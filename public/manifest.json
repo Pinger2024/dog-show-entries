@@ -1,0 +1,9 @@
+{
+  "name": "Remi - Dog Show Entries",
+  "short_name": "Remi",
+  "description": "The modern way to enter dog shows",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#4f46e5"
+}

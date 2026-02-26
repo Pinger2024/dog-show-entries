@@ -1,0 +1,66 @@
+import {
+  date,
+  index,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from 'drizzle-orm/pg-core';
+import { relations } from 'drizzle-orm';
+import { showTypeEnum, showScopeEnum, showStatusEnum } from './enums';
+import { organisations } from './organisations';
+import { venues } from './venues';
+import { showClasses } from './show-classes';
+import { entries } from './entries';
+import { rings } from './rings';
+import { judgeAssignments } from './judge-assignments';
+
+export const shows = pgTable(
+  'shows',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    name: text('name').notNull(),
+    showType: showTypeEnum('show_type').notNull(),
+    showScope: showScopeEnum('show_scope').notNull(),
+    organisationId: uuid('organisation_id')
+      .notNull()
+      .references(() => organisations.id),
+    venueId: uuid('venue_id').references(() => venues.id),
+    startDate: date('start_date', { mode: 'string' }).notNull(),
+    endDate: date('end_date', { mode: 'string' }).notNull(),
+    entryCloseDate: timestamp('entry_close_date', { withTimezone: true }),
+    postalCloseDate: timestamp('postal_close_date', { withTimezone: true }),
+    status: showStatusEnum('status').notNull().default('draft'),
+    kcLicenceNo: text('kc_licence_no'),
+    scheduleUrl: text('schedule_url'),
+    description: text('description'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    index('shows_organisation_id_idx').on(table.organisationId),
+    index('shows_venue_id_idx').on(table.venueId),
+    index('shows_start_date_idx').on(table.startDate),
+    index('shows_status_idx').on(table.status),
+  ]
+);
+
+export const showsRelations = relations(shows, ({ one, many }) => ({
+  organisation: one(organisations, {
+    fields: [shows.organisationId],
+    references: [organisations.id],
+  }),
+  venue: one(venues, {
+    fields: [shows.venueId],
+    references: [venues.id],
+  }),
+  showClasses: many(showClasses),
+  entries: many(entries),
+  rings: many(rings),
+  judgeAssignments: many(judgeAssignments),
+}));
