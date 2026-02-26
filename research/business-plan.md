@@ -227,55 +227,76 @@ Our infrastructure scales automatically. During quiet periods (most of the time)
 
 | Stream | Description | Pricing | Phase |
 |--------|------------|---------|-------|
-| **Per-entry service fee** | Fee charged on every entry processed through the platform | 50p-£1.00 per entry | MVP |
-| **Show society subscription** | Monthly/annual subscription for show management tools | £30-100/month (tiered by show size) | MVP |
-| **Premium exhibitor features** | Career tracking, smart recommendations, analytics | £3-5/month or £30-50/year | Phase 2 |
-| **Stripe payment margin** | Residual margin on payment processing | Included in per-entry fee | MVP |
-| **Catalogue advertising** | Digital catalogue sponsorship and advertising | £50-500 per show | Phase 3 |
+| **Per-entry booking fee** | Small fee charged to the exhibitor on every entry processed | 50p–£1.00 per entry | MVP |
+| **Show setup fee** | One-off fee charged to the society per show listed on the platform | £20 per show | MVP |
+| **Stripe payment margin** | Residual margin on payment processing (Stripe takes ~1.4% + 20p; we pass this through or absorb into booking fee) | Included in per-entry fee | MVP |
+| **Premium exhibitor features** | Career tracking, smart recommendations, analytics | £3–5/month or £30–50/year | Phase 2 |
+| **Catalogue advertising** | Digital catalogue sponsorship and advertising | £50–500 per show | Phase 3 |
 | **Data insights** | Anonymised market intelligence for breed clubs, KC, industry | Bespoke pricing | Phase 4 |
 
 ### 7.2 Pricing Strategy
 
-**For exhibitors**: The platform is free to use for basic entry. No online surcharges (unlike Higham Press's +£2). The per-entry service fee (50p-£1) is absorbed into the entry fee set by the show society, or charged transparently as a small booking fee (similar to Ticketmaster). Premium features (career tracking, advanced analytics) available via optional subscription.
+**For exhibitors**: The platform is free to browse. A small booking fee (50p–£1) is added per entry at checkout — transparent, expected (every online ticketing platform does this), and modest relative to entry fees of £5–28. No account fees. No online surcharges for late entry (unlike Higham Press's +£2 penalty).
 
-**For show societies**: Tiered subscription based on show size and features used. Significantly cheaper than Fosse Data/Higham Press's per-dog data charges plus printing fees, because we eliminate printing costs entirely for societies that go digital-only. Societies that still want printed catalogues can export data to any printer.
+**For show societies**: A flat **£20 setup fee per show** — not a monthly subscription. Volunteer-run committees don't have budgets for SaaS subscriptions, but £20 per show is a trivial cost against a show that collects hundreds or thousands of pounds in entry fees. This is significantly cheaper than what societies currently pay Fosse Data or Higham Press for data handling, printing coordination, and per-entry charges. Societies that still want printed catalogues can export data to any printer.
+
+**Why no monthly subscription**: Show societies are run by volunteers with annual budgets approved by committee. A monthly subscription creates friction — it needs ongoing approval, someone to manage the payment method, and feels like an overhead. A one-off £20 per show is a line item on the show budget, approved once, and done. It also means societies only pay when they use the platform, which lowers the barrier to trying it.
 
 ### 7.3 Revenue Projections
 
-**Conservative scenario** (Year 1-3):
+**Realistic scenario** (Year 1–3):
+
+Assumes grassroots adoption starting with open shows in a geographic cluster (Yorkshire/Midlands), expanding through word-of-mouth and show-day demonstrations. Championship shows from Year 2 onwards.
 
 | Metric | Year 1 | Year 2 | Year 3 |
 |--------|--------|--------|--------|
-| **Shows on platform** | 50 | 200 | 500 |
-| **Entries processed** | 20,000 | 100,000 | 300,000 |
-| **Avg. entry service fee** | £0.75 | £0.75 | £0.75 |
-| **Entry fee revenue** | £15,000 | £75,000 | £225,000 |
-| **Society subscriptions** (avg £50/mo) | £15,000 | £72,000 | £180,000 |
-| **Premium exhibitor subscriptions** | £0 | £15,000 | £60,000 |
-| **Total revenue** | **£30,000** | **£162,000** | **£465,000** |
-| **Infrastructure costs** | £6,000 | £24,000 | £60,000 |
-| **Gross margin** | 80% | 85% | 87% |
+| **Shows on platform** | 15 | 60 | 200 |
+| **Entries processed** | 5,000 | 25,000 | 100,000 |
+| **Avg. entries per show** | 333 | 417 | 500 |
+| | | | |
+| **Booking fee revenue** (75p/entry) | £3,750 | £18,750 | £75,000 |
+| **Show setup fee revenue** (£20/show) | £300 | £1,200 | £4,000 |
+| **Premium exhibitor subs** | £0 | £2,000 | £10,000 |
+| **Total revenue** | **£4,050** | **£21,950** | **£89,000** |
+| | | | |
+| **Infrastructure costs** | £1,200 | £3,600 | £12,000 |
+| **Stripe fees** (~2.5% of entry value) | £1,875 | £9,375 | £37,500 |
+| **Net after costs** | **£975** | **£8,975** | **£39,500** |
 
-**Optimistic scenario** (faster adoption, championship shows earlier):
+*Note: Stripe fees are passed through to the exhibitor as part of the booking fee in practice, so the platform's true cost is infrastructure only. The table above shows worst-case where we absorb Stripe fees.*
+
+**Optimistic scenario** (faster adoption, early championship show wins):
 
 | Metric | Year 1 | Year 2 | Year 3 |
 |--------|--------|--------|--------|
-| **Shows on platform** | 100 | 400 | 1,000 |
-| **Entries processed** | 50,000 | 250,000 | 500,000+ |
-| **Total revenue** | **£67,500** | **£355,000** | **£850,000+** |
+| **Shows on platform** | 30 | 150 | 500 |
+| **Entries processed** | 12,000 | 75,000 | 300,000 |
+| **Total revenue** | **£9,600** | **£58,250** | **£234,000** |
 
-**Break-even analysis**: With a lean team (1-2 developers, minimal marketing spend), break-even is achievable at approximately 100-150 shows and 40,000-60,000 entries annually — reachable by mid-Year 2 in the conservative scenario.
+**Break-even analysis**: With minimal costs (one developer working evenings/weekends, ~£100/month infrastructure), the platform breaks even at roughly **15–20 shows processing ~2,000 entries** — achievable in Year 1. As a side project or bootstrapped venture, this becomes profitable very quickly because there are almost no fixed costs. The economics improve dramatically if/when championship shows come on board (3,000–10,000 entries per show at £0.75 = £2,250–£7,500 per show in booking fees alone).
 
 ### 7.4 Unit Economics
 
 | Metric | Value |
 |--------|-------|
-| **Revenue per entry** | £0.75-1.50 (service fee + share of society subscription) |
-| **Cost per entry** (infrastructure) | ~£0.02-0.05 (serverless compute + storage + Stripe fees) |
-| **Gross margin per entry** | ~95% |
-| **Customer acquisition cost (society)** | £100-500 (direct sales + onboarding support) |
-| **Lifetime value (society)** | £3,000-10,000+ (multi-year subscription + per-entry fees) |
-| **LTV:CAC ratio** | 10-20x |
+| **Revenue per entry** | £0.75 (booking fee) + ~£0.01 (show setup fee amortised) |
+| **Cost per entry** (infrastructure) | ~£0.02–0.05 (compute + storage) |
+| **Stripe processing cost per entry** | ~£0.15–0.30 (passed through to exhibitor or absorbed into booking fee) |
+| **Gross margin per entry** | ~90%+ (if Stripe fees passed through) |
+| **Customer acquisition cost (society)** | ~£50 (personal outreach, show-day demo, white-glove setup) |
+| **Lifetime value (society)** | £200–2,000+ (£20/show × 2–4 shows/year × multiple years + per-entry fees from their exhibitors) |
+| **LTV:CAC ratio** | 4–40x |
+
+### 7.5 Revenue Reality Check
+
+The honest picture: **this is not a get-rich-quick business**. Year 1 revenue of £4k won't pay anyone's salary. The realistic path is:
+
+1. **Year 1**: Side project / bootstrapped. Prove the product works, build reputation with 10–20 shows. Revenue covers infrastructure costs.
+2. **Year 2**: Growing word-of-mouth. 60+ shows, approaching break-even for a part-time operation. Start conversations with championship show societies.
+3. **Year 3**: If championship shows adopt, revenue jumps significantly (a single championship show with 5,000 entries = £3,750 in booking fees). At 200 shows and £89k revenue, this becomes a viable full-time business.
+4. **The prize**: Winning even one major championship show contract (or the Crufts contract) is transformative — Crufts alone processes ~18,700 entries, worth ~£14,000 in booking fees for a single event.
+
+The business model works because marginal costs are near-zero. Every additional entry costs fractions of a penny to process. The challenge is not margin — it's getting shows onto the platform in the first place.
 
 ---
 
