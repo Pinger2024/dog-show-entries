@@ -2,7 +2,7 @@ import { auth } from '@/lib/auth';
 import { NextResponse } from 'next/server';
 
 const publicRoutes = ['/', '/login', '/register'];
-const publicPrefixes = ['/shows', '/api/auth'];
+const publicPrefixes = ['/shows', '/api/auth', '/api/trpc'];
 
 function isPublicRoute(pathname: string) {
   if (publicRoutes.includes(pathname)) return true;
