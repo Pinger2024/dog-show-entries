@@ -28,6 +28,8 @@ export const shows = pgTable(
     venueId: uuid('venue_id').references(() => venues.id),
     startDate: date('start_date', { mode: 'string' }).notNull(),
     endDate: date('end_date', { mode: 'string' }).notNull(),
+    startTime: text('start_time'),
+    endTime: text('end_time'),
     entryCloseDate: timestamp('entry_close_date', { withTimezone: true }),
     postalCloseDate: timestamp('postal_close_date', { withTimezone: true }),
     status: showStatusEnum('status').notNull().default('draft'),
