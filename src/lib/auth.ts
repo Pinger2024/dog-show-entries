@@ -1,7 +1,9 @@
 import NextAuth from 'next-auth';
 import Google from 'next-auth/providers/google';
 import Resend from 'next-auth/providers/resend';
+import Credentials from 'next-auth/providers/credentials';
 import { DrizzleAdapter } from '@auth/drizzle-adapter';
+import { eq } from 'drizzle-orm';
 import { db } from '@/server/db';
 import * as schema from '@/server/db/schema';
 
@@ -24,6 +26,30 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     verifyRequest: '/login?verify=true',
   },
   providers: [
+    // Demo login — sign in with just an email, no verification
+    Credentials({
+      id: 'demo',
+      name: 'Demo',
+      credentials: {
+        email: { label: 'Email', type: 'email' },
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !db) return null;
+        const email = credentials.email as string;
+        const [user] = await db
+          .select()
+          .from(schema.users)
+          .where(eq(schema.users.email, email))
+          .limit(1);
+        if (!user) return null;
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+        };
+      },
+    }),
     Resend({
       from: process.env.EMAIL_FROM ?? 'Remi <noreply@remi.dog>',
     }),
