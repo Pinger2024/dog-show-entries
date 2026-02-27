@@ -132,3 +132,10 @@ export const paymentTypeEnum = pgEnum('payment_type', [
   'adjustment',
   'refund',
 ]);
+
+export const feedbackStatusEnum = pgEnum('feedback_status', [
+  'pending',
+  'in_progress',
+  'completed',
+  'dismissed',
+]);

@@ -17,6 +17,7 @@ export {
   catalogueFormatEnum,
   catalogueStatusEnum,
   paymentTypeEnum,
+  feedbackStatusEnum,
 } from './enums';
 
 // Tables
@@ -57,3 +58,4 @@ export {
 } from './junior-handler-details';
 export { fileUploads, fileUploadsRelations } from './file-uploads';
 export { catalogues, cataloguesRelations } from './catalogues';
+export { feedback } from './feedback';

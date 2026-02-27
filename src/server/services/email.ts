@@ -191,6 +191,7 @@ export async function sendEntryConfirmationEmail(orderId: string) {
     const result = await resend.emails.send({
       from: FROM,
       to: exhibitor.email,
+      replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
       subject: `Entry Confirmed — ${show.name}`,
       html,
     });

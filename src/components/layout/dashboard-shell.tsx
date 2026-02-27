@@ -8,6 +8,7 @@ import {
   Dog,
   Ticket,
   CalendarDays,
+  Inbox,
   LogOut,
   ChevronRight,
 } from 'lucide-react';
@@ -21,6 +22,7 @@ interface DashboardShellProps {
     name?: string | null;
     email?: string | null;
     image?: string | null;
+    role?: string;
   };
   children: React.ReactNode;
 }
@@ -30,6 +32,10 @@ const navItems = [
   { href: '/dogs', label: 'My Dogs', icon: Dog },
   { href: '/entries', label: 'My Entries', icon: Ticket },
   { href: '/shows', label: 'Find a Show', icon: CalendarDays },
+];
+
+const adminNavItems = [
+  { href: '/feedback', label: 'Feedback', icon: Inbox },
 ];
 
 function getInitials(name?: string | null, email?: string | null) {
@@ -105,6 +111,29 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
               </Link>
             );
           })}
+          {user.role === 'admin' && (
+            <>
+              <Separator className="my-2" />
+              {adminNavItems.map((item) => {
+                const isActive = pathname.startsWith(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      'flex items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-medium transition-colors',
+                      isActive
+                        ? 'bg-sidebar-accent text-sidebar-primary'
+                        : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
+                    )}
+                  >
+                    <item.icon className="size-5" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </>
+          )}
         </nav>
 
         {/* Sidebar footer */}
