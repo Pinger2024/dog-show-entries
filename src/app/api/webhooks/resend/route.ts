@@ -76,24 +76,14 @@ export async function POST(request: NextRequest) {
     ? data.subject.replace(/^(?:Re|Fwd|Fw):\s*/i, '')
     : null;
 
-  // Fetch full email content from Resend API (webhook payload doesn't include body)
+  // Fetch full email content via Resend SDK (webhook payload doesn't include body)
   let textBody: string | null = null;
   let htmlBody: string | null = null;
   try {
-    const emailRes = await fetch(
-      `https://api.resend.com/emails/${data.email_id}/content`,
-      {
-        headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` },
-      }
-    );
-    if (emailRes.ok) {
-      const emailData = await emailRes.json();
-      textBody = emailData.text || null;
-      htmlBody = emailData.html || null;
-    } else {
-      console.warn(
-        `[resend-webhook] Could not fetch email content: ${emailRes.status}`
-      );
+    const { data: emailContent } = await resend.emails.receiving.get(data.email_id);
+    if (emailContent) {
+      textBody = emailContent.text || null;
+      htmlBody = emailContent.html || null;
     }
   } catch (err) {
     console.warn('[resend-webhook] Email content fetch failed:', err);
