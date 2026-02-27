@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter, Libre_Baskerville } from 'next/font/google';
 import { Toaster } from '@/components/ui/sonner';
 import { Providers } from '@/components/providers';
+import { AccountSwitcher } from '@/components/dev/account-switcher';
 import './globals.css';
 
 const inter = Inter({
@@ -55,6 +56,7 @@ export default function RootLayout({
         <Providers>
           {children}
           <Toaster richColors position="top-right" />
+          <AccountSwitcher />
         </Providers>
       </body>
     </html>

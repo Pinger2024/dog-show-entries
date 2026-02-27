@@ -28,9 +28,9 @@ const demoUsers = [
   {
     email: 'mandy@hundarkgsd.co.uk',
     name: 'Amanda',
-    role: 'Exhibitor',
+    role: 'Secretary',
     icon: User,
-    description: 'Exhibitor view — browse shows, manage dogs, enter shows',
+    description: 'Secretary & exhibitor — manage shows, enter dogs',
   },
 ];
 
