@@ -202,17 +202,24 @@ export default function NewShowPage() {
     }
   }
 
+  // Watch the fields needed for step validation so the button re-renders
+  const watchedName = form.watch('name');
+  const watchedShowType = form.watch('showType');
+  const watchedShowScope = form.watch('showScope');
+  const watchedOrgId = form.watch('organisationId');
+  const watchedStartDate = form.watch('startDate');
+  const watchedEndDate = form.watch('endDate');
+
   function canProceed(): boolean {
-    const values = form.getValues();
     switch (step) {
       case 0:
         return !!(
-          values.name &&
-          values.showType &&
-          values.showScope &&
-          values.organisationId &&
-          values.startDate &&
-          values.endDate
+          watchedName &&
+          watchedShowType &&
+          watchedShowScope &&
+          watchedOrgId &&
+          watchedStartDate &&
+          watchedEndDate
         );
       case 1:
         return true; // Venue is optional
