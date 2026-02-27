@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, isNull, asc } from 'drizzle-orm';
+import { and, eq, isNull, asc, desc, sql } from 'drizzle-orm';
 import { protectedProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { dogs, dogOwners, dogTitles, users } from '@/server/db/schema';
+import { scrapeKcDog } from '@/server/services/firecrawl';
 
 export const dogsRouter = createTRPCRouter({
   list: protectedProcedure.query(async ({ ctx }) => {
@@ -351,4 +352,44 @@ export const dogsRouter = createTRPCRouter({
       await ctx.db.delete(dogTitles).where(eq(dogTitles.id, input.id));
       return { success: true };
     }),
+
+  // ── KC Lookup ──────────────────────────────────────────────
+
+  kcLookup: protectedProcedure
+    .input(z.object({ query: z.string().min(2).max(255) }))
+    .mutation(async ({ input }) => {
+      const result = await scrapeKcDog(input.query);
+      if (!result) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Could not find a dog matching that name or registration number on the KC website.',
+        });
+      }
+      return result;
+    }),
+
+  // ── Owner profiles (reuse previous owners) ────────────────
+
+  getMyOwnerProfiles: protectedProcedure.query(async ({ ctx }) => {
+    // Get distinct owner profiles from all dogs owned by this user.
+    // Uses a subquery to deduplicate by email and return the most recent version.
+    const ownerRows = await ctx.db
+      .selectDistinctOn([dogOwners.ownerEmail], {
+        ownerName: dogOwners.ownerName,
+        ownerAddress: dogOwners.ownerAddress,
+        ownerEmail: dogOwners.ownerEmail,
+        ownerPhone: dogOwners.ownerPhone,
+      })
+      .from(dogOwners)
+      .innerJoin(dogs, eq(dogOwners.dogId, dogs.id))
+      .where(
+        and(
+          eq(dogs.ownerId, ctx.session.user.id),
+          isNull(dogs.deletedAt),
+        )
+      )
+      .orderBy(dogOwners.ownerEmail, desc(dogOwners.createdAt));
+
+    return ownerRows;
+  }),
 });

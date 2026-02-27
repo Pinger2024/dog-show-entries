@@ -1,11 +1,10 @@
 /**
  * Kennel Club registration number utilities.
  *
- * The KC does not provide a public API for dog registration lookups.
  * This module provides:
  * - Registration number format validation
  * - A link to the KC Health Test Results Finder for manual verification
- * - A placeholder for future API integration if one becomes available
+ * - Dog lookup via Firecrawl web scraping of the KC website
  */
 
 /**
@@ -42,16 +41,13 @@ export function getKcLookupUrl(): string {
 }
 
 /**
- * Placeholder for future KC API integration.
+ * Look up a dog on the KC Health Test Results Finder via Firecrawl web scraping.
  *
- * If the KC provides an API in the future, this function would:
- * - Accept a registration number
- * - Return dog details (registered name, breed, DOB, sire, dam, breeder, etc.)
- *
- * For now, returns null to indicate no API lookup is available.
+ * Accepts a registration number or registered name. Returns structured dog
+ * details if found, or null if the lookup fails or no results are found.
  */
 export async function lookupDogByKcReg(
-  _kcRegNumber: string
+  query: string
 ): Promise<null | {
   registeredName: string;
   breed: string;
@@ -60,8 +56,9 @@ export async function lookupDogByKcReg(
   sire: string;
   dam: string;
   breeder: string;
+  colour?: string;
 }> {
-  // KC does not provide a public API.
-  // Return null to indicate manual entry is required.
-  return null;
+  // Dynamic import to avoid loading Firecrawl when not needed
+  const { scrapeKcDog } = await import('./firecrawl');
+  return scrapeKcDog(query);
 }

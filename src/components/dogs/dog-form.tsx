@@ -6,7 +6,7 @@ import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format } from 'date-fns';
-import { CalendarIcon, Check, ChevronsUpDown, Loader2, Plus, Trash2, Award } from 'lucide-react';
+import { CalendarIcon, Check, ChevronsUpDown, Loader2, Plus, Trash2, Award, Search, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { cn, getTitleDisplay } from '@/lib/utils';
@@ -157,6 +157,53 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
     },
   });
 
+  const kcLookup = trpc.dogs.kcLookup.useMutation({
+    onSuccess: (data) => {
+      // Auto-populate form fields from KC data
+      if (data.registeredName) form.setValue('registeredName', data.registeredName);
+      if (data.sex) form.setValue('sex', data.sex as 'dog' | 'bitch');
+      if (data.dateOfBirth) {
+        // Try to parse the date — KC may return various formats
+        const parsed = new Date(data.dateOfBirth);
+        if (!isNaN(parsed.getTime())) {
+          form.setValue('dateOfBirth', format(parsed, 'yyyy-MM-dd'));
+        }
+      }
+      if (data.sire) form.setValue('sireName', data.sire);
+      if (data.dam) form.setValue('damName', data.dam);
+      if (data.breeder) form.setValue('breederName', data.breeder);
+      if (data.colour) form.setValue('colour', data.colour);
+
+      // Try to match breed by name
+      if (data.breed && breeds) {
+        const breedNameLower = data.breed.toLowerCase();
+        const matchedBreed = breeds.find(
+          (b) => b.name.toLowerCase() === breedNameLower
+            || b.name.toLowerCase().includes(breedNameLower)
+            || breedNameLower.includes(b.name.toLowerCase())
+        );
+        if (matchedBreed) {
+          form.setValue('breedId', matchedBreed.id);
+        }
+      }
+
+      toast.success('Dog details found on KC website!', {
+        description: `${data.registeredName} — fields have been populated.`,
+      });
+    },
+    onError: (error) => {
+      toast.error('KC Lookup failed', {
+        description: error.message,
+      });
+    },
+  });
+
+  // Fetch previously-used owner profiles for reuse
+  const { data: ownerProfiles } = trpc.dogs.getMyOwnerProfiles.useQuery(
+    undefined,
+    { enabled: mode === 'create' }
+  );
+
   const form = useForm<DogFormValues>({
     resolver: zodResolver(dogFormSchema),
     defaultValues: {
@@ -208,7 +255,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
             <CardTitle>Registration Details</CardTitle>
             <CardDescription>
               Enter the details as they appear on your Kennel Club registration
-              certificate.
+              certificate, or use the KC Lookup to auto-fill.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -226,15 +273,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                   </FormControl>
                   <FormDescription>
                     Found on your Kennel Club registration certificate. Leave
-                    blank if not yet registered.{' '}
-                    <a
-                      href="https://www.thekennelclub.org.uk/search/health-test-results-finder/"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline"
-                    >
-                      Verify on KC website
-                    </a>
+                    blank if not yet registered.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -261,6 +300,49 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                 </FormItem>
               )}
             />
+
+            {/* KC Lookup Button */}
+            <div className="rounded-lg border border-dashed border-primary/30 bg-primary/5 p-4">
+              <div className="flex items-start gap-3">
+                <Search className="mt-0.5 size-5 shrink-0 text-primary" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium">
+                    Auto-fill from Kennel Club
+                  </p>
+                  <p className="mt-0.5 text-sm text-muted-foreground">
+                    Enter a KC registration number or registered name above, then click below to
+                    fetch breed, sex, date of birth, sire, dam, and breeder from the KC website.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    className="mt-3"
+                    disabled={kcLookup.isPending}
+                    onClick={() => {
+                      const query = form.getValues('kcRegNumber') || form.getValues('registeredName');
+                      if (!query || query.trim().length < 2) {
+                        toast.error('Enter a registration number or name first');
+                        return;
+                      }
+                      kcLookup.mutate({ query: query.trim() });
+                    }}
+                  >
+                    {kcLookup.isPending ? (
+                      <>
+                        <Loader2 className="size-4 animate-spin" />
+                        Searching KC website...
+                      </>
+                    ) : (
+                      <>
+                        <Search className="size-4" />
+                        Lookup on KC Website
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -596,23 +678,72 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
             ))}
 
             {ownerFields.length < 4 && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  appendOwner({
-                    ownerName: '',
-                    ownerAddress: '',
-                    ownerEmail: '',
-                    ownerPhone: '',
-                    isPrimary: ownerFields.length === 0,
-                  })
-                }
-              >
-                <Plus className="size-4" />
-                Add Owner
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    appendOwner({
+                      ownerName: '',
+                      ownerAddress: '',
+                      ownerEmail: '',
+                      ownerPhone: '',
+                      isPrimary: ownerFields.length === 0,
+                    })
+                  }
+                >
+                  <Plus className="size-4" />
+                  Add New Owner
+                </Button>
+                {mode === 'create' && ownerProfiles && ownerProfiles.length > 0 && (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button type="button" variant="secondary" size="sm">
+                        <UserPlus className="size-4" />
+                        Use Previous Owner
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80 p-0" align="start">
+                      <div className="border-b px-3 py-2">
+                        <p className="text-sm font-medium">Select a previous owner</p>
+                        <p className="text-xs text-muted-foreground">
+                          From your other dogs
+                        </p>
+                      </div>
+                      <div className="max-h-60 overflow-y-auto p-1">
+                        {ownerProfiles.map((profile, i) => (
+                          <button
+                            key={`${profile.ownerEmail}-${i}`}
+                            type="button"
+                            className="flex w-full flex-col items-start gap-0.5 rounded-md px-3 py-2.5 text-left transition-colors hover:bg-accent"
+                            onClick={() => {
+                              appendOwner({
+                                ownerName: profile.ownerName,
+                                ownerAddress: profile.ownerAddress,
+                                ownerEmail: profile.ownerEmail,
+                                ownerPhone: profile.ownerPhone ?? '',
+                                isPrimary: ownerFields.length === 0,
+                              });
+                              toast.success(`Added ${profile.ownerName}`);
+                            }}
+                          >
+                            <span className="text-sm font-medium">
+                              {profile.ownerName}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {profile.ownerEmail}
+                            </span>
+                            <span className="line-clamp-1 text-xs text-muted-foreground">
+                              {profile.ownerAddress}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                )}
+              </div>
             )}
 
             {ownerFields.length === 0 && (
