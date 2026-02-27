@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, sql, isNull, inArray, asc, desc } from 'drizzle-orm';
+import { and, eq, sql, isNull, inArray, asc, desc, ilike } from 'drizzle-orm';
 import { secretaryProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { verifyShowAccess } from '../verify-show-access';
@@ -23,6 +23,7 @@ import {
   judges,
   judgeAssignments,
   rings,
+  breeds,
 } from '@/server/db/schema';
 import { getStripe } from '@/server/services/stripe';
 
@@ -1085,5 +1086,200 @@ export const secretaryRouter = createTRPCRouter({
         amount: refundAmount,
         fullyRefunded: isFullyRefunded,
       };
+    }),
+
+  // ─── Secretary-Initiated Entries ───────────────────────
+  searchDogs: secretaryProcedure
+    .input(
+      z.object({
+        query: z.string().min(1).max(255),
+        limit: z.number().min(1).max(50).default(20),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      return ctx.db.query.dogs.findMany({
+        where: and(
+          ilike(dogs.registeredName, `%${input.query}%`),
+          isNull(dogs.deletedAt)
+        ),
+        with: {
+          breed: { with: { group: true } },
+          owners: { orderBy: [asc(dogOwners.sortOrder)], limit: 1 },
+          titles: true,
+        },
+        limit: input.limit,
+      });
+    }),
+
+  registerDogForExhibitor: secretaryProcedure
+    .input(
+      z.object({
+        registeredName: z.string().min(1).max(255),
+        kcRegNumber: z.string().optional(),
+        breedId: z.string().uuid(),
+        sex: z.enum(['dog', 'bitch']),
+        dateOfBirth: z.string(),
+        sireName: z.string().optional(),
+        damName: z.string().optional(),
+        breederName: z.string().optional(),
+        colour: z.string().optional(),
+        exhibitorEmail: z.string().email(),
+        ownerName: z.string().min(1),
+        ownerAddress: z.string().min(1),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { exhibitorEmail, ownerName, ownerAddress, ...dogData } = input;
+
+      // Look up the exhibitor by email — create a placeholder if not found
+      let exhibitor = await ctx.db.query.users.findFirst({
+        where: eq(users.email, exhibitorEmail.toLowerCase()),
+      });
+
+      const exhibitorId = exhibitor?.id ?? ctx.session.user.id;
+
+      const [dog] = await ctx.db
+        .insert(dogs)
+        .values({
+          registeredName: dogData.registeredName,
+          kcRegNumber: dogData.kcRegNumber ?? null,
+          breedId: dogData.breedId,
+          sex: dogData.sex,
+          dateOfBirth: dogData.dateOfBirth,
+          sireName: dogData.sireName ?? null,
+          damName: dogData.damName ?? null,
+          breederName: dogData.breederName ?? null,
+          colour: dogData.colour ?? null,
+          ownerId: exhibitorId,
+        })
+        .returning();
+
+      // Create primary owner record
+      await ctx.db.insert(dogOwners).values({
+        dogId: dog!.id,
+        userId: exhibitor ? exhibitor.id : null,
+        ownerName,
+        ownerAddress,
+        ownerEmail: exhibitorEmail,
+        isPrimary: true,
+        sortOrder: 0,
+      });
+
+      return dog!;
+    }),
+
+  createManualEntry: secretaryProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        dogId: z.string().uuid(),
+        classIds: z.array(z.string().uuid()).min(1),
+        exhibitorEmail: z.string().email(),
+        handlerName: z.string().optional(),
+        isNfc: z.boolean().default(false),
+        paymentMethod: z.enum(['postal', 'cash', 'bank_transfer', 'online']).default('postal'),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      // Validate the show accepts entries (allow entries_open OR entries_closed for postal)
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+      });
+
+      if (!show) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
+      }
+
+      if (!['entries_open', 'entries_closed', 'published'].includes(show.status)) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Show is not in a state that accepts entries',
+        });
+      }
+
+      // Validate dog exists
+      const dog = await ctx.db.query.dogs.findFirst({
+        where: and(eq(dogs.id, input.dogId), isNull(dogs.deletedAt)),
+      });
+
+      if (!dog) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Dog not found' });
+      }
+
+      // Find exhibitor by email
+      const exhibitor = await ctx.db.query.users.findFirst({
+        where: eq(users.email, input.exhibitorEmail.toLowerCase()),
+      });
+
+      const exhibitorId = exhibitor?.id ?? ctx.session.user.id;
+
+      // Validate classes belong to this show
+      const selectedClasses = await ctx.db.query.showClasses.findMany({
+        where: and(
+          inArray(showClasses.id, input.classIds),
+          eq(showClasses.showId, input.showId)
+        ),
+      });
+
+      if (selectedClasses.length !== input.classIds.length) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'One or more classes are invalid for this show',
+        });
+      }
+
+      // Calculate total fee
+      const totalFee = selectedClasses.reduce(
+        (sum, sc) => sum + sc.entryFee,
+        0
+      );
+
+      // Create entry — auto-confirmed for secretary entries
+      const [entry] = await ctx.db
+        .insert(entries)
+        .values({
+          showId: input.showId,
+          dogId: input.dogId,
+          exhibitorId,
+          isNfc: input.isNfc,
+          totalFee,
+          status: 'confirmed',
+        })
+        .returning();
+
+      // Create entry class records
+      await ctx.db.insert(entryClasses).values(
+        selectedClasses.map((sc) => ({
+          entryId: entry!.id,
+          showClassId: sc.id,
+          fee: sc.entryFee,
+        }))
+      );
+
+      // Create a payment record (manual — no Stripe)
+      await ctx.db.insert(payments).values({
+        entryId: entry!.id,
+        amount: totalFee,
+        status: 'succeeded',
+        type: 'initial',
+      });
+
+      // Audit log
+      await ctx.db.insert(entryAuditLog).values({
+        entryId: entry!.id,
+        action: 'created',
+        userId: ctx.session.user.id,
+        changes: {
+          source: 'secretary',
+          paymentMethod: input.paymentMethod,
+          exhibitorEmail: input.exhibitorEmail,
+          handlerName: input.handlerName ?? null,
+        },
+        reason: `Entry created by secretary (${input.paymentMethod} payment)`,
+      });
+
+      return entry!;
     }),
 });

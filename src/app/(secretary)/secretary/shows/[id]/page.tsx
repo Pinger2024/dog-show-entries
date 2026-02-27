@@ -4,6 +4,7 @@ import { use, useState, useMemo, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft,
+  ArrowRight,
   BookOpen,
   CalendarDays,
   CircleDot,
@@ -475,6 +476,7 @@ function EntriesTab({
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [editingEntry, setEditingEntry] = useState<EntryItem | null>(null);
+  const [showAddEntry, setShowAddEntry] = useState(false);
 
   const filtered = useMemo(() => {
     return entries.filter((entry) => {
@@ -544,15 +546,21 @@ function EntriesTab({
               All entries for this show
             </CardDescription>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={exportCsv}
-            disabled={filtered.length === 0}
-          >
-            <Download className="size-4" />
-            Export CSV
-          </Button>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => setShowAddEntry(true)}>
+              <Plus className="size-4" />
+              Add Entry
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={exportCsv}
+              disabled={filtered.length === 0}
+            >
+              <Download className="size-4" />
+              Export CSV
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
@@ -684,7 +692,405 @@ function EntriesTab({
           onClose={() => setEditingEntry(null)}
         />
       )}
+
+      {showAddEntry && (
+        <AddEntryDialog
+          showId={showId}
+          onClose={() => setShowAddEntry(false)}
+        />
+      )}
     </Card>
+  );
+}
+
+// ── Add Entry Dialog (Secretary-Initiated) ───────────────────
+
+function AddEntryDialog({
+  showId,
+  onClose,
+}: {
+  showId: string;
+  onClose: () => void;
+}) {
+  const [step, setStep] = useState<'search' | 'register' | 'classes'>('search');
+  const [dogSearch, setDogSearch] = useState('');
+  const [selectedDogId, setSelectedDogId] = useState<string | null>(null);
+  const [selectedDogName, setSelectedDogName] = useState('');
+  const [exhibitorEmail, setExhibitorEmail] = useState('');
+  const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
+  const [paymentMethod, setPaymentMethod] = useState<string>('postal');
+  const [isNfc, setIsNfc] = useState(false);
+
+  // Register dog form
+  const [regName, setRegName] = useState('');
+  const [regKc, setRegKc] = useState('');
+  const [regBreed, setRegBreed] = useState('');
+  const [regSex, setRegSex] = useState<string>('');
+  const [regDob, setRegDob] = useState('');
+  const [regSire, setRegSire] = useState('');
+  const [regDam, setRegDam] = useState('');
+  const [regOwnerName, setRegOwnerName] = useState('');
+  const [regOwnerAddress, setRegOwnerAddress] = useState('');
+
+  const utils = trpc.useUtils();
+
+  // Search dogs
+  const { data: dogResults, isLoading: searchLoading } =
+    trpc.secretary.searchDogs.useQuery(
+      { query: dogSearch, limit: 10 },
+      { enabled: dogSearch.length >= 2 }
+    );
+
+  // Get show classes for the class selection
+  const { data: classesData } = trpc.shows.getClasses.useQuery(
+    { showId },
+    { enabled: step === 'classes' }
+  );
+
+  // Get breeds for registration
+  const { data: allBreeds } = trpc.breeds.list.useQuery(undefined, {
+    enabled: step === 'register',
+  });
+
+  const registerDogMutation = trpc.secretary.registerDogForExhibitor.useMutation({
+    onSuccess: (dog) => {
+      toast.success(`Dog "${dog.registeredName}" registered`);
+      setSelectedDogId(dog.id);
+      setSelectedDogName(dog.registeredName);
+      setStep('classes');
+      utils.secretary.searchDogs.invalidate();
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to register dog'),
+  });
+
+  const createEntryMutation = trpc.secretary.createManualEntry.useMutation({
+    onSuccess: () => {
+      toast.success('Entry created successfully');
+      utils.entries.getForShow.invalidate({ showId });
+      utils.secretary.getShowStats.invalidate({ showId });
+      onClose();
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to create entry'),
+  });
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>
+            {step === 'search' && 'Search for a Dog'}
+            {step === 'register' && 'Register New Dog'}
+            {step === 'classes' && `Select Classes — ${selectedDogName}`}
+          </DialogTitle>
+          <DialogDescription>
+            {step === 'search' &&
+              'Search by registered name to find a dog in the database, or register a new one.'}
+            {step === 'register' &&
+              'Register a new dog on behalf of the exhibitor.'}
+            {step === 'classes' &&
+              'Select the classes to enter and provide exhibitor details.'}
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Step 1: Search for existing dog */}
+        {step === 'search' && (
+          <div className="space-y-4 py-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by registered name..."
+                value={dogSearch}
+                onChange={(e) => setDogSearch(e.target.value)}
+                className="pl-9"
+                autoFocus
+              />
+            </div>
+
+            {searchLoading && (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="size-5 animate-spin text-muted-foreground" />
+              </div>
+            )}
+
+            {dogSearch.length >= 2 && dogResults && dogResults.length === 0 && (
+              <div className="rounded-lg border border-dashed py-8 text-center">
+                <p className="text-sm text-muted-foreground">No dogs found matching &ldquo;{dogSearch}&rdquo;</p>
+              </div>
+            )}
+
+            {dogResults && dogResults.length > 0 && (
+              <div className="max-h-60 space-y-1 overflow-y-auto">
+                {dogResults.map((dog) => (
+                  <button
+                    key={dog.id}
+                    onClick={() => {
+                      setSelectedDogId(dog.id);
+                      setSelectedDogName(dog.registeredName);
+                      // Pre-fill exhibitor email from primary owner
+                      const primaryOwner = dog.owners?.[0];
+                      if (primaryOwner?.ownerEmail) {
+                        setExhibitorEmail(primaryOwner.ownerEmail);
+                      }
+                      setStep('classes');
+                    }}
+                    className="flex w-full items-center justify-between rounded-lg border px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                  >
+                    <div>
+                      <p className="font-medium">{dog.registeredName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {dog.breed?.name} · {dog.sex === 'dog' ? 'Dog' : 'Bitch'}
+                        {dog.kcRegNumber ? ` · KC: ${dog.kcRegNumber}` : ''}
+                      </p>
+                      {dog.owners?.[0] && (
+                        <p className="text-xs text-muted-foreground">
+                          Owner: {dog.owners[0].ownerName}
+                        </p>
+                      )}
+                    </div>
+                    <ArrowRight className="size-4 text-muted-foreground" />
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="border-t pt-4">
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  setRegName(dogSearch);
+                  setStep('register');
+                }}
+              >
+                <Plus className="size-4" />
+                Register New Dog
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 2: Register new dog */}
+        {step === 'register' && (
+          <div className="space-y-4 py-2">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Registered Name *</label>
+                <Input value={regName} onChange={(e) => setRegName(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium">KC Reg Number</label>
+                <Input value={regKc} onChange={(e) => setRegKc(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Breed *</label>
+                <Select value={regBreed} onValueChange={setRegBreed}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select breed" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(allBreeds ?? []).map((b) => (
+                      <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Sex *</label>
+                <Select value={regSex} onValueChange={setRegSex}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select sex" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="dog">Dog</SelectItem>
+                    <SelectItem value="bitch">Bitch</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Date of Birth *</label>
+                <Input type="date" value={regDob} onChange={(e) => setRegDob(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Sire</label>
+                <Input value={regSire} onChange={(e) => setRegSire(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Dam</label>
+                <Input value={regDam} onChange={(e) => setRegDam(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="border-t pt-4">
+              <p className="mb-3 text-sm font-medium">Owner Details</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium">Owner Name *</label>
+                  <Input value={regOwnerName} onChange={(e) => setRegOwnerName(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium">Owner Email *</label>
+                  <Input
+                    type="email"
+                    value={exhibitorEmail}
+                    onChange={(e) => setExhibitorEmail(e.target.value)}
+                  />
+                </div>
+                <div className="sm:col-span-2 space-y-1">
+                  <label className="text-xs font-medium">Owner Address *</label>
+                  <Input value={regOwnerAddress} onChange={(e) => setRegOwnerAddress(e.target.value)} />
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setStep('search')}>
+                Back
+              </Button>
+              <Button
+                disabled={
+                  !regName || !regBreed || !regSex || !regDob ||
+                  !regOwnerName || !exhibitorEmail || !regOwnerAddress ||
+                  registerDogMutation.isPending
+                }
+                onClick={() =>
+                  registerDogMutation.mutate({
+                    registeredName: regName,
+                    kcRegNumber: regKc || undefined,
+                    breedId: regBreed,
+                    sex: regSex as 'dog' | 'bitch',
+                    dateOfBirth: regDob,
+                    sireName: regSire || undefined,
+                    damName: regDam || undefined,
+                    exhibitorEmail,
+                    ownerName: regOwnerName,
+                    ownerAddress: regOwnerAddress,
+                  })
+                }
+              >
+                {registerDogMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+                Register & Continue
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+
+        {/* Step 3: Select classes and submit */}
+        {step === 'classes' && (
+          <div className="space-y-4 py-2">
+            {/* Exhibitor email */}
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Exhibitor Email</label>
+              <Input
+                type="email"
+                placeholder="exhibitor@example.com"
+                value={exhibitorEmail}
+                onChange={(e) => setExhibitorEmail(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                If this matches a Remi account, the entry appears in their dashboard.
+              </p>
+            </div>
+
+            {/* Payment method */}
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Payment Method</label>
+              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="postal">Postal (cheque)</SelectItem>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                  <SelectItem value="online">Online (already paid)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* NFC toggle */}
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="nfc-check"
+                checked={isNfc}
+                onCheckedChange={(v) => setIsNfc(!!v)}
+              />
+              <Label htmlFor="nfc-check" className="text-sm">Not for Competition (NFC)</Label>
+            </div>
+
+            {/* Class selection */}
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Classes</label>
+              <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border p-3">
+                {classesData && classesData.length > 0 ? (
+                  classesData.map((sc) => (
+                    <label
+                      key={sc.id}
+                      className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-muted/50"
+                    >
+                      <Checkbox
+                        checked={selectedClassIds.includes(sc.id)}
+                        onCheckedChange={(checked) => {
+                          setSelectedClassIds((prev) =>
+                            checked
+                              ? [...prev, sc.id]
+                              : prev.filter((id) => id !== sc.id)
+                          );
+                        }}
+                      />
+                      <span className="flex-1 text-sm">
+                        {sc.classDefinition?.name ?? 'Unknown Class'}
+                        {sc.sex ? ` (${sc.sex === 'dog' ? 'Dog' : 'Bitch'})` : ''}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {formatCurrency(sc.entryFee)}
+                      </span>
+                    </label>
+                  ))
+                ) : (
+                  <p className="py-4 text-center text-sm text-muted-foreground">
+                    No classes defined for this show yet.
+                  </p>
+                )}
+              </div>
+              {selectedClassIds.length > 0 && (
+                <p className="text-sm font-medium">
+                  Total: {formatCurrency(
+                    (classesData ?? [])
+                      .filter((sc) => selectedClassIds.includes(sc.id))
+                      .reduce((sum, sc) => sum + sc.entryFee, 0)
+                  )}
+                </p>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setStep('search')}>
+                Back
+              </Button>
+              <Button
+                disabled={
+                  !selectedDogId || !exhibitorEmail || selectedClassIds.length === 0 ||
+                  createEntryMutation.isPending
+                }
+                onClick={() =>
+                  createEntryMutation.mutate({
+                    showId,
+                    dogId: selectedDogId!,
+                    classIds: selectedClassIds,
+                    exhibitorEmail,
+                    isNfc,
+                    paymentMethod: paymentMethod as 'postal' | 'cash' | 'bank_transfer' | 'online',
+                  })
+                }
+              >
+                {createEntryMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+                Create Entry
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
