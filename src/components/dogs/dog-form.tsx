@@ -310,8 +310,23 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                     Auto-fill from Kennel Club
                   </p>
                   <p className="mt-0.5 text-sm text-muted-foreground">
-                    Enter a KC registration number or registered name above, then click below to
-                    fetch breed, sex, date of birth, sire, dam, and breeder from the KC website.
+                    Enter the KC registration number above (e.g. BC28843204), then
+                    click the button below. This will look up the dog on the KC
+                    website and auto-fill the breed, sex, date of birth, sire, dam,
+                    and breeder details.
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    The registration number gives the most reliable results. You can
+                    find it on your KC registration certificate or at{' '}
+                    <a
+                      href="https://www.royalkennelclub.com/search/health-test-results-finder/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-primary underline underline-offset-2"
+                    >
+                      royalkennelclub.com
+                    </a>
+                    . This may take a few seconds as the KC website can be slow.
                   </p>
                   <Button
                     type="button"
@@ -322,7 +337,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                     onClick={() => {
                       const query = form.getValues('kcRegNumber') || form.getValues('registeredName');
                       if (!query || query.trim().length < 2) {
-                        toast.error('Enter a registration number or name first');
+                        toast.error('Enter a KC registration number first');
                         return;
                       }
                       kcLookup.mutate({ query: query.trim() });
@@ -331,7 +346,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                     {kcLookup.isPending ? (
                       <>
                         <Loader2 className="size-4 animate-spin" />
-                        Searching KC website...
+                        Searching KC website (this may take a moment)...
                       </>
                     ) : (
                       <>
