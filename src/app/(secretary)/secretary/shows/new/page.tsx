@@ -205,8 +205,8 @@ export default function NewShowPage() {
         classDefinitionIds: values.selectedClassIds.length > 0
           ? values.selectedClassIds
           : undefined,
-        entryFee: values.firstEntryFee > 0
-          ? values.firstEntryFee
+        entryFee: Number(values.firstEntryFee) > 0
+          ? Number(values.firstEntryFee)
           : undefined,
       });
 
