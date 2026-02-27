@@ -215,6 +215,7 @@ export const showsRouter = createTRPCRouter({
         venueId: z.string().uuid().optional(),
         startDate: z.string(),
         endDate: z.string(),
+        entriesOpenDate: z.string().datetime().optional(),
         entryCloseDate: z.string().datetime().optional(),
         postalCloseDate: z.string().datetime().optional(),
         kcLicenceNo: z.string().optional(),
@@ -227,6 +228,9 @@ export const showsRouter = createTRPCRouter({
         .insert(shows)
         .values({
           ...input,
+          entriesOpenDate: input.entriesOpenDate
+            ? new Date(input.entriesOpenDate)
+            : null,
           entryCloseDate: input.entryCloseDate
             ? new Date(input.entryCloseDate)
             : null,
@@ -259,6 +263,7 @@ export const showsRouter = createTRPCRouter({
         venueId: z.string().uuid().nullable().optional(),
         startDate: z.string().optional(),
         endDate: z.string().optional(),
+        entriesOpenDate: z.string().datetime().nullable().optional(),
         entryCloseDate: z.string().datetime().nullable().optional(),
         postalCloseDate: z.string().datetime().nullable().optional(),
         status: z
@@ -278,7 +283,7 @@ export const showsRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { id, entryCloseDate, postalCloseDate, ...rest } = input;
+      const { id, entriesOpenDate, entryCloseDate, postalCloseDate, ...rest } = input;
 
       const existing = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, id),
@@ -292,6 +297,11 @@ export const showsRouter = createTRPCRouter({
       }
 
       const updateData: Record<string, unknown> = { ...rest };
+      if (entriesOpenDate !== undefined) {
+        updateData.entriesOpenDate = entriesOpenDate
+          ? new Date(entriesOpenDate)
+          : null;
+      }
       if (entryCloseDate !== undefined) {
         updateData.entryCloseDate = entryCloseDate
           ? new Date(entryCloseDate)

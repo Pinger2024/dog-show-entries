@@ -31,6 +31,7 @@ export const shows = pgTable(
     endDate: date('end_date', { mode: 'string' }).notNull(),
     startTime: text('start_time'),
     endTime: text('end_time'),
+    entriesOpenDate: timestamp('entries_open_date', { withTimezone: true }),
     entryCloseDate: timestamp('entry_close_date', { withTimezone: true }),
     postalCloseDate: timestamp('postal_close_date', { withTimezone: true }),
     status: showStatusEnum('status').notNull().default('draft'),

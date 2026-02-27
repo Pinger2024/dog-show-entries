@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { format, parseISO, differenceInDays } from 'date-fns';
+import { format, differenceInDays } from 'date-fns';
+import { formatDateRange } from '@/lib/date-utils';
 import {
   CalendarDays,
   MapPin,
@@ -24,26 +25,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-
-/* ─── Date helpers ─────────────────────────────────── */
-
-function formatDateRange(startDate: string, endDate: string): string {
-  const start = parseISO(startDate);
-  const end = parseISO(endDate);
-  if (startDate === endDate) {
-    return format(start, 'd MMM yyyy');
-  }
-  // Same month and year: "15–17 May 2025"
-  if (start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear()) {
-    return `${format(start, 'd')}–${format(end, 'd')} ${format(end, 'MMM yyyy')}`;
-  }
-  // Same year, different month: "30 Apr – 2 May 2025"
-  if (start.getFullYear() === end.getFullYear()) {
-    return `${format(start, 'd MMM')} – ${format(end, 'd MMM yyyy')}`;
-  }
-  // Different years
-  return `${format(start, 'd MMM yyyy')} – ${format(end, 'd MMM yyyy')}`;
-}
 
 /* ─── Show type config ──────────────────────────────── */
 
@@ -341,6 +322,7 @@ function ShowCard({ show }: { show: {
   status: string;
   startDate: string;
   endDate: string;
+  entriesOpenDate: string | Date | null;
   entryCloseDate: string | Date | null;
   organisation: { name: string } | null;
   venue: { name: string } | null;
@@ -409,9 +391,16 @@ function ShowCard({ show }: { show: {
               </div>
             ) : (
               <div className="flex items-center justify-between">
-                <Badge variant="outline" className="text-[11px] font-medium">
-                  {statusLabels[show.status] ?? show.status}
-                </Badge>
+                <div className="flex flex-col gap-1">
+                  <Badge variant="outline" className="w-fit text-[11px] font-medium">
+                    {statusLabels[show.status] ?? show.status}
+                  </Badge>
+                  {show.status === 'published' && show.entriesOpenDate && (
+                    <span className="text-[11px] text-muted-foreground">
+                      Entries open {format(new Date(show.entriesOpenDate), 'd MMM yyyy')}
+                    </span>
+                  )}
+                </div>
                 <ArrowRight className="size-4 text-muted-foreground/30 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-primary" />
               </div>
             )}

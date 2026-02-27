@@ -77,6 +77,7 @@ const createShowSchema = z.object({
   organisationId: z.string().uuid('Please select an organisation'),
   startDate: z.string().min(1, 'Start date is required'),
   endDate: z.string().min(1, 'End date is required'),
+  entriesOpenDate: z.string().optional(),
   entryCloseDate: z.string().optional(),
   postalCloseDate: z.string().optional(),
   description: z.string().optional(),
@@ -134,6 +135,7 @@ export default function NewShowPage() {
       organisationId: '',
       startDate: '',
       endDate: '',
+      entriesOpenDate: '',
       entryCloseDate: '',
       postalCloseDate: '',
       description: '',
@@ -190,6 +192,9 @@ export default function NewShowPage() {
         venueId: venueId || undefined,
         startDate: values.startDate,
         endDate: values.endDate,
+        entriesOpenDate: values.entriesOpenDate
+          ? new Date(values.entriesOpenDate).toISOString()
+          : undefined,
         entryCloseDate: values.entryCloseDate
           ? new Date(values.entryCloseDate).toISOString()
           : undefined,
@@ -505,7 +510,53 @@ export default function NewShowPage() {
                   />
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <FormField
+                    control={form.control}
+                    name="entriesOpenDate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Entries Open Date</FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant="outline"
+                                className={cn(
+                                  'w-full justify-start text-left font-normal',
+                                  !field.value && 'text-muted-foreground'
+                                )}
+                              >
+                                <CalendarIcon className="size-4" />
+                                {field.value
+                                  ? format(new Date(field.value), 'PPP')
+                                  : 'Optional'}
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={
+                                field.value
+                                  ? new Date(field.value)
+                                  : undefined
+                              }
+                              onSelect={(date) =>
+                                field.onChange(
+                                  date
+                                    ? date.toISOString().split('T')[0]
+                                    : ''
+                                )
+                              }
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
                   <FormField
                     control={form.control}
                     name="entryCloseDate"

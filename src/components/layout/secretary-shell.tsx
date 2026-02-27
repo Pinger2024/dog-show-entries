@@ -24,10 +24,16 @@ interface SecretaryShellProps {
   children: React.ReactNode;
 }
 
-const navItems = [
+const sidebarNavItems = [
   { href: '/secretary', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/secretary/shows', label: 'My Shows', icon: CalendarDays },
   { href: '/secretary/shows/new', label: 'Create Show', icon: PlusCircle },
+  { href: '/secretary/billing', label: 'Billing', icon: CreditCard },
+];
+
+const mobileNavItems = [
+  { href: '/secretary', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/secretary/shows', label: 'My Shows', icon: CalendarDays },
   { href: '/secretary/billing', label: 'Billing', icon: CreditCard },
 ];
 
@@ -84,7 +90,7 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
         </div>
 
         <nav className="flex-1 space-y-1 p-3">
-          {navItems.map((item) => {
+          {sidebarNavItems.map((item) => {
             const isActive =
               pathname === item.href ||
               (item.href !== '/secretary' &&
@@ -178,12 +184,11 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
 
         {/* Mobile bottom tab bar */}
         <nav className="fixed bottom-0 left-0 right-0 z-50 flex border-t bg-background md:hidden">
-          {navItems.map((item) => {
+          {mobileNavItems.map((item) => {
             const isActive =
               pathname === item.href ||
               (item.href !== '/secretary' &&
-                pathname.startsWith(item.href) &&
-                item.href !== '/secretary/shows/new');
+                pathname.startsWith(item.href));
             return (
               <Link
                 key={item.href}

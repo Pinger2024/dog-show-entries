@@ -6,15 +6,18 @@ import {
   ArrowLeft,
   BookOpen,
   CalendarDays,
+  CircleDot,
   Clock,
   Download,
   Edit3,
   FileText,
+  Gavel,
   Hash,
   Loader2,
   MapPin,
   Plus,
   PoundSterling,
+  RotateCcw,
   Search,
   Ticket,
   Trash2,
@@ -26,6 +29,7 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { formatDogName } from '@/lib/utils';
+import { formatCurrency } from '@/lib/date-utils';
 import { CLASS_TEMPLATES } from '@/lib/class-templates';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -95,10 +99,6 @@ function formatDate(dateStr: string | Date | null) {
     month: 'short',
     year: 'numeric',
   });
-}
-
-function formatCurrency(pence: number) {
-  return `£${(pence / 100).toFixed(2)}`;
 }
 
 function daysUntil(dateStr: string) {
@@ -252,6 +252,8 @@ export default function ManageShowPage({
           <TabsTrigger value="financial">Financial</TabsTrigger>
           <TabsTrigger value="catalogue">Catalogue</TabsTrigger>
           <TabsTrigger value="reports">Reports</TabsTrigger>
+          <TabsTrigger value="judges">Judges</TabsTrigger>
+          <TabsTrigger value="rings">Rings</TabsTrigger>
           <TabsTrigger value="stewards">Stewards</TabsTrigger>
         </TabsList>
 
@@ -421,6 +423,7 @@ export default function ManageShowPage({
         {/* Financial Tab */}
         <TabsContent value="financial" className="space-y-6">
           <FinancialTab
+            showId={id}
             stats={stats}
             entries={entriesData?.items ?? []}
           />
@@ -434,6 +437,16 @@ export default function ManageShowPage({
         {/* Reports Tab */}
         <TabsContent value="reports" className="space-y-6">
           <ReportsTab showId={id} />
+        </TabsContent>
+
+        {/* Judges Tab */}
+        <TabsContent value="judges" className="space-y-6">
+          <JudgesTab showId={id} />
+        </TabsContent>
+
+        {/* Rings Tab */}
+        <TabsContent value="rings" className="space-y-6">
+          <RingsTab showId={id} />
         </TabsContent>
 
         {/* Stewards Tab */}
@@ -676,9 +689,11 @@ function EntriesTab({
 }
 
 function FinancialTab({
+  showId,
   stats,
   entries,
 }: {
+  showId: string;
   stats:
     | {
         totalEntries: number;
@@ -689,6 +704,27 @@ function FinancialTab({
     | undefined;
   entries: EntryItem[];
 }) {
+  const [refundEntry, setRefundEntry] = useState<EntryItem | null>(null);
+  const [refundAmount, setRefundAmount] = useState('');
+  const [refundReason, setRefundReason] = useState('');
+  const utils = trpc.useUtils();
+
+  const refundMutation = trpc.secretary.issueRefund.useMutation({
+    onSuccess: (data) => {
+      toast.success(
+        data.fullyRefunded
+          ? `Full refund of ${formatCurrency(data.amount)} issued — entry cancelled`
+          : `Partial refund of ${formatCurrency(data.amount)} issued`
+      );
+      setRefundEntry(null);
+      setRefundAmount('');
+      setRefundReason('');
+      utils.entries.getForShow.invalidate({ showId });
+      utils.secretary.getShowStats.invalidate({ showId });
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to issue refund'),
+  });
+
   const confirmedRevenue = entries
     .filter((e) => e.status === 'confirmed')
     .reduce((sum, e) => sum + e.totalFee, 0);
@@ -699,6 +735,8 @@ function FinancialTab({
 
   const nfcEntries = entries.filter((e) => e.isNfc);
   const standardEntries = entries.filter((e) => !e.isNfc);
+
+  const confirmedEntries = entries.filter((e) => e.status === 'confirmed');
 
   return (
     <div className="space-y-6">
@@ -831,6 +869,123 @@ function FinancialTab({
           </Table>
         </CardContent>
       </Card>
+
+      {/* Refund Management */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-start justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <RotateCcw className="size-5" />
+                Issue Refund
+              </CardTitle>
+              <CardDescription>
+                Refund a confirmed entry via Stripe. Full refunds auto-cancel the entry.
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {confirmedEntries.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              No confirmed entries available for refund.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Cat #</TableHead>
+                  <TableHead>Dog</TableHead>
+                  <TableHead>Fee</TableHead>
+                  <TableHead className="w-10" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {confirmedEntries.map((entry) => (
+                  <TableRow key={entry.id}>
+                    <TableCell className="font-medium">
+                      {entry.catalogueNumber ?? '—'}
+                    </TableCell>
+                    <TableCell>{entry.dog ? formatDogName(entry.dog) : 'Unknown'}</TableCell>
+                    <TableCell>{formatCurrency(entry.totalFee)}</TableCell>
+                    <TableCell>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setRefundEntry(entry);
+                          setRefundAmount((entry.totalFee / 100).toFixed(2));
+                        }}
+                      >
+                        <RotateCcw className="size-3.5" />
+                        Refund
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Refund dialog */}
+      <Dialog open={!!refundEntry} onOpenChange={(open) => !open && setRefundEntry(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Issue Refund</DialogTitle>
+            <DialogDescription>
+              Refunding {refundEntry?.dog ? formatDogName(refundEntry.dog) : ''} — entry fee {formatCurrency(refundEntry?.totalFee ?? 0)}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Amount (GBP)</label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0.01"
+                max={(refundEntry?.totalFee ?? 0) / 100}
+                value={refundAmount}
+                onChange={(e) => setRefundAmount(e.target.value)}
+                placeholder="e.g. 5.00"
+              />
+              <p className="text-xs text-muted-foreground">
+                Max refundable: {formatCurrency(refundEntry?.totalFee ?? 0)}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Reason (optional)</label>
+              <Input
+                value={refundReason}
+                onChange={(e) => setRefundReason(e.target.value)}
+                placeholder="e.g. Exhibitor withdrew"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRefundEntry(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={refundMutation.isPending || !refundAmount}
+              onClick={() => {
+                if (!refundEntry) return;
+                const amountPence = Math.round(parseFloat(refundAmount) * 100);
+                refundMutation.mutate({
+                  entryId: refundEntry.id,
+                  amount: amountPence,
+                  reason: refundReason || undefined,
+                });
+              }}
+            >
+              {refundMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+              Confirm Refund
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -2599,6 +2754,437 @@ function AuditLogViewer({ showId }: { showId: string }) {
               </div>
             ))}
           </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Judges Tab ───────────────────────────────────────────────
+
+function JudgesTab({ showId }: { showId: string }) {
+  const [adding, setAdding] = useState(false);
+  const [judgeName, setJudgeName] = useState('');
+  const [judgeKc, setJudgeKc] = useState('');
+  const [judgeEmail, setJudgeEmail] = useState('');
+  const [selectedJudgeId, setSelectedJudgeId] = useState('');
+  const [selectedBreedId, setSelectedBreedId] = useState('');
+  const [selectedRingId, setSelectedRingId] = useState('');
+  const utils = trpc.useUtils();
+
+  const { data: assignments, isLoading } =
+    trpc.secretary.getShowJudges.useQuery({ showId });
+  const { data: allJudges } = trpc.secretary.getJudges.useQuery();
+  const { data: breeds } = trpc.breeds.list.useQuery();
+  const { data: showRings } = trpc.secretary.getShowRings.useQuery({ showId });
+
+  const addJudgeMutation = trpc.secretary.addJudge.useMutation({
+    onSuccess: (judge) => {
+      toast.success(`Judge "${judge.name}" created`);
+      setJudgeName('');
+      setJudgeKc('');
+      setJudgeEmail('');
+      setAdding(false);
+      setSelectedJudgeId(judge.id);
+      utils.secretary.getJudges.invalidate();
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to add judge'),
+  });
+
+  const assignMutation = trpc.secretary.assignJudge.useMutation({
+    onSuccess: () => {
+      toast.success('Judge assigned to show');
+      setSelectedJudgeId('');
+      setSelectedBreedId('');
+      setSelectedRingId('');
+      utils.secretary.getShowJudges.invalidate({ showId });
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to assign judge'),
+  });
+
+  const removeMutation = trpc.secretary.removeJudgeAssignment.useMutation({
+    onSuccess: () => {
+      toast.success('Judge assignment removed');
+      utils.secretary.getShowJudges.invalidate({ showId });
+    },
+    onError: () => toast.error('Failed to remove judge assignment'),
+  });
+
+  return (
+    <div className="space-y-6">
+      {/* Create new judge */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-start justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Gavel className="size-5" />
+                Judges
+              </CardTitle>
+              <CardDescription>
+                Add judges to the system and assign them to this show.
+              </CardDescription>
+            </div>
+            {!adding && (
+              <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+                <Plus className="size-4" />
+                New Judge
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        {adding && (
+          <CardContent>
+            <div className="rounded-lg border bg-muted/30 p-4">
+              <p className="mb-3 text-sm font-medium">Create New Judge</p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Input
+                  placeholder="Name *"
+                  value={judgeName}
+                  onChange={(e) => setJudgeName(e.target.value)}
+                />
+                <Input
+                  placeholder="KC Number"
+                  value={judgeKc}
+                  onChange={(e) => setJudgeKc(e.target.value)}
+                />
+                <Input
+                  type="email"
+                  placeholder="Email"
+                  value={judgeEmail}
+                  onChange={(e) => setJudgeEmail(e.target.value)}
+                />
+              </div>
+              <div className="mt-3 flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    addJudgeMutation.mutate({
+                      name: judgeName.trim(),
+                      kcNumber: judgeKc.trim() || undefined,
+                      contactEmail: judgeEmail.trim() || undefined,
+                    })
+                  }
+                  disabled={!judgeName.trim() || addJudgeMutation.isPending}
+                >
+                  {addJudgeMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+                  Create Judge
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setAdding(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        )}
+      </Card>
+
+      {/* Assign judge to show */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Assign Judge to Show</CardTitle>
+          <CardDescription>
+            Select an existing judge and optionally assign them to a breed and ring.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 sm:grid-cols-4">
+            <Select value={selectedJudgeId} onValueChange={setSelectedJudgeId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select judge *" />
+              </SelectTrigger>
+              <SelectContent>
+                {(allJudges ?? []).map((j) => (
+                  <SelectItem key={j.id} value={j.id}>
+                    {j.name} {j.kcNumber ? `(${j.kcNumber})` : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={selectedBreedId} onValueChange={setSelectedBreedId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Breed (optional)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">All breeds</SelectItem>
+                {(breeds ?? []).map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={selectedRingId} onValueChange={setSelectedRingId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Ring (optional)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No ring</SelectItem>
+                {(showRings ?? []).map((r) => (
+                  <SelectItem key={r.id} value={r.id}>
+                    Ring {r.number}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              onClick={() =>
+                assignMutation.mutate({
+                  showId,
+                  judgeId: selectedJudgeId,
+                  breedId: selectedBreedId && selectedBreedId !== 'none' ? selectedBreedId : null,
+                  ringId: selectedRingId && selectedRingId !== 'none' ? selectedRingId : null,
+                })
+              }
+              disabled={!selectedJudgeId || assignMutation.isPending}
+            >
+              {assignMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+              Assign
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Current judge assignments */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Current Assignments ({assignments?.length ?? 0})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="size-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : !assignments || assignments.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
+              <Gavel className="mb-4 size-10 text-muted-foreground/40" />
+              <h3 className="font-semibold">No judges assigned</h3>
+              <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                Assign judges to this show using the form above.
+              </p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Judge</TableHead>
+                  <TableHead>KC Number</TableHead>
+                  <TableHead>Breed</TableHead>
+                  <TableHead>Ring</TableHead>
+                  <TableHead className="w-10" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {assignments.map((a) => (
+                  <TableRow key={a.id}>
+                    <TableCell className="font-medium">{a.judge.name}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {a.judge.kcNumber ?? '—'}
+                    </TableCell>
+                    <TableCell>
+                      {a.breed ? (
+                        <Badge variant="outline">{a.breed.name}</Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">All</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {a.ring ? (
+                        <Badge variant="outline">Ring {a.ring.number}</Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="size-7 text-destructive hover:text-destructive"
+                        onClick={() => {
+                          if (confirm('Remove this judge assignment?')) {
+                            removeMutation.mutate({ assignmentId: a.id });
+                          }
+                        }}
+                        disabled={removeMutation.isPending}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ── Rings Tab ────────────────────────────────────────────────
+
+function RingsTab({ showId }: { showId: string }) {
+  const [adding, setAdding] = useState(false);
+  const [ringNumber, setRingNumber] = useState('');
+  const [ringDay, setRingDay] = useState('');
+  const [ringTime, setRingTime] = useState('');
+  const utils = trpc.useUtils();
+
+  const { data: showRings, isLoading } =
+    trpc.secretary.getShowRings.useQuery({ showId });
+
+  const addMutation = trpc.secretary.addRing.useMutation({
+    onSuccess: () => {
+      toast.success('Ring added');
+      setRingNumber('');
+      setRingDay('');
+      setRingTime('');
+      setAdding(false);
+      utils.secretary.getShowRings.invalidate({ showId });
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to add ring'),
+  });
+
+  const removeMutation = trpc.secretary.removeRing.useMutation({
+    onSuccess: () => {
+      toast.success('Ring removed');
+      utils.secretary.getShowRings.invalidate({ showId });
+    },
+    onError: () => toast.error('Failed to remove ring'),
+  });
+
+  // Suggest the next ring number
+  const nextNumber = (showRings?.length ?? 0) + 1;
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-start justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <CircleDot className="size-5" />
+              Rings ({showRings?.length ?? 0})
+            </CardTitle>
+            <CardDescription>
+              Define the judging rings for this show. Rings can be assigned to judges and stewards.
+            </CardDescription>
+          </div>
+          {!adding && (
+            <Button onClick={() => { setAdding(true); setRingNumber(String(nextNumber)); }}>
+              <Plus className="size-4" />
+              Add Ring
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        {/* Add ring form */}
+        {adding && (
+          <div className="mb-6 rounded-lg border bg-muted/30 p-4">
+            <p className="mb-3 text-sm font-medium">Add Ring</p>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Ring Number *</label>
+                <Input
+                  type="number"
+                  min="1"
+                  placeholder="e.g. 1"
+                  value={ringNumber}
+                  onChange={(e) => setRingNumber(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Show Day</label>
+                <Input
+                  type="number"
+                  min="1"
+                  placeholder="e.g. 1"
+                  value={ringDay}
+                  onChange={(e) => setRingDay(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Start Time</label>
+                <Input
+                  type="time"
+                  value={ringTime}
+                  onChange={(e) => setRingTime(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="mt-3 flex gap-2">
+              <Button
+                size="sm"
+                onClick={() =>
+                  addMutation.mutate({
+                    showId,
+                    number: parseInt(ringNumber),
+                    showDay: ringDay ? parseInt(ringDay) : null,
+                    startTime: ringTime || null,
+                  })
+                }
+                disabled={!ringNumber || addMutation.isPending}
+              >
+                {addMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+                Add Ring
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setAdding(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Ring list */}
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="size-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : !showRings || showRings.length === 0 ? (
+          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
+            <CircleDot className="mb-4 size-10 text-muted-foreground/40" />
+            <h3 className="font-semibold">No rings defined</h3>
+            <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+              Add rings so judges and stewards can be assigned to specific areas.
+            </p>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Ring</TableHead>
+                <TableHead>Day</TableHead>
+                <TableHead>Start Time</TableHead>
+                <TableHead className="w-10" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {showRings.map((ring) => (
+                <TableRow key={ring.id}>
+                  <TableCell className="font-medium">Ring {ring.number}</TableCell>
+                  <TableCell>
+                    {ring.showDay ? `Day ${ring.showDay}` : '—'}
+                  </TableCell>
+                  <TableCell>{ring.startTime ?? '—'}</TableCell>
+                  <TableCell>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="size-7 text-destructive hover:text-destructive"
+                      onClick={() => {
+                        if (confirm('Remove this ring? Any judge/steward assignments to this ring will be unlinked.')) {
+                          removeMutation.mutate({ ringId: ring.id });
+                        }
+                      }}
+                      disabled={removeMutation.isPending}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
       </CardContent>
     </Card>

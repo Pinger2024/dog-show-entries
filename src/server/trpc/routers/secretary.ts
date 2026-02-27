@@ -20,7 +20,11 @@ import {
   orders,
   stewardAssignments,
   users,
+  judges,
+  judgeAssignments,
+  rings,
 } from '@/server/db/schema';
+import { getStripe } from '@/server/services/stripe';
 
 export const secretaryRouter = createTRPCRouter({
   getDashboard: secretaryProcedure.query(async ({ ctx }) => {
@@ -824,5 +828,262 @@ export const secretaryRouter = createTRPCRouter({
       }
 
       return { deleted: true };
+    }),
+
+  // ─── Ring Management ──────────────────────────────────
+  getShowRings: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      return ctx.db.query.rings.findMany({
+        where: eq(rings.showId, input.showId),
+        orderBy: asc(rings.number),
+      });
+    }),
+
+  addRing: secretaryProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        number: z.number().int().min(1),
+        showDay: z.number().int().min(1).nullable().optional(),
+        startTime: z.string().nullable().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      const [ring] = await ctx.db
+        .insert(rings)
+        .values({
+          showId: input.showId,
+          number: input.number,
+          showDay: input.showDay ?? null,
+          startTime: input.startTime ?? null,
+        })
+        .returning();
+
+      return ring!;
+    }),
+
+  updateRing: secretaryProcedure
+    .input(
+      z.object({
+        ringId: z.string().uuid(),
+        number: z.number().int().min(1).optional(),
+        showDay: z.number().int().min(1).nullable().optional(),
+        startTime: z.string().nullable().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { ringId, ...data } = input;
+      const updateData: Record<string, unknown> = {};
+      if (data.number !== undefined) updateData.number = data.number;
+      if (data.showDay !== undefined) updateData.showDay = data.showDay;
+      if (data.startTime !== undefined) updateData.startTime = data.startTime;
+
+      const [updated] = await ctx.db
+        .update(rings)
+        .set(updateData)
+        .where(eq(rings.id, ringId))
+        .returning();
+
+      if (!updated) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Ring not found' });
+      }
+      return updated;
+    }),
+
+  removeRing: secretaryProcedure
+    .input(z.object({ ringId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const [deleted] = await ctx.db
+        .delete(rings)
+        .where(eq(rings.id, input.ringId))
+        .returning({ id: rings.id });
+
+      if (!deleted) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Ring not found' });
+      }
+      return { removed: true };
+    }),
+
+  // ─── Judge Management ─────────────────────────────────
+  getJudges: secretaryProcedure
+    .query(async ({ ctx }) => {
+      return ctx.db.query.judges.findMany({
+        orderBy: asc(judges.name),
+      });
+    }),
+
+  addJudge: secretaryProcedure
+    .input(
+      z.object({
+        name: z.string().min(1).max(255),
+        kcNumber: z.string().optional(),
+        contactEmail: z.string().email().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const [judge] = await ctx.db
+        .insert(judges)
+        .values({
+          name: input.name,
+          kcNumber: input.kcNumber ?? null,
+          contactEmail: input.contactEmail ?? null,
+        })
+        .returning();
+
+      return judge!;
+    }),
+
+  getShowJudges: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      return ctx.db.query.judgeAssignments.findMany({
+        where: eq(judgeAssignments.showId, input.showId),
+        with: {
+          judge: true,
+          breed: true,
+          ring: true,
+        },
+      });
+    }),
+
+  assignJudge: secretaryProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        judgeId: z.string().uuid(),
+        breedId: z.string().uuid().nullable().optional(),
+        ringId: z.string().uuid().nullable().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      const [assignment] = await ctx.db
+        .insert(judgeAssignments)
+        .values({
+          showId: input.showId,
+          judgeId: input.judgeId,
+          breedId: input.breedId ?? null,
+          ringId: input.ringId ?? null,
+        })
+        .returning();
+
+      return assignment!;
+    }),
+
+  removeJudgeAssignment: secretaryProcedure
+    .input(z.object({ assignmentId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const [deleted] = await ctx.db
+        .delete(judgeAssignments)
+        .where(eq(judgeAssignments.id, input.assignmentId))
+        .returning({ id: judgeAssignments.id });
+
+      if (!deleted) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Judge assignment not found',
+        });
+      }
+      return { removed: true };
+    }),
+
+  // ─── Refund Management ────────────────────────────────
+  issueRefund: secretaryProcedure
+    .input(
+      z.object({
+        entryId: z.string().uuid(),
+        amount: z.number().int().min(1).optional(), // pence; omit for full refund
+        reason: z.string().max(500).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Find the entry and its show
+      const entry = await ctx.db.query.entries.findFirst({
+        where: eq(entries.id, input.entryId),
+        with: { show: true },
+      });
+
+      if (!entry) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Entry not found' });
+      }
+
+      await verifyShowAccess(ctx.db, ctx.session.user.id, entry.showId);
+
+      // Find the original succeeded payment with a Stripe payment ID
+      const originalPayment = await ctx.db.query.payments.findFirst({
+        where: and(
+          eq(payments.entryId, input.entryId),
+          eq(payments.status, 'succeeded'),
+        ),
+      });
+
+      if (!originalPayment?.stripePaymentId) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'No completed payment found for this entry',
+        });
+      }
+
+      const refundAmount = input.amount ?? entry.totalFee;
+      const alreadyRefunded = originalPayment.refundAmount ?? 0;
+      const maxRefundable = originalPayment.amount - alreadyRefunded;
+
+      if (refundAmount > maxRefundable) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Cannot refund more than the remaining amount (${maxRefundable}p)`,
+        });
+      }
+
+      // Issue refund via Stripe
+      const stripe = getStripe();
+      await stripe.refunds.create({
+        payment_intent: originalPayment.stripePaymentId,
+        amount: refundAmount,
+        ...(input.reason ? { reason: 'requested_by_customer' as const } : {}),
+      });
+
+      // Record the refund payment
+      await ctx.db.insert(payments).values({
+        entryId: input.entryId,
+        orderId: originalPayment.orderId,
+        stripePaymentId: originalPayment.stripePaymentId,
+        amount: refundAmount,
+        status: 'refunded',
+        type: 'refund',
+      });
+
+      // Update original payment's refund tracking
+      const newRefundTotal = alreadyRefunded + refundAmount;
+      const isFullyRefunded = newRefundTotal >= originalPayment.amount;
+      await ctx.db
+        .update(payments)
+        .set({
+          refundAmount: newRefundTotal,
+          status: isFullyRefunded ? 'refunded' : 'partially_refunded',
+        })
+        .where(eq(payments.id, originalPayment.id));
+
+      // If fully refunded, cancel the entry
+      if (isFullyRefunded) {
+        await ctx.db
+          .update(entries)
+          .set({ status: 'cancelled' })
+          .where(eq(entries.id, input.entryId));
+      }
+
+      return {
+        refunded: true,
+        amount: refundAmount,
+        fullyRefunded: isFullyRefunded,
+      };
     }),
 });
