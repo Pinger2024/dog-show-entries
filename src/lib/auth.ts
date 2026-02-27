@@ -67,6 +67,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         token.id = user.id;
         token.role = (user as typeof user & { role: string }).role;
+      } else if (token.id && db) {
+        // Refresh role from DB on every token refresh so role changes
+        // (e.g. via account switcher or admin panel) take effect without re-login
+        const [dbUser] = await db
+          .select({ role: schema.users.role })
+          .from(schema.users)
+          .where(eq(schema.users.id, token.id as string))
+          .limit(1);
+        if (dbUser) {
+          token.role = dbUser.role;
+        }
       }
       return token;
     },
