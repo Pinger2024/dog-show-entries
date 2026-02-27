@@ -21,3 +21,11 @@ export async function requireRole(role: string) {
   }
   return user;
 }
+
+export async function requireAnyRole(roles: string[]) {
+  const user = await requireAuth();
+  if (!roles.includes(user.role) && user.role !== 'admin') {
+    redirect('/dashboard');
+  }
+  return user;
+}

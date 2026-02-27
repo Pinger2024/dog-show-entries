@@ -21,6 +21,7 @@ import {
   Upload,
   Users,
   X,
+  Eye,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
@@ -200,6 +201,7 @@ export default function ManageShowPage({
           <TabsTrigger value="financial">Financial</TabsTrigger>
           <TabsTrigger value="catalogue">Catalogue</TabsTrigger>
           <TabsTrigger value="reports">Reports</TabsTrigger>
+          <TabsTrigger value="stewards">Stewards</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
@@ -381,6 +383,11 @@ export default function ManageShowPage({
         {/* Reports Tab */}
         <TabsContent value="reports" className="space-y-6">
           <ReportsTab showId={id} />
+        </TabsContent>
+
+        {/* Stewards Tab */}
+        <TabsContent value="stewards" className="space-y-6">
+          <StewardsTab showId={id} />
         </TabsContent>
       </Tabs>
     </div>
@@ -2534,6 +2541,159 @@ function AuditLogViewer({ showId }: { showId: string }) {
               </div>
             ))}
           </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Stewards Tab ──────────────────────────────────────────────
+
+function StewardsTab({ showId }: { showId: string }) {
+  const [email, setEmail] = useState('');
+  const [adding, setAdding] = useState(false);
+  const utils = trpc.useUtils();
+
+  const { data: stewards, isLoading } =
+    trpc.secretary.getShowStewards.useQuery({ showId });
+
+  const assignMutation = trpc.secretary.assignSteward.useMutation({
+    onSuccess: () => {
+      toast.success('Steward assigned');
+      setEmail('');
+      setAdding(false);
+      utils.secretary.getShowStewards.invalidate({ showId });
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to assign steward'),
+  });
+
+  const removeMutation = trpc.secretary.removeSteward.useMutation({
+    onSuccess: () => {
+      toast.success('Steward removed');
+      utils.secretary.getShowStewards.invalidate({ showId });
+    },
+    onError: () => toast.error('Failed to remove steward'),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-start justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Eye className="size-5" />
+              Stewards ({stewards?.length ?? 0})
+            </CardTitle>
+            <CardDescription>
+              Assign stewards who can record results at ringside using their phone.
+            </CardDescription>
+          </div>
+          {!adding && (
+            <Button onClick={() => setAdding(true)}>
+              <Plus className="size-4" />
+              Add Steward
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        {/* Add steward form */}
+        {adding && (
+          <div className="mb-6 rounded-lg border bg-muted/30 p-4">
+            <p className="mb-2 text-sm font-medium">Add Steward by Email</p>
+            <p className="mb-3 text-xs text-muted-foreground">
+              The user must have a Remi account. If they&apos;re currently an exhibitor,
+              their role will be upgraded to steward.
+            </p>
+            <div className="flex gap-2">
+              <Input
+                type="email"
+                placeholder="steward@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && email.trim()) {
+                    assignMutation.mutate({ showId, email: email.trim() });
+                  }
+                }}
+                className="flex-1"
+              />
+              <Button
+                onClick={() =>
+                  assignMutation.mutate({ showId, email: email.trim() })
+                }
+                disabled={!email.trim() || assignMutation.isPending}
+              >
+                {assignMutation.isPending && (
+                  <Loader2 className="size-4 animate-spin" />
+                )}
+                Assign
+              </Button>
+              <Button variant="outline" onClick={() => setAdding(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Steward list */}
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="size-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : !stewards || stewards.length === 0 ? (
+          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
+            <Eye className="mb-4 size-10 text-muted-foreground/40" />
+            <h3 className="font-semibold">No stewards assigned</h3>
+            <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+              Assign stewards so they can record results from ringside during the show.
+            </p>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Ring</TableHead>
+                <TableHead className="w-10" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {stewards.map((assignment) => (
+                <TableRow key={assignment.id}>
+                  <TableCell className="font-medium">
+                    {assignment.user.name}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {assignment.user.email}
+                  </TableCell>
+                  <TableCell>
+                    {assignment.ring ? (
+                      <Badge variant="outline">Ring {assignment.ring.number}</Badge>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">All</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="size-7 text-destructive hover:text-destructive"
+                      onClick={() => {
+                        if (confirm('Remove this steward from the show?')) {
+                          removeMutation.mutate({ assignmentId: assignment.id });
+                        }
+                      }}
+                      disabled={removeMutation.isPending}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
       </CardContent>
     </Card>

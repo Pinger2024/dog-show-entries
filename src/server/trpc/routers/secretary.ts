@@ -17,6 +17,8 @@ import {
   dogs,
   entryAuditLog,
   orders,
+  stewardAssignments,
+  users,
 } from '@/server/db/schema';
 
 export const secretaryRouter = createTRPCRouter({
@@ -597,6 +599,96 @@ export const secretaryRouter = createTRPCRouter({
       }
 
       return deleted;
+    }),
+
+  // ── Steward management ───────────────────────────────
+
+  getShowStewards: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.db.query.stewardAssignments.findMany({
+        where: eq(stewardAssignments.showId, input.showId),
+        with: {
+          user: {
+            columns: { id: true, name: true, email: true, image: true },
+          },
+          ring: true,
+        },
+      });
+    }),
+
+  assignSteward: secretaryProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        email: z.string().email(),
+        ringId: z.string().uuid().nullable().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Find user by email
+      const user = await ctx.db.query.users.findFirst({
+        where: eq(users.email, input.email.toLowerCase()),
+      });
+
+      if (!user) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'No user found with that email address. They need to create an account first.',
+        });
+      }
+
+      // Check not already assigned
+      const existing = await ctx.db.query.stewardAssignments.findFirst({
+        where: and(
+          eq(stewardAssignments.showId, input.showId),
+          eq(stewardAssignments.userId, user.id)
+        ),
+      });
+
+      if (existing) {
+        throw new TRPCError({
+          code: 'CONFLICT',
+          message: 'This user is already assigned as a steward for this show',
+        });
+      }
+
+      // Update user role to steward if they're an exhibitor
+      if (user.role === 'exhibitor') {
+        await ctx.db
+          .update(users)
+          .set({ role: 'steward' })
+          .where(eq(users.id, user.id));
+      }
+
+      const [assignment] = await ctx.db
+        .insert(stewardAssignments)
+        .values({
+          showId: input.showId,
+          userId: user.id,
+          ringId: input.ringId ?? null,
+        })
+        .returning();
+
+      return assignment!;
+    }),
+
+  removeSteward: secretaryProcedure
+    .input(z.object({ assignmentId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const [deleted] = await ctx.db
+        .delete(stewardAssignments)
+        .where(eq(stewardAssignments.id, input.assignmentId))
+        .returning({ id: stewardAssignments.id });
+
+      if (!deleted) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Steward assignment not found',
+        });
+      }
+
+      return { removed: true };
     }),
 
   deleteShow: secretaryProcedure

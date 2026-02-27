@@ -63,3 +63,7 @@ export { fileUploads, fileUploadsRelations } from './file-uploads';
 export { catalogues, cataloguesRelations } from './catalogues';
 export { feedback } from './feedback';
 export { plans, plansRelations } from './plans';
+export {
+  stewardAssignments,
+  stewardAssignmentsRelations,
+} from './steward-assignments';

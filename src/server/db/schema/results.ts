@@ -4,6 +4,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
@@ -35,6 +36,7 @@ export const results = pgTable(
   (table) => [
     index('results_entry_class_id_idx').on(table.entryClassId),
     index('results_judge_id_idx').on(table.judgeId),
+    uniqueIndex('results_entry_class_id_uniq').on(table.entryClassId),
   ]
 );
 

@@ -15,6 +15,7 @@ import {
   ChevronDown,
   ChevronUp,
   Dog,
+  Trophy,
 } from 'lucide-react';
 import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
@@ -166,6 +167,7 @@ export default function ShowDetailPage() {
   }
 
   const isOpen = show.status === 'entries_open';
+  const hasResults = show.status === 'in_progress' || show.status === 'completed';
   const meta = showTypeMeta[show.showType];
 
   /* Group classes by breed */
@@ -254,14 +256,24 @@ export default function ShowDetailPage() {
                 )}
               </div>
             </div>
-            {isOpen && (
-              <Button size="lg" className="shrink-0 shadow-sm" asChild>
-                <Link href={`/shows/${showId}/enter`}>
-                  <Ticket className="size-4" />
-                  Enter This Show
-                </Link>
-              </Button>
-            )}
+            <div className="flex shrink-0 flex-wrap gap-2">
+              {isOpen && (
+                <Button size="lg" className="shadow-sm" asChild>
+                  <Link href={`/shows/${showId}/enter`}>
+                    <Ticket className="size-4" />
+                    Enter This Show
+                  </Link>
+                </Button>
+              )}
+              {hasResults && (
+                <Button size="lg" variant={isOpen ? 'outline' : 'default'} className="shadow-sm" asChild>
+                  <Link href={`/shows/${showId}/results`}>
+                    <Trophy className="size-4" />
+                    {show.status === 'in_progress' ? 'Live Results' : 'View Results'}
+                  </Link>
+                </Button>
+              )}
+            </div>
           </div>
 
           {show.description && (

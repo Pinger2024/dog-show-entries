@@ -13,6 +13,7 @@ import { entries } from './entries';
 import { memberships } from './memberships';
 import { dogOwners } from './dog-owners';
 import { orders } from './orders';
+import { stewardAssignments } from './steward-assignments';
 
 export const users = pgTable(
   'users',
@@ -50,4 +51,5 @@ export const usersRelations = relations(users, ({ many }) => ({
   memberships: many(memberships),
   dogOwnerships: many(dogOwners),
   orders: many(orders),
+  stewardAssignments: many(stewardAssignments),
 }));
