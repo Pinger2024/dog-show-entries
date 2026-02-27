@@ -23,12 +23,12 @@ export const entries = pgTable(
     id: uuid('id').defaultRandom().primaryKey(),
     showId: uuid('show_id')
       .notNull()
-      .references(() => shows.id),
-    dogId: uuid('dog_id').references(() => dogs.id), // nullable for JH entries
+      .references(() => shows.id, { onDelete: 'cascade' }),
+    dogId: uuid('dog_id').references(() => dogs.id, { onDelete: 'set null' }), // nullable for JH entries
     exhibitorId: uuid('exhibitor_id')
       .notNull()
       .references(() => users.id),
-    handlerId: uuid('handler_id').references(() => users.id),
+    handlerId: uuid('handler_id').references(() => users.id, { onDelete: 'set null' }),
     orderId: uuid('order_id'), // FK added via orders table to avoid circular ref
     entryType: entryTypeEnum('entry_type').notNull().default('standard'),
     isNfc: boolean('is_nfc').notNull().default(false),

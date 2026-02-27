@@ -38,6 +38,19 @@ export async function GET(
     return NextResponse.json({ error: 'Show not found' }, { status: 404 });
   }
 
+  // Verify user belongs to this show's organisation
+  const membership = await db.query.memberships.findFirst({
+    where: and(
+      eq(schema.memberships.userId, session.user.id),
+      eq(schema.memberships.organisationId, show.organisationId),
+      eq(schema.memberships.status, 'active')
+    ),
+  });
+
+  if (!membership) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const entries = await db.query.entries.findMany({
     where: and(
       eq(schema.entries.showId, showId),

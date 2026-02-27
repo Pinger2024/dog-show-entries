@@ -9,6 +9,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { entryClasses } from './entry-classes';
+import { users } from './users';
 
 export const results = pgTable(
   'results',
@@ -16,12 +17,12 @@ export const results = pgTable(
     id: uuid('id').defaultRandom().primaryKey(),
     entryClassId: uuid('entry_class_id')
       .notNull()
-      .references(() => entryClasses.id),
+      .references(() => entryClasses.id, { onDelete: 'cascade' }),
     placement: integer('placement'),
     specialAward: text('special_award'),
-    judgeId: uuid('judge_id'),
+    judgeId: uuid('judge_id').references(() => users.id, { onDelete: 'set null' }),
     critiqueText: text('critique_text'),
-    recordedBy: uuid('recorded_by'),
+    recordedBy: uuid('recorded_by').references(() => users.id, { onDelete: 'set null' }),
     recordedAt: timestamp('recorded_at', { withTimezone: true })
       .defaultNow()
       .notNull(),

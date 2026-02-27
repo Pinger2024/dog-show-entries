@@ -5,6 +5,7 @@ import { protectedProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import {
   entries,
+  entryClasses,
   dogs,
   shows,
   showClasses,
@@ -93,9 +94,7 @@ export const paymentsRouter = createTRPCRouter({
         .returning();
 
       // Create entry class records
-      await ctx.db.insert(
-        (await import('@/server/db/schema')).entryClasses
-      ).values(
+      await ctx.db.insert(entryClasses).values(
         selectedClasses.map((sc) => ({
           entryId: entry!.id,
           showClassId: sc.id,

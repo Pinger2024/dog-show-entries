@@ -27,6 +27,12 @@ export function Footer() {
               Help
             </Link>
             <Link
+              href="/pricing"
+              className="text-[0.9375rem] text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Pricing
+            </Link>
+            <Link
               href="/privacy"
               className="text-[0.9375rem] text-muted-foreground transition-colors hover:text-foreground"
             >

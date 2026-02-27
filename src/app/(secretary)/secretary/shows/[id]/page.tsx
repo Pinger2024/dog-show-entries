@@ -55,6 +55,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 const statusConfig: Record<
   string,
@@ -145,7 +153,15 @@ export default function ManageShowPage({
     variant: 'outline' as const,
   };
 
-  async function handleStatusChange(newStatus: string) {
+  const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+
+  const riskyTransitions: Record<string, string> = {
+    cancelled: 'This will mark the show as cancelled. Exhibitors will no longer be able to view or manage their entries.',
+    entries_open: 'This will open entries to the public. Make sure all classes and pricing are set up correctly before proceeding.',
+    completed: 'This will mark the show as completed. This should only be done after the event has finished.',
+  };
+
+  async function applyStatusChange(newStatus: string) {
     try {
       await updateMutation.mutateAsync({
         id,
@@ -155,6 +171,16 @@ export default function ManageShowPage({
       toast.success(`Show status updated to ${statusConfig[newStatus]?.label ?? newStatus}`);
     } catch {
       toast.error('Failed to update show status');
+    }
+    setPendingStatus(null);
+  }
+
+  function handleStatusChange(newStatus: string) {
+    if (newStatus === show.status) return;
+    if (riskyTransitions[newStatus]) {
+      setPendingStatus(newStatus);
+    } else {
+      applyStatusChange(newStatus);
     }
   }
 
@@ -192,6 +218,31 @@ export default function ManageShowPage({
           </SelectContent>
         </Select>
       </div>
+
+      {/* Status change confirmation dialog */}
+      <Dialog open={!!pendingStatus} onOpenChange={(open) => !open && setPendingStatus(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Change status to {statusConfig[pendingStatus ?? '']?.label ?? pendingStatus}?
+            </DialogTitle>
+            <DialogDescription>
+              {riskyTransitions[pendingStatus ?? '']}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setPendingStatus(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant={pendingStatus === 'cancelled' ? 'destructive' : 'default'}
+              onClick={() => pendingStatus && applyStatusChange(pendingStatus)}
+            >
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Tabs */}
       <Tabs defaultValue="overview">

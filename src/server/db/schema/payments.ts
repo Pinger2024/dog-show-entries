@@ -8,8 +8,8 @@ export const payments = pgTable(
   'payments',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    entryId: uuid('entry_id').references(() => entries.id), // nullable for order-level payments
-    orderId: uuid('order_id').references(() => orders.id),
+    entryId: uuid('entry_id').references(() => entries.id, { onDelete: 'set null' }), // nullable for order-level payments
+    orderId: uuid('order_id').references(() => orders.id, { onDelete: 'cascade' }),
     stripePaymentId: text('stripe_payment_id'),
     amount: integer('amount').notNull(),
     status: paymentStatusEnum('status').notNull().default('pending'),

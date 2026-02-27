@@ -6,6 +6,7 @@ import {
   secretaryProcedure,
 } from '../procedures';
 import { createTRPCRouter } from '../init';
+import { verifyShowAccess } from '../verify-show-access';
 import {
   entries,
   entryClasses,
@@ -240,6 +241,8 @@ export const entriesRouter = createTRPCRouter({
       })
     )
     .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
       const conditions = [
         eq(entries.showId, input.showId),
         isNull(entries.deletedAt),

@@ -1,4 +1,4 @@
-import { index, integer, pgTable, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { index, integer, pgTable, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { entries } from './entries';
 import { showClasses } from './show-classes';
@@ -26,6 +26,7 @@ export const entryClasses = pgTable(
   (table) => [
     index('entry_classes_entry_id_idx').on(table.entryId),
     index('entry_classes_show_class_id_idx').on(table.showClassId),
+    uniqueIndex('entry_classes_entry_show_class_uniq').on(table.entryId, table.showClassId),
   ]
 );
 
