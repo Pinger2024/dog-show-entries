@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState, useMemo } from 'react';
+import { use, useState, useMemo, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -8,6 +8,7 @@ import {
   CalendarDays,
   Clock,
   Download,
+  Edit3,
   FileText,
   Hash,
   Loader2,
@@ -15,7 +16,9 @@ import {
   PoundSterling,
   Search,
   Ticket,
+  Upload,
   Users,
+  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
@@ -332,6 +335,9 @@ export default function ManageShowPage({
             </CardContent>
           </Card>
 
+          {/* Schedule upload */}
+          <ScheduleUpload showId={id} currentUrl={show.scheduleUrl} />
+
           {/* Classes summary */}
           {show.showClasses && show.showClasses.length > 0 && (
             <Card>
@@ -363,6 +369,7 @@ export default function ManageShowPage({
             entries={entriesData?.items ?? []}
             total={entriesData?.total ?? 0}
             isLoading={entriesLoading}
+            showId={id}
           />
         </TabsContent>
 
@@ -395,13 +402,16 @@ function EntriesTab({
   entries,
   total,
   isLoading,
+  showId,
 }: {
   entries: EntryItem[];
   total: number;
   isLoading: boolean;
+  showId: string;
 }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [editingEntry, setEditingEntry] = useState<EntryItem | null>(null);
 
   const filtered = useMemo(() => {
     return entries.filter((entry) => {
@@ -535,6 +545,7 @@ function EntriesTab({
                 <TableHead>Fee</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Date</TableHead>
+                <TableHead className="w-10" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -584,6 +595,17 @@ function EntriesTab({
                     <TableCell className="text-muted-foreground">
                       {formatDate(entry.createdAt)}
                     </TableCell>
+                    <TableCell>
+                      {entry.dog && (
+                        <button
+                          onClick={() => setEditingEntry(entry)}
+                          className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                          title="Edit dog details"
+                        >
+                          <Edit3 className="size-4" />
+                        </button>
+                      )}
+                    </TableCell>
                   </TableRow>
                 );
               })}
@@ -591,6 +613,14 @@ function EntriesTab({
           </Table>
         )}
       </CardContent>
+
+      {editingEntry && (
+        <EditDogDialog
+          entry={editingEntry}
+          showId={showId}
+          onClose={() => setEditingEntry(null)}
+        />
+      )}
     </Card>
   );
 }
@@ -817,7 +847,7 @@ function CatalogueTab({ showId }: { showId: string }) {
                 rel="noopener noreferrer"
               >
                 <Download className="size-4" />
-                Download Catalogue JSON
+                Download Catalogue PDF
               </a>
             </Button>
             <Button variant="outline" asChild>
@@ -827,7 +857,16 @@ function CatalogueTab({ showId }: { showId: string }) {
                 rel="noopener noreferrer"
               >
                 <Download className="size-4" />
-                Download Absentees JSON
+                Download Absentees PDF
+              </a>
+            </Button>
+            <Button variant="ghost" size="sm" asChild>
+              <a
+                href={`/api/catalogue/${showId}/standard?output=json`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Export JSON
               </a>
             </Button>
           </>
@@ -1411,6 +1450,278 @@ function downloadCsv(headers: string[], rows: string[][], filename: string) {
   a.click();
   URL.revokeObjectURL(url);
   toast.success('Report exported to CSV');
+}
+
+// ── Schedule Upload ──────────────────────────────────────────
+
+function ScheduleUpload({
+  showId,
+  currentUrl,
+}: {
+  showId: string;
+  currentUrl: string | null | undefined;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const utils = trpc.useUtils();
+
+  const updateUrl = trpc.secretary.updateScheduleUrl.useMutation({
+    onSuccess: () => {
+      toast.success('Schedule uploaded');
+      utils.shows.getById.invalidate({ id: showId });
+    },
+    onError: () => toast.error('Failed to save schedule URL'),
+  });
+
+  const handleUpload = useCallback(
+    async (file: File) => {
+      setUploading(true);
+      try {
+        const res = await fetch('/api/upload/presign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: file.name,
+            contentType: file.type,
+            sizeBytes: file.size,
+          }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error ?? 'Upload failed');
+        }
+
+        const { presignedUrl, publicUrl } = await res.json();
+
+        // Upload directly to R2
+        const uploadRes = await fetch(presignedUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': file.type },
+          body: file,
+        });
+
+        if (!uploadRes.ok) throw new Error('File upload to storage failed');
+
+        // Save the public URL to the show
+        await updateUrl.mutateAsync({ showId, scheduleUrl: publicUrl });
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Upload failed');
+      } finally {
+        setUploading(false);
+        if (fileRef.current) fileRef.current.value = '';
+      }
+    },
+    [showId, updateUrl]
+  );
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FileText className="size-5" />
+          Show Schedule
+        </CardTitle>
+        <CardDescription>
+          Upload a PDF schedule for exhibitors to download
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {currentUrl && (
+          <div className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2">
+            <FileText className="size-4 text-primary" />
+            <a
+              href={currentUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 truncate text-sm text-primary hover:underline"
+            >
+              Current schedule
+            </a>
+            <Badge variant="secondary" className="text-[10px]">
+              Uploaded
+            </Badge>
+          </div>
+        )}
+        <div className="flex items-center gap-3">
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/pdf"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleUpload(file);
+            }}
+          />
+          <Button
+            variant="outline"
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+          >
+            {uploading ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Upload className="size-4" />
+            )}
+            {uploading
+              ? 'Uploading...'
+              : currentUrl
+                ? 'Replace Schedule'
+                : 'Upload Schedule PDF'}
+          </Button>
+          <p className="text-xs text-muted-foreground">PDF, max 10MB</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Edit Dog Dialog ─────────────────────────────────────────
+
+function EditDogDialog({
+  entry,
+  showId,
+  onClose,
+}: {
+  entry: EntryItem;
+  showId: string;
+  onClose: () => void;
+}) {
+  const [registeredName, setRegisteredName] = useState(
+    entry.dog?.registeredName ?? ''
+  );
+  const [sireName, setSireName] = useState(entry.dog?.sireName ?? '');
+  const [damName, setDamName] = useState(entry.dog?.damName ?? '');
+  const [breederName, setBreederName] = useState(
+    entry.dog?.breederName ?? ''
+  );
+  const [reason, setReason] = useState('');
+  const utils = trpc.useUtils();
+
+  const updateDog = trpc.secretary.updateDog.useMutation({
+    onSuccess: () => {
+      toast.success('Dog details updated');
+      utils.entries.getForShow.invalidate({ showId });
+      onClose();
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to update dog'),
+  });
+
+  function handleSave() {
+    if (!reason.trim()) {
+      toast.error('Please provide a reason for the change');
+      return;
+    }
+
+    const changes: Record<string, string> = {};
+    if (registeredName !== (entry.dog?.registeredName ?? ''))
+      changes.registeredName = registeredName;
+    if (sireName !== (entry.dog?.sireName ?? ''))
+      changes.sireName = sireName;
+    if (damName !== (entry.dog?.damName ?? ''))
+      changes.damName = damName;
+    if (breederName !== (entry.dog?.breederName ?? ''))
+      changes.breederName = breederName;
+
+    if (Object.keys(changes).length === 0) {
+      toast.error('No changes to save');
+      return;
+    }
+
+    updateDog.mutate({
+      showId,
+      entryId: entry.id,
+      changes,
+      reason: reason.trim(),
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <Card className="w-full max-w-lg">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Edit Dog Details</CardTitle>
+            <button
+              onClick={onClose}
+              className="rounded-full p-1 hover:bg-muted"
+            >
+              <X className="size-5" />
+            </button>
+          </div>
+          <CardDescription>
+            Editing {entry.dog?.registeredName ?? 'Unknown'} — entered by{' '}
+            {entry.exhibitor?.name ?? 'Unknown'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <Label className="text-sm font-medium">Registered Name</Label>
+            <Input
+              value={registeredName}
+              onChange={(e) => setRegisteredName(e.target.value)}
+              className="mt-1"
+            />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <Label className="text-sm font-medium">Sire</Label>
+              <Input
+                value={sireName}
+                onChange={(e) => setSireName(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Dam</Label>
+              <Input
+                value={damName}
+                onChange={(e) => setDamName(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+          </div>
+          <div>
+            <Label className="text-sm font-medium">Breeder</Label>
+            <Input
+              value={breederName}
+              onChange={(e) => setBreederName(e.target.value)}
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <Label className="text-sm font-medium">
+              Reason for Change <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="e.g. Exhibitor requested correction to sire name"
+              className="mt-1"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              This will be recorded in the audit log
+            </p>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={updateDog.isPending || !reason.trim()}
+            >
+              {updateDog.isPending && (
+                <Loader2 className="size-4 animate-spin" />
+              )}
+              Save Changes
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
 // ── Bulk Class Creator ───────────────────────────────────────

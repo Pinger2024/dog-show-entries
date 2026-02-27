@@ -226,7 +226,15 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                   </FormControl>
                   <FormDescription>
                     Found on your Kennel Club registration certificate. Leave
-                    blank if not yet registered.
+                    blank if not yet registered.{' '}
+                    <a
+                      href="https://www.thekennelclub.org.uk/search/health-test-results-finder/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      Verify on KC website
+                    </a>
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

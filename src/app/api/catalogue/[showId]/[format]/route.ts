@@ -4,9 +4,14 @@ import { db } from '@/server/db';
 import { and, eq, isNull, asc } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
 import { formatDogName } from '@/lib/utils';
+import { renderToBuffer } from '@react-pdf/renderer';
+import { CatalogueStandard } from '@/components/catalogue/catalogue-standard';
+import { CatalogueAbsentees } from '@/components/catalogue/catalogue-absentees';
+import type { CatalogueEntry, CatalogueShowInfo } from '@/components/catalogue/catalogue-standard';
+import React from 'react';
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ showId: string; format: string }> }
 ) {
   const { showId, format } = await params;
@@ -18,6 +23,10 @@ export async function GET(
 
   if (!db) {
     return NextResponse.json({ error: 'Database not available' }, { status: 500 });
+  }
+
+  if (!['standard', 'absentees'].includes(format)) {
+    return NextResponse.json({ error: 'Invalid format. Use "standard" or "absentees".' }, { status: 400 });
   }
 
   const show = await db.query.shows.findFirst({
@@ -55,11 +64,7 @@ export async function GET(
     orderBy: [asc(schema.entries.catalogueNumber)],
   });
 
-  // For now, return JSON data (PDF generation with @react-pdf/renderer
-  // requires client-side rendering or a separate worker for server-side).
-  // The UI will render this data into a formatted view.
-
-  const catalogueData = entries.map((entry) => ({
+  const catalogueEntries: CatalogueEntry[] = entries.map((entry) => ({
     catalogueNumber: entry.catalogueNumber,
     dogName: entry.dog ? formatDogName(entry.dog) : null,
     breed: entry.dog?.breed?.name,
@@ -82,16 +87,52 @@ export async function GET(
     entryType: entry.entryType,
   }));
 
-  return NextResponse.json({
-    show: {
-      name: show.name,
-      date: show.startDate,
-      venue: show.venue?.name,
-      organisation: show.organisation?.name,
-      kcLicenceNo: show.kcLicenceNo,
-    },
-    entries: catalogueData,
-    format,
-    generatedAt: new Date().toISOString(),
-  });
+  const showInfo: CatalogueShowInfo = {
+    name: show.name,
+    date: show.startDate,
+    venue: show.venue?.name,
+    organisation: show.organisation?.name,
+    kcLicenceNo: show.kcLicenceNo,
+    logoUrl: show.organisation?.logoUrl ?? undefined,
+  };
+
+  // Check if JSON format was explicitly requested (for data export)
+  const wantsJson = request.nextUrl.searchParams.get('output') === 'json';
+  if (wantsJson) {
+    return NextResponse.json({
+      show: showInfo,
+      entries: catalogueEntries,
+      format,
+      generatedAt: new Date().toISOString(),
+    });
+  }
+
+  // Render PDF
+  try {
+    const pdfDocument =
+      format === 'absentees'
+        ? React.createElement(CatalogueAbsentees, { show: showInfo, entries: catalogueEntries })
+        : React.createElement(CatalogueStandard, { show: showInfo, entries: catalogueEntries });
+
+    const buffer = await renderToBuffer(pdfDocument);
+
+    const filename =
+      format === 'absentees'
+        ? `${show.name.replace(/[^a-zA-Z0-9]/g, '-')}-Absentees.pdf`
+        : `${show.name.replace(/[^a-zA-Z0-9]/g, '-')}-Catalogue.pdf`;
+
+    return new Response(buffer, {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `inline; filename="${filename}"`,
+        'Cache-Control': 'no-cache',
+      },
+    });
+  } catch (err) {
+    console.error('PDF generation failed:', err);
+    return NextResponse.json(
+      { error: 'PDF generation failed. Try ?output=json for raw data.' },
+      { status: 500 }
+    );
+  }
 }
