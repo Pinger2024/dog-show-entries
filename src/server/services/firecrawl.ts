@@ -20,16 +20,12 @@ export type KcDogResult = {
 const KC_SEARCH_URL = 'https://www.royalkennelclub.com/search/health-test-results-finder/';
 
 /**
- * Look up a dog on the KC Health Test Results Finder.
+ * Search the KC Health Test Results Finder and return ALL matching dogs.
  *
- * Fetches the search results page with ?Filter= and parses the server-rendered
- * HTML to extract dog details. Returns the first match, or null if not found.
- *
- * Fields extracted: registeredName, breed, sex, colour, dateOfBirth.
- * Sire/dam/breeder are on the profile page (client-rendered) and not available
- * via this method — returned as empty strings.
+ * Fetches the search results page with ?Filter= and parses every dog card
+ * from the server-rendered HTML. Returns up to 12 results (one page).
  */
-export async function scrapeKcDog(query: string): Promise<KcDogResult | null> {
+export async function searchKcDogs(query: string): Promise<KcDogResult[]> {
   try {
     console.log(`[kc-lookup] Searching KC for "${query}"...`);
 
@@ -42,63 +38,57 @@ export async function scrapeKcDog(query: string): Promise<KcDogResult | null> {
 
     if (!response.ok) {
       console.error(`[kc-lookup] KC returned HTTP ${response.status}`);
-      return null;
+      return [];
     }
 
     const html = await response.text();
 
-    // Extract dog cards from the HTML using the consistent KC markup:
-    //   <div class="m-dog-card">
-    //     <a class="m-dog-card__link" href="/search/dog-profile/?dogId=...">
-    //       <div class="m-dog-card__category">German Shepherd Dog</div>
-    //       <strong class="m-dog-card__title">HUNDARK PHANTOM</strong>
-    //     </a>
-    //     <dl class="m-breed-summary__list">
-    //       <dt>...<span class="m-breed-summary__key-label">Sex</span></dt>
-    //       <dd class="m-breed-summary__value">Dog</dd>
-    //       ...
-    //     </dl>
-    //   </div>
-
-    // Check if any results exist
     if (!html.includes('m-dog-card')) {
       console.log('[kc-lookup] No results found');
-      return null;
+      return [];
     }
 
-    // Extract the first dog card's data
-    const registeredName = extractBetween(html, 'm-dog-card__title">', '</strong>');
-    const breed = extractBetween(html, 'm-dog-card__category">', '</div>');
+    // Split the HTML into individual dog card blocks
+    const cards = html.split('<div class="m-dog-card">').slice(1); // skip first chunk (before any card)
 
-    if (!registeredName) {
-      console.log('[kc-lookup] Could not parse dog name from results');
-      return null;
+    const results: KcDogResult[] = [];
+
+    for (const card of cards) {
+      const registeredName = extractBetween(card, 'm-dog-card__title">', '</strong>');
+      if (!registeredName) continue;
+
+      const breed = extractBetween(card, 'm-dog-card__category">', '</div>');
+      const sex = extractSummaryField(card, 'Sex');
+      const colour = extractSummaryField(card, 'Colour');
+      const dateOfBirth = extractSummaryField(card, 'Date of birth');
+
+      results.push({
+        registeredName: registeredName.trim(),
+        breed: breed?.trim() ?? '',
+        sex: sex?.toLowerCase() === 'bitch' ? 'bitch' : 'dog',
+        dateOfBirth: dateOfBirth?.trim() ?? '',
+        colour: colour?.trim() || undefined,
+        sire: '',
+        dam: '',
+        breeder: '',
+      });
     }
 
-    // Extract summary fields (Sex, Colour, Date of birth) from the breed-summary list
-    const sex = extractSummaryField(html, 'Sex');
-    const colour = extractSummaryField(html, 'Colour');
-    const dateOfBirth = extractSummaryField(html, 'Date of birth');
-
-    const normalisedSex = sex?.toLowerCase() === 'bitch' ? 'bitch' : 'dog';
-
-    console.log(`[kc-lookup] Found: ${registeredName} (${breed}, ${normalisedSex})`);
-
-    return {
-      registeredName: registeredName.trim(),
-      breed: breed?.trim() ?? '',
-      sex: normalisedSex,
-      dateOfBirth: dateOfBirth?.trim() ?? '',
-      colour: colour?.trim() || undefined,
-      // Sire/dam/breeder are on the profile page (client-side rendered)
-      sire: '',
-      dam: '',
-      breeder: '',
-    };
+    console.log(`[kc-lookup] Found ${results.length} dogs`);
+    return results;
   } catch (error) {
     console.error('[kc-lookup] KC lookup failed:', error);
-    return null;
+    return [];
   }
+}
+
+/**
+ * Look up a single dog — returns the first match or null.
+ * Kept for backwards compatibility with existing callers.
+ */
+export async function scrapeKcDog(query: string): Promise<KcDogResult | null> {
+  const results = await searchKcDogs(query);
+  return results[0] ?? null;
 }
 
 /** Extract text between a marker and a closing tag */
@@ -121,7 +111,6 @@ function extractSummaryField(html: string, fieldName: string): string | null {
   const labelIdx = html.indexOf(labelMarker);
   if (labelIdx === -1) return null;
 
-  // Find the next m-breed-summary__value after this label
   const valueMarker = 'm-breed-summary__value">';
   const valueIdx = html.indexOf(valueMarker, labelIdx);
   if (valueIdx === -1) return null;

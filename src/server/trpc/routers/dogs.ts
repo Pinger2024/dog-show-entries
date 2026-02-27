@@ -4,7 +4,7 @@ import { and, eq, isNull, asc, desc, sql } from 'drizzle-orm';
 import { protectedProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { dogs, dogOwners, dogTitles, users } from '@/server/db/schema';
-import { scrapeKcDog } from '@/server/services/firecrawl';
+import { scrapeKcDog, searchKcDogs } from '@/server/services/firecrawl';
 
 export const dogsRouter = createTRPCRouter({
   list: protectedProcedure.query(async ({ ctx }) => {
@@ -358,14 +358,14 @@ export const dogsRouter = createTRPCRouter({
   kcLookup: protectedProcedure
     .input(z.object({ query: z.string().min(2).max(255) }))
     .mutation(async ({ input }) => {
-      const result = await scrapeKcDog(input.query);
-      if (!result) {
+      const results = await searchKcDogs(input.query);
+      if (results.length === 0) {
         throw new TRPCError({
           code: 'NOT_FOUND',
           message: 'Could not find a dog matching that name or registration number on the KC website.',
         });
       }
-      return result;
+      return results;
     }),
 
   // ── Owner profiles (reuse previous owners) ────────────────

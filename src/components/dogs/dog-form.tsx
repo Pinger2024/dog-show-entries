@@ -157,39 +157,53 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
     },
   });
 
+  // KC lookup — returns an array of results
+  const [kcResults, setKcResults] = useState<
+    { registeredName: string; breed: string; sex: string; dateOfBirth: string; colour?: string; sire: string; dam: string; breeder: string }[]
+  >([]);
+
+  function applyKcResult(data: typeof kcResults[number]) {
+    if (data.registeredName) form.setValue('registeredName', data.registeredName);
+    if (data.sex) form.setValue('sex', data.sex as 'dog' | 'bitch');
+    if (data.dateOfBirth) {
+      const parsed = new Date(data.dateOfBirth);
+      if (!isNaN(parsed.getTime())) {
+        form.setValue('dateOfBirth', format(parsed, 'yyyy-MM-dd'));
+      }
+    }
+    if (data.sire) form.setValue('sireName', data.sire);
+    if (data.dam) form.setValue('damName', data.dam);
+    if (data.breeder) form.setValue('breederName', data.breeder);
+    if (data.colour) form.setValue('colour', data.colour);
+
+    if (data.breed && breeds) {
+      const breedNameLower = data.breed.toLowerCase();
+      const matchedBreed = breeds.find(
+        (b) => b.name.toLowerCase() === breedNameLower
+          || b.name.toLowerCase().includes(breedNameLower)
+          || breedNameLower.includes(b.name.toLowerCase())
+      );
+      if (matchedBreed) {
+        form.setValue('breedId', matchedBreed.id);
+      }
+    }
+
+    setKcResults([]);
+    toast.success('Dog details found on KC website!', {
+      description: `${data.registeredName} — fields have been populated.`,
+    });
+  }
+
   const kcLookup = trpc.dogs.kcLookup.useMutation({
-    onSuccess: (data) => {
-      // Auto-populate form fields from KC data
-      if (data.registeredName) form.setValue('registeredName', data.registeredName);
-      if (data.sex) form.setValue('sex', data.sex as 'dog' | 'bitch');
-      if (data.dateOfBirth) {
-        // Try to parse the date — KC may return various formats
-        const parsed = new Date(data.dateOfBirth);
-        if (!isNaN(parsed.getTime())) {
-          form.setValue('dateOfBirth', format(parsed, 'yyyy-MM-dd'));
-        }
+    onSuccess: (results) => {
+      if (results.length === 1) {
+        // Single result — auto-fill immediately
+        applyKcResult(results[0]);
+      } else {
+        // Multiple results — show picker
+        setKcResults(results);
+        toast.info(`Found ${results.length} dogs — please select the right one.`);
       }
-      if (data.sire) form.setValue('sireName', data.sire);
-      if (data.dam) form.setValue('damName', data.dam);
-      if (data.breeder) form.setValue('breederName', data.breeder);
-      if (data.colour) form.setValue('colour', data.colour);
-
-      // Try to match breed by name
-      if (data.breed && breeds) {
-        const breedNameLower = data.breed.toLowerCase();
-        const matchedBreed = breeds.find(
-          (b) => b.name.toLowerCase() === breedNameLower
-            || b.name.toLowerCase().includes(breedNameLower)
-            || breedNameLower.includes(b.name.toLowerCase())
-        );
-        if (matchedBreed) {
-          form.setValue('breedId', matchedBreed.id);
-        }
-      }
-
-      toast.success('Dog details found on KC website!', {
-        description: `${data.registeredName} — fields have been populated.`,
-      });
     },
     onError: (error) => {
       toast.error('KC Lookup failed', {
@@ -310,14 +324,17 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                     Auto-fill from Kennel Club
                   </p>
                   <p className="mt-0.5 text-sm text-muted-foreground">
-                    Enter the KC registration number above (e.g. BC28843204), then
-                    click the button below. This will look up the dog on the KC
-                    website and auto-fill the breed, sex, date of birth, sire, dam,
-                    and breeder details.
+                    Enter the KC registration number (e.g. BC28843204) or registered
+                    name above, then click the button below. This will look up the
+                    dog on the KC website and auto-fill the breed, sex, date of
+                    birth, and colour.
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    The registration number gives the most reliable results. You can
-                    find it on your KC registration certificate or at{' '}
+                    A registration number gives an exact match. Searching by name can
+                    return hundreds of results — use the full registered name (e.g.
+                    &quot;Hundark Phantom&quot; not just &quot;Hundark&quot;) to narrow it
+                    down. You can find your registration number on your KC certificate or
+                    at{' '}
                     <a
                       href="https://www.royalkennelclub.com/search/health-test-results-finder/"
                       target="_blank"
@@ -326,7 +343,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                     >
                       royalkennelclub.com
                     </a>
-                    . This may take a few seconds as the KC website can be slow.
+                    .
                   </p>
                   <Button
                     type="button"
@@ -335,9 +352,10 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                     className="mt-3"
                     disabled={kcLookup.isPending}
                     onClick={() => {
+                      setKcResults([]);
                       const query = form.getValues('kcRegNumber') || form.getValues('registeredName');
                       if (!query || query.trim().length < 2) {
-                        toast.error('Enter a KC registration number first');
+                        toast.error('Enter a KC registration number or registered name first');
                         return;
                       }
                       kcLookup.mutate({ query: query.trim() });
@@ -346,7 +364,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                     {kcLookup.isPending ? (
                       <>
                         <Loader2 className="size-4 animate-spin" />
-                        Searching KC website (this may take a moment)...
+                        Searching KC website...
                       </>
                     ) : (
                       <>
@@ -355,6 +373,42 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                       </>
                     )}
                   </Button>
+
+                  {/* Multiple results picker */}
+                  {kcResults.length > 1 && (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-sm font-medium">
+                        {kcResults.length} dogs found — select the correct one:
+                      </p>
+                      {kcResults.length >= 12 && (
+                        <p className="text-xs text-amber-600">
+                          Showing first 12 results only. Try a more specific search
+                          (e.g. the full registered name) if your dog isn&apos;t listed.
+                        </p>
+                      )}
+                      <div className="max-h-60 space-y-1 overflow-y-auto">
+                        {kcResults.map((dog, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => applyKcResult(dog)}
+                            className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
+                          >
+                            <div>
+                              <span className="font-medium">{dog.registeredName}</span>
+                              <span className="ml-2 text-muted-foreground">
+                                {dog.breed}
+                              </span>
+                            </div>
+                            <span className="shrink-0 text-xs text-muted-foreground">
+                              {dog.sex === 'bitch' ? 'Bitch' : 'Dog'}
+                              {dog.dateOfBirth ? ` · ${dog.dateOfBirth}` : ''}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
