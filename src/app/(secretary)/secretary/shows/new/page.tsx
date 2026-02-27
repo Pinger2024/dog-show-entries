@@ -89,7 +89,7 @@ const createShowSchema = z.object({
   newVenuePostcode: z.string().optional(),
   newVenueIndoorOutdoor: z.string().optional(),
 
-  // Step 3 - Entry Fees (in pence)
+  // Step 3 - Entry Fees (in pounds, converted to pence on submit)
   firstEntryFee: z.coerce.number().min(0, 'Fee must be 0 or more').default(0),
   subsequentEntryFee: z.coerce.number().min(0).default(0),
   nfcEntryFee: z.coerce.number().min(0).default(0),
@@ -117,9 +117,6 @@ function formatDateDisplay(dateStr: string) {
   });
 }
 
-function formatCurrency(pence: number) {
-  return `£${(pence / 100).toFixed(2)}`;
-}
 
 export default function NewShowPage() {
   const router = useRouter();
@@ -206,7 +203,7 @@ export default function NewShowPage() {
           ? values.selectedClassIds
           : undefined,
         entryFee: Number(values.firstEntryFee) > 0
-          ? Number(values.firstEntryFee)
+          ? Math.round(Number(values.firstEntryFee) * 100)
           : undefined,
       });
 
@@ -828,8 +825,7 @@ export default function NewShowPage() {
               <CardHeader>
                 <CardTitle>Entry Fees</CardTitle>
                 <CardDescription>
-                  Set the entry fees in pounds. Enter amounts in pence (e.g.
-                  2500 = £25.00).
+                  Set the entry fees in pounds.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -838,21 +834,16 @@ export default function NewShowPage() {
                   name="firstEntryFee"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>First Entry Fee (pence)</FormLabel>
+                      <FormLabel>First Entry Fee (£)</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
                           min={0}
-                          step={1}
-                          placeholder="e.g. 2500"
+                          step={0.01}
+                          placeholder="e.g. 10.00"
                           {...field}
                         />
                       </FormControl>
-                      <p className="text-xs text-muted-foreground">
-                        {field.value
-                          ? formatCurrency(Number(field.value))
-                          : '£0.00'}
-                      </p>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -862,21 +853,16 @@ export default function NewShowPage() {
                   name="subsequentEntryFee"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Subsequent Entry Fee (pence)</FormLabel>
+                      <FormLabel>Subsequent Entry Fee (£)</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
                           min={0}
-                          step={1}
-                          placeholder="e.g. 1500"
+                          step={0.01}
+                          placeholder="e.g. 8.00"
                           {...field}
                         />
                       </FormControl>
-                      <p className="text-xs text-muted-foreground">
-                        {field.value
-                          ? formatCurrency(Number(field.value))
-                          : '£0.00'}
-                      </p>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -886,21 +872,16 @@ export default function NewShowPage() {
                   name="nfcEntryFee"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>NFC Entry Fee (pence)</FormLabel>
+                      <FormLabel>NFC Entry Fee (£)</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
                           min={0}
-                          step={1}
-                          placeholder="e.g. 500"
+                          step={0.01}
+                          placeholder="e.g. 5.00"
                           {...field}
                         />
                       </FormControl>
-                      <p className="text-xs text-muted-foreground">
-                        {field.value
-                          ? formatCurrency(Number(field.value))
-                          : '£0.00'}
-                      </p>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -1179,19 +1160,19 @@ function ReviewStep({
             <div>
               <dt className="text-sm text-muted-foreground">First Entry</dt>
               <dd className="font-medium">
-                {formatCurrency(values.firstEntryFee)}
+                £{Number(values.firstEntryFee).toFixed(2)}
               </dd>
             </div>
             <div>
               <dt className="text-sm text-muted-foreground">Subsequent</dt>
               <dd className="font-medium">
-                {formatCurrency(values.subsequentEntryFee)}
+                £{Number(values.subsequentEntryFee).toFixed(2)}
               </dd>
             </div>
             <div>
               <dt className="text-sm text-muted-foreground">NFC</dt>
               <dd className="font-medium">
-                {formatCurrency(values.nfcEntryFee)}
+                £{Number(values.nfcEntryFee).toFixed(2)}
               </dd>
             </div>
           </dl>
