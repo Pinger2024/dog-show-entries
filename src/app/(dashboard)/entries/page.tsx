@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { format, isPast, parseISO } from 'date-fns';
-import { Ticket, CalendarDays, Dog, ChevronRight, Loader2 } from 'lucide-react';
+import { Ticket, CalendarDays, Dog, ChevronRight, Loader2, MapPin } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
 import type { RouterOutputs } from '@/server/trpc/router';
 import { Button } from '@/components/ui/button';
@@ -65,8 +65,14 @@ export default function EntriesPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <h1 className="text-2xl font-bold">My Entries</h1>
+    <div className="space-y-8 pb-16 md:pb-0">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">My Entries</h1>
+        <p className="mt-1 text-muted-foreground">
+          {entries.length} entr{entries.length !== 1 ? 'ies' : 'y'} total
+          {upcoming.length > 0 && ` · ${upcoming.length} upcoming`}
+        </p>
+      </div>
 
       {/* Upcoming */}
       {upcoming.length > 0 && (
@@ -101,10 +107,15 @@ export default function EntriesPage() {
 
 function EntryCard({ entry }: { entry: RouterOutputs['entries']['list']['items'][number] }) {
   const status = statusConfig[entry.status] ?? statusConfig.pending;
+  const isInactive = entry.status === 'withdrawn' || entry.status === 'cancelled';
+  const classNames = entry.entryClasses
+    .map((ec) => ec.showClass?.classDefinition?.name)
+    .filter(Boolean)
+    .join(', ');
 
   return (
     <Link href={`/entries/${entry.id}`}>
-      <Card className="transition-colors hover:bg-accent/30">
+      <Card className={`transition-colors hover:bg-accent/30 ${isInactive ? 'opacity-60' : ''}`}>
         <CardContent className="flex items-center gap-4 py-4">
           <div className="hidden size-12 items-center justify-center rounded-lg bg-primary/10 sm:flex">
             <CalendarDays className="size-5 text-primary" />
@@ -121,17 +132,25 @@ function EntryCard({ entry }: { entry: RouterOutputs['entries']['list']['items']
                 <Dog className="size-3.5" />
                 {entry.dog.registeredName}
               </span>
-              <span>
+              <span className="flex items-center gap-1">
+                <CalendarDays className="size-3.5" />
                 {format(parseISO(entry.show.startDate), 'dd MMM yyyy')}
               </span>
-              <span>
-                {entry.entryClasses.length} class
-                {entry.entryClasses.length !== 1 ? 'es' : ''}
-              </span>
+              {entry.show.venue && (
+                <span className="flex items-center gap-1">
+                  <MapPin className="size-3.5" />
+                  {entry.show.venue.name}
+                </span>
+              )}
               <span className="font-medium text-foreground">
                 {formatFee(entry.totalFee)}
               </span>
             </div>
+            {classNames && (
+              <p className="truncate text-xs text-muted-foreground/70">
+                {classNames}
+              </p>
+            )}
           </div>
           <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
         </CardContent>
