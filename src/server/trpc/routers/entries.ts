@@ -110,15 +110,20 @@ export const entriesRouter = createTRPCRouter({
   list: protectedProcedure
     .input(
       z.object({
+        dogId: z.string().uuid().optional(),
         limit: z.number().min(1).max(100).default(20),
         cursor: z.number().min(0).default(0),
       })
     )
     .query(async ({ ctx, input }) => {
-      const where = and(
+      const conditions = [
         eq(entries.exhibitorId, ctx.session.user.id),
-        isNull(entries.deletedAt)
-      );
+        isNull(entries.deletedAt),
+      ];
+      if (input.dogId) {
+        conditions.push(eq(entries.dogId, input.dogId));
+      }
+      const where = and(...conditions);
 
       const items = await ctx.db.query.entries.findMany({
         where,

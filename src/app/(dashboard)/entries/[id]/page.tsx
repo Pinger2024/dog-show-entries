@@ -9,7 +9,10 @@ import {
   MapPin,
   Dog,
   Loader2,
+  AlertTriangle,
 } from 'lucide-react';
+import { useState } from 'react';
+import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc/client';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,6 +23,14 @@ import {
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 
 function formatFee(pence: number) {
   return `£${(pence / 100).toFixed(2)}`;
@@ -50,9 +61,27 @@ const paymentStatusConfig: Record<
 export default function EntryDetailPage() {
   const params = useParams();
   const entryId = params.id as string;
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
 
   const { data: entry, isLoading } = trpc.entries.getById.useQuery({
     id: entryId,
+  });
+
+  const utils = trpc.useUtils();
+  const withdrawEntry = trpc.entries.withdraw.useMutation({
+    onSuccess: () => {
+      utils.entries.getById.invalidate({ id: entryId });
+      utils.entries.list.invalidate();
+      setWithdrawOpen(false);
+      toast.success('Entry withdrawn', {
+        description: 'Your entry has been withdrawn from this show.',
+      });
+    },
+    onError: (error) => {
+      toast.error('Failed to withdraw', {
+        description: error.message,
+      });
+    },
   });
 
   if (isLoading) {
@@ -190,10 +219,54 @@ export default function EntryDetailPage() {
       </Card>
 
       {/* Actions */}
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-3">
         <Button variant="outline" asChild>
           <Link href={`/shows/${entry.showId}`}>View Show</Link>
         </Button>
+        {entry.status !== 'withdrawn' && entry.status !== 'cancelled' && (
+          <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
+            <DialogTrigger asChild>
+              <Button variant="destructive" size="default">
+                <AlertTriangle className="size-4" />
+                Withdraw Entry
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Withdraw this entry?</DialogTitle>
+                <DialogDescription>
+                  This will withdraw your entry for{' '}
+                  <span className="font-medium text-foreground">
+                    {entry.dog.registeredName}
+                  </span>{' '}
+                  from{' '}
+                  <span className="font-medium text-foreground">
+                    {entry.show.name}
+                  </span>
+                  . Refund policies are set by the show society.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex justify-end gap-3 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setWithdrawOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  disabled={withdrawEntry.isPending}
+                  onClick={() => withdrawEntry.mutate({ id: entryId })}
+                >
+                  {withdrawEntry.isPending && (
+                    <Loader2 className="size-4 animate-spin" />
+                  )}
+                  Yes, Withdraw
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
     </div>
   );

@@ -12,6 +12,8 @@ import {
   Dog,
   Trophy,
   Loader2,
+  CalendarDays,
+  MapPin,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
@@ -58,6 +60,91 @@ function DetailRow({ label, value }: { label: string; value?: string | null }) {
       </span>
       <span className="text-sm">{value}</span>
     </div>
+  );
+}
+
+const entryStatusColors: Record<string, string> = {
+  pending: 'bg-amber-100 text-amber-800',
+  confirmed: 'bg-emerald-100 text-emerald-800',
+  withdrawn: 'bg-gray-100 text-gray-600',
+  cancelled: 'bg-red-100 text-red-700',
+};
+
+function EntryHistoryCard({ dogId }: { dogId: string }) {
+  const { data, isLoading } = trpc.entries.list.useQuery({
+    dogId,
+    limit: 20,
+    cursor: 0,
+  });
+
+  const entries = data?.items ?? [];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Entry History</CardTitle>
+        <CardDescription>Shows this dog has been entered in.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="size-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : entries.length === 0 ? (
+          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-8 text-center">
+            <Ticket className="mb-3 size-8 text-muted-foreground/50" />
+            <p className="font-medium">No entries yet</p>
+            <p className="mt-1 max-w-xs text-sm text-muted-foreground">
+              Enter a show to start building your dog&apos;s show record.
+            </p>
+            <Button className="mt-4" size="sm" variant="outline" asChild>
+              <Link href="/shows">Browse Shows</Link>
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {entries.map((entry) => (
+              <Link
+                key={entry.id}
+                href={`/entries/${entry.id}`}
+                className="block rounded-lg border p-3 transition-colors hover:bg-muted/50"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold">{entry.show.name}</p>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <CalendarDays className="size-3" />
+                        {format(parseISO(entry.show.startDate), 'd MMM yyyy')}
+                      </span>
+                      {entry.show.venue && (
+                        <span className="flex items-center gap-1">
+                          <MapPin className="size-3" />
+                          {entry.show.venue.name}
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {entry.entryClasses.length} class
+                      {entry.entryClasses.length !== 1 ? 'es' : ''} · £
+                      {(entry.totalFee / 100).toFixed(2)}
+                    </p>
+                  </div>
+                  <Badge
+                    className={
+                      entryStatusColors[entry.status] ??
+                      'bg-gray-100 text-gray-600'
+                    }
+                  >
+                    {entry.status}
+                  </Badge>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -216,24 +303,7 @@ export default function DogDetailPage({
         </Card>
 
         {/* Entry History */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Entry History</CardTitle>
-            <CardDescription>Shows this dog has been entered in.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-8 text-center">
-              <Ticket className="mb-3 size-8 text-muted-foreground/50" />
-              <p className="font-medium">No entries yet</p>
-              <p className="mt-1 max-w-xs text-sm text-muted-foreground">
-                Enter a show to start building your dog&apos;s show record.
-              </p>
-              <Button className="mt-4" size="sm" variant="outline" asChild>
-                <Link href="/shows">Browse Shows</Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <EntryHistoryCard dogId={id} />
       </div>
 
       {/* Achievements */}

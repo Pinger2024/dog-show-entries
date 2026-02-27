@@ -25,6 +25,26 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
+/* ─── Date helpers ─────────────────────────────────── */
+
+function formatDateRange(startDate: string, endDate: string): string {
+  const start = parseISO(startDate);
+  const end = parseISO(endDate);
+  if (startDate === endDate) {
+    return format(start, 'd MMM yyyy');
+  }
+  // Same month and year: "15–17 May 2025"
+  if (start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear()) {
+    return `${format(start, 'd')}–${format(end, 'd')} ${format(end, 'MMM yyyy')}`;
+  }
+  // Same year, different month: "30 Apr – 2 May 2025"
+  if (start.getFullYear() === end.getFullYear()) {
+    return `${format(start, 'd MMM')} – ${format(end, 'd MMM yyyy')}`;
+  }
+  // Different years
+  return `${format(start, 'd MMM yyyy')} – ${format(end, 'd MMM yyyy')}`;
+}
+
 /* ─── Show type config ──────────────────────────────── */
 
 const showTypeLabels: Record<string, string> = {
@@ -366,11 +386,7 @@ function ShowCard({ show }: { show: {
             <div className="space-y-1.5 border-t border-dashed border-border/60 pt-3">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <CalendarDays className="size-3.5 shrink-0 text-muted-foreground/60" />
-                <span>
-                  {format(parseISO(show.startDate), 'dd MMM yyyy')}
-                  {show.startDate !== show.endDate &&
-                    ` – ${format(parseISO(show.endDate), 'dd MMM')}`}
-                </span>
+                <span>{formatDateRange(show.startDate, show.endDate)}</span>
               </div>
               {show.venue && (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
