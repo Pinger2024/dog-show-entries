@@ -13,6 +13,13 @@ export function getFirecrawl() {
   return _firecrawl;
 }
 
+// Schema for the search results page — just need the dogId link
+const kcSearchResultSchema = z.object({
+  dogId: z.string().describe('The dogId UUID from the first dog profile link (from href like /search/dog-profile/?dogId=...)'),
+  registeredName: z.string().describe('The registered name of the first matching dog'),
+});
+
+// Schema for the full dog profile page
 const kcDogSchema = z.object({
   registeredName: z.string().describe('The full KC registered name of the dog'),
   breed: z.string().describe('The breed of the dog'),
@@ -26,52 +33,68 @@ const kcDogSchema = z.object({
 
 export type KcDogResult = z.infer<typeof kcDogSchema>;
 
-const KC_URL = 'https://www.royalkennelclub.com/search/health-test-results-finder/';
+const KC_SEARCH_URL = 'https://www.royalkennelclub.com/search/health-test-results-finder/';
+const KC_PROFILE_URL = 'https://www.royalkennelclub.com/search/dog-profile/';
 
 /**
- * Scrape the KC Health Test Results Finder to look up a dog by name or reg number.
+ * Look up a dog on the KC website via Firecrawl.
  *
- * Uses Firecrawl's actions to:
- * 1. Navigate to the search page
- * 2. Type the query into the search box
- * 3. Submit the search
- * 4. Wait for results to render
- * 5. Extract structured data via LLM
+ * Two-step approach:
+ * 1. Hit the search page with ?Filter= to get search results and extract the dogId
+ * 2. Hit the dog profile page with ?dogId= to get full details
+ *
+ * This avoids fragile click/type automation — both pages accept URL parameters.
+ * The KC site is a slow SPA so we use generous wait times.
  */
 export async function scrapeKcDog(query: string): Promise<KcDogResult | null> {
   const firecrawl = getFirecrawl();
 
   try {
-    console.log(`[firecrawl] Looking up dog: "${query}"`);
+    console.log(`[firecrawl] Step 1: Searching KC for "${query}"...`);
 
-    const result = await firecrawl.scrapeUrl(KC_URL, {
+    // Step 1: Search for the dog and extract the dogId from the results
+    const searchUrl = `${KC_SEARCH_URL}?Filter=${encodeURIComponent(query)}`;
+    const searchResult = await firecrawl.scrape(searchUrl, {
+      formats: [
+        {
+          type: 'json' as const,
+          schema: kcSearchResultSchema,
+          prompt: `Extract the dogId UUID and registered name from the first search result on this KC Health Test Results page. The dogId is in the href of the dog profile link, which looks like "/search/dog-profile/?dogId=SOME-UUID". Return the UUID only (not the full URL). If no results are found, return empty strings.`,
+        },
+      ],
+      actions: [
+        { type: 'wait' as const, milliseconds: 6000 },
+      ],
+    });
+
+    const searchData = (searchResult as { json?: z.infer<typeof kcSearchResultSchema> }).json;
+
+    if (!searchData?.dogId) {
+      console.log('[firecrawl] No dog found in search results');
+      return null;
+    }
+
+    console.log(`[firecrawl] Step 2: Found "${searchData.registeredName}", fetching profile (dogId: ${searchData.dogId})...`);
+
+    // Step 2: Scrape the full dog profile page
+    const profileUrl = `${KC_PROFILE_URL}?dogId=${encodeURIComponent(searchData.dogId)}`;
+    const profileResult = await firecrawl.scrape(profileUrl, {
       formats: [
         {
           type: 'json' as const,
           schema: kcDogSchema,
-          prompt: `Extract the dog's details from this KC Health Test Results page. The user searched for "${query}". Extract the first matching dog's registered name, breed, sex (must be "Dog" or "Bitch"), date of birth, sire name, dam name, breeder name, and colour if available. If no dog results are found, return empty strings for all fields.`,
+          prompt: `Extract the dog's full details from this KC dog profile page. Get the registered name, breed, sex ("Dog" or "Bitch"), date of birth, sire (father's registered name), dam (mother's registered name), breeder name, and colour. If any field is not shown, return an empty string.`,
         },
       ],
       actions: [
-        { type: 'wait' as const, milliseconds: 2000 },
-        { type: 'click' as const, selector: 'input[type="search"], input[type="text"], input[name*="search"], .search-input, #search' },
-        { type: 'write' as const, text: query },
-        { type: 'press' as const, key: 'Enter' },
-        { type: 'wait' as const, milliseconds: 4000 },
-        { type: 'click' as const, selector: '.search-result a, .results a, [class*="result"] a, table a, .dog-name a' },
-        { type: 'wait' as const, milliseconds: 3000 },
+        { type: 'wait' as const, milliseconds: 8000 },
       ],
     });
 
-    if ('error' in result && result.error) {
-      console.error('[firecrawl] Scrape error:', result.error);
-      return null;
-    }
+    const data = (profileResult as { json?: KcDogResult }).json;
 
-    const data = (result as { json?: KcDogResult }).json;
-
-    if (!data || !data.registeredName) {
-      console.log('[firecrawl] No dog data found in scrape result');
+    if (!data?.registeredName) {
+      console.log('[firecrawl] No dog data found on profile page');
       return null;
     }
 

@@ -60,5 +60,10 @@ export async function lookupDogByKcReg(
 }> {
   // Dynamic import to avoid loading Firecrawl when not needed
   const { scrapeKcDog } = await import('./firecrawl');
-  return scrapeKcDog(query);
+  const result = await scrapeKcDog(query);
+  if (!result) return null;
+  return {
+    ...result,
+    sex: result.sex === 'bitch' ? 'bitch' as const : 'dog' as const,
+  };
 }
