@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { TRPCError } from '@trpc/server';
 import { and, eq, sql, isNull, inArray, asc, desc } from 'drizzle-orm';
 import { secretaryProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
@@ -490,5 +491,55 @@ export const secretaryRouter = createTRPCRouter({
       }
 
       return { created: count };
+    }),
+
+  // ── Individual class management ────────────────────────────
+
+  updateShowClass: secretaryProcedure
+    .input(
+      z.object({
+        showClassId: z.string().uuid(),
+        entryFee: z.number().int().min(0).optional(),
+        sortOrder: z.number().int().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const updates: Record<string, unknown> = {};
+      if (input.entryFee !== undefined) updates.entryFee = input.entryFee;
+      if (input.sortOrder !== undefined) updates.sortOrder = input.sortOrder;
+
+      if (Object.keys(updates).length === 0) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'No fields to update',
+        });
+      }
+
+      const [updated] = await ctx.db
+        .update(showClasses)
+        .set(updates)
+        .where(eq(showClasses.id, input.showClassId))
+        .returning();
+
+      if (!updated) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Class not found' });
+      }
+
+      return updated;
+    }),
+
+  deleteShowClass: secretaryProcedure
+    .input(z.object({ showClassId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const [deleted] = await ctx.db
+        .delete(showClasses)
+        .where(eq(showClasses.id, input.showClassId))
+        .returning({ id: showClasses.id });
+
+      if (!deleted) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Class not found' });
+      }
+
+      return deleted;
     }),
 });

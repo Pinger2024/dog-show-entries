@@ -9,6 +9,7 @@ export interface CartEntry {
   dogName?: string;
   breedName?: string;
   classIds: string[];
+  classNames: string[]; // human-readable class names for cart review
   isNfc: boolean;
   totalFee: number;
   // Junior handler fields
@@ -38,7 +39,7 @@ type CartAction =
   | { type: 'SET_ENTRY_TYPE'; entryType: EntryType }
   | { type: 'SET_DOG'; dogId: string; dogName: string; breedName: string }
   | { type: 'SET_JH_DETAILS'; handlerName: string; handlerDob: string; handlerKcNumber?: string }
-  | { type: 'SET_CLASSES'; classIds: string[]; totalFee: number; isNfc: boolean }
+  | { type: 'SET_CLASSES'; classIds: string[]; classNames: string[]; totalFee: number; isNfc: boolean }
   | { type: 'EDIT_ENTRY'; entryId: string }
   | { type: 'REMOVE_ENTRY'; entryId: string }
   | { type: 'SET_STEP'; step: WizardStep }
@@ -65,6 +66,7 @@ function cartReducer(state: CartState, action: CartAction): CartState {
             id,
             entryType: 'standard',
             classIds: [],
+            classNames: [],
             isNfc: false,
             totalFee: 0,
           },
@@ -126,6 +128,7 @@ function cartReducer(state: CartState, action: CartAction): CartState {
             ? {
                 ...e,
                 classIds: action.classIds,
+                classNames: action.classNames,
                 totalFee: action.totalFee,
                 isNfc: action.isNfc,
               }
@@ -209,8 +212,8 @@ export function useEntryCart() {
     []
   );
   const setClasses = useCallback(
-    (classIds: string[], totalFee: number, isNfc: boolean) =>
-      dispatch({ type: 'SET_CLASSES', classIds, totalFee, isNfc }),
+    (classIds: string[], classNames: string[], totalFee: number, isNfc: boolean) =>
+      dispatch({ type: 'SET_CLASSES', classIds, classNames, totalFee, isNfc }),
     []
   );
   const editEntry = useCallback(

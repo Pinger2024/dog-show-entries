@@ -145,6 +145,7 @@ async function seedClydeValley() {
   ];
 
   let classCount = 0;
+  let sortOrder = 0;
   for (const className of gsdClasses) {
     const classDefId = classMap[className];
     if (!classDefId) {
@@ -159,6 +160,7 @@ async function seedClydeValley() {
       breedId: gsd.id,
       sex: 'dog',
       entryFee: 800, // £8.00 per class
+      sortOrder: sortOrder++,
     });
     classCount++;
 
@@ -169,6 +171,7 @@ async function seedClydeValley() {
       breedId: gsd.id,
       sex: 'bitch',
       entryFee: 800, // £8.00 per class
+      sortOrder: sortOrder++,
     });
     classCount++;
   }
@@ -189,6 +192,7 @@ async function seedClydeValley() {
       classDefinitionId: classDefId,
       breedId: gsd.id,
       entryFee: 500, // £5.00 for JH classes
+      sortOrder: sortOrder++,
     });
     classCount++;
   }

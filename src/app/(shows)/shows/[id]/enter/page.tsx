@@ -177,7 +177,14 @@ export default function EnterShowPage() {
   }
 
   function handleConfirmClasses() {
-    cart.setClasses(selectedClassIds, selectedTotal, isNfc);
+    // Build human-readable class names for cart review
+    const names = (showClasses ?? [])
+      .filter((sc) => selectedClassIds.includes(sc.id))
+      .map((sc) => {
+        const sex = sc.sex === 'dog' ? ' Dog' : sc.sex === 'bitch' ? ' Bitch' : '';
+        return `${sc.classDefinition.name}${sex}`;
+      });
+    cart.setClasses(selectedClassIds, names, selectedTotal, isNfc);
     setSelectedClassIds([]);
     setIsNfc(false);
   }
@@ -732,12 +739,22 @@ export default function EnterShowPage() {
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-1 text-sm">
-                  <p className="text-muted-foreground">
-                    {entry.classIds.length} class
-                    {entry.classIds.length !== 1 ? 'es' : ''}
-                    {entry.isNfc && ' (NFC)'}
-                  </p>
+                <CardContent className="space-y-2 text-sm">
+                  {entry.classNames.length > 0 ? (
+                    <ul className="space-y-0.5 text-muted-foreground">
+                      {entry.classNames.map((name, i) => (
+                        <li key={i}>{name}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-muted-foreground">
+                      {entry.classIds.length} class
+                      {entry.classIds.length !== 1 ? 'es' : ''}
+                    </p>
+                  )}
+                  {entry.isNfc && (
+                    <p className="text-xs font-semibold text-amber-600">NOT FOR COMPETITION</p>
+                  )}
                   <p className="font-semibold">{formatFee(entry.totalFee)}</p>
                 </CardContent>
               </Card>

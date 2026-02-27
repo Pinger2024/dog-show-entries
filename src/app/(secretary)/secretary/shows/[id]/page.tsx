@@ -16,6 +16,7 @@ import {
   PoundSterling,
   Search,
   Ticket,
+  Trash2,
   Upload,
   Users,
   X,
@@ -338,26 +339,8 @@ export default function ManageShowPage({
           {/* Schedule upload */}
           <ScheduleUpload showId={id} currentUrl={show.scheduleUrl} />
 
-          {/* Classes summary */}
-          {show.showClasses && show.showClasses.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  Classes ({show.showClasses.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-1.5">
-                  {show.showClasses.map((sc) => (
-                    <Badge key={sc.id} variant="secondary">
-                      {sc.classDefinition?.name ?? 'Unknown'}
-                      {sc.breed && ` (${sc.breed.name})`}
-                    </Badge>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          {/* Class management */}
+          <ClassManager showId={id} classes={show.showClasses ?? []} />
 
           {/* Bulk class creation */}
           <BulkClassCreator showId={id} />
@@ -1725,6 +1708,227 @@ function EditDogDialog({
 }
 
 // ── Bulk Class Creator ───────────────────────────────────────
+
+// ── Class Manager ─────────────────────────────────────────────
+
+interface ClassManagerProps {
+  showId: string;
+  classes: {
+    id: string;
+    entryFee: number;
+    sex: 'dog' | 'bitch' | null;
+    sortOrder: number;
+    classDefinition?: { name: string; type: string } | null;
+    breed?: { name: string } | null;
+  }[];
+}
+
+function ClassManager({ showId, classes }: ClassManagerProps) {
+  const [editingFees, setEditingFees] = useState<Record<string, string>>({});
+  const utils = trpc.useUtils();
+
+  const updateMutation = trpc.secretary.updateShowClass.useMutation({
+    onSuccess: () => {
+      utils.shows.getById.invalidate({ id: showId });
+      toast.success('Class updated');
+    },
+    onError: () => toast.error('Failed to update class'),
+  });
+
+  const deleteMutation = trpc.secretary.deleteShowClass.useMutation({
+    onSuccess: () => {
+      utils.shows.getById.invalidate({ id: showId });
+      toast.success('Class removed');
+    },
+    onError: () => toast.error('Failed to remove class'),
+  });
+
+  if (classes.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Classes</CardTitle>
+          <CardDescription>No classes added yet. Use the template below to get started.</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
+  function startEditFee(classId: string, currentFee: number) {
+    setEditingFees((prev) => ({
+      ...prev,
+      [classId]: String(currentFee),
+    }));
+  }
+
+  function saveFee(classId: string) {
+    const val = editingFees[classId];
+    if (val === undefined) return;
+    const pence = parseInt(val, 10);
+    if (isNaN(pence) || pence < 0) {
+      toast.error('Enter a valid fee in pence');
+      return;
+    }
+    updateMutation.mutate({ showClassId: classId, entryFee: pence });
+    setEditingFees((prev) => {
+      const next = { ...prev };
+      delete next[classId];
+      return next;
+    });
+  }
+
+  function cancelEditFee(classId: string) {
+    setEditingFees((prev) => {
+      const next = { ...prev };
+      delete next[classId];
+      return next;
+    });
+  }
+
+  // Group by type for nicer display
+  const grouped: Record<string, typeof classes> = {};
+  for (const sc of classes) {
+    const type = sc.classDefinition?.type ?? 'other';
+    grouped[type] ??= [];
+    grouped[type]!.push(sc);
+  }
+
+  const typeLabels: Record<string, string> = {
+    age: 'Age Classes',
+    achievement: 'Achievement Classes',
+    special: 'Special Classes',
+    junior_handler: 'Junior Handler Classes',
+    other: 'Other',
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>Classes ({classes.length})</CardTitle>
+            <CardDescription>Click a fee to edit it. Remove classes that don&apos;t apply to this show.</CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {Object.entries(grouped).map(([type, typeClasses]) => (
+          <div key={type}>
+            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              {typeLabels[type] ?? type}
+            </h4>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Class</TableHead>
+                  <TableHead className="w-[100px]">Sex</TableHead>
+                  <TableHead className="w-[120px]">Fee</TableHead>
+                  <TableHead className="w-[60px]" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {typeClasses.map((sc) => {
+                  const isEditing = editingFees[sc.id] !== undefined;
+                  return (
+                    <TableRow key={sc.id}>
+                      <TableCell className="font-medium">
+                        {sc.classDefinition?.name ?? 'Unknown'}
+                        {sc.breed && (
+                          <span className="ml-1 text-muted-foreground">
+                            ({sc.breed.name})
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {sc.sex ? (
+                          <Badge variant="outline" className="text-xs">
+                            {sc.sex === 'dog' ? 'Dog' : 'Bitch'}
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Any</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {isEditing ? (
+                          <div className="flex items-center gap-1">
+                            <Input
+                              type="number"
+                              min={0}
+                              value={editingFees[sc.id]}
+                              onChange={(e) =>
+                                setEditingFees((prev) => ({
+                                  ...prev,
+                                  [sc.id]: e.target.value,
+                                }))
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') saveFee(sc.id);
+                                if (e.key === 'Escape') cancelEditFee(sc.id);
+                              }}
+                              className="h-7 w-20 text-xs"
+                              autoFocus
+                            />
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="size-7"
+                              onClick={() => saveFee(sc.id)}
+                              disabled={updateMutation.isPending}
+                            >
+                              {updateMutation.isPending ? (
+                                <Loader2 className="size-3 animate-spin" />
+                              ) : (
+                                <span className="text-xs">OK</span>
+                              )}
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="size-7"
+                              onClick={() => cancelEditFee(sc.id)}
+                            >
+                              <X className="size-3" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => startEditFee(sc.id, sc.entryFee)}
+                            className="rounded px-1.5 py-0.5 text-sm font-semibold transition-colors hover:bg-muted"
+                            title="Click to edit fee"
+                          >
+                            {formatCurrency(sc.entryFee)}
+                          </button>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-7 text-destructive hover:text-destructive"
+                          onClick={() => {
+                            if (confirm('Remove this class from the show?')) {
+                              deleteMutation.mutate({ showClassId: sc.id });
+                            }
+                          }}
+                          disabled={deleteMutation.isPending}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Bulk Class Creator ──────────────────────────────────────
 
 function BulkClassCreator({ showId }: { showId: string }) {
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);

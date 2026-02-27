@@ -3,6 +3,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { getStripe } from '@/server/services/stripe';
 import { db } from '@/server/db';
 import { entries, orders, payments } from '@/server/db/schema';
+import { sendEntryConfirmationEmail } from '@/server/services/email';
 import type Stripe from 'stripe';
 
 export async function POST(request: NextRequest) {
@@ -80,6 +81,13 @@ export async function POST(request: NextRequest) {
         .update(payments)
         .set({ status: 'succeeded' })
         .where(eq(payments.stripePaymentId, paymentIntent.id));
+
+      // Send confirmation email (non-blocking — don't fail the webhook)
+      if (orderId) {
+        sendEntryConfirmationEmail(orderId).catch((err) =>
+          console.error('[webhook] Email send failed:', err)
+        );
+      }
 
       break;
     }
