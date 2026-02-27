@@ -446,6 +446,61 @@ export const secretaryRouter = createTRPCRouter({
       });
     }),
 
+  // ── Custom class definition creation ─────────────────────
+
+  createClassDefinition: secretaryProcedure
+    .input(
+      z.object({
+        name: z.string().min(1).max(255),
+        description: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const [created] = await ctx.db
+        .insert(classDefinitions)
+        .values({
+          name: input.name,
+          type: 'special',
+          description: input.description,
+        })
+        .returning();
+      return created!;
+    }),
+
+  // ── Add individual show class ───────────────────────────
+
+  addShowClass: secretaryProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        classDefinitionId: z.string().uuid(),
+        breedId: z.string().uuid().optional(),
+        sex: z.enum(['dog', 'bitch']).nullable().optional(),
+        entryFee: z.number().int().positive(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Get max sort order for this show
+      const [maxSort] = await ctx.db
+        .select({ max: sql<number>`coalesce(max(${showClasses.sortOrder}), -1)` })
+        .from(showClasses)
+        .where(eq(showClasses.showId, input.showId));
+
+      const [created] = await ctx.db
+        .insert(showClasses)
+        .values({
+          showId: input.showId,
+          classDefinitionId: input.classDefinitionId,
+          breedId: input.breedId ?? null,
+          sex: input.sex ?? null,
+          entryFee: input.entryFee,
+          sortOrder: (Number(maxSort?.max) ?? -1) + 1,
+          isBreedSpecific: !!input.breedId,
+        })
+        .returning();
+      return created!;
+    }),
+
   // ── Bulk class creation from templates ────────────────────
 
   bulkCreateClasses: secretaryProcedure

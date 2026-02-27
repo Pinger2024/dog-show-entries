@@ -13,6 +13,7 @@ import {
   Hash,
   Loader2,
   MapPin,
+  Plus,
   PoundSterling,
   Search,
   Ticket,
@@ -344,6 +345,9 @@ export default function ManageShowPage({
 
           {/* Bulk class creation */}
           <BulkClassCreator showId={id} />
+
+          {/* Add individual class */}
+          <AddIndividualClass showId={id} />
 
           {/* Delete show (draft only) */}
           {show.status === 'draft' && (
@@ -2229,6 +2233,196 @@ function BulkClassCreator({ showId }: { showId: string }) {
             </Button>
           </>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Add Individual Class ─────────────────────────────────────
+
+function AddIndividualClass({ showId }: { showId: string }) {
+  const [classDefId, setClassDefId] = useState<string>('');
+  const [newClassName, setNewClassName] = useState('');
+  const [breedId, setBreedId] = useState<string>('');
+  const [sex, setSex] = useState<string>('combined');
+  const [feeInput, setFeeInput] = useState('500');
+  const [isCreatingNew, setIsCreatingNew] = useState(false);
+
+  const { data: classDefs } = trpc.secretary.listClassDefinitions.useQuery();
+  const { data: breeds } = trpc.breeds.list.useQuery();
+  const utils = trpc.useUtils();
+
+  const createDefMutation = trpc.secretary.createClassDefinition.useMutation();
+  const addClassMutation = trpc.secretary.addShowClass.useMutation({
+    onSuccess: () => {
+      toast.success('Class added');
+      utils.shows.getById.invalidate({ id: showId });
+      utils.secretary.listClassDefinitions.invalidate();
+      setClassDefId('');
+      setNewClassName('');
+      setIsCreatingNew(false);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  async function handleAdd() {
+    const fee = parseInt(feeInput, 10);
+    if (isNaN(fee) || fee <= 0) {
+      toast.error('Enter a valid entry fee');
+      return;
+    }
+
+    let defId = classDefId;
+
+    // If creating a new class definition
+    if (isCreatingNew) {
+      if (!newClassName.trim()) {
+        toast.error('Enter a class name');
+        return;
+      }
+      const newDef = await createDefMutation.mutateAsync({
+        name: newClassName.trim(),
+      });
+      defId = newDef.id;
+    }
+
+    if (!defId) {
+      toast.error('Select or create a class');
+      return;
+    }
+
+    addClassMutation.mutate({
+      showId,
+      classDefinitionId: defId,
+      breedId: breedId && breedId !== 'any' ? breedId : undefined,
+      sex: sex === 'combined' ? null : (sex as 'dog' | 'bitch'),
+      entryFee: fee,
+    });
+  }
+
+  const isPending = createDefMutation.isPending || addClassMutation.isPending;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Add Individual Class</CardTitle>
+        <CardDescription>
+          Add a single class to this show. Pick an existing class type or create a custom one.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Class selection mode */}
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">Class</Label>
+          {!isCreatingNew ? (
+            <div className="flex gap-2">
+              <Select value={classDefId} onValueChange={setClassDefId}>
+                <SelectTrigger className="flex-1">
+                  <SelectValue placeholder="Select a class..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {classDefs?.map((cd) => (
+                    <SelectItem key={cd.id} value={cd.id}>
+                      {cd.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setIsCreatingNew(true);
+                  setClassDefId('');
+                }}
+              >
+                <Plus className="size-4" />
+                New
+              </Button>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <Input
+                value={newClassName}
+                onChange={(e) => setNewClassName(e.target.value)}
+                placeholder="Custom class name..."
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setIsCreatingNew(false);
+                  setNewClassName('');
+                }}
+              >
+                <X className="size-4" />
+                Cancel
+              </Button>
+            </div>
+          )}
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          {/* Breed selector */}
+          <div>
+            <Label className="text-sm font-medium">Breed (optional)</Label>
+            <Select value={breedId} onValueChange={setBreedId}>
+              <SelectTrigger className="mt-1">
+                <SelectValue placeholder="Any breed" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="any">Any breed</SelectItem>
+                {breeds?.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Sex selector */}
+          <div>
+            <Label className="text-sm font-medium">Sex</Label>
+            <Select value={sex} onValueChange={setSex}>
+              <SelectTrigger className="mt-1">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="combined">Combined (Dog &amp; Bitch)</SelectItem>
+                <SelectItem value="dog">Dogs only</SelectItem>
+                <SelectItem value="bitch">Bitches only</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Entry fee */}
+          <div>
+            <Label className="text-sm font-medium">Entry Fee (pence)</Label>
+            <Input
+              type="number"
+              min={0}
+              value={feeInput}
+              onChange={(e) => setFeeInput(e.target.value)}
+              className="mt-1"
+            />
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {feeInput ? formatCurrency(parseInt(feeInput, 10) || 0) : '£0.00'}
+            </p>
+          </div>
+        </div>
+
+        <Button
+          onClick={handleAdd}
+          disabled={isPending || (!classDefId && !newClassName.trim())}
+        >
+          {isPending && <Loader2 className="size-4 animate-spin" />}
+          <Plus className="size-4" />
+          Add Class
+        </Button>
       </CardContent>
     </Card>
   );

@@ -103,11 +103,14 @@ async function seed() {
       { name: 'Graduate', type: 'achievement' as const, maxWins: 3, description: 'For dogs which have not won a CC or 4 or more first prizes at Championship Shows.' },
       { name: 'Post Graduate', type: 'achievement' as const, maxWins: 4, description: 'For dogs which have not won a CC or 5 or more first prizes at Championship Shows.' },
       { name: 'Limit', type: 'achievement' as const, maxWins: 6, description: 'For dogs which have not become Show Champions or won 3 or more CCs or 7 or more first prizes at Championship Shows in Limit or Open.' },
+      { name: 'Undergraduate', type: 'achievement' as const, maxWins: 2, description: 'For dogs which have not won a CC or 3 or more first prizes at Championship Shows in Undergraduate, Graduate, Post Graduate, Mid Limit, Limit, or Open.' },
+      { name: 'Mid Limit', type: 'achievement' as const, maxWins: 4, description: 'For dogs which have not won a CC or 3 or more first prizes in Mid Limit, Limit, or Open at Championship Shows.' },
       { name: 'Open', type: 'achievement' as const, description: 'For all dogs of the breed eligible for entry at the show. No restrictions.' },
       // Long Coat GSD varieties
       { name: 'Long Coat Open', type: 'achievement' as const, description: 'For Long Coat German Shepherd Dogs eligible for entry at the show. No restrictions.' },
       { name: 'Long Coat Puppy', type: 'age' as const, minAgeMonths: 6, maxAgeMonths: 12, description: 'For Long Coat German Shepherd Dogs of 6 and not exceeding 12 calendar months of age on the first day of the show.' },
       // Special
+      { name: 'Good Citizen Dog Scheme', type: 'special' as const, description: 'For dogs that have passed any level of the Kennel Club Good Citizen Dog Scheme.' },
       { name: 'Special Beginners', type: 'special' as const, description: 'For dogs whose owners/handlers have never won a CC or Reserve CC at Championship Shows.' },
       // Junior Handler classes
       { name: 'Junior Handler (6-11)', type: 'junior_handler' as const, minAgeMonths: 72, maxAgeMonths: 143, description: 'For handlers aged 6-11 years on the day of the show. Judged on handling skill, not the dog.' },
