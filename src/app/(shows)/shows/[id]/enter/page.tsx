@@ -88,6 +88,7 @@ export default function EnterShowPage() {
   const { data: dogs, isLoading: dogsLoading } = trpc.dogs.list.useQuery();
 
   const selectedDog = dogs?.find((d) => d.id === cart.activeEntry?.dogId);
+  const selectedDogSex = selectedDog?.sex as 'dog' | 'bitch' | undefined;
 
   const breedIdForClasses =
     cart.activeEntry?.entryType === 'standard' ? selectedDog?.breedId : undefined;
@@ -117,16 +118,22 @@ export default function EnterShowPage() {
     }
   }, [cart.editingExisting, cart.activeEntry]);
 
-  // Group classes by type
+  // Group classes by type, filtering by the selected dog's sex
   const groupedClasses = useMemo(() => {
     if (!showClasses) return { age: [], achievement: [], special: [], junior_handler: [] };
+
+    // Filter to only show classes matching the dog's sex (or unisex classes)
+    const sexFiltered = selectedDogSex
+      ? showClasses.filter((sc) => !sc.sex || sc.sex === selectedDogSex)
+      : showClasses;
+
     return {
-      age: showClasses.filter((sc) => sc.classDefinition.type === 'age'),
-      achievement: showClasses.filter((sc) => sc.classDefinition.type === 'achievement'),
-      special: showClasses.filter((sc) => sc.classDefinition.type === 'special'),
-      junior_handler: showClasses.filter((sc) => sc.classDefinition.type === 'junior_handler'),
+      age: sexFiltered.filter((sc) => sc.classDefinition.type === 'age'),
+      achievement: sexFiltered.filter((sc) => sc.classDefinition.type === 'achievement'),
+      special: sexFiltered.filter((sc) => sc.classDefinition.type === 'special'),
+      junior_handler: sexFiltered.filter((sc) => sc.classDefinition.type === 'junior_handler'),
     };
-  }, [showClasses]);
+  }, [showClasses, selectedDogSex]);
 
   // Filter classes by entry type
   const availableClasses = useMemo(() => {
@@ -918,6 +925,7 @@ export default function EnterShowPage() {
 interface ShowClassItem {
   id: string;
   entryFee: number;
+  sex: 'dog' | 'bitch' | null;
   classDefinition: {
     name: string;
     type: string;
@@ -943,28 +951,34 @@ function ClassGroup({
     max: number | null
   ) => { ageMonths: number; eligible: boolean } | null;
 }) {
+  // Filter out age-ineligible classes if eligibility info is available
+  const visibleClasses = getAgeEligibility
+    ? classes.filter((sc) => {
+        if (sc.classDefinition.type !== 'age') return true;
+        const elig = getAgeEligibility(
+          sc.classDefinition.minAgeMonths,
+          sc.classDefinition.maxAgeMonths
+        );
+        return !elig || elig.eligible;
+      })
+    : classes;
+
+  if (visibleClasses.length === 0) return null;
+
   return (
     <div>
       <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
         {title}
       </h3>
       <div className="space-y-2">
-        {classes.map((sc) => {
-          const eligibility =
-            getAgeEligibility && sc.classDefinition.type === 'age'
-              ? getAgeEligibility(
-                  sc.classDefinition.minAgeMonths,
-                  sc.classDefinition.maxAgeMonths
-                )
-              : null;
+        {visibleClasses.map((sc) => {
           const isSelected = selectedIds.includes(sc.id);
           return (
             <label
               key={sc.id}
               className={cn(
                 'flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-all hover:bg-accent/50',
-                isSelected && 'border-primary bg-primary/5',
-                eligibility && !eligibility.eligible && 'opacity-60'
+                isSelected && 'border-primary bg-primary/5'
               )}
             >
               <Checkbox
@@ -974,12 +988,14 @@ function ClassGroup({
               />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="font-medium">{sc.classDefinition.name}</span>
-                  {eligibility && !eligibility.eligible && (
-                    <Badge variant="secondary" className="text-[10px]">
-                      Age may not match
-                    </Badge>
-                  )}
+                  <span className="font-medium">
+                    {sc.classDefinition.name}
+                    {sc.sex && (
+                      <span className="ml-1">
+                        {sc.sex === 'dog' ? 'Dog' : 'Bitch'}
+                      </span>
+                    )}
+                  </span>
                 </div>
                 {sc.classDefinition.description && (
                   <p className="text-sm text-muted-foreground">

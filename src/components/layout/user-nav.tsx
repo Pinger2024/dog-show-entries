@@ -7,6 +7,7 @@ import {
   Dog,
   Ticket,
   LogOut,
+  ClipboardList,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -26,6 +27,7 @@ interface UserNavProps {
     email?: string | null;
     image?: string | null;
   } | null;
+  isSecretary?: boolean;
 }
 
 function getInitials(name?: string | null, email?: string | null) {
@@ -41,7 +43,7 @@ function getInitials(name?: string | null, email?: string | null) {
   return '?';
 }
 
-export function UserNav({ user }: UserNavProps) {
+export function UserNav({ user, isSecretary }: UserNavProps) {
   if (!user) {
     return (
       <div className="flex items-center gap-2">
@@ -106,6 +108,14 @@ export function UserNav({ user }: UserNavProps) {
               My Entries
             </Link>
           </DropdownMenuItem>
+          {isSecretary && (
+            <DropdownMenuItem asChild>
+              <Link href="/secretary" className="text-[0.9375rem]">
+                <ClipboardList />
+                Secretary Dashboard
+              </Link>
+            </DropdownMenuItem>
+          )}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem

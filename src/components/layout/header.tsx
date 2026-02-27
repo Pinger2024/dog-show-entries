@@ -6,6 +6,7 @@ import { MobileNav } from './mobile-nav';
 export async function Header() {
   const session = await auth();
   const user = session?.user;
+  const isSecretary = user?.role === 'secretary' || user?.role === 'admin';
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/85 backdrop-blur-lg supports-[backdrop-filter]:bg-background/70">
@@ -42,6 +43,14 @@ export async function Header() {
               >
                 My Entries
               </Link>
+              {isSecretary && (
+                <Link
+                  href="/secretary"
+                  className="rounded-lg px-4 py-2.5 text-[0.9375rem] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  Secretary
+                </Link>
+              )}
             </>
           )}
         </nav>
@@ -49,9 +58,9 @@ export async function Header() {
         {/* Right side */}
         <div className="flex items-center gap-3">
           <div className="hidden md:block">
-            <UserNav user={user ?? null} />
+            <UserNav user={user ?? null} isSecretary={isSecretary} />
           </div>
-          <MobileNav user={user ?? null} />
+          <MobileNav user={user ?? null} isSecretary={isSecretary} />
         </div>
       </div>
     </header>

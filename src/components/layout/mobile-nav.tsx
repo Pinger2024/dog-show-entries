@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { signOut } from 'next-auth/react';
-import { Menu, Dog, Ticket, LayoutDashboard, LogOut, Eye } from 'lucide-react';
+import { Menu, Dog, Ticket, LayoutDashboard, LogOut, Eye, ClipboardList } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Sheet,
@@ -20,9 +20,10 @@ interface MobileNavProps {
     email?: string | null;
     image?: string | null;
   } | null;
+  isSecretary?: boolean;
 }
 
-export function MobileNav({ user }: MobileNavProps) {
+export function MobileNav({ user, isSecretary }: MobileNavProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -74,6 +75,16 @@ export function MobileNav({ user }: MobileNavProps) {
                 <Ticket className="size-5" />
                 My Entries
               </Link>
+              {isSecretary && (
+                <Link
+                  href="/secretary"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  <ClipboardList className="size-5" />
+                  Secretary Dashboard
+                </Link>
+              )}
             </>
           )}
           <Separator className="my-2" />
