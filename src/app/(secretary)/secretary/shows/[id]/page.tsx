@@ -1487,8 +1487,15 @@ function ScheduleUpload({
         });
 
         if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.error ?? 'Upload failed');
+          const text = await res.text();
+          let message = 'Upload failed';
+          try {
+            const err = JSON.parse(text);
+            message = err.error ?? message;
+          } catch {
+            message = text || message;
+          }
+          throw new Error(message);
         }
 
         const { presignedUrl, publicUrl } = await res.json();

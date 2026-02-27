@@ -37,9 +37,12 @@ export const secretaryRouter = createTRPCRouter({
     if (orgIds.length === 0) {
       return {
         organisations: [],
-        shows: [],
+        activeShows: [],
+        pastShows: [],
         totalShows: 0,
+        activeShowsCount: 0,
         totalEntries: 0,
+        activeRevenue: 0,
         totalRevenue: 0,
       };
     }
@@ -54,31 +57,61 @@ export const secretaryRouter = createTRPCRouter({
       orderBy: (shows, { desc }) => [desc(shows.startDate)],
     });
 
-    // Get total entries across all shows
-    const showIds = orgShows.map((s) => s.id);
+    // Split into active vs past/cancelled
+    const inactiveStatuses = ['completed', 'cancelled'];
+    const activeShows = orgShows.filter(
+      (s) => !inactiveStatuses.includes(s.status)
+    );
+    const pastShows = orgShows.filter((s) =>
+      inactiveStatuses.includes(s.status)
+    );
+
+    // Get entries/revenue for active shows only
+    const activeShowIds = activeShows.map((s) => s.id);
+    const allShowIds = orgShows.map((s) => s.id);
     let totalEntries = 0;
+    let activeRevenue = 0;
     let totalRevenue = 0;
 
-    if (showIds.length > 0) {
-      const entryCounts = await ctx.db
+    if (allShowIds.length > 0) {
+      const allStats = await ctx.db
         .select({
           count: sql<number>`count(*)`,
           revenue: sql<number>`coalesce(sum(${entries.totalFee}), 0)`,
         })
         .from(entries)
         .where(
-          and(inArray(entries.showId, showIds), isNull(entries.deletedAt))
+          and(inArray(entries.showId, allShowIds), isNull(entries.deletedAt))
         );
 
-      totalEntries = Number(entryCounts[0]?.count ?? 0);
-      totalRevenue = Number(entryCounts[0]?.revenue ?? 0);
+      totalEntries = Number(allStats[0]?.count ?? 0);
+      totalRevenue = Number(allStats[0]?.revenue ?? 0);
+    }
+
+    if (activeShowIds.length > 0) {
+      const activeStats = await ctx.db
+        .select({
+          revenue: sql<number>`coalesce(sum(${entries.totalFee}), 0)`,
+        })
+        .from(entries)
+        .where(
+          and(
+            inArray(entries.showId, activeShowIds),
+            isNull(entries.deletedAt)
+          )
+        );
+
+      activeRevenue = Number(activeStats[0]?.revenue ?? 0);
     }
 
     return {
       organisations: userMemberships.map((m) => m.organisation),
-      shows: orgShows,
+      activeShows,
+      pastShows,
       totalShows: orgShows.length,
+      activeShowsCount: activeShows.length,
       totalEntries,
+      activeRevenue,
       totalRevenue,
     };
   }),

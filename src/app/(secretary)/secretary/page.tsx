@@ -7,6 +7,7 @@ import {
   PoundSterling,
   Plus,
   ArrowRight,
+  Archive,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -18,6 +19,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const statusConfig: Record<
   string,
@@ -64,10 +66,11 @@ export default function SecretaryDashboardPage() {
     );
   }
 
-  const totalShows = data?.totalShows ?? 0;
+  const activeShows = data?.activeShows ?? [];
+  const pastShows = data?.pastShows ?? [];
+  const activeShowsCount = data?.activeShowsCount ?? 0;
   const totalEntries = data?.totalEntries ?? 0;
-  const totalRevenue = data?.totalRevenue ?? 0;
-  const shows = data?.shows ?? [];
+  const activeRevenue = data?.activeRevenue ?? 0;
 
   return (
     <div className="space-y-8 pb-16 md:pb-0">
@@ -89,17 +92,17 @@ export default function SecretaryDashboardPage() {
         </Button>
       </div>
 
-      {/* Stats */}
+      {/* Stats — scoped to active shows */}
       <div className="grid gap-4 sm:grid-cols-3">
         <Card>
           <CardHeader className="flex-row items-center justify-between pb-2">
             <CardDescription className="text-sm font-medium">
-              Total Shows
+              Active Shows
             </CardDescription>
             <CalendarDays className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">{totalShows}</p>
+            <p className="text-3xl font-bold">{activeShowsCount}</p>
           </CardContent>
         </Card>
         <Card>
@@ -116,85 +119,155 @@ export default function SecretaryDashboardPage() {
         <Card>
           <CardHeader className="flex-row items-center justify-between pb-2">
             <CardDescription className="text-sm font-medium">
-              Revenue
+              Active Revenue
             </CardDescription>
             <PoundSterling className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">{formatCurrency(totalRevenue)}</p>
+            <p className="text-3xl font-bold">{formatCurrency(activeRevenue)}</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Shows list */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Your Shows</CardTitle>
-          <CardDescription>
-            All shows across your organisations
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {shows.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
-              <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-primary/10">
-                <CalendarDays className="size-6 text-primary" />
+      {/* Shows list with tabs */}
+      <Tabs defaultValue="active">
+        <TabsList>
+          <TabsTrigger value="active">
+            Active Shows
+            {activeShows.length > 0 && (
+              <Badge variant="secondary" className="ml-2">
+                {activeShows.length}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="past">
+            Past & Cancelled
+            {pastShows.length > 0 && (
+              <Badge variant="secondary" className="ml-2">
+                {pastShows.length}
+              </Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="active">
+          <Card>
+            <CardHeader>
+              <CardTitle>Active Shows</CardTitle>
+              <CardDescription>
+                Shows that are in progress, accepting entries, or being prepared
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ShowList shows={activeShows} emptyMessage="No active shows" />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="past">
+          <Card>
+            <CardHeader>
+              <CardTitle>Past & Cancelled Shows</CardTitle>
+              <CardDescription>
+                Completed and cancelled shows
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {pastShows.length === 0 ? (
+                <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
+                  <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-muted">
+                    <Archive className="size-6 text-muted-foreground" />
+                  </div>
+                  <h3 className="font-semibold">No past shows</h3>
+                  <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                    Completed and cancelled shows will appear here.
+                  </p>
+                </div>
+              ) : (
+                <ShowList shows={pastShows} emptyMessage="No past shows" />
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function ShowList({
+  shows,
+  emptyMessage,
+}: {
+  shows: Array<{
+    id: string;
+    name: string;
+    status: string;
+    startDate: string;
+    organisation?: { name: string } | null;
+    venue?: { name: string } | null;
+  }>;
+  emptyMessage: string;
+}) {
+  if (shows.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
+        <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-primary/10">
+          <CalendarDays className="size-6 text-primary" />
+        </div>
+        <h3 className="font-semibold">{emptyMessage}</h3>
+        <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+          Create your first show to start accepting entries.
+        </p>
+        <Button className="mt-4" size="sm" asChild>
+          <Link href="/secretary/shows/new">
+            Create Show
+            <ArrowRight className="ml-1 size-3.5" />
+          </Link>
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {shows.map((show) => {
+        const status = statusConfig[show.status] ?? {
+          label: show.status,
+          variant: 'outline' as const,
+        };
+        return (
+          <Link
+            key={show.id}
+            href={`/secretary/shows/${show.id}`}
+            className="flex items-center justify-between rounded-lg border p-4 transition-colors hover:bg-muted/50"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <p className="truncate font-medium">{show.name}</p>
+                <Badge variant={status.variant}>{status.label}</Badge>
               </div>
-              <h3 className="font-semibold">No shows yet</h3>
-              <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                Create your first show to start accepting entries.
-              </p>
-              <Button className="mt-4" size="sm" asChild>
-                <Link href="/secretary/shows/new">
-                  Create Show
-                  <ArrowRight className="ml-1 size-3.5" />
-                </Link>
-              </Button>
+              <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
+                <span>{formatDate(show.startDate)}</span>
+                {show.organisation && (
+                  <>
+                    <span>&middot;</span>
+                    <span className="truncate">
+                      {show.organisation.name}
+                    </span>
+                  </>
+                )}
+                {show.venue && (
+                  <>
+                    <span>&middot;</span>
+                    <span className="truncate">{show.venue.name}</span>
+                  </>
+                )}
+              </div>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {shows.map((show) => {
-                const status = statusConfig[show.status] ?? {
-                  label: show.status,
-                  variant: 'outline' as const,
-                };
-                return (
-                  <Link
-                    key={show.id}
-                    href={`/secretary/shows/${show.id}`}
-                    className="flex items-center justify-between rounded-lg border p-4 transition-colors hover:bg-muted/50"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="truncate font-medium">{show.name}</p>
-                        <Badge variant={status.variant}>{status.label}</Badge>
-                      </div>
-                      <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
-                        <span>{formatDate(show.startDate)}</span>
-                        {show.organisation && (
-                          <>
-                            <span>&middot;</span>
-                            <span className="truncate">
-                              {show.organisation.name}
-                            </span>
-                          </>
-                        )}
-                        {show.venue && (
-                          <>
-                            <span>&middot;</span>
-                            <span className="truncate">{show.venue.name}</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    <ArrowRight className="ml-4 size-4 shrink-0 text-muted-foreground" />
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            <ArrowRight className="ml-4 size-4 shrink-0 text-muted-foreground" />
+          </Link>
+        );
+      })}
     </div>
   );
 }
