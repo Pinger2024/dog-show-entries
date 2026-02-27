@@ -158,6 +158,12 @@ export default function NewShowPage() {
 
   const organisations = dashboardData?.organisations ?? [];
 
+  // Auto-select the organisation if there's only one
+  const currentOrgId = form.watch('organisationId');
+  if (organisations.length === 1 && !currentOrgId) {
+    form.setValue('organisationId', organisations[0].id);
+  }
+
   const isSubmitting =
     createVenueMutation.isPending || createShowMutation.isPending;
 

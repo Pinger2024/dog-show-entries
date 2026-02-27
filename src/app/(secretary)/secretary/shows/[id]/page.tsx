@@ -1515,7 +1515,7 @@ function ScheduleUpload({
           Show Schedule
         </CardTitle>
         <CardDescription>
-          Upload a PDF schedule for exhibitors to download
+          Upload a schedule (PDF or image) for exhibitors to download
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -1539,7 +1539,7 @@ function ScheduleUpload({
           <input
             ref={fileRef}
             type="file"
-            accept="application/pdf"
+            accept="application/pdf,image/jpeg,image/png,image/webp"
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0];
