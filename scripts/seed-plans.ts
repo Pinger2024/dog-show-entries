@@ -40,8 +40,8 @@ async function main() {
         name: 'Single Breed Club — Managed',
         clubType: 'single_breed',
         serviceTier: 'managed',
-        annualFeePence: 19900, // £199/year
-        perShowFeePence: 4000, // £40/show
+        annualFeePence: 15000, // £150/year
+        perShowFeePence: 2000, // £20/show
         perEntryFeePence: 150, // £1.50/entry
         description:
           'Full-service plan for single breed clubs. We handle show setup, schedules, catalogues, and exhibitor queries.',
@@ -79,8 +79,8 @@ async function main() {
         name: 'Multi Breed Club — Managed',
         clubType: 'multi_breed',
         serviceTier: 'managed',
-        annualFeePence: 29900, // £299/year
-        perShowFeePence: 7500, // £75/show
+        annualFeePence: 19900, // £199/year
+        perShowFeePence: 5000, // £50/show
         perEntryFeePence: 150, // £1.50/entry
         description:
           'Full-service plan for multi breed clubs. Complete concierge service for your show calendar.',

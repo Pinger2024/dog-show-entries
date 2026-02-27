@@ -26,11 +26,11 @@ type ClubType = 'single' | 'multi';
 const pricing = {
   single: {
     diy: { annual: 99, perShow: 15, perEntry: 1.5 },
-    managed: { annual: 199, perShow: 40, perEntry: 1.5 },
+    managed: { annual: 150, perShow: 20, perEntry: 1.5 },
   },
   multi: {
     diy: { annual: 149, perShow: 15, perEntry: 1.5 },
-    managed: { annual: 299, perShow: 75, perEntry: 1.5 },
+    managed: { annual: 199, perShow: 50, perEntry: 1.5 },
   },
 } as const;
 
