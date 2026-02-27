@@ -127,11 +127,14 @@ export default function EnterShowPage() {
       ? showClasses.filter((sc) => !sc.sex || sc.sex === selectedDogSex)
       : showClasses;
 
+    const byCanonicalOrder = (a: (typeof sexFiltered)[0], b: (typeof sexFiltered)[0]) =>
+      (a.classDefinition.sortOrder ?? 0) - (b.classDefinition.sortOrder ?? 0);
+
     return {
-      age: sexFiltered.filter((sc) => sc.classDefinition.type === 'age'),
-      achievement: sexFiltered.filter((sc) => sc.classDefinition.type === 'achievement'),
-      special: sexFiltered.filter((sc) => sc.classDefinition.type === 'special'),
-      junior_handler: sexFiltered.filter((sc) => sc.classDefinition.type === 'junior_handler'),
+      age: sexFiltered.filter((sc) => sc.classDefinition.type === 'age').sort(byCanonicalOrder),
+      achievement: sexFiltered.filter((sc) => sc.classDefinition.type === 'achievement').sort(byCanonicalOrder),
+      special: sexFiltered.filter((sc) => sc.classDefinition.type === 'special').sort(byCanonicalOrder),
+      junior_handler: sexFiltered.filter((sc) => sc.classDefinition.type === 'junior_handler').sort(byCanonicalOrder),
     };
   }, [showClasses, selectedDogSex]);
 
@@ -946,6 +949,7 @@ interface ShowClassItem {
   classDefinition: {
     name: string;
     type: string;
+    sortOrder: number;
     description: string | null;
     minAgeMonths: number | null;
     maxAgeMonths: number | null;

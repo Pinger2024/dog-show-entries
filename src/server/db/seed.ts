@@ -91,31 +91,31 @@ async function seed() {
   const classDefs = await db
     .insert(schema.classDefinitions)
     .values([
-      // Age-based
-      { name: 'Minor Puppy', type: 'age' as const, minAgeMonths: 6, maxAgeMonths: 9, description: 'For dogs of 6 and not exceeding 9 calendar months of age on the first day of the show.' },
-      { name: 'Puppy', type: 'age' as const, minAgeMonths: 6, maxAgeMonths: 12, description: 'For dogs of 6 and not exceeding 12 calendar months of age on the first day of the show.' },
-      { name: 'Junior', type: 'age' as const, minAgeMonths: 6, maxAgeMonths: 18, description: 'For dogs of 6 and not exceeding 18 calendar months of age on the first day of the show.' },
-      { name: 'Yearling', type: 'age' as const, minAgeMonths: 12, maxAgeMonths: 24, description: 'For dogs of 12 and not exceeding 24 calendar months of age on the first day of the show.' },
-      { name: 'Veteran', type: 'age' as const, minAgeMonths: 84, description: 'For dogs of not less than 7 years of age on the first day of the show.' },
-      // Achievement-based
-      { name: 'Maiden', type: 'achievement' as const, maxWins: 0, description: 'For dogs which have not won a CC/RCC or a first prize at an Open or Championship Show.' },
-      { name: 'Novice', type: 'achievement' as const, maxWins: 2, description: 'For dogs which have not won a CC or 3 or more first prizes at Open and Championship Shows.' },
-      { name: 'Graduate', type: 'achievement' as const, maxWins: 3, description: 'For dogs which have not won a CC or 4 or more first prizes at Championship Shows.' },
-      { name: 'Post Graduate', type: 'achievement' as const, maxWins: 4, description: 'For dogs which have not won a CC or 5 or more first prizes at Championship Shows.' },
-      { name: 'Limit', type: 'achievement' as const, maxWins: 6, description: 'For dogs which have not become Show Champions or won 3 or more CCs or 7 or more first prizes at Championship Shows in Limit or Open.' },
-      { name: 'Undergraduate', type: 'achievement' as const, maxWins: 2, description: 'For dogs which have not won a CC or 3 or more first prizes at Championship Shows in Undergraduate, Graduate, Post Graduate, Mid Limit, Limit, or Open.' },
-      { name: 'Mid Limit', type: 'achievement' as const, maxWins: 4, description: 'For dogs which have not won a CC or 3 or more first prizes in Mid Limit, Limit, or Open at Championship Shows.' },
-      { name: 'Open', type: 'achievement' as const, description: 'For all dogs of the breed eligible for entry at the show. No restrictions.' },
-      // Long Coat GSD varieties
-      { name: 'Long Coat Open', type: 'achievement' as const, description: 'For Long Coat German Shepherd Dogs eligible for entry at the show. No restrictions.' },
-      { name: 'Long Coat Puppy', type: 'age' as const, minAgeMonths: 6, maxAgeMonths: 12, description: 'For Long Coat German Shepherd Dogs of 6 and not exceeding 12 calendar months of age on the first day of the show.' },
+      // Age-based (sortOrder: lowest age first)
+      { name: 'Minor Puppy', type: 'age' as const, sortOrder: 1, minAgeMonths: 6, maxAgeMonths: 9, description: 'For dogs of 6 and not exceeding 9 calendar months of age on the first day of the show.' },
+      { name: 'Puppy', type: 'age' as const, sortOrder: 2, minAgeMonths: 6, maxAgeMonths: 12, description: 'For dogs of 6 and not exceeding 12 calendar months of age on the first day of the show.' },
+      { name: 'Junior', type: 'age' as const, sortOrder: 3, minAgeMonths: 6, maxAgeMonths: 18, description: 'For dogs of 6 and not exceeding 18 calendar months of age on the first day of the show.' },
+      { name: 'Yearling', type: 'age' as const, sortOrder: 4, minAgeMonths: 12, maxAgeMonths: 24, description: 'For dogs of 12 and not exceeding 24 calendar months of age on the first day of the show.' },
+      { name: 'Veteran', type: 'age' as const, sortOrder: 5, minAgeMonths: 84, description: 'For dogs of not less than 7 years of age on the first day of the show.' },
+      // Achievement-based (sortOrder: KC progression order)
+      { name: 'Maiden', type: 'achievement' as const, sortOrder: 1, maxWins: 0, description: 'For dogs which have not won a CC/RCC or a first prize at an Open or Championship Show.' },
+      { name: 'Novice', type: 'achievement' as const, sortOrder: 2, maxWins: 2, description: 'For dogs which have not won a CC or 3 or more first prizes at Open and Championship Shows.' },
+      { name: 'Undergraduate', type: 'achievement' as const, sortOrder: 3, maxWins: 2, description: 'For dogs which have not won a CC or 3 or more first prizes at Championship Shows in Undergraduate, Graduate, Post Graduate, Mid Limit, Limit, or Open.' },
+      { name: 'Graduate', type: 'achievement' as const, sortOrder: 4, maxWins: 3, description: 'For dogs which have not won a CC or 4 or more first prizes at Championship Shows.' },
+      { name: 'Post Graduate', type: 'achievement' as const, sortOrder: 5, maxWins: 4, description: 'For dogs which have not won a CC or 5 or more first prizes at Championship Shows.' },
+      { name: 'Mid Limit', type: 'achievement' as const, sortOrder: 6, maxWins: 4, description: 'For dogs which have not won a CC or 3 or more first prizes in Mid Limit, Limit, or Open at Championship Shows.' },
+      { name: 'Limit', type: 'achievement' as const, sortOrder: 7, maxWins: 6, description: 'For dogs which have not become Show Champions or won 3 or more CCs or 7 or more first prizes at Championship Shows in Limit or Open.' },
+      { name: 'Open', type: 'achievement' as const, sortOrder: 8, description: 'For all dogs of the breed eligible for entry at the show. No restrictions.' },
+      // Long Coat GSD varieties (continue numbering after standard classes in their type)
+      { name: 'Long Coat Puppy', type: 'age' as const, sortOrder: 6, minAgeMonths: 6, maxAgeMonths: 12, description: 'For Long Coat German Shepherd Dogs of 6 and not exceeding 12 calendar months of age on the first day of the show.' },
+      { name: 'Long Coat Open', type: 'achievement' as const, sortOrder: 9, description: 'For Long Coat German Shepherd Dogs eligible for entry at the show. No restrictions.' },
       // Special
-      { name: 'Good Citizen Dog Scheme', type: 'special' as const, description: 'For dogs that have passed any level of the Kennel Club Good Citizen Dog Scheme.' },
-      { name: 'Special Beginners', type: 'special' as const, description: 'For dogs whose owners/handlers have never won a CC or Reserve CC at Championship Shows.' },
+      { name: 'Good Citizen Dog Scheme', type: 'special' as const, sortOrder: 1, description: 'For dogs that have passed any level of the Kennel Club Good Citizen Dog Scheme.' },
+      { name: 'Special Beginners', type: 'special' as const, sortOrder: 2, description: 'For dogs whose owners/handlers have never won a CC or Reserve CC at Championship Shows.' },
       // Junior Handler classes
-      { name: 'Junior Handler (6-11)', type: 'junior_handler' as const, minAgeMonths: 72, maxAgeMonths: 143, description: 'For handlers aged 6-11 years on the day of the show. Judged on handling skill, not the dog.' },
-      { name: 'Junior Handler (12-16)', type: 'junior_handler' as const, minAgeMonths: 144, maxAgeMonths: 203, description: 'For handlers aged 12-16 years on the day of the show. Judged on handling skill, not the dog.' },
-      { name: 'Junior Handler (17-24)', type: 'junior_handler' as const, minAgeMonths: 204, maxAgeMonths: 299, description: 'For handlers aged 17-24 years on the day of the show. Judged on handling skill, not the dog.' },
+      { name: 'Junior Handler (6-11)', type: 'junior_handler' as const, sortOrder: 1, minAgeMonths: 72, maxAgeMonths: 143, description: 'For handlers aged 6-11 years on the day of the show. Judged on handling skill, not the dog.' },
+      { name: 'Junior Handler (12-16)', type: 'junior_handler' as const, sortOrder: 2, minAgeMonths: 144, maxAgeMonths: 203, description: 'For handlers aged 12-16 years on the day of the show. Judged on handling skill, not the dog.' },
+      { name: 'Junior Handler (17-24)', type: 'junior_handler' as const, sortOrder: 3, minAgeMonths: 204, maxAgeMonths: 299, description: 'For handlers aged 17-24 years on the day of the show. Judged on handling skill, not the dog.' },
     ])
     .onConflictDoNothing()
     .returning();

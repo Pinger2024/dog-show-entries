@@ -202,6 +202,12 @@ export default function NewShowPage() {
           ? new Date(values.postalCloseDate).toISOString()
           : undefined,
         description: values.description || undefined,
+        classDefinitionIds: values.selectedClassIds.length > 0
+          ? values.selectedClassIds
+          : undefined,
+        entryFee: values.firstEntryFee > 0
+          ? values.firstEntryFee
+          : undefined,
       });
 
       toast.success(

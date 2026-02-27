@@ -18,6 +18,7 @@ export const classDefinitions = pgTable('class_definitions', {
   minAgeMonths: integer('min_age_months'),
   maxAgeMonths: integer('max_age_months'),
   maxWins: integer('max_wins'),
+  sortOrder: integer('sort_order').notNull().default(0),
   description: text('description'),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()

@@ -221,25 +221,41 @@ export const showsRouter = createTRPCRouter({
         kcLicenceNo: z.string().optional(),
         scheduleUrl: z.string().url().optional(),
         description: z.string().optional(),
+        classDefinitionIds: z.array(z.string().uuid()).optional(),
+        entryFee: z.number().int().min(0).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const { classDefinitionIds, entryFee, ...showData } = input;
+
       const [show] = await ctx.db
         .insert(shows)
         .values({
-          ...input,
-          entriesOpenDate: input.entriesOpenDate
-            ? new Date(input.entriesOpenDate)
+          ...showData,
+          entriesOpenDate: showData.entriesOpenDate
+            ? new Date(showData.entriesOpenDate)
             : null,
-          entryCloseDate: input.entryCloseDate
-            ? new Date(input.entryCloseDate)
+          entryCloseDate: showData.entryCloseDate
+            ? new Date(showData.entryCloseDate)
             : null,
-          postalCloseDate: input.postalCloseDate
-            ? new Date(input.postalCloseDate)
+          postalCloseDate: showData.postalCloseDate
+            ? new Date(showData.postalCloseDate)
             : null,
-          venueId: input.venueId ?? null,
+          venueId: showData.venueId ?? null,
         })
         .returning();
+
+      // Create show classes from selected class definitions
+      if (classDefinitionIds && classDefinitionIds.length > 0) {
+        await ctx.db.insert(showClasses).values(
+          classDefinitionIds.map((classDefId, idx) => ({
+            showId: show!.id,
+            classDefinitionId: classDefId,
+            entryFee: entryFee ?? 0,
+            sortOrder: idx,
+          }))
+        );
+      }
 
       return show!;
     }),
