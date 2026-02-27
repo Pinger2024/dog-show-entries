@@ -34,9 +34,9 @@ function formatFee(pence: number) {
 export default function EditEntryPage({
   params,
 }: {
-  params: Promise<{ showId: string; entryId: string }>;
+  params: Promise<{ id: string; entryId: string }>;
 }) {
-  const { showId, entryId } = use(params);
+  const { id: showId, entryId } = use(params);
   const router = useRouter();
 
   const [selectedClassIds, setSelectedClassIds] = useState<string[] | null>(null);
