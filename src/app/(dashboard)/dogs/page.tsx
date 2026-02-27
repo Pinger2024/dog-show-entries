@@ -75,14 +75,14 @@ export default function DogsPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+          <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">
             My Dogs
           </h1>
-          <p className="mt-1 text-muted-foreground">
+          <p className="mt-1.5 text-muted-foreground">
             {dogs?.length ?? 0} dog{(dogs?.length ?? 0) !== 1 ? 's' : ''} registered
           </p>
         </div>
-        <Button asChild>
+        <Button className="h-12 px-6 text-[0.9375rem]" asChild>
           <Link href="/dogs/new">
             <Plus className="size-4" />
             Add Dog
@@ -123,7 +123,7 @@ export default function DogsPage() {
                 placeholder="Search by name, breed, or KC number..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="h-10 pl-10"
+                className="h-12 pl-10 text-[0.9375rem]"
               />
             </div>
           )}

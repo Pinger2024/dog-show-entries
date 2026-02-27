@@ -59,11 +59,11 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
     <div className="flex min-h-screen">
       {/* Desktop Sidebar */}
       <aside className="hidden w-64 shrink-0 border-r bg-sidebar md:flex md:flex-col">
-        <div className="flex h-16 items-center gap-3 border-b px-5">
-          <Link href="/" className="text-xl font-extrabold tracking-tight text-primary">
+        <div className="flex h-[4.5rem] items-center gap-3 border-b px-5">
+          <Link href="/" className="font-serif text-[1.375rem] font-bold tracking-tight text-primary">
             Remi
           </Link>
-          <span className="rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+          <span className="rounded-md bg-gold/15 px-2 py-0.5 text-xs font-semibold text-gold">
             Secretary
           </span>
         </div>
@@ -76,8 +76,8 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{user.name ?? 'Secretary'}</p>
-            <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+            <p className="truncate text-[0.9375rem] font-medium">{user.name ?? 'Secretary'}</p>
+            <p className="truncate text-sm text-muted-foreground">{user.email}</p>
           </div>
         </div>
 
@@ -93,13 +93,13 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                  'flex items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-medium transition-colors',
                   isActive
                     ? 'bg-sidebar-accent text-sidebar-primary'
                     : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
                 )}
               >
-                <item.icon className="size-4" />
+                <item.icon className="size-5" />
                 {item.label}
               </Link>
             );
@@ -109,16 +109,16 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
         <div className="border-t p-3">
           <Link
             href="/dashboard"
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
           >
-            <LayoutDashboard className="size-4" />
+            <LayoutDashboard className="size-5" />
             Exhibitor View
           </Link>
           <button
             onClick={() => signOut({ callbackUrl: '/' })}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
           >
-            <LogOut className="size-4" />
+            <LogOut className="size-5" />
             Sign Out
           </button>
         </div>
@@ -126,14 +126,14 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
 
       {/* Main content */}
       <div className="flex flex-1 flex-col">
-        <header className="hidden h-16 items-center border-b px-6 md:flex">
-          <nav className="flex items-center gap-1 text-sm text-muted-foreground">
+        <header className="hidden h-[4.5rem] items-center border-b px-6 md:flex">
+          <nav className="flex items-center gap-1.5 text-[0.9375rem] text-muted-foreground">
             <Link href="/" className="hover:text-foreground">
               Home
             </Link>
             {breadcrumbs.map((crumb) => (
-              <span key={crumb.href} className="flex items-center gap-1">
-                <ChevronRight className="size-3.5" />
+              <span key={crumb.href} className="flex items-center gap-1.5">
+                <ChevronRight className="size-4" />
                 {crumb.isLast ? (
                   <span className="font-medium text-foreground">
                     {crumb.label}
@@ -149,26 +149,27 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
         </header>
 
         {/* Mobile header */}
-        <header className="flex h-14 items-center justify-between border-b px-4 md:hidden">
+        <header className="flex h-16 items-center justify-between border-b px-4 md:hidden">
           <div className="flex items-center gap-2">
-            <Link href="/" className="text-xl font-extrabold tracking-tight text-primary">
+            <Link href="/" className="font-serif text-xl font-bold tracking-tight text-primary">
               Remi
             </Link>
-            <span className="rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+            <span className="rounded-md bg-gold/15 px-2 py-0.5 text-xs font-semibold text-gold">
               Secretary
             </span>
           </div>
           <Button
             variant="ghost"
             size="sm"
+            className="size-10"
             onClick={() => signOut({ callbackUrl: '/' })}
           >
-            <LogOut className="size-4" />
+            <LogOut className="size-5" />
           </Button>
         </header>
 
         <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-6xl px-4 py-6 pb-20 sm:px-6 md:pb-6 lg:px-8">
+          <div className="mx-auto max-w-6xl px-4 py-8 pb-24 sm:px-6 md:pb-8 lg:px-8">
             {children}
           </div>
         </main>
@@ -186,7 +187,7 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'flex flex-1 flex-col items-center gap-1 py-2.5 text-xs font-medium transition-colors',
+                  'flex flex-1 flex-col items-center gap-1 py-3 text-xs font-medium transition-colors',
                   isActive
                     ? 'text-primary'
                     : 'text-muted-foreground hover:text-foreground'

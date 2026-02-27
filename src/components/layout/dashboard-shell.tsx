@@ -29,7 +29,7 @@ const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dogs', label: 'My Dogs', icon: Dog },
   { href: '/entries', label: 'My Entries', icon: Ticket },
-  { href: '/shows', label: 'Calendar', icon: CalendarDays },
+  { href: '/shows', label: 'Find a Show', icon: CalendarDays },
 ];
 
 function getInitials(name?: string | null, email?: string | null) {
@@ -63,8 +63,8 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
       {/* Desktop Sidebar */}
       <aside className="hidden w-64 shrink-0 border-r bg-sidebar md:flex md:flex-col">
         {/* Sidebar header */}
-        <div className="flex h-16 items-center gap-3 border-b px-5">
-          <Link href="/" className="text-xl font-extrabold tracking-tight text-primary">
+        <div className="flex h-[4.5rem] items-center gap-3 border-b px-5">
+          <Link href="/" className="font-serif text-[1.375rem] font-bold tracking-tight text-primary">
             Remi
           </Link>
         </div>
@@ -78,8 +78,8 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{user.name ?? 'User'}</p>
-            <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+            <p className="truncate text-[0.9375rem] font-medium">{user.name ?? 'User'}</p>
+            <p className="truncate text-sm text-muted-foreground">{user.email}</p>
           </div>
         </div>
 
@@ -94,13 +94,13 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                  'flex items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-medium transition-colors',
                   isActive
                     ? 'bg-sidebar-accent text-sidebar-primary'
                     : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
                 )}
               >
-                <item.icon className="size-4" />
+                <item.icon className="size-5" />
                 {item.label}
               </Link>
             );
@@ -111,9 +111,9 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
         <div className="border-t p-3">
           <button
             onClick={() => signOut({ callbackUrl: '/' })}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
           >
-            <LogOut className="size-4" />
+            <LogOut className="size-5" />
             Sign Out
           </button>
         </div>
@@ -122,14 +122,14 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
       {/* Main content */}
       <div className="flex flex-1 flex-col">
         {/* Top bar with breadcrumbs (desktop) */}
-        <header className="hidden h-16 items-center border-b px-6 md:flex">
-          <nav className="flex items-center gap-1 text-sm text-muted-foreground">
+        <header className="hidden h-[4.5rem] items-center border-b px-6 md:flex">
+          <nav className="flex items-center gap-1.5 text-[0.9375rem] text-muted-foreground">
             <Link href="/" className="hover:text-foreground">
               Home
             </Link>
             {breadcrumbs.map((crumb) => (
-              <span key={crumb.href} className="flex items-center gap-1">
-                <ChevronRight className="size-3.5" />
+              <span key={crumb.href} className="flex items-center gap-1.5">
+                <ChevronRight className="size-4" />
                 {crumb.isLast ? (
                   <span className="font-medium text-foreground">
                     {crumb.label}
@@ -145,22 +145,23 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
         </header>
 
         {/* Mobile header */}
-        <header className="flex h-14 items-center justify-between border-b px-4 md:hidden">
-          <Link href="/" className="text-xl font-extrabold tracking-tight text-primary">
+        <header className="flex h-16 items-center justify-between border-b px-4 md:hidden">
+          <Link href="/" className="font-serif text-xl font-bold tracking-tight text-primary">
             Remi
           </Link>
           <Button
             variant="ghost"
             size="sm"
+            className="size-10"
             onClick={() => signOut({ callbackUrl: '/' })}
           >
-            <LogOut className="size-4" />
+            <LogOut className="size-5" />
           </Button>
         </header>
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-6xl px-4 py-6 pb-20 sm:px-6 md:pb-6 lg:px-8">
+          <div className="mx-auto max-w-6xl px-4 py-8 pb-24 sm:px-6 md:pb-8 lg:px-8">
             {children}
           </div>
         </main>
@@ -176,7 +177,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'flex flex-1 flex-col items-center gap-1 py-2.5 text-xs font-medium transition-colors',
+                  'flex flex-1 flex-col items-center gap-1 py-3 text-xs font-medium transition-colors',
                   isActive
                     ? 'text-primary'
                     : 'text-muted-foreground hover:text-foreground'

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter } from 'next/font/google';
+import { Inter, Libre_Baskerville } from 'next/font/google';
 import { Toaster } from '@/components/ui/sonner';
 import { Providers } from '@/components/providers';
 import './globals.css';
@@ -9,22 +9,37 @@ const inter = Inter({
   subsets: ['latin'],
 });
 
+const libreBaskerville = Libre_Baskerville({
+  variable: '--font-libre-baskerville',
+  subsets: ['latin'],
+  weight: ['400', '700'],
+});
+
 export const metadata: Metadata = {
   title: {
-    default: 'Remi — The Modern Way to Enter Dog Shows',
+    default: 'Remi — Enter Dog Shows with Confidence',
     template: '%s | Remi',
   },
   description:
-    'One platform for finding shows, entering your dogs, and tracking your results. No phone calls. No paper forms. Just beautiful, simple entries.',
+    'Find upcoming KC-licensed shows, enter all your dogs in one place, and manage your entries from home or ringside. Trusted by exhibitors and show secretaries.',
   manifest: '/manifest.json',
-  keywords: ['dog shows', 'dog show entries', 'conformation', 'kennel club'],
+  keywords: [
+    'dog shows',
+    'dog show entries',
+    'KC shows',
+    'kennel club',
+    'conformation',
+    'show entries online',
+    'championship shows',
+    'open shows',
+  ],
 };
 
 export const viewport: Viewport = {
-  themeColor: '#4f46e5',
+  themeColor: '#2D5F3F',
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
+  maximumScale: 5,
 };
 
 export default function RootLayout({
@@ -34,7 +49,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} antialiased`}>
+      <body
+        className={`${inter.variable} ${libreBaskerville.variable} antialiased`}
+      >
         <Providers>
           {children}
           <Toaster richColors position="top-right" />

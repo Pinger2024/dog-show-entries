@@ -67,14 +67,14 @@ export function LoginForm() {
       <div className="flex min-h-screen items-center justify-center px-4">
         <Card className="w-full max-w-sm">
           <CardHeader className="text-center">
-            <CardTitle className="text-xl">Check your email</CardTitle>
-            <CardDescription>
+            <CardTitle className="font-serif text-xl">Check your email</CardTitle>
+            <CardDescription className="text-[0.9375rem]">
               We&apos;ve sent a sign-in link to your email address. Click the
               link to sign in.
             </CardDescription>
           </CardHeader>
           <CardFooter className="justify-center">
-            <Button variant="ghost" onClick={() => setEmailSent(false)}>
+            <Button variant="ghost" className="h-11 text-[0.9375rem]" onClick={() => setEmailSent(false)}>
               Try a different email
             </Button>
           </CardFooter>
@@ -85,9 +85,19 @@ export function LoginForm() {
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-sm space-y-4">
+      <div className="w-full max-w-sm space-y-5">
+        {/* Logo */}
+        <div className="text-center">
+          <Link href="/" className="font-serif text-3xl font-bold tracking-tight text-primary">
+            Remi
+          </Link>
+          <p className="mt-2 text-muted-foreground">
+            Sign in to manage your dogs and entries
+          </p>
+        </div>
+
         {/* Demo login card */}
-        <Card className="border-primary/20 bg-primary/[0.02]">
+        <Card className="border-primary/20 bg-primary/[0.03]">
           <CardHeader className="pb-3 text-center">
             <CardTitle className="text-lg">Demo Login</CardTitle>
             <CardDescription>
@@ -100,19 +110,19 @@ export function LoginForm() {
                 key={user.email}
                 onClick={() => handleDemoLogin(user.email)}
                 disabled={demoLoading !== null}
-                className="flex w-full items-center gap-3 rounded-lg border bg-white p-3 text-left transition-all hover:border-primary/30 hover:shadow-sm disabled:opacity-60"
+                className="flex w-full items-center gap-3 rounded-lg border bg-card p-3.5 text-left transition-all hover:border-primary/30 hover:shadow-sm disabled:opacity-60"
               >
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                   <user.icon className="size-5" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold">{user.name}</span>
-                    <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium text-secondary-foreground">
+                    <span className="text-[0.9375rem] font-semibold">{user.name}</span>
+                    <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
                       {user.role}
                     </span>
                   </div>
-                  <p className="truncate text-xs text-muted-foreground">
+                  <p className="truncate text-sm text-muted-foreground">
                     {user.description}
                   </p>
                 </div>
@@ -134,9 +144,9 @@ export function LoginForm() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <form onSubmit={handleEmailSignIn} className="space-y-3">
+            <form onSubmit={handleEmailSignIn} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email" className="text-[0.9375rem]">Email address</Label>
                 <Input
                   id="email"
                   type="email"
@@ -144,18 +154,19 @@ export function LoginForm() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
+                  className="h-12 text-[0.9375rem]"
                 />
               </div>
-              <Button type="submit" className="w-full" disabled={loading}>
+              <Button type="submit" className="h-12 w-full text-[0.9375rem]" disabled={loading}>
                 {loading ? 'Sending link...' : 'Send sign-in link'}
               </Button>
             </form>
           </CardContent>
           <CardFooter className="justify-center">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-[0.9375rem] text-muted-foreground">
               New to Remi?{' '}
               <Link href="/register" className="text-primary hover:underline">
-                Create an account
+                Create a free account
               </Link>
             </p>
           </CardFooter>

@@ -45,11 +45,11 @@ export function UserNav({ user }: UserNavProps) {
   if (!user) {
     return (
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="sm" asChild>
+        <Button variant="ghost" className="h-11 px-5 text-[0.9375rem]" asChild>
           <Link href="/login">Sign In</Link>
         </Button>
-        <Button size="sm" asChild>
-          <Link href="/register">Get Started</Link>
+        <Button className="h-11 px-5 text-[0.9375rem]" asChild>
+          <Link href="/register">Create Free Account</Link>
         </Button>
       </div>
     );
@@ -60,14 +60,14 @@ export function UserNav({ user }: UserNavProps) {
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
-          className="relative h-9 w-9 rounded-full"
+          className="relative size-10 rounded-full"
         >
           <Avatar>
             <AvatarImage
               src={user.image ?? undefined}
               alt={user.name ?? 'User avatar'}
             />
-            <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+            <AvatarFallback className="bg-primary/10 text-primary text-sm font-semibold">
               {getInitials(user.name, user.email)}
             </AvatarFallback>
           </Avatar>
@@ -77,10 +77,10 @@ export function UserNav({ user }: UserNavProps) {
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
             {user.name && (
-              <p className="text-sm font-medium leading-none">{user.name}</p>
+              <p className="text-[0.9375rem] font-medium leading-none">{user.name}</p>
             )}
             {user.email && (
-              <p className="text-xs leading-none text-muted-foreground">
+              <p className="text-sm leading-none text-muted-foreground">
                 {user.email}
               </p>
             )}
@@ -89,19 +89,19 @@ export function UserNav({ user }: UserNavProps) {
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <DropdownMenuItem asChild>
-            <Link href="/dashboard">
+            <Link href="/dashboard" className="text-[0.9375rem]">
               <LayoutDashboard />
               Dashboard
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
-            <Link href="/dogs">
+            <Link href="/dogs" className="text-[0.9375rem]">
               <Dog />
               My Dogs
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
-            <Link href="/entries">
+            <Link href="/entries" className="text-[0.9375rem]">
               <Ticket />
               My Entries
             </Link>
@@ -110,6 +110,7 @@ export function UserNav({ user }: UserNavProps) {
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={() => signOut({ callbackUrl: '/' })}
+          className="text-[0.9375rem]"
         >
           <LogOut />
           Sign Out

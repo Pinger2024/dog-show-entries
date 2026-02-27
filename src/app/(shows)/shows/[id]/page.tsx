@@ -218,7 +218,7 @@ export default function ShowDetailPage() {
                   </Badge>
                 )}
               </div>
-              <h1 className="mt-2 text-2xl font-extrabold tracking-tight sm:text-3xl">
+              <h1 className="mt-2 font-serif text-2xl font-bold tracking-tight sm:text-3xl">
                 {show.name}
               </h1>
 

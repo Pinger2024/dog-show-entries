@@ -67,7 +67,7 @@ export default function EntriesPage() {
   return (
     <div className="space-y-8 pb-16 md:pb-0">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">My Entries</h1>
+        <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">My Entries</h1>
         <p className="mt-1 text-muted-foreground">
           {entries.length} entr{entries.length !== 1 ? 'ies' : 'y'} total
           {upcoming.length > 0 && ` · ${upcoming.length} upcoming`}

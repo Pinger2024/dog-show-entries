@@ -70,10 +70,10 @@ export default function DashboardPage() {
     <div className="space-y-8 pb-16 md:pb-0">
       {/* Welcome */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+        <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">
           Welcome back, {firstName}
         </h1>
-        <p className="mt-1 text-muted-foreground">
+        <p className="mt-1.5 text-muted-foreground">
           Here&apos;s what&apos;s happening with your shows and dogs.
         </p>
       </div>
@@ -84,10 +84,12 @@ export default function DashboardPage() {
           <Link key={stat.label} href={stat.href}>
             <Card className="transition-all hover:border-primary/20 hover:shadow-md hover:shadow-primary/5">
               <CardHeader className="flex-row items-center justify-between pb-2">
-                <CardDescription className="text-sm font-medium">
+                <CardDescription className="text-[0.9375rem] font-medium">
                   {stat.label}
                 </CardDescription>
-                <stat.icon className="size-4 text-muted-foreground" />
+                <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10">
+                  <stat.icon className="size-4.5 text-primary" />
+                </div>
               </CardHeader>
               <CardContent>
                 {isLoading ? (
@@ -103,13 +105,13 @@ export default function DashboardPage() {
 
       {/* Quick actions */}
       <div className="flex flex-wrap gap-3">
-        <Button asChild>
+        <Button className="h-12 px-6 text-[0.9375rem]" asChild>
           <Link href="/shows">
             <Plus className="size-4" />
             Enter a Show
           </Link>
         </Button>
-        <Button variant="outline" asChild>
+        <Button variant="outline" className="h-12 px-6 text-[0.9375rem]" asChild>
           <Link href="/dogs/new">
             <Plus className="size-4" />
             Add a Dog
@@ -120,7 +122,7 @@ export default function DashboardPage() {
       {/* Upcoming entries */}
       <Card>
         <CardHeader>
-          <CardTitle>Upcoming Entries</CardTitle>
+          <CardTitle className="font-serif text-xl">Upcoming Entries</CardTitle>
           <CardDescription>
             Your confirmed entries for upcoming shows
           </CardDescription>
@@ -131,19 +133,19 @@ export default function DashboardPage() {
               <Loader2 className="size-6 animate-spin text-muted-foreground" />
             </div>
           ) : upcomingEntries.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
-              <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-primary/10">
-                <Ticket className="size-6 text-primary" />
+            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-14 text-center">
+              <div className="mb-4 flex size-14 items-center justify-center rounded-full bg-primary/10">
+                <Ticket className="size-7 text-primary" />
               </div>
-              <h3 className="font-semibold">No upcoming entries</h3>
-              <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+              <h3 className="text-lg font-semibold">No upcoming entries</h3>
+              <p className="mx-auto mt-2 max-w-sm text-muted-foreground">
                 You haven&apos;t entered any upcoming shows yet. Browse
-                available shows to get started.
+                available shows to find your next ring.
               </p>
-              <Button className="mt-4" size="sm" asChild>
+              <Button className="mt-5 h-11 px-6" asChild>
                 <Link href="/shows">
-                  Browse Shows
-                  <ArrowRight className="ml-1 size-3.5" />
+                  Find a Show
+                  <ArrowRight className="ml-1 size-4" />
                 </Link>
               </Button>
             </div>
@@ -153,30 +155,30 @@ export default function DashboardPage() {
                 <Link
                   key={entry.id}
                   href={`/entries/${entry.id}`}
-                  className="block rounded-lg border p-4 transition-colors hover:bg-muted/50"
+                  className="block rounded-lg border p-4 transition-colors hover:bg-accent/30"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <p className="font-semibold">{entry.show.name}</p>
-                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <CalendarDays className="size-3.5" />
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.9375rem] text-muted-foreground">
+                        <span className="flex items-center gap-1.5">
+                          <CalendarDays className="size-4" />
                           {format(
                             parseISO(entry.show.startDate),
                             'd MMM yyyy'
                           )}
                         </span>
                         {entry.show.venue && (
-                          <span className="flex items-center gap-1">
-                            <MapPin className="size-3.5" />
+                          <span className="flex items-center gap-1.5">
+                            <MapPin className="size-4" />
                             {entry.show.venue.name}
                           </span>
                         )}
                       </div>
-                      <div className="mt-1.5 flex items-center gap-2 text-sm">
-                        <Dog className="size-3.5 text-muted-foreground" />
+                      <div className="mt-2 flex items-center gap-2 text-[0.9375rem]">
+                        <Dog className="size-4 text-muted-foreground" />
                         <span>{entry.dog?.registeredName ?? 'Junior Handler'}</span>
-                        <span className="text-muted-foreground">·</span>
+                        <span className="text-muted-foreground">&middot;</span>
                         <span className="text-muted-foreground">
                           {entry.entryClasses.length} class
                           {entry.entryClasses.length !== 1 ? 'es' : ''}
@@ -204,15 +206,15 @@ export default function DashboardPage() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle>Shows Coming Up</CardTitle>
+                <CardTitle className="font-serif text-xl">Shows Coming Up</CardTitle>
                 <CardDescription>
                   Browse and enter upcoming shows
                 </CardDescription>
               </div>
-              <Button variant="outline" size="sm" asChild>
+              <Button variant="outline" className="h-10" asChild>
                 <Link href="/shows">
                   View All
-                  <ArrowRight className="ml-1 size-3.5" />
+                  <ArrowRight className="ml-1 size-4" />
                 </Link>
               </Button>
             </div>
@@ -223,26 +225,26 @@ export default function DashboardPage() {
                 <Link
                   key={show.id}
                   href={`/shows/${show.id}`}
-                  className="block rounded-lg border p-4 transition-colors hover:bg-muted/50"
+                  className="block rounded-lg border p-4 transition-colors hover:bg-accent/30"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <p className="font-semibold">{show.name}</p>
-                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <CalendarDays className="size-3.5" />
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.9375rem] text-muted-foreground">
+                        <span className="flex items-center gap-1.5">
+                          <CalendarDays className="size-4" />
                           {format(parseISO(show.startDate), 'd MMM yyyy')}
                         </span>
                         {show.venue && (
-                          <span className="flex items-center gap-1">
-                            <MapPin className="size-3.5" />
+                          <span className="flex items-center gap-1.5">
+                            <MapPin className="size-4" />
                             {show.venue.name}
                           </span>
                         )}
                         {(show as typeof show & { startTime?: string | null })
                           .startTime && (
-                          <span className="flex items-center gap-1">
-                            <Clock className="size-3.5" />
+                          <span className="flex items-center gap-1.5">
+                            <Clock className="size-4" />
                             {
                               (
                                 show as typeof show & {
@@ -255,9 +257,9 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     {show.status === 'entries_open' && (
-                      <Badge className="bg-emerald-600 text-xs shrink-0">
+                      <Badge className="bg-primary text-xs shrink-0">
                         <Ticket className="mr-1 size-3" />
-                        Open
+                        Open for Entry
                       </Badge>
                     )}
                   </div>
