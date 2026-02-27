@@ -76,6 +76,29 @@ export async function POST(request: NextRequest) {
     ? data.subject.replace(/^(?:Re|Fwd|Fw):\s*/i, '')
     : null;
 
+  // Fetch full email content from Resend API (webhook payload doesn't include body)
+  let textBody: string | null = null;
+  let htmlBody: string | null = null;
+  try {
+    const emailRes = await fetch(
+      `https://api.resend.com/emails/${data.email_id}/content`,
+      {
+        headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` },
+      }
+    );
+    if (emailRes.ok) {
+      const emailData = await emailRes.json();
+      textBody = emailData.text || null;
+      htmlBody = emailData.html || null;
+    } else {
+      console.warn(
+        `[resend-webhook] Could not fetch email content: ${emailRes.status}`
+      );
+    }
+  } catch (err) {
+    console.warn('[resend-webhook] Email content fetch failed:', err);
+  }
+
   try {
     await db
       .insert(feedback)
@@ -84,8 +107,8 @@ export async function POST(request: NextRequest) {
         fromEmail,
         fromName,
         subject: data.subject || null,
-        textBody: data.text || null,
-        htmlBody: data.html || null,
+        textBody,
+        htmlBody,
         inReplyToSubject,
       })
       .onConflictDoNothing({ target: feedback.resendEmailId });
@@ -98,7 +121,7 @@ export async function POST(request: NextRequest) {
     const notifyEmail = process.env.FEEDBACK_NOTIFY_EMAIL;
     if (notifyEmail) {
       const displaySender = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
-      const preview = data.text ? data.text.slice(0, 500) : '(No text body)';
+      const preview = textBody ? textBody.slice(0, 500) : '(No text body)';
       resend.emails
         .send({
           from: process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>',
