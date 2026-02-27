@@ -344,6 +344,11 @@ export default function ManageShowPage({
 
           {/* Bulk class creation */}
           <BulkClassCreator showId={id} />
+
+          {/* Delete show (draft only) */}
+          {show.status === 'draft' && (
+            <DeleteShowSection showId={id} showName={show.name} />
+          )}
         </TabsContent>
 
         {/* Entries Tab */}
@@ -1933,6 +1938,7 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
 function BulkClassCreator({ showId }: { showId: string }) {
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [selectedBreedIds, setSelectedBreedIds] = useState<string[]>([]);
+  const [selectedClassDefIds, setSelectedClassDefIds] = useState<string[]>([]);
   const [splitBySex, setSplitBySex] = useState(false);
   const [feeInput, setFeeInput] = useState('');
 
@@ -1946,6 +1952,7 @@ function BulkClassCreator({ showId }: { showId: string }) {
       utils.shows.getById.invalidate({ id: showId });
       setSelectedTemplate(null);
       setSelectedBreedIds([]);
+      setSelectedClassDefIds([]);
     },
     onError: () => toast.error('Failed to create classes'),
   });
@@ -1953,11 +1960,9 @@ function BulkClassCreator({ showId }: { showId: string }) {
   const template = CLASS_TEMPLATES.find((t) => t.id === selectedTemplate);
 
   // Match template class names to actual class definitions
-  const matchedClassDefIds = useMemo(() => {
+  const matchedClassDefs = useMemo(() => {
     if (!template || !classDefs) return [];
-    return classDefs
-      .filter((cd) => template.classNames.includes(cd.name))
-      .map((cd) => cd.id);
+    return classDefs.filter((cd) => template.classNames.includes(cd.name));
   }, [template, classDefs]);
 
   // Group breeds by group
@@ -1973,16 +1978,30 @@ function BulkClassCreator({ showId }: { showId: string }) {
 
   const totalClasses =
     selectedBreedIds.length *
-    matchedClassDefIds.length *
+    selectedClassDefIds.length *
     (splitBySex ? 2 : 1);
 
+  function handleSelectTemplate(templateId: string) {
+    const t = CLASS_TEMPLATES.find((t) => t.id === templateId);
+    setSelectedTemplate(templateId);
+    setSplitBySex(t?.splitBySex ?? false);
+    setFeeInput(String(t?.defaultFeePence ?? 500));
+    // Pre-check all template classes
+    if (t && classDefs) {
+      const ids = classDefs
+        .filter((cd) => t.classNames.includes(cd.name))
+        .map((cd) => cd.id);
+      setSelectedClassDefIds(ids);
+    }
+  }
+
   function handleCreate() {
-    if (!template || selectedBreedIds.length === 0) return;
+    if (!template || selectedBreedIds.length === 0 || selectedClassDefIds.length === 0) return;
     const fee = feeInput ? parseInt(feeInput, 10) : template.defaultFeePence;
     bulkMutation.mutate({
       showId,
       breedIds: selectedBreedIds,
-      classDefinitionIds: matchedClassDefIds,
+      classDefinitionIds: selectedClassDefIds,
       entryFee: fee,
       splitBySex,
     });
@@ -1998,16 +2017,12 @@ function BulkClassCreator({ showId }: { showId: string }) {
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Template selection */}
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {CLASS_TEMPLATES.map((t) => (
             <button
               key={t.id}
               type="button"
-              onClick={() => {
-                setSelectedTemplate(t.id);
-                setSplitBySex(t.splitBySex);
-                setFeeInput(String(t.defaultFeePence));
-              }}
+              onClick={() => handleSelectTemplate(t.id)}
               className={`rounded-lg border p-3 text-left transition-colors ${
                 selectedTemplate === t.id
                   ? 'border-primary bg-primary/5'
@@ -2029,16 +2044,53 @@ function BulkClassCreator({ showId }: { showId: string }) {
 
         {template && (
           <>
-            {/* Classes in template */}
+            {/* Class selection with checkboxes */}
             <div>
-              <Label className="text-sm font-medium">
-                Classes in template ({matchedClassDefIds.length})
-              </Label>
-              <div className="mt-1 flex flex-wrap gap-1">
-                {template.classNames.map((name) => (
-                  <Badge key={name} variant="secondary">
-                    {name}
-                  </Badge>
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">
+                  Classes ({selectedClassDefIds.length} of {matchedClassDefs.length} selected)
+                </Label>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      setSelectedClassDefIds(matchedClassDefs.map((cd) => cd.id))
+                    }
+                  >
+                    Select All
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedClassDefIds([])}
+                  >
+                    Clear
+                  </Button>
+                </div>
+              </div>
+              <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-1 rounded-lg border p-2">
+                {matchedClassDefs.map((cd) => (
+                  <label
+                    key={cd.id}
+                    className="flex items-center gap-2 text-sm cursor-pointer rounded px-1.5 py-1 hover:bg-muted/50"
+                  >
+                    <Checkbox
+                      checked={selectedClassDefIds.includes(cd.id)}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setSelectedClassDefIds((prev) => [...prev, cd.id]);
+                        } else {
+                          setSelectedClassDefIds((prev) =>
+                            prev.filter((id) => id !== cd.id)
+                          );
+                        }
+                      }}
+                    />
+                    {cd.name}
+                  </label>
                 ))}
               </div>
             </div>
@@ -2167,7 +2219,7 @@ function BulkClassCreator({ showId }: { showId: string }) {
               disabled={
                 bulkMutation.isPending ||
                 selectedBreedIds.length === 0 ||
-                matchedClassDefIds.length === 0
+                selectedClassDefIds.length === 0
               }
             >
               {bulkMutation.isPending && (
@@ -2177,6 +2229,52 @@ function BulkClassCreator({ showId }: { showId: string }) {
             </Button>
           </>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Delete Show ─────────────────────────────────────────────
+
+function DeleteShowSection({ showId, showName }: { showId: string; showName: string }) {
+  const deleteMutation = trpc.secretary.deleteShow.useMutation({
+    onSuccess: () => {
+      toast.success('Show deleted');
+      window.location.href = '/secretary';
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  function handleDelete() {
+    if (
+      confirm(
+        `Are you sure you want to delete "${showName}"?\n\nThis will permanently delete the show and all its classes. This cannot be undone.`
+      )
+    ) {
+      deleteMutation.mutate({ showId });
+    }
+  }
+
+  return (
+    <Card className="border-destructive/50">
+      <CardHeader>
+        <CardTitle className="text-destructive">Danger Zone</CardTitle>
+        <CardDescription>
+          Permanently delete this show and all associated classes. This action cannot be undone.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Button
+          variant="destructive"
+          onClick={handleDelete}
+          disabled={deleteMutation.isPending}
+        >
+          {deleteMutation.isPending && (
+            <Loader2 className="size-4 animate-spin" />
+          )}
+          <Trash2 className="size-4" />
+          Delete Show
+        </Button>
       </CardContent>
     </Card>
   );

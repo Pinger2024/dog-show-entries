@@ -104,6 +104,9 @@ async function seed() {
       { name: 'Post Graduate', type: 'achievement' as const, maxWins: 4, description: 'For dogs which have not won a CC or 5 or more first prizes at Championship Shows.' },
       { name: 'Limit', type: 'achievement' as const, maxWins: 6, description: 'For dogs which have not become Show Champions or won 3 or more CCs or 7 or more first prizes at Championship Shows in Limit or Open.' },
       { name: 'Open', type: 'achievement' as const, description: 'For all dogs of the breed eligible for entry at the show. No restrictions.' },
+      // Long Coat GSD varieties
+      { name: 'Long Coat Open', type: 'achievement' as const, description: 'For Long Coat German Shepherd Dogs eligible for entry at the show. No restrictions.' },
+      { name: 'Long Coat Puppy', type: 'age' as const, minAgeMonths: 6, maxAgeMonths: 12, description: 'For Long Coat German Shepherd Dogs of 6 and not exceeding 12 calendar months of age on the first day of the show.' },
       // Special
       { name: 'Special Beginners', type: 'special' as const, description: 'For dogs whose owners/handlers have never won a CC or Reserve CC at Championship Shows.' },
       // Junior Handler classes

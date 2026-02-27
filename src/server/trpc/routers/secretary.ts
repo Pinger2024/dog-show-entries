@@ -16,6 +16,7 @@ import {
   dogOwners,
   dogs,
   entryAuditLog,
+  orders,
 } from '@/server/db/schema';
 
 export const secretaryRouter = createTRPCRouter({
@@ -541,5 +542,55 @@ export const secretaryRouter = createTRPCRouter({
       }
 
       return deleted;
+    }),
+
+  deleteShow: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+      });
+
+      if (!show) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
+      }
+
+      if (show.status !== 'draft') {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: 'Only draft shows can be deleted. Change the status to draft first, or cancel the show instead.',
+        });
+      }
+
+      // Check for entries
+      const [entryCount] = await ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(entries)
+        .where(and(eq(entries.showId, input.showId), isNull(entries.deletedAt)));
+
+      if (Number(entryCount?.count) > 0) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: 'Cannot delete a show that has entries. Cancel the show instead.',
+        });
+      }
+
+      // Check for orders
+      const [orderCount] = await ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(orders)
+        .where(eq(orders.showId, input.showId));
+
+      if (Number(orderCount?.count) > 0) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: 'Cannot delete a show that has orders. Cancel the show instead.',
+        });
+      }
+
+      // Safe to delete — showClasses, rings, judgeAssignments, catalogues cascade
+      await ctx.db.delete(shows).where(eq(shows.id, input.showId));
+
+      return { deleted: true };
     }),
 });
