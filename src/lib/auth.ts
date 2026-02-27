@@ -26,34 +26,30 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     verifyRequest: '/login?verify=true',
   },
   providers: [
-    // Demo login — only available when DEMO_LOGIN=true (never in production)
-    ...(process.env.DEMO_LOGIN === 'true'
-      ? [
-          Credentials({
-            id: 'demo',
-            name: 'Demo',
-            credentials: {
-              email: { label: 'Email', type: 'email' },
-            },
-            async authorize(credentials) {
-              if (!credentials?.email || !db) return null;
-              const email = credentials.email as string;
-              const [user] = await db
-                .select()
-                .from(schema.users)
-                .where(eq(schema.users.email, email))
-                .limit(1);
-              if (!user) return null;
-              return {
-                id: user.id,
-                email: user.email,
-                name: user.name,
-                role: user.role,
-              };
-            },
-          }),
-        ]
-      : []),
+    // Demo login — sign in with just an email, no verification
+    Credentials({
+      id: 'demo',
+      name: 'Demo',
+      credentials: {
+        email: { label: 'Email', type: 'email' },
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !db) return null;
+        const email = credentials.email as string;
+        const [user] = await db
+          .select()
+          .from(schema.users)
+          .where(eq(schema.users.email, email))
+          .limit(1);
+        if (!user) return null;
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+        };
+      },
+    }),
     Resend({
       from: process.env.EMAIL_FROM ?? 'Remi <noreply@remi.dog>',
     }),
