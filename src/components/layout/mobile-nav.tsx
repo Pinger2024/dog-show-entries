@@ -21,9 +21,10 @@ interface MobileNavProps {
     image?: string | null;
   } | null;
   isSecretary?: boolean;
+  isSteward?: boolean;
 }
 
-export function MobileNav({ user, isSecretary }: MobileNavProps) {
+export function MobileNav({ user, isSecretary, isSteward }: MobileNavProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -83,6 +84,16 @@ export function MobileNav({ user, isSecretary }: MobileNavProps) {
                 >
                   <ClipboardList className="size-5" />
                   Secretary Dashboard
+                </Link>
+              )}
+              {isSteward && (
+                <Link
+                  href="/steward"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  <Eye className="size-5" />
+                  Steward
                 </Link>
               )}
             </>

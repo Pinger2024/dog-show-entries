@@ -214,8 +214,11 @@ export default function NewShowPage() {
         asDraft ? 'Show saved as draft' : 'Show created successfully'
       );
       router.push(`/secretary/shows/${show.id}`);
-    } catch {
-      toast.error('Failed to create show. Please try again.');
+    } catch (error) {
+      console.error('Show creation failed:', error);
+      const message =
+        error instanceof Error ? error.message : 'Unknown error';
+      toast.error('Failed to create show', { description: message });
     }
   }
 

@@ -7,6 +7,10 @@ export async function Header() {
   const session = await auth();
   const user = session?.user;
   const isSecretary = user?.role === 'secretary' || user?.role === 'admin';
+  const isSteward =
+    user?.role === 'steward' ||
+    user?.role === 'secretary' ||
+    user?.role === 'admin';
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/85 backdrop-blur-lg supports-[backdrop-filter]:bg-background/70">
@@ -51,6 +55,14 @@ export async function Header() {
                   Secretary
                 </Link>
               )}
+              {isSteward && (
+                <Link
+                  href="/steward"
+                  className="rounded-lg px-4 py-2.5 text-[0.9375rem] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  Steward
+                </Link>
+              )}
             </>
           )}
         </nav>
@@ -60,7 +72,7 @@ export async function Header() {
           <div className="hidden md:block">
             <UserNav user={user ?? null} isSecretary={isSecretary} />
           </div>
-          <MobileNav user={user ?? null} isSecretary={isSecretary} />
+          <MobileNav user={user ?? null} isSecretary={isSecretary} isSteward={isSteward} />
         </div>
       </div>
     </header>
