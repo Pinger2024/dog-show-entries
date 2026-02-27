@@ -18,6 +18,9 @@ export {
   catalogueStatusEnum,
   paymentTypeEnum,
   feedbackStatusEnum,
+  clubTypeEnum,
+  serviceTierEnum,
+  subscriptionStatusEnum,
 } from './enums';
 
 // Tables
@@ -59,3 +62,4 @@ export {
 export { fileUploads, fileUploadsRelations } from './file-uploads';
 export { catalogues, cataloguesRelations } from './catalogues';
 export { feedback } from './feedback';
+export { plans, plansRelations } from './plans';

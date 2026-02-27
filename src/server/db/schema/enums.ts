@@ -139,3 +139,23 @@ export const feedbackStatusEnum = pgEnum('feedback_status', [
   'completed',
   'dismissed',
 ]);
+
+// ── Subscription & pricing enums ──────────────────────────
+
+export const clubTypeEnum = pgEnum('club_type', [
+  'single_breed',
+  'multi_breed',
+]);
+
+export const serviceTierEnum = pgEnum('service_tier', [
+  'diy',
+  'managed',
+]);
+
+export const subscriptionStatusEnum = pgEnum('subscription_status', [
+  'active',
+  'trial',
+  'past_due',
+  'cancelled',
+  'none',
+]);

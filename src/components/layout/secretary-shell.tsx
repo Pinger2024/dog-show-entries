@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   CalendarDays,
   PlusCircle,
+  CreditCard,
   LogOut,
   ChevronRight,
 } from 'lucide-react';
@@ -27,6 +28,7 @@ const navItems = [
   { href: '/secretary', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/secretary/shows', label: 'My Shows', icon: CalendarDays },
   { href: '/secretary/shows/new', label: 'Create Show', icon: PlusCircle },
+  { href: '/secretary/billing', label: 'Billing', icon: CreditCard },
 ];
 
 function getInitials(name?: string | null, email?: string | null) {
