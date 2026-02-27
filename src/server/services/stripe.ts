@@ -14,13 +14,7 @@ export function getStripe() {
 
 export async function createPaymentIntent(
   amount: number,
-  metadata: {
-    showId: string;
-    dogId: string;
-    exhibitorId: string;
-    classIds: string;
-    entryId: string;
-  }
+  metadata: Record<string, string>
 ) {
   const stripe = getStripe();
   return stripe.paymentIntents.create({

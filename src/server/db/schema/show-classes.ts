@@ -1,7 +1,9 @@
 import {
+  boolean,
   index,
   integer,
   pgTable,
+  text,
   timestamp,
   uuid,
 } from 'drizzle-orm/pg-core';
@@ -26,6 +28,9 @@ export const showClasses = pgTable(
     sex: sexEnum('sex'),
     entryFee: integer('entry_fee').notNull(),
     sortOrder: integer('sort_order').notNull().default(0),
+    classGroup: text('class_group'),
+    classNumber: integer('class_number'),
+    isBreedSpecific: boolean('is_breed_specific').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),

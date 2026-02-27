@@ -130,7 +130,7 @@ function EntryCard({ entry }: { entry: RouterOutputs['entries']['list']['items']
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
               <span className="flex items-center gap-1">
                 <Dog className="size-3.5" />
-                {entry.dog.registeredName}
+                {entry.dog?.registeredName ?? 'Junior Handler'}
               </span>
               <span className="flex items-center gap-1">
                 <CalendarDays className="size-3.5" />

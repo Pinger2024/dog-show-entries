@@ -12,6 +12,7 @@ export const organisations = pgTable('organisations', {
   contactPhone: text('contact_phone'),
   website: text('website'),
   stripeAccountId: text('stripe_account_id'),
+  logoUrl: text('logo_url'),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),

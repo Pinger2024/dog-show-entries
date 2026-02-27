@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, asc } from 'drizzle-orm';
 import { protectedProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
-import { dogs } from '@/server/db/schema';
+import { dogs, dogOwners, dogTitles, users } from '@/server/db/schema';
 
 export const dogsRouter = createTRPCRouter({
   list: protectedProcedure.query(async ({ ctx }) => {
@@ -18,6 +18,7 @@ export const dogsRouter = createTRPCRouter({
             group: true,
           },
         },
+        titles: true,
       },
     });
   }),
@@ -34,6 +35,10 @@ export const dogsRouter = createTRPCRouter({
             },
           },
           achievements: true,
+          owners: {
+            orderBy: [asc(dogOwners.sortOrder)],
+          },
+          titles: true,
         },
       });
 
@@ -66,21 +71,61 @@ export const dogsRouter = createTRPCRouter({
         damName: z.string().optional(),
         breederName: z.string().optional(),
         colour: z.string().optional(),
+        owners: z.array(z.object({
+          ownerName: z.string().min(1),
+          ownerAddress: z.string().min(1),
+          ownerEmail: z.string().email(),
+          ownerPhone: z.string().optional(),
+          isPrimary: z.boolean().default(false),
+        })).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const { owners, ...dogData } = input;
+
       const [dog] = await ctx.db
         .insert(dogs)
         .values({
-          ...input,
-          kcRegNumber: input.kcRegNumber ?? null,
-          sireName: input.sireName ?? null,
-          damName: input.damName ?? null,
-          breederName: input.breederName ?? null,
-          colour: input.colour ?? null,
+          ...dogData,
+          kcRegNumber: dogData.kcRegNumber ?? null,
+          sireName: dogData.sireName ?? null,
+          damName: dogData.damName ?? null,
+          breederName: dogData.breederName ?? null,
+          colour: dogData.colour ?? null,
           ownerId: ctx.session.user.id,
         })
         .returning();
+
+      // Create owner records — auto-create primary from user if not provided
+      if (owners && owners.length > 0) {
+        await ctx.db.insert(dogOwners).values(
+          owners.map((o, i) => ({
+            dogId: dog!.id,
+            userId: i === 0 ? ctx.session.user.id : null,
+            ownerName: o.ownerName,
+            ownerAddress: o.ownerAddress,
+            ownerEmail: o.ownerEmail,
+            ownerPhone: o.ownerPhone ?? null,
+            isPrimary: o.isPrimary || i === 0,
+            sortOrder: i,
+          }))
+        );
+      } else {
+        // Default: create primary owner from session user
+        const user = await ctx.db.query.users.findFirst({
+          where: eq(users.id, ctx.session.user.id),
+        });
+        await ctx.db.insert(dogOwners).values({
+          dogId: dog!.id,
+          userId: ctx.session.user.id,
+          ownerName: ctx.session.user.name,
+          ownerAddress: user?.address ?? '',
+          ownerEmail: ctx.session.user.email,
+          ownerPhone: user?.phone ?? null,
+          isPrimary: true,
+          sortOrder: 0,
+        });
+      }
 
       return dog!;
     }),
@@ -158,5 +203,152 @@ export const dogsRouter = createTRPCRouter({
         .returning();
 
       return deleted!;
+    }),
+
+  // ── Owner management ─────────────────────────────────────
+
+  addOwner: protectedProcedure
+    .input(
+      z.object({
+        dogId: z.string().uuid(),
+        ownerName: z.string().min(1),
+        ownerAddress: z.string().min(1),
+        ownerEmail: z.string().email(),
+        ownerPhone: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const dog = await ctx.db.query.dogs.findFirst({
+        where: and(eq(dogs.id, input.dogId), isNull(dogs.deletedAt)),
+        with: { owners: true },
+      });
+
+      if (!dog || dog.ownerId !== ctx.session.user.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
+      }
+
+      if (dog.owners.length >= 4) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Maximum 4 owners per dog',
+        });
+      }
+
+      const [owner] = await ctx.db
+        .insert(dogOwners)
+        .values({
+          dogId: input.dogId,
+          ownerName: input.ownerName,
+          ownerAddress: input.ownerAddress,
+          ownerEmail: input.ownerEmail,
+          ownerPhone: input.ownerPhone ?? null,
+          sortOrder: dog.owners.length,
+          isPrimary: false,
+        })
+        .returning();
+
+      return owner!;
+    }),
+
+  updateOwner: protectedProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        ownerName: z.string().min(1).optional(),
+        ownerAddress: z.string().min(1).optional(),
+        ownerEmail: z.string().email().optional(),
+        ownerPhone: z.string().nullable().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const owner = await ctx.db.query.dogOwners.findFirst({
+        where: eq(dogOwners.id, input.id),
+        with: { dog: true },
+      });
+
+      if (!owner || owner.dog.ownerId !== ctx.session.user.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
+      }
+
+      const { id, ...data } = input;
+      const [updated] = await ctx.db
+        .update(dogOwners)
+        .set(data)
+        .where(eq(dogOwners.id, id))
+        .returning();
+
+      return updated!;
+    }),
+
+  removeOwner: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const owner = await ctx.db.query.dogOwners.findFirst({
+        where: eq(dogOwners.id, input.id),
+        with: { dog: { with: { owners: true } } },
+      });
+
+      if (!owner || owner.dog.ownerId !== ctx.session.user.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
+      }
+
+      if (owner.isPrimary) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Cannot remove the primary owner',
+        });
+      }
+
+      await ctx.db.delete(dogOwners).where(eq(dogOwners.id, input.id));
+      return { success: true };
+    }),
+
+  // ── Title management ─────────────────────────────────────
+
+  addTitle: protectedProcedure
+    .input(
+      z.object({
+        dogId: z.string().uuid(),
+        title: z.enum(['ch', 'sh_ch', 'ir_ch', 'ir_sh_ch', 'int_ch', 'ob_ch', 'ft_ch', 'wt_ch']),
+        dateAwarded: z.string().optional(),
+        awardingBody: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const dog = await ctx.db.query.dogs.findFirst({
+        where: and(eq(dogs.id, input.dogId), isNull(dogs.deletedAt)),
+      });
+
+      if (!dog || dog.ownerId !== ctx.session.user.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
+      }
+
+      const [title] = await ctx.db
+        .insert(dogTitles)
+        .values({
+          dogId: input.dogId,
+          title: input.title,
+          dateAwarded: input.dateAwarded ?? null,
+          awardingBody: input.awardingBody ?? null,
+        })
+        .returning();
+
+      return title!;
+    }),
+
+  removeTitle: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const title = await ctx.db.query.dogTitles.findFirst({
+        where: eq(dogTitles.id, input.id),
+        with: { dog: true },
+      });
+
+      if (!title || title.dog.ownerId !== ctx.session.user.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
+      }
+
+      await ctx.db.delete(dogTitles).where(eq(dogTitles.id, input.id));
+      return { success: true };
     }),
 });

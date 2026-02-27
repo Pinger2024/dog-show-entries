@@ -10,6 +10,13 @@ export {
   userRoleEnum,
   achievementTypeEnum,
   classTypeEnum,
+  dogTitleTypeEnum,
+  orderStatusEnum,
+  entryAuditActionEnum,
+  entryTypeEnum,
+  catalogueFormatEnum,
+  catalogueStatusEnum,
+  paymentTypeEnum,
 } from './enums';
 
 // Tables
@@ -38,3 +45,15 @@ export {
 export { achievements, achievementsRelations } from './achievements';
 export { memberships, membershipsRelations } from './memberships';
 export { payments, paymentsRelations } from './payments';
+
+// New tables
+export { dogOwners, dogOwnersRelations } from './dog-owners';
+export { dogTitles, dogTitlesRelations } from './dog-titles';
+export { orders, ordersRelations } from './orders';
+export { entryAuditLog, entryAuditLogRelations } from './entry-audit-log';
+export {
+  juniorHandlerDetails,
+  juniorHandlerDetailsRelations,
+} from './junior-handler-details';
+export { fileUploads, fileUploadsRelations } from './file-uploads';
+export { catalogues, cataloguesRelations } from './catalogues';

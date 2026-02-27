@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { getStripe } from '@/server/services/stripe';
 import { db } from '@/server/db';
-import { entries, payments } from '@/server/db/schema';
+import { entries, orders, payments } from '@/server/db/schema';
 import type Stripe from 'stripe';
 
 export async function POST(request: NextRequest) {
@@ -35,20 +35,44 @@ export async function POST(request: NextRequest) {
   switch (event.type) {
     case 'payment_intent.succeeded': {
       const paymentIntent = event.data.object as Stripe.PaymentIntent;
-      const entryId = paymentIntent.metadata.entryId;
+      const { entryId, orderId } = paymentIntent.metadata;
 
-      if (!entryId) break;
+      // Order-level payment: confirm all entries in the order
+      if (orderId) {
+        const orderEntries = await db.query.entries.findMany({
+          where: and(
+            eq(entries.orderId, orderId),
+            isNull(entries.deletedAt)
+          ),
+        });
 
-      // Idempotent: check if already confirmed
-      const entry = await db.query.entries.findFirst({
-        where: eq(entries.id, entryId),
-      });
+        for (const entry of orderEntries) {
+          if (entry.status !== 'confirmed') {
+            await db
+              .update(entries)
+              .set({ status: 'confirmed' })
+              .where(eq(entries.id, entry.id));
+          }
+        }
 
-      if (entry && entry.status !== 'confirmed') {
         await db
-          .update(entries)
-          .set({ status: 'confirmed' })
-          .where(eq(entries.id, entryId));
+          .update(orders)
+          .set({ status: 'paid' })
+          .where(eq(orders.id, orderId));
+      }
+
+      // Legacy single-entry payment
+      if (entryId && !orderId) {
+        const entry = await db.query.entries.findFirst({
+          where: eq(entries.id, entryId),
+        });
+
+        if (entry && entry.status !== 'confirmed') {
+          await db
+            .update(entries)
+            .set({ status: 'confirmed' })
+            .where(eq(entries.id, entryId));
+        }
       }
 
       // Update payment record
@@ -62,9 +86,14 @@ export async function POST(request: NextRequest) {
 
     case 'payment_intent.payment_failed': {
       const paymentIntent = event.data.object as Stripe.PaymentIntent;
-      const entryId = paymentIntent.metadata.entryId;
+      const { orderId } = paymentIntent.metadata;
 
-      if (!entryId) break;
+      if (orderId) {
+        await db
+          .update(orders)
+          .set({ status: 'failed' })
+          .where(eq(orders.id, orderId));
+      }
 
       await db
         .update(payments)

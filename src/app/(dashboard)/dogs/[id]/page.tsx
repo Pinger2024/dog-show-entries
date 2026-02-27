@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
+import { formatDogName, getTitleDisplay } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -214,7 +215,7 @@ export default function DogDetailPage({
             </div>
             <div>
               <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                {dog.registeredName}
+                {formatDogName(dog)}
               </h1>
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <span className="text-muted-foreground">
@@ -305,6 +306,64 @@ export default function DogDetailPage({
         {/* Entry History */}
         <EntryHistoryCard dogId={id} />
       </div>
+
+      {/* Owners */}
+      {dog.owners && dog.owners.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Owners</CardTitle>
+            <CardDescription>
+              Registered owners of this dog.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {dog.owners.map((owner) => (
+                <div key={owner.id} className="flex items-start justify-between gap-4 rounded-lg border p-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">{owner.ownerName}</span>
+                      {owner.isPrimary && (
+                        <Badge variant="secondary" className="text-xs">Primary</Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground">{owner.ownerEmail}</p>
+                    {owner.ownerAddress && (
+                      <p className="text-sm text-muted-foreground">{owner.ownerAddress}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Titles */}
+      {dog.titles && dog.titles.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Titles</CardTitle>
+            <CardDescription>
+              Championship and other titles awarded.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              {dog.titles.map((t) => (
+                <Badge key={t.id} variant="default" className="text-sm">
+                  {getTitleDisplay(t.title)}
+                  {t.dateAwarded && (
+                    <span className="ml-1 opacity-70">
+                      ({format(parseISO(t.dateAwarded), 'yyyy')})
+                    </span>
+                  )}
+                </Badge>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Achievements */}
       <Card>

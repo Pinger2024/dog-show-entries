@@ -2,14 +2,15 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
+import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format } from 'date-fns';
-import { CalendarIcon, Check, ChevronsUpDown, Loader2 } from 'lucide-react';
+import { CalendarIcon, Check, ChevronsUpDown, Loader2, Plus, Trash2, Award } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
-import { cn } from '@/lib/utils';
+import { cn, getTitleDisplay } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Calendar } from '@/components/ui/calendar';
@@ -50,6 +51,14 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 
+const ownerSchema = z.object({
+  ownerName: z.string().min(1, 'Name is required'),
+  ownerAddress: z.string().min(1, 'Address is required'),
+  ownerEmail: z.string().email('Valid email required'),
+  ownerPhone: z.string().optional(),
+  isPrimary: z.boolean(),
+});
+
 const dogFormSchema = z.object({
   registeredName: z
     .string()
@@ -65,9 +74,21 @@ const dogFormSchema = z.object({
   sireName: z.string().optional(),
   damName: z.string().optional(),
   breederName: z.string().optional(),
+  owners: z.array(ownerSchema).optional(),
 });
 
 type DogFormValues = z.infer<typeof dogFormSchema>;
+
+const TITLE_OPTIONS = [
+  { value: 'ch', label: 'Ch. — Champion' },
+  { value: 'sh_ch', label: 'Sh.Ch. — Show Champion' },
+  { value: 'ir_ch', label: 'Ir.Ch. — Irish Champion' },
+  { value: 'ir_sh_ch', label: 'Ir.Sh.Ch. — Irish Show Champion' },
+  { value: 'int_ch', label: 'Int.Ch. — International Champion' },
+  { value: 'ob_ch', label: 'Ob.Ch. — Obedience Champion' },
+  { value: 'ft_ch', label: 'FT.Ch. — Field Trial Champion' },
+  { value: 'wt_ch', label: 'WT.Ch. — Working Trial Champion' },
+] as const;
 
 interface DogFormProps {
   mode: 'create' | 'edit';
@@ -82,6 +103,12 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
 
   const { data: breeds, isLoading: breedsLoading } =
     trpc.breeds.list.useQuery();
+
+  // Fetch existing dog data for titles in edit mode
+  const { data: dogData } = trpc.dogs.getById.useQuery(
+    { id: dogId! },
+    { enabled: mode === 'edit' && !!dogId }
+  );
 
   const utils = trpc.useUtils();
 
@@ -116,6 +143,20 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
     },
   });
 
+  const addTitle = trpc.dogs.addTitle.useMutation({
+    onSuccess: () => {
+      if (dogId) utils.dogs.getById.invalidate({ id: dogId });
+      toast.success('Title added');
+    },
+  });
+
+  const removeTitle = trpc.dogs.removeTitle.useMutation({
+    onSuccess: () => {
+      if (dogId) utils.dogs.getById.invalidate({ id: dogId });
+      toast.success('Title removed');
+    },
+  });
+
   const form = useForm<DogFormValues>({
     resolver: zodResolver(dogFormSchema),
     defaultValues: {
@@ -128,9 +169,13 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
       sireName: '',
       damName: '',
       breederName: '',
+      owners: [],
       ...defaultValues,
     },
   });
+
+  const { fields: ownerFields, append: appendOwner, remove: removeOwner } =
+    useFieldArray({ control: form.control, name: 'owners' });
 
   const isPending = createDog.isPending || updateDog.isPending;
 
@@ -138,7 +183,8 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
     if (mode === 'create') {
       createDog.mutate(data);
     } else if (dogId) {
-      updateDog.mutate({ id: dogId, ...data });
+      const { owners: _owners, ...dogFields } = data;
+      updateDog.mutate({ id: dogId, ...dogFields });
     }
   }
 
@@ -452,6 +498,172 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
             />
           </CardContent>
         </Card>
+
+        {/* Owners */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Owners</CardTitle>
+            <CardDescription>
+              Add up to 4 owners. At least one owner with name, address, and email is required for show entries.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {ownerFields.map((field, index) => (
+              <div key={field.id} className="space-y-3 rounded-lg border p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">
+                    Owner {index + 1}
+                    {index === 0 && ' (Primary)'}
+                  </span>
+                  {index > 0 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeOwner(index)}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  )}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name={`owners.${index}.ownerName`}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Full name" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name={`owners.${index}.ownerEmail`}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="email"
+                            placeholder="owner@example.com"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <FormField
+                  control={form.control}
+                  name={`owners.${index}.ownerAddress`}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Address</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Full postal address" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name={`owners.${index}.ownerPhone`}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Phone (optional)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Phone number" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            ))}
+
+            {ownerFields.length < 4 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  appendOwner({
+                    ownerName: '',
+                    ownerAddress: '',
+                    ownerEmail: '',
+                    ownerPhone: '',
+                    isPrimary: ownerFields.length === 0,
+                  })
+                }
+              >
+                <Plus className="size-4" />
+                Add Owner
+              </Button>
+            )}
+
+            {ownerFields.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                No owners added yet. An owner record will be created automatically from your profile when you add this dog.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Titles (edit mode only — need saved dog to add titles) */}
+        {mode === 'edit' && dogId && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Titles</CardTitle>
+              <CardDescription>
+                Championship and other KC titles awarded to this dog.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {dogData?.titles && dogData.titles.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {dogData.titles.map((t) => (
+                    <Badge key={t.id} variant="default" className="gap-1.5 text-sm">
+                      <Award className="size-3" />
+                      {getTitleDisplay(t.title)}
+                      <button
+                        type="button"
+                        className="ml-1 rounded-full p-0.5 hover:bg-white/20"
+                        onClick={() => removeTitle.mutate({ id: t.id })}
+                      >
+                        <Trash2 className="size-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <Select
+                  onValueChange={(value) => {
+                    addTitle.mutate({ dogId, title: value as 'ch' | 'sh_ch' | 'ir_ch' | 'ir_sh_ch' | 'int_ch' | 'ob_ch' | 'ft_ch' | 'wt_ch' });
+                  }}
+                >
+                  <SelectTrigger className="w-full sm:w-64">
+                    <SelectValue placeholder="Add a title..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TITLE_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Submit */}
         <div className="flex gap-3">

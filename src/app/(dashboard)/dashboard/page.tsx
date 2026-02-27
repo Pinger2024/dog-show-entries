@@ -175,7 +175,7 @@ export default function DashboardPage() {
                       </div>
                       <div className="mt-1.5 flex items-center gap-2 text-sm">
                         <Dog className="size-3.5 text-muted-foreground" />
-                        <span>{entry.dog.registeredName}</span>
+                        <span>{entry.dog?.registeredName ?? 'Junior Handler'}</span>
                         <span className="text-muted-foreground">·</span>
                         <span className="text-muted-foreground">
                           {entry.entryClasses.length} class

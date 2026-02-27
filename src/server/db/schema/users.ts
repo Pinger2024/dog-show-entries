@@ -11,6 +11,8 @@ import { userRoleEnum } from './enums';
 import { dogs } from './dogs';
 import { entries } from './entries';
 import { memberships } from './memberships';
+import { dogOwners } from './dog-owners';
+import { orders } from './orders';
 
 export const users = pgTable(
   'users',
@@ -22,6 +24,7 @@ export const users = pgTable(
     image: text('image'),
     address: text('address'),
     phone: text('phone'),
+    postcode: text('postcode'),
     kcAccountNo: text('kc_account_no'),
     role: userRoleEnum('role').notNull().default('exhibitor'),
     stripeCustomerId: text('stripe_customer_id'),
@@ -45,4 +48,6 @@ export const usersRelations = relations(users, ({ many }) => ({
   dogs: many(dogs),
   entries: many(entries),
   memberships: many(memberships),
+  dogOwnerships: many(dogOwners),
+  orders: many(orders),
 }));

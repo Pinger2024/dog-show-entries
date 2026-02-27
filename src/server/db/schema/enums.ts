@@ -77,4 +77,58 @@ export const classTypeEnum = pgEnum('class_type', [
   'age',
   'achievement',
   'special',
+  'junior_handler',
+]);
+
+// ── New enums for Amanda's requirements ──────────────────
+
+export const dogTitleTypeEnum = pgEnum('dog_title_type', [
+  'ch',
+  'sh_ch',
+  'ir_ch',
+  'ir_sh_ch',
+  'int_ch',
+  'ob_ch',
+  'ft_ch',
+  'wt_ch',
+]);
+
+export const orderStatusEnum = pgEnum('order_status', [
+  'draft',
+  'pending_payment',
+  'paid',
+  'failed',
+  'cancelled',
+]);
+
+export const entryAuditActionEnum = pgEnum('entry_audit_action', [
+  'created',
+  'classes_changed',
+  'handler_changed',
+  'withdrawn',
+  'reinstated',
+]);
+
+export const entryTypeEnum = pgEnum('entry_type', [
+  'standard',
+  'junior_handler',
+]);
+
+export const catalogueFormatEnum = pgEnum('catalogue_format', [
+  'standard',
+  'branded',
+  'premium',
+]);
+
+export const catalogueStatusEnum = pgEnum('catalogue_status', [
+  'draft',
+  'generating',
+  'generated',
+  'published',
+]);
+
+export const paymentTypeEnum = pgEnum('payment_type', [
+  'initial',
+  'adjustment',
+  'refund',
 ]);

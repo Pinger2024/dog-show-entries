@@ -10,6 +10,7 @@ import {
   Dog,
   Loader2,
   AlertTriangle,
+  Pencil,
 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -181,19 +182,25 @@ export default function EntryDetailPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Name</span>
-            <span className="font-medium">{entry.dog.registeredName}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Breed</span>
-            <span>{entry.dog.breed?.name}</span>
-          </div>
-          {entry.dog.kcRegNumber && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">KC Registration</span>
-              <span>{entry.dog.kcRegNumber}</span>
-            </div>
+          {entry.dog ? (
+            <>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Name</span>
+                <span className="font-medium">{entry.dog.registeredName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Breed</span>
+                <span>{entry.dog.breed?.name}</span>
+              </div>
+              {entry.dog.kcRegNumber && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">KC Registration</span>
+                  <span>{entry.dog.kcRegNumber}</span>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-muted-foreground">Junior Handler entry</p>
           )}
         </CardContent>
       </Card>
@@ -223,6 +230,14 @@ export default function EntryDetailPage() {
         <Button variant="outline" asChild>
           <Link href={`/shows/${entry.showId}`}>View Show</Link>
         </Button>
+        {(entry.status === 'confirmed' || entry.status === 'pending') && entry.show.status === 'entries_open' && (
+          <Button variant="outline" asChild>
+            <Link href={`/shows/${entry.showId}/entries/${entry.id}/edit`}>
+              <Pencil className="size-4" />
+              Edit Classes
+            </Link>
+          </Button>
+        )}
         {entry.status !== 'withdrawn' && entry.status !== 'cancelled' && (
           <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
             <DialogTrigger asChild>
@@ -237,7 +252,7 @@ export default function EntryDetailPage() {
                 <DialogDescription>
                   This will withdraw your entry for{' '}
                   <span className="font-medium text-foreground">
-                    {entry.dog.registeredName}
+                    {entry.dog?.registeredName ?? 'this entry'}
                   </span>{' '}
                   from{' '}
                   <span className="font-medium text-foreground">

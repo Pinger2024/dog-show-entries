@@ -12,7 +12,11 @@ import {
   dogs,
   shows,
   showClasses,
+  payments,
+  entryAuditLog,
+  users,
 } from '@/server/db/schema';
+import { createPaymentIntent, getStripe } from '@/server/services/stripe';
 
 export const entriesRouter = createTRPCRouter({
   create: protectedProcedure
@@ -322,6 +326,194 @@ export const entriesRouter = createTRPCRouter({
         .where(eq(entries.id, input.id))
         .returning();
 
+      // Audit log
+      await ctx.db.insert(entryAuditLog).values({
+        entryId: input.id,
+        action: 'withdrawn',
+        userId: ctx.session.user.id,
+      });
+
       return updated!;
+    }),
+
+  // ── Entry editing (class changes) ────────────────────────
+
+  update: protectedProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        classIds: z.array(z.string().uuid()).min(1),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const entry = await ctx.db.query.entries.findFirst({
+        where: and(eq(entries.id, input.id), isNull(entries.deletedAt)),
+        with: {
+          show: true,
+          entryClasses: true,
+          payments: true,
+        },
+      });
+
+      if (!entry) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Entry not found' });
+      }
+
+      if (entry.exhibitorId !== ctx.session.user.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your entry' });
+      }
+
+      if (entry.show.status !== 'entries_open') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Show is no longer accepting entry changes',
+        });
+      }
+
+      if (entry.status !== 'confirmed' && entry.status !== 'pending') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Only confirmed or pending entries can be modified',
+        });
+      }
+
+      // Validate new classes
+      const newClasses = await ctx.db.query.showClasses.findMany({
+        where: and(
+          inArray(showClasses.id, input.classIds),
+          eq(showClasses.showId, entry.showId)
+        ),
+      });
+
+      if (newClasses.length !== input.classIds.length) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'One or more classes are invalid',
+        });
+      }
+
+      const oldFee = entry.totalFee;
+      const newFee = newClasses.reduce((sum, sc) => sum + sc.entryFee, 0);
+      const feeDiff = newFee - oldFee;
+
+      const oldClassIds = entry.entryClasses.map((ec) => ec.showClassId);
+
+      // Delete old entry classes and insert new ones
+      await ctx.db
+        .delete(entryClasses)
+        .where(eq(entryClasses.entryId, input.id));
+
+      await ctx.db.insert(entryClasses).values(
+        newClasses.map((sc) => ({
+          entryId: input.id,
+          showClassId: sc.id,
+          fee: sc.entryFee,
+        }))
+      );
+
+      // Update entry total
+      await ctx.db
+        .update(entries)
+        .set({ totalFee: newFee })
+        .where(eq(entries.id, input.id));
+
+      // Audit log
+      await ctx.db.insert(entryAuditLog).values({
+        entryId: input.id,
+        action: 'classes_changed',
+        userId: ctx.session.user.id,
+        changes: {
+          oldClassIds,
+          newClassIds: input.classIds,
+          oldFee,
+          newFee,
+          feeDiff,
+        },
+      });
+
+      let paymentResult: { requiresPayment: boolean; clientSecret?: string } = {
+        requiresPayment: false,
+      };
+
+      // Handle fee difference
+      if (feeDiff > 0) {
+        // Additional payment needed
+        const pi = await createPaymentIntent(feeDiff, {
+          entryId: input.id,
+          showId: entry.showId,
+          exhibitorId: ctx.session.user.id,
+          type: 'adjustment',
+        });
+
+        await ctx.db.insert(payments).values({
+          entryId: input.id,
+          stripePaymentId: pi.id,
+          amount: feeDiff,
+          status: 'pending',
+          type: 'adjustment',
+        });
+
+        paymentResult = {
+          requiresPayment: true,
+          clientSecret: pi.client_secret!,
+        };
+      } else if (feeDiff < 0) {
+        // Refund needed — find the original successful payment
+        const originalPayment = entry.payments.find(
+          (p) => p.status === 'succeeded' && p.stripePaymentId
+        );
+
+        if (originalPayment?.stripePaymentId) {
+          const stripe = getStripe();
+          await stripe.refunds.create({
+            payment_intent: originalPayment.stripePaymentId,
+            amount: Math.abs(feeDiff),
+          });
+
+          await ctx.db.insert(payments).values({
+            entryId: input.id,
+            stripePaymentId: originalPayment.stripePaymentId,
+            amount: Math.abs(feeDiff),
+            status: 'succeeded',
+            type: 'refund',
+          });
+        }
+      }
+
+      return {
+        entryId: input.id,
+        oldFee,
+        newFee,
+        feeDiff,
+        ...paymentResult,
+      };
+    }),
+
+  // ── Validate exhibitor profile for entry ──────────────────
+
+  validateExhibitorForEntry: protectedProcedure
+    .query(async ({ ctx }) => {
+      const user = await ctx.db.query.users.findFirst({
+        where: eq(users.id, ctx.session.user.id),
+      });
+
+      if (!user) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
+      }
+
+      const issues: string[] = [];
+      if (!user.address) issues.push('Address is required for show entries');
+      if (!user.name) issues.push('Name is required');
+
+      return {
+        valid: issues.length === 0,
+        issues,
+        user: {
+          name: user.name,
+          address: user.address,
+          phone: user.phone,
+          kcAccountNo: user.kcAccountNo,
+        },
+      };
     }),
 });

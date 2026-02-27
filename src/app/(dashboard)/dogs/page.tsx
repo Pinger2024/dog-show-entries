@@ -47,6 +47,7 @@ export default function DogsPage() {
   // Count entries per dog
   const entryCountByDog = new Map<string, number>();
   for (const entry of entriesData?.items ?? []) {
+    if (!entry.dogId) continue;
     const count = entryCountByDog.get(entry.dogId) ?? 0;
     entryCountByDog.set(entry.dogId, count + 1);
   }

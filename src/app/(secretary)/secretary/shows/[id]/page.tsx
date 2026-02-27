@@ -4,9 +4,13 @@ import { use, useState, useMemo } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft,
+  BookOpen,
   CalendarDays,
   Clock,
   Download,
+  FileText,
+  Hash,
+  Loader2,
   MapPin,
   PoundSterling,
   Search,
@@ -15,6 +19,10 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
+import { formatDogName } from '@/lib/utils';
+import { CLASS_TEMPLATES } from '@/lib/class-templates';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -185,6 +193,8 @@ export default function ManageShowPage({
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="entries">Entries</TabsTrigger>
           <TabsTrigger value="financial">Financial</TabsTrigger>
+          <TabsTrigger value="catalogue">Catalogue</TabsTrigger>
+          <TabsTrigger value="reports">Reports</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
@@ -342,6 +352,9 @@ export default function ManageShowPage({
               </CardContent>
             </Card>
           )}
+
+          {/* Bulk class creation */}
+          <BulkClassCreator showId={id} />
         </TabsContent>
 
         {/* Entries Tab */}
@@ -359,6 +372,16 @@ export default function ManageShowPage({
             stats={stats}
             entries={entriesData?.items ?? []}
           />
+        </TabsContent>
+
+        {/* Catalogue Tab */}
+        <TabsContent value="catalogue" className="space-y-6">
+          <CatalogueTab showId={id} />
+        </TabsContent>
+
+        {/* Reports Tab */}
+        <TabsContent value="reports" className="space-y-6">
+          <ReportsTab showId={id} />
         </TabsContent>
       </Tabs>
     </div>
@@ -729,5 +752,983 @@ function FinancialTab({
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// ── Catalogue Tab ────────────────────────────────────────────
+
+function CatalogueTab({ showId }: { showId: string }) {
+  const utils = trpc.useUtils();
+  const { data: catalogueData, isLoading } =
+    trpc.secretary.getCatalogueData.useQuery({ showId });
+  const { data: absentees } =
+    trpc.secretary.getAbsenteeList.useQuery({ showId });
+
+  const assignMutation = trpc.secretary.assignCatalogueNumbers.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Assigned catalogue numbers to ${data.assigned} entries`);
+      utils.secretary.getCatalogueData.invalidate({ showId });
+    },
+    onError: () => toast.error('Failed to assign catalogue numbers'),
+  });
+
+  const entries = catalogueData?.entries ?? [];
+  const show = catalogueData?.show;
+
+  // Group entries by breed group → breed → sex for display
+  const grouped = useMemo(() => {
+    const groups: Record<string, Record<string, { dogs: typeof entries; bitches: typeof entries }>> = {};
+    for (const entry of entries) {
+      const groupName = entry.dog?.breed?.group?.name ?? 'Unclassified';
+      const breedName = entry.dog?.breed?.name ?? 'Unknown Breed';
+      groups[groupName] ??= {};
+      groups[groupName][breedName] ??= { dogs: [], bitches: [] };
+      if (entry.dog?.sex === 'bitch') {
+        groups[groupName][breedName].bitches.push(entry);
+      } else {
+        groups[groupName][breedName].dogs.push(entry);
+      }
+    }
+    return groups;
+  }, [entries]);
+
+  const hasNumbers = entries.some((e) => e.catalogueNumber);
+
+  return (
+    <div className="space-y-6">
+      {/* Actions */}
+      <div className="flex items-center gap-3">
+        <Button
+          onClick={() => assignMutation.mutate({ showId })}
+          disabled={assignMutation.isPending || entries.length === 0}
+        >
+          {assignMutation.isPending && (
+            <Loader2 className="size-4 animate-spin" />
+          )}
+          <Hash className="size-4" />
+          Assign Catalogue Numbers
+        </Button>
+        {hasNumbers && (
+          <>
+            <Button variant="outline" asChild>
+              <a
+                href={`/api/catalogue/${showId}/standard`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Download className="size-4" />
+                Download Catalogue JSON
+              </a>
+            </Button>
+            <Button variant="outline" asChild>
+              <a
+                href={`/api/catalogue/${showId}/absentees`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Download className="size-4" />
+                Download Absentees JSON
+              </a>
+            </Button>
+          </>
+        )}
+      </div>
+
+      {/* Stats */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription className="text-sm font-medium">
+              Catalogue Entries
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">{entries.length}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription className="text-sm font-medium">
+              Absentees
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">{absentees?.length ?? 0}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription className="text-sm font-medium">
+              Numbers Assigned
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">
+              {hasNumbers ? 'Yes' : 'Not yet'}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Catalogue Preview */}
+      {isLoading ? (
+        <Card>
+          <CardContent className="py-12 text-center text-muted-foreground">
+            Loading catalogue data...
+          </CardContent>
+        </Card>
+      ) : entries.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <BookOpen className="mx-auto mb-4 size-10 text-muted-foreground" />
+            <p className="font-semibold">No confirmed entries yet</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Entries will appear here once exhibitors have paid.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>Catalogue Preview</CardTitle>
+            <CardDescription>
+              Entries ordered by breed group, breed, then sex
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {Object.entries(grouped)
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([groupName, breeds]) => (
+                <div key={groupName}>
+                  <h3 className="mb-3 rounded bg-primary px-3 py-1.5 text-sm font-bold uppercase tracking-wider text-primary-foreground">
+                    {groupName}
+                  </h3>
+                  {Object.entries(breeds)
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([breedName, { dogs, bitches }]) => (
+                      <div key={breedName} className="mb-4 pl-2">
+                        <h4 className="mb-2 border-b font-semibold">
+                          {breedName}
+                        </h4>
+                        {dogs.length > 0 && (
+                          <>
+                            <p className="mb-1 text-xs font-medium italic text-muted-foreground">
+                              Dogs
+                            </p>
+                            {dogs.map((entry) => (
+                              <CatalogueEntryRow
+                                key={entry.id}
+                                entry={entry}
+                              />
+                            ))}
+                          </>
+                        )}
+                        {bitches.length > 0 && (
+                          <>
+                            <p className="mb-1 mt-2 text-xs font-medium italic text-muted-foreground">
+                              Bitches
+                            </p>
+                            {bitches.map((entry) => (
+                              <CatalogueEntryRow
+                                key={entry.id}
+                                entry={entry}
+                              />
+                            ))}
+                          </>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Absentee List */}
+      {(absentees?.length ?? 0) > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Absentee List</CardTitle>
+            <CardDescription>
+              Withdrawn entries with catalogue numbers
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Cat. No.</TableHead>
+                  <TableHead>Dog</TableHead>
+                  <TableHead>Breed</TableHead>
+                  <TableHead>Exhibitor</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {absentees?.map((entry) => (
+                  <TableRow key={entry.id}>
+                    <TableCell className="font-mono font-bold">
+                      {entry.catalogueNumber ?? '—'}
+                    </TableCell>
+                    <TableCell>
+                      {entry.dog?.registeredName ?? '—'}
+                    </TableCell>
+                    <TableCell>{entry.dog?.breed?.name ?? '—'}</TableCell>
+                    <TableCell>{entry.exhibitor?.name ?? '—'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+type CatalogueEntryItem = NonNullable<
+  RouterOutputs['secretary']['getCatalogueData']
+>['entries'][number];
+
+function CatalogueEntryRow({ entry }: { entry: CatalogueEntryItem }) {
+  return (
+    <div className="mb-2 rounded border bg-card px-3 py-2 text-sm">
+      <div className="flex items-baseline gap-2">
+        <span className="font-mono text-xs font-bold text-muted-foreground">
+          {entry.catalogueNumber ?? '—'}
+        </span>
+        <span className="font-semibold">
+          {entry.dog ? formatDogName(entry.dog) : 'Junior Handler'}
+        </span>
+      </div>
+      {entry.dog && (
+        <div className="mt-1 grid grid-cols-2 gap-x-4 text-xs text-muted-foreground">
+          {entry.dog.dateOfBirth && (
+            <span>DOB: {formatDate(entry.dog.dateOfBirth)}</span>
+          )}
+          {entry.dog.sireName && <span>Sire: {entry.dog.sireName}</span>}
+          {entry.dog.damName && <span>Dam: {entry.dog.damName}</span>}
+          {entry.dog.breederName && (
+            <span>Breeder: {entry.dog.breederName}</span>
+          )}
+        </div>
+      )}
+      {entry.dog?.owners && entry.dog.owners.length > 0 && (
+        <p className="mt-1 text-xs text-muted-foreground">
+          Owner{entry.dog.owners.length > 1 ? 's' : ''}:{' '}
+          {entry.dog.owners
+            .map((o) => ('ownerName' in o ? o.ownerName : ''))
+            .filter(Boolean)
+            .join(' & ')}
+        </p>
+      )}
+      {entry.entryClasses.length > 0 && (
+        <div className="mt-1 flex flex-wrap gap-1">
+          {entry.entryClasses.map((ec, i) => (
+            <Badge key={i} variant="secondary" className="text-[10px]">
+              {ec.showClass?.classDefinition?.name ?? '?'}
+            </Badge>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Reports Tab ──────────────────────────────────────────────
+
+function ReportsTab({ showId }: { showId: string }) {
+  const [activeReport, setActiveReport] = useState<string | null>(null);
+
+  return (
+    <div className="space-y-6">
+      {/* Report cards */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Card
+          className="cursor-pointer transition-colors hover:border-primary"
+          onClick={() =>
+            setActiveReport(activeReport === 'entries' ? null : 'entries')
+          }
+        >
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-950">
+                <FileText className="size-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <CardTitle className="text-base">Entry Report</CardTitle>
+                <CardDescription>
+                  Full entry list with exhibitor, dog, classes, and fees
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+        </Card>
+
+        <Card
+          className="cursor-pointer transition-colors hover:border-primary"
+          onClick={() =>
+            setActiveReport(activeReport === 'payments' ? null : 'payments')
+          }
+        >
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 items-center justify-center rounded-lg bg-green-100 dark:bg-green-950">
+                <PoundSterling className="size-5 text-green-600 dark:text-green-400" />
+              </div>
+              <div>
+                <CardTitle className="text-base">Payment Report</CardTitle>
+                <CardDescription>
+                  Revenue breakdown by status with payment reconciliation
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+        </Card>
+
+        <Card
+          className="cursor-pointer transition-colors hover:border-primary"
+          onClick={() =>
+            setActiveReport(
+              activeReport === 'catalogueOrders' ? null : 'catalogueOrders'
+            )
+          }
+        >
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 items-center justify-center rounded-lg bg-purple-100 dark:bg-purple-950">
+                <BookOpen className="size-5 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div>
+                <CardTitle className="text-base">Catalogue Orders</CardTitle>
+                <CardDescription>
+                  Entries that requested a printed catalogue
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+        </Card>
+      </div>
+
+      {/* Active report content */}
+      {activeReport === 'entries' && <EntryReportContent showId={showId} />}
+      {activeReport === 'payments' && <PaymentReportContent showId={showId} />}
+      {activeReport === 'catalogueOrders' && (
+        <CatalogueOrdersContent showId={showId} />
+      )}
+
+      {/* Audit Log */}
+      <AuditLogViewer showId={showId} />
+    </div>
+  );
+}
+
+function EntryReportContent({ showId }: { showId: string }) {
+  const { data: entries, isLoading } =
+    trpc.secretary.getEntryReport.useQuery({ showId });
+
+  function exportCsv() {
+    if (!entries) return;
+    const headers = [
+      'Entry Date',
+      'Status',
+      'Exhibitor',
+      'Email',
+      'Dog',
+      'Breed',
+      'Group',
+      'Sex',
+      'Classes',
+      'Fee (£)',
+      'NFC',
+    ];
+    const rows = entries.map((e) => [
+      formatDate(e.entryDate),
+      e.status,
+      e.exhibitor?.name ?? '',
+      e.exhibitor?.email ?? '',
+      e.dog?.registeredName ?? 'Junior Handler',
+      e.dog?.breed?.name ?? '',
+      e.dog?.breed?.group?.name ?? '',
+      e.dog?.sex ?? '',
+      e.entryClasses
+        .map((ec) => ec.showClass?.classDefinition?.name ?? '')
+        .filter(Boolean)
+        .join('; '),
+      (e.totalFee / 100).toFixed(2),
+      e.isNfc ? 'Yes' : 'No',
+    ]);
+
+    downloadCsv(headers, rows, `entry-report-${showId}`);
+  }
+
+  if (isLoading) return <LoadingCard />;
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-start justify-between">
+          <CardTitle>Entry Report ({entries?.length ?? 0} entries)</CardTitle>
+          <Button variant="outline" size="sm" onClick={exportCsv}>
+            <Download className="size-4" />
+            Export CSV
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Date</TableHead>
+              <TableHead>Exhibitor</TableHead>
+              <TableHead>Dog</TableHead>
+              <TableHead>Breed</TableHead>
+              <TableHead>Classes</TableHead>
+              <TableHead>Fee</TableHead>
+              <TableHead>Status</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {entries?.map((entry) => (
+              <TableRow key={entry.id}>
+                <TableCell className="text-muted-foreground">
+                  {formatDate(entry.entryDate)}
+                </TableCell>
+                <TableCell>{entry.exhibitor?.name ?? '—'}</TableCell>
+                <TableCell>
+                  {entry.dog?.registeredName ?? 'Junior Handler'}
+                </TableCell>
+                <TableCell>{entry.dog?.breed?.name ?? '—'}</TableCell>
+                <TableCell>
+                  <div className="flex flex-wrap gap-1">
+                    {entry.entryClasses.map((ec, i) => (
+                      <Badge key={i} variant="secondary" className="text-[10px]">
+                        {ec.showClass?.classDefinition?.name ?? '?'}
+                      </Badge>
+                    ))}
+                  </div>
+                </TableCell>
+                <TableCell>{formatCurrency(entry.totalFee)}</TableCell>
+                <TableCell>
+                  <Badge
+                    variant={
+                      entryStatusConfig[entry.status]?.variant ?? 'outline'
+                    }
+                  >
+                    {entryStatusConfig[entry.status]?.label ?? entry.status}
+                  </Badge>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PaymentReportContent({ showId }: { showId: string }) {
+  const { data, isLoading } =
+    trpc.secretary.getPaymentReport.useQuery({ showId });
+
+  function exportCsv() {
+    if (!data) return;
+    const headers = [
+      'Exhibitor',
+      'Dog',
+      'Status',
+      'Fee (£)',
+      'Payments',
+    ];
+    const rows = data.entries.map((e) => [
+      e.exhibitor?.name ?? '',
+      e.dog?.registeredName ?? 'Junior Handler',
+      e.status,
+      (e.totalFee / 100).toFixed(2),
+      e.payments.map((p) => `${p.status}: £${(p.amount / 100).toFixed(2)}`).join('; '),
+    ]);
+
+    downloadCsv(headers, rows, `payment-report-${showId}`);
+  }
+
+  if (isLoading) return <LoadingCard />;
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-start justify-between">
+          <div>
+            <CardTitle>Payment Report</CardTitle>
+            <CardDescription>
+              {data?.summary.totalEntries} entries, {data?.summary.paidCount}{' '}
+              paid, {data?.summary.pendingCount} pending
+            </CardDescription>
+          </div>
+          <Button variant="outline" size="sm" onClick={exportCsv}>
+            <Download className="size-4" />
+            Export CSV
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-lg bg-green-50 p-3 dark:bg-green-950/30">
+            <p className="text-xs text-muted-foreground">Total Revenue</p>
+            <p className="text-lg font-bold text-green-700 dark:text-green-400">
+              {formatCurrency(data?.summary.totalRevenue ?? 0)}
+            </p>
+          </div>
+          <div className="rounded-lg bg-blue-50 p-3 dark:bg-blue-950/30">
+            <p className="text-xs text-muted-foreground">Paid</p>
+            <p className="text-lg font-bold text-blue-700 dark:text-blue-400">
+              {data?.summary.paidCount ?? 0} entries
+            </p>
+          </div>
+          <div className="rounded-lg bg-amber-50 p-3 dark:bg-amber-950/30">
+            <p className="text-xs text-muted-foreground">Pending</p>
+            <p className="text-lg font-bold text-amber-700 dark:text-amber-400">
+              {data?.summary.pendingCount ?? 0} entries
+            </p>
+          </div>
+        </div>
+
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Exhibitor</TableHead>
+              <TableHead>Dog</TableHead>
+              <TableHead>Fee</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Payments</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {data?.entries.map((entry) => (
+              <TableRow key={entry.id}>
+                <TableCell>{entry.exhibitor?.name ?? '—'}</TableCell>
+                <TableCell>
+                  {entry.dog?.registeredName ?? 'Junior Handler'}
+                </TableCell>
+                <TableCell>{formatCurrency(entry.totalFee)}</TableCell>
+                <TableCell>
+                  <Badge
+                    variant={
+                      entryStatusConfig[entry.status]?.variant ?? 'outline'
+                    }
+                  >
+                    {entryStatusConfig[entry.status]?.label ?? entry.status}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <div className="flex flex-wrap gap-1">
+                    {entry.payments.map((p, i) => (
+                      <Badge
+                        key={i}
+                        variant={
+                          p.status === 'succeeded' ? 'default' : 'outline'
+                        }
+                        className="text-[10px]"
+                      >
+                        £{(p.amount / 100).toFixed(2)} ({p.status})
+                      </Badge>
+                    ))}
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+}
+
+function CatalogueOrdersContent({ showId }: { showId: string }) {
+  const { data: orders, isLoading } =
+    trpc.secretary.getCatalogueOrders.useQuery({ showId });
+
+  if (isLoading) return <LoadingCard />;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Catalogue Orders ({orders?.length ?? 0})</CardTitle>
+        <CardDescription>
+          Entries that requested a printed catalogue
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {(orders?.length ?? 0) === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            No catalogue orders yet.
+          </p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Exhibitor</TableHead>
+                <TableHead>Dog</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {orders?.map((entry) => (
+                <TableRow key={entry.id}>
+                  <TableCell>{entry.exhibitor?.name ?? '—'}</TableCell>
+                  <TableCell>
+                    {entry.dog?.registeredName ?? 'Junior Handler'}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function LoadingCard() {
+  return (
+    <Card>
+      <CardContent className="flex items-center justify-center py-12">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </CardContent>
+    </Card>
+  );
+}
+
+function downloadCsv(headers: string[], rows: string[][], filename: string) {
+  const csv = [headers, ...rows]
+    .map((row) =>
+      row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')
+    )
+    .join('\n');
+
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${filename}-${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast.success('Report exported to CSV');
+}
+
+// ── Bulk Class Creator ───────────────────────────────────────
+
+function BulkClassCreator({ showId }: { showId: string }) {
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  const [selectedBreedIds, setSelectedBreedIds] = useState<string[]>([]);
+  const [splitBySex, setSplitBySex] = useState(false);
+  const [feeInput, setFeeInput] = useState('');
+
+  const { data: breeds } = trpc.breeds.list.useQuery();
+  const { data: classDefs } = trpc.secretary.listClassDefinitions.useQuery();
+  const utils = trpc.useUtils();
+
+  const bulkMutation = trpc.secretary.bulkCreateClasses.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Created ${data.created} classes`);
+      utils.shows.getById.invalidate({ id: showId });
+      setSelectedTemplate(null);
+      setSelectedBreedIds([]);
+    },
+    onError: () => toast.error('Failed to create classes'),
+  });
+
+  const template = CLASS_TEMPLATES.find((t) => t.id === selectedTemplate);
+
+  // Match template class names to actual class definitions
+  const matchedClassDefIds = useMemo(() => {
+    if (!template || !classDefs) return [];
+    return classDefs
+      .filter((cd) => template.classNames.includes(cd.name))
+      .map((cd) => cd.id);
+  }, [template, classDefs]);
+
+  // Group breeds by group
+  const breedsByGroup = useMemo(() => {
+    const groups: Record<string, { id: string; name: string }[]> = {};
+    for (const breed of breeds ?? []) {
+      const groupName = breed.group?.name ?? 'Other';
+      groups[groupName] ??= [];
+      groups[groupName].push({ id: breed.id, name: breed.name });
+    }
+    return groups;
+  }, [breeds]);
+
+  const totalClasses =
+    selectedBreedIds.length *
+    matchedClassDefIds.length *
+    (splitBySex ? 2 : 1);
+
+  function handleCreate() {
+    if (!template || selectedBreedIds.length === 0) return;
+    const fee = feeInput ? parseInt(feeInput, 10) : template.defaultFeePence;
+    bulkMutation.mutate({
+      showId,
+      breedIds: selectedBreedIds,
+      classDefinitionIds: matchedClassDefIds,
+      entryFee: fee,
+      splitBySex,
+    });
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Add Classes from Template</CardTitle>
+        <CardDescription>
+          Quickly add a standard set of classes for selected breeds.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Template selection */}
+        <div className="grid gap-2 sm:grid-cols-2">
+          {CLASS_TEMPLATES.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => {
+                setSelectedTemplate(t.id);
+                setSplitBySex(t.splitBySex);
+                setFeeInput(String(t.defaultFeePence));
+              }}
+              className={`rounded-lg border p-3 text-left transition-colors ${
+                selectedTemplate === t.id
+                  ? 'border-primary bg-primary/5'
+                  : 'hover:bg-muted/50'
+              }`}
+            >
+              <p className="font-medium text-sm">{t.name}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t.description}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {t.classNames.length} classes &middot;{' '}
+                {formatCurrency(t.defaultFeePence)}/class
+                {t.splitBySex ? ' &middot; Split by sex' : ''}
+              </p>
+            </button>
+          ))}
+        </div>
+
+        {template && (
+          <>
+            {/* Classes in template */}
+            <div>
+              <Label className="text-sm font-medium">
+                Classes in template ({matchedClassDefIds.length})
+              </Label>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {template.classNames.map((name) => (
+                  <Badge key={name} variant="secondary">
+                    {name}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+
+            {/* Breed selection */}
+            <div>
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">
+                  Breeds ({selectedBreedIds.length} selected)
+                </Label>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      setSelectedBreedIds(
+                        (breeds ?? []).map((b) => b.id)
+                      )
+                    }
+                  >
+                    Select All
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedBreedIds([])}
+                  >
+                    Clear
+                  </Button>
+                </div>
+              </div>
+              <div className="mt-2 max-h-60 overflow-y-auto rounded-lg border p-2 space-y-3">
+                {Object.entries(breedsByGroup)
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([groupName, groupBreeds]) => (
+                    <div key={groupName}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const groupIds = groupBreeds.map((b) => b.id);
+                            const allSelected = groupIds.every((id) =>
+                              selectedBreedIds.includes(id)
+                            );
+                            if (allSelected) {
+                              setSelectedBreedIds((prev) =>
+                                prev.filter((id) => !groupIds.includes(id))
+                              );
+                            } else {
+                              setSelectedBreedIds((prev) => [
+                                ...new Set([...prev, ...groupIds]),
+                              ]);
+                            }
+                          }}
+                          className="text-xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground"
+                        >
+                          {groupName}
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1 pl-2">
+                        {groupBreeds.map((breed) => (
+                          <label
+                            key={breed.id}
+                            className="flex items-center gap-2 text-sm cursor-pointer"
+                          >
+                            <Checkbox
+                              checked={selectedBreedIds.includes(breed.id)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setSelectedBreedIds((prev) => [
+                                    ...prev,
+                                    breed.id,
+                                  ]);
+                                } else {
+                                  setSelectedBreedIds((prev) =>
+                                    prev.filter((id) => id !== breed.id)
+                                  );
+                                }
+                              }}
+                            />
+                            {breed.name}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+
+            {/* Options */}
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div>
+                <Label className="text-sm font-medium">Entry Fee (pence)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={feeInput}
+                  onChange={(e) => setFeeInput(e.target.value)}
+                  className="mt-1"
+                />
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {feeInput ? formatCurrency(parseInt(feeInput, 10) || 0) : '£0.00'}
+                </p>
+              </div>
+              <div className="flex items-end gap-2 pb-6">
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox
+                    checked={splitBySex}
+                    onCheckedChange={(v) => setSplitBySex(v === true)}
+                  />
+                  Split by sex (Dog / Bitch)
+                </label>
+              </div>
+              <div className="flex items-end pb-6">
+                <p className="text-sm text-muted-foreground">
+                  <span className="font-bold text-foreground">{totalClasses}</span>{' '}
+                  classes will be created
+                </p>
+              </div>
+            </div>
+
+            <Button
+              onClick={handleCreate}
+              disabled={
+                bulkMutation.isPending ||
+                selectedBreedIds.length === 0 ||
+                matchedClassDefIds.length === 0
+              }
+            >
+              {bulkMutation.isPending && (
+                <Loader2 className="size-4 animate-spin" />
+              )}
+              Create {totalClasses} Classes
+            </Button>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Audit Log Viewer ─────────────────────────────────────────
+
+function AuditLogViewer({ showId }: { showId: string }) {
+  const { data: auditLog, isLoading } =
+    trpc.secretary.getAuditLog.useQuery({ showId });
+
+  if (isLoading) return <LoadingCard />;
+
+  const actionLabels: Record<string, string> = {
+    created: 'Created',
+    classes_changed: 'Classes Changed',
+    handler_changed: 'Handler Changed',
+    withdrawn: 'Withdrawn',
+    reinstated: 'Reinstated',
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Audit Log</CardTitle>
+        <CardDescription>
+          Change history for entries in this show
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {(auditLog?.length ?? 0) === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            No audit log entries yet.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {auditLog?.map((log) => (
+              <div
+                key={log.id}
+                className="rounded-lg border px-3 py-2 text-sm"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline">
+                      {actionLabels[log.action] ?? log.action}
+                    </Badge>
+                    <span className="font-medium">
+                      {log.entry?.dog?.registeredName ?? 'Unknown dog'}
+                    </span>
+                    <span className="text-muted-foreground">
+                      ({log.entry?.exhibitor?.name ?? 'Unknown'})
+                    </span>
+                  </div>
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    {formatDate(log.createdAt)}
+                  </span>
+                </div>
+                {log.reason && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Reason: {log.reason}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
