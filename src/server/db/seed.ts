@@ -23,10 +23,16 @@ async function seed() {
       { name: 'Utility', sortOrder: 6 },
       { name: 'Working', sortOrder: 7 },
     ])
+    .onConflictDoNothing()
     .returning();
 
-  const groupMap = Object.fromEntries(groups.map((g) => [g.name, g.id]));
-  console.log(`  ✓ ${groups.length} breed groups created`);
+  // If groups already existed, fetch them
+  const allGroups = groups.length > 0
+    ? groups
+    : await db.query.breedGroups.findMany();
+
+  const groupMap = Object.fromEntries(allGroups.map((g) => [g.name, g.id]));
+  console.log(`  ✓ ${allGroups.length} breed groups (${groups.length} new)`);
 
   // ── Breeds (30 popular breeds) ────────────────────────────
   console.log('Creating breeds...');
@@ -71,10 +77,14 @@ async function seed() {
       { name: 'Great Dane', groupId: groupMap['Working'], kcBreedCode: 'GRD' },
       { name: 'Newfoundland', groupId: groupMap['Working'], kcBreedCode: 'NFD' },
     ])
+    .onConflictDoNothing()
     .returning();
 
-  const breedMap = Object.fromEntries(breeds.map((b) => [b.name, b.id]));
-  console.log(`  ✓ ${breeds.length} breeds created`);
+  const allBreeds = breeds.length > 0
+    ? breeds
+    : await db.query.breeds.findMany();
+  const breedMap = Object.fromEntries(allBreeds.map((b) => [b.name, b.id]));
+  console.log(`  ✓ ${allBreeds.length} breeds (${breeds.length} new)`);
 
   // ── Class Definitions (12 standard KC classes) ────────────
   console.log('Creating class definitions...');
@@ -101,10 +111,14 @@ async function seed() {
       { name: 'Junior Handler (12-16)', type: 'junior_handler' as const, minAgeMonths: 144, maxAgeMonths: 203, description: 'For handlers aged 12-16 years on the day of the show. Judged on handling skill, not the dog.' },
       { name: 'Junior Handler (17-24)', type: 'junior_handler' as const, minAgeMonths: 204, maxAgeMonths: 299, description: 'For handlers aged 17-24 years on the day of the show. Judged on handling skill, not the dog.' },
     ])
+    .onConflictDoNothing()
     .returning();
 
-  const classMap = Object.fromEntries(classDefs.map((c) => [c.name, c.id]));
-  console.log(`  ✓ ${classDefs.length} class definitions created`);
+  const allClassDefs = classDefs.length > 0
+    ? classDefs
+    : await db.query.classDefinitions.findMany();
+  const classMap = Object.fromEntries(allClassDefs.map((c) => [c.name, c.id]));
+  console.log(`  ✓ ${allClassDefs.length} class definitions (${classDefs.length} new)`);
 
   // ── Organisations ─────────────────────────────────────────
   console.log('Creating organisations...');
@@ -116,9 +130,13 @@ async function seed() {
       { name: 'Northern Counties All Breeds', type: 'general', contactEmail: 'entries@ncab.org.uk' },
       { name: 'Midland Counties Canine Society', type: 'general', contactEmail: 'secretary@midlandcounties.org.uk' },
     ])
+    .onConflictDoNothing()
     .returning();
 
-  console.log(`  ✓ ${orgs.length} organisations created`);
+  const allOrgs = orgs.length > 0
+    ? orgs
+    : await db.query.organisations.findMany();
+  console.log(`  ✓ ${allOrgs.length} organisations (${orgs.length} new)`);
 
   // ── Venues ────────────────────────────────────────────────
   console.log('Creating venues...');
@@ -130,9 +148,13 @@ async function seed() {
       { name: 'NEC Birmingham', address: 'North Ave, Marston Green', postcode: 'B40 1NT', lat: '52.4539', lng: '-1.7221', indoorOutdoor: 'indoor', capacity: 20000 },
       { name: 'Event City Manchester', address: 'Phoenix Way, Barton Dock Rd, Stretford', postcode: 'M17 8AS', lat: '53.4668', lng: '-2.3163', indoorOutdoor: 'indoor', capacity: 6000 },
     ])
+    .onConflictDoNothing()
     .returning();
 
-  console.log(`  ✓ ${venuesList.length} venues created`);
+  const allVenues = venuesList.length > 0
+    ? venuesList
+    : await db.query.venues.findMany();
+  console.log(`  ✓ ${allVenues.length} venues (${venuesList.length} new)`);
 
   // ── Judges ────────────────────────────────────────────────
   console.log('Creating judges...');
@@ -145,9 +167,10 @@ async function seed() {
       { name: 'Mr Robert Hughes', kcNumber: 'J45678' },
       { name: 'Mrs Helen Clarke', kcNumber: 'J56789' },
     ])
+    .onConflictDoNothing()
     .returning();
 
-  console.log(`  ✓ ${judgesList.length} judges created`);
+  console.log(`  ✓ ${judgesList.length} judges created (new)`);
 
   // ── Shows ─────────────────────────────────────────────────
   console.log('Creating shows...');
@@ -158,8 +181,8 @@ async function seed() {
         name: 'Yorkshire Canine Society Championship Show',
         showType: 'championship',
         showScope: 'general',
-        organisationId: orgs[0].id,
-        venueId: venuesList[0].id,
+        organisationId: allOrgs[0].id,
+        venueId: allVenues[0].id,
         startDate: '2026-05-16',
         endDate: '2026-05-18',
         entryCloseDate: new Date('2026-04-18T23:59:00Z'),
@@ -170,8 +193,8 @@ async function seed() {
         name: 'Border Collie Club Open Show',
         showType: 'open',
         showScope: 'single_breed',
-        organisationId: orgs[1].id,
-        venueId: venuesList[3].id,
+        organisationId: allOrgs[1].id,
+        venueId: allVenues[3].id,
         startDate: '2026-04-12',
         endDate: '2026-04-12',
         entryCloseDate: new Date('2026-03-28T23:59:00Z'),
@@ -182,8 +205,8 @@ async function seed() {
         name: 'Northern Counties All Breeds Open Show',
         showType: 'open',
         showScope: 'general',
-        organisationId: orgs[2].id,
-        venueId: venuesList[0].id,
+        organisationId: allOrgs[2].id,
+        venueId: allVenues[0].id,
         startDate: '2026-03-29',
         endDate: '2026-03-29',
         entryCloseDate: new Date('2026-03-14T23:59:00Z'),
@@ -194,8 +217,8 @@ async function seed() {
         name: 'Midland Counties Championship Show',
         showType: 'championship',
         showScope: 'general',
-        organisationId: orgs[3].id,
-        venueId: venuesList[1].id,
+        organisationId: allOrgs[3].id,
+        venueId: allVenues[1].id,
         startDate: '2026-06-20',
         endDate: '2026-06-22',
         entryCloseDate: new Date('2026-05-22T23:59:00Z'),
@@ -230,8 +253,8 @@ async function seed() {
         name: 'Autumn Working & Pastoral Open Show',
         showType: 'open',
         showScope: 'group',
-        organisationId: orgs[2].id,
-        venueId: venuesList[1].id,
+        organisationId: allOrgs[2].id,
+        venueId: allVenues[1].id,
         startDate: '2026-09-19',
         endDate: '2026-09-19',
         entryCloseDate: new Date('2026-09-05T23:59:00Z'),
@@ -242,8 +265,8 @@ async function seed() {
         name: 'NEC Premier Open Show',
         showType: 'premier_open',
         showScope: 'general',
-        organisationId: orgs[3].id,
-        venueId: venuesList[2].id,
+        organisationId: allOrgs[3].id,
+        venueId: allVenues[2].id,
         startDate: '2026-08-08',
         endDate: '2026-08-09',
         entryCloseDate: new Date('2026-07-25T23:59:00Z'),
@@ -251,9 +274,13 @@ async function seed() {
         description: 'Premier open show at the NEC. Group placings qualify for Crufts. Two days covering all seven breed groups.',
       },
     ])
+    .onConflictDoNothing()
     .returning();
 
-  console.log(`  ✓ ${showsList.length} shows created`);
+  const allShows = showsList.length > 0
+    ? showsList
+    : await db.query.shows.findMany();
+  console.log(`  ✓ ${allShows.length} shows (${showsList.length} new)`);
 
   // ── Show Classes (for open-entry shows) ───────────────────
   console.log('Creating show classes...');
@@ -264,6 +291,11 @@ async function seed() {
   ];
 
   let showClassCount = 0;
+
+  // Only create show classes if shows were newly inserted
+  if (showsList.length === 0) {
+    console.log('  ⏭ Shows already existed, skipping show class creation');
+  }
 
   // Championship shows — full class sets for selected breeds, both sexes
   for (const show of showsList.filter((s) => s.showType === 'championship')) {
@@ -309,13 +341,13 @@ async function seed() {
 
   // ── Summary ───────────────────────────────────────────────
   console.log('\n🎉 Seeding complete!\n');
-  console.log('  Breed Groups:      ', groups.length);
-  console.log('  Breeds:            ', breeds.length);
-  console.log('  Class Definitions: ', classDefs.length);
-  console.log('  Organisations:     ', orgs.length);
-  console.log('  Venues:            ', venuesList.length);
+  console.log('  Breed Groups:      ', allGroups.length);
+  console.log('  Breeds:            ', allBreeds.length);
+  console.log('  Class Definitions: ', allClassDefs.length);
+  console.log('  Organisations:     ', allOrgs.length);
+  console.log('  Venues:            ', allVenues.length);
   console.log('  Judges:            ', judgesList.length);
-  console.log('  Shows:             ', showsList.length);
+  console.log('  Shows:             ', allShows.length);
   console.log('  Show Classes:      ', showClassCount);
   console.log('\n  Your Remi database is ready to go! 🐾\n');
 
