@@ -116,18 +116,18 @@ function EntryCard({ entry }: { entry: RouterOutputs['entries']['list']['items']
   return (
     <Link href={`/entries/${entry.id}`}>
       <Card className={`transition-colors hover:bg-accent/30 ${isInactive ? 'opacity-60' : ''}`}>
-        <CardContent className="flex items-center gap-4 py-4">
+        <CardContent className="flex items-center gap-3 px-3 py-3 sm:gap-4 sm:px-4 sm:py-4 lg:px-6">
           <div className="hidden size-12 items-center justify-center rounded-lg bg-primary/10 sm:flex">
             <CalendarDays className="size-5 text-primary" />
           </div>
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex items-center gap-2">
-              <span className="truncate font-medium">{entry.show.name}</span>
+              <span className="truncate text-sm font-medium sm:text-base">{entry.show.name}</span>
               <Badge variant={status.variant} className="shrink-0">
                 {status.label}
               </Badge>
             </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+            <div className="flex flex-col gap-0.5 text-sm text-muted-foreground sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-1">
               <span className="flex items-center gap-1">
                 <Dog className="size-3.5" />
                 {entry.dog?.registeredName ?? 'Junior Handler'}

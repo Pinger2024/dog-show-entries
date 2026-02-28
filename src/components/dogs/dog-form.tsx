@@ -386,15 +386,15 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                           (e.g. the full registered name) if your dog isn&apos;t listed.
                         </p>
                       )}
-                      <div className="max-h-60 space-y-1 overflow-y-auto">
+                      <div className="max-h-[40vh] sm:max-h-60 space-y-1 overflow-y-auto overscroll-contain -webkit-overflow-scrolling-touch">
                         {kcResults.map((dog, i) => (
                           <button
                             key={i}
                             type="button"
                             onClick={() => applyKcResult(dog)}
-                            className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
+                            className="flex w-full flex-col gap-0.5 rounded-md border px-3 py-2.5 text-left text-sm transition-colors hover:bg-accent sm:flex-row sm:items-center sm:justify-between sm:gap-2 sm:py-2"
                           >
-                            <div>
+                            <div className="min-w-0">
                               <span className="font-medium">{dog.registeredName}</span>
                               <span className="ml-2 text-muted-foreground">
                                 {dog.breed}
@@ -423,7 +423,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
               Tell us about your dog.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3 sm:space-y-4">
             {/* Breed combobox */}
             <FormField
               control={form.control}
@@ -453,7 +453,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                     <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
                       <Command>
                         <CommandInput placeholder="Type to search breeds..." />
-                        <CommandList>
+                        <CommandList className="max-h-[60vh] sm:max-h-[300px]">
                           <CommandEmpty>
                             {breedsLoading
                               ? 'Loading breeds...'
@@ -604,7 +604,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
               entries.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3 sm:space-y-4">
             <FormField
               control={form.control}
               name="sireName"

@@ -310,7 +310,7 @@ export default function EnterShowPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-3xl px-4 py-6 pb-24 sm:py-8">
+    <div className="container mx-auto max-w-3xl px-3 py-6 pb-24 sm:px-4 sm:py-8 lg:px-6">
       {/* Header */}
       <div className="mb-6">
         <Link
@@ -320,31 +320,31 @@ export default function EnterShowPage() {
           <ChevronLeft className="size-4" />
           Back to show
         </Link>
-        <h1 className="mt-2 text-2xl font-bold">Enter {show.name}</h1>
-        <p className="text-sm text-muted-foreground">
+        <h1 className="mt-2 text-lg font-bold sm:text-xl lg:text-2xl">Enter {show.name}</h1>
+        <p className="text-xs text-muted-foreground sm:text-sm">
           {show.startDate} &middot; {show.venue?.name ?? 'Venue TBC'}
         </p>
       </div>
 
       {/* Step indicator */}
-      <nav className="mb-8">
-        <ol className="flex items-center gap-2">
+      <nav className="mb-6 sm:mb-8">
+        <ol className="flex items-center justify-between gap-1 sm:justify-start sm:gap-2">
           {displaySteps.map((s, i) => {
             const isCurrent = s.key === cart.step || (s.key === 'select_dog' && cart.step === 'junior_handler');
             const isComplete = i < stepIndex;
             return (
-              <li key={s.key} className="flex items-center gap-2">
+              <li key={s.key} className="flex items-center gap-1 sm:gap-2">
                 {i > 0 && (
                   <div
                     className={cn(
-                      'hidden h-px w-4 sm:block sm:w-8',
+                      'h-px w-3 sm:w-8',
                       isComplete ? 'bg-primary' : 'bg-border'
                     )}
                   />
                 )}
                 <div
                   className={cn(
-                    'flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors',
+                    'flex items-center justify-center gap-1.5 rounded-full px-2 py-1.5 text-xs font-medium transition-colors sm:px-3',
                     isCurrent && 'bg-primary text-primary-foreground',
                     isComplete && 'bg-primary/10 text-primary',
                     !isCurrent && !isComplete && 'text-muted-foreground'
@@ -365,8 +365,8 @@ export default function EnterShowPage() {
 
       {/* Cart badge */}
       {cart.entries.length > 0 && cart.step !== 'cart_review' && cart.step !== 'payment' && cart.step !== 'confirmation' && (
-        <div className="mb-4 flex items-center justify-between rounded-lg border bg-muted/50 px-4 py-2">
-          <div className="flex items-center gap-2 text-sm">
+        <div className="mb-4 flex items-center justify-between rounded-lg border bg-muted/50 px-3 py-2 sm:px-4">
+          <div className="flex items-center gap-2 text-xs sm:text-sm">
             <ShoppingCart className="size-4" />
             <span>
               {cart.entries.filter((e) => e.classIds.length > 0).length} entr
@@ -390,20 +390,20 @@ export default function EnterShowPage() {
       {/* Step: Entry Type */}
       {cart.step === 'entry_type' && (
         <div className="space-y-4">
-          <h2 className="text-lg font-semibold">What type of entry?</h2>
+          <h2 className="text-base font-semibold sm:text-lg">What type of entry?</h2>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
             <button
               type="button"
               onClick={() => cart.setEntryType('standard')}
-              className="flex items-start gap-3 rounded-xl border p-4 text-left transition-all hover:border-primary/50"
+              className="flex min-h-[44px] items-start gap-3 rounded-xl border p-3 text-left transition-all hover:border-primary/50 sm:p-4"
             >
               <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
                 <Dog className="size-5 text-primary" />
               </div>
               <div>
-                <p className="font-medium">Enter a Dog</p>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm font-medium sm:text-base">Enter a Dog</p>
+                <p className="text-xs text-muted-foreground sm:text-sm">
                   Standard breed class entry for your registered dog.
                 </p>
               </div>
@@ -412,14 +412,14 @@ export default function EnterShowPage() {
             <button
               type="button"
               onClick={() => cart.setEntryType('junior_handler')}
-              className="flex items-start gap-3 rounded-xl border p-4 text-left transition-all hover:border-primary/50"
+              className="flex min-h-[44px] items-start gap-3 rounded-xl border p-3 text-left transition-all hover:border-primary/50 sm:p-4"
             >
               <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-900/30">
                 <Users className="size-5 text-orange-600 dark:text-orange-400" />
               </div>
               <div>
-                <p className="font-medium">Junior Handler</p>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm font-medium sm:text-base">Junior Handler</p>
+                <p className="text-xs text-muted-foreground sm:text-sm">
                   Handler aged 6-24, judged on handling skill.
                 </p>
               </div>
@@ -431,14 +431,14 @@ export default function EnterShowPage() {
       {/* Step: Select Dog */}
       {cart.step === 'select_dog' && (
         <div className="space-y-4">
-          <h2 className="text-lg font-semibold">Which dog are you entering?</h2>
+          <h2 className="text-base font-semibold sm:text-lg">Which dog are you entering?</h2>
 
           {dogsLoading ? (
             <div className="flex justify-center py-12">
               <Loader2 className="size-6 animate-spin text-muted-foreground" />
             </div>
           ) : dogs && dogs.length > 0 ? (
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
               {dogs.map((dog) => (
                 <button
                   key={dog.id}
@@ -450,7 +450,7 @@ export default function EnterShowPage() {
                       dog.breed?.name ?? ''
                     )
                   }
-                  className="flex items-start gap-3 rounded-xl border p-4 text-left transition-all hover:border-primary/50"
+                  className="flex min-h-[44px] items-start gap-3 rounded-xl border p-3 text-left transition-all hover:border-primary/50 sm:p-4"
                 >
                   <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
                     <Dog className="size-5 text-primary" />
@@ -541,11 +541,12 @@ export default function EnterShowPage() {
           </div>
 
           <div className="flex gap-2 pt-4">
-            <Button variant="outline" onClick={() => cart.setStep('entry_type')}>
+            <Button variant="outline" className="h-11 flex-1 text-sm sm:flex-none" onClick={() => cart.setStep('entry_type')}>
               <ChevronLeft className="size-4" />
               Back
             </Button>
             <Button
+              className="h-11 flex-1 text-sm sm:flex-none"
               onClick={() => {
                 cart.setJHDetails(jhName, jhDob, jhKcNumber || undefined);
                 setJhName('');
@@ -565,8 +566,8 @@ export default function EnterShowPage() {
       {cart.step === 'select_classes' && (
         <div className="space-y-6">
           <div>
-            <h2 className="text-lg font-semibold">Select classes</h2>
-            <p className="text-sm text-muted-foreground">
+            <h2 className="text-base font-semibold sm:text-lg">Select classes</h2>
+            <p className="text-xs text-muted-foreground sm:text-sm">
               {cart.activeEntry?.entryType === 'standard'
                 ? `Choose classes for ${cart.activeEntry?.dogName ?? 'your dog'}`
                 : `Choose classes for ${cart.activeEntry?.handlerName ?? 'the handler'}`}
@@ -647,18 +648,19 @@ export default function EnterShowPage() {
           )}
 
           {/* Running total */}
-          <div className="sticky bottom-0 rounded-lg border bg-background p-4 shadow-sm">
-            <div className="flex items-center justify-between">
+          <div className="sticky bottom-0 rounded-lg border bg-background p-3 shadow-sm sm:p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground sm:text-sm">
                   {selectedClassIds.length} class
                   {selectedClassIds.length !== 1 ? 'es' : ''} selected
                 </p>
-                <p className="text-lg font-bold">{formatFee(selectedTotal)}</p>
+                <p className="text-base font-bold sm:text-lg">{formatFee(selectedTotal)}</p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex w-full gap-2 sm:w-auto">
                 <Button
                   variant="outline"
+                  className="h-11 flex-1 text-sm sm:flex-none"
                   onClick={() => {
                     if (cart.editingExisting) {
                       cart.setStep('cart_review');
@@ -675,6 +677,7 @@ export default function EnterShowPage() {
                   Back
                 </Button>
                 <Button
+                  className="h-11 flex-1 text-sm sm:flex-none"
                   onClick={handleConfirmClasses}
                   disabled={selectedClassIds.length === 0}
                 >
@@ -690,7 +693,7 @@ export default function EnterShowPage() {
       {/* Step: Cart Review */}
       {cart.step === 'cart_review' && (
         <div className="space-y-6">
-          <h2 className="text-lg font-semibold">Review your entries</h2>
+          <h2 className="text-base font-semibold sm:text-lg">Review your entries</h2>
 
           {/* Show info */}
           <Card>
@@ -770,8 +773,8 @@ export default function EnterShowPage() {
           </Button>
 
           {/* Grand total */}
-          <div className="rounded-lg border bg-muted/50 p-4">
-            <div className="flex justify-between text-base font-bold">
+          <div className="rounded-lg border bg-muted/50 p-3 sm:p-4">
+            <div className="flex justify-between text-sm font-bold sm:text-base">
               <span>Grand Total</span>
               <span>{formatFee(cart.grandTotal)}</span>
             </div>
@@ -815,7 +818,7 @@ export default function EnterShowPage() {
           )}
 
           <Button
-            className="w-full"
+            className="h-11 w-full text-sm sm:text-base"
             size="lg"
             onClick={handleProceedToPayment}
             disabled={
@@ -842,7 +845,7 @@ export default function EnterShowPage() {
       {/* Step: Payment */}
       {cart.step === 'payment' && clientSecret && (
         <div className="space-y-6">
-          <h2 className="text-lg font-semibold">Payment</h2>
+          <h2 className="text-base font-semibold sm:text-lg">Payment</h2>
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
@@ -869,11 +872,11 @@ export default function EnterShowPage() {
       {/* Step: Confirmation */}
       {cart.step === 'confirmation' && (
         <div className="space-y-6 text-center">
-          <div className="mx-auto flex size-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30">
+          <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30 sm:size-16">
             <CheckCircle2 className="size-8 text-green-600 dark:text-green-400" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold">
+            <h2 className="text-xl font-bold sm:text-2xl">
               {cart.entries.length === 1 ? 'Entry' : 'Entries'} Confirmed!
             </h2>
             <p className="mt-2 text-muted-foreground">
@@ -998,7 +1001,7 @@ function ClassGroup({
             <label
               key={sc.id}
               className={cn(
-                'flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-all hover:bg-accent/50',
+                'flex min-h-[44px] cursor-pointer items-start gap-2 rounded-lg border p-3 transition-all hover:bg-accent/50 sm:gap-3',
                 isSelected && 'border-primary bg-primary/5'
               )}
             >

@@ -34,7 +34,7 @@ export function StewardShell({ user, children }: StewardShellProps) {
   return (
     <div className="flex min-h-screen flex-col">
       {/* Top header */}
-      <header className="flex h-14 items-center justify-between border-b px-4">
+      <header className="flex h-14 items-center justify-between border-b px-3 sm:px-4">
         <div className="flex items-center gap-2">
           <Link
             href="/"
@@ -74,7 +74,7 @@ export function StewardShell({ user, children }: StewardShellProps) {
 
       {/* Main content — full width for phone-first */}
       <main className="flex-1 overflow-y-auto pb-20 md:pb-8">
-        <div className="mx-auto max-w-2xl px-4 py-6">
+        <div className="mx-auto max-w-2xl px-3 py-6 sm:px-4">
           {children}
         </div>
       </main>
@@ -89,7 +89,7 @@ export function StewardShell({ user, children }: StewardShellProps) {
               key={item.href}
               href={item.href}
               className={cn(
-                'flex flex-1 flex-col items-center gap-1 py-3 text-xs font-medium transition-colors',
+                'flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[10px] sm:text-xs font-medium transition-colors',
                 isActive
                   ? 'text-blue-600'
                   : 'text-muted-foreground hover:text-foreground'

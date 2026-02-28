@@ -89,7 +89,7 @@ function BreedSection({
     <div className="overflow-hidden rounded-lg border border-border/60 bg-white">
       <button
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30"
+        className="flex w-full items-center gap-2 px-3 py-3 text-left transition-colors hover:bg-muted/30 sm:gap-3 sm:px-4"
       >
         <Dog className="size-5 shrink-0 text-muted-foreground/50" />
         <div className="min-w-0 flex-1">
@@ -190,7 +190,7 @@ export default function ShowDetailPage() {
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute -right-32 -top-32 h-80 w-80 rounded-full bg-primary/[0.06] blur-3xl" />
         </div>
-        <div className="relative mx-auto max-w-4xl px-4 pb-8 pt-6 sm:px-6 sm:pt-10">
+        <div className="relative mx-auto max-w-4xl px-3 pb-8 pt-6 sm:px-4 sm:pt-10 lg:px-6">
           <Link
             href="/shows"
             className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -220,7 +220,7 @@ export default function ShowDetailPage() {
                   </Badge>
                 )}
               </div>
-              <h1 className="mt-2 font-serif text-2xl font-bold tracking-tight sm:text-3xl">
+              <h1 className="mt-2 font-serif text-lg font-bold tracking-tight sm:text-2xl lg:text-3xl">
                 {show.name}
               </h1>
 
@@ -256,9 +256,9 @@ export default function ShowDetailPage() {
                 )}
               </div>
             </div>
-            <div className="flex shrink-0 flex-wrap gap-2">
+            <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
               {isOpen && (
-                <Button size="lg" className="shadow-sm" asChild>
+                <Button size="lg" className="h-11 w-full shadow-sm sm:w-auto" asChild>
                   <Link href={`/shows/${showId}/enter`}>
                     <Ticket className="size-4" />
                     Enter This Show
@@ -266,7 +266,7 @@ export default function ShowDetailPage() {
                 </Button>
               )}
               {hasResults && (
-                <Button size="lg" variant={isOpen ? 'outline' : 'default'} className="shadow-sm" asChild>
+                <Button size="lg" variant={isOpen ? 'outline' : 'default'} className="h-11 w-full shadow-sm sm:w-auto" asChild>
                   <Link href={`/shows/${showId}/results`}>
                     <Trophy className="size-4" />
                     {show.status === 'in_progress' ? 'Live Results' : 'View Results'}
@@ -285,9 +285,9 @@ export default function ShowDetailPage() {
       </div>
 
       {/* ─── Content ──────────────────────────── */}
-      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+      <div className="mx-auto max-w-4xl px-3 py-6 sm:px-4 sm:py-8 lg:px-6">
         {/* Info cards row */}
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
           {/* Show information */}
           <Card>
             <CardHeader className="pb-3">
@@ -296,22 +296,22 @@ export default function ShowDetailPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2.5 text-sm">
-              <div className="flex justify-between">
+              <div className="flex flex-col sm:flex-row sm:justify-between">
                 <span className="text-muted-foreground">Type</span>
                 <span className="font-medium">{showTypeLabels[show.showType] ?? show.showType}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex flex-col sm:flex-row sm:justify-between">
                 <span className="text-muted-foreground">Scope</span>
                 <span className="font-medium capitalize">{show.showScope.replace(/_/g, ' ')}</span>
               </div>
               {show.kcLicenceNo && (
-                <div className="flex justify-between">
+                <div className="flex flex-col sm:flex-row sm:justify-between">
                   <span className="text-muted-foreground">KC Licence</span>
                   <span className="font-medium">{show.kcLicenceNo}</span>
                 </div>
               )}
               {show.entryCloseDate && (
-                <div className="flex justify-between">
+                <div className="flex flex-col sm:flex-row sm:justify-between">
                   <span className="text-muted-foreground">Entries Close</span>
                   <span className="font-medium">
                     {format(new Date(show.entryCloseDate), 'dd MMM yyyy, HH:mm')}
@@ -319,13 +319,13 @@ export default function ShowDetailPage() {
                 </div>
               )}
               {breeds.length > 0 && (
-                <div className="flex justify-between">
+                <div className="flex flex-col sm:flex-row sm:justify-between">
                   <span className="text-muted-foreground">Breeds</span>
                   <span className="font-medium">{breeds.length}</span>
                 </div>
               )}
               {show.showClasses && show.showClasses.length > 0 && (
-                <div className="flex justify-between">
+                <div className="flex flex-col sm:flex-row sm:justify-between">
                   <span className="text-muted-foreground">Total Classes</span>
                   <span className="font-medium">{show.showClasses.length}</span>
                 </div>

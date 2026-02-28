@@ -260,14 +260,14 @@ export default function NewShowPage() {
     <div className="space-y-6 pb-16 md:pb-0">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Create New Show</h1>
-        <p className="mt-1 text-muted-foreground">
+        <h1 className="text-lg font-bold tracking-tight sm:text-xl lg:text-2xl">Create New Show</h1>
+        <p className="mt-1 text-sm text-muted-foreground sm:text-base">
           Set up a new show in {STEPS.length} steps.
         </p>
       </div>
 
       {/* Step indicator */}
-      <nav className="flex items-center gap-1 overflow-x-auto">
+      <nav className="flex items-center gap-1 overflow-x-auto pb-1 -mb-1">
         {STEPS.map((label, i) => (
           <button
             key={label}
@@ -275,7 +275,7 @@ export default function NewShowPage() {
             onClick={() => i < step && setStep(i)}
             disabled={i > step}
             className={cn(
-              'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors',
+              'flex items-center gap-1.5 rounded-lg px-2 py-2 text-xs font-medium whitespace-nowrap transition-colors sm:gap-2 sm:px-3 sm:text-sm',
               i === step
                 ? 'bg-primary text-primary-foreground'
                 : i < step
@@ -966,22 +966,24 @@ export default function NewShowPage() {
           {step === 4 && <ReviewStep form={form} organisations={organisations} venues={venues ?? []} classDefinitions={classDefinitions ?? []} createVenue={createVenue} />}
 
           {/* Navigation */}
-          <div className="mt-6 flex items-center justify-between">
+          <div className="mt-6 flex items-center justify-between gap-2">
             <Button
               type="button"
               variant="outline"
+              className="min-h-[2.75rem] sm:min-h-0"
               onClick={() => (step === 0 ? router.back() : setStep(step - 1))}
             >
               <ArrowLeft className="size-4" />
               {step === 0 ? 'Cancel' : 'Back'}
             </Button>
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {step === 4 ? (
                 <>
                   <Button
                     type="button"
                     variant="outline"
+                    className="min-h-[2.75rem] text-xs sm:min-h-0 sm:text-sm"
                     disabled={isSubmitting}
                     onClick={() => onSubmit(form.getValues(), true)}
                   >
@@ -992,6 +994,7 @@ export default function NewShowPage() {
                   </Button>
                   <Button
                     type="button"
+                    className="min-h-[2.75rem] text-xs sm:min-h-0 sm:text-sm"
                     disabled={isSubmitting}
                     onClick={() => onSubmit(form.getValues(), false)}
                   >
@@ -1004,6 +1007,7 @@ export default function NewShowPage() {
               ) : (
                 <Button
                   type="button"
+                  className="min-h-[2.75rem] sm:min-h-0"
                   disabled={!canProceed()}
                   onClick={() => setStep(step + 1)}
                 >

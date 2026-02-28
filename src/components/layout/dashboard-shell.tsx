@@ -174,7 +174,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
         </header>
 
         {/* Mobile header */}
-        <header className="flex h-16 items-center justify-between border-b px-4 md:hidden">
+        <header className="flex h-16 items-center justify-between border-b px-3 sm:px-4 md:hidden">
           <Link href="/" className="font-serif text-xl font-bold tracking-tight text-primary">
             Remi
           </Link>
@@ -190,7 +190,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-6xl px-4 py-8 pb-24 sm:px-6 md:pb-8 lg:px-8">
+          <div className="mx-auto max-w-6xl px-3 py-8 pb-24 sm:px-4 md:pb-8 lg:px-8">
             {children}
           </div>
         </main>
@@ -206,14 +206,14 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'flex flex-1 flex-col items-center gap-1 py-3 text-xs font-medium transition-colors',
+                  'flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[10px] sm:text-xs font-medium transition-colors',
                   isActive
                     ? 'text-primary'
                     : 'text-muted-foreground hover:text-foreground'
                 )}
               >
                 <item.icon className="size-5" />
-                <span>{item.label}</span>
+                <span className="truncate max-w-[60px]">{item.label}</span>
               </Link>
             );
           })}

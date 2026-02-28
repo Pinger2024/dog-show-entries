@@ -188,16 +188,16 @@ export default function ManageShowPage({
   return (
     <div className="space-y-6 pb-16 md:pb-0">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div className="min-w-0">
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" asChild className="-ml-2">
               <Link href="/secretary">
                 <ArrowLeft className="size-4" />
               </Link>
             </Button>
-            <h1 className="text-2xl font-bold tracking-tight">{show.name}</h1>
-            <Badge variant={showStatus.variant}>{showStatus.label}</Badge>
+            <h1 className="truncate text-lg font-bold tracking-tight sm:text-2xl">{show.name}</h1>
+            <Badge variant={showStatus.variant} className="shrink-0">{showStatus.label}</Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
             {show.organisation?.name}
@@ -205,7 +205,7 @@ export default function ManageShowPage({
           </p>
         </div>
         <Select onValueChange={handleStatusChange} value={show.status}>
-          <SelectTrigger className="w-44">
+          <SelectTrigger className="w-full sm:w-44">
             <SelectValue placeholder="Change status" />
           </SelectTrigger>
           <SelectContent>
@@ -247,21 +247,21 @@ export default function ManageShowPage({
 
       {/* Tabs */}
       <Tabs defaultValue="overview">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="entries">Entries</TabsTrigger>
-          <TabsTrigger value="financial">Financial</TabsTrigger>
-          <TabsTrigger value="catalogue">Catalogue</TabsTrigger>
-          <TabsTrigger value="reports">Reports</TabsTrigger>
-          <TabsTrigger value="judges">Judges</TabsTrigger>
-          <TabsTrigger value="rings">Rings</TabsTrigger>
-          <TabsTrigger value="stewards">Stewards</TabsTrigger>
+        <TabsList className="h-auto flex-wrap">
+          <TabsTrigger value="overview" className="text-xs sm:text-sm">Overview</TabsTrigger>
+          <TabsTrigger value="entries" className="text-xs sm:text-sm">Entries</TabsTrigger>
+          <TabsTrigger value="financial" className="text-xs sm:text-sm">Financial</TabsTrigger>
+          <TabsTrigger value="catalogue" className="text-xs sm:text-sm">Catalogue</TabsTrigger>
+          <TabsTrigger value="reports" className="text-xs sm:text-sm">Reports</TabsTrigger>
+          <TabsTrigger value="judges" className="text-xs sm:text-sm">Judges</TabsTrigger>
+          <TabsTrigger value="rings" className="text-xs sm:text-sm">Rings</TabsTrigger>
+          <TabsTrigger value="stewards" className="text-xs sm:text-sm">Stewards</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-6">
           {/* Quick stats */}
-          <div className="grid gap-4 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
             <Card>
               <CardHeader className="flex-row items-center justify-between pb-2">
                 <CardDescription className="text-sm font-medium">
@@ -539,21 +539,22 @@ function EntriesTab({
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
           <div>
-            <CardTitle>Entries ({total})</CardTitle>
+            <CardTitle className="text-base sm:text-lg">Entries ({total})</CardTitle>
             <CardDescription>
               All entries for this show
             </CardDescription>
           </div>
-          <div className="flex gap-2">
-            <Button size="sm" onClick={() => setShowAddEntry(true)}>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" className="min-h-[2.75rem] sm:min-h-0" onClick={() => setShowAddEntry(true)}>
               <Plus className="size-4" />
               Add Entry
             </Button>
             <Button
               variant="outline"
               size="sm"
+              className="min-h-[2.75rem] sm:min-h-0"
               onClick={exportCsv}
               disabled={filtered.length === 0}
             >
@@ -606,16 +607,17 @@ function EntriesTab({
             </p>
           </div>
         ) : (
+          <div className="overflow-x-auto -mx-3 px-3 sm:-mx-4 sm:px-4 lg:-mx-6 lg:px-6">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Exhibitor</TableHead>
                 <TableHead>Dog</TableHead>
-                <TableHead>Breed</TableHead>
+                <TableHead className="hidden sm:table-cell">Breed</TableHead>
                 <TableHead>Classes</TableHead>
                 <TableHead>Fee</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Date</TableHead>
+                <TableHead className="hidden sm:table-cell">Date</TableHead>
                 <TableHead className="w-10" />
               </TableRow>
             </TableHeader>
@@ -645,7 +647,7 @@ function EntriesTab({
                         </Badge>
                       )}
                     </TableCell>
-                    <TableCell>{entry.dog?.breed?.name ?? '—'}</TableCell>
+                    <TableCell className="hidden sm:table-cell">{entry.dog?.breed?.name ?? '—'}</TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
                         {entry.entryClasses.map((ec, i) => (
@@ -663,7 +665,7 @@ function EntriesTab({
                     <TableCell>
                       <Badge variant={es.variant}>{es.label}</Badge>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="hidden sm:table-cell text-muted-foreground">
                       {formatDate(entry.createdAt)}
                     </TableCell>
                     <TableCell>
@@ -682,6 +684,7 @@ function EntriesTab({
               })}
             </TableBody>
           </Table>
+          </div>
         )}
       </CardContent>
 

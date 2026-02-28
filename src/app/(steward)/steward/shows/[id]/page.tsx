@@ -63,15 +63,15 @@ export default function StewardShowPage({
     <div>
       <Link
         href="/steward"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        className="inline-flex items-center gap-1 text-xs sm:text-sm text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="size-4" />
+        <ArrowLeft className="size-3.5 sm:size-4" />
         My Shows
       </Link>
 
       {/* Progress section */}
-      <div className="mt-4">
-        <div className="flex items-center justify-between text-sm">
+      <div className="mt-3 sm:mt-4">
+        <div className="flex items-center justify-between text-xs sm:text-sm">
           <span className="font-medium">
             {judged} of {total} classes judged
           </span>
@@ -81,10 +81,10 @@ export default function StewardShowPage({
       </div>
 
       {/* Classes grouped by breed */}
-      <div className="mt-6 space-y-6">
+      <div className="mt-4 sm:mt-6 space-y-4 sm:space-y-6">
         {breeds.map(([breedName, breedClasses]) => (
           <div key={breedName}>
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            <h2 className="mb-2 text-xs sm:text-sm font-semibold uppercase tracking-wider text-muted-foreground">
               {breedName}
             </h2>
             <div className="space-y-1">
@@ -92,7 +92,7 @@ export default function StewardShowPage({
                 <Link
                   key={sc.id}
                   href={`/steward/shows/${showId}/classes/${sc.id}`}
-                  className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/30 active:bg-muted/50"
+                  className="flex items-center gap-2 sm:gap-3 rounded-lg border p-2.5 sm:p-3 transition-colors hover:bg-muted/30 active:bg-muted/50"
                 >
                   {sc.hasResults ? (
                     <CheckCircle2 className="size-5 shrink-0 text-green-500" />
@@ -100,13 +100,13 @@ export default function StewardShowPage({
                     <div className="size-5 shrink-0 rounded-full border-2 border-muted-foreground/20" />
                   )}
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 sm:gap-2">
                       {sc.classNumber != null && (
                         <span className="text-xs font-bold text-muted-foreground">
                           #{sc.classNumber}
                         </span>
                       )}
-                      <span className="font-medium text-sm">
+                      <span className="font-medium text-xs sm:text-sm">
                         {sc.classDefinition.name}
                       </span>
                       {sc.sex && (

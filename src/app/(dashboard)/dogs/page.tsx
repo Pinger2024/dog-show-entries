@@ -138,10 +138,10 @@ export default function DogsPage() {
                     key={dog.id}
                     className="transition-all hover:border-primary/20 hover:shadow-md hover:shadow-primary/5"
                   >
-                    <CardHeader className="pb-3">
+                    <CardHeader className="p-3 pb-2 sm:p-4 sm:pb-3 lg:p-6 lg:pb-3">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
-                          <CardTitle className="truncate text-lg">
+                          <CardTitle className="truncate text-base sm:text-lg">
                             {dog.registeredName}
                           </CardTitle>
                           <CardDescription className="mt-0.5">
@@ -153,7 +153,7 @@ export default function DogsPage() {
                         </div>
                       </div>
                     </CardHeader>
-                    <CardContent className="space-y-3">
+                    <CardContent className="space-y-3 p-3 pt-0 sm:p-4 sm:pt-0 lg:p-6 lg:pt-0">
                       <div className="flex flex-wrap gap-2">
                         <Badge variant="secondary">
                           {dog.sex === 'dog' ? 'Dog' : 'Bitch'}
@@ -177,20 +177,20 @@ export default function DogsPage() {
                       )}
 
                       {/* Actions */}
-                      <div className="flex gap-2 pt-1">
-                        <Button variant="outline" size="sm" asChild>
+                      <div className="flex flex-wrap gap-1.5 sm:gap-2 pt-1">
+                        <Button variant="outline" size="sm" className="min-h-[2.75rem] sm:min-h-0" asChild>
                           <Link href={`/dogs/${dog.id}`}>
                             <Eye className="size-3.5" />
                             View
                           </Link>
                         </Button>
-                        <Button variant="outline" size="sm" asChild>
+                        <Button variant="outline" size="sm" className="min-h-[2.75rem] sm:min-h-0" asChild>
                           <Link href={`/dogs/${dog.id}/edit`}>
                             <Pencil className="size-3.5" />
                             Edit
                           </Link>
                         </Button>
-                        <Button variant="outline" size="sm" asChild>
+                        <Button variant="outline" size="sm" className="min-h-[2.75rem] sm:min-h-0" asChild>
                           <Link href="/shows">
                             <Ticket className="size-3.5" />
                             Enter

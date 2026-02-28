@@ -60,11 +60,11 @@ export function PricingCards() {
   return (
     <div>
       {/* Club type toggle */}
-      <div className="mx-auto flex w-fit items-center rounded-xl border bg-card p-1.5 shadow-sm">
+      <div className="mx-auto flex w-fit items-center rounded-xl border bg-card p-1 shadow-sm sm:p-1.5">
         <button
           onClick={() => setClubType('single')}
           className={cn(
-            'rounded-lg px-5 py-2.5 text-[0.9375rem] font-medium transition-all',
+            'rounded-lg px-3 py-2.5 text-xs font-medium transition-all sm:px-5 sm:text-[0.9375rem]',
             clubType === 'single'
               ? 'bg-primary text-primary-foreground shadow-sm'
               : 'text-muted-foreground hover:text-foreground'
@@ -75,7 +75,7 @@ export function PricingCards() {
         <button
           onClick={() => setClubType('multi')}
           className={cn(
-            'rounded-lg px-5 py-2.5 text-[0.9375rem] font-medium transition-all',
+            'rounded-lg px-3 py-2.5 text-xs font-medium transition-all sm:px-5 sm:text-[0.9375rem]',
             clubType === 'multi'
               ? 'bg-primary text-primary-foreground shadow-sm'
               : 'text-muted-foreground hover:text-foreground'
@@ -86,14 +86,14 @@ export function PricingCards() {
       </div>
 
       {/* Pricing cards */}
-      <div className="mx-auto mt-12 grid max-w-4xl gap-8 lg:grid-cols-2">
+      <div className="mx-auto mt-8 grid max-w-4xl grid-cols-1 gap-6 sm:mt-12 sm:gap-8 lg:grid-cols-2">
         {/* DIY Card */}
         <Card className="relative flex flex-col transition-all hover:shadow-lg hover:shadow-primary/5">
           <CardHeader>
             <div className="mb-2 flex size-12 items-center justify-center rounded-xl bg-primary/10">
               <Wrench className="size-6 text-primary" strokeWidth={1.5} />
             </div>
-            <CardTitle className="font-serif text-2xl font-bold">
+            <CardTitle className="font-serif text-xl font-bold sm:text-2xl">
               DIY
             </CardTitle>
             <CardDescription className="text-[0.9375rem] leading-relaxed">
@@ -104,10 +104,10 @@ export function PricingCards() {
           <CardContent className="flex-1">
             <div className="mb-6">
               <div className="flex items-baseline gap-1">
-                <span className="font-serif text-4xl font-bold tracking-tight">
+                <span className="font-serif text-3xl font-bold tracking-tight sm:text-4xl">
                   &pound;{plans.diy.annual}
                 </span>
-                <span className="text-muted-foreground">/year</span>
+                <span className="text-sm text-muted-foreground sm:text-base">/year</span>
               </div>
               <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[0.9375rem] text-muted-foreground">
                 <span>
@@ -162,7 +162,7 @@ export function PricingCards() {
             <div className="mb-2 flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
               <Sparkles className="size-6" strokeWidth={1.5} />
             </div>
-            <CardTitle className="font-serif text-2xl font-bold">
+            <CardTitle className="font-serif text-xl font-bold sm:text-2xl">
               Managed
             </CardTitle>
             <CardDescription className="text-[0.9375rem] leading-relaxed">
@@ -173,10 +173,10 @@ export function PricingCards() {
           <CardContent className="flex-1">
             <div className="mb-6">
               <div className="flex items-baseline gap-1">
-                <span className="font-serif text-4xl font-bold tracking-tight">
+                <span className="font-serif text-3xl font-bold tracking-tight sm:text-4xl">
                   &pound;{plans.managed.annual}
                 </span>
-                <span className="text-muted-foreground">/year</span>
+                <span className="text-sm text-muted-foreground sm:text-base">/year</span>
               </div>
               <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[0.9375rem] text-muted-foreground">
                 <span>
@@ -228,7 +228,7 @@ export function PricingCards() {
       </div>
 
       {/* Entry fee note */}
-      <p className="mx-auto mt-8 max-w-2xl text-center text-[0.9375rem] leading-relaxed text-muted-foreground">
+      <p className="mx-auto mt-6 max-w-2xl px-3 text-center text-sm leading-relaxed text-muted-foreground sm:mt-8 sm:px-0 sm:text-[0.9375rem]">
         Entry fees are collected from exhibitors at the point of entry and passed
         directly to your club via Stripe, minus the per-entry platform fee.
         No hidden costs.

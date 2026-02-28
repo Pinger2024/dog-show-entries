@@ -75,9 +75,9 @@ export default function SecretaryDashboardPage() {
   return (
     <div className="space-y-8 pb-16 md:pb-0">
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+          <h1 className="text-lg font-bold tracking-tight sm:text-xl lg:text-3xl">
             Secretary Dashboard
           </h1>
           <p className="mt-1 text-muted-foreground">
@@ -93,7 +93,7 @@ export default function SecretaryDashboardPage() {
       </div>
 
       {/* Stats — scoped to active shows */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-4">
         <Card>
           <CardHeader className="flex-row items-center justify-between pb-2">
             <CardDescription className="text-sm font-medium">
@@ -102,7 +102,7 @@ export default function SecretaryDashboardPage() {
             <CalendarDays className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">{activeShowsCount}</p>
+            <p className="text-2xl font-bold sm:text-3xl">{activeShowsCount}</p>
           </CardContent>
         </Card>
         <Card>
@@ -113,7 +113,7 @@ export default function SecretaryDashboardPage() {
             <Ticket className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">{totalEntries}</p>
+            <p className="text-2xl font-bold sm:text-3xl">{totalEntries}</p>
           </CardContent>
         </Card>
         <Card>
@@ -124,7 +124,7 @@ export default function SecretaryDashboardPage() {
             <PoundSterling className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">{formatCurrency(activeRevenue)}</p>
+            <p className="text-2xl font-bold sm:text-3xl">{formatCurrency(activeRevenue)}</p>
           </CardContent>
         </Card>
       </div>
@@ -132,7 +132,7 @@ export default function SecretaryDashboardPage() {
       {/* Shows list with tabs */}
       <Tabs defaultValue="active">
         <TabsList>
-          <TabsTrigger value="active">
+          <TabsTrigger value="active" className="text-xs sm:text-sm">
             Active Shows
             {activeShows.length > 0 && (
               <Badge variant="secondary" className="ml-2">
@@ -140,7 +140,7 @@ export default function SecretaryDashboardPage() {
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="past">
+          <TabsTrigger value="past" className="text-xs sm:text-sm">
             Past & Cancelled
             {pastShows.length > 0 && (
               <Badge variant="secondary" className="ml-2">
@@ -239,7 +239,7 @@ function ShowList({
           <Link
             key={show.id}
             href={`/secretary/shows/${show.id}`}
-            className="flex items-center justify-between rounded-lg border p-4 transition-colors hover:bg-muted/50"
+            className="flex items-center justify-between rounded-lg border p-3 transition-colors hover:bg-muted/50 sm:p-4"
           >
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">

@@ -56,7 +56,7 @@ export function PaymentForm({ amount, onSuccess, onBack }: PaymentFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
       <PaymentElement
         options={{
           layout: 'tabs',
@@ -69,10 +69,11 @@ export function PaymentForm({ amount, onSuccess, onBack }: PaymentFormProps) {
         </div>
       )}
 
-      <div className="flex gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row">
         <Button
           type="button"
           variant="outline"
+          className="h-11 text-sm"
           onClick={onBack}
           disabled={isProcessing}
         >
@@ -81,7 +82,7 @@ export function PaymentForm({ amount, onSuccess, onBack }: PaymentFormProps) {
         </Button>
         <Button
           type="submit"
-          className="flex-1"
+          className="h-11 flex-1 text-sm"
           disabled={!stripe || isProcessing}
         >
           {isProcessing ? (

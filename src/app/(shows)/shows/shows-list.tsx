@@ -190,7 +190,7 @@ export default function ShowsList() {
   return (
     <>
       {/* ─── Filters ─────────────────────────────── */}
-      <div className="mb-2 flex flex-col gap-3 sm:flex-row">
+      <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/60" />
           <Input
@@ -200,32 +200,34 @@ export default function ShowsList() {
             className="h-11 rounded-xl border-border/60 bg-white pl-10 shadow-sm transition-shadow focus-visible:shadow-md"
           />
         </div>
-        <Select value={showType} onValueChange={setShowType}>
-          <SelectTrigger className="h-11 w-full rounded-xl border-border/60 bg-white shadow-sm sm:w-[170px]">
-            <SelectValue placeholder="Show Type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Types</SelectItem>
-            {Object.entries(showTypeLabels).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="h-11 w-full rounded-xl border-border/60 bg-white shadow-sm sm:w-[170px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            {Object.entries(statusLabels).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-3">
+          <Select value={showType} onValueChange={setShowType}>
+            <SelectTrigger className="h-11 w-full rounded-xl border-border/60 bg-white shadow-sm sm:w-[170px]">
+              <SelectValue placeholder="Show Type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              {Object.entries(showTypeLabels).map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={status} onValueChange={setStatus}>
+            <SelectTrigger className="h-11 w-full rounded-xl border-border/60 bg-white shadow-sm sm:w-[170px]">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              {Object.entries(statusLabels).map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <FilterPills
@@ -281,7 +283,7 @@ export default function ShowsList() {
                   Accepting Entries
                 </h2>
               </div>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
                 {openShows.map((show) => (
                   <ShowCard key={show.id} show={show} />
                 ))}
@@ -300,7 +302,7 @@ export default function ShowsList() {
                   </h2>
                 </div>
               )}
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
                 {otherShows.map((show) => (
                   <ShowCard key={show.id} show={show} />
                 ))}
@@ -336,7 +338,7 @@ function ShowCard({ show }: { show: {
         {/* Colored top accent bar */}
         <div className={`h-1 w-full ${meta?.accent ?? 'bg-gray-300'}`} />
 
-        <div className="flex flex-1 flex-col p-5">
+        <div className="flex flex-1 flex-col p-3 sm:p-4 lg:p-5">
           {/* Header: type badge + status */}
           <div className="mb-3 flex items-center justify-between gap-2">
             <Badge
@@ -351,7 +353,7 @@ function ShowCard({ show }: { show: {
           </div>
 
           {/* Title */}
-          <h3 className="line-clamp-2 text-[15px] font-semibold leading-snug tracking-tight text-foreground group-hover:text-primary transition-colors">
+          <h3 className="line-clamp-2 text-sm font-semibold leading-snug tracking-tight text-foreground transition-colors group-hover:text-primary sm:text-[15px]">
             {show.name}
           </h3>
 

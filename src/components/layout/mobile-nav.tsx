@@ -35,7 +35,7 @@ export function MobileNav({ user, isSecretary, isSteward }: MobileNavProps) {
           <span className="sr-only">Open menu</span>
         </Button>
       </SheetTrigger>
-      <SheetContent side="right" className="w-72 p-0">
+      <SheetContent side="right" className="max-w-[80vw] sm:w-72 p-0">
         <SheetHeader className="border-b px-6 py-5">
           <SheetTitle className="text-left font-serif text-xl font-bold tracking-tight text-primary">
             Remi
