@@ -88,7 +88,7 @@ export function AccountSwitcher() {
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-[9999]">
+    <div className="fixed bottom-20 right-3 z-[9999] md:bottom-4 md:right-4">
       {/* Expanded panel */}
       {open && (
         <div className="mb-2 w-80 rounded-xl border bg-white shadow-2xl">
