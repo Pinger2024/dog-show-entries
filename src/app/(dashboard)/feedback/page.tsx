@@ -66,7 +66,7 @@ function SanitizedHtml({ html }: { html: string }) {
   const clean = useMemo(() => DOMPurify.sanitize(html), [html]);
   return (
     <div
-      className="prose prose-sm max-w-none rounded-lg bg-muted/30 p-4"
+      className="prose prose-sm max-w-none rounded-lg bg-muted/30 p-3 sm:p-4"
       dangerouslySetInnerHTML={{ __html: clean }}
     />
   );
@@ -129,7 +129,7 @@ export default function FeedbackPage() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid gap-4 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
         {statCards.map((stat) => {
           const isActive = activeFilter === stat.key;
           return (
@@ -158,7 +158,7 @@ export default function FeedbackPage() {
                   {countsLoading ? (
                     <Loader2 className="size-6 animate-spin text-muted-foreground" />
                   ) : (
-                    <p className="text-3xl font-bold">
+                    <p className="text-2xl font-bold sm:text-3xl">
                       {counts?.[stat.key] ?? 0}
                     </p>
                   )}
@@ -222,7 +222,7 @@ export default function FeedbackPage() {
                       onClick={() =>
                         setExpandedId(isExpanded ? null : item.id)
                       }
-                      className="flex w-full items-start justify-between gap-3 p-4 text-left"
+                      className="flex w-full items-start justify-between gap-3 p-3 text-left sm:p-4"
                     >
                       <div className="min-w-0 flex-1">
                         <p className="font-semibold">
@@ -258,7 +258,7 @@ export default function FeedbackPage() {
 
                     {/* Expanded detail */}
                     {isExpanded && (
-                      <div className="border-t px-4 py-4">
+                      <div className="border-t px-3 py-3 sm:px-4 sm:py-4">
                         {/* Email body */}
                         {item.htmlBody ? (
                           <SanitizedHtml html={item.htmlBody} />

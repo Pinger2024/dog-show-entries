@@ -135,7 +135,7 @@ export default function EditEntryPage({
   if (clientSecret) {
     return (
       <div className="container mx-auto max-w-3xl px-4 py-6">
-        <h1 className="mb-6 text-2xl font-bold">Additional Payment Required</h1>
+        <h1 className="mb-6 text-lg font-bold sm:text-2xl">Additional Payment Required</h1>
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
@@ -163,7 +163,7 @@ export default function EditEntryPage({
   }
 
   return (
-    <div className="container mx-auto max-w-3xl px-4 py-6 pb-24">
+    <div className="container mx-auto max-w-3xl px-3 py-6 pb-24 sm:px-4">
       {/* Header */}
       <div className="mb-6">
         <Link
@@ -173,7 +173,7 @@ export default function EditEntryPage({
           <ChevronLeft className="size-4" />
           Back to entry
         </Link>
-        <h1 className="mt-2 text-2xl font-bold">Edit Classes</h1>
+        <h1 className="mt-2 text-lg font-bold sm:text-2xl">Edit Classes</h1>
         <p className="text-sm text-muted-foreground">
           {entry.show.name} &middot; {entry.dog?.registeredName ?? 'Junior Handler'}
         </p>

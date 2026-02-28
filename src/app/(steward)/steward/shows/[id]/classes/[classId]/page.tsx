@@ -279,22 +279,22 @@ export default function StewardClassResultsPage({
       </div>
 
       {/* Previous / Next class navigation */}
-      <div className="mt-8 flex items-center justify-between gap-4">
+      <div className="mt-8 flex items-center justify-between gap-2 sm:gap-4">
         {prevClass ? (
-          <Button variant="outline" asChild>
+          <Button variant="outline" asChild className="min-w-0 max-w-[45%]">
             <Link href={`/steward/shows/${showId}/classes/${prevClass.id}`}>
-              <ChevronLeft className="mr-1 size-4" />
-              {prevClass.classDefinition.name}
+              <ChevronLeft className="mr-1 size-4 shrink-0" />
+              <span className="truncate">{prevClass.classDefinition.name}</span>
             </Link>
           </Button>
         ) : (
           <div />
         )}
         {nextClass ? (
-          <Button variant="outline" asChild>
+          <Button variant="outline" asChild className="min-w-0 max-w-[45%]">
             <Link href={`/steward/shows/${showId}/classes/${nextClass.id}`}>
-              {nextClass.classDefinition.name}
-              <ChevronRight className="ml-1 size-4" />
+              <span className="truncate">{nextClass.classDefinition.name}</span>
+              <ChevronRight className="ml-1 size-4 shrink-0" />
             </Link>
           </Button>
         ) : (

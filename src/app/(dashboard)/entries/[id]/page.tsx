@@ -108,7 +108,7 @@ export default function EntryDetailPage() {
     : null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-16 md:pb-0">
       <div>
         <Link
           href="/entries"
@@ -122,7 +122,7 @@ export default function EntryDetailPage() {
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">{entry.show.name}</h1>
+          <h1 className="text-lg font-bold sm:text-2xl">{entry.show.name}</h1>
           <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
             <span className="flex items-center gap-1">
               <CalendarDays className="size-3.5" />

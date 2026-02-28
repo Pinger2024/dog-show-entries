@@ -137,10 +137,10 @@ export default function BillingPage() {
     return (
       <div className="space-y-8 pb-16 md:pb-0">
         <div>
-          <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">
+          <h1 className="font-serif text-lg font-bold tracking-tight sm:text-2xl lg:text-3xl">
             Billing &amp; Subscription
           </h1>
-          <p className="mt-1 text-muted-foreground">
+          <p className="mt-1 text-sm text-muted-foreground sm:text-base">
             Manage your club&apos;s subscription and billing details.
           </p>
         </div>
@@ -185,10 +185,10 @@ export default function BillingPage() {
     <div className="space-y-8 pb-16 md:pb-0">
       {/* Header */}
       <div>
-        <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">
+        <h1 className="font-serif text-lg font-bold tracking-tight sm:text-2xl lg:text-3xl">
           Billing &amp; Subscription
         </h1>
-        <p className="mt-1 text-muted-foreground">
+        <p className="mt-1 text-sm text-muted-foreground sm:text-base">
           Manage the subscription and billing for {orgName}.
         </p>
       </div>
@@ -384,7 +384,7 @@ export default function BillingPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-4">
               <div className="rounded-lg border bg-muted/30 p-4 text-center">
                 <CalendarDays className="mx-auto mb-2 size-5 text-muted-foreground" />
                 <p className="text-2xl font-bold">{showCount}</p>
