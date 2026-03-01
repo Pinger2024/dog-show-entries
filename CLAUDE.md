@@ -88,3 +88,19 @@ When sending update/notification emails to Amanda, use the Resend API with:
 ## Database Migrations
 
 Use `npx drizzle-kit push` to sync schema changes to the database. No migration files — push mode.
+
+## Feature Development Workflow
+
+When building new features (not bug fixes), always follow this research-first approach:
+
+1. **Research first** — Before writing any code, launch a research agent (Task tool with `subagent_type: "Explore"` or `"general-purpose"`) to investigate:
+   - How best-in-class apps solve this problem (competitors, adjacent industries)
+   - What the KC/dog show world specifically needs (regulations, conventions, workflows)
+   - UX patterns that would make the feature innovative rather than just functional
+   - What data we already have in the schema that could make the feature richer
+
+2. **Design for innovation** — Remi isn't just digitising paper processes. Every feature should ask: "What can we do that paper/PDFs/spreadsheets never could?" Think real-time updates, smart automation, cross-referencing data, proactive notifications, and mobile-first workflows.
+
+3. **Build and ship** — Implement, test (`npm run build`), commit, push, mark feedback completed, email Amanda.
+
+4. **Close the loop** — Always email Amanda when a feature ships, with clear instructions on how to use it and encouragement to share feedback.

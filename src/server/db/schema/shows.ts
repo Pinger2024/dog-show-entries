@@ -15,6 +15,7 @@ import { entries } from './entries';
 import { rings } from './rings';
 import { judgeAssignments } from './judge-assignments';
 import { stewardAssignments } from './steward-assignments';
+import { showChecklistItems } from './show-checklist';
 
 export const shows = pgTable(
   'shows',
@@ -68,4 +69,5 @@ export const showsRelations = relations(shows, ({ one, many }) => ({
   rings: many(rings),
   judgeAssignments: many(judgeAssignments),
   stewardAssignments: many(stewardAssignments),
+  checklistItems: many(showChecklistItems),
 }));

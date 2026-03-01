@@ -24,7 +24,12 @@ import {
   judgeAssignments,
   rings,
   breeds,
+  showChecklistItems,
 } from '@/server/db/schema';
+import {
+  DEFAULT_CHECKLIST_ITEMS,
+  calculateDueDate,
+} from '@/lib/default-checklist';
 import { getStripe } from '@/server/services/stripe';
 
 export const secretaryRouter = createTRPCRouter({
@@ -1281,5 +1286,299 @@ export const secretaryRouter = createTRPCRouter({
       });
 
       return entry!;
+    }),
+
+  // ─── Show Requirements Checklist ───────────────────────
+
+  getChecklist: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      const items = await ctx.db.query.showChecklistItems.findMany({
+        where: eq(showChecklistItems.showId, input.showId),
+        orderBy: [asc(showChecklistItems.sortOrder)],
+      });
+
+      return items;
+    }),
+
+  seedChecklist: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      // Check if already seeded
+      const [existing] = await ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(showChecklistItems)
+        .where(eq(showChecklistItems.showId, input.showId));
+
+      if (Number(existing?.count) > 0) {
+        return { seeded: false, message: 'Checklist already exists' };
+      }
+
+      // Get show details for date calculation and type filtering
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+      });
+
+      if (!show) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
+      }
+
+      const isChampionship = show.showType === 'championship';
+
+      // Fetch assigned judges so we can create per-judge items
+      const assignedJudges = await ctx.db.query.judgeAssignments.findMany({
+        where: eq(judgeAssignments.showId, input.showId),
+        with: { judge: true },
+      });
+
+      // Deduplicate judges (a judge may be assigned to multiple breeds)
+      const uniqueJudges = new Map<string, { id: string; name: string }>();
+      for (const a of assignedJudges) {
+        if (a.judge && !uniqueJudges.has(a.judge.id)) {
+          uniqueJudges.set(a.judge.id, { id: a.judge.id, name: a.judge.name });
+        }
+      }
+
+      const itemsToInsert: Array<{
+        showId: string;
+        title: string;
+        description: string | null;
+        phase: typeof DEFAULT_CHECKLIST_ITEMS[number]['phase'];
+        sortOrder: number;
+        status: 'not_started';
+        dueDate: string | null;
+        autoDetectKey: string | null;
+        championshipOnly: boolean;
+        relativeDueDays: number | null;
+        entityType: string | null;
+        entityId: string | null;
+        entityName: string | null;
+      }> = [];
+
+      for (const item of DEFAULT_CHECKLIST_ITEMS) {
+        if (item.championshipOnly && !isChampionship) continue;
+
+        const dueDate =
+          item.relativeDueDays !== undefined
+            ? calculateDueDate(show.startDate, item.relativeDueDays)
+            : null;
+
+        if (item.perJudge && uniqueJudges.size > 0) {
+          // Create one item per judge
+          let subOrder = 0;
+          for (const judge of uniqueJudges.values()) {
+            itemsToInsert.push({
+              showId: input.showId,
+              title: `${item.title} — ${judge.name}`,
+              description: item.description ?? null,
+              phase: item.phase,
+              sortOrder: item.sortOrder * 100 + subOrder,
+              status: 'not_started',
+              dueDate,
+              autoDetectKey: item.autoDetectKey ?? null,
+              championshipOnly: item.championshipOnly ?? false,
+              relativeDueDays: item.relativeDueDays ?? null,
+              entityType: 'judge',
+              entityId: judge.id,
+              entityName: judge.name,
+            });
+            subOrder++;
+          }
+        } else {
+          // Regular item (or per-judge with no judges yet — create the base item)
+          itemsToInsert.push({
+            showId: input.showId,
+            title: item.perJudge ? `${item.title} (per judge)` : item.title,
+            description: item.description ?? null,
+            phase: item.phase,
+            sortOrder: item.sortOrder * 100,
+            status: 'not_started',
+            dueDate,
+            autoDetectKey: item.autoDetectKey ?? null,
+            championshipOnly: item.championshipOnly ?? false,
+            relativeDueDays: item.relativeDueDays ?? null,
+            entityType: null,
+            entityId: null,
+            entityName: null,
+          });
+        }
+      }
+
+      await ctx.db.insert(showChecklistItems).values(itemsToInsert);
+
+      return { seeded: true, count: itemsToInsert.length };
+    }),
+
+  updateChecklistItem: secretaryProcedure
+    .input(
+      z.object({
+        itemId: z.string().uuid(),
+        status: z
+          .enum(['not_started', 'in_progress', 'complete', 'not_applicable'])
+          .optional(),
+        notes: z.string().max(1000).nullable().optional(),
+        assignedToName: z.string().max(255).nullable().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const item = await ctx.db.query.showChecklistItems.findFirst({
+        where: eq(showChecklistItems.id, input.itemId),
+      });
+
+      if (!item) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Checklist item not found',
+        });
+      }
+
+      await verifyShowAccess(ctx.db, ctx.session.user.id, item.showId);
+
+      const updates: Record<string, unknown> = {};
+      if (input.status !== undefined) {
+        updates.status = input.status;
+        if (input.status === 'complete') {
+          updates.completedAt = new Date();
+          updates.completedByUserId = ctx.session.user.id;
+        } else {
+          updates.completedAt = null;
+          updates.completedByUserId = null;
+        }
+      }
+      if (input.notes !== undefined) updates.notes = input.notes;
+      if (input.assignedToName !== undefined)
+        updates.assignedToName = input.assignedToName;
+
+      const [updated] = await ctx.db
+        .update(showChecklistItems)
+        .set(updates)
+        .where(eq(showChecklistItems.id, input.itemId))
+        .returning();
+
+      return updated!;
+    }),
+
+  addChecklistItem: secretaryProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        title: z.string().min(1).max(255),
+        description: z.string().max(1000).optional(),
+        phase: z.enum([
+          'pre_planning',
+          'planning',
+          'pre_show',
+          'final_prep',
+          'show_day',
+          'post_show',
+        ]),
+        dueDate: z.string().optional(),
+        assignedToName: z.string().max(255).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      // Get max sort order for this phase
+      const [maxSort] = await ctx.db
+        .select({
+          max: sql<number>`coalesce(max(${showChecklistItems.sortOrder}), -1)`,
+        })
+        .from(showChecklistItems)
+        .where(
+          and(
+            eq(showChecklistItems.showId, input.showId),
+            eq(showChecklistItems.phase, input.phase)
+          )
+        );
+
+      const [created] = await ctx.db
+        .insert(showChecklistItems)
+        .values({
+          showId: input.showId,
+          title: input.title,
+          description: input.description ?? null,
+          phase: input.phase,
+          sortOrder: (Number(maxSort?.max) ?? -1) + 1,
+          dueDate: input.dueDate ?? null,
+          assignedToName: input.assignedToName ?? null,
+        })
+        .returning();
+
+      return created!;
+    }),
+
+  deleteChecklistItem: secretaryProcedure
+    .input(z.object({ itemId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const item = await ctx.db.query.showChecklistItems.findFirst({
+        where: eq(showChecklistItems.id, input.itemId),
+      });
+
+      if (!item) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Checklist item not found',
+        });
+      }
+
+      await verifyShowAccess(ctx.db, ctx.session.user.id, item.showId);
+
+      await ctx.db
+        .delete(showChecklistItems)
+        .where(eq(showChecklistItems.id, input.itemId));
+
+      return { deleted: true };
+    }),
+
+  /** Returns auto-detection results for checklist items */
+  getChecklistAutoDetect: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+      });
+
+      if (!show) return {};
+
+      const [classCount] = await ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(showClasses)
+        .where(eq(showClasses.showId, input.showId));
+
+      const [judgeCount] = await ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(judgeAssignments)
+        .where(eq(judgeAssignments.showId, input.showId));
+
+      const [stewardCount] = await ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(stewardAssignments)
+        .where(eq(stewardAssignments.showId, input.showId));
+
+      const [ringCount] = await ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(rings)
+        .where(eq(rings.showId, input.showId));
+
+      const detected: Record<string, boolean> = {
+        venue_set: !!show.venueId,
+        kc_licence_recorded: !!show.kcLicenceNo,
+        classes_created: Number(classCount?.count) > 0,
+        show_published: ['published', 'entries_open', 'entries_closed', 'in_progress', 'completed'].includes(show.status),
+        entries_opened: ['entries_open', 'entries_closed', 'in_progress', 'completed'].includes(show.status),
+        entries_closed: ['entries_closed', 'in_progress', 'completed'].includes(show.status),
+        judges_assigned: Number(judgeCount?.count) > 0,
+        stewards_assigned: Number(stewardCount?.count) > 0,
+        rings_created: Number(ringCount?.count) > 0,
+      };
+
+      return detected;
     }),
 });
