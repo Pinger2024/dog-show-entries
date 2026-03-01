@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState, useMemo, useRef, useCallback } from 'react';
+import { use, useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -38,6 +38,10 @@ import {
   ListChecks,
   AlertTriangle,
   MessageSquare,
+  Mail,
+  Send,
+  RefreshCw,
+  FileCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
@@ -350,8 +354,9 @@ export default function ManageShowPage({
 
           {/* Show details */}
           <Card>
-            <CardHeader>
+            <CardHeader className="flex-row items-center justify-between">
               <CardTitle>Show Details</CardTitle>
+              <EditShowDetailsDialog show={show} showId={id} />
             </CardHeader>
             <CardContent>
               <dl className="grid gap-4 sm:grid-cols-2">
@@ -491,6 +496,229 @@ export default function ManageShowPage({
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+// ── Edit Show Details Dialog ──────────────────────────────
+
+function EditShowDetailsDialog({
+  show,
+  showId,
+}: {
+  show: {
+    name: string;
+    showType: string;
+    showScope: string;
+    startDate: string;
+    endDate: string;
+    entryCloseDate: Date | string | null;
+    postalCloseDate: Date | string | null;
+    kcLicenceNo: string | null;
+    description: string | null;
+  };
+  showId: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(show.name);
+  const [showType, setShowType] = useState(show.showType);
+  const [showScope, setShowScope] = useState(show.showScope);
+  const [startDate, setStartDate] = useState(show.startDate);
+  const [endDate, setEndDate] = useState(show.endDate);
+  const [entryCloseDate, setEntryCloseDate] = useState(
+    show.entryCloseDate
+      ? new Date(show.entryCloseDate).toISOString().slice(0, 16)
+      : ''
+  );
+  const [postalCloseDate, setPostalCloseDate] = useState(
+    show.postalCloseDate
+      ? new Date(show.postalCloseDate).toISOString().slice(0, 16)
+      : ''
+  );
+  const [kcLicenceNo, setKcLicenceNo] = useState(show.kcLicenceNo ?? '');
+  const [description, setDescription] = useState(show.description ?? '');
+
+  const utils = trpc.useUtils();
+  const updateMutation = trpc.shows.update.useMutation({
+    onSuccess: () => {
+      utils.shows.getById.invalidate({ id: showId });
+      toast.success('Show details updated');
+      setOpen(false);
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to update show'),
+  });
+
+  function handleSave() {
+    updateMutation.mutate({
+      id: showId,
+      name,
+      showType: showType as 'companion' | 'primary' | 'limited' | 'open' | 'premier_open' | 'championship',
+      showScope: showScope as 'single_breed' | 'group' | 'general',
+      startDate,
+      endDate,
+      entryCloseDate: entryCloseDate
+        ? new Date(entryCloseDate).toISOString()
+        : null,
+      postalCloseDate: postalCloseDate
+        ? new Date(postalCloseDate).toISOString()
+        : null,
+      kcLicenceNo: kcLicenceNo || null,
+      description: description || null,
+    });
+  }
+
+  // Sync state when show data changes (e.g. after save)
+  useEffect(() => {
+    if (!open) {
+      setName(show.name);
+      setShowType(show.showType);
+      setShowScope(show.showScope);
+      setStartDate(show.startDate);
+      setEndDate(show.endDate);
+      setEntryCloseDate(
+        show.entryCloseDate
+          ? new Date(show.entryCloseDate).toISOString().slice(0, 16)
+          : ''
+      );
+      setPostalCloseDate(
+        show.postalCloseDate
+          ? new Date(show.postalCloseDate).toISOString().slice(0, 16)
+          : ''
+      );
+      setKcLicenceNo(show.kcLicenceNo ?? '');
+      setDescription(show.description ?? '');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, show.name, show.showType, show.startDate]);
+
+  return (
+    <>
+      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+        <Edit3 className="size-4" />
+        Edit
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Show Details</DialogTitle>
+            <DialogDescription>
+              Update the basic details for this show.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-name">Show Name</Label>
+              <Input
+                id="edit-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Show Type</Label>
+                <Select value={showType} onValueChange={setShowType}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="companion">Companion</SelectItem>
+                    <SelectItem value="primary">Primary</SelectItem>
+                    <SelectItem value="limited">Limited</SelectItem>
+                    <SelectItem value="open">Open</SelectItem>
+                    <SelectItem value="premier_open">Premier Open</SelectItem>
+                    <SelectItem value="championship">Championship</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Show Scope</Label>
+                <Select value={showScope} onValueChange={setShowScope}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="single_breed">Single Breed</SelectItem>
+                    <SelectItem value="group">Group</SelectItem>
+                    <SelectItem value="general">General</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-start">Start Date</Label>
+                <Input
+                  id="edit-start"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-end">End Date</Label>
+                <Input
+                  id="edit-end"
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-entry-close">Entry Close Date</Label>
+                <Input
+                  id="edit-entry-close"
+                  type="datetime-local"
+                  value={entryCloseDate}
+                  onChange={(e) => setEntryCloseDate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-postal-close">Postal Close Date</Label>
+                <Input
+                  id="edit-postal-close"
+                  type="datetime-local"
+                  value={postalCloseDate}
+                  onChange={(e) => setPostalCloseDate(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-kc">KC Licence Number</Label>
+              <Input
+                id="edit-kc"
+                value={kcLicenceNo}
+                onChange={(e) => setKcLicenceNo(e.target.value)}
+                placeholder="e.g. 12345"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-description">Description</Label>
+              <textarea
+                id="edit-description"
+                className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Optional description for exhibitors..."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={!name.trim() || !startDate || !endDate || updateMutation.isPending}
+            >
+              {updateMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -1181,6 +1409,9 @@ function FinancialTab({
   const standardEntries = entries.filter((e) => !e.isNfc);
 
   const confirmedEntries = entries.filter((e) => e.status === 'confirmed');
+  const refundableEntries = confirmedEntries.filter(
+    (e) => e.paymentIntentId || e.payments?.some((p) => p.stripePaymentId)
+  );
 
   return (
     <div className="space-y-6">
@@ -1330,9 +1561,9 @@ function FinancialTab({
           </div>
         </CardHeader>
         <CardContent>
-          {confirmedEntries.length === 0 ? (
+          {refundableEntries.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
-              No confirmed entries available for refund.
+              No confirmed entries with Stripe payments available for refund.
             </p>
           ) : (
             <Table>
@@ -1345,7 +1576,7 @@ function FinancialTab({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {confirmedEntries.map((entry) => (
+                {refundableEntries.map((entry) => (
                   <TableRow key={entry.id}>
                     <TableCell className="font-medium">
                       {entry.catalogueNumber ?? '—'}
@@ -2381,6 +2612,7 @@ interface ClassManagerProps {
     entryFee: number;
     sex: 'dog' | 'bitch' | null;
     sortOrder: number;
+    classNumber?: number | null;
     classDefinition?: { name: string; type: string } | null;
     breed?: { name: string } | null;
   }[];
@@ -2388,6 +2620,7 @@ interface ClassManagerProps {
 
 function ClassManager({ showId, classes }: ClassManagerProps) {
   const [editingFees, setEditingFees] = useState<Record<string, string>>({});
+  const [editingNumbers, setEditingNumbers] = useState<Record<string, string>>({});
   const utils = trpc.useUtils();
 
   const updateMutation = trpc.secretary.updateShowClass.useMutation({
@@ -2405,6 +2638,45 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
     },
     onError: () => toast.error('Failed to remove class'),
   });
+
+  const autoAssignMutation = trpc.secretary.autoAssignClassNumbers.useMutation({
+    onSuccess: (data) => {
+      utils.shows.getById.invalidate({ id: showId });
+      toast.success(`${data.assigned} class numbers assigned`);
+    },
+    onError: () => toast.error('Failed to auto-assign class numbers'),
+  });
+
+  function startEditNumber(classId: string, current: number | null | undefined) {
+    setEditingNumbers((prev) => ({
+      ...prev,
+      [classId]: current?.toString() ?? '',
+    }));
+  }
+
+  function saveNumber(classId: string) {
+    const val = editingNumbers[classId];
+    if (val === undefined) return;
+    const num = val === '' ? null : parseInt(val);
+    if (num !== null && (isNaN(num) || num < 1)) {
+      toast.error('Enter a valid class number (1 or higher)');
+      return;
+    }
+    updateMutation.mutate({ showClassId: classId, classNumber: num });
+    setEditingNumbers((prev) => {
+      const next = { ...prev };
+      delete next[classId];
+      return next;
+    });
+  }
+
+  function cancelEditNumber(classId: string) {
+    setEditingNumbers((prev) => {
+      const next = { ...prev };
+      delete next[classId];
+      return next;
+    });
+  }
 
   if (classes.length === 0) {
     return (
@@ -2468,11 +2740,24 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <div>
             <CardTitle>Classes ({classes.length})</CardTitle>
-            <CardDescription>Click a fee to edit it. Remove classes that don&apos;t apply to this show.</CardDescription>
+            <CardDescription>Click a fee or class number to edit. Remove classes that don&apos;t apply to this show.</CardDescription>
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => autoAssignMutation.mutate({ showId })}
+            disabled={autoAssignMutation.isPending}
+          >
+            {autoAssignMutation.isPending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Hash className="size-4" />
+            )}
+            Auto-number
+          </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -2484,6 +2769,7 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-[70px]">#</TableHead>
                   <TableHead>Class</TableHead>
                   <TableHead className="w-[100px]">Sex</TableHead>
                   <TableHead className="w-[120px]">Fee</TableHead>
@@ -2493,8 +2779,41 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
               <TableBody>
                 {typeClasses.map((sc) => {
                   const isEditing = editingFees[sc.id] !== undefined;
+                  const isEditingNum = editingNumbers[sc.id] !== undefined;
                   return (
                     <TableRow key={sc.id}>
+                      <TableCell>
+                        {isEditingNum ? (
+                          <div className="flex items-center gap-1">
+                            <Input
+                              type="number"
+                              min={1}
+                              value={editingNumbers[sc.id]}
+                              onChange={(e) =>
+                                setEditingNumbers((prev) => ({
+                                  ...prev,
+                                  [sc.id]: e.target.value,
+                                }))
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') saveNumber(sc.id);
+                                if (e.key === 'Escape') cancelEditNumber(sc.id);
+                              }}
+                              className="h-7 w-14 text-xs"
+                              autoFocus
+                            />
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => startEditNumber(sc.id, sc.classNumber)}
+                            className="rounded px-1.5 py-0.5 text-sm font-bold text-muted-foreground transition-colors hover:bg-muted"
+                            title="Click to edit class number"
+                          >
+                            {sc.classNumber ?? '—'}
+                          </button>
+                        )}
+                      </TableCell>
                       <TableCell className="font-medium">
                         {sc.classDefinition?.name ?? 'Unknown'}
                         {sc.breed && (
@@ -3202,6 +3521,16 @@ function AuditLogViewer({ showId }: { showId: string }) {
 
 // ── Judges Tab ───────────────────────────────────────────────
 
+const contractStageConfig: Record<
+  string,
+  { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }
+> = {
+  offer_sent: { label: 'Offer Sent', variant: 'secondary' },
+  offer_accepted: { label: 'Accepted', variant: 'default' },
+  confirmed: { label: 'Confirmed', variant: 'default' },
+  declined: { label: 'Declined', variant: 'destructive' },
+};
+
 function JudgesTab({ showId }: { showId: string }) {
   const [adding, setAdding] = useState(false);
   const [judgeName, setJudgeName] = useState('');
@@ -3211,6 +3540,10 @@ function JudgesTab({ showId }: { showId: string }) {
   const [judgePopoverOpen, setJudgePopoverOpen] = useState(false);
   const [selectedBreedId, setSelectedBreedId] = useState('');
   const [selectedRingId, setSelectedRingId] = useState('');
+  const [offerDialogOpen, setOfferDialogOpen] = useState(false);
+  const [offerJudgeId, setOfferJudgeId] = useState('');
+  const [offerEmail, setOfferEmail] = useState('');
+  const [offerNotes, setOfferNotes] = useState('');
   const utils = trpc.useUtils();
 
   const { data: assignments, isLoading } =
@@ -3218,6 +3551,7 @@ function JudgesTab({ showId }: { showId: string }) {
   const { data: allJudges } = trpc.secretary.getJudges.useQuery();
   const { data: breeds } = trpc.breeds.list.useQuery();
   const { data: showRings } = trpc.secretary.getShowRings.useQuery({ showId });
+  const { data: contracts } = trpc.secretary.getJudgeContracts.useQuery({ showId });
 
   const addJudgeMutation = trpc.secretary.addJudge.useMutation({
     onSuccess: (judge) => {
@@ -3250,6 +3584,89 @@ function JudgesTab({ showId }: { showId: string }) {
     },
     onError: () => toast.error('Failed to remove judge assignment'),
   });
+
+  const sendOfferMutation = trpc.secretary.sendJudgeOffer.useMutation({
+    onSuccess: () => {
+      toast.success('Offer email sent to judge');
+      setOfferDialogOpen(false);
+      setOfferJudgeId('');
+      setOfferEmail('');
+      setOfferNotes('');
+      utils.secretary.getJudgeContracts.invalidate({ showId });
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to send offer'),
+  });
+
+  const resendOfferMutation = trpc.secretary.resendJudgeOffer.useMutation({
+    onSuccess: () => {
+      toast.success('Offer email resent');
+      utils.secretary.getJudgeContracts.invalidate({ showId });
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to resend offer'),
+  });
+
+  const confirmMutation = trpc.secretary.sendJudgeConfirmation.useMutation({
+    onSuccess: () => {
+      toast.success('Confirmation email sent to judge');
+      utils.secretary.getJudgeContracts.invalidate({ showId });
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to send confirmation'),
+  });
+
+  // Build a map of judgeId -> latest contract for quick lookups
+  const contractsByJudge = useMemo(() => {
+    const map = new Map<string, NonNullable<typeof contracts>[number]>();
+    for (const c of contracts ?? []) {
+      const existing = map.get(c.judgeId);
+      if (!existing || new Date(c.createdAt) > new Date(existing.createdAt)) {
+        map.set(c.judgeId, c);
+      }
+    }
+    return map;
+  }, [contracts]);
+
+  // Deduplicate judges from assignments (a judge may have multiple breed/ring assignments)
+  const uniqueJudges = useMemo(() => {
+    const seen = new Map<string, {
+      judgeId: string;
+      name: string;
+      kcNumber: string | null;
+      contactEmail: string | null;
+      breeds: string[];
+      rings: string[];
+      assignmentIds: string[];
+    }>();
+    for (const a of assignments ?? []) {
+      const existing = seen.get(a.judgeId);
+      if (existing) {
+        if (a.breed && !existing.breeds.includes(a.breed.name)) {
+          existing.breeds.push(a.breed.name);
+        }
+        if (a.ring && !existing.rings.includes(`Ring ${a.ring.number}`)) {
+          existing.rings.push(`Ring ${a.ring.number}`);
+        }
+        existing.assignmentIds.push(a.id);
+      } else {
+        seen.set(a.judgeId, {
+          judgeId: a.judgeId,
+          name: a.judge.name,
+          kcNumber: a.judge.kcNumber,
+          contactEmail: a.judge.contactEmail,
+          breeds: a.breed ? [a.breed.name] : [],
+          rings: a.ring ? [`Ring ${a.ring.number}`] : [],
+          assignmentIds: [a.id],
+        });
+      }
+    }
+    return Array.from(seen.values());
+  }, [assignments]);
+
+  function openOfferDialog(judgeId: string, email: string) {
+    setOfferJudgeId(judgeId);
+    setOfferEmail(email);
+    setOfferNotes('');
+    setOfferDialogOpen(true);
+  }
 
   return (
     <div className="space-y-6">
@@ -3423,17 +3840,20 @@ function JudgesTab({ showId }: { showId: string }) {
         </CardContent>
       </Card>
 
-      {/* Current judge assignments */}
+      {/* Current judge assignments with contract status */}
       <Card>
         <CardHeader>
-          <CardTitle>Current Assignments ({assignments?.length ?? 0})</CardTitle>
+          <CardTitle>Current Assignments ({uniqueJudges.length})</CardTitle>
+          <CardDescription>
+            Manage judge assignments and track the three-stage KC contract process.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="size-6 animate-spin text-muted-foreground" />
             </div>
-          ) : !assignments || assignments.length === 0 ? (
+          ) : uniqueJudges.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
               <Gavel className="mb-4 size-10 text-muted-foreground/40" />
               <h3 className="font-semibold">No judges assigned</h3>
@@ -3442,59 +3862,195 @@ function JudgesTab({ showId }: { showId: string }) {
               </p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Judge</TableHead>
-                  <TableHead>KC Number</TableHead>
-                  <TableHead>Breed</TableHead>
-                  <TableHead>Ring</TableHead>
-                  <TableHead className="w-10" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {assignments.map((a) => (
-                  <TableRow key={a.id}>
-                    <TableCell className="font-medium">{a.judge.name}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {a.judge.kcNumber ?? '—'}
-                    </TableCell>
-                    <TableCell>
-                      {a.breed ? (
-                        <Badge variant="outline">{a.breed.name}</Badge>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">All</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {a.ring ? (
-                        <Badge variant="outline">Ring {a.ring.number}</Badge>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="size-7 text-destructive hover:text-destructive"
-                        onClick={() => {
-                          if (confirm('Remove this judge assignment?')) {
-                            removeMutation.mutate({ assignmentId: a.id });
-                          }
-                        }}
-                        disabled={removeMutation.isPending}
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <div className="space-y-3">
+              {uniqueJudges.map((j) => {
+                const contract = contractsByJudge.get(j.judgeId);
+                const stage = contract?.stage;
+                const stageConf = stage ? contractStageConfig[stage] : null;
+
+                return (
+                  <div key={j.judgeId} className="rounded-lg border p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold">{j.name}</span>
+                          {j.kcNumber && (
+                            <span className="text-sm text-muted-foreground">({j.kcNumber})</span>
+                          )}
+                          {stageConf ? (
+                            <Badge variant={stageConf.variant}>{stageConf.label}</Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-muted-foreground">No Contract</Badge>
+                          )}
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          {j.breeds.length > 0 ? (
+                            j.breeds.map((b) => (
+                              <Badge key={b} variant="outline" className="text-xs">{b}</Badge>
+                            ))
+                          ) : (
+                            <span className="text-xs text-muted-foreground">All breeds</span>
+                          )}
+                          {j.rings.map((r) => (
+                            <Badge key={r} variant="outline" className="text-xs">{r}</Badge>
+                          ))}
+                        </div>
+                        {j.contactEmail && (
+                          <p className="mt-1 text-xs text-muted-foreground flex items-center gap-1">
+                            <Mail className="size-3" />
+                            {j.contactEmail}
+                          </p>
+                        )}
+                        {contract?.offerSentAt && (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Offer sent {new Date(contract.offerSentAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            {contract.acceptedAt && ` · Accepted ${new Date(contract.acceptedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`}
+                            {contract.confirmedAt && ` · Confirmed ${new Date(contract.confirmedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`}
+                            {contract.declinedAt && ` · Declined ${new Date(contract.declinedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {!contract && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openOfferDialog(j.judgeId, j.contactEmail ?? '')}
+                          >
+                            <Send className="size-3.5" />
+                            Send Offer
+                          </Button>
+                        )}
+                        {stage === 'offer_sent' && contract && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              if (confirm('Resend the offer email to this judge?')) {
+                                resendOfferMutation.mutate({ contractId: contract.id });
+                              }
+                            }}
+                            disabled={resendOfferMutation.isPending}
+                          >
+                            {resendOfferMutation.isPending ? (
+                              <Loader2 className="size-3.5 animate-spin" />
+                            ) : (
+                              <RefreshCw className="size-3.5" />
+                            )}
+                            Resend
+                          </Button>
+                        )}
+                        {stage === 'offer_accepted' && contract && (
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              if (confirm('Send the formal confirmation email to this judge?')) {
+                                confirmMutation.mutate({ contractId: contract.id });
+                              }
+                            }}
+                            disabled={confirmMutation.isPending}
+                          >
+                            {confirmMutation.isPending ? (
+                              <Loader2 className="size-3.5 animate-spin" />
+                            ) : (
+                              <FileCheck className="size-3.5" />
+                            )}
+                            Send Confirmation
+                          </Button>
+                        )}
+                        {stage === 'declined' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openOfferDialog(j.judgeId, j.contactEmail ?? contract?.judgeEmail ?? '')}
+                          >
+                            <Send className="size-3.5" />
+                            New Offer
+                          </Button>
+                        )}
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-7 text-destructive hover:text-destructive"
+                          onClick={() => {
+                            if (confirm('Remove all assignments for this judge from this show?')) {
+                              for (const aId of j.assignmentIds) {
+                                removeMutation.mutate({ assignmentId: aId });
+                              }
+                            }
+                          }}
+                          disabled={removeMutation.isPending}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Send Offer Dialog */}
+      <Dialog open={offerDialogOpen} onOpenChange={setOfferDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send Judging Offer</DialogTitle>
+            <DialogDescription>
+              Send a formal written offer to this judge. This is Stage 1 of the KC three-part contract process.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label className="text-sm font-medium">Judge Email</Label>
+              <Input
+                type="email"
+                placeholder="judge@example.com"
+                value={offerEmail}
+                onChange={(e) => setOfferEmail(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Additional Notes (optional)</Label>
+              <Input
+                placeholder="Any special instructions or details..."
+                value={offerNotes}
+                onChange={(e) => setOfferNotes(e.target.value)}
+                className="mt-1"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                These notes will appear in the offer email sent to the judge.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOfferDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() =>
+                sendOfferMutation.mutate({
+                  showId,
+                  judgeId: offerJudgeId,
+                  judgeEmail: offerEmail.trim(),
+                  notes: offerNotes.trim() || undefined,
+                })
+              }
+              disabled={!offerEmail.trim() || sendOfferMutation.isPending}
+            >
+              {sendOfferMutation.isPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Send className="size-4" />
+              )}
+              Send Offer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -4288,6 +4844,94 @@ function RequirementsTab({
                               })}
                               {new Date(item.documentExpiryDate) < new Date() && ' (EXPIRED)'}
                             </p>
+                          )}
+
+                          {/* Document upload section for items that require evidence */}
+                          {item.requiresDocument && (
+                            <div className="rounded-md border bg-background p-3 space-y-2">
+                              <Label className="text-xs font-medium flex items-center gap-1">
+                                <FileText className="size-3" />
+                                Supporting Document
+                              </Label>
+                              {item.fileUpload ? (
+                                <div className="flex items-center gap-2">
+                                  <a
+                                    href={item.fileUpload.publicUrl ?? '#'}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-primary hover:underline flex items-center gap-1 truncate"
+                                  >
+                                    <FileText className="size-3 shrink-0" />
+                                    {item.fileUpload.fileName}
+                                  </a>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="size-6 shrink-0 text-muted-foreground hover:text-destructive"
+                                    onClick={() =>
+                                      updateItemMut.mutate({
+                                        itemId: item.id,
+                                        fileUploadId: null,
+                                      })
+                                    }
+                                    title="Remove document"
+                                  >
+                                    <X className="size-3" />
+                                  </Button>
+                                </div>
+                              ) : (
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                  <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-dashed text-xs text-muted-foreground hover:bg-muted transition-colors">
+                                    <Upload className="size-3" />
+                                    Upload document
+                                  </div>
+                                  <input
+                                    type="file"
+                                    className="sr-only"
+                                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                                    onChange={async (e) => {
+                                      const file = e.target.files?.[0];
+                                      if (!file) return;
+                                      const formData = new FormData();
+                                      formData.append('file', file);
+                                      try {
+                                        const res = await fetch('/api/upload/checklist-document', {
+                                          method: 'POST',
+                                          body: formData,
+                                        });
+                                        if (!res.ok) {
+                                          const err = await res.json();
+                                          throw new Error(err.error ?? 'Upload failed');
+                                        }
+                                        const { id: fileId } = await res.json();
+                                        updateItemMut.mutate({ itemId: item.id, fileUploadId: fileId });
+                                        toast.success('Document uploaded');
+                                      } catch (err) {
+                                        toast.error(err instanceof Error ? err.message : 'Failed to upload document');
+                                      }
+                                      e.target.value = '';
+                                    }}
+                                  />
+                                </label>
+                              )}
+                              {item.hasExpiry && (
+                                <div className="space-y-1">
+                                  <Label className="text-xs text-muted-foreground">Expiry date</Label>
+                                  <Input
+                                    type="date"
+                                    className="h-8 text-xs w-auto"
+                                    defaultValue={item.documentExpiryDate ?? ''}
+                                    key={`expiry-${item.id}`}
+                                    onBlur={(e) =>
+                                      updateItemMut.mutate({
+                                        itemId: item.id,
+                                        documentExpiryDate: e.target.value || null,
+                                      })
+                                    }
+                                  />
+                                </div>
+                              )}
+                            </div>
                           )}
 
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

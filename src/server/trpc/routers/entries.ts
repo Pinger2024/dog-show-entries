@@ -66,6 +66,23 @@ export const entriesRouter = createTRPCRouter({
         });
       }
 
+      // Check for duplicate entry (same dog + same show, non-withdrawn)
+      const existingEntry = await ctx.db.query.entries.findFirst({
+        where: and(
+          eq(entries.dogId, input.dogId),
+          eq(entries.showId, input.showId),
+          isNull(entries.deletedAt),
+          sql`${entries.status} NOT IN ('withdrawn', 'cancelled')`
+        ),
+      });
+
+      if (existingEntry) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'This dog is already entered in this show',
+        });
+      }
+
       // Validate classes exist and belong to the show
       const selectedClasses = await ctx.db.query.showClasses.findMany({
         where: and(
@@ -272,6 +289,7 @@ export const entriesRouter = createTRPCRouter({
               },
             },
           },
+          payments: true,
         },
         orderBy: [asc(entries.createdAt)],
         limit: input.limit,

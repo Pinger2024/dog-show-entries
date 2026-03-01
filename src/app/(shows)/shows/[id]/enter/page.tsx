@@ -63,6 +63,7 @@ export default function EnterShowPage() {
   const [isNfc, setIsNfc] = useState(false);
   const [healthDeclared, setHealthDeclared] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [catalogueRequested, setCatalogueRequested] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState(0);
@@ -157,13 +158,31 @@ export default function EnterShowPage() {
     ];
   }, [cart.activeEntry?.entryType, groupedClasses]);
 
-  // Calculate total for current selection
+  // Calculate total for current selection using show-level fee tiers
   const selectedTotal = useMemo(() => {
-    if (!showClasses) return 0;
+    if (!showClasses || !show) return 0;
+    const count = selectedClassIds.length;
+    if (count === 0) return 0;
+
+    // Use show-level fee tiers if available, otherwise fall back to per-class fees
+    const firstFee = show.firstEntryFee;
+    const subFee = show.subsequentEntryFee;
+    const nfcFeeAmount = show.nfcEntryFee;
+
+    if (isNfc && nfcFeeAmount != null) {
+      return nfcFeeAmount * count;
+    }
+
+    if (firstFee != null) {
+      const subsequentRate = subFee ?? firstFee;
+      return firstFee + subsequentRate * (count - 1);
+    }
+
+    // Fallback: per-class fees from showClasses
     return showClasses
       .filter((sc) => selectedClassIds.includes(sc.id))
       .reduce((sum, sc) => sum + sc.entryFee, 0);
-  }, [showClasses, selectedClassIds]);
+  }, [showClasses, selectedClassIds, show, isNfc]);
 
   // Age eligibility
   function getAgeEligibility(minMonths: number | null, maxMonths: number | null) {
@@ -209,6 +228,7 @@ export default function EnterShowPage() {
     try {
       const result = await checkoutMutation.mutateAsync({
         showId,
+        catalogueRequested,
         entries: cart.entries.map((e) => ({
           entryType: e.entryType,
           dogId: e.dogId,
@@ -806,6 +826,21 @@ export default function EnterShowPage() {
               {cart.entries.filter((e) => e.classIds.length > 0).length !== 1 ? 'ies' : 'y'}
             </p>
           </div>
+
+          {/* Printed catalogue */}
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border p-3">
+            <Checkbox
+              checked={catalogueRequested}
+              onCheckedChange={(checked) => setCatalogueRequested(checked === true)}
+              className="mt-0.5"
+            />
+            <div>
+              <span className="text-sm font-medium">Request a printed catalogue</span>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Tick this box if you would like to receive a printed show catalogue on the day.
+              </p>
+            </div>
+          </label>
 
           {/* Declarations */}
           <div className="space-y-4">

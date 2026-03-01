@@ -12,6 +12,7 @@ import {
   results,
   stewardAssignments,
   classDefinitions,
+  achievements,
 } from '@/server/db/schema';
 
 async function verifyStewardAssignment(
@@ -166,10 +167,13 @@ export const stewardRouter = createTRPCRouter({
           })
           .map((ec) => ({
             entryClassId: ec.id,
+            entryId: ec.entry.id,
+            dogId: ec.entry.dog?.id ?? null,
             catalogueNumber: ec.entry.catalogueNumber,
             dogName: ec.entry.dog?.registeredName ?? 'Unknown',
             breedName: ec.entry.dog?.breed?.name ?? '',
             exhibitorName: ec.entry.exhibitor.name,
+            absent: ec.entry.absent,
             result: ec.result
               ? {
                   id: ec.result.id,
@@ -267,6 +271,34 @@ export const stewardRouter = createTRPCRouter({
         .where(eq(results.entryClassId, input.entryClassId));
 
       return { removed: true };
+    }),
+
+  // ── Mark entry absent/present ──────────────────────────
+  markAbsent: stewardProcedure
+    .input(
+      z.object({
+        entryId: z.string().uuid(),
+        absent: z.boolean(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const entry = await ctx.db.query.entries.findFirst({
+        where: eq(entries.id, input.entryId),
+      });
+
+      if (!entry) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Entry not found' });
+      }
+
+      await verifyStewardAssignment(ctx.db, ctx.session.user.id, entry.showId);
+
+      const [updated] = await ctx.db
+        .update(entries)
+        .set({ absent: input.absent })
+        .where(eq(entries.id, input.entryId))
+        .returning();
+
+      return updated!;
     }),
 
   // ── Public: live results for a show ─────────────────────
@@ -371,6 +403,16 @@ export const stewardRouter = createTRPCRouter({
         }
       }
 
+      // Fetch breed-level and show-level achievements
+      const showAchievements = await ctx.db.query.achievements.findMany({
+        where: eq(achievements.showId, input.showId),
+        with: {
+          dog: {
+            columns: { id: true, registeredName: true },
+          },
+        },
+      });
+
       return {
         show: {
           id: show.id,
@@ -384,6 +426,13 @@ export const stewardRouter = createTRPCRouter({
         breedGroups: Array.from(breedGroups.values()).sort((a, b) =>
           a.breedName.localeCompare(b.breedName)
         ),
+        achievements: showAchievements.map((a) => ({
+          id: a.id,
+          type: a.type,
+          dogId: a.dogId,
+          dogName: a.dog?.registeredName ?? 'Unknown',
+          details: a.details as Record<string, unknown> | null,
+        })),
       };
     }),
 
@@ -420,5 +469,133 @@ export const stewardRouter = createTRPCRouter({
         totalClasses,
         judgedClasses,
       };
+    }),
+
+  // ── Mark an entry as absent ─────────────────────────────
+  markAbsent: stewardProcedure
+    .input(
+      z.object({
+        entryId: z.string().uuid(),
+        absent: z.boolean(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const entry = await ctx.db.query.entries.findFirst({
+        where: eq(entries.id, input.entryId),
+      });
+
+      if (!entry) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Entry not found' });
+      }
+
+      await verifyStewardAssignment(
+        ctx.db,
+        ctx.session.user.id,
+        entry.showId
+      );
+
+      const [updated] = await ctx.db
+        .update(entries)
+        .set({ absent: input.absent })
+        .where(eq(entries.id, input.entryId))
+        .returning();
+
+      return updated!;
+    }),
+
+  // ── Record a breed-level or show-level achievement ──────
+  recordAchievement: stewardProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        dogId: z.string().uuid(),
+        type: z.enum([
+          'cc',
+          'reserve_cc',
+          'best_of_breed',
+          'best_in_show',
+          'reserve_best_in_show',
+          'best_puppy_in_breed',
+          'best_puppy_in_show',
+          'best_veteran_in_breed',
+          'group_placement',
+        ]),
+        judgeId: z.string().uuid().optional(),
+        details: z
+          .object({
+            breedName: z.string().optional(),
+            groupName: z.string().optional(),
+            placement: z.number().optional(),
+          })
+          .optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyStewardAssignment(
+        ctx.db,
+        ctx.session.user.id,
+        input.showId
+      );
+
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+      });
+
+      if (!show) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
+      }
+
+      const [achievement] = await ctx.db
+        .insert(achievements)
+        .values({
+          dogId: input.dogId,
+          type: input.type,
+          showId: input.showId,
+          judgeId: input.judgeId ?? null,
+          date: show.startDate,
+          details: input.details ?? null,
+        })
+        .returning();
+
+      return achievement!;
+    }),
+
+  // ── Remove an achievement ───────────────────────────────
+  removeAchievement: stewardProcedure
+    .input(z.object({ achievementId: z.string().uuid(), showId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyStewardAssignment(
+        ctx.db,
+        ctx.session.user.id,
+        input.showId
+      );
+
+      await ctx.db
+        .delete(achievements)
+        .where(eq(achievements.id, input.achievementId));
+
+      return { removed: true };
+    }),
+
+  // ── Get achievements for a show ─────────────────────────
+  getShowAchievements: stewardProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyStewardAssignment(
+        ctx.db,
+        ctx.session.user.id,
+        input.showId
+      );
+
+      const showAchievements = await ctx.db.query.achievements.findMany({
+        where: eq(achievements.showId, input.showId),
+        with: {
+          dog: {
+            columns: { id: true, registeredName: true },
+          },
+        },
+      });
+
+      return showAchievements;
     }),
 });

@@ -207,6 +207,15 @@ export default function NewShowPage() {
         entryFee: Number(values.firstEntryFee) > 0
           ? poundsToPence(Number(values.firstEntryFee))
           : undefined,
+        firstEntryFee: Number(values.firstEntryFee) > 0
+          ? poundsToPence(Number(values.firstEntryFee))
+          : undefined,
+        subsequentEntryFee: Number(values.subsequentEntryFee) > 0
+          ? poundsToPence(Number(values.subsequentEntryFee))
+          : undefined,
+        nfcEntryFee: Number(values.nfcEntryFee) > 0
+          ? poundsToPence(Number(values.nfcEntryFee))
+          : undefined,
       });
 
       // Prefetch the show data so the detail page doesn't 404

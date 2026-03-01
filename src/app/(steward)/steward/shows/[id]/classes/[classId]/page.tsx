@@ -11,6 +11,7 @@ import {
   X,
   MessageSquare,
   ChevronDown,
+  UserX,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
@@ -131,6 +132,15 @@ export default function StewardClassResultsPage({
     },
   });
 
+  const markAbsent = trpc.steward.markAbsent.useMutation({
+    onSuccess: () => {
+      utils.steward.getClassEntries.invalidate({ showClassId: classId });
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
@@ -234,6 +244,11 @@ export default function StewardClassResultsPage({
             </Badge>
           )}
           <span>{entries.length} {entries.length === 1 ? 'entry' : 'entries'}</span>
+          {entries.filter((e) => e.absent).length > 0 && (
+            <span className="text-amber-600">
+              ({entries.filter((e) => e.absent).length} absent)
+            </span>
+          )}
         </div>
       </div>
 
@@ -247,21 +262,29 @@ export default function StewardClassResultsPage({
           entries.map((entry) => (
             <div
               key={entry.entryClassId}
-              className="rounded-lg border"
+              className={`rounded-lg border ${entry.absent ? 'opacity-50' : ''}`}
             >
               <div className="flex items-center gap-3 p-3">
                 {/* Catalogue number — large for ringside visibility */}
-                <div className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-muted text-lg font-bold">
-                  {entry.catalogueNumber ?? '—'}
+                <div className={`flex size-12 shrink-0 items-center justify-center rounded-lg text-lg font-bold ${entry.absent ? 'bg-amber-100 text-amber-600' : 'bg-muted'}`}>
+                  {entry.absent ? 'Abs' : (entry.catalogueNumber ?? '—')}
                 </div>
 
                 {/* Dog info */}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">
-                    {entry.dogName}
-                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <p className={`truncate text-sm font-medium ${entry.absent ? 'line-through' : ''}`}>
+                      {entry.dogName}
+                    </p>
+                    {entry.absent && (
+                      <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300 shrink-0">
+                        Absent
+                      </Badge>
+                    )}
+                  </div>
                   <p className="truncate text-xs text-muted-foreground">
                     {entry.exhibitorName}
+                    {!entry.absent && entry.catalogueNumber && ` · #${entry.catalogueNumber}`}
                   </p>
                   {entry.result?.specialAward && (
                     <Badge variant="secondary" className="mt-1 text-[10px] bg-amber-50 text-amber-700">
@@ -271,8 +294,24 @@ export default function StewardClassResultsPage({
                   )}
                 </div>
 
+                {/* Absent toggle */}
+                <Button
+                  variant={entry.absent ? 'default' : 'ghost'}
+                  size="icon"
+                  className={`size-10 shrink-0 ${entry.absent ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'text-muted-foreground/40'}`}
+                  title={entry.absent ? 'Mark as present' : 'Mark as absent'}
+                  onClick={() =>
+                    markAbsent.mutate({
+                      entryId: entry.entryId,
+                      absent: !entry.absent,
+                    })
+                  }
+                >
+                  <UserX className="size-4" />
+                </Button>
+
                 {/* Placement select */}
-                <div className="flex items-center gap-1">
+                <div className={`flex items-center gap-1 ${entry.absent ? 'pointer-events-none opacity-30' : ''}`}>
                   <Select
                     value={
                       entry.result?.placement

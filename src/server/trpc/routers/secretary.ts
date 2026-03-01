@@ -22,6 +22,7 @@ import {
   users,
   judges,
   judgeAssignments,
+  judgeContracts,
   rings,
   breeds,
   showChecklistItems,
@@ -31,6 +32,7 @@ import {
   calculateDueDate,
 } from '@/lib/default-checklist';
 import { getStripe } from '@/server/services/stripe';
+import { Resend } from 'resend';
 
 export const secretaryRouter = createTRPCRouter({
   getDashboard: secretaryProcedure.query(async ({ ctx }) => {
@@ -640,12 +642,14 @@ export const secretaryRouter = createTRPCRouter({
         showClassId: z.string().uuid(),
         entryFee: z.number().int().min(0).optional(),
         sortOrder: z.number().int().optional(),
+        classNumber: z.number().int().min(1).nullable().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const updates: Record<string, unknown> = {};
       if (input.entryFee !== undefined) updates.entryFee = input.entryFee;
       if (input.sortOrder !== undefined) updates.sortOrder = input.sortOrder;
+      if (input.classNumber !== undefined) updates.classNumber = input.classNumber;
 
       if (Object.keys(updates).length === 0) {
         throw new TRPCError({
@@ -680,6 +684,74 @@ export const secretaryRouter = createTRPCRouter({
       }
 
       return deleted;
+    }),
+
+  // ── Class number assignment ────────────────────────────
+
+  assignClassNumbers: secretaryProcedure
+    .input(
+      z.object({
+        assignments: z.array(
+          z.object({
+            classId: z.string().uuid(),
+            classNumber: z.number().int().min(1),
+          })
+        ),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      for (const { classId, classNumber } of input.assignments) {
+        await ctx.db
+          .update(showClasses)
+          .set({ classNumber })
+          .where(eq(showClasses.id, classId));
+      }
+      return { updated: input.assignments.length };
+    }),
+
+  autoAssignClassNumbers: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      // Fetch all classes with breed group info for ordering
+      const classes = await ctx.db.query.showClasses.findMany({
+        where: eq(showClasses.showId, input.showId),
+        with: {
+          classDefinition: true,
+          breed: {
+            with: { group: true },
+          },
+        },
+        orderBy: [asc(showClasses.sortOrder)],
+      });
+
+      // Sort by: breed group name → breed name → sex (dog first) → class sort order
+      const sorted = [...classes].sort((a, b) => {
+        const groupA = a.breed?.group?.name ?? 'ZZZ';
+        const groupB = b.breed?.group?.name ?? 'ZZZ';
+        if (groupA !== groupB) return groupA.localeCompare(groupB);
+
+        const breedA = a.breed?.name ?? 'ZZZ';
+        const breedB = b.breed?.name ?? 'ZZZ';
+        if (breedA !== breedB) return breedA.localeCompare(breedB);
+
+        // Dog before Bitch, null last
+        const sexOrder = (s: string | null) => s === 'dog' ? 0 : s === 'bitch' ? 1 : 2;
+        if (sexOrder(a.sex) !== sexOrder(b.sex)) return sexOrder(a.sex) - sexOrder(b.sex);
+
+        return a.sortOrder - b.sortOrder;
+      });
+
+      // Assign sequential numbers
+      for (let i = 0; i < sorted.length; i++) {
+        await ctx.db
+          .update(showClasses)
+          .set({ classNumber: i + 1 })
+          .where(eq(showClasses.id, sorted[i]!.id));
+      }
+
+      return { assigned: sorted.length };
     }),
 
   // ── Steward management ───────────────────────────────
@@ -1298,6 +1370,9 @@ export const secretaryRouter = createTRPCRouter({
       const items = await ctx.db.query.showChecklistItems.findMany({
         where: eq(showChecklistItems.showId, input.showId),
         orderBy: [asc(showChecklistItems.sortOrder)],
+        with: {
+          fileUpload: true,
+        },
       });
 
       return items;
@@ -1354,6 +1429,8 @@ export const secretaryRouter = createTRPCRouter({
         autoDetectKey: string | null;
         championshipOnly: boolean;
         relativeDueDays: number | null;
+        requiresDocument: boolean;
+        hasExpiry: boolean;
         entityType: string | null;
         entityId: string | null;
         entityName: string | null;
@@ -1382,6 +1459,8 @@ export const secretaryRouter = createTRPCRouter({
               autoDetectKey: item.autoDetectKey ?? null,
               championshipOnly: item.championshipOnly ?? false,
               relativeDueDays: item.relativeDueDays ?? null,
+              requiresDocument: item.requiresDocument ?? false,
+              hasExpiry: item.hasExpiry ?? false,
               entityType: 'judge',
               entityId: judge.id,
               entityName: judge.name,
@@ -1401,6 +1480,8 @@ export const secretaryRouter = createTRPCRouter({
             autoDetectKey: item.autoDetectKey ?? null,
             championshipOnly: item.championshipOnly ?? false,
             relativeDueDays: item.relativeDueDays ?? null,
+            requiresDocument: item.requiresDocument ?? false,
+            hasExpiry: item.hasExpiry ?? false,
             entityType: null,
             entityId: null,
             entityName: null,
@@ -1422,6 +1503,8 @@ export const secretaryRouter = createTRPCRouter({
           .optional(),
         notes: z.string().max(1000).nullable().optional(),
         assignedToName: z.string().max(255).nullable().optional(),
+        fileUploadId: z.string().uuid().nullable().optional(),
+        documentExpiryDate: z.string().nullable().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -1452,6 +1535,10 @@ export const secretaryRouter = createTRPCRouter({
       if (input.notes !== undefined) updates.notes = input.notes;
       if (input.assignedToName !== undefined)
         updates.assignedToName = input.assignedToName;
+      if (input.fileUploadId !== undefined)
+        updates.fileUploadId = input.fileUploadId;
+      if (input.documentExpiryDate !== undefined)
+        updates.documentExpiryDate = input.documentExpiryDate;
 
       const [updated] = await ctx.db
         .update(showChecklistItems)
@@ -1579,6 +1666,523 @@ export const secretaryRouter = createTRPCRouter({
         rings_created: Number(ringCount?.count) > 0,
       };
 
+      // Check if all assigned judges have been sent offer letters
+      if (Number(judgeCount?.count) > 0) {
+        const uniqueJudgeIds = await ctx.db
+          .selectDistinct({ judgeId: judgeAssignments.judgeId })
+          .from(judgeAssignments)
+          .where(eq(judgeAssignments.showId, input.showId));
+
+        const [contractCount] = await ctx.db
+          .select({ count: sql<number>`count(distinct ${judgeContracts.judgeId})` })
+          .from(judgeContracts)
+          .where(eq(judgeContracts.showId, input.showId));
+
+        detected.judge_offers_sent =
+          Number(contractCount?.count) >= uniqueJudgeIds.length && uniqueJudgeIds.length > 0;
+      } else {
+        detected.judge_offers_sent = false;
+      }
+
       return detected;
+    }),
+
+  // ─── Judge Contracts ────────────────────────────────────
+  getJudgeContracts: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      return ctx.db.query.judgeContracts.findMany({
+        where: eq(judgeContracts.showId, input.showId),
+        with: {
+          judge: true,
+          show: { with: { venue: true, organisation: true } },
+        },
+        orderBy: desc(judgeContracts.createdAt),
+      });
+    }),
+
+  sendJudgeOffer: secretaryProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        judgeId: z.string().uuid(),
+        judgeEmail: z.string().email(),
+        notes: z.string().max(2000).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      // Fetch judge info
+      const judge = await ctx.db.query.judges.findFirst({
+        where: eq(judges.id, input.judgeId),
+      });
+      if (!judge) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Judge not found' });
+      }
+
+      // Update judge's contact email if not already set
+      if (!judge.contactEmail) {
+        await ctx.db
+          .update(judges)
+          .set({ contactEmail: input.judgeEmail })
+          .where(eq(judges.id, input.judgeId));
+      }
+
+      // Fetch show with venue and org
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+        with: { venue: true, organisation: true },
+      });
+      if (!show) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
+      }
+
+      // Get breeds assigned to this judge for this show
+      const assignments = await ctx.db.query.judgeAssignments.findMany({
+        where: and(
+          eq(judgeAssignments.showId, input.showId),
+          eq(judgeAssignments.judgeId, input.judgeId)
+        ),
+        with: { breed: true, ring: true },
+      });
+
+      const breedNames = assignments
+        .filter((a) => a.breed)
+        .map((a) => a.breed!.name);
+      const breedsText = breedNames.length > 0 ? breedNames.join(', ') : 'All breeds';
+
+      // Token expires in 30 days
+      const tokenExpiresAt = new Date();
+      tokenExpiresAt.setDate(tokenExpiresAt.getDate() + 30);
+
+      // Create contract record
+      const [contract] = await ctx.db
+        .insert(judgeContracts)
+        .values({
+          showId: input.showId,
+          judgeId: input.judgeId,
+          judgeName: judge.name,
+          judgeEmail: input.judgeEmail,
+          stage: 'offer_sent',
+          offerSentAt: new Date(),
+          tokenExpiresAt,
+          notes: input.notes ?? null,
+        })
+        .returning();
+
+      if (!contract) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to create contract' });
+      }
+
+      // Build and send email
+      const baseUrl = process.env.RENDER_EXTERNAL_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
+      const acceptUrl = `${baseUrl}/api/judge-contract/${contract.offerToken}`;
+
+      const showDate = new Date(show.startDate).toLocaleDateString('en-GB', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      });
+
+      const venue = show.venue
+        ? `${show.venue.name}${show.venue.postcode ? `, ${show.venue.postcode}` : ''}`
+        : 'Venue TBC';
+
+      const orgName = show.organisation?.name ?? 'the Show Society';
+
+      const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; background-color: #f5f3ef; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
+
+    <!-- Header -->
+    <div style="text-align: center; padding: 24px 0;">
+      <h1 style="margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 28px; color: #2D5F3F; letter-spacing: -0.5px;">Remi</h1>
+    </div>
+
+    <!-- Main card -->
+    <div style="background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+
+      <!-- Banner -->
+      <div style="background: #2D5F3F; padding: 24px 24px 20px; text-align: center;">
+        <h2 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 700;">Judging Appointment Offer</h2>
+        <p style="margin: 8px 0 0; color: #b8d4c4; font-size: 14px;">
+          from ${orgName}
+        </p>
+      </div>
+
+      <!-- Letter body -->
+      <div style="padding: 24px;">
+        <p style="font-size: 15px; color: #1a1a1a; line-height: 1.6;">
+          Dear ${judge.name},
+        </p>
+        <p style="font-size: 15px; color: #333; line-height: 1.6;">
+          On behalf of ${orgName}, I have much pleasure in inviting you to judge at our forthcoming show. The details are as follows:
+        </p>
+
+        <!-- Show details table -->
+        <table style="width: 100%; margin: 20px 0; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444; width: 120px;">Show</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${show.name}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Date</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${showDate}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Venue</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${venue}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Breeds</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${breedsText}</td>
+          </tr>
+          ${show.showType ? `<tr>
+            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Show Type</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${show.showType.replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}</td>
+          </tr>` : ''}
+        </table>
+
+        ${input.notes ? `<p style="font-size: 14px; color: #555; line-height: 1.6; padding: 12px; background: #f9f8f6; border-radius: 8px;">${input.notes}</p>` : ''}
+
+        <p style="font-size: 15px; color: #333; line-height: 1.6;">
+          If you are willing to accept this appointment, please confirm by clicking the button below. This constitutes the formal written offer as required under Kennel Club regulations.
+        </p>
+
+        <!-- Buttons -->
+        <div style="text-align: center; margin: 28px 0;">
+          <a href="${acceptUrl}?action=accept"
+             style="display: inline-block; background: #2D5F3F; color: #ffffff; padding: 14px 32px; border-radius: 8px; font-size: 16px; font-weight: 600; text-decoration: none; margin-bottom: 12px;">
+            Accept Appointment
+          </a>
+          <br>
+          <a href="${acceptUrl}?action=decline"
+             style="display: inline-block; color: #888; padding: 8px 16px; font-size: 13px; text-decoration: underline; margin-top: 8px;">
+            Decline
+          </a>
+        </div>
+
+        <p style="font-size: 13px; color: #999; line-height: 1.5; text-align: center;">
+          This link will expire on ${tokenExpiresAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.
+        </p>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div style="text-align: center; padding: 24px 16px; font-size: 12px; color: #999;">
+      <p style="margin: 0;">
+        This offer was sent by <strong>Remi</strong> on behalf of ${orgName}.
+      </p>
+      <p style="margin: 8px 0 0;">
+        If you have any questions, please reply to this email.
+      </p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>';
+
+      try {
+        await resend.emails.send({
+          from: emailFrom,
+          to: input.judgeEmail,
+          replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+          subject: `Judging Offer — ${show.name}`,
+          html,
+        });
+      } catch (error) {
+        console.error('[email] Failed to send judge offer:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to send offer email. The contract was created but the email could not be delivered.',
+        });
+      }
+
+      return contract;
+    }),
+
+  resendJudgeOffer: secretaryProcedure
+    .input(z.object({ contractId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const contract = await ctx.db.query.judgeContracts.findFirst({
+        where: eq(judgeContracts.id, input.contractId),
+        with: {
+          show: { with: { venue: true, organisation: true } },
+          judge: true,
+        },
+      });
+
+      if (!contract) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Contract not found' });
+      }
+
+      await verifyShowAccess(ctx.db, ctx.session.user.id, contract.showId);
+
+      if (contract.stage !== 'offer_sent') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Can only resend offers that are in the "offer sent" stage',
+        });
+      }
+
+      // Refresh token expiry
+      const tokenExpiresAt = new Date();
+      tokenExpiresAt.setDate(tokenExpiresAt.getDate() + 30);
+
+      await ctx.db
+        .update(judgeContracts)
+        .set({ tokenExpiresAt, offerSentAt: new Date() })
+        .where(eq(judgeContracts.id, input.contractId));
+
+      // Get breed assignments
+      const assignments = await ctx.db.query.judgeAssignments.findMany({
+        where: and(
+          eq(judgeAssignments.showId, contract.showId),
+          eq(judgeAssignments.judgeId, contract.judgeId)
+        ),
+        with: { breed: true },
+      });
+
+      const breedNames = assignments
+        .filter((a) => a.breed)
+        .map((a) => a.breed!.name);
+      const breedsText = breedNames.length > 0 ? breedNames.join(', ') : 'All breeds';
+
+      const baseUrl = process.env.RENDER_EXTERNAL_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
+      const acceptUrl = `${baseUrl}/api/judge-contract/${contract.offerToken}`;
+      const show = contract.show;
+      const orgName = show.organisation?.name ?? 'the Show Society';
+
+      const showDate = new Date(show.startDate).toLocaleDateString('en-GB', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      });
+
+      const venue = show.venue
+        ? `${show.venue.name}${show.venue.postcode ? `, ${show.venue.postcode}` : ''}`
+        : 'Venue TBC';
+
+      const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; background-color: #f5f3ef; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
+    <div style="text-align: center; padding: 24px 0;">
+      <h1 style="margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 28px; color: #2D5F3F; letter-spacing: -0.5px;">Remi</h1>
+    </div>
+    <div style="background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: #2D5F3F; padding: 24px 24px 20px; text-align: center;">
+        <h2 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 700;">Judging Appointment Offer</h2>
+        <p style="margin: 8px 0 0; color: #b8d4c4; font-size: 14px;">Reminder from ${orgName}</p>
+      </div>
+      <div style="padding: 24px;">
+        <p style="font-size: 15px; color: #1a1a1a; line-height: 1.6;">Dear ${contract.judgeName},</p>
+        <p style="font-size: 15px; color: #333; line-height: 1.6;">
+          This is a reminder regarding our invitation for you to judge at our show. We would be delighted if you could confirm your acceptance at your earliest convenience.
+        </p>
+        <table style="width: 100%; margin: 20px 0; border-collapse: collapse;">
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444; width: 120px;">Show</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${show.name}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Date</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${showDate}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Venue</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${venue}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Breeds</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${breedsText}</td></tr>
+        </table>
+        <div style="text-align: center; margin: 28px 0;">
+          <a href="${acceptUrl}?action=accept" style="display: inline-block; background: #2D5F3F; color: #ffffff; padding: 14px 32px; border-radius: 8px; font-size: 16px; font-weight: 600; text-decoration: none; margin-bottom: 12px;">Accept Appointment</a>
+          <br>
+          <a href="${acceptUrl}?action=decline" style="display: inline-block; color: #888; padding: 8px 16px; font-size: 13px; text-decoration: underline; margin-top: 8px;">Decline</a>
+        </div>
+        <p style="font-size: 13px; color: #999; line-height: 1.5; text-align: center;">
+          This link will expire on ${tokenExpiresAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.
+        </p>
+      </div>
+    </div>
+    <div style="text-align: center; padding: 24px 16px; font-size: 12px; color: #999;">
+      <p style="margin: 0;">This offer was sent by <strong>Remi</strong> on behalf of ${orgName}.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>';
+
+      try {
+        await resend.emails.send({
+          from: emailFrom,
+          to: contract.judgeEmail,
+          replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+          subject: `Reminder: Judging Offer — ${show.name}`,
+          html,
+        });
+      } catch (error) {
+        console.error('[email] Failed to resend judge offer:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to resend offer email.',
+        });
+      }
+
+      return { resent: true };
+    }),
+
+  sendJudgeConfirmation: secretaryProcedure
+    .input(z.object({ contractId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const contract = await ctx.db.query.judgeContracts.findFirst({
+        where: eq(judgeContracts.id, input.contractId),
+        with: {
+          show: { with: { venue: true, organisation: true } },
+          judge: true,
+        },
+      });
+
+      if (!contract) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Contract not found' });
+      }
+
+      await verifyShowAccess(ctx.db, ctx.session.user.id, contract.showId);
+
+      if (contract.stage !== 'offer_accepted') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Can only confirm offers that have been accepted',
+        });
+      }
+
+      // Get breed assignments
+      const assignments = await ctx.db.query.judgeAssignments.findMany({
+        where: and(
+          eq(judgeAssignments.showId, contract.showId),
+          eq(judgeAssignments.judgeId, contract.judgeId)
+        ),
+        with: { breed: true, ring: true },
+      });
+
+      const breedNames = assignments.filter((a) => a.breed).map((a) => a.breed!.name);
+      const breedsText = breedNames.length > 0 ? breedNames.join(', ') : 'All breeds';
+
+      const ringNums = assignments.filter((a) => a.ring).map((a) => `Ring ${a.ring!.number}`);
+      const ringsText = ringNums.length > 0 ? ringNums.join(', ') : 'TBC';
+
+      const show = contract.show;
+      const orgName = show.organisation?.name ?? 'the Show Society';
+
+      const showDate = new Date(show.startDate).toLocaleDateString('en-GB', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      });
+
+      const venue = show.venue
+        ? `${show.venue.name}${show.venue.address ? `, ${show.venue.address}` : ''}${show.venue.postcode ? `, ${show.venue.postcode}` : ''}`
+        : 'Venue TBC';
+
+      // Update contract stage
+      await ctx.db
+        .update(judgeContracts)
+        .set({ stage: 'confirmed', confirmedAt: new Date() })
+        .where(eq(judgeContracts.id, input.contractId));
+
+      // Auto-update checklist items for this judge
+      await ctx.db
+        .update(showChecklistItems)
+        .set({
+          status: 'complete',
+          completedAt: new Date(),
+          autoDetected: true,
+        })
+        .where(
+          and(
+            eq(showChecklistItems.showId, contract.showId),
+            eq(showChecklistItems.entityType, 'judge'),
+            eq(showChecklistItems.entityId, contract.judgeId),
+            ilike(showChecklistItems.title, '%confirmation%')
+          )
+        );
+
+      const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; background-color: #f5f3ef; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
+    <div style="text-align: center; padding: 24px 0;">
+      <h1 style="margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 28px; color: #2D5F3F; letter-spacing: -0.5px;">Remi</h1>
+    </div>
+    <div style="background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: #2D5F3F; padding: 24px 24px 20px; text-align: center;">
+        <div style="font-size: 32px; margin-bottom: 8px;">&#10003;</div>
+        <h2 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 700;">Appointment Confirmed</h2>
+      </div>
+      <div style="padding: 24px;">
+        <p style="font-size: 15px; color: #1a1a1a; line-height: 1.6;">Dear ${contract.judgeName},</p>
+        <p style="font-size: 15px; color: #333; line-height: 1.6;">
+          Thank you for accepting our invitation. This letter confirms your appointment to judge at our show. Please retain this as your formal confirmation.
+        </p>
+        <table style="width: 100%; margin: 20px 0; border-collapse: collapse;">
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444; width: 120px;">Show</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${show.name}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Date</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${showDate}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Venue</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${venue}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Breeds</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${breedsText}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Ring(s)</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${ringsText}</td></tr>
+        </table>
+        <p style="font-size: 15px; color: #333; line-height: 1.6;">
+          Further details regarding entry numbers and the running order will be sent to you closer to the show date. We look forward to welcoming you.
+        </p>
+        <p style="font-size: 15px; color: #333; line-height: 1.6; margin-top: 24px;">
+          Yours sincerely,<br>
+          <strong>${orgName}</strong>
+        </p>
+      </div>
+    </div>
+    <div style="text-align: center; padding: 24px 16px; font-size: 12px; color: #999;">
+      <p style="margin: 0;">This confirmation was sent by <strong>Remi</strong> on behalf of ${orgName}.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>';
+
+      try {
+        await resend.emails.send({
+          from: emailFrom,
+          to: contract.judgeEmail,
+          replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+          subject: `Appointment Confirmed — ${show.name}`,
+          html,
+        });
+      } catch (error) {
+        console.error('[email] Failed to send judge confirmation:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Contract was confirmed but the email could not be delivered.',
+        });
+      }
+
+      return { confirmed: true };
     }),
 });

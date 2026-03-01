@@ -49,11 +49,18 @@ export const showsRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const conditions = [];
 
-      if (input.showType) {
-        conditions.push(eq(shows.showType, input.showType));
-      }
+      // Public list: only show visible statuses unless a specific status is requested
       if (input.status) {
         conditions.push(eq(shows.status, input.status));
+      } else {
+        // Exclude drafts and cancelled from public listings
+        conditions.push(
+          inArray(shows.status, ['published', 'entries_open', 'entries_closed', 'in_progress', 'completed'])
+        );
+      }
+
+      if (input.showType) {
+        conditions.push(eq(shows.showType, input.showType));
       }
       if (input.startDate) {
         conditions.push(gte(shows.startDate, input.startDate));
@@ -120,6 +127,16 @@ export const showsRouter = createTRPCRouter({
       });
 
       if (!show) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Show not found',
+        });
+      }
+
+      // Hide draft/cancelled shows from non-secretary/admin users
+      const userRole = ctx.session?.user?.role;
+      const isPrivileged = userRole === 'secretary' || userRole === 'admin';
+      if (!isPrivileged && (show.status === 'draft' || show.status === 'cancelled')) {
         throw new TRPCError({
           code: 'NOT_FOUND',
           message: 'Show not found',
@@ -322,10 +339,13 @@ export const showsRouter = createTRPCRouter({
         description: z.string().optional(),
         classDefinitionIds: z.array(z.string().uuid()).optional(),
         entryFee: z.number().int().min(0).optional(),
+        firstEntryFee: z.number().int().min(0).optional(),
+        subsequentEntryFee: z.number().int().min(0).optional(),
+        nfcEntryFee: z.number().int().min(0).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { classDefinitionIds, entryFee, ...showData } = input;
+      const { classDefinitionIds, entryFee, firstEntryFee, subsequentEntryFee, nfcEntryFee, ...showData } = input;
 
       const [show] = await ctx.db
         .insert(shows)
@@ -341,6 +361,9 @@ export const showsRouter = createTRPCRouter({
             ? new Date(showData.postalCloseDate)
             : null,
           venueId: showData.venueId ?? null,
+          firstEntryFee: firstEntryFee ?? null,
+          subsequentEntryFee: subsequentEntryFee ?? null,
+          nfcEntryFee: nfcEntryFee ?? null,
         })
         .returning();
 

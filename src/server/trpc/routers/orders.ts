@@ -75,6 +75,30 @@ export const ordersRouter = createTRPCRouter({
         }
       }
 
+      // Check for duplicate entries (same dog already entered in this show)
+      for (const entryInput of input.entries) {
+        if (entryInput.entryType === 'standard' && entryInput.dogId) {
+          const existingEntry = await ctx.db.query.entries.findFirst({
+            where: and(
+              eq(entries.dogId, entryInput.dogId),
+              eq(entries.showId, input.showId),
+              isNull(entries.deletedAt),
+              sql`${entries.status} NOT IN ('withdrawn', 'cancelled')`
+            ),
+          });
+
+          if (existingEntry) {
+            const dog = await ctx.db.query.dogs.findFirst({
+              where: eq(dogs.id, entryInput.dogId),
+            });
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `${dog?.registeredName ?? 'This dog'} is already entered in this show`,
+            });
+          }
+        }
+      }
+
       // Collect all class IDs and validate
       const allClassIds = input.entries.flatMap((e) => e.classIds);
       const selectedClasses = await ctx.db.query.showClasses.findMany({
@@ -96,11 +120,21 @@ export const ordersRouter = createTRPCRouter({
         }
       }
 
-      // Calculate total amount
+      // Calculate total amount using show-level fee tiers if available
       let totalAmount = 0;
       for (const entry of input.entries) {
-        for (const classId of entry.classIds) {
-          totalAmount += classMap.get(classId)!.entryFee;
+        const classCount = entry.classIds.length;
+
+        if (entry.isNfc && show.nfcEntryFee != null) {
+          totalAmount += show.nfcEntryFee * classCount;
+        } else if (show.firstEntryFee != null) {
+          const subsequentRate = show.subsequentEntryFee ?? show.firstEntryFee;
+          totalAmount += show.firstEntryFee + subsequentRate * (classCount - 1);
+        } else {
+          // Fallback: per-class fees
+          for (const classId of entry.classIds) {
+            totalAmount += classMap.get(classId)!.entryFee;
+          }
         }
       }
 
@@ -119,10 +153,20 @@ export const ordersRouter = createTRPCRouter({
       const createdEntries: { id: string; dogId: string | null }[] = [];
 
       for (const entryInput of input.entries) {
-        const entryFee = entryInput.classIds.reduce(
-          (sum, cid) => sum + (classMap.get(cid)?.entryFee ?? 0),
-          0
-        );
+        const classCount = entryInput.classIds.length;
+        let entryFee: number;
+
+        if (entryInput.isNfc && show.nfcEntryFee != null) {
+          entryFee = show.nfcEntryFee * classCount;
+        } else if (show.firstEntryFee != null) {
+          const subsequentRate = show.subsequentEntryFee ?? show.firstEntryFee;
+          entryFee = show.firstEntryFee + subsequentRate * (classCount - 1);
+        } else {
+          entryFee = entryInput.classIds.reduce(
+            (sum, cid) => sum + (classMap.get(cid)?.entryFee ?? 0),
+            0
+          );
+        }
 
         const [entry] = await ctx.db
           .insert(entries)
@@ -144,13 +188,23 @@ export const ordersRouter = createTRPCRouter({
           dogId: entryInput.dogId ?? null,
         });
 
-        // Create entry classes
+        // Create entry classes with tiered fees
         await ctx.db.insert(entryClasses).values(
-          entryInput.classIds.map((cid) => ({
-            entryId: entry!.id,
-            showClassId: cid,
-            fee: classMap.get(cid)!.entryFee,
-          }))
+          entryInput.classIds.map((cid, idx) => {
+            let classFee: number;
+            if (entryInput.isNfc && show.nfcEntryFee != null) {
+              classFee = show.nfcEntryFee;
+            } else if (show.firstEntryFee != null) {
+              classFee = idx === 0 ? show.firstEntryFee : (show.subsequentEntryFee ?? show.firstEntryFee);
+            } else {
+              classFee = classMap.get(cid)!.entryFee;
+            }
+            return {
+              entryId: entry!.id,
+              showClassId: cid,
+              fee: classFee,
+            };
+          })
         );
 
         // Create junior handler details if applicable

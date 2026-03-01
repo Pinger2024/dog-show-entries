@@ -46,6 +46,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     phase: 'pre_planning',
     sortOrder: 1,
     relativeDueDays: 365,
+    autoDetectKey: 'judge_offers_sent',
   },
   {
     title: 'Confirm venue',

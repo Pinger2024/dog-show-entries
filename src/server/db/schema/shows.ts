@@ -1,6 +1,7 @@
 import {
   date,
   index,
+  integer,
   pgTable,
   text,
   timestamp,
@@ -14,6 +15,7 @@ import { showClasses } from './show-classes';
 import { entries } from './entries';
 import { rings } from './rings';
 import { judgeAssignments } from './judge-assignments';
+import { judgeContracts } from './judge-contracts';
 import { stewardAssignments } from './steward-assignments';
 import { showChecklistItems } from './show-checklist';
 
@@ -39,6 +41,9 @@ export const shows = pgTable(
     kcLicenceNo: text('kc_licence_no'),
     scheduleUrl: text('schedule_url'),
     description: text('description'),
+    firstEntryFee: integer('first_entry_fee'),
+    subsequentEntryFee: integer('subsequent_entry_fee'),
+    nfcEntryFee: integer('nfc_entry_fee'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -68,6 +73,7 @@ export const showsRelations = relations(shows, ({ one, many }) => ({
   entries: many(entries),
   rings: many(rings),
   judgeAssignments: many(judgeAssignments),
+  judgeContracts: many(judgeContracts),
   stewardAssignments: many(stewardAssignments),
   checklistItems: many(showChecklistItems),
 }));

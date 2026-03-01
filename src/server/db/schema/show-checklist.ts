@@ -55,6 +55,8 @@ export const showChecklistItems = pgTable(
     // Relative due days from show date (positive = before, negative = after)
     relativeDueDays: integer('relative_due_days'),
     // Document tracking — for items that need evidence (insurance cert, KC licence, etc.)
+    requiresDocument: boolean('requires_document').notNull().default(false),
+    hasExpiry: boolean('has_expiry').notNull().default(false),
     fileUploadId: uuid('file_upload_id').references(() => fileUploads.id),
     documentExpiryDate: date('document_expiry_date', { mode: 'string' }),
     // For per-entity items (e.g. one per judge): the entity type and display name

@@ -3,7 +3,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { getStripe } from '@/server/services/stripe';
 import { db } from '@/server/db';
 import { entries, orders, payments, organisations, plans } from '@/server/db/schema';
-import { sendEntryConfirmationEmail } from '@/server/services/email';
+import { sendEntryConfirmationEmail, sendSecretaryNotificationEmail } from '@/server/services/email';
 import type Stripe from 'stripe';
 
 export async function POST(request: NextRequest) {
@@ -86,6 +86,9 @@ export async function POST(request: NextRequest) {
       if (orderId) {
         sendEntryConfirmationEmail(orderId).catch((err) =>
           console.error('[webhook] Email send failed:', err)
+        );
+        sendSecretaryNotificationEmail(orderId).catch((err) =>
+          console.error('[webhook] Secretary notification failed:', err)
         );
       }
 

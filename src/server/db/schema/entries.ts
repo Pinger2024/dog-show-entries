@@ -39,6 +39,7 @@ export const entries = pgTable(
       .notNull(),
     catalogueNumber: text('catalogue_number'),
     catalogueRequested: boolean('catalogue_requested').notNull().default(false),
+    absent: boolean('absent').notNull().default(false),
     totalFee: integer('total_fee').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
