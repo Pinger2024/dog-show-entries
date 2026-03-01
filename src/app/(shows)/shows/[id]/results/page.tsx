@@ -16,6 +16,15 @@ import { trpc } from '@/lib/trpc';
 import { getPlacementLabel } from '@/lib/placements';
 import { Badge } from '@/components/ui/badge';
 
+const achievementLabels: Record<string, string> = {
+  best_in_show: 'Best in Show',
+  reserve_best_in_show: 'Reserve Best in Show',
+  best_puppy_in_show: 'Best Puppy in Show',
+  best_of_breed: 'Best of Breed',
+  best_puppy_in_breed: 'Best Puppy in Breed',
+  best_veteran_in_breed: 'Best Veteran in Breed',
+};
+
 const placementColors: Record<number, string> = {
   1: 'bg-yellow-100 text-yellow-800 border-yellow-200',
   2: 'bg-gray-100 text-gray-700 border-gray-200',
@@ -44,6 +53,12 @@ export default function LiveResultsPage({
     { refetchInterval: 10_000 }
   );
 
+  const { data: achievements } =
+    trpc.steward.getPublicShowAchievements.useQuery(
+      { showId },
+      { refetchInterval: 10_000 }
+    );
+
   if (isLoading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -70,6 +85,20 @@ export default function LiveResultsPage({
   const { show, breedGroups } = data;
   const isLive = show.status === 'in_progress';
   const isCompleted = show.status === 'completed';
+
+  // Group achievements by type for display
+  const showAwards = (achievements ?? []).filter((a) =>
+    ['best_in_show', 'reserve_best_in_show', 'best_puppy_in_show'].includes(a.type)
+  );
+  const breedAwards = (achievements ?? []).filter((a) =>
+    ['best_of_breed', 'best_puppy_in_breed', 'best_veteran_in_breed'].includes(a.type)
+  );
+  const breedAwardsByBreed = new Map<string, typeof breedAwards>();
+  for (const a of breedAwards) {
+    const breedName = a.dog?.breed?.name ?? 'Unknown';
+    if (!breedAwardsByBreed.has(breedName)) breedAwardsByBreed.set(breedName, []);
+    breedAwardsByBreed.get(breedName)!.push(a);
+  }
   const lastUpdated = dataUpdatedAt
     ? new Date(dataUpdatedAt).toLocaleTimeString('en-GB', {
         hour: '2-digit',
@@ -160,11 +189,71 @@ export default function LiveResultsPage({
           </div>
         ) : (
           <div className="space-y-8">
+            {/* Show-level awards (BIS/RBIS/BPS) */}
+            {showAwards.length > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-gradient-to-b from-amber-50/80 to-amber-50/30 p-4 sm:p-5">
+                <div className="mb-3 flex items-center gap-2">
+                  <Trophy className="size-5 text-amber-600" />
+                  <h2 className="font-serif text-lg font-semibold text-amber-900">
+                    Show Awards
+                  </h2>
+                </div>
+                <div className="space-y-2">
+                  {showAwards.map((a) => (
+                    <div key={a.id} className="flex items-center gap-3">
+                      <Badge className="w-44 justify-center bg-amber-100 text-amber-800 border-amber-300 text-xs font-semibold">
+                        {achievementLabels[a.type] ?? a.type}
+                      </Badge>
+                      {a.dog ? (
+                        <Link
+                          href={`/dog/${a.dogId}`}
+                          className="font-medium text-sm text-primary hover:underline"
+                        >
+                          {a.dog.registeredName}
+                        </Link>
+                      ) : (
+                        <span className="font-medium text-sm">Unknown dog</span>
+                      )}
+                      {a.dog?.breed && (
+                        <span className="text-xs text-muted-foreground">
+                          ({a.dog.breed.name})
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {breedGroups.map((group) => (
               <div key={group.breedName}>
                 <h2 className="mb-3 font-serif text-lg font-semibold">
                   {group.breedName}
                 </h2>
+
+                {/* Breed-level awards (BOB/BPB/BVB) */}
+                {breedAwardsByBreed.has(group.breedName) && (
+                  <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1.5">
+                    {breedAwardsByBreed.get(group.breedName)!.map((a) => (
+                      <div key={a.id} className="flex items-center gap-1.5 text-sm">
+                        <Award className="size-4 text-amber-500" />
+                        <span className="text-xs font-medium text-muted-foreground">
+                          {achievementLabels[a.type] ?? a.type}:
+                        </span>
+                        {a.dog ? (
+                          <Link
+                            href={`/dog/${a.dogId}`}
+                            className="text-xs font-medium text-primary hover:underline"
+                          >
+                            {a.dog.registeredName}
+                          </Link>
+                        ) : (
+                          <span className="text-xs font-medium">Unknown</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="space-y-4">
                   {group.classes.map((cls) => (
                     <div
