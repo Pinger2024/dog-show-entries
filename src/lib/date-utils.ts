@@ -31,3 +31,25 @@ export function formatDateRange(startDate: string, endDate: string): string {
 export function formatCurrency(pence: number): string {
   return `£${(pence / 100).toFixed(2)}`;
 }
+
+/**
+ * Converts a pounds value (e.g. 5.00) to pence (e.g. 500).
+ * Rounds to the nearest penny to avoid floating-point issues.
+ */
+export function poundsToPence(pounds: number): number {
+  return Math.round(pounds * 100);
+}
+
+/**
+ * Converts a pence value (e.g. 500) to pounds (e.g. 5.00).
+ */
+export function penceToPounds(pence: number): number {
+  return pence / 100;
+}
+
+/**
+ * Formats a pence value as a pounds string for form inputs (e.g. 500 → "5.00").
+ */
+export function penceToPoundsString(pence: number): string {
+  return (pence / 100).toFixed(2);
+}

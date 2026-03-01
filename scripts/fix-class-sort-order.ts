@@ -20,7 +20,9 @@ const sortOrders: Record<string, number> = {
   'Junior': 3,
   'Yearling': 4,
   'Veteran': 5,
-  'Long Coat Puppy': 6,
+  'Special Long Coat Puppy': 6,
+  'Special Long Coat Junior': 7,
+  'Special Long Coat Yearling': 8,
   // Achievement classes: least restrictive → most open
   'Maiden': 1,
   'Novice': 2,
@@ -30,7 +32,7 @@ const sortOrders: Record<string, number> = {
   'Mid Limit': 6,
   'Limit': 7,
   'Open': 8,
-  'Long Coat Open': 9,
+  'Special Long Coat Open': 9,
   // Special
   'Good Citizen Dog Scheme': 1,
   'Special Beginners': 2,

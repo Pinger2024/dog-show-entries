@@ -106,9 +106,11 @@ async function seed() {
       { name: 'Mid Limit', type: 'achievement' as const, sortOrder: 6, maxWins: 4, description: 'For dogs which have not won a CC or 3 or more first prizes in Mid Limit, Limit, or Open at Championship Shows.' },
       { name: 'Limit', type: 'achievement' as const, sortOrder: 7, maxWins: 6, description: 'For dogs which have not become Show Champions or won 3 or more CCs or 7 or more first prizes at Championship Shows in Limit or Open.' },
       { name: 'Open', type: 'achievement' as const, sortOrder: 8, description: 'For all dogs of the breed eligible for entry at the show. No restrictions.' },
-      // Long Coat GSD varieties (continue numbering after standard classes in their type)
-      { name: 'Long Coat Puppy', type: 'age' as const, sortOrder: 6, minAgeMonths: 6, maxAgeMonths: 12, description: 'For Long Coat German Shepherd Dogs of 6 and not exceeding 12 calendar months of age on the first day of the show.' },
-      { name: 'Long Coat Open', type: 'achievement' as const, sortOrder: 9, description: 'For Long Coat German Shepherd Dogs eligible for entry at the show. No restrictions.' },
+      // Special Long Coat GSD varieties (continue numbering after standard classes in their type)
+      { name: 'Special Long Coat Puppy', type: 'age' as const, sortOrder: 6, minAgeMonths: 6, maxAgeMonths: 12, description: 'For Long Coat German Shepherd Dogs of 6 and not exceeding 12 calendar months of age on the first day of the show.' },
+      { name: 'Special Long Coat Junior', type: 'age' as const, sortOrder: 7, minAgeMonths: 6, maxAgeMonths: 18, description: 'For Long Coat dogs aged 6-18 months' },
+      { name: 'Special Long Coat Yearling', type: 'age' as const, sortOrder: 8, minAgeMonths: 12, maxAgeMonths: 24, description: 'For Long Coat dogs aged 12-24 months' },
+      { name: 'Special Long Coat Open', type: 'achievement' as const, sortOrder: 9, description: 'For Long Coat German Shepherd Dogs eligible for entry at the show. No restrictions.' },
       // Special
       { name: 'Good Citizen Dog Scheme', type: 'special' as const, sortOrder: 1, description: 'For dogs that have passed any level of the Kennel Club Good Citizen Dog Scheme.' },
       { name: 'Special Beginners', type: 'special' as const, sortOrder: 2, description: 'For dogs whose owners/handlers have never won a CC or Reserve CC at Championship Shows.' },

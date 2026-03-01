@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { trpc } from '@/lib/trpc';
+import { poundsToPence } from '@/lib/date-utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -152,6 +153,7 @@ export default function NewShowPage() {
   const { data: venues } = trpc.secretary.listVenues.useQuery();
   const { data: classDefinitions } = trpc.secretary.listClassDefinitions.useQuery();
 
+  const utils = trpc.useUtils();
   const createVenueMutation = trpc.secretary.createVenue.useMutation();
   const createShowMutation = trpc.shows.create.useMutation();
 
@@ -203,9 +205,12 @@ export default function NewShowPage() {
           ? values.selectedClassIds
           : undefined,
         entryFee: Number(values.firstEntryFee) > 0
-          ? Math.round(Number(values.firstEntryFee) * 100)
+          ? poundsToPence(Number(values.firstEntryFee))
           : undefined,
       });
+
+      // Prefetch the show data so the detail page doesn't 404
+      await utils.shows.getById.prefetch({ id: show.id });
 
       toast.success(
         asDraft ? 'Show saved as draft' : 'Show created successfully'

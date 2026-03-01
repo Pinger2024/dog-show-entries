@@ -26,11 +26,13 @@ import {
   Users,
   X,
   Eye,
+  Check,
+  ChevronsUpDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
-import { formatDogName } from '@/lib/utils';
-import { formatCurrency } from '@/lib/date-utils';
+import { cn, formatDogName } from '@/lib/utils';
+import { formatCurrency, penceToPoundsString, poundsToPence } from '@/lib/date-utils';
 import { CLASS_TEMPLATES } from '@/lib/class-templates';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -68,6 +70,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
 
 const statusConfig: Record<
   string,
@@ -2392,21 +2407,22 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
     );
   }
 
-  function startEditFee(classId: string, currentFee: number) {
+  function startEditFee(classId: string, currentFeePence: number) {
     setEditingFees((prev) => ({
       ...prev,
-      [classId]: String(currentFee),
+      [classId]: penceToPoundsString(currentFeePence),
     }));
   }
 
   function saveFee(classId: string) {
     const val = editingFees[classId];
     if (val === undefined) return;
-    const pence = parseInt(val, 10);
-    if (isNaN(pence) || pence < 0) {
-      toast.error('Enter a valid fee in pence');
+    const pounds = parseFloat(val);
+    if (isNaN(pounds) || pounds < 0) {
+      toast.error('Enter a valid fee in pounds (e.g. 5.00)');
       return;
     }
+    const pence = poundsToPence(pounds);
     updateMutation.mutate({ showClassId: classId, entryFee: pence });
     setEditingFees((prev) => {
       const next = { ...prev };
@@ -2618,7 +2634,7 @@ function BulkClassCreator({ showId }: { showId: string }) {
     const t = CLASS_TEMPLATES.find((t) => t.id === templateId);
     setSelectedTemplate(templateId);
     setSplitBySex(t?.splitBySex ?? false);
-    setFeeInput(String(t?.defaultFeePence ?? 500));
+    setFeeInput(penceToPoundsString(t?.defaultFeePence ?? 500));
     // Pre-check all template classes
     if (t && classDefs) {
       const ids = classDefs
@@ -2630,7 +2646,7 @@ function BulkClassCreator({ showId }: { showId: string }) {
 
   function handleCreate() {
     if (!template || selectedBreedIds.length === 0 || selectedClassDefIds.length === 0) return;
-    const fee = feeInput ? parseInt(feeInput, 10) : template.defaultFeePence;
+    const fee = poundsToPence(parseFloat(feeInput || '0')) || template.defaultFeePence;
     bulkMutation.mutate({
       showId,
       breedIds: selectedBreedIds,
@@ -2818,16 +2834,18 @@ function BulkClassCreator({ showId }: { showId: string }) {
             {/* Options */}
             <div className="grid gap-4 sm:grid-cols-3">
               <div>
-                <Label className="text-sm font-medium">Entry Fee (pence)</Label>
+                <Label className="text-sm font-medium">Entry Fee (£)</Label>
                 <Input
                   type="number"
                   min={0}
+                  step={0.01}
+                  placeholder="e.g. 5.00"
                   value={feeInput}
                   onChange={(e) => setFeeInput(e.target.value)}
                   className="mt-1"
                 />
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {feeInput ? formatCurrency(parseInt(feeInput, 10) || 0) : '£0.00'}
+                  {feeInput ? formatCurrency(poundsToPence(parseFloat(feeInput)) || 0) : '£0.00'}
                 </p>
               </div>
               <div className="flex items-end gap-2 pb-6">
@@ -2874,7 +2892,7 @@ function AddIndividualClass({ showId }: { showId: string }) {
   const [newClassName, setNewClassName] = useState('');
   const [breedId, setBreedId] = useState<string>('');
   const [sex, setSex] = useState<string>('combined');
-  const [feeInput, setFeeInput] = useState('500');
+  const [feeInput, setFeeInput] = useState('5.00');
   const [isCreatingNew, setIsCreatingNew] = useState(false);
 
   const { data: classDefs } = trpc.secretary.listClassDefinitions.useQuery();
@@ -2895,11 +2913,12 @@ function AddIndividualClass({ showId }: { showId: string }) {
   });
 
   async function handleAdd() {
-    const fee = parseInt(feeInput, 10);
-    if (isNaN(fee) || fee <= 0) {
-      toast.error('Enter a valid entry fee');
+    const pounds = parseFloat(feeInput);
+    if (isNaN(pounds) || pounds <= 0) {
+      toast.error('Enter a valid entry fee in pounds (e.g. 5.00)');
       return;
     }
+    const fee = poundsToPence(pounds);
 
     let defId = classDefId;
 
@@ -3030,16 +3049,18 @@ function AddIndividualClass({ showId }: { showId: string }) {
 
           {/* Entry fee */}
           <div>
-            <Label className="text-sm font-medium">Entry Fee (pence)</Label>
+            <Label className="text-sm font-medium">Entry Fee (£)</Label>
             <Input
               type="number"
               min={0}
+              step={0.01}
+              placeholder="e.g. 5.00"
               value={feeInput}
               onChange={(e) => setFeeInput(e.target.value)}
               className="mt-1"
             />
             <p className="text-xs text-muted-foreground mt-0.5">
-              {feeInput ? formatCurrency(parseInt(feeInput, 10) || 0) : '£0.00'}
+              {feeInput ? formatCurrency(poundsToPence(parseFloat(feeInput)) || 0) : '£0.00'}
             </p>
           </div>
         </div>
@@ -3177,6 +3198,7 @@ function JudgesTab({ showId }: { showId: string }) {
   const [judgeKc, setJudgeKc] = useState('');
   const [judgeEmail, setJudgeEmail] = useState('');
   const [selectedJudgeId, setSelectedJudgeId] = useState('');
+  const [judgePopoverOpen, setJudgePopoverOpen] = useState(false);
   const [selectedBreedId, setSelectedBreedId] = useState('');
   const [selectedRingId, setSelectedRingId] = useState('');
   const utils = trpc.useUtils();
@@ -3298,18 +3320,55 @@ function JudgesTab({ showId }: { showId: string }) {
         </CardHeader>
         <CardContent>
           <div className="grid gap-3 sm:grid-cols-4">
-            <Select value={selectedJudgeId} onValueChange={setSelectedJudgeId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select judge *" />
-              </SelectTrigger>
-              <SelectContent>
-                {(allJudges ?? []).map((j) => (
-                  <SelectItem key={j.id} value={j.id}>
-                    {j.name} {j.kcNumber ? `(${j.kcNumber})` : ''}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover open={judgePopoverOpen} onOpenChange={setJudgePopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={judgePopoverOpen}
+                  className={cn(
+                    'w-full justify-between font-normal',
+                    !selectedJudgeId && 'text-muted-foreground'
+                  )}
+                >
+                  {selectedJudgeId
+                    ? (() => {
+                        const j = (allJudges ?? []).find((j) => j.id === selectedJudgeId);
+                        return j ? `${j.name}${j.kcNumber ? ` (${j.kcNumber})` : ''}` : 'Select judge...';
+                      })()
+                    : 'Select judge...'}
+                  <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Search judges..." />
+                  <CommandList className="max-h-[300px]">
+                    <CommandEmpty>No judges found.</CommandEmpty>
+                    <CommandGroup>
+                      {(allJudges ?? []).map((j) => (
+                        <CommandItem
+                          key={j.id}
+                          value={j.name}
+                          onSelect={() => {
+                            setSelectedJudgeId(j.id);
+                            setJudgePopoverOpen(false);
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              'mr-2 size-4',
+                              j.id === selectedJudgeId ? 'opacity-100' : 'opacity-0'
+                            )}
+                          />
+                          {j.name} {j.kcNumber ? `(${j.kcNumber})` : ''}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
             <Select value={selectedBreedId} onValueChange={setSelectedBreedId}>
               <SelectTrigger>
                 <SelectValue placeholder="Breed (optional)" />
