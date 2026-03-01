@@ -10,47 +10,51 @@ import { scrapeKcDog, searchKcDogs } from '@/server/services/firecrawl';
 /**
  * Recommend the highest achievement class a dog is still eligible for,
  * based on their first-place wins at qualifying shows.
+ * If availableClassNames is provided, only suggest from classes in the show schedule.
  */
-function getClassRecommendation(firsts: number, hasCC: boolean): {
+function getClassRecommendation(
+  firsts: number,
+  hasCC: boolean,
+  availableClassNames?: string[],
+): {
   eligible: string[];
   suggested: string | null;
   reason: string;
 } {
+  // Full eligibility based on wins (KC rules)
+  let allEligible: string[];
+
   if (hasCC) {
-    return {
-      eligible: ['Open'],
-      suggested: 'Open',
-      reason: 'Has won a CC — eligible for Open only',
-    };
-  }
-
-  const eligible: string[] = [];
-  let suggested: string | null = null;
-
-  // Work from most restrictive to least
-  if (firsts === 0) {
-    eligible.push('Maiden', 'Novice', 'Graduate', 'Post Graduate', 'Limit', 'Open');
-    suggested = 'Maiden';
+    allEligible = ['Open'];
+  } else if (firsts === 0) {
+    allEligible = ['Maiden', 'Novice', 'Graduate', 'Post Graduate', 'Limit', 'Open'];
   } else if (firsts <= 2) {
-    eligible.push('Novice', 'Graduate', 'Post Graduate', 'Limit', 'Open');
-    suggested = 'Novice';
+    allEligible = ['Novice', 'Graduate', 'Post Graduate', 'Limit', 'Open'];
   } else if (firsts <= 3) {
-    eligible.push('Graduate', 'Post Graduate', 'Limit', 'Open');
-    suggested = 'Graduate';
+    allEligible = ['Graduate', 'Post Graduate', 'Limit', 'Open'];
   } else if (firsts <= 4) {
-    eligible.push('Post Graduate', 'Limit', 'Open');
-    suggested = 'Post Graduate';
+    allEligible = ['Post Graduate', 'Limit', 'Open'];
   } else if (firsts <= 6) {
-    eligible.push('Limit', 'Open');
-    suggested = 'Limit';
+    allEligible = ['Limit', 'Open'];
   } else {
-    eligible.push('Open');
-    suggested = 'Open';
+    allEligible = ['Open'];
   }
 
-  const reason = firsts === 0
-    ? 'No qualifying wins recorded — eligible for all classes'
-    : `${firsts} first-place win${firsts !== 1 ? 's' : ''} recorded on Remi`;
+  // Filter to only classes available in this show's schedule
+  const eligible = availableClassNames
+    ? allEligible.filter((name) =>
+        availableClassNames.some((avail) => avail.toLowerCase() === name.toLowerCase())
+      )
+    : allEligible;
+
+  // Suggest the most restrictive eligible class that's in the schedule
+  const suggested = eligible[0] ?? null;
+
+  const reason = hasCC
+    ? 'Has won a CC — eligible for Open only'
+    : firsts === 0
+      ? 'No qualifying wins recorded — eligible for all achievement classes'
+      : `${firsts} first-place win${firsts !== 1 ? 's' : ''} recorded on Remi`;
 
   return { eligible, suggested, reason };
 }
@@ -553,11 +557,12 @@ export const dogsRouter = createTRPCRouter({
 
   // ── Win summary for class eligibility ────────────────────
   getWinSummary: protectedProcedure
-    .input(z.object({ dogId: z.string().uuid() }))
+    .input(z.object({
+      dogId: z.string().uuid(),
+      showId: z.string().uuid().optional(),
+    }))
     .query(async ({ ctx, input }) => {
       // Count first-place wins at Open and Championship shows
-      // This is used to determine eligibility for achievement-based classes
-      // e.g., Novice allows max 2 firsts, Graduate allows max 3, etc.
       const winRows = await ctx.db
         .select({
           className: classDefinitions.name,
@@ -580,12 +585,10 @@ export const dogsRouter = createTRPCRouter({
           )
         );
 
-      // Count firsts by show type (KC rules count Open + Championship shows)
       const firstsAtQualifyingShows = winRows.filter(
         (r) => r.showType === 'open' || r.showType === 'championship' || r.showType === 'premier_open'
       ).length;
 
-      // Count CCs from achievements
       const ccCount = await ctx.db
         .select({ count: sql<number>`count(*)::int` })
         .from(achievements)
@@ -598,18 +601,26 @@ export const dogsRouter = createTRPCRouter({
 
       const hasCC = (ccCount[0]?.count ?? 0) > 0;
 
-      // Build recommendation per class definition
-      // KC eligibility rules for achievement classes:
-      // Maiden: no first at Open/Champ
-      // Novice: max 2 firsts at Open/Champ, no CC
-      // Graduate: max 3 firsts at Champ shows, no CC
-      // Post Graduate: max 4 firsts at Champ shows, no CC
-      // Limit: max 6 firsts at Champ in Limit/Open, no Show Champion, no 3+ CCs
-      // Open: no restrictions
+      // Get achievement class names actually in this show's schedule
+      let availableClassNames: string[] | undefined;
+      if (input.showId) {
+        const showAchievementClasses = await ctx.db
+          .select({ name: classDefinitions.name })
+          .from(showClasses)
+          .innerJoin(classDefinitions, eq(showClasses.classDefinitionId, classDefinitions.id))
+          .where(
+            and(
+              eq(showClasses.showId, input.showId),
+              eq(classDefinitions.type, 'achievement'),
+            )
+          );
+        availableClassNames = showAchievementClasses.map((c) => c.name);
+      }
+
       return {
         totalFirsts: firstsAtQualifyingShows,
         hasCC,
-        recommendation: getClassRecommendation(firstsAtQualifyingShows, hasCC),
+        recommendation: getClassRecommendation(firstsAtQualifyingShows, hasCC, availableClassNames),
       };
     }),
 

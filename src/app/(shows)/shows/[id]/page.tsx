@@ -16,6 +16,9 @@ import {
   ChevronUp,
   Dog,
   Trophy,
+  FileText,
+  ListChecks,
+  User,
 } from 'lucide-react';
 import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
@@ -76,10 +79,14 @@ function VenueMap({ lat, lng, name }: { lat: string; lng: string; name: string }
 function BreedSection({
   breedName,
   classes,
+  judgeName,
+  ringName,
   defaultOpen,
 }: {
   breedName: string;
   classes: { id: string; classDefinition: { name: string; description: string | null; type: string }; entryFee: number }[];
+  judgeName?: string | null;
+  ringName?: string | null;
   defaultOpen: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -97,9 +104,14 @@ function BreedSection({
           <span className="ml-2 text-xs text-muted-foreground">
             {classes.length} class{classes.length !== 1 ? 'es' : ''}
           </span>
+          {judgeName && (
+            <span className="ml-2 text-xs text-muted-foreground">
+              · Judge: {judgeName}
+            </span>
+          )}
         </div>
-        <span className="text-xs font-medium text-muted-foreground">
-          {formatFee(fee)} per class
+        <span className="hidden text-xs font-medium text-muted-foreground sm:inline">
+          {formatFee(fee)}/class
         </span>
         {open ? (
           <ChevronUp className="size-4 shrink-0 text-muted-foreground/50" />
@@ -109,6 +121,21 @@ function BreedSection({
       </button>
       {open && (
         <div className="border-t border-dashed px-4 py-2">
+          {(judgeName || ringName) && (
+            <div className="mb-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
+              {judgeName && (
+                <span className="flex items-center gap-1">
+                  <User className="size-3" /> {judgeName}
+                </span>
+              )}
+              {ringName && (
+                <span className="flex items-center gap-1">
+                  Ring: {ringName}
+                </span>
+              )}
+              <span>{formatFee(fee)} per class</span>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3 md:grid-cols-4">
             {classes.map((sc) => (
               <div
@@ -180,6 +207,17 @@ export default function ShowDetailPage() {
   const breeds = Array.from(breedMap.entries()).sort(([a], [b]) =>
     a.localeCompare(b)
   );
+
+  /* Build breed → judge/ring lookup from judge assignments */
+  const breedJudgeMap = new Map<string, { judgeName: string; ringName?: string }>();
+  for (const ja of show.judgeAssignments ?? []) {
+    if (ja.breed) {
+      breedJudgeMap.set(ja.breed.name, {
+        judgeName: ja.judge?.name ?? '',
+        ringName: ja.ring?.name ?? undefined,
+      });
+    }
+  }
 
   const showAny = show as typeof show & { startTime?: string | null; endTime?: string | null };
 
@@ -273,6 +311,14 @@ export default function ShowDetailPage() {
                   </Link>
                 </Button>
               )}
+              {show.scheduleUrl && (
+                <Button size="lg" variant="outline" className="h-11 w-full shadow-sm sm:w-auto" asChild>
+                  <a href={show.scheduleUrl} target="_blank" rel="noopener noreferrer">
+                    <FileText className="size-4" />
+                    Schedule PDF
+                  </a>
+                </Button>
+              )}
             </div>
           </div>
 
@@ -330,15 +376,11 @@ export default function ShowDetailPage() {
                   <span className="font-medium">{show.showClasses.length}</span>
                 </div>
               )}
-              {show.scheduleUrl && (
-                <a
-                  href={show.scheduleUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-primary hover:underline"
-                >
-                  View Schedule <ExternalLink className="size-3" />
-                </a>
+              {show.judgeAssignments && show.judgeAssignments.length > 0 && (
+                <div className="flex flex-col sm:flex-row sm:justify-between">
+                  <span className="text-muted-foreground">Judges</span>
+                  <span className="font-medium">{show.judgeAssignments.length}</span>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -403,14 +445,19 @@ export default function ShowDetailPage() {
               Breeds ({breeds.length})
             </h2>
             <div className="space-y-2">
-              {breeds.map(([breedName, classes], i) => (
-                <BreedSection
-                  key={breedName}
-                  breedName={breedName}
-                  classes={classes as { id: string; classDefinition: { name: string; description: string | null; type: string }; entryFee: number }[]}
-                  defaultOpen={i === 0}
-                />
-              ))}
+              {breeds.map(([breedName, classes], i) => {
+                const judgeInfo = breedJudgeMap.get(breedName);
+                return (
+                  <BreedSection
+                    key={breedName}
+                    breedName={breedName}
+                    classes={classes as { id: string; classDefinition: { name: string; description: string | null; type: string }; entryFee: number }[]}
+                    judgeName={judgeInfo?.judgeName}
+                    ringName={judgeInfo?.ringName}
+                    defaultOpen={i === 0}
+                  />
+                );
+              })}
             </div>
 
             {isOpen && (

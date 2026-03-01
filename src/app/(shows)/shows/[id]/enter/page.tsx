@@ -99,9 +99,10 @@ export default function EnterShowPage() {
       { enabled: cart.step === 'select_classes' }
     );
 
-  // Win summary for smart class recommendations
+  // Win summary for smart class recommendations — pass showId so suggestions
+  // are filtered to classes actually in this show's schedule
   const { data: winSummary } = trpc.dogs.getWinSummary.useQuery(
-    { dogId: cart.activeEntry?.dogId ?? '' },
+    { dogId: cart.activeEntry?.dogId ?? '', showId },
     { enabled: !!cart.activeEntry?.dogId && cart.step === 'select_classes' }
   );
 
