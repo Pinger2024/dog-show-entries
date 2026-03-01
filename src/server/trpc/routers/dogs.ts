@@ -1,12 +1,169 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { and, eq, isNull, asc, desc, sql } from 'drizzle-orm';
-import { protectedProcedure } from '../procedures';
+import { protectedProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
-import { dogs, dogOwners, dogTitles, users } from '@/server/db/schema';
+import { dogs, dogOwners, dogTitles, users, entries, entryClasses, showClasses, shows, results, classDefinitions, achievements } from '@/server/db/schema';
 import { scrapeKcDog, searchKcDogs } from '@/server/services/firecrawl';
 
+/**
+ * Recommend the highest achievement class a dog is still eligible for,
+ * based on their first-place wins at qualifying shows.
+ */
+function getClassRecommendation(firsts: number, hasCC: boolean): {
+  eligible: string[];
+  suggested: string | null;
+  reason: string;
+} {
+  if (hasCC) {
+    return {
+      eligible: ['Open'],
+      suggested: 'Open',
+      reason: 'Has won a CC — eligible for Open only',
+    };
+  }
+
+  const eligible: string[] = [];
+  let suggested: string | null = null;
+
+  // Work from most restrictive to least
+  if (firsts === 0) {
+    eligible.push('Maiden', 'Novice', 'Graduate', 'Post Graduate', 'Limit', 'Open');
+    suggested = 'Maiden';
+  } else if (firsts <= 2) {
+    eligible.push('Novice', 'Graduate', 'Post Graduate', 'Limit', 'Open');
+    suggested = 'Novice';
+  } else if (firsts <= 3) {
+    eligible.push('Graduate', 'Post Graduate', 'Limit', 'Open');
+    suggested = 'Graduate';
+  } else if (firsts <= 4) {
+    eligible.push('Post Graduate', 'Limit', 'Open');
+    suggested = 'Post Graduate';
+  } else if (firsts <= 6) {
+    eligible.push('Limit', 'Open');
+    suggested = 'Limit';
+  } else {
+    eligible.push('Open');
+    suggested = 'Open';
+  }
+
+  const reason = firsts === 0
+    ? 'No qualifying wins recorded — eligible for all classes'
+    : `${firsts} first-place win${firsts !== 1 ? 's' : ''} recorded on Remi`;
+
+  return { eligible, suggested, reason };
+}
+
 export const dogsRouter = createTRPCRouter({
+  // ── Public dog profile ──────────────────────────────────
+  getPublicProfile: publicProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      // Fetch dog info with breed, titles, achievements
+      const dog = await ctx.db.query.dogs.findFirst({
+        where: and(eq(dogs.id, input.id), isNull(dogs.deletedAt)),
+        with: {
+          breed: {
+            with: {
+              group: true,
+            },
+          },
+          titles: true,
+          achievements: true,
+        },
+      });
+
+      if (!dog) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Dog not found',
+        });
+      }
+
+      // Fetch show history: entries → entryClasses → showClass → classDefinition + result
+      const dogEntries = await ctx.db.query.entries.findMany({
+        where: and(
+          eq(entries.dogId, input.id),
+          eq(entries.status, 'confirmed'),
+          isNull(entries.deletedAt)
+        ),
+        with: {
+          show: true,
+          entryClasses: {
+            with: {
+              showClass: {
+                with: {
+                  classDefinition: true,
+                },
+              },
+              result: true,
+            },
+          },
+        },
+      });
+
+      // Build show history grouped by show
+      const showHistory = dogEntries
+        .map((entry) => ({
+          showId: entry.show.id,
+          showName: entry.show.name,
+          showDate: entry.show.startDate,
+          showType: entry.show.showType,
+          classes: entry.entryClasses.map((ec) => ({
+            className: ec.showClass.classDefinition.name,
+            classNumber: ec.showClass.classNumber,
+            placement: ec.result?.placement ?? null,
+            specialAward: ec.result?.specialAward ?? null,
+            critiqueText: ec.result?.critiqueText ?? null,
+          })),
+        }))
+        .sort((a, b) => b.showDate.localeCompare(a.showDate));
+
+      // Compute stats
+      const totalShows = showHistory.length;
+      let totalClasses = 0;
+      let firsts = 0;
+      let seconds = 0;
+      let thirds = 0;
+      let specialAwards = 0;
+
+      for (const show of showHistory) {
+        totalClasses += show.classes.length;
+        for (const cls of show.classes) {
+          if (cls.placement === 1) firsts++;
+          if (cls.placement === 2) seconds++;
+          if (cls.placement === 3) thirds++;
+          if (cls.specialAward) specialAwards++;
+        }
+      }
+
+      return {
+        dog: {
+          id: dog.id,
+          registeredName: dog.registeredName,
+          breed: dog.breed,
+          sex: dog.sex,
+          dateOfBirth: dog.dateOfBirth,
+          sireName: dog.sireName,
+          damName: dog.damName,
+          breederName: dog.breederName,
+          colour: dog.colour,
+          kcRegNumber: dog.kcRegNumber,
+        },
+        titles: dog.titles,
+        achievements: dog.achievements,
+        showHistory,
+        stats: {
+          totalShows,
+          totalClasses,
+          firsts,
+          seconds,
+          thirds,
+          specialAwards,
+        },
+      };
+    }),
+
   list: protectedProcedure.query(async ({ ctx }) => {
     return ctx.db.query.dogs.findMany({
       where: and(
@@ -392,4 +549,190 @@ export const dogsRouter = createTRPCRouter({
 
     return ownerRows;
   }),
+
+  // ── Win summary for class eligibility ────────────────────
+  getWinSummary: protectedProcedure
+    .input(z.object({ dogId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      // Count first-place wins at Open and Championship shows
+      // This is used to determine eligibility for achievement-based classes
+      // e.g., Novice allows max 2 firsts, Graduate allows max 3, etc.
+      const winRows = await ctx.db
+        .select({
+          className: classDefinitions.name,
+          classType: classDefinitions.type,
+          showType: shows.showType,
+          placement: results.placement,
+        })
+        .from(results)
+        .innerJoin(entryClasses, eq(results.entryClassId, entryClasses.id))
+        .innerJoin(entries, eq(entryClasses.entryId, entries.id))
+        .innerJoin(showClasses, eq(entryClasses.showClassId, showClasses.id))
+        .innerJoin(classDefinitions, eq(showClasses.classDefinitionId, classDefinitions.id))
+        .innerJoin(shows, eq(entries.showId, shows.id))
+        .where(
+          and(
+            eq(entries.dogId, input.dogId),
+            eq(entries.status, 'confirmed'),
+            isNull(entries.deletedAt),
+            eq(results.placement, 1),
+          )
+        );
+
+      // Count firsts by show type (KC rules count Open + Championship shows)
+      const firstsAtQualifyingShows = winRows.filter(
+        (r) => r.showType === 'open' || r.showType === 'championship' || r.showType === 'premier_open'
+      ).length;
+
+      // Count CCs from achievements
+      const ccCount = await ctx.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(achievements)
+        .where(
+          and(
+            eq(achievements.dogId, input.dogId),
+            eq(achievements.type, 'cc'),
+          )
+        );
+
+      const hasCC = (ccCount[0]?.count ?? 0) > 0;
+
+      // Build recommendation per class definition
+      // KC eligibility rules for achievement classes:
+      // Maiden: no first at Open/Champ
+      // Novice: max 2 firsts at Open/Champ, no CC
+      // Graduate: max 3 firsts at Champ shows, no CC
+      // Post Graduate: max 4 firsts at Champ shows, no CC
+      // Limit: max 6 firsts at Champ in Limit/Open, no Show Champion, no 3+ CCs
+      // Open: no restrictions
+      return {
+        totalFirsts: firstsAtQualifyingShows,
+        hasCC,
+        recommendation: getClassRecommendation(firstsAtQualifyingShows, hasCC),
+      };
+    }),
+
+  // ── KC Title Progress ─────────────────────────────────────
+  getTitleProgress: protectedProcedure
+    .input(z.object({ dogId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const dog = await ctx.db.query.dogs.findFirst({
+        where: and(eq(dogs.id, input.dogId), isNull(dogs.deletedAt)),
+        with: {
+          breed: { with: { group: true } },
+          titles: true,
+          achievements: true,
+        },
+      });
+
+      if (!dog) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Dog not found' });
+      }
+
+      const now = new Date();
+      const dob = new Date(dog.dateOfBirth);
+      const ageMonths = (now.getFullYear() - dob.getFullYear()) * 12 + (now.getMonth() - dob.getMonth());
+
+      // Count achievements by type
+      const ccAchievements = dog.achievements.filter((a) => a.type === 'cc');
+      const reserveCCs = dog.achievements.filter((a) => a.type === 'reserve_cc');
+      const bobs = dog.achievements.filter((a) => a.type === 'best_of_breed');
+
+      // Count unique judges who awarded CCs
+      const ccJudgeIds = new Set(ccAchievements.map((a) => a.judgeId).filter(Boolean));
+
+      // Count first-place wins from results for JW calculation
+      const firstPlaceWins = await ctx.db
+        .select({
+          showType: shows.showType,
+          showDate: shows.startDate,
+        })
+        .from(results)
+        .innerJoin(entryClasses, eq(results.entryClassId, entryClasses.id))
+        .innerJoin(entries, eq(entryClasses.entryId, entries.id))
+        .innerJoin(shows, eq(entries.showId, shows.id))
+        .where(
+          and(
+            eq(entries.dogId, input.dogId),
+            eq(entries.status, 'confirmed'),
+            isNull(entries.deletedAt),
+            eq(results.placement, 1),
+          )
+        );
+
+      // Junior Warrant: 25 points from firsts before 18 months
+      // Championship show first = 3 points, Open show first = 1 point
+      const eighteenMonths = new Date(dob);
+      eighteenMonths.setMonth(eighteenMonths.getMonth() + 18);
+
+      const jwWins = firstPlaceWins.filter(
+        (w) => new Date(w.showDate) <= eighteenMonths
+      );
+      const jwPoints = jwWins.reduce((sum, w) => {
+        if (w.showType === 'championship') return sum + 3;
+        if (w.showType === 'open' || w.showType === 'premier_open') return sum + 1;
+        return sum;
+      }, 0);
+
+      const existingTitles = new Set(dog.titles.map((t) => t.title));
+
+      const titleProgress = [];
+
+      // Champion: 3 CCs under 3 different judges
+      if (!existingTitles.has('ch')) {
+        titleProgress.push({
+          title: 'Champion (Ch)',
+          code: 'ch' as const,
+          current: ccAchievements.length,
+          required: 3,
+          progress: Math.min(ccAchievements.length / 3, 1),
+          detail: `${ccAchievements.length}/3 CCs${ccJudgeIds.size > 0 ? ` (${ccJudgeIds.size} judge${ccJudgeIds.size !== 1 ? 's' : ''})` : ''}`,
+          milestoneReached: ccAchievements.length >= 3 && ccJudgeIds.size >= 3,
+        });
+      }
+
+      // Show Champion: 3 CCs + qualifying field (gundogs only)
+      const isGundog = dog.breed.group?.name === 'Gundog';
+      if (!existingTitles.has('sh_ch') && isGundog) {
+        titleProgress.push({
+          title: 'Show Champion (Sh Ch)',
+          code: 'sh_ch' as const,
+          current: ccAchievements.length,
+          required: 3,
+          progress: Math.min(ccAchievements.length / 3, 1),
+          detail: `${ccAchievements.length}/3 CCs (+ qualifying field trial win required)`,
+          milestoneReached: false, // Can't auto-detect field trial wins
+        });
+      }
+
+      // Junior Warrant: 25 points before 18 months
+      if (ageMonths < 18 || jwPoints > 0) {
+        const isStillEligible = ageMonths < 18;
+        titleProgress.push({
+          title: 'Junior Warrant (JW)',
+          code: 'jw' as const,
+          current: jwPoints,
+          required: 25,
+          progress: Math.min(jwPoints / 25, 1),
+          detail: isStillEligible
+            ? `${jwPoints}/25 points (${Math.ceil((eighteenMonths.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))} days remaining)`
+            : `${jwPoints}/25 points (age limit reached)`,
+          milestoneReached: jwPoints >= 25,
+        });
+      }
+
+      return {
+        dogName: dog.registeredName,
+        existingTitles: dog.titles,
+        titleProgress,
+        stats: {
+          ccs: ccAchievements.length,
+          reserveCCs: reserveCCs.length,
+          bobs: bobs.length,
+          totalFirsts: firstPlaceWins.length,
+          jwPoints,
+        },
+        disclaimer: 'Progress shown is based on results recorded in Remi only. Wins at shows not using Remi are not included.',
+      };
+    }),
 });

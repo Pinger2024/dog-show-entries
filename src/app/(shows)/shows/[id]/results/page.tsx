@@ -191,32 +191,45 @@ export default function LiveResultsPage({
                       </div>
                       <div className="space-y-1.5">
                         {cls.results.map((result, i) => (
-                          <div
-                            key={i}
-                            className="flex items-center gap-3 text-sm"
-                          >
-                            {result.placement && (
-                              <Badge
-                                variant="outline"
-                                className={`w-16 justify-center text-xs font-semibold ${placementColors[result.placement] ?? ''}`}
-                              >
-                                {getPlacementLabel(result.placement)}
-                              </Badge>
-                            )}
-                            <span className="font-mono text-xs text-muted-foreground">
-                              {result.catalogueNumber ?? '—'}
-                            </span>
-                            <span className="flex-1 truncate font-medium">
-                              {result.dogName}
-                            </span>
-                            {result.specialAward && (
-                              <Badge
-                                variant="secondary"
-                                className="shrink-0 text-[10px] bg-amber-50 text-amber-700"
-                              >
-                                <Award className="mr-0.5 size-3" />
-                                {result.specialAward}
-                              </Badge>
+                          <div key={i}>
+                            <div className="flex items-center gap-3 text-sm">
+                              {result.placement && (
+                                <Badge
+                                  variant="outline"
+                                  className={`w-16 justify-center text-xs font-semibold ${placementColors[result.placement] ?? ''}`}
+                                >
+                                  {getPlacementLabel(result.placement)}
+                                </Badge>
+                              )}
+                              <span className="font-mono text-xs text-muted-foreground">
+                                {result.catalogueNumber ?? '—'}
+                              </span>
+                              {result.dogId ? (
+                                <Link
+                                  href={`/dog/${result.dogId}`}
+                                  className="flex-1 truncate font-medium text-primary hover:underline"
+                                >
+                                  {result.dogName}
+                                </Link>
+                              ) : (
+                                <span className="flex-1 truncate font-medium">
+                                  {result.dogName}
+                                </span>
+                              )}
+                              {result.specialAward && (
+                                <Badge
+                                  variant="secondary"
+                                  className="shrink-0 text-[10px] bg-amber-50 text-amber-700"
+                                >
+                                  <Award className="mr-0.5 size-3" />
+                                  {result.specialAward}
+                                </Badge>
+                              )}
+                            </div>
+                            {result.critiqueText && (
+                              <p className="ml-[4.75rem] mt-0.5 text-xs italic text-muted-foreground">
+                                {result.critiqueText}
+                              </p>
                             )}
                           </div>
                         ))}

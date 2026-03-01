@@ -99,6 +99,12 @@ export default function EnterShowPage() {
       { enabled: cart.step === 'select_classes' }
     );
 
+  // Win summary for smart class recommendations
+  const { data: winSummary } = trpc.dogs.getWinSummary.useQuery(
+    { dogId: cart.activeEntry?.dogId ?? '' },
+    { enabled: !!cart.activeEntry?.dogId && cart.step === 'select_classes' }
+  );
+
   // Profile completeness check
   const { data: profileCheck, refetch: refetchProfile } =
     trpc.entries.validateExhibitorForEntry.useQuery();
@@ -593,12 +599,28 @@ export default function EnterShowPage() {
                     />
                   )}
                   {groupedClasses.achievement.length > 0 && (
-                    <ClassGroup
-                      title="Achievement Classes"
-                      classes={groupedClasses.achievement}
-                      selectedIds={selectedClassIds}
-                      onToggle={toggleClass}
-                    />
+                    <>
+                      {winSummary && (
+                        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm dark:border-blue-800 dark:bg-blue-950">
+                          <p className="font-medium text-blue-900 dark:text-blue-100">
+                            {winSummary.recommendation.suggested
+                              ? <>Suggested class: <span className="font-bold">{winSummary.recommendation.suggested}</span></>
+                              : 'Eligible for all achievement classes'}
+                          </p>
+                          <p className="mt-0.5 text-xs text-blue-700 dark:text-blue-300">
+                            {winSummary.recommendation.reason}
+                          </p>
+                        </div>
+                      )}
+                      <ClassGroup
+                        title="Achievement Classes"
+                        classes={groupedClasses.achievement}
+                        selectedIds={selectedClassIds}
+                        onToggle={toggleClass}
+                        eligibleClassNames={winSummary?.recommendation.eligible}
+                        suggestedClassName={winSummary?.recommendation.suggested}
+                      />
+                    </>
                   )}
                   {groupedClasses.special.length > 0 && (
                     <ClassGroup
@@ -965,6 +987,8 @@ function ClassGroup({
   selectedIds,
   onToggle,
   getAgeEligibility,
+  eligibleClassNames,
+  suggestedClassName,
 }: {
   title: string;
   classes: ShowClassItem[];
@@ -974,6 +998,8 @@ function ClassGroup({
     min: number | null,
     max: number | null
   ) => { ageMonths: number; eligible: boolean } | null;
+  eligibleClassNames?: string[];
+  suggestedClassName?: string | null;
 }) {
   // Filter out age-ineligible classes if eligibility info is available
   const visibleClasses = getAgeEligibility
@@ -997,12 +1023,16 @@ function ClassGroup({
       <div className="space-y-2">
         {visibleClasses.map((sc) => {
           const isSelected = selectedIds.includes(sc.id);
+          const isSuggested = suggestedClassName === sc.classDefinition.name;
+          const isIneligible = eligibleClassNames && !eligibleClassNames.includes(sc.classDefinition.name);
           return (
             <label
               key={sc.id}
               className={cn(
                 'flex min-h-[44px] cursor-pointer items-start gap-2 rounded-lg border p-3 transition-all hover:bg-accent/50 sm:gap-3',
-                isSelected && 'border-primary bg-primary/5'
+                isSelected && 'border-primary bg-primary/5',
+                isSuggested && !isSelected && 'border-blue-300 bg-blue-50/50 dark:border-blue-700 dark:bg-blue-950/30',
+                isIneligible && 'opacity-50',
               )}
             >
               <Checkbox
@@ -1011,7 +1041,7 @@ function ClassGroup({
                 className="mt-0.5"
               />
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                   <span className="font-medium">
                     {sc.classDefinition.name}
                     {sc.sex && (
@@ -1020,6 +1050,16 @@ function ClassGroup({
                       </span>
                     )}
                   </span>
+                  {isSuggested && (
+                    <Badge variant="secondary" className="bg-blue-100 text-blue-800 text-[10px] px-1.5 py-0 dark:bg-blue-900 dark:text-blue-200">
+                      Recommended
+                    </Badge>
+                  )}
+                  {isIneligible && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
+                      May not be eligible
+                    </Badge>
+                  )}
                 </div>
                 {sc.classDefinition.description && (
                   <p className="text-sm text-muted-foreground">

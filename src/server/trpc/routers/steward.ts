@@ -175,6 +175,7 @@ export const stewardRouter = createTRPCRouter({
                   id: ec.result.id,
                   placement: ec.result.placement,
                   specialAward: ec.result.specialAward,
+                  critiqueText: ec.result.critiqueText,
                 }
               : null,
           })),
@@ -188,6 +189,7 @@ export const stewardRouter = createTRPCRouter({
         entryClassId: z.string().uuid(),
         placement: z.number().int().min(1).max(7).nullable(),
         specialAward: z.string().nullable().optional(),
+        critiqueText: z.string().nullable().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -219,6 +221,7 @@ export const stewardRouter = createTRPCRouter({
           entryClassId: input.entryClassId,
           placement: input.placement,
           specialAward: input.specialAward ?? null,
+          critiqueText: input.critiqueText ?? null,
           recordedBy: ctx.session.user.id,
           recordedAt: new Date(),
         })
@@ -227,6 +230,7 @@ export const stewardRouter = createTRPCRouter({
           set: {
             placement: input.placement,
             specialAward: input.specialAward ?? null,
+            critiqueText: input.critiqueText ?? null,
             recordedBy: ctx.session.user.id,
             recordedAt: new Date(),
           },
@@ -291,10 +295,11 @@ export const stewardRouter = createTRPCRouter({
                   catalogueNumber: true,
                   status: true,
                   deletedAt: true,
+                  dogId: true,
                 },
                 with: {
                   dog: {
-                    columns: { registeredName: true },
+                    columns: { id: true, registeredName: true },
                     with: { breed: true },
                   },
                   exhibitor: { columns: { name: true } },
@@ -320,7 +325,9 @@ export const stewardRouter = createTRPCRouter({
             results: {
               placement: number | null;
               specialAward: string | null;
+              critiqueText: string | null;
               catalogueNumber: string | null;
+              dogId: string | null;
               dogName: string;
               exhibitorName: string;
             }[];
@@ -345,7 +352,9 @@ export const stewardRouter = createTRPCRouter({
           .map((ec) => ({
             placement: ec.result!.placement,
             specialAward: ec.result!.specialAward,
+            critiqueText: ec.result!.critiqueText,
             catalogueNumber: ec.entry.catalogueNumber,
+            dogId: ec.entry.dog?.id ?? null,
             dogName: ec.entry.dog?.registeredName ?? 'Unknown',
             exhibitorName: ec.entry.exhibitor?.name ?? '',
           }))

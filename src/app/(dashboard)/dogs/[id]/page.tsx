@@ -149,6 +149,95 @@ function EntryHistoryCard({ dogId }: { dogId: string }) {
   );
 }
 
+function TitleProgressCard({ dogId }: { dogId: string }) {
+  const { data, isLoading } = trpc.dogs.getTitleProgress.useQuery({ dogId });
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">KC Title Progress</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="size-6 animate-spin text-muted-foreground" />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!data) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Trophy className="size-4" />
+          KC Title Progress
+        </CardTitle>
+        <CardDescription>
+          Track progress toward Kennel Club titles.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Stats summary */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[
+            { label: 'CCs', value: data.stats.ccs },
+            { label: 'Res. CCs', value: data.stats.reserveCCs },
+            { label: 'BOBs', value: data.stats.bobs },
+            { label: 'JW Points', value: data.stats.jwPoints },
+          ].map((s) => (
+            <div key={s.label} className="rounded-lg border p-2 text-center">
+              <p className="text-lg font-bold">{s.value}</p>
+              <p className="text-xs text-muted-foreground">{s.label}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Title progress bars */}
+        {data.titleProgress.length > 0 ? (
+          <div className="space-y-3">
+            {data.titleProgress.map((tp) => (
+              <div key={tp.code}>
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-sm font-medium">{tp.title}</span>
+                  {tp.milestoneReached && (
+                    <Badge className="bg-emerald-100 text-emerald-800 text-xs">
+                      Milestone reached
+                    </Badge>
+                  )}
+                </div>
+                <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all"
+                    style={{ width: `${Math.round(tp.progress * 100)}%` }}
+                  />
+                </div>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {tp.detail}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            {data.existingTitles.length > 0
+              ? 'All tracked titles have been achieved!'
+              : 'Enter championship shows to start tracking progress toward KC titles.'}
+          </p>
+        )}
+
+        {/* Disclaimer */}
+        <p className="text-xs text-muted-foreground/70 italic">
+          {data.disclaimer}
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function DogDetailPage({
   params,
 }: {
@@ -365,25 +454,34 @@ export default function DogDetailPage({
         </Card>
       )}
 
+      {/* KC Title Progress */}
+      <TitleProgressCard dogId={id} />
+
       {/* Achievements */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Achievements</CardTitle>
-          <CardDescription>
-            Track your dog&apos;s career as you enter shows.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-8 text-center">
-            <Trophy className="mb-3 size-8 text-muted-foreground/50" />
-            <p className="font-medium">No achievements yet</p>
-            <p className="mt-1 max-w-xs text-sm text-muted-foreground">
-              Achievements will appear here as your dog competes and earns
-              placements at shows.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+      {dog.achievements && dog.achievements.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Achievements</CardTitle>
+            <CardDescription>
+              Major awards and placements earned.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              {dog.achievements.map((a) => (
+                <Badge key={a.id} variant="secondary">
+                  {a.type.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
+                  {a.date && (
+                    <span className="ml-1 opacity-70">
+                      ({format(parseISO(a.date), 'd MMM yyyy')})
+                    </span>
+                  )}
+                </Badge>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Danger zone */}
       <Separator />

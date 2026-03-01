@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import { format, differenceInDays } from 'date-fns';
 import { formatDateRange } from '@/lib/date-utils';
@@ -14,10 +14,13 @@ import {
   ArrowRight,
   Dog,
   X,
+  Navigation,
+  Locate,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   Select,
   SelectContent,
@@ -55,6 +58,13 @@ const statusLabels: Record<string, string> = {
   completed: 'Completed',
   cancelled: 'Cancelled',
 };
+
+const radiusOptions = [
+  { value: 25, label: '25 miles' },
+  { value: 50, label: '50 miles' },
+  { value: 100, label: '100 miles' },
+  { value: 200, label: '200 miles' },
+];
 
 /* ─── Closing countdown ─────────────────────────────── */
 
@@ -140,6 +150,167 @@ function FilterPills({
   );
 }
 
+/* ─── Postcode lookup helper ────────────────────────── */
+
+async function lookupPostcode(postcode: string): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const cleaned = postcode.trim().replace(/\s+/g, '');
+    const res = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(cleaned)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.status === 200 && data.result) {
+      return { lat: data.result.latitude, lng: data.result.longitude };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/* ─── Near Me Controls ──────────────────────────────── */
+
+function NearMeControls({
+  location,
+  radiusMiles,
+  breedId,
+  postcode,
+  postcodeError,
+  isLocating,
+  onUseMyLocation,
+  onPostcodeChange,
+  onPostcodeSubmit,
+  onRadiusChange,
+  onBreedChange,
+  onDisable,
+}: {
+  location: { lat: number; lng: number } | null;
+  radiusMiles: number;
+  breedId: string;
+  postcode: string;
+  postcodeError: string;
+  isLocating: boolean;
+  onUseMyLocation: () => void;
+  onPostcodeChange: (v: string) => void;
+  onPostcodeSubmit: () => void;
+  onRadiusChange: (v: number) => void;
+  onBreedChange: (v: string) => void;
+  onDisable: () => void;
+}) {
+  const { data: breeds } = trpc.breeds.list.useQuery();
+
+  return (
+    <div className="mb-4 rounded-xl border border-primary/20 bg-primary/5 p-3 sm:p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Navigation className="size-4 text-primary" />
+          <span className="text-sm font-semibold text-foreground">Near Me</span>
+        </div>
+        <button
+          onClick={onDisable}
+          className="text-xs text-muted-foreground hover:text-foreground"
+        >
+          <X className="size-4" />
+        </button>
+      </div>
+
+      {/* Location input */}
+      {!location && (
+        <div className="space-y-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onUseMyLocation}
+            disabled={isLocating}
+            className="w-full gap-2 sm:w-auto"
+          >
+            {isLocating ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Locate className="size-4" />
+            )}
+            {isLocating ? 'Locating...' : 'Use my location'}
+          </Button>
+
+          <div className="flex items-center gap-2">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs text-muted-foreground">or</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
+          <div className="flex gap-2">
+            <Input
+              placeholder="Enter postcode (e.g. G1 1AA)"
+              value={postcode}
+              onChange={(e) => onPostcodeChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') onPostcodeSubmit();
+              }}
+              className="h-10 flex-1 rounded-lg border-border/60 bg-white"
+            />
+            <Button
+              size="sm"
+              onClick={onPostcodeSubmit}
+              disabled={!postcode.trim()}
+              className="h-10 px-4"
+            >
+              Search
+            </Button>
+          </div>
+          {postcodeError && (
+            <p className="text-xs text-destructive">{postcodeError}</p>
+          )}
+        </div>
+      )}
+
+      {/* Active location controls */}
+      {location && (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+          <Select
+            value={radiusMiles.toString()}
+            onValueChange={(v) => onRadiusChange(Number(v))}
+          >
+            <SelectTrigger className="h-9 w-full rounded-lg border-border/60 bg-white shadow-sm sm:w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {radiusOptions.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value.toString()}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {breeds && breeds.length > 0 && (
+            <Select value={breedId} onValueChange={onBreedChange}>
+              <SelectTrigger className="h-9 w-full rounded-lg border-border/60 bg-white shadow-sm sm:w-[200px]">
+                <SelectValue placeholder="Any breed" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Any breed</SelectItem>
+                {breeds.map((breed) => (
+                  <SelectItem key={breed.id} value={breed.id}>
+                    {breed.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onDisable}
+            className="h-9 text-xs text-muted-foreground"
+          >
+            Clear location
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Main component ────────────────────────────────── */
 
 export default function ShowsList() {
@@ -147,45 +318,132 @@ export default function ShowsList() {
   const [showType, setShowType] = useState<string>('all');
   const [status, setStatus] = useState<string>('all');
 
-  const { data, isLoading } = trpc.shows.list.useQuery({
-    showType:
-      showType !== 'all'
-        ? (showType as
-            | 'companion'
-            | 'primary'
-            | 'limited'
-            | 'open'
-            | 'premier_open'
-            | 'championship')
-        : undefined,
-    status:
-      status !== 'all'
-        ? (status as
-            | 'draft'
-            | 'published'
-            | 'entries_open'
-            | 'entries_closed'
-            | 'in_progress'
-            | 'completed'
-            | 'cancelled')
-        : undefined,
-    limit: 50,
-  });
+  // Near Me state
+  const [nearMeActive, setNearMeActive] = useState(false);
+  const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [radiusMiles, setRadiusMiles] = useState(50);
+  const [breedId, setBreedId] = useState<string>('all');
+  const [postcode, setPostcode] = useState('');
+  const [postcodeError, setPostcodeError] = useState('');
+  const [isLocating, setIsLocating] = useState(false);
 
-  const shows = data?.items ?? [];
+  // Standard list query (only when near me is not active)
+  const { data, isLoading } = trpc.shows.list.useQuery(
+    {
+      showType:
+        showType !== 'all'
+          ? (showType as
+              | 'companion'
+              | 'primary'
+              | 'limited'
+              | 'open'
+              | 'premier_open'
+              | 'championship')
+          : undefined,
+      status:
+        status !== 'all'
+          ? (status as
+              | 'draft'
+              | 'published'
+              | 'entries_open'
+              | 'entries_closed'
+              | 'in_progress'
+              | 'completed'
+              | 'cancelled')
+          : undefined,
+      limit: 50,
+    },
+    { enabled: !nearMeActive || !location },
+  );
 
+  // Nearby query (only when near me is active and we have a location)
+  const {
+    data: nearbyData,
+    isLoading: isNearbyLoading,
+  } = trpc.shows.nearby.useQuery(
+    {
+      lat: location?.lat ?? 0,
+      lng: location?.lng ?? 0,
+      radiusMiles,
+      breedId: breedId !== 'all' ? breedId : undefined,
+      limit: 50,
+    },
+    { enabled: nearMeActive && !!location },
+  );
+
+  const handleUseMyLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      setPostcodeError('Geolocation is not supported by your browser. Please enter a postcode instead.');
+      return;
+    }
+
+    setIsLocating(true);
+    setPostcodeError('');
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        });
+        setIsLocating(false);
+      },
+      () => {
+        setPostcodeError('Could not get your location. Please enter a postcode instead.');
+        setIsLocating(false);
+      },
+      { timeout: 10000 }
+    );
+  }, []);
+
+  const handlePostcodeSubmit = useCallback(async () => {
+    if (!postcode.trim()) return;
+    setPostcodeError('');
+    setIsLocating(true);
+
+    const result = await lookupPostcode(postcode);
+    if (result) {
+      setLocation(result);
+      setPostcodeError('');
+    } else {
+      setPostcodeError('Postcode not found. Please check and try again.');
+    }
+    setIsLocating(false);
+  }, [postcode]);
+
+  const handleDisableNearMe = useCallback(() => {
+    setNearMeActive(false);
+    setLocation(null);
+    setPostcode('');
+    setPostcodeError('');
+    setBreedId('all');
+  }, []);
+
+  const handleEnableNearMe = useCallback(() => {
+    setNearMeActive(true);
+  }, []);
+
+  // Determine which data to show
+  const isNearMeMode = nearMeActive && !!location;
+  const currentLoading = isNearMeMode ? isNearbyLoading : isLoading;
+
+  // Standard list shows
+  const listShows = data?.items ?? [];
   const filteredShows = search
-    ? shows.filter(
+    ? listShows.filter(
         (s) =>
           s.name.toLowerCase().includes(search.toLowerCase()) ||
           s.organisation?.name?.toLowerCase().includes(search.toLowerCase()) ||
           s.venue?.name?.toLowerCase().includes(search.toLowerCase())
       )
-    : shows;
+    : listShows;
 
   /* Split into entries-open vs others for visual grouping */
   const openShows = filteredShows.filter((s) => s.status === 'entries_open');
   const otherShows = filteredShows.filter((s) => s.status !== 'entries_open');
+
+  // Nearby shows
+  const nearbyShows = nearbyData ?? [];
 
   return (
     <>
@@ -198,10 +456,11 @@ export default function ShowsList() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="h-11 rounded-xl border-border/60 bg-white pl-10 shadow-sm transition-shadow focus-visible:shadow-md"
+            disabled={isNearMeMode}
           />
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-3">
-          <Select value={showType} onValueChange={setShowType}>
+        <div className="grid grid-cols-3 gap-2 sm:flex sm:gap-3">
+          <Select value={showType} onValueChange={setShowType} disabled={isNearMeMode}>
             <SelectTrigger className="h-11 w-full rounded-xl border-border/60 bg-white shadow-sm sm:w-[170px]">
               <SelectValue placeholder="Show Type" />
             </SelectTrigger>
@@ -214,7 +473,7 @@ export default function ShowsList() {
               ))}
             </SelectContent>
           </Select>
-          <Select value={status} onValueChange={setStatus}>
+          <Select value={status} onValueChange={setStatus} disabled={isNearMeMode}>
             <SelectTrigger className="h-11 w-full rounded-xl border-border/60 bg-white shadow-sm sm:w-[170px]">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
@@ -227,26 +486,103 @@ export default function ShowsList() {
               ))}
             </SelectContent>
           </Select>
+
+          {/* Near Me toggle button */}
+          <Button
+            variant={nearMeActive ? 'default' : 'outline'}
+            onClick={nearMeActive ? handleDisableNearMe : handleEnableNearMe}
+            className={`h-11 gap-2 rounded-xl shadow-sm ${
+              nearMeActive
+                ? 'bg-primary text-primary-foreground'
+                : 'border-border/60 bg-white'
+            }`}
+          >
+            <Navigation className="size-4" />
+            <span className="hidden sm:inline">Near Me</span>
+          </Button>
         </div>
       </div>
 
-      <FilterPills
-        search={search}
-        showType={showType}
-        status={status}
-        onClearSearch={() => setSearch('')}
-        onClearShowType={() => setShowType('all')}
-        onClearStatus={() => setStatus('all')}
-      />
+      {/* ─── Near Me Controls ────────────────────── */}
+      {nearMeActive && (
+        <NearMeControls
+          location={location}
+          radiusMiles={radiusMiles}
+          breedId={breedId}
+          postcode={postcode}
+          postcodeError={postcodeError}
+          isLocating={isLocating}
+          onUseMyLocation={handleUseMyLocation}
+          onPostcodeChange={setPostcode}
+          onPostcodeSubmit={handlePostcodeSubmit}
+          onRadiusChange={setRadiusMiles}
+          onBreedChange={setBreedId}
+          onDisable={handleDisableNearMe}
+        />
+      )}
+
+      {!isNearMeMode && (
+        <FilterPills
+          search={search}
+          showType={showType}
+          status={status}
+          onClearSearch={() => setSearch('')}
+          onClearShowType={() => setShowType('all')}
+          onClearStatus={() => setStatus('all')}
+        />
+      )}
 
       {/* ─── Loading ─────────────────────────────── */}
-      {isLoading ? (
+      {currentLoading ? (
         <div className="flex min-h-[45vh] items-center justify-center">
           <div className="flex flex-col items-center gap-3">
             <Loader2 className="size-8 animate-spin text-primary/40" />
-            <p className="text-sm text-muted-foreground">Loading shows...</p>
+            <p className="text-sm text-muted-foreground">
+              {isNearMeMode ? 'Finding shows near you...' : 'Loading shows...'}
+            </p>
           </div>
         </div>
+      ) : isNearMeMode ? (
+        /* ─── Near Me Results ────────────────────── */
+        nearbyShows.length === 0 ? (
+          <div className="flex min-h-[45vh] flex-col items-center justify-center gap-4 text-center">
+            <div className="flex size-20 items-center justify-center rounded-2xl bg-muted">
+              <MapPin className="size-10 text-muted-foreground/40" />
+            </div>
+            <div>
+              <p className="text-lg font-semibold">No shows nearby</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Try increasing the search radius or check back later
+              </p>
+            </div>
+          </div>
+        ) : (
+          <>
+            <p className="mb-6 text-sm text-muted-foreground">
+              {nearbyShows.length} show{nearbyShows.length !== 1 ? 's' : ''} within {radiusMiles} miles
+            </p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
+              {nearbyShows.map((show) => (
+                <ShowCard
+                  key={show.id}
+                  show={{
+                    id: show.id,
+                    name: show.name,
+                    showType: show.showType,
+                    status: show.status,
+                    startDate: show.startDate,
+                    endDate: show.endDate,
+                    entriesOpenDate: show.entriesOpenDate,
+                    entryCloseDate: show.entryCloseDate,
+                    organisation: show.organisation,
+                    venue: show.venue,
+                  }}
+                  distance={show.distance}
+                />
+              ))}
+            </div>
+          </>
+        )
       ) : filteredShows.length === 0 ? (
         /* ─── Empty state ──────────────────────── */
         <div className="flex min-h-[45vh] flex-col items-center justify-center gap-4 text-center">
@@ -317,7 +653,7 @@ export default function ShowsList() {
 
 /* ─── Show Card ─────────────────────────────────────── */
 
-function ShowCard({ show }: { show: {
+function ShowCard({ show, distance }: { show: {
   id: string;
   name: string;
   showType: string;
@@ -328,7 +664,7 @@ function ShowCard({ show }: { show: {
   entryCloseDate: string | Date | null;
   organisation: { name: string } | null;
   venue: { name: string } | null;
-}}) {
+}; distance?: number }) {
   const meta = showTypeMeta[show.showType];
   const isOpen = show.status === 'entries_open';
 
@@ -373,9 +709,24 @@ function ShowCard({ show }: { show: {
                 <span>{formatDateRange(show.startDate, show.endDate)}</span>
               </div>
               {show.venue && (
+                <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <MapPin className="size-3.5 shrink-0 text-muted-foreground/60" />
+                    <span className="truncate">{show.venue.name}</span>
+                  </div>
+                  {distance != null && (
+                    <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                      <Navigation className="size-3" />
+                      {distance} mi
+                    </span>
+                  )}
+                </div>
+              )}
+              {/* Show distance even if no venue name (shouldn't happen for nearby, but safety) */}
+              {distance != null && !show.venue && (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <MapPin className="size-3.5 shrink-0 text-muted-foreground/60" />
-                  <span className="truncate">{show.venue.name}</span>
+                  <Navigation className="size-3.5 shrink-0 text-primary/60" />
+                  <span className="font-medium text-primary">{distance} miles away</span>
                 </div>
               )}
             </div>

@@ -11,6 +11,7 @@ import {
   Ticket,
   Loader2,
   Search,
+  Globe,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -194,6 +195,12 @@ export default function DogsPage() {
                           <Link href="/shows">
                             <Ticket className="size-3.5" />
                             Enter
+                          </Link>
+                        </Button>
+                        <Button variant="outline" size="sm" className="min-h-[2.75rem] sm:min-h-0" asChild>
+                          <Link href={`/dog/${dog.id}`} target="_blank">
+                            <Globe className="size-3.5" />
+                            Profile
                           </Link>
                         </Button>
                       </div>
