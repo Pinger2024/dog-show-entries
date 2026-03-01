@@ -32,7 +32,7 @@ export function StewardShell({ user, children }: StewardShellProps) {
     user.role === 'secretary' || user.role === 'admin';
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex min-h-screen flex-col overflow-x-hidden">
       {/* Top header */}
       <header className="flex h-14 items-center justify-between border-b px-3 sm:px-4">
         <div className="flex items-center gap-2">

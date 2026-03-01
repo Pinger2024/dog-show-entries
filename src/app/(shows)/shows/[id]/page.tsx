@@ -96,7 +96,7 @@ function BreedSection({
     <div className="overflow-hidden rounded-lg border border-border/60 bg-white">
       <button
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-2 px-3 py-3 text-left transition-colors hover:bg-muted/30 sm:gap-3 sm:px-4"
+        className="flex w-full items-center gap-2 px-3 py-3.5 text-left transition-colors hover:bg-muted/30 active:bg-muted/50 sm:gap-3 sm:px-4 sm:py-3"
       >
         <Dog className="size-5 shrink-0 text-muted-foreground/50" />
         <div className="min-w-0 flex-1">

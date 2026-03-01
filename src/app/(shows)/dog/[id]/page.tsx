@@ -193,7 +193,7 @@ export default function DogProfilePage({
             </div>
 
             {/* Dog details grid */}
-            <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
+            <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 text-sm sm:grid-cols-3 sm:gap-x-6">
               <div>
                 <span className="text-muted-foreground">Sex</span>
                 <p className="font-medium capitalize">{dog.sex}</p>
@@ -281,7 +281,7 @@ export default function DogProfilePage({
                 <Trophy className="size-5 text-primary" />
                 Career Stats
               </h2>
-              <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-6 sm:gap-3">
                 <Card>
                   <CardContent className="px-3 py-3 text-center">
                     <p className="text-2xl font-bold">{stats.totalShows}</p>

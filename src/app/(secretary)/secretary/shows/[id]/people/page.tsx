@@ -247,6 +247,8 @@ function JudgesSection({ showId }: { showId: string }) {
                 />
                 <Input
                   type="email"
+                  inputMode="email"
+                  autoComplete="email"
                   placeholder="Email"
                   value={judgeEmail}
                   onChange={(e) => setJudgeEmail(e.target.value)}
@@ -285,7 +287,7 @@ function JudgesSection({ showId }: { showId: string }) {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Popover open={judgePopoverOpen} onOpenChange={setJudgePopoverOpen}>
               <PopoverTrigger asChild>
                 <Button
@@ -306,7 +308,7 @@ function JudgesSection({ showId }: { showId: string }) {
                   <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+              <PopoverContent className="w-[min(90vw,400px)] sm:w-[--radix-popover-trigger-width] p-0" align="start">
                 <Command>
                   <CommandInput placeholder="Search judges..." />
                   <CommandList className="max-h-[300px]">
@@ -722,42 +724,74 @@ function RingsSection({ showId }: { showId: string }) {
             </p>
           </div>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Ring</TableHead>
-                <TableHead>Day</TableHead>
-                <TableHead>Start Time</TableHead>
-                <TableHead className="w-10" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {showRings.map((ring) => (
-                <TableRow key={ring.id}>
-                  <TableCell className="font-medium">Ring {ring.number}</TableCell>
-                  <TableCell>
-                    {ring.showDay ? `Day ${ring.showDay}` : '—'}
-                  </TableCell>
-                  <TableCell>{ring.startTime ?? '—'}</TableCell>
-                  <TableCell>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="size-7 text-destructive hover:text-destructive"
-                      onClick={() => {
-                        if (confirm('Remove this ring? Any judge/steward assignments to this ring will be unlinked.')) {
-                          removeMutation.mutate({ ringId: ring.id });
-                        }
-                      }}
-                      disabled={removeMutation.isPending}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
-                  </TableCell>
+          <>
+          {/* Mobile card view */}
+          <div className="space-y-2 sm:hidden">
+            {showRings.map((ring) => (
+              <div key={ring.id} className="flex items-center justify-between rounded-lg border p-3">
+                <div>
+                  <p className="font-medium text-sm">Ring {ring.number}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {ring.showDay ? `Day ${ring.showDay}` : 'No day set'}
+                    {ring.startTime && ` · ${ring.startTime}`}
+                  </p>
+                </div>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="size-9 text-destructive hover:text-destructive"
+                  onClick={() => {
+                    if (confirm('Remove this ring? Any judge/steward assignments to this ring will be unlinked.')) {
+                      removeMutation.mutate({ ringId: ring.id });
+                    }
+                  }}
+                  disabled={removeMutation.isPending}
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+          {/* Desktop table */}
+          <div className="hidden sm:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Ring</TableHead>
+                  <TableHead>Day</TableHead>
+                  <TableHead>Start Time</TableHead>
+                  <TableHead className="w-10" />
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {showRings.map((ring) => (
+                  <TableRow key={ring.id}>
+                    <TableCell className="font-medium">Ring {ring.number}</TableCell>
+                    <TableCell>
+                      {ring.showDay ? `Day ${ring.showDay}` : '—'}
+                    </TableCell>
+                    <TableCell>{ring.startTime ?? '—'}</TableCell>
+                    <TableCell>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="size-7 text-destructive hover:text-destructive"
+                        onClick={() => {
+                          if (confirm('Remove this ring? Any judge/steward assignments to this ring will be unlinked.')) {
+                            removeMutation.mutate({ ringId: ring.id });
+                          }
+                        }}
+                        disabled={removeMutation.isPending}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          </>
         )}
       </CardContent>
     </Card>
@@ -825,6 +859,8 @@ function StewardsSection({ showId }: { showId: string }) {
             <div className="flex gap-2">
               <Input
                 type="email"
+                inputMode="email"
+                autoComplete="email"
                 placeholder="steward@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -867,50 +903,82 @@ function StewardsSection({ showId }: { showId: string }) {
             </p>
           </div>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Ring</TableHead>
-                <TableHead className="w-10" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {stewards.map((assignment) => (
-                <TableRow key={assignment.id}>
-                  <TableCell className="font-medium">
-                    {assignment.user.name}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {assignment.user.email}
-                  </TableCell>
-                  <TableCell>
-                    {assignment.ring ? (
-                      <Badge variant="outline">Ring {assignment.ring.number}</Badge>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">All</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="size-7 text-destructive hover:text-destructive"
-                      onClick={() => {
-                        if (confirm('Remove this steward from the show?')) {
-                          removeMutation.mutate({ assignmentId: assignment.id });
-                        }
-                      }}
-                      disabled={removeMutation.isPending}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
-                  </TableCell>
+          <>
+          {/* Mobile card view */}
+          <div className="space-y-2 sm:hidden">
+            {stewards.map((assignment) => (
+              <div key={assignment.id} className="flex items-center justify-between rounded-lg border p-3">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-sm truncate">{assignment.user.name}</p>
+                  <p className="text-xs text-muted-foreground truncate">{assignment.user.email}</p>
+                  {assignment.ring && (
+                    <Badge variant="outline" className="mt-1 text-xs">Ring {assignment.ring.number}</Badge>
+                  )}
+                </div>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="size-9 shrink-0 text-destructive hover:text-destructive"
+                  onClick={() => {
+                    if (confirm('Remove this steward from the show?')) {
+                      removeMutation.mutate({ assignmentId: assignment.id });
+                    }
+                  }}
+                  disabled={removeMutation.isPending}
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+          {/* Desktop table */}
+          <div className="hidden sm:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Ring</TableHead>
+                  <TableHead className="w-10" />
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {stewards.map((assignment) => (
+                  <TableRow key={assignment.id}>
+                    <TableCell className="font-medium">
+                      {assignment.user.name}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {assignment.user.email}
+                    </TableCell>
+                    <TableCell>
+                      {assignment.ring ? (
+                        <Badge variant="outline">Ring {assignment.ring.number}</Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">All</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="size-7 text-destructive hover:text-destructive"
+                        onClick={() => {
+                          if (confirm('Remove this steward from the show?')) {
+                            removeMutation.mutate({ assignmentId: assignment.id });
+                          }
+                        }}
+                        disabled={removeMutation.isPending}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          </>
         )}
       </CardContent>
     </Card>

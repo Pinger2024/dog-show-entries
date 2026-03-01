@@ -59,7 +59,7 @@ const faqs = [
 
 export default function HelpPage() {
   return (
-    <div className="mx-auto max-w-3xl px-4 py-14 sm:px-6">
+    <div className="mx-auto max-w-3xl px-4 py-8 sm:py-14 sm:px-6">
       <h1 className="gold-rule font-serif text-3xl font-bold tracking-tight sm:text-4xl">
         Help Centre
       </h1>
@@ -79,7 +79,7 @@ export default function HelpPage() {
                 {faq.question}
               </CardTitle>
             </CardHeader>
-            <CardContent className="pl-16">
+            <CardContent className="pl-4 sm:pl-16">
               <p className="leading-relaxed text-muted-foreground">
                 {faq.answer}
               </p>

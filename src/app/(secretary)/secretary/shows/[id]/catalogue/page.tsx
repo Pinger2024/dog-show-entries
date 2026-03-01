@@ -74,7 +74,7 @@ export default function CataloguePage({
   return (
     <div className="space-y-6">
       {/* Actions */}
-      <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         <Button
           onClick={() => assignMutation.mutate({ showId })}
           disabled={assignMutation.isPending || entries.length === 0}

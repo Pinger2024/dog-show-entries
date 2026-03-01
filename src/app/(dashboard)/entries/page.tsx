@@ -115,7 +115,7 @@ function EntryCard({ entry }: { entry: RouterOutputs['entries']['list']['items']
 
   return (
     <Link href={`/entries/${entry.id}`}>
-      <Card className={`transition-colors hover:bg-accent/30 ${isInactive ? 'opacity-60' : ''}`}>
+      <Card className={`transition-colors hover:bg-accent/30 active:bg-accent/40 ${isInactive ? 'opacity-60' : ''}`}>
         <CardContent className="flex items-center gap-3 px-3 py-3 sm:gap-4 sm:px-4 sm:py-4 lg:px-6">
           <div className="hidden size-12 items-center justify-center rounded-lg bg-primary/10 sm:flex">
             <CalendarDays className="size-5 text-primary" />

@@ -201,7 +201,7 @@ export default function LiveResultsPage({
                 <div className="space-y-2">
                   {showAwards.map((a) => (
                     <div key={a.id} className="flex items-center gap-3">
-                      <Badge className="w-44 justify-center bg-amber-100 text-amber-800 border-amber-300 text-xs font-semibold">
+                      <Badge className="w-auto sm:w-44 justify-center bg-amber-100 text-amber-800 border-amber-300 text-xs font-semibold whitespace-nowrap">
                         {achievementLabels[a.type] ?? a.type}
                       </Badge>
                       {a.dog ? (
@@ -285,7 +285,7 @@ export default function LiveResultsPage({
                               {result.placement && (
                                 <Badge
                                   variant="outline"
-                                  className={`w-16 justify-center text-xs font-semibold ${placementColors[result.placement] ?? ''}`}
+                                  className={`w-auto sm:w-16 justify-center text-xs font-semibold whitespace-nowrap ${placementColors[result.placement] ?? ''}`}
                                 >
                                   {getPlacementLabel(result.placement)}
                                 </Badge>

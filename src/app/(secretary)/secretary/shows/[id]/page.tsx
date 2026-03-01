@@ -674,144 +674,198 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
             <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               {typeLabels[type] ?? type}
             </h4>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[70px]">#</TableHead>
-                  <TableHead>Class</TableHead>
-                  <TableHead className="w-[100px]">Sex</TableHead>
-                  <TableHead className="w-[120px]">Fee</TableHead>
-                  <TableHead className="w-[60px]" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {typeClasses.map((sc) => {
-                  const isEditing = editingFees[sc.id] !== undefined;
-                  const isEditingNum = editingNumbers[sc.id] !== undefined;
-                  return (
-                    <TableRow key={sc.id}>
-                      <TableCell>
-                        {isEditingNum ? (
-                          <div className="flex items-center gap-1">
-                            <Input
-                              type="number"
-                              min={1}
-                              value={editingNumbers[sc.id]}
-                              onChange={(e) =>
-                                setEditingNumbers((prev) => ({
-                                  ...prev,
-                                  [sc.id]: e.target.value,
-                                }))
-                              }
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') saveNumber(sc.id);
-                                if (e.key === 'Escape') cancelEditNumber(sc.id);
-                              }}
-                              className="h-7 w-14 text-xs"
-                              autoFocus
-                            />
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => startEditNumber(sc.id, sc.classNumber)}
-                            className="rounded px-1.5 py-0.5 text-sm font-bold text-muted-foreground transition-colors hover:bg-muted"
-                            title="Click to edit class number"
-                          >
-                            {sc.classNumber ?? '—'}
-                          </button>
-                        )}
-                      </TableCell>
-                      <TableCell className="font-medium">
+            {/* Mobile card view */}
+            <div className="space-y-2 sm:hidden">
+              {typeClasses.map((sc) => (
+                <div key={sc.id} className="flex items-center justify-between rounded-lg border p-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-muted-foreground">
+                        #{sc.classNumber ?? '—'}
+                      </span>
+                      <span className="text-sm font-medium truncate">
                         {sc.classDefinition?.name ?? 'Unknown'}
-                        {sc.breed && (
-                          <span className="ml-1 text-muted-foreground">
-                            ({sc.breed.name})
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {sc.sex ? (
-                          <Badge variant="outline" className="text-xs">
-                            {sc.sex === 'dog' ? 'Dog' : 'Bitch'}
-                          </Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Any</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {isEditing ? (
-                          <div className="flex items-center gap-1">
-                            <Input
-                              type="number"
-                              min={0}
-                              value={editingFees[sc.id]}
-                              onChange={(e) =>
-                                setEditingFees((prev) => ({
-                                  ...prev,
-                                  [sc.id]: e.target.value,
-                                }))
+                      </span>
+                    </div>
+                    <div className="mt-1 flex items-center gap-2">
+                      {sc.sex ? (
+                        <Badge variant="outline" className="text-[10px]">
+                          {sc.sex === 'dog' ? 'Dog' : 'Bitch'}
+                        </Badge>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground">Any sex</span>
+                      )}
+                      {sc.breed && (
+                        <span className="text-[10px] text-muted-foreground truncate">{sc.breed.name}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => startEditFee(sc.id, sc.entryFee)}
+                      className="rounded px-2 py-1 text-sm font-semibold transition-colors hover:bg-muted"
+                    >
+                      {formatCurrency(sc.entryFee)}
+                    </button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="size-9 text-destructive hover:text-destructive"
+                      onClick={() => {
+                        if (confirm('Remove this class from the show?')) {
+                          deleteMutation.mutate({ showClassId: sc.id });
+                        }
+                      }}
+                      disabled={deleteMutation.isPending}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Desktop table */}
+            <div className="hidden sm:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[70px]">#</TableHead>
+                    <TableHead>Class</TableHead>
+                    <TableHead className="w-[100px]">Sex</TableHead>
+                    <TableHead className="w-[120px]">Fee</TableHead>
+                    <TableHead className="w-[60px]" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {typeClasses.map((sc) => {
+                    const isEditing = editingFees[sc.id] !== undefined;
+                    const isEditingNum = editingNumbers[sc.id] !== undefined;
+                    return (
+                      <TableRow key={sc.id}>
+                        <TableCell>
+                          {isEditingNum ? (
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="number"
+                                min={1}
+                                value={editingNumbers[sc.id]}
+                                onChange={(e) =>
+                                  setEditingNumbers((prev) => ({
+                                    ...prev,
+                                    [sc.id]: e.target.value,
+                                  }))
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') saveNumber(sc.id);
+                                  if (e.key === 'Escape') cancelEditNumber(sc.id);
+                                }}
+                                className="h-7 w-14 text-xs"
+                                autoFocus
+                              />
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => startEditNumber(sc.id, sc.classNumber)}
+                              className="rounded px-1.5 py-0.5 text-sm font-bold text-muted-foreground transition-colors hover:bg-muted"
+                              title="Click to edit class number"
+                            >
+                              {sc.classNumber ?? '—'}
+                            </button>
+                          )}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {sc.classDefinition?.name ?? 'Unknown'}
+                          {sc.breed && (
+                            <span className="ml-1 text-muted-foreground">
+                              ({sc.breed.name})
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {sc.sex ? (
+                            <Badge variant="outline" className="text-xs">
+                              {sc.sex === 'dog' ? 'Dog' : 'Bitch'}
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">Any</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {isEditing ? (
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="number"
+                                min={0}
+                                value={editingFees[sc.id]}
+                                onChange={(e) =>
+                                  setEditingFees((prev) => ({
+                                    ...prev,
+                                    [sc.id]: e.target.value,
+                                  }))
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') saveFee(sc.id);
+                                  if (e.key === 'Escape') cancelEditFee(sc.id);
+                                }}
+                                className="h-7 w-20 text-xs"
+                                autoFocus
+                              />
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="size-7"
+                                onClick={() => saveFee(sc.id)}
+                                disabled={updateMutation.isPending}
+                              >
+                                {updateMutation.isPending ? (
+                                  <Loader2 className="size-3 animate-spin" />
+                                ) : (
+                                  <span className="text-xs">OK</span>
+                                )}
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="size-7"
+                                onClick={() => cancelEditFee(sc.id)}
+                              >
+                                <X className="size-3" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => startEditFee(sc.id, sc.entryFee)}
+                              className="rounded px-1.5 py-0.5 text-sm font-semibold transition-colors hover:bg-muted"
+                              title="Click to edit fee"
+                            >
+                              {formatCurrency(sc.entryFee)}
+                            </button>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="size-7 text-destructive hover:text-destructive"
+                            onClick={() => {
+                              if (confirm('Remove this class from the show?')) {
+                                deleteMutation.mutate({ showClassId: sc.id });
                               }
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') saveFee(sc.id);
-                                if (e.key === 'Escape') cancelEditFee(sc.id);
-                              }}
-                              className="h-7 w-20 text-xs"
-                              autoFocus
-                            />
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="size-7"
-                              onClick={() => saveFee(sc.id)}
-                              disabled={updateMutation.isPending}
-                            >
-                              {updateMutation.isPending ? (
-                                <Loader2 className="size-3 animate-spin" />
-                              ) : (
-                                <span className="text-xs">OK</span>
-                              )}
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="size-7"
-                              onClick={() => cancelEditFee(sc.id)}
-                            >
-                              <X className="size-3" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => startEditFee(sc.id, sc.entryFee)}
-                            className="rounded px-1.5 py-0.5 text-sm font-semibold transition-colors hover:bg-muted"
-                            title="Click to edit fee"
+                            }}
+                            disabled={deleteMutation.isPending}
                           >
-                            {formatCurrency(sc.entryFee)}
-                          </button>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="size-7 text-destructive hover:text-destructive"
-                          onClick={() => {
-                            if (confirm('Remove this class from the show?')) {
-                              deleteMutation.mutate({ showClassId: sc.id });
-                            }
-                          }}
-                          disabled={deleteMutation.isPending}
-                        >
-                          <Trash2 className="size-3.5" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           </div>
         ))}
       </CardContent>

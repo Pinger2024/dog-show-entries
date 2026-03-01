@@ -65,7 +65,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
   const breadcrumbs = getBreadcrumbs(pathname);
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen overflow-x-hidden">
       {/* Desktop Sidebar */}
       <aside className="hidden w-64 shrink-0 border-r bg-sidebar md:flex md:flex-col">
         {/* Sidebar header */}

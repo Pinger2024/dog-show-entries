@@ -110,7 +110,7 @@ export function LoginForm() {
                 key={user.email}
                 onClick={() => handleDemoLogin(user.email)}
                 disabled={demoLoading !== null}
-                className="flex w-full items-center gap-2.5 sm:gap-3 rounded-lg border bg-card p-2.5 sm:p-3.5 text-left transition-all hover:border-primary/30 hover:shadow-sm disabled:opacity-60"
+                className="flex w-full items-center gap-2.5 sm:gap-3 rounded-lg border bg-card p-3 sm:p-3.5 text-left transition-all hover:border-primary/30 hover:shadow-sm active:bg-accent/30 disabled:opacity-60"
               >
                 <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                   <user.icon className="size-5" />
@@ -150,6 +150,8 @@ export function LoginForm() {
                 <Input
                   id="email"
                   type="email"
+                  inputMode="email"
+                  autoComplete="email"
                   placeholder="you@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}

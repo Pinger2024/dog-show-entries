@@ -281,7 +281,8 @@ export default function NewShowPage() {
       </div>
 
       {/* Step indicator */}
-      <nav className="flex items-center gap-1 overflow-x-auto pb-1 -mb-1">
+      <nav className="overflow-x-auto scrollbar-hide -mx-3 sm:mx-0 pb-1 -mb-1">
+        <div className="flex items-center gap-1 px-3 sm:px-0">
         {STEPS.map((label, i) => (
           <button
             key={label}
@@ -289,7 +290,7 @@ export default function NewShowPage() {
             onClick={() => i < step && setStep(i)}
             disabled={i > step}
             className={cn(
-              'flex items-center gap-1.5 rounded-lg px-2 py-2 text-xs font-medium whitespace-nowrap transition-colors sm:gap-2 sm:px-3 sm:text-sm',
+              'flex items-center gap-1.5 rounded-lg px-2.5 py-2.5 text-xs font-medium whitespace-nowrap transition-colors sm:gap-2 sm:px-3 sm:py-2 sm:text-sm',
               i === step
                 ? 'bg-primary text-primary-foreground'
                 : i < step
@@ -312,6 +313,7 @@ export default function NewShowPage() {
             <span className="hidden sm:inline">{label}</span>
           </button>
         ))}
+        </div>
       </nav>
 
       <Form {...form}>

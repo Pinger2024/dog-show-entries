@@ -82,7 +82,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
         {stats.map((stat) => (
           <Link key={stat.label} href={stat.href}>
-            <Card className="transition-all hover:border-primary/20 hover:shadow-md hover:shadow-primary/5">
+            <Card className="transition-all hover:border-primary/20 hover:shadow-md hover:shadow-primary/5 active:bg-accent/30">
               <CardHeader className="flex-row items-center justify-between pb-2 p-3 sm:p-4 lg:p-6">
                 <CardDescription className="text-xs sm:text-[0.9375rem] font-medium">
                   {stat.label}
@@ -155,7 +155,7 @@ export default function DashboardPage() {
                 <Link
                   key={entry.id}
                   href={`/entries/${entry.id}`}
-                  className="block rounded-lg border p-3 sm:p-4 transition-colors hover:bg-accent/30"
+                  className="block rounded-lg border p-3 sm:p-4 transition-colors hover:bg-accent/30 active:bg-accent/40"
                 >
                   <div className="flex items-start justify-between gap-2 sm:gap-3">
                     <div className="min-w-0 flex-1">
@@ -223,7 +223,7 @@ export default function DashboardPage() {
                 <Link
                   key={show.id}
                   href={`/shows/${show.id}`}
-                  className="block rounded-lg border p-3 sm:p-4 transition-colors hover:bg-accent/30"
+                  className="block rounded-lg border p-3 sm:p-4 transition-colors hover:bg-accent/30 active:bg-accent/40"
                 >
                   <div className="flex items-start justify-between gap-2 sm:gap-3">
                     <div className="min-w-0 flex-1">

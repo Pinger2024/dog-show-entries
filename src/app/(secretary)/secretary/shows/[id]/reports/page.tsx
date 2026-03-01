@@ -184,52 +184,89 @@ function EntryReportContent({ showId }: { showId: string }) {
         </div>
       </CardHeader>
       <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>Exhibitor</TableHead>
-              <TableHead>Dog</TableHead>
-              <TableHead>Breed</TableHead>
-              <TableHead>Classes</TableHead>
-              <TableHead>Fee</TableHead>
-              <TableHead>Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {entries?.map((entry) => (
-              <TableRow key={entry.id}>
-                <TableCell className="text-muted-foreground">
-                  {formatDate(entry.entryDate)}
-                </TableCell>
-                <TableCell>{entry.exhibitor?.name ?? '—'}</TableCell>
-                <TableCell>
-                  {entry.dog?.registeredName ?? 'Junior Handler'}
-                </TableCell>
-                <TableCell>{entry.dog?.breed?.name ?? '—'}</TableCell>
-                <TableCell>
-                  <div className="flex flex-wrap gap-1">
-                    {entry.entryClasses.map((ec, i) => (
-                      <Badge key={i} variant="secondary" className="text-[10px]">
-                        {ec.showClass?.classDefinition?.name ?? '?'}
-                      </Badge>
-                    ))}
-                  </div>
-                </TableCell>
-                <TableCell>{formatCurrency(entry.totalFee)}</TableCell>
-                <TableCell>
-                  <Badge
-                    variant={
-                      entryStatusConfig[entry.status]?.variant ?? 'outline'
-                    }
-                  >
-                    {entryStatusConfig[entry.status]?.label ?? entry.status}
+        {/* Mobile card view */}
+        <div className="space-y-3 sm:hidden">
+          {entries?.map((entry) => (
+            <div key={entry.id} className="rounded-lg border p-3 space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-sm truncate">
+                    {entry.dog?.registeredName ?? 'Junior Handler'}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {entry.exhibitor?.name ?? '—'} · {entry.dog?.breed?.name ?? '—'}
+                  </p>
+                </div>
+                <Badge
+                  variant={entryStatusConfig[entry.status]?.variant ?? 'outline'}
+                  className="shrink-0"
+                >
+                  {entryStatusConfig[entry.status]?.label ?? entry.status}
+                </Badge>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {entry.entryClasses.map((ec, i) => (
+                  <Badge key={i} variant="secondary" className="text-[10px]">
+                    {ec.showClass?.classDefinition?.name ?? '?'}
                   </Badge>
-                </TableCell>
+                ))}
+              </div>
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>{formatDate(entry.entryDate)}</span>
+                <span className="font-medium text-foreground">{formatCurrency(entry.totalFee)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        {/* Desktop table */}
+        <div className="hidden sm:block">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Exhibitor</TableHead>
+                <TableHead>Dog</TableHead>
+                <TableHead className="hidden md:table-cell">Breed</TableHead>
+                <TableHead>Classes</TableHead>
+                <TableHead>Fee</TableHead>
+                <TableHead>Status</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {entries?.map((entry) => (
+                <TableRow key={entry.id}>
+                  <TableCell className="text-muted-foreground">
+                    {formatDate(entry.entryDate)}
+                  </TableCell>
+                  <TableCell>{entry.exhibitor?.name ?? '—'}</TableCell>
+                  <TableCell>
+                    {entry.dog?.registeredName ?? 'Junior Handler'}
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell">{entry.dog?.breed?.name ?? '—'}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {entry.entryClasses.map((ec, i) => (
+                        <Badge key={i} variant="secondary" className="text-[10px]">
+                          {ec.showClass?.classDefinition?.name ?? '?'}
+                        </Badge>
+                      ))}
+                    </div>
+                  </TableCell>
+                  <TableCell>{formatCurrency(entry.totalFee)}</TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={
+                        entryStatusConfig[entry.status]?.variant ?? 'outline'
+                      }
+                    >
+                      {entryStatusConfig[entry.status]?.label ?? entry.status}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </CardContent>
     </Card>
   );
@@ -279,7 +316,7 @@ function PaymentReportContent({ showId }: { showId: string }) {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="rounded-lg bg-green-50 p-3 dark:bg-green-950/30">
             <p className="text-xs text-muted-foreground">Total Revenue</p>
             <p className="text-lg font-bold text-green-700 dark:text-green-400">
@@ -300,52 +337,90 @@ function PaymentReportContent({ showId }: { showId: string }) {
           </div>
         </div>
 
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Exhibitor</TableHead>
-              <TableHead>Dog</TableHead>
-              <TableHead>Fee</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Payments</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {data?.entries.map((entry) => (
-              <TableRow key={entry.id}>
-                <TableCell>{entry.exhibitor?.name ?? '—'}</TableCell>
-                <TableCell>
-                  {entry.dog?.registeredName ?? 'Junior Handler'}
-                </TableCell>
-                <TableCell>{formatCurrency(entry.totalFee)}</TableCell>
-                <TableCell>
-                  <Badge
-                    variant={
-                      entryStatusConfig[entry.status]?.variant ?? 'outline'
-                    }
-                  >
-                    {entryStatusConfig[entry.status]?.label ?? entry.status}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-wrap gap-1">
-                    {entry.payments.map((p, i) => (
-                      <Badge
-                        key={i}
-                        variant={
-                          p.status === 'succeeded' ? 'default' : 'outline'
-                        }
-                        className="text-[10px]"
-                      >
-                        £{(p.amount / 100).toFixed(2)} ({p.status})
-                      </Badge>
-                    ))}
-                  </div>
-                </TableCell>
+        {/* Mobile card view */}
+        <div className="space-y-3 sm:hidden">
+          {data?.entries.map((entry) => (
+            <div key={entry.id} className="rounded-lg border p-3 space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-sm truncate">{entry.exhibitor?.name ?? '—'}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {entry.dog?.registeredName ?? 'Junior Handler'}
+                  </p>
+                </div>
+                <Badge
+                  variant={entryStatusConfig[entry.status]?.variant ?? 'outline'}
+                  className="shrink-0"
+                >
+                  {entryStatusConfig[entry.status]?.label ?? entry.status}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-medium">{formatCurrency(entry.totalFee)}</span>
+                <div className="flex flex-wrap gap-1 justify-end">
+                  {entry.payments.map((p, i) => (
+                    <Badge
+                      key={i}
+                      variant={p.status === 'succeeded' ? 'default' : 'outline'}
+                      className="text-[10px]"
+                    >
+                      £{(p.amount / 100).toFixed(2)} ({p.status})
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        {/* Desktop table */}
+        <div className="hidden sm:block">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Exhibitor</TableHead>
+                <TableHead>Dog</TableHead>
+                <TableHead>Fee</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Payments</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {data?.entries.map((entry) => (
+                <TableRow key={entry.id}>
+                  <TableCell>{entry.exhibitor?.name ?? '—'}</TableCell>
+                  <TableCell>
+                    {entry.dog?.registeredName ?? 'Junior Handler'}
+                  </TableCell>
+                  <TableCell>{formatCurrency(entry.totalFee)}</TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={
+                        entryStatusConfig[entry.status]?.variant ?? 'outline'
+                      }
+                    >
+                      {entryStatusConfig[entry.status]?.label ?? entry.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {entry.payments.map((p, i) => (
+                        <Badge
+                          key={i}
+                          variant={
+                            p.status === 'succeeded' ? 'default' : 'outline'
+                          }
+                          className="text-[10px]"
+                        >
+                          £{(p.amount / 100).toFixed(2)} ({p.status})
+                        </Badge>
+                      ))}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </CardContent>
     </Card>
   );
@@ -429,15 +504,15 @@ function AuditLogViewer({ showId }: { showId: string }) {
                 key={log.id}
                 className="rounded-lg border px-3 py-2 text-sm"
               >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <Badge variant="outline">
                       {actionLabels[log.action] ?? log.action}
                     </Badge>
-                    <span className="font-medium">
+                    <span className="font-medium truncate">
                       {log.entry?.dog?.registeredName ?? 'Unknown dog'}
                     </span>
-                    <span className="text-muted-foreground">
+                    <span className="text-muted-foreground truncate">
                       ({log.entry?.exhibitor?.name ?? 'Unknown'})
                     </span>
                   </div>

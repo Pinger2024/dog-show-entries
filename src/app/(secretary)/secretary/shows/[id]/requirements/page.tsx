@@ -288,7 +288,7 @@ export default function RequirementsPage({
         return (
           <Card key={phase.key}>
             <button
-              className="flex w-full items-center gap-3 px-4 py-3 sm:px-6 sm:py-4 text-left hover:bg-muted/50 transition-colors"
+              className="flex w-full items-center gap-3 px-4 py-4 sm:px-6 sm:py-4 text-left hover:bg-muted/50 active:bg-muted/70 transition-colors"
               onClick={() => togglePhase(phase.key)}
             >
               {expanded ? (
@@ -329,14 +329,14 @@ export default function RequirementsPage({
                     <div key={item.id} className="rounded-lg border">
                       <div
                         className={cn(
-                          'flex items-start gap-2 px-3 py-2.5 sm:gap-3 sm:px-4 sm:py-3',
+                          'flex items-start gap-2 px-3 py-3.5 sm:gap-3 sm:px-4 sm:py-3',
                           item.effectiveStatus === 'complete' && 'opacity-60',
                           item.effectiveStatus === 'not_applicable' && 'opacity-40'
                         )}
                       >
                         <button
                           className={cn(
-                            'mt-0.5 shrink-0 rounded-full p-0.5 transition-colors min-h-[28px] min-w-[28px] flex items-center justify-center',
+                            'mt-0.5 shrink-0 rounded-full p-1.5 sm:p-0.5 transition-colors min-h-[40px] min-w-[40px] sm:min-h-[28px] sm:min-w-[28px] flex items-center justify-center',
                             item.isAutoDetected ? 'cursor-default' : 'hover:bg-muted'
                           )}
                           onClick={(e) => {
@@ -404,7 +404,7 @@ export default function RequirementsPage({
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="size-7 shrink-0 text-muted-foreground"
+                          className="size-9 sm:size-7 shrink-0 text-muted-foreground"
                           onClick={() => setExpandedItem(isItemExpanded ? null : item.id)}
                         >
                           {isItemExpanded ? (
@@ -417,7 +417,7 @@ export default function RequirementsPage({
 
                       {/* Expanded detail panel */}
                       {isItemExpanded && (
-                        <div className="border-t px-3 py-3 sm:px-4 space-y-3 bg-muted/30">
+                        <div className="border-t px-4 py-4 sm:px-4 space-y-4 sm:space-y-3 bg-muted/30">
                           {item.description && (
                             <p className="text-sm text-muted-foreground">{item.description}</p>
                           )}
