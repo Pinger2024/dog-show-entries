@@ -305,6 +305,7 @@ function PhotoGalleryCard({ dogId }: { dogId: string }) {
           <Button
             variant="outline"
             size="sm"
+            className="min-h-[44px] px-4 sm:min-h-0"
             disabled={uploading}
             onClick={() => fileInputRef.current?.click()}
           >
@@ -371,21 +372,22 @@ function PhotoGalleryCard({ dogId }: { dogId: string }) {
                     <Star className="size-3 fill-white text-white" />
                   </div>
                 )}
-                {/* Overlay actions */}
-                <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 bg-gradient-to-t from-black/60 to-transparent px-2 pb-2 pt-6 opacity-0 transition-opacity group-hover:opacity-100">
-                  {!photo.isPrimary && (
+                {/* Overlay actions — always visible on mobile, hover reveal on desktop */}
+                <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 bg-gradient-to-t from-black/60 to-transparent px-2 pb-2 pt-6 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+                  {!photo.isPrimary ? (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         setPrimary.mutate({ photoId: photo.id, dogId });
                       }}
-                      className="rounded-full bg-white/90 p-1.5 text-xs shadow hover:bg-white"
+                      className="min-h-[44px] min-w-[44px] rounded-full bg-white/90 p-2 shadow active:bg-white sm:min-h-0 sm:min-w-0 sm:p-1.5"
                       title="Set as profile photo"
                     >
-                      <Star className="size-3.5 text-yellow-600" />
+                      <Star className="size-4 text-yellow-600 sm:size-3.5" />
                     </button>
+                  ) : (
+                    <span />
                   )}
-                  {photo.isPrimary && <span />}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -393,10 +395,10 @@ function PhotoGalleryCard({ dogId }: { dogId: string }) {
                         deletePhoto.mutate({ photoId: photo.id, dogId });
                       }
                     }}
-                    className="rounded-full bg-white/90 p-1.5 shadow hover:bg-white"
+                    className="min-h-[44px] min-w-[44px] rounded-full bg-white/90 p-2 shadow active:bg-white sm:min-h-0 sm:min-w-0 sm:p-1.5"
                     title="Delete photo"
                   >
-                    <Trash2 className="size-3.5 text-red-600" />
+                    <Trash2 className="size-4 text-red-600 sm:size-3.5" />
                   </button>
                 </div>
               </div>
@@ -411,7 +413,7 @@ function PhotoGalleryCard({ dogId }: { dogId: string }) {
             onClick={() => setLightboxUrl(null)}
           >
             <button
-              className="absolute right-4 top-4 rounded-full bg-white/20 p-2 text-white hover:bg-white/40"
+              className="absolute right-3 top-3 min-h-[44px] min-w-[44px] rounded-full bg-white/20 p-2.5 text-white active:bg-white/40 sm:right-4 sm:top-4 sm:p-2"
               onClick={() => setLightboxUrl(null)}
             >
               <X className="size-6" />

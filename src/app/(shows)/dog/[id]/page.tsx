@@ -497,7 +497,7 @@ export default function DogProfilePage({
           onClick={() => setLightboxUrl(null)}
         >
           <button
-            className="absolute right-4 top-4 rounded-full bg-white/20 p-2 text-white hover:bg-white/40"
+            className="absolute right-3 top-3 min-h-[44px] min-w-[44px] rounded-full bg-white/20 p-2.5 text-white active:bg-white/40 sm:right-4 sm:top-4 sm:p-2"
             onClick={() => setLightboxUrl(null)}
           >
             <X className="size-6" />
