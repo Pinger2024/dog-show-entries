@@ -210,12 +210,18 @@ export default function ShowDetailPage() {
 
   /* Build breed → judge/ring lookup from judge assignments */
   const breedJudgeMap = new Map<string, { judgeName: string; ringName?: string }>();
+  // Also track "all breeds" judge (breedId is null — common for single-breed shows)
+  let allBreedsJudge: { judgeName: string; ringName?: string } | null = null;
   for (const ja of show.judgeAssignments ?? []) {
+    const info = {
+      judgeName: ja.judge?.name ?? '',
+      ringName: ja.ring ? `Ring ${ja.ring.number}` : undefined,
+    };
     if (ja.breed) {
-      breedJudgeMap.set(ja.breed.name, {
-        judgeName: ja.judge?.name ?? '',
-        ringName: ja.ring?.name ?? undefined,
-      });
+      breedJudgeMap.set(ja.breed.name, info);
+    } else {
+      // Judge assigned to show without specific breed — applies to all breeds
+      allBreedsJudge = info;
     }
   }
 
@@ -446,7 +452,7 @@ export default function ShowDetailPage() {
             </h2>
             <div className="space-y-2">
               {breeds.map(([breedName, classes], i) => {
-                const judgeInfo = breedJudgeMap.get(breedName);
+                const judgeInfo = breedJudgeMap.get(breedName) ?? allBreedsJudge;
                 return (
                   <BreedSection
                     key={breedName}
