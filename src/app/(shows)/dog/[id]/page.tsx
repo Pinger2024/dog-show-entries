@@ -1,6 +1,7 @@
 'use client';
 
-import { use } from 'react';
+import { use, useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { format, parseISO, differenceInYears, differenceInMonths } from 'date-fns';
 import {
@@ -12,6 +13,8 @@ import {
   Loader2,
   Star,
   Medal,
+  Camera,
+  X,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { Badge } from '@/components/ui/badge';
@@ -109,8 +112,10 @@ export default function DogProfilePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const { data, isLoading } = trpc.dogs.getPublicProfile.useQuery({ id });
+  const { data: photos } = trpc.dogs.getPublicPhotos.useQuery({ dogId: id });
 
   if (isLoading) {
     return (
@@ -153,9 +158,21 @@ export default function DogProfilePage({
 
           <div className="mt-4">
             <div className="flex items-start gap-4">
-              <div className="flex size-14 shrink-0 items-center justify-center rounded-full bg-primary/10 sm:size-16">
-                <Dog className="size-7 text-primary sm:size-8" />
-              </div>
+              {photos?.find((p) => p.isPrimary) ? (
+                <div className="relative size-14 shrink-0 overflow-hidden rounded-full border-2 border-primary/20 sm:size-16">
+                  <Image
+                    src={photos.find((p) => p.isPrimary)!.url}
+                    alt={dog.registeredName}
+                    fill
+                    className="object-cover"
+                    sizes="(min-width: 640px) 64px, 56px"
+                  />
+                </div>
+              ) : (
+                <div className="flex size-14 shrink-0 items-center justify-center rounded-full bg-primary/10 sm:size-16">
+                  <Dog className="size-7 text-primary sm:size-8" />
+                </div>
+              )}
               <div className="min-w-0 flex-1">
                 <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">
                   {titlePrefix && (
@@ -313,6 +330,38 @@ export default function DogProfilePage({
             </section>
           )}
 
+          {/* Photo Gallery */}
+          {photos && photos.length > 0 && (
+            <section>
+              <h2 className="mb-3 flex items-center gap-2 font-serif text-lg font-semibold">
+                <Camera className="size-5 text-primary" />
+                Photos
+              </h2>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                {photos.map((photo) => (
+                  <div
+                    key={photo.id}
+                    className="group relative aspect-square cursor-pointer overflow-hidden rounded-lg border bg-muted"
+                    onClick={() => setLightboxUrl(photo.url)}
+                  >
+                    <Image
+                      src={photo.url}
+                      alt={photo.caption || 'Dog photo'}
+                      fill
+                      className="object-cover transition-transform group-hover:scale-105"
+                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                    />
+                    {photo.caption && (
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-2 pb-2 pt-4">
+                        <p className="text-xs text-white">{photo.caption}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           {/* Show History */}
           <section>
             <h2 className="mb-3 flex items-center gap-2 font-serif text-lg font-semibold">
@@ -440,6 +489,29 @@ export default function DogProfilePage({
           )}
         </div>
       </div>
+
+      {/* Lightbox */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <button
+            className="absolute right-4 top-4 rounded-full bg-white/20 p-2 text-white hover:bg-white/40"
+            onClick={() => setLightboxUrl(null)}
+          >
+            <X className="size-6" />
+          </button>
+          <Image
+            src={lightboxUrl}
+            alt="Dog photo"
+            width={1200}
+            height={900}
+            className="max-h-[85vh] max-w-full rounded-lg object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }

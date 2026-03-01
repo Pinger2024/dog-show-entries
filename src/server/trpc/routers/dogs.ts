@@ -3,7 +3,8 @@ import { TRPCError } from '@trpc/server';
 import { and, eq, isNull, asc, desc, sql } from 'drizzle-orm';
 import { protectedProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
-import { dogs, dogOwners, dogTitles, users, entries, entryClasses, showClasses, shows, results, classDefinitions, achievements } from '@/server/db/schema';
+import { dogs, dogOwners, dogTitles, dogPhotos, users, entries, entryClasses, showClasses, shows, results, classDefinitions, achievements } from '@/server/db/schema';
+import { deleteFromR2 } from '@/server/services/storage';
 import { scrapeKcDog, searchKcDogs } from '@/server/services/firecrawl';
 
 /**
@@ -734,5 +735,95 @@ export const dogsRouter = createTRPCRouter({
         },
         disclaimer: 'Progress shown is based on results recorded in Remi only. Wins at shows not using Remi are not included.',
       };
+    }),
+
+  // ── Dog Photos ────────────────────────────────────────
+
+  listPhotos: protectedProcedure
+    .input(z.object({ dogId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.db.query.dogPhotos.findMany({
+        where: eq(dogPhotos.dogId, input.dogId),
+        orderBy: [desc(dogPhotos.isPrimary), asc(dogPhotos.sortOrder), asc(dogPhotos.createdAt)],
+      });
+    }),
+
+  getPublicPhotos: publicProcedure
+    .input(z.object({ dogId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.db.query.dogPhotos.findMany({
+        where: eq(dogPhotos.dogId, input.dogId),
+        orderBy: [desc(dogPhotos.isPrimary), asc(dogPhotos.sortOrder), asc(dogPhotos.createdAt)],
+      });
+    }),
+
+  setPrimaryPhoto: protectedProcedure
+    .input(z.object({ photoId: z.string().uuid(), dogId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify ownership
+      const dog = await ctx.db.query.dogs.findFirst({
+        where: and(eq(dogs.id, input.dogId), eq(dogs.ownerId, ctx.session.user.id), isNull(dogs.deletedAt)),
+      });
+      if (!dog) throw new TRPCError({ code: 'NOT_FOUND', message: 'Dog not found' });
+
+      // Clear existing primary
+      await ctx.db
+        .update(dogPhotos)
+        .set({ isPrimary: false })
+        .where(and(eq(dogPhotos.dogId, input.dogId), eq(dogPhotos.isPrimary, true)));
+
+      // Set new primary
+      await ctx.db
+        .update(dogPhotos)
+        .set({ isPrimary: true })
+        .where(eq(dogPhotos.id, input.photoId));
+
+      return { success: true };
+    }),
+
+  updatePhotoCaption: protectedProcedure
+    .input(z.object({
+      photoId: z.string().uuid(),
+      dogId: z.string().uuid(),
+      caption: z.string().max(200).nullable(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const dog = await ctx.db.query.dogs.findFirst({
+        where: and(eq(dogs.id, input.dogId), eq(dogs.ownerId, ctx.session.user.id), isNull(dogs.deletedAt)),
+      });
+      if (!dog) throw new TRPCError({ code: 'NOT_FOUND', message: 'Dog not found' });
+
+      await ctx.db
+        .update(dogPhotos)
+        .set({ caption: input.caption })
+        .where(eq(dogPhotos.id, input.photoId));
+
+      return { success: true };
+    }),
+
+  deletePhoto: protectedProcedure
+    .input(z.object({ photoId: z.string().uuid(), dogId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const dog = await ctx.db.query.dogs.findFirst({
+        where: and(eq(dogs.id, input.dogId), eq(dogs.ownerId, ctx.session.user.id), isNull(dogs.deletedAt)),
+      });
+      if (!dog) throw new TRPCError({ code: 'NOT_FOUND', message: 'Dog not found' });
+
+      const photo = await ctx.db.query.dogPhotos.findFirst({
+        where: and(eq(dogPhotos.id, input.photoId), eq(dogPhotos.dogId, input.dogId)),
+      });
+      if (!photo) throw new TRPCError({ code: 'NOT_FOUND', message: 'Photo not found' });
+
+      // Delete from R2
+      try {
+        await deleteFromR2(photo.storageKey);
+      } catch (e) {
+        console.error('Failed to delete from R2:', e);
+      }
+
+      // Delete from DB
+      await ctx.db.delete(dogPhotos).where(eq(dogPhotos.id, input.photoId));
+
+      return { success: true };
     }),
 });

@@ -62,6 +62,7 @@ export {
 export { fileUploads, fileUploadsRelations } from './file-uploads';
 export { catalogues, cataloguesRelations } from './catalogues';
 export { feedback } from './feedback';
+export { dogPhotos, dogPhotosRelations } from './dog-photos';
 export { plans, plansRelations } from './plans';
 export {
   stewardAssignments,

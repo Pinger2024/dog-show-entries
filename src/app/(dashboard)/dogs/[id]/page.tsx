@@ -1,6 +1,7 @@
 'use client';
 
-import { use } from 'react';
+import { use, useRef, useState, useCallback } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { format, parseISO, differenceInYears, differenceInMonths } from 'date-fns';
@@ -14,6 +15,10 @@ import {
   Loader2,
   CalendarDays,
   MapPin,
+  Camera,
+  ImagePlus,
+  Star,
+  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
@@ -238,6 +243,194 @@ function TitleProgressCard({ dogId }: { dogId: string }) {
   );
 }
 
+function PhotoGalleryCard({ dogId }: { dogId: string }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const utils = trpc.useUtils();
+
+  const { data: photos, isLoading } = trpc.dogs.listPhotos.useQuery({ dogId });
+  const setPrimary = trpc.dogs.setPrimaryPhoto.useMutation({
+    onSuccess: () => {
+      utils.dogs.listPhotos.invalidate({ dogId });
+      toast.success('Profile photo updated');
+    },
+  });
+  const deletePhoto = trpc.dogs.deletePhoto.useMutation({
+    onSuccess: () => {
+      utils.dogs.listPhotos.invalidate({ dogId });
+      toast.success('Photo deleted');
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const handleUpload = useCallback(async (files: FileList | null) => {
+    if (!files?.length) return;
+    setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        const form = new FormData();
+        form.append('file', file);
+        form.append('dogId', dogId);
+        const res = await fetch('/api/upload/dog-photo', {
+          method: 'POST',
+          body: form,
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || 'Upload failed');
+        }
+      }
+      utils.dogs.listPhotos.invalidate({ dogId });
+      toast.success(files.length > 1 ? `${files.length} photos uploaded` : 'Photo uploaded');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }, [dogId, utils]);
+
+  const primaryPhoto = photos?.find((p) => p.isPrimary);
+  const galleryPhotos = photos?.filter((p) => !p.isPrimary) ?? [];
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Camera className="size-4" />
+            Photos
+          </CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={uploading}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {uploading ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <ImagePlus className="size-3.5" />
+            )}
+            {uploading ? 'Uploading...' : 'Add Photo'}
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            multiple
+            className="hidden"
+            onChange={(e) => handleUpload(e.target.files)}
+          />
+        </div>
+        <CardDescription>
+          {photos?.length
+            ? `${photos.length} photo${photos.length !== 1 ? 's' : ''} · tap the star to set as profile photo`
+            : 'Add photos of your dog for their public profile.'}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="size-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : !photos?.length ? (
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="flex w-full flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed py-12 text-center transition-colors hover:border-primary/40 hover:bg-muted/30"
+          >
+            <div className="flex size-14 items-center justify-center rounded-full bg-primary/10">
+              <Camera className="size-7 text-primary" />
+            </div>
+            <div>
+              <p className="font-medium">Upload your first photo</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                JPEG, PNG or WebP · up to 5MB each
+              </p>
+            </div>
+          </button>
+        ) : (
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+            {photos.map((photo) => (
+              <div
+                key={photo.id}
+                className="group relative aspect-square overflow-hidden rounded-lg border bg-muted"
+              >
+                <Image
+                  src={photo.url}
+                  alt={photo.caption || 'Dog photo'}
+                  fill
+                  className="cursor-pointer object-cover transition-transform group-hover:scale-105"
+                  sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                  onClick={() => setLightboxUrl(photo.url)}
+                />
+                {photo.isPrimary && (
+                  <div className="absolute left-1.5 top-1.5 rounded-full bg-yellow-400 p-1 shadow-sm">
+                    <Star className="size-3 fill-white text-white" />
+                  </div>
+                )}
+                {/* Overlay actions */}
+                <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 bg-gradient-to-t from-black/60 to-transparent px-2 pb-2 pt-6 opacity-0 transition-opacity group-hover:opacity-100">
+                  {!photo.isPrimary && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPrimary.mutate({ photoId: photo.id, dogId });
+                      }}
+                      className="rounded-full bg-white/90 p-1.5 text-xs shadow hover:bg-white"
+                      title="Set as profile photo"
+                    >
+                      <Star className="size-3.5 text-yellow-600" />
+                    </button>
+                  )}
+                  {photo.isPrimary && <span />}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (confirm('Delete this photo?')) {
+                        deletePhoto.mutate({ photoId: photo.id, dogId });
+                      }
+                    }}
+                    className="rounded-full bg-white/90 p-1.5 shadow hover:bg-white"
+                    title="Delete photo"
+                  >
+                    <Trash2 className="size-3.5 text-red-600" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Lightbox */}
+        {lightboxUrl && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+            onClick={() => setLightboxUrl(null)}
+          >
+            <button
+              className="absolute right-4 top-4 rounded-full bg-white/20 p-2 text-white hover:bg-white/40"
+              onClick={() => setLightboxUrl(null)}
+            >
+              <X className="size-6" />
+            </button>
+            <Image
+              src={lightboxUrl}
+              alt="Dog photo"
+              width={1200}
+              height={900}
+              className="max-h-[85vh] max-w-full rounded-lg object-contain"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function DogDetailPage({
   params,
 }: {
@@ -246,6 +439,8 @@ export default function DogDetailPage({
   const { id } = use(params);
   const router = useRouter();
   const { data: dog, isLoading } = trpc.dogs.getById.useQuery({ id });
+  const { data: photos } = trpc.dogs.listPhotos.useQuery({ dogId: id });
+  const profilePhoto = photos?.find((p) => p.isPrimary);
   const utils = trpc.useUtils();
 
   const deleteDog = trpc.dogs.delete.useMutation({
@@ -299,9 +494,21 @@ export default function DogDetailPage({
 
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-4">
-            <div className="flex size-14 shrink-0 items-center justify-center rounded-full bg-primary/10">
-              <Dog className="size-7 text-primary" />
-            </div>
+            {profilePhoto ? (
+              <div className="relative size-14 shrink-0 overflow-hidden rounded-full border-2 border-primary/20">
+                <Image
+                  src={profilePhoto.url}
+                  alt={dog.registeredName}
+                  fill
+                  className="object-cover"
+                  sizes="56px"
+                />
+              </div>
+            ) : (
+              <div className="flex size-14 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                <Dog className="size-7 text-primary" />
+              </div>
+            )}
             <div>
               <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
                 {formatDogName(dog)}
@@ -395,6 +602,9 @@ export default function DogDetailPage({
         {/* Entry History */}
         <EntryHistoryCard dogId={id} />
       </div>
+
+      {/* Photos */}
+      <PhotoGalleryCard dogId={id} />
 
       {/* Owners */}
       {dog.owners && dog.owners.length > 0 && (

@@ -14,6 +14,7 @@ import { entries } from './entries';
 import { achievements } from './achievements';
 import { dogOwners } from './dog-owners';
 import { dogTitles } from './dog-titles';
+import { dogPhotos } from './dog-photos';
 
 export const dogs = pgTable(
   'dogs',
@@ -62,4 +63,5 @@ export const dogsRelations = relations(dogs, ({ one, many }) => ({
   achievements: many(achievements),
   owners: many(dogOwners),
   titles: many(dogTitles),
+  photos: many(dogPhotos),
 }));

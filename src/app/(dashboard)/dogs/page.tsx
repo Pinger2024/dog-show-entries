@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { differenceInYears, differenceInMonths, parseISO } from 'date-fns';
 import {
@@ -35,6 +36,29 @@ function formatAge(dateOfBirth: string): string {
   const months = differenceInMonths(now, dob);
   if (months < 1) return 'Under 1 month';
   return `${months} month${months !== 1 ? 's' : ''} old`;
+}
+
+function DogAvatar({ dogId }: { dogId: string }) {
+  const { data: photos } = trpc.dogs.listPhotos.useQuery({ dogId });
+  const primaryPhoto = photos?.find((p) => p.isPrimary);
+  if (primaryPhoto) {
+    return (
+      <div className="relative size-10 shrink-0 overflow-hidden rounded-full border border-primary/20">
+        <Image
+          src={primaryPhoto.url}
+          alt=""
+          fill
+          className="object-cover"
+          sizes="40px"
+        />
+      </div>
+    );
+  }
+  return (
+    <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
+      <Dog className="size-5 text-primary" />
+    </div>
+  );
 }
 
 export default function DogsPage() {
@@ -149,9 +173,7 @@ export default function DogsPage() {
                             {dog.breed?.name ?? 'Unknown breed'}
                           </CardDescription>
                         </div>
-                        <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                          <Dog className="size-5 text-primary" />
-                        </div>
+                        <DogAvatar dogId={dog.id} />
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-3 p-3 pt-0 sm:p-4 sm:pt-0 lg:p-6 lg:pt-0">

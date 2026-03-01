@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 let _s3: S3Client | null = null;
@@ -26,9 +26,9 @@ const PUBLIC_URL = process.env.R2_PUBLIC_URL ?? '';
 
 const ALLOWED_MIME_TYPES: Record<string, { maxSizeBytes: number }> = {
   'application/pdf': { maxSizeBytes: 10 * 1024 * 1024 }, // 10 MB
-  'image/jpeg': { maxSizeBytes: 2 * 1024 * 1024 }, // 2 MB
-  'image/png': { maxSizeBytes: 2 * 1024 * 1024 },
-  'image/webp': { maxSizeBytes: 2 * 1024 * 1024 },
+  'image/jpeg': { maxSizeBytes: 5 * 1024 * 1024 }, // 5 MB
+  'image/png': { maxSizeBytes: 5 * 1024 * 1024 },
+  'image/webp': { maxSizeBytes: 5 * 1024 * 1024 },
 };
 
 export function validateUpload(mimeType: string, sizeBytes: number) {
@@ -78,6 +78,18 @@ export async function uploadToR2(
     Key: key,
     Body: body,
     ContentType: contentType,
+  });
+  await client.send(command);
+}
+
+/**
+ * Delete a file from R2.
+ */
+export async function deleteFromR2(key: string): Promise<void> {
+  const client = getS3Client();
+  const command = new DeleteObjectCommand({
+    Bucket: BUCKET,
+    Key: key,
   });
   await client.send(command);
 }
