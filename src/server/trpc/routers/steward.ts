@@ -3,6 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { and, eq, sql, isNull, inArray, asc } from 'drizzle-orm';
 import { stewardProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
+import type { Database } from '@/server/db';
 import {
   shows,
   entries,
@@ -14,7 +15,7 @@ import {
 } from '@/server/db/schema';
 
 async function verifyStewardAssignment(
-  db: Parameters<Parameters<typeof stewardProcedure.mutation>[0]>['ctx']['db'],
+  db: Database,
   userId: string,
   showId: string
 ) {
@@ -49,10 +50,10 @@ export const stewardRouter = createTRPCRouter({
       },
     });
 
-    // Only return shows that are entries_closed, in_progress, or completed
+    // Show all assigned shows except drafts and cancelled
     return assignments
       .filter((a) =>
-        ['entries_closed', 'in_progress', 'completed'].includes(a.show.status)
+        !['draft', 'cancelled'].includes(a.show.status)
       )
       .map((a) => ({
         ...a.show,

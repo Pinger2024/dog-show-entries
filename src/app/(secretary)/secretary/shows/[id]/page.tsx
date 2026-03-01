@@ -192,7 +192,7 @@ export default function ManageShowPage({
   }
 
   function handleStatusChange(newStatus: string) {
-    if (newStatus === show.status) return;
+    if (!show || newStatus === show.status) return;
     if (riskyTransitions[newStatus]) {
       setPendingStatus(newStatus);
     } else {
@@ -2106,14 +2106,13 @@ function ScheduleUpload({
     async (file: File) => {
       setUploading(true);
       try {
-        const res = await fetch('/api/upload/presign', {
+        // Upload via server-side proxy (avoids CORS issues with R2)
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const res = await fetch('/api/upload', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fileName: file.name,
-            contentType: file.type,
-            sizeBytes: file.size,
-          }),
+          body: formData,
         });
 
         if (!res.ok) {
@@ -2128,16 +2127,7 @@ function ScheduleUpload({
           throw new Error(message);
         }
 
-        const { presignedUrl, publicUrl } = await res.json();
-
-        // Upload directly to R2
-        const uploadRes = await fetch(presignedUrl, {
-          method: 'PUT',
-          headers: { 'Content-Type': file.type },
-          body: file,
-        });
-
-        if (!uploadRes.ok) throw new Error('File upload to storage failed');
+        const { publicUrl } = await res.json();
 
         // Save the public URL to the show
         await updateUrl.mutateAsync({ showId, scheduleUrl: publicUrl });

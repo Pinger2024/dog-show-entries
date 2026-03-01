@@ -63,3 +63,21 @@ export function getPublicUrl(key: string): string {
   }
   return `https://${BUCKET}.r2.dev/${key}`;
 }
+
+/**
+ * Upload a file directly to R2 from the server (avoids CORS issues).
+ */
+export async function uploadToR2(
+  key: string,
+  body: Buffer | Uint8Array,
+  contentType: string
+): Promise<void> {
+  const client = getS3Client();
+  const command = new PutObjectCommand({
+    Bucket: BUCKET,
+    Key: key,
+    Body: body,
+    ContentType: contentType,
+  });
+  await client.send(command);
+}

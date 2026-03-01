@@ -278,7 +278,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
               name="kcRegNumber"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>KC Registration Number</FormLabel>
+                  <FormLabel>KC Registration Number <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
                   <FormControl>
                     <Input
                       placeholder="e.g. AQ04052601"
