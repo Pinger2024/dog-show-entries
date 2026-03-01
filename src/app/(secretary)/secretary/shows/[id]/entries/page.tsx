@@ -194,48 +194,47 @@ export default function EntriesPage({ params }: { params: Promise<{ id: string }
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto -mx-3 px-3 sm:-mx-4 sm:px-4 lg:-mx-6 lg:px-6">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Exhibitor</TableHead>
-                  <TableHead>Dog</TableHead>
-                  <TableHead className="hidden sm:table-cell">Breed</TableHead>
-                  <TableHead>Classes</TableHead>
-                  <TableHead>Fee</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="hidden sm:table-cell">Date</TableHead>
-                  <TableHead className="w-10" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <>
+              {/* Mobile card view */}
+              <div className="space-y-3 sm:hidden">
                 {filtered.map((entry) => {
                   const es = entryStatusConfig[entry.status] ?? {
                     label: entry.status,
                     variant: 'outline' as const,
                   };
                   return (
-                    <TableRow key={entry.id}>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">
-                            {entry.exhibitor?.name ?? '\u2014'}
+                    <div
+                      key={entry.id}
+                      className="rounded-lg border p-3 space-y-2"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium truncate">
+                            {entry.dog?.registeredName ?? '\u2014'}
+                            {entry.isNfc && (
+                              <Badge variant="outline" className="ml-1.5 text-[10px] align-middle">
+                                NFC
+                              </Badge>
+                            )}
                           </p>
-                          <p className="text-xs text-muted-foreground">
-                            {entry.exhibitor?.email ?? ''}
+                          <p className="text-xs text-muted-foreground truncate">
+                            {entry.dog?.breed?.name ?? ''} &middot; {entry.exhibitor?.name ?? '\u2014'}
                           </p>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        {entry.dog?.registeredName ?? '\u2014'}
-                        {entry.isNfc && (
-                          <Badge variant="outline" className="ml-1.5 text-[10px]">
-                            NFC
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="hidden sm:table-cell">{entry.dog?.breed?.name ?? '\u2014'}</TableCell>
-                      <TableCell>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <Badge variant={es.variant}>{es.label}</Badge>
+                          {entry.dog && (
+                            <button
+                              onClick={() => setEditingEntry(entry)}
+                              className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                              title="Edit dog details"
+                            >
+                              <Edit3 className="size-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
                         <div className="flex flex-wrap gap-1">
                           {entry.entryClasses.map((ec, i) => (
                             <Badge
@@ -247,31 +246,95 @@ export default function EntriesPage({ params }: { params: Promise<{ id: string }
                             </Badge>
                           ))}
                         </div>
-                      </TableCell>
-                      <TableCell>{formatCurrency(entry.totalFee)}</TableCell>
-                      <TableCell>
-                        <Badge variant={es.variant}>{es.label}</Badge>
-                      </TableCell>
-                      <TableCell className="hidden sm:table-cell text-muted-foreground">
-                        {formatDate(entry.createdAt)}
-                      </TableCell>
-                      <TableCell>
-                        {entry.dog && (
-                          <button
-                            onClick={() => setEditingEntry(entry)}
-                            className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                            title="Edit dog details"
-                          >
-                            <Edit3 className="size-4" />
-                          </button>
-                        )}
-                      </TableCell>
-                    </TableRow>
+                        <span className="text-sm font-semibold shrink-0 ml-2">
+                          {formatCurrency(entry.totalFee)}
+                        </span>
+                      </div>
+                    </div>
                   );
                 })}
-              </TableBody>
-            </Table>
-            </div>
+              </div>
+
+              {/* Desktop table view */}
+              <div className="hidden sm:block overflow-x-auto -mx-4 px-4 lg:-mx-6 lg:px-6">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Exhibitor</TableHead>
+                    <TableHead>Dog</TableHead>
+                    <TableHead className="hidden md:table-cell">Breed</TableHead>
+                    <TableHead>Classes</TableHead>
+                    <TableHead>Fee</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="hidden md:table-cell">Date</TableHead>
+                    <TableHead className="w-10" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered.map((entry) => {
+                    const es = entryStatusConfig[entry.status] ?? {
+                      label: entry.status,
+                      variant: 'outline' as const,
+                    };
+                    return (
+                      <TableRow key={entry.id}>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">
+                              {entry.exhibitor?.name ?? '\u2014'}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {entry.exhibitor?.email ?? ''}
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {entry.dog?.registeredName ?? '\u2014'}
+                          {entry.isNfc && (
+                            <Badge variant="outline" className="ml-1.5 text-[10px]">
+                              NFC
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">{entry.dog?.breed?.name ?? '\u2014'}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {entry.entryClasses.map((ec, i) => (
+                              <Badge
+                                key={i}
+                                variant="secondary"
+                                className="text-[10px]"
+                              >
+                                {ec.showClass?.classDefinition?.name ?? '?'}
+                              </Badge>
+                            ))}
+                          </div>
+                        </TableCell>
+                        <TableCell>{formatCurrency(entry.totalFee)}</TableCell>
+                        <TableCell>
+                          <Badge variant={es.variant}>{es.label}</Badge>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-muted-foreground">
+                          {formatDate(entry.createdAt)}
+                        </TableCell>
+                        <TableCell>
+                          {entry.dog && (
+                            <button
+                              onClick={() => setEditingEntry(entry)}
+                              className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                              title="Edit dog details"
+                            >
+                              <Edit3 className="size-4" />
+                            </button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+              </div>
+            </>
           )}
         </CardContent>
 
@@ -355,14 +418,14 @@ function EditDogDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <Card className="w-full max-w-lg">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4">
+      <Card className="w-full max-w-lg rounded-t-2xl sm:rounded-xl max-h-[90vh] overflow-y-auto">
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Edit Dog Details</CardTitle>
             <button
               onClick={onClose}
-              className="rounded-full p-1 hover:bg-muted"
+              className="flex size-10 items-center justify-center rounded-full hover:bg-muted"
             >
               <X className="size-5" />
             </button>
@@ -669,6 +732,7 @@ function AddEntryDialog({
                   <label className="text-xs font-medium">Owner Email *</label>
                   <Input
                     type="email"
+                    inputMode="email"
                     value={exhibitorEmail}
                     onChange={(e) => setExhibitorEmail(e.target.value)}
                   />
@@ -720,6 +784,7 @@ function AddEntryDialog({
               <label className="text-sm font-medium">Exhibitor Email</label>
               <Input
                 type="email"
+                inputMode="email"
                 placeholder="exhibitor@example.com"
                 value={exhibitorEmail}
                 onChange={(e) => setExhibitorEmail(e.target.value)}

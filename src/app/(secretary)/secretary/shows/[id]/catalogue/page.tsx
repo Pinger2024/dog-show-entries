@@ -240,30 +240,49 @@ export default function CataloguePage({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Cat. No.</TableHead>
-                  <TableHead>Dog</TableHead>
-                  <TableHead>Breed</TableHead>
-                  <TableHead>Exhibitor</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {absentees?.map((entry) => (
-                  <TableRow key={entry.id}>
-                    <TableCell className="font-mono font-bold">
-                      {entry.catalogueNumber ?? '—'}
-                    </TableCell>
-                    <TableCell>
-                      {entry.dog?.registeredName ?? '—'}
-                    </TableCell>
-                    <TableCell>{entry.dog?.breed?.name ?? '—'}</TableCell>
-                    <TableCell>{entry.exhibitor?.name ?? '—'}</TableCell>
+            {/* Mobile card view */}
+            <div className="space-y-2 sm:hidden">
+              {absentees?.map((entry) => (
+                <div key={entry.id} className="flex items-center gap-3 rounded-lg border p-3">
+                  <span className="font-mono text-sm font-bold text-muted-foreground shrink-0">
+                    #{entry.catalogueNumber ?? '—'}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium truncate">{entry.dog?.registeredName ?? '—'}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {entry.dog?.breed?.name ?? '—'} &middot; {entry.exhibitor?.name ?? '—'}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Desktop table */}
+            <div className="hidden sm:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Cat. No.</TableHead>
+                    <TableHead>Dog</TableHead>
+                    <TableHead>Breed</TableHead>
+                    <TableHead>Exhibitor</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {absentees?.map((entry) => (
+                    <TableRow key={entry.id}>
+                      <TableCell className="font-mono font-bold">
+                        {entry.catalogueNumber ?? '—'}
+                      </TableCell>
+                      <TableCell>
+                        {entry.dog?.registeredName ?? '—'}
+                      </TableCell>
+                      <TableCell>{entry.dog?.breed?.name ?? '—'}</TableCell>
+                      <TableCell>{entry.exhibitor?.name ?? '—'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       )}

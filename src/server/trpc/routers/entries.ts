@@ -66,7 +66,7 @@ export const entriesRouter = createTRPCRouter({
         });
       }
 
-      // Check for duplicate entry (same dog + same show, non-withdrawn)
+      // Check for duplicate classes (same dog can enter multiple classes, but not the same class twice)
       const existingEntry = await ctx.db.query.entries.findFirst({
         where: and(
           eq(entries.dogId, input.dogId),
@@ -74,13 +74,24 @@ export const entriesRouter = createTRPCRouter({
           isNull(entries.deletedAt),
           sql`${entries.status} NOT IN ('withdrawn', 'cancelled')`
         ),
+        with: { entryClasses: true },
       });
 
       if (existingEntry) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'This dog is already entered in this show',
-        });
+        const existingClassIds = new Set(existingEntry.entryClasses.map((ec) => ec.showClassId));
+        const duplicateClassIds = input.classIds.filter((id) => existingClassIds.has(id));
+
+        if (duplicateClassIds.length > 0) {
+          const dupClasses = await ctx.db.query.showClasses.findMany({
+            where: inArray(showClasses.id, duplicateClassIds),
+            with: { classDefinition: true },
+          });
+          const names = dupClasses.map((c) => c.classDefinition.name).join(', ');
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `This dog is already entered in: ${names}`,
+          });
+        }
       }
 
       // Validate classes exist and belong to the show
@@ -98,13 +109,34 @@ export const entriesRouter = createTRPCRouter({
         });
       }
 
-      // Calculate total fee
-      const totalFee = selectedClasses.reduce(
+      // Calculate total fee for the new classes
+      const newClassesFee = selectedClasses.reduce(
         (sum, sc) => sum + sc.entryFee,
         0
       );
 
-      // Create entry and entry classes in a transaction-like approach
+      // If the dog already has an entry, add classes to it; otherwise create a new entry
+      if (existingEntry) {
+        // Add new classes to the existing entry
+        await ctx.db.insert(entryClasses).values(
+          selectedClasses.map((sc) => ({
+            entryId: existingEntry.id,
+            showClassId: sc.id,
+            fee: sc.entryFee,
+          }))
+        );
+
+        // Update the total fee on the existing entry
+        const [updated] = await ctx.db
+          .update(entries)
+          .set({ totalFee: existingEntry.totalFee + newClassesFee })
+          .where(eq(entries.id, existingEntry.id))
+          .returning();
+
+        return updated!;
+      }
+
+      // Create new entry and entry classes
       const [entry] = await ctx.db
         .insert(entries)
         .values({
@@ -113,11 +145,10 @@ export const entriesRouter = createTRPCRouter({
           exhibitorId: ctx.session.user.id,
           handlerId: input.handlerId ?? null,
           isNfc: input.isNfc,
-          totalFee,
+          totalFee: newClassesFee,
         })
         .returning();
 
-      // Create entry class records
       await ctx.db.insert(entryClasses).values(
         selectedClasses.map((sc) => ({
           entryId: entry!.id,

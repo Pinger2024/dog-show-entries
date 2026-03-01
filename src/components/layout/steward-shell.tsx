@@ -73,7 +73,7 @@ export function StewardShell({ user, children }: StewardShellProps) {
       </header>
 
       {/* Main content — full width for phone-first */}
-      <main className="flex-1 overflow-y-auto pb-20 md:pb-8">
+      <main className="flex-1 overflow-y-auto overflow-x-hidden pb-20 md:pb-8">
         <div className="mx-auto max-w-2xl px-3 py-6 sm:px-4">
           {children}
         </div>

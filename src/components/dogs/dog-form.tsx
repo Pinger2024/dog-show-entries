@@ -708,6 +708,8 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                         <FormControl>
                           <Input
                             type="email"
+                            inputMode="email"
+                            autoComplete="email"
                             placeholder="owner@example.com"
                             {...field}
                           />
@@ -737,7 +739,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                     <FormItem>
                       <FormLabel>Phone (optional)</FormLabel>
                       <FormControl>
-                        <Input placeholder="Phone number" {...field} />
+                        <Input type="tel" inputMode="tel" autoComplete="tel" placeholder="Phone number" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

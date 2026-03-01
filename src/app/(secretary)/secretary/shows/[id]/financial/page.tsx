@@ -234,40 +234,72 @@ export default function FinancialPage({
               No confirmed entries with Stripe payments available for refund.
             </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Cat #</TableHead>
-                  <TableHead>Dog</TableHead>
-                  <TableHead>Fee</TableHead>
-                  <TableHead className="w-10" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {refundableEntries.map((entry) => (
-                  <TableRow key={entry.id}>
-                    <TableCell className="font-medium">
-                      {entry.catalogueNumber ?? '—'}
-                    </TableCell>
-                    <TableCell>{entry.dog ? formatDogName(entry.dog) : 'Unknown'}</TableCell>
-                    <TableCell>{formatCurrency(entry.totalFee)}</TableCell>
-                    <TableCell>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setRefundEntry(entry);
-                          setRefundAmount((entry.totalFee / 100).toFixed(2));
-                        }}
-                      >
-                        <RotateCcw className="size-3.5" />
-                        Refund
-                      </Button>
-                    </TableCell>
+            <>
+            {/* Mobile card view */}
+            <div className="space-y-2 sm:hidden">
+              {refundableEntries.map((entry) => (
+                <div key={entry.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium truncate">
+                      {entry.dog ? formatDogName(entry.dog) : 'Unknown'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Cat #{entry.catalogueNumber ?? '—'} &middot; {formatCurrency(entry.totalFee)}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="min-h-[2.75rem] shrink-0"
+                    onClick={() => {
+                      setRefundEntry(entry);
+                      setRefundAmount((entry.totalFee / 100).toFixed(2));
+                    }}
+                  >
+                    <RotateCcw className="size-3.5" />
+                    Refund
+                  </Button>
+                </div>
+              ))}
+            </div>
+            {/* Desktop table */}
+            <div className="hidden sm:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Cat #</TableHead>
+                    <TableHead>Dog</TableHead>
+                    <TableHead>Fee</TableHead>
+                    <TableHead className="w-10" />
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {refundableEntries.map((entry) => (
+                    <TableRow key={entry.id}>
+                      <TableCell className="font-medium">
+                        {entry.catalogueNumber ?? '—'}
+                      </TableCell>
+                      <TableCell>{entry.dog ? formatDogName(entry.dog) : 'Unknown'}</TableCell>
+                      <TableCell>{formatCurrency(entry.totalFee)}</TableCell>
+                      <TableCell>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setRefundEntry(entry);
+                            setRefundAmount((entry.totalFee / 100).toFixed(2));
+                          }}
+                        >
+                          <RotateCcw className="size-3.5" />
+                          Refund
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -286,6 +318,7 @@ export default function FinancialPage({
               <label className="text-sm font-medium">Amount (GBP)</label>
               <Input
                 type="number"
+                inputMode="decimal"
                 step="0.01"
                 min="0.01"
                 max={(refundEntry?.totalFee ?? 0) / 100}

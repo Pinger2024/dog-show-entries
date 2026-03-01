@@ -147,6 +147,7 @@
     @apply bg-background text-foreground;
     font-size: 1.0625rem;
     line-height: 1.6;
+    overflow-x: hidden;
   }
 }
 
@@ -174,6 +175,15 @@
   .animate-gentle-float {
     animation: gentle-float 4s ease-in-out infinite;
   }
+}
+
+/* Hide scrollbar while keeping scroll functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
 
 /* Decorative gold rule utility */

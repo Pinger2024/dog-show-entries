@@ -75,7 +75,7 @@ export const ordersRouter = createTRPCRouter({
         }
       }
 
-      // Check for duplicate entries (same dog already entered in this show)
+      // Check for duplicate classes (same dog can enter multiple classes, but not the same class twice)
       for (const entryInput of input.entries) {
         if (entryInput.entryType === 'standard' && entryInput.dogId) {
           const existingEntry = await ctx.db.query.entries.findFirst({
@@ -85,16 +85,27 @@ export const ordersRouter = createTRPCRouter({
               isNull(entries.deletedAt),
               sql`${entries.status} NOT IN ('withdrawn', 'cancelled')`
             ),
+            with: { entryClasses: true },
           });
 
           if (existingEntry) {
-            const dog = await ctx.db.query.dogs.findFirst({
-              where: eq(dogs.id, entryInput.dogId),
-            });
-            throw new TRPCError({
-              code: 'BAD_REQUEST',
-              message: `${dog?.registeredName ?? 'This dog'} is already entered in this show`,
-            });
+            const existingClassIds = new Set(existingEntry.entryClasses.map((ec) => ec.showClassId));
+            const duplicateClassIds = entryInput.classIds.filter((id) => existingClassIds.has(id));
+
+            if (duplicateClassIds.length > 0) {
+              const dog = await ctx.db.query.dogs.findFirst({
+                where: eq(dogs.id, entryInput.dogId),
+              });
+              const dupClasses = await ctx.db.query.showClasses.findMany({
+                where: inArray(showClasses.id, duplicateClassIds),
+                with: { classDefinition: true },
+              });
+              const classNames = dupClasses.map((c) => c.classDefinition.name).join(', ');
+              throw new TRPCError({
+                code: 'BAD_REQUEST',
+                message: `${dog?.registeredName ?? 'This dog'} is already entered in: ${classNames}`,
+              });
+            }
           }
         }
       }
