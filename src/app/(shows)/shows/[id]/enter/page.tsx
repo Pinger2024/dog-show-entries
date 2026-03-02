@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   CreditCard,
   Loader2,
+  Minus,
   PawPrint,
   ListChecks,
   ClipboardCheck,
@@ -63,7 +64,6 @@ export default function EnterShowPage() {
   const [isNfc, setIsNfc] = useState(false);
   const [healthDeclared, setHealthDeclared] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
-  const [catalogueRequested, setCatalogueRequested] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState(0);
@@ -99,6 +99,12 @@ export default function EnterShowPage() {
       { showId, breedId: breedIdForClasses },
       { enabled: cart.step === 'select_classes' }
     );
+
+  // Fetch sundry items for checkout
+  const { data: sundryItemsData } = trpc.shows.getSundryItems.useQuery(
+    { showId },
+    { enabled: cart.step === 'cart_review' }
+  );
 
   // Win summary for smart class recommendations — pass showId so suggestions
   // are filtered to classes actually in this show's schedule
@@ -234,7 +240,7 @@ export default function EnterShowPage() {
     try {
       const result = await checkoutMutation.mutateAsync({
         showId,
-        catalogueRequested,
+        catalogueRequested: false,
         entries: cart.entries.map((e) => ({
           entryType: e.entryType,
           dogId: e.dogId,
@@ -243,6 +249,10 @@ export default function EnterShowPage() {
           handlerName: e.handlerName,
           handlerDob: e.handlerDob,
           handlerKcNumber: e.handlerKcNumber,
+        })),
+        sundryItems: cart.sundryItems.map((s) => ({
+          sundryItemId: s.sundryItemId,
+          quantity: s.quantity,
         })),
       });
       setClientSecret(result.clientSecret);
@@ -839,20 +849,114 @@ export default function EnterShowPage() {
             </p>
           </div>
 
-          {/* Printed catalogue */}
-          <label className="flex cursor-pointer items-start gap-3 rounded-lg border p-3">
-            <Checkbox
-              checked={catalogueRequested}
-              onCheckedChange={(checked) => setCatalogueRequested(checked === true)}
-              className="mt-0.5"
-            />
-            <div>
-              <span className="text-sm font-medium">Request a printed catalogue</span>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Tick this box if you would like to receive a printed show catalogue on the day.
-              </p>
+          {/* Sundry items (catalogues, memberships, donations, etc.) */}
+          {sundryItemsData && sundryItemsData.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold">Add-ons</h3>
+              {sundryItemsData.map((item) => {
+                const inCart = cart.sundryItems.find((s) => s.sundryItemId === item.id);
+                const isCheckbox = item.maxPerOrder === 1;
+
+                if (isCheckbox) {
+                  return (
+                    <label key={item.id} className="flex cursor-pointer items-start gap-3 rounded-lg border p-3">
+                      <Checkbox
+                        checked={!!inCart}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            cart.setSundryItem({
+                              sundryItemId: item.id,
+                              name: item.name,
+                              quantity: 1,
+                              unitPrice: item.priceInPence,
+                              maxPerOrder: item.maxPerOrder,
+                            });
+                          } else {
+                            cart.removeSundryItem(item.id);
+                          }
+                        }}
+                        className="mt-0.5"
+                      />
+                      <div className="flex-1">
+                        <span className="text-sm font-medium">{item.name}</span>
+                        <span className="ml-2 text-sm text-muted-foreground">
+                          {formatFee(item.priceInPence)}
+                        </span>
+                        {item.description && (
+                          <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
+                        )}
+                      </div>
+                    </label>
+                  );
+                }
+
+                // Quantity stepper for items with maxPerOrder > 1 or unlimited
+                const qty = inCart?.quantity ?? 0;
+                const max = item.maxPerOrder;
+
+                return (
+                  <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium">{item.name}</p>
+                      {item.description && (
+                        <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        {formatFee(item.priceInPence)} each
+                        {max ? ` · max ${max}` : ''}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="size-8"
+                        disabled={qty === 0}
+                        onClick={() => {
+                          if (qty <= 1) {
+                            cart.removeSundryItem(item.id);
+                          } else {
+                            cart.setSundryItem({
+                              sundryItemId: item.id,
+                              name: item.name,
+                              quantity: qty - 1,
+                              unitPrice: item.priceInPence,
+                              maxPerOrder: item.maxPerOrder,
+                            });
+                          }
+                        }}
+                      >
+                        <Minus className="size-3.5" />
+                      </Button>
+                      <span className="w-6 text-center text-sm font-medium">{qty}</span>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="size-8"
+                        disabled={max != null && qty >= max}
+                        onClick={() => {
+                          cart.setSundryItem({
+                            sundryItemId: item.id,
+                            name: item.name,
+                            quantity: qty + 1,
+                            unitPrice: item.priceInPence,
+                            maxPerOrder: item.maxPerOrder,
+                          });
+                        }}
+                      >
+                        <Plus className="size-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+              {cart.sundryTotal > 0 && (
+                <p className="text-right text-sm text-muted-foreground">
+                  Add-ons subtotal: <span className="font-medium text-foreground">{formatFee(cart.sundryTotal)}</span>
+                </p>
+              )}
             </div>
-          </label>
+          )}
 
           {/* Declarations */}
           <div className="space-y-4">

@@ -1,7 +1,7 @@
 'use client';
 
 import { use, useState, useMemo } from 'react';
-import { Download, Loader2, RotateCcw, BookOpen } from 'lucide-react';
+import { Download, Loader2, RotateCcw, BookOpen, ShoppingBag } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { formatCurrency } from '@/lib/date-utils';
@@ -44,6 +44,7 @@ export default function FinancialPage({
   const { data: entriesData } = trpc.entries.getForShow.useQuery({ showId, limit: 100 });
   const { data: entryReport } = trpc.secretary.getEntryReport.useQuery({ showId });
   const { data: catalogueOrders } = trpc.secretary.getCatalogueOrders.useQuery({ showId });
+  const { data: sundryReport } = trpc.secretary.getSundryItemReport.useQuery({ showId });
   const entries: EntryItem[] = entriesData?.items ?? [];
 
   const [refundEntry, setRefundEntry] = useState<EntryItem | null>(null);
@@ -220,6 +221,50 @@ export default function FinancialPage({
                   </TableCell>
                   <TableCell className="text-right">
                     {formatCurrency(classBreakdown.reduce((s, c) => s + c.revenue, 0))}
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Sundry items revenue */}
+      {sundryReport && sundryReport.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ShoppingBag className="size-5" />
+              Sundry Items Revenue
+            </CardTitle>
+            <CardDescription>
+              Add-on items purchased alongside entries (paid orders only)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Item</TableHead>
+                  <TableHead className="text-right">Qty Sold</TableHead>
+                  <TableHead className="text-right">Revenue</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sundryReport.map((item) => (
+                  <TableRow key={item.sundryItemId}>
+                    <TableCell className="font-medium">{item.name}</TableCell>
+                    <TableCell className="text-right">{item.quantitySold}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(item.totalRevenue)}</TableCell>
+                  </TableRow>
+                ))}
+                <TableRow className="font-bold border-t-2">
+                  <TableCell>Total Sundry Revenue</TableCell>
+                  <TableCell className="text-right">
+                    {sundryReport.reduce((s, i) => s + i.quantitySold, 0)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatCurrency(sundryReport.reduce((s, i) => s + i.totalRevenue, 0))}
                   </TableCell>
                 </TableRow>
               </TableBody>

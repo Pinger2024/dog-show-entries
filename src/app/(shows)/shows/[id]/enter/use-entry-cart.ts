@@ -18,6 +18,14 @@ export interface CartEntry {
   handlerKcNumber?: string;
 }
 
+export interface CartSundryItem {
+  sundryItemId: string;
+  name: string;
+  quantity: number;
+  unitPrice: number; // pence
+  maxPerOrder: number | null;
+}
+
 export type WizardStep =
   | 'entry_type'
   | 'select_dog'
@@ -29,6 +37,7 @@ export type WizardStep =
 
 interface CartState {
   entries: CartEntry[];
+  sundryItems: CartSundryItem[];
   activeEntryId: string | null;
   step: WizardStep;
   editingExisting: boolean;
@@ -42,6 +51,8 @@ type CartAction =
   | { type: 'SET_CLASSES'; classIds: string[]; classNames: string[]; totalFee: number; isNfc: boolean }
   | { type: 'EDIT_ENTRY'; entryId: string }
   | { type: 'REMOVE_ENTRY'; entryId: string }
+  | { type: 'SET_SUNDRY_ITEM'; item: CartSundryItem }
+  | { type: 'REMOVE_SUNDRY_ITEM'; sundryItemId: string }
   | { type: 'SET_STEP'; step: WizardStep }
   | { type: 'CHECKOUT_SUCCESS' }
   | { type: 'RESET' };
@@ -160,6 +171,33 @@ function cartReducer(state: CartState, action: CartAction): CartState {
       };
     }
 
+    case 'SET_SUNDRY_ITEM': {
+      const existing = state.sundryItems.findIndex(
+        (s) => s.sundryItemId === action.item.sundryItemId
+      );
+      if (existing >= 0) {
+        return {
+          ...state,
+          sundryItems: state.sundryItems.map((s, i) =>
+            i === existing ? action.item : s
+          ),
+        };
+      }
+      return {
+        ...state,
+        sundryItems: [...state.sundryItems, action.item],
+      };
+    }
+
+    case 'REMOVE_SUNDRY_ITEM': {
+      return {
+        ...state,
+        sundryItems: state.sundryItems.filter(
+          (s) => s.sundryItemId !== action.sundryItemId
+        ),
+      };
+    }
+
     case 'SET_STEP': {
       return { ...state, step: action.step };
     }
@@ -179,6 +217,7 @@ function cartReducer(state: CartState, action: CartAction): CartState {
 
 const initialState: CartState = {
   entries: [],
+  sundryItems: [],
   activeEntryId: null,
   step: 'entry_type',
   editingExisting: false,
@@ -191,10 +230,17 @@ export function useEntryCart() {
     (e) => e.id === state.activeEntryId
   );
 
-  const grandTotal = state.entries.reduce(
+  const entriesTotal = state.entries.reduce(
     (sum, e) => sum + e.totalFee,
     0
   );
+
+  const sundryTotal = state.sundryItems.reduce(
+    (sum, s) => sum + s.unitPrice * s.quantity,
+    0
+  );
+
+  const grandTotal = entriesTotal + sundryTotal;
 
   const startNewEntry = useCallback(() => dispatch({ type: 'START_NEW_ENTRY' }), []);
   const addAnotherDog = useCallback(
@@ -240,12 +286,21 @@ export function useEntryCart() {
     () => dispatch({ type: 'CHECKOUT_SUCCESS' }),
     []
   );
+  const setSundryItem = useCallback(
+    (item: CartSundryItem) => dispatch({ type: 'SET_SUNDRY_ITEM', item }),
+    []
+  );
+  const removeSundryItem = useCallback(
+    (sundryItemId: string) => dispatch({ type: 'REMOVE_SUNDRY_ITEM', sundryItemId }),
+    []
+  );
   const reset = useCallback(() => dispatch({ type: 'RESET' }), []);
 
   return {
     ...state,
     activeEntry,
     grandTotal,
+    sundryTotal,
     startNewEntry,
     addAnotherDog,
     addJuniorHandler,
@@ -255,6 +310,8 @@ export function useEntryCart() {
     setClasses,
     editEntry,
     removeEntry,
+    setSundryItem,
+    removeSundryItem,
     setStep,
     checkoutSuccess,
     reset,

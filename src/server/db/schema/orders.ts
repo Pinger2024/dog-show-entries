@@ -12,6 +12,7 @@ import { shows } from './shows';
 import { users } from './users';
 import { entries } from './entries';
 import { payments } from './payments';
+import { orderSundryItems } from './order-sundry-items';
 
 export const orders = pgTable(
   'orders',
@@ -52,4 +53,5 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
   }),
   entries: many(entries),
   payments: many(payments),
+  orderSundryItems: many(orderSundryItems),
 }));

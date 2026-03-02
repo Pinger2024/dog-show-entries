@@ -18,6 +18,7 @@ import { judgeAssignments } from './judge-assignments';
 import { judgeContracts } from './judge-contracts';
 import { stewardAssignments } from './steward-assignments';
 import { showChecklistItems } from './show-checklist';
+import { sundryItems } from './sundry-items';
 
 export const shows = pgTable(
   'shows',
@@ -76,4 +77,5 @@ export const showsRelations = relations(shows, ({ one, many }) => ({
   judgeContracts: many(judgeContracts),
   stewardAssignments: many(stewardAssignments),
   checklistItems: many(showChecklistItems),
+  sundryItems: many(sundryItems),
 }));

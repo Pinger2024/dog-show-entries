@@ -12,6 +12,7 @@ import {
   showClasses,
   venues,
   organisations,
+  sundryItems,
 } from '@/server/db/schema';
 
 export const showsRouter = createTRPCRouter({
@@ -458,5 +459,17 @@ export const showsRouter = createTRPCRouter({
         .returning();
 
       return updated!;
+    }),
+
+  getSundryItems: publicProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.db.query.sundryItems.findMany({
+        where: and(
+          eq(sundryItems.showId, input.showId),
+          eq(sundryItems.enabled, true)
+        ),
+        orderBy: [asc(sundryItems.sortOrder), asc(sundryItems.createdAt)],
+      });
     }),
 });

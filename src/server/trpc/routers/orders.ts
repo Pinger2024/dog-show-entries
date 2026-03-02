@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, isNull, inArray, desc, sql } from 'drizzle-orm';
+import { and, eq, isNull, inArray, desc, sql, asc } from 'drizzle-orm';
 import { protectedProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import {
@@ -13,6 +13,8 @@ import {
   payments,
   juniorHandlerDetails,
   entryAuditLog,
+  sundryItems,
+  orderSundryItems,
 } from '@/server/db/schema';
 import { createPaymentIntent } from '@/server/services/stripe';
 
@@ -34,6 +36,10 @@ export const ordersRouter = createTRPCRouter({
         showId: z.string().uuid(),
         entries: z.array(cartEntrySchema).min(1),
         catalogueRequested: z.boolean().default(false),
+        sundryItems: z.array(z.object({
+          sundryItemId: z.string().uuid(),
+          quantity: z.number().int().min(1),
+        })).default([]),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -149,6 +155,48 @@ export const ordersRouter = createTRPCRouter({
         }
       }
 
+      // Validate and calculate sundry items
+      let sundryTotal = 0;
+      const validatedSundryItems: { sundryItemId: string; quantity: number; unitPrice: number }[] = [];
+
+      if (input.sundryItems.length > 0) {
+        const requestedIds = input.sundryItems.map((s) => s.sundryItemId);
+        const availableItems = await ctx.db.query.sundryItems.findMany({
+          where: and(
+            inArray(sundryItems.id, requestedIds),
+            eq(sundryItems.showId, input.showId),
+            eq(sundryItems.enabled, true)
+          ),
+        });
+
+        const itemMap = new Map(availableItems.map((i) => [i.id, i]));
+
+        for (const requested of input.sundryItems) {
+          const item = itemMap.get(requested.sundryItemId);
+          if (!item) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `Sundry item not found or not available: ${requested.sundryItemId}`,
+            });
+          }
+          if (item.maxPerOrder != null && requested.quantity > item.maxPerOrder) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `Maximum ${item.maxPerOrder} of "${item.name}" per order`,
+            });
+          }
+          const lineTotal = item.priceInPence * requested.quantity;
+          sundryTotal += lineTotal;
+          validatedSundryItems.push({
+            sundryItemId: item.id,
+            quantity: requested.quantity,
+            unitPrice: item.priceInPence,
+          });
+        }
+      }
+
+      totalAmount += sundryTotal;
+
       // Create order
       const [order] = await ctx.db
         .insert(orders)
@@ -243,6 +291,18 @@ export const ordersRouter = createTRPCRouter({
         });
       }
 
+      // Create order sundry items
+      if (validatedSundryItems.length > 0) {
+        await ctx.db.insert(orderSundryItems).values(
+          validatedSundryItems.map((s) => ({
+            orderId: order!.id,
+            sundryItemId: s.sundryItemId,
+            quantity: s.quantity,
+            unitPrice: s.unitPrice,
+          }))
+        );
+      }
+
       // Create Stripe PaymentIntent
       const paymentIntent = await createPaymentIntent(totalAmount, {
         orderId: order!.id,
@@ -298,6 +358,9 @@ export const ordersRouter = createTRPCRouter({
             },
           },
           payments: true,
+          orderSundryItems: {
+            with: { sundryItem: true },
+          },
         },
       });
 

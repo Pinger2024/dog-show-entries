@@ -26,6 +26,8 @@ import {
   rings,
   breeds,
   showChecklistItems,
+  sundryItems,
+  orderSundryItems,
 } from '@/server/db/schema';
 import {
   DEFAULT_CHECKLIST_ITEMS,
@@ -2208,5 +2210,206 @@ export const secretaryRouter = createTRPCRouter({
       }
 
       return { confirmed: true };
+    }),
+
+  // ── Sundry Items CRUD ────────────────────────────────────
+
+  getSundryItems: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      return ctx.db.query.sundryItems.findMany({
+        where: eq(sundryItems.showId, input.showId),
+        orderBy: [asc(sundryItems.sortOrder), asc(sundryItems.createdAt)],
+      });
+    }),
+
+  createSundryItem: secretaryProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        name: z.string().min(1).max(100),
+        description: z.string().max(500).optional(),
+        priceInPence: z.number().int().min(0),
+        maxPerOrder: z.number().int().min(1).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      // Get next sort order
+      const existing = await ctx.db.query.sundryItems.findMany({
+        where: eq(sundryItems.showId, input.showId),
+      });
+      const nextSort = existing.length > 0
+        ? Math.max(...existing.map((i) => i.sortOrder)) + 1
+        : 0;
+
+      const [item] = await ctx.db
+        .insert(sundryItems)
+        .values({
+          showId: input.showId,
+          name: input.name,
+          description: input.description ?? null,
+          priceInPence: input.priceInPence,
+          maxPerOrder: input.maxPerOrder ?? null,
+          sortOrder: nextSort,
+        })
+        .returning();
+
+      return item!;
+    }),
+
+  updateSundryItem: secretaryProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        showId: z.string().uuid(),
+        name: z.string().min(1).max(100).optional(),
+        description: z.string().max(500).nullable().optional(),
+        priceInPence: z.number().int().min(0).optional(),
+        maxPerOrder: z.number().int().min(1).nullable().optional(),
+        enabled: z.boolean().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      const { id, showId, ...updates } = input;
+      const [updated] = await ctx.db
+        .update(sundryItems)
+        .set(updates)
+        .where(and(eq(sundryItems.id, id), eq(sundryItems.showId, showId)))
+        .returning();
+
+      if (!updated) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Sundry item not found' });
+      }
+
+      return updated;
+    }),
+
+  deleteSundryItem: secretaryProcedure
+    .input(z.object({ id: z.string().uuid(), showId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      // Check if any orders reference this item
+      const references = await ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(orderSundryItems)
+        .where(eq(orderSundryItems.sundryItemId, input.id));
+
+      const refCount = Number(references[0]?.count ?? 0);
+
+      if (refCount > 0) {
+        // Soft delete: disable instead
+        await ctx.db
+          .update(sundryItems)
+          .set({ enabled: false })
+          .where(and(eq(sundryItems.id, input.id), eq(sundryItems.showId, input.showId)));
+        return { softDeleted: true };
+      }
+
+      // Hard delete
+      await ctx.db
+        .delete(sundryItems)
+        .where(and(eq(sundryItems.id, input.id), eq(sundryItems.showId, input.showId)));
+      return { softDeleted: false };
+    }),
+
+  reorderSundryItems: secretaryProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        itemIds: z.array(z.string().uuid()),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      await Promise.all(
+        input.itemIds.map((id, index) =>
+          ctx.db
+            .update(sundryItems)
+            .set({ sortOrder: index })
+            .where(and(eq(sundryItems.id, id), eq(sundryItems.showId, input.showId)))
+        )
+      );
+
+      return { reordered: true };
+    }),
+
+  bulkCreateSundryItems: secretaryProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        items: z.array(
+          z.object({
+            name: z.string().min(1),
+            description: z.string().optional(),
+            priceInPence: z.number().int().min(0),
+            maxPerOrder: z.number().int().min(1).optional(),
+          })
+        ),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      // Get next sort order
+      const existing = await ctx.db.query.sundryItems.findMany({
+        where: eq(sundryItems.showId, input.showId),
+      });
+      const startSort = existing.length > 0
+        ? Math.max(...existing.map((i) => i.sortOrder)) + 1
+        : 0;
+
+      const values = input.items.map((item, idx) => ({
+        showId: input.showId,
+        name: item.name,
+        description: item.description ?? null,
+        priceInPence: item.priceInPence,
+        maxPerOrder: item.maxPerOrder ?? null,
+        sortOrder: startSort + idx,
+      }));
+
+      const created = await ctx.db
+        .insert(sundryItems)
+        .values(values)
+        .returning();
+
+      return { created: created.length };
+    }),
+
+  getSundryItemReport: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      const report = await ctx.db
+        .select({
+          sundryItemId: orderSundryItems.sundryItemId,
+          name: sundryItems.name,
+          quantitySold: sql<number>`coalesce(sum(${orderSundryItems.quantity}), 0)`,
+          totalRevenue: sql<number>`coalesce(sum(${orderSundryItems.quantity} * ${orderSundryItems.unitPrice}), 0)`,
+        })
+        .from(orderSundryItems)
+        .innerJoin(sundryItems, eq(orderSundryItems.sundryItemId, sundryItems.id))
+        .innerJoin(orders, eq(orderSundryItems.orderId, orders.id))
+        .where(
+          and(
+            eq(sundryItems.showId, input.showId),
+            eq(orders.status, 'paid')
+          )
+        )
+        .groupBy(orderSundryItems.sundryItemId, sundryItems.name);
+
+      return report.map((r) => ({
+        ...r,
+        quantitySold: Number(r.quantitySold),
+        totalRevenue: Number(r.totalRevenue),
+      }));
     }),
 });

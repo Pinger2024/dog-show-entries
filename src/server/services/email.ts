@@ -46,6 +46,9 @@ export async function sendEntryConfirmationEmail(orderId: string) {
           juniorHandlerDetails: true,
         },
       },
+      orderSundryItems: {
+        with: { sundryItem: true },
+      },
     },
   });
 
@@ -157,6 +160,17 @@ export async function sendEntryConfirmationEmail(orderId: string) {
         </tbody>
       </table>
 
+      ${(order.orderSundryItems ?? []).length > 0 ? `
+      <!-- Sundry Items -->
+      <div style="padding: 16px 24px; border-top: 1px solid #e5e5e5;">
+        <p style="margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #888;">Add-ons</p>
+        ${(order.orderSundryItems ?? []).map((osi) => `
+        <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 14px;">
+          <span style="color: #444;">${osi.sundryItem?.name ?? 'Item'}${osi.quantity > 1 ? ` x${osi.quantity}` : ''}</span>
+          <span style="font-weight: 600;">${formatFee(osi.unitPrice * osi.quantity)}</span>
+        </div>`).join('')}
+      </div>` : ''}
+
       <!-- Total -->
       <div style="padding: 16px 24px; background: #f9f8f6;">
         <table style="width: 100%;">
@@ -230,6 +244,9 @@ export async function sendSecretaryNotificationEmail(orderId: string) {
           },
           juniorHandlerDetails: true,
         },
+      },
+      orderSundryItems: {
+        with: { sundryItem: true },
       },
     },
   });
@@ -313,6 +330,13 @@ export async function sendSecretaryNotificationEmail(orderId: string) {
           </thead>
           <tbody>${entrySummary}</tbody>
         </table>
+        ${(order.orderSundryItems ?? []).length > 0 ? `
+        <div style="margin-top: 12px; padding: 8px 16px;">
+          <p style="margin: 0 0 4px; font-size: 11px; text-transform: uppercase; color: #888;">Add-ons</p>
+          ${(order.orderSundryItems ?? []).map((osi) =>
+            `<p style="margin: 2px 0; font-size: 13px; color: #444;">${osi.sundryItem?.name ?? 'Item'}${osi.quantity > 1 ? ` x${osi.quantity}` : ''} — ${formatFee(osi.unitPrice * osi.quantity)}</p>`
+          ).join('')}
+        </div>` : ''}
         <div style="margin-top: 16px; padding: 12px 16px; background: #f0f9ff; border-radius: 8px;">
           <p style="margin: 0; font-size: 14px; font-weight: 600;">Total: ${formatFee(order.totalAmount)}</p>
         </div>
