@@ -6,10 +6,17 @@ import { orders, memberships, users } from '@/server/db/schema';
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 const FROM =
-  process.env.EMAIL_FROM ?? 'Remi <onboarding@resend.dev>';
+  process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>';
+
+const APP_URL =
+  process.env.NEXTAUTH_URL ?? 'https://remishowmanager.co.uk';
 
 function formatFee(pence: number) {
   return `£${(pence / 100).toFixed(2)}`;
+}
+
+function btn(href: string, label: string, bg = '#2D5F3F') {
+  return `<a href="${href}" style="display: inline-block; padding: 12px 28px; background: ${bg}; color: #ffffff; text-decoration: none; border-radius: 8px; font-size: 14px; font-weight: 600;">${label}</a>`;
 }
 
 /**
@@ -69,15 +76,17 @@ export async function sendEntryConfirmationEmail(orderId: string) {
       : entry.dog?.registeredName ?? 'Unknown Dog';
     const breed = entry.dog?.breed?.name ?? '';
 
-    const classes = (entry.entryClasses ?? [])
+    const classLines = (entry.entryClasses ?? [])
       .map((ec) => {
         const cd = ec.showClass?.classDefinition;
         const sex = ec.showClass?.sex;
+        const classNum = ec.showClass?.classNumber;
         const className = cd?.name ?? 'Class';
         const sexLabel = sex === 'dog' ? ' Dog' : sex === 'bitch' ? ' Bitch' : '';
-        return `${className}${sexLabel} — ${formatFee(ec.fee)}`;
+        const numPrefix = classNum != null ? `${classNum}. ` : '';
+        return `<div style="padding: 2px 0; color: #444;">${numPrefix}${className}${sexLabel} — ${formatFee(ec.fee)}</div>`;
       })
-      .join('\n          ');
+      .join('');
 
     return `
         <tr>
@@ -85,8 +94,8 @@ export async function sendEntryConfirmationEmail(orderId: string) {
             <strong style="color: #1a1a1a;">${name}</strong>
             ${breed ? `<br><span style="color: #666; font-size: 14px;">${breed}</span>` : ''}
             ${entry.isNfc ? '<br><span style="color: #b45309; font-size: 12px; font-weight: 600;">NOT FOR COMPETITION</span>' : ''}
-            <div style="margin-top: 8px; font-size: 14px; color: #444;">
-              ${classes}
+            <div style="margin-top: 8px; font-size: 14px;">
+              ${classLines}
             </div>
           </td>
           <td style="padding: 16px; border-bottom: 1px solid #e5e5e5; text-align: right; font-weight: 600; vertical-align: top;">
@@ -130,7 +139,7 @@ export async function sendEntryConfirmationEmail(orderId: string) {
 
       <!-- Green banner -->
       <div style="background: #2D5F3F; padding: 24px 24px 20px; text-align: center;">
-        <div style="font-size: 32px; margin-bottom: 8px;">&#10003;</div>
+        <div style="display: inline-block; width: 40px; height: 40px; line-height: 40px; border-radius: 50%; background: rgba(255,255,255,0.2); font-size: 20px; color: #fff; margin-bottom: 8px;">&#10003;</div>
         <h2 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 700;">Entry Confirmed</h2>
         <p style="margin: 8px 0 0; color: #b8d4c4; font-size: 14px;">
           Order ${orderRef} &middot; ${formatFee(order.totalAmount)}
@@ -181,6 +190,14 @@ export async function sendEntryConfirmationEmail(orderId: string) {
         </table>
       </div>
 
+      <!-- CTA -->
+      <div style="padding: 20px 24px; text-align: center; border-top: 1px solid #e5e5e5;">
+        ${btn(`${APP_URL}/entries`, 'View Your Entries')}
+        <p style="margin: 12px 0 0; font-size: 12px; color: #999;">
+          Manage your entries, change handlers, or withdraw from your dashboard.
+        </p>
+      </div>
+
       <!-- Exhibitor -->
       <div style="padding: 16px 24px; border-top: 1px solid #e5e5e5; font-size: 13px; color: #666;">
         <strong style="color: #444;">Exhibitor:</strong> ${exhibitor.name ?? exhibitor.email}
@@ -191,10 +208,10 @@ export async function sendEntryConfirmationEmail(orderId: string) {
     <!-- Footer -->
     <div style="text-align: center; padding: 24px 16px; font-size: 12px; color: #999;">
       <p style="margin: 0;">
-        This confirmation was sent by <strong>Remi</strong> on behalf of ${show.organisation?.name ?? 'the show society'}.
+        This confirmation was sent by <a href="${APP_URL}" style="color: #2D5F3F; text-decoration: none; font-weight: 600;">Remi</a> on behalf of ${show.organisation?.name ?? 'the show society'}.
       </p>
       <p style="margin: 8px 0 0;">
-        If you have questions about this entry, please contact the show secretary.
+        If you have questions about this entry, please reply to this email.
       </p>
     </div>
   </div>
@@ -340,10 +357,13 @@ export async function sendSecretaryNotificationEmail(orderId: string) {
         <div style="margin-top: 16px; padding: 12px 16px; background: #f0f9ff; border-radius: 8px;">
           <p style="margin: 0; font-size: 14px; font-weight: 600;">Total: ${formatFee(order.totalAmount)}</p>
         </div>
+        <div style="margin-top: 20px; text-align: center;">
+          ${btn(`${APP_URL}/secretary/shows/${show.id}/entries`, 'View All Entries', '#2563eb')}
+        </div>
       </div>
     </div>
     <p style="text-align: center; margin-top: 16px; font-size: 12px; color: #999;">
-      Sent by Remi on behalf of ${org?.name ?? 'your organisation'}.
+      Sent by <a href="${APP_URL}" style="color: #2D5F3F; text-decoration: none; font-weight: 600;">Remi</a> on behalf of ${org?.name ?? 'your organisation'}.
     </p>
   </div>
 </body>
