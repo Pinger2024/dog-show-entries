@@ -221,7 +221,13 @@ export default function EnterShowPage() {
   function handleAddAnother() {
     setSelectedClassIds([]);
     setIsNfc(false);
-    cart.startNewEntry();
+    cart.addAnotherDog();
+  }
+
+  function handleAddJuniorHandler() {
+    setSelectedClassIds([]);
+    setIsNfc(false);
+    cart.addJuniorHandler();
   }
 
   async function handleProceedToPayment() {
@@ -810,10 +816,16 @@ export default function EnterShowPage() {
             ))}
 
           {/* Add another */}
-          <Button variant="outline" className="w-full" onClick={handleAddAnother}>
-            <Plus className="size-4" />
-            Add Another Dog
-          </Button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button variant="outline" className="flex-1" onClick={handleAddAnother}>
+              <Plus className="size-4" />
+              Add Another Dog
+            </Button>
+            <Button variant="outline" className="flex-1" onClick={handleAddJuniorHandler}>
+              <Users className="size-4" />
+              Add Junior Handler
+            </Button>
+          </div>
 
           {/* Grand total */}
           <div className="rounded-lg border bg-muted/50 p-3 sm:p-4">

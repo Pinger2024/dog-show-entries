@@ -2,6 +2,8 @@
 
 import { use, useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import {
+  ArrowDown,
+  ArrowUp,
   CalendarDays,
   Edit3,
   FileText,
@@ -555,6 +557,23 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
     onError: () => toast.error('Failed to auto-assign class numbers'),
   });
 
+  const reorderMutation = trpc.secretary.reorderClasses.useMutation({
+    onSuccess: () => {
+      utils.shows.getById.invalidate({ id: showId });
+    },
+    onError: () => toast.error('Failed to reorder classes'),
+  });
+
+  function swapClass(classId: string, direction: 'up' | 'down') {
+    const sorted = [...classes].sort((a, b) => a.sortOrder - b.sortOrder);
+    const idx = sorted.findIndex((c) => c.id === classId);
+    if (idx < 0) return;
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= sorted.length) return;
+    [sorted[idx], sorted[swapIdx]] = [sorted[swapIdx], sorted[idx]];
+    reorderMutation.mutate({ showId, classIds: sorted.map((c) => c.id) });
+  }
+
   function startEditNumber(classId: string, current: number | null | undefined) {
     setEditingNumbers((prev) => ({
       ...prev,
@@ -700,7 +719,27 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex flex-col">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="size-7"
+                        onClick={() => swapClass(sc.id, 'up')}
+                        disabled={reorderMutation.isPending}
+                      >
+                        <ArrowUp className="size-3" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="size-7"
+                        onClick={() => swapClass(sc.id, 'down')}
+                        disabled={reorderMutation.isPending}
+                      >
+                        <ArrowDown className="size-3" />
+                      </Button>
+                    </div>
                     <button
                       type="button"
                       onClick={() => startEditFee(sc.id, sc.entryFee)}
@@ -730,6 +769,7 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-[50px]">Order</TableHead>
                     <TableHead className="w-[70px]">#</TableHead>
                     <TableHead>Class</TableHead>
                     <TableHead className="w-[100px]">Sex</TableHead>
@@ -743,6 +783,28 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
                     const isEditingNum = editingNumbers[sc.id] !== undefined;
                     return (
                       <TableRow key={sc.id}>
+                        <TableCell className="p-1">
+                          <div className="flex items-center gap-0.5">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="size-6"
+                              onClick={() => swapClass(sc.id, 'up')}
+                              disabled={reorderMutation.isPending}
+                            >
+                              <ArrowUp className="size-3" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="size-6"
+                              onClick={() => swapClass(sc.id, 'down')}
+                              disabled={reorderMutation.isPending}
+                            >
+                              <ArrowDown className="size-3" />
+                            </Button>
+                          </div>
+                        </TableCell>
                         <TableCell>
                           {isEditingNum ? (
                             <div className="flex items-center gap-1">

@@ -35,7 +35,7 @@ interface CartState {
 }
 
 type CartAction =
-  | { type: 'START_NEW_ENTRY' }
+  | { type: 'START_NEW_ENTRY'; skipToStep?: WizardStep; entryType?: EntryType }
   | { type: 'SET_ENTRY_TYPE'; entryType: EntryType }
   | { type: 'SET_DOG'; dogId: string; dogName: string; breedName: string }
   | { type: 'SET_JH_DETAILS'; handlerName: string; handlerDob: string; handlerKcNumber?: string }
@@ -59,12 +59,12 @@ function cartReducer(state: CartState, action: CartAction): CartState {
         ...state,
         activeEntryId: id,
         editingExisting: false,
-        step: 'entry_type',
+        step: action.skipToStep ?? 'entry_type',
         entries: [
           ...state.entries,
           {
             id,
-            entryType: 'standard',
+            entryType: action.entryType ?? 'standard',
             classIds: [],
             classNames: [],
             isNfc: false,
@@ -197,6 +197,14 @@ export function useEntryCart() {
   );
 
   const startNewEntry = useCallback(() => dispatch({ type: 'START_NEW_ENTRY' }), []);
+  const addAnotherDog = useCallback(
+    () => dispatch({ type: 'START_NEW_ENTRY', skipToStep: 'select_dog', entryType: 'standard' }),
+    []
+  );
+  const addJuniorHandler = useCallback(
+    () => dispatch({ type: 'START_NEW_ENTRY', skipToStep: 'junior_handler', entryType: 'junior_handler' }),
+    []
+  );
   const setEntryType = useCallback(
     (entryType: EntryType) => dispatch({ type: 'SET_ENTRY_TYPE', entryType }),
     []
@@ -239,6 +247,8 @@ export function useEntryCart() {
     activeEntry,
     grandTotal,
     startNewEntry,
+    addAnotherDog,
+    addJuniorHandler,
     setEntryType,
     setDog,
     setJHDetails,

@@ -1,7 +1,7 @@
 'use client';
 
-import { use, useState } from 'react';
-import { Loader2, RotateCcw } from 'lucide-react';
+import { use, useState, useMemo } from 'react';
+import { Download, Loader2, RotateCcw, BookOpen } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { formatCurrency } from '@/lib/date-utils';
@@ -32,7 +32,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { type EntryItem, entryStatusConfig } from '../_lib/show-utils';
+import { type EntryItem, entryStatusConfig, downloadCsv } from '../_lib/show-utils';
 
 export default function FinancialPage({
   params,
@@ -42,6 +42,8 @@ export default function FinancialPage({
   const { id: showId } = use(params);
   const { data: stats } = trpc.secretary.getShowStats.useQuery({ showId });
   const { data: entriesData } = trpc.entries.getForShow.useQuery({ showId, limit: 100 });
+  const { data: entryReport } = trpc.secretary.getEntryReport.useQuery({ showId });
+  const { data: catalogueOrders } = trpc.secretary.getCatalogueOrders.useQuery({ showId });
   const entries: EntryItem[] = entriesData?.items ?? [];
 
   const [refundEntry, setRefundEntry] = useState<EntryItem | null>(null);
@@ -81,10 +83,40 @@ export default function FinancialPage({
     (e) => e.paymentIntentId || e.payments?.some((p) => p.stripePaymentId)
   );
 
+  // Per-class breakdown from entry report
+  const classBreakdown = useMemo(() => {
+    if (!entryReport) return [];
+    const classMap = new Map<string, { name: string; entries: number; revenue: number }>();
+    for (const entry of entryReport) {
+      if (entry.status === 'cancelled' || entry.status === 'withdrawn') continue;
+      for (const ec of entry.entryClasses ?? []) {
+        const className = ec.showClass?.classDefinition?.name ?? 'Unknown';
+        const existing = classMap.get(className) ?? { name: className, entries: 0, revenue: 0 };
+        existing.entries += 1;
+        existing.revenue += ec.fee;
+        classMap.set(className, existing);
+      }
+    }
+    return Array.from(classMap.values()).sort((a, b) => b.entries - a.entries);
+  }, [entryReport]);
+
+  function handleExportCsv() {
+    const headers = ['Dog', 'Exhibitor', 'Status', 'Classes', 'Fee', 'Catalogue Requested'];
+    const rows = entries.map((e) => [
+      e.dog ? formatDogName(e.dog) : 'Unknown',
+      e.exhibitor?.name ?? 'Unknown',
+      entryStatusConfig[e.status]?.label ?? e.status,
+      (e.entryClasses ?? []).map((ec) => ec.showClass?.classDefinition?.name ?? '').join('; '),
+      (e.totalFee / 100).toFixed(2),
+      e.catalogueRequested ? 'Yes' : 'No',
+    ]);
+    downloadCsv(headers, rows, 'financial-report');
+  }
+
   return (
     <div className="space-y-6">
       {/* Summary cards */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 grid-cols-2 sm:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
             <CardDescription className="text-sm font-medium">
@@ -103,7 +135,7 @@ export default function FinancialPage({
         <Card>
           <CardHeader className="pb-2">
             <CardDescription className="text-sm font-medium">
-              Confirmed Payments
+              Confirmed
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -111,14 +143,14 @@ export default function FinancialPage({
               {formatCurrency(confirmedRevenue)}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              {stats?.confirmedEntries ?? 0} confirmed entries
+              {stats?.confirmedEntries ?? 0} entries
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardDescription className="text-sm font-medium">
-              Pending Payments
+              Pending
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -126,13 +158,77 @@ export default function FinancialPage({
               {formatCurrency(pendingRevenue)}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              {stats?.pendingEntries ?? 0} pending entries
+              {stats?.pendingEntries ?? 0} entries
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription className="text-sm font-medium">
+              Catalogues
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">
+              {catalogueOrders?.length ?? 0}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              requested
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Breakdown */}
+      {/* Export */}
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" onClick={handleExportCsv} disabled={entries.length === 0}>
+          <Download className="size-4" />
+          Export CSV
+        </Button>
+      </div>
+
+      {/* Per-class breakdown */}
+      {classBreakdown.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Entries by Class</CardTitle>
+            <CardDescription>
+              Number of entries and revenue per class
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Class</TableHead>
+                  <TableHead className="text-right">Entries</TableHead>
+                  <TableHead className="text-right">Revenue</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {classBreakdown.map((c) => (
+                  <TableRow key={c.name}>
+                    <TableCell className="font-medium">{c.name}</TableCell>
+                    <TableCell className="text-right">{c.entries}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(c.revenue)}</TableCell>
+                  </TableRow>
+                ))}
+                <TableRow className="font-bold border-t-2">
+                  <TableCell>Total (class entries)</TableCell>
+                  <TableCell className="text-right">
+                    {classBreakdown.reduce((s, c) => s + c.entries, 0)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatCurrency(classBreakdown.reduce((s, c) => s + c.revenue, 0))}
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Breakdown by entry type */}
       <Card>
         <CardHeader>
           <CardTitle>Breakdown by Entry Type</CardTitle>
@@ -212,6 +308,61 @@ export default function FinancialPage({
           </Table>
         </CardContent>
       </Card>
+
+      {/* Catalogue requests */}
+      {(catalogueOrders?.length ?? 0) > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BookOpen className="size-5" />
+              Catalogue Requests
+            </CardTitle>
+            <CardDescription>
+              Exhibitors who requested a printed catalogue
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {/* Mobile */}
+            <div className="space-y-2 sm:hidden">
+              {catalogueOrders?.map((entry) => (
+                <div key={entry.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium truncate">
+                      {entry.exhibitor?.name ?? 'Unknown'}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {entry.dog ? formatDogName(entry.dog) : 'Unknown dog'}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Desktop */}
+            <div className="hidden sm:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Exhibitor</TableHead>
+                    <TableHead>Dog</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {catalogueOrders?.map((entry) => (
+                    <TableRow key={entry.id}>
+                      <TableCell className="font-medium">
+                        {entry.exhibitor?.name ?? 'Unknown'}
+                      </TableCell>
+                      <TableCell>
+                        {entry.dog ? formatDogName(entry.dog) : 'Unknown dog'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Refund Management */}
       <Card>

@@ -686,6 +686,30 @@ export const secretaryRouter = createTRPCRouter({
       return deleted;
     }),
 
+  reorderClasses: secretaryProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        classIds: z.array(z.string().uuid()),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      for (let i = 0; i < input.classIds.length; i++) {
+        await ctx.db
+          .update(showClasses)
+          .set({ sortOrder: i })
+          .where(
+            and(
+              eq(showClasses.id, input.classIds[i]),
+              eq(showClasses.showId, input.showId)
+            )
+          );
+      }
+      return { updated: input.classIds.length };
+    }),
+
   // ── Class number assignment ────────────────────────────
 
   assignClassNumbers: secretaryProcedure
