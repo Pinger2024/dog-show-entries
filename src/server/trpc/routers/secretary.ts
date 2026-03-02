@@ -2418,4 +2418,71 @@ export const secretaryRouter = createTRPCRouter({
         totalRevenue: Number(r.totalRevenue),
       }));
     }),
+
+  getShowEntryStats: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      // Entry counts by status
+      const statusCounts = await ctx.db
+        .select({
+          status: entries.status,
+          count: sql<number>`count(*)`,
+        })
+        .from(entries)
+        .where(eq(entries.showId, input.showId))
+        .groupBy(entries.status);
+
+      // Revenue from paid orders
+      const revenueResult = await ctx.db
+        .select({
+          totalRevenue: sql<number>`coalesce(sum(${orders.totalAmount}), 0)`,
+          orderCount: sql<number>`count(*)`,
+        })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.showId, input.showId),
+            eq(orders.status, 'paid')
+          )
+        );
+
+      // Unique exhibitors
+      const exhibitorResult = await ctx.db
+        .select({
+          count: sql<number>`count(distinct ${entries.exhibitorId})`,
+        })
+        .from(entries)
+        .where(
+          and(
+            eq(entries.showId, input.showId),
+            inArray(entries.status, ['pending', 'confirmed'])
+          )
+        );
+
+      // Most recent entry date
+      const latestEntry = await ctx.db
+        .select({ createdAt: entries.createdAt })
+        .from(entries)
+        .where(eq(entries.showId, input.showId))
+        .orderBy(desc(entries.createdAt))
+        .limit(1);
+
+      const counts: Record<string, number> = {};
+      for (const row of statusCounts) {
+        counts[row.status] = Number(row.count);
+      }
+
+      return {
+        totalEntries: Object.values(counts).reduce((a, b) => a + b, 0),
+        confirmed: counts.confirmed ?? 0,
+        pending: counts.pending ?? 0,
+        withdrawn: counts.withdrawn ?? 0,
+        cancelled: counts.cancelled ?? 0,
+        transferred: counts.transferred ?? 0,
+        totalRevenue: Number(revenueResult[0]?.totalRevenue ?? 0),
+        paidOrders: Number(revenueResult[0]?.orderCount ?? 0),
+        uniqueExhibitors: Number(exhibitorResult[0]?.count ?? 0),
+        lastEntryAt: latestEntry[0]?.createdAt ?? null,
+      };
+    }),
 });

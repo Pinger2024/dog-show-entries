@@ -16,6 +16,10 @@ import {
   Trash2,
   Upload,
   X,
+  Users,
+  PoundSterling,
+  ClipboardList,
+  Clock,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
@@ -74,6 +78,9 @@ export default function OverviewPage({
     <div className="space-y-6">
       {/* Show Readiness */}
       <ReadinessCard showId={showId} />
+
+      {/* Entry Stats */}
+      <EntryStatsBar showId={showId} />
 
       {/* Show details */}
       <Card>
@@ -1881,6 +1888,98 @@ function DeleteShowSection({ showId, showName }: { showId: string; showName: str
       </CardContent>
     </Card>
   );
+}
+
+// ── Entry Stats Bar ─────────────────────────────────────────
+
+function EntryStatsBar({ showId }: { showId: string }) {
+  const { data: stats } = trpc.secretary.getShowEntryStats.useQuery({ showId });
+
+  if (!stats || stats.totalEntries === 0) return null;
+
+  const formatRevenue = (pence: number) => {
+    const pounds = pence / 100;
+    return pounds >= 1000
+      ? `£${(pounds / 1000).toFixed(1)}k`
+      : `£${pounds.toFixed(0)}`;
+  };
+
+  const lastEntryLabel = stats.lastEntryAt
+    ? formatRelativeTime(new Date(stats.lastEntryAt))
+    : null;
+
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="rounded-xl border bg-white p-4 shadow-sm">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <ClipboardList className="size-4" />
+          <span className="text-xs font-medium uppercase tracking-wider">Entries</span>
+        </div>
+        <p className="mt-2 text-2xl font-bold tracking-tight">{stats.totalEntries}</p>
+        <div className="mt-1 flex flex-wrap gap-1.5">
+          {stats.confirmed > 0 && (
+            <span className="text-[11px] font-medium text-emerald-600">{stats.confirmed} confirmed</span>
+          )}
+          {stats.pending > 0 && (
+            <span className="text-[11px] font-medium text-amber-600">{stats.pending} pending</span>
+          )}
+          {stats.withdrawn > 0 && (
+            <span className="text-[11px] text-muted-foreground">{stats.withdrawn} withdrawn</span>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-xl border bg-white p-4 shadow-sm">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <PoundSterling className="size-4" />
+          <span className="text-xs font-medium uppercase tracking-wider">Revenue</span>
+        </div>
+        <p className="mt-2 text-2xl font-bold tracking-tight text-emerald-700">
+          {formatRevenue(stats.totalRevenue)}
+        </p>
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          {stats.paidOrders} paid order{stats.paidOrders !== 1 ? 's' : ''}
+        </p>
+      </div>
+
+      <div className="rounded-xl border bg-white p-4 shadow-sm">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Users className="size-4" />
+          <span className="text-xs font-medium uppercase tracking-wider">Exhibitors</span>
+        </div>
+        <p className="mt-2 text-2xl font-bold tracking-tight">{stats.uniqueExhibitors}</p>
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          unique exhibitor{stats.uniqueExhibitors !== 1 ? 's' : ''}
+        </p>
+      </div>
+
+      <div className="rounded-xl border bg-white p-4 shadow-sm">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Clock className="size-4" />
+          <span className="text-xs font-medium uppercase tracking-wider">Latest</span>
+        </div>
+        <p className="mt-2 text-lg font-bold tracking-tight">
+          {lastEntryLabel ?? '—'}
+        </p>
+        <p className="mt-1 text-[11px] text-muted-foreground">most recent entry</p>
+      </div>
+    </div>
+  );
+}
+
+function formatRelativeTime(date: Date): string {
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
 // ── Readiness Card ──────────────────────────────────────────
