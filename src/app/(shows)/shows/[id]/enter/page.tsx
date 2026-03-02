@@ -141,14 +141,24 @@ export default function EnterShowPage() {
       ? showClasses.filter((sc) => !sc.sex || sc.sex === selectedDogSex)
       : showClasses;
 
-    const byCanonicalOrder = (a: (typeof sexFiltered)[0], b: (typeof sexFiltered)[0]) =>
+    // KC rule: AVNSC classes are hidden when the show has breed-specific classes
+    // for this breed. Check if any classes have the dog's breedId set.
+    const hasBreedClasses = sexFiltered.some((sc) => sc.breedId != null);
+    const isAvnsc = (name: string) =>
+      /avnsc|not separately classified/i.test(name);
+
+    const eligible = hasBreedClasses
+      ? sexFiltered.filter((sc) => sc.breedId != null || !isAvnsc(sc.classDefinition.name))
+      : sexFiltered;
+
+    const byCanonicalOrder = (a: (typeof eligible)[0], b: (typeof eligible)[0]) =>
       (a.classDefinition.sortOrder ?? 0) - (b.classDefinition.sortOrder ?? 0);
 
     return {
-      age: sexFiltered.filter((sc) => sc.classDefinition.type === 'age').sort(byCanonicalOrder),
-      achievement: sexFiltered.filter((sc) => sc.classDefinition.type === 'achievement').sort(byCanonicalOrder),
-      special: sexFiltered.filter((sc) => sc.classDefinition.type === 'special').sort(byCanonicalOrder),
-      junior_handler: sexFiltered.filter((sc) => sc.classDefinition.type === 'junior_handler').sort(byCanonicalOrder),
+      age: eligible.filter((sc) => sc.classDefinition.type === 'age').sort(byCanonicalOrder),
+      achievement: eligible.filter((sc) => sc.classDefinition.type === 'achievement').sort(byCanonicalOrder),
+      special: eligible.filter((sc) => sc.classDefinition.type === 'special').sort(byCanonicalOrder),
+      junior_handler: eligible.filter((sc) => sc.classDefinition.type === 'junior_handler').sort(byCanonicalOrder),
     };
   }, [showClasses, selectedDogSex]);
 
@@ -1123,6 +1133,7 @@ interface ShowClassItem {
   id: string;
   entryFee: number;
   sex: 'dog' | 'bitch' | null;
+  breedId: string | null;
   classDefinition: {
     name: string;
     type: string;
