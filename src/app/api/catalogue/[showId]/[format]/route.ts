@@ -7,6 +7,8 @@ import { formatDogName } from '@/lib/utils';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { CatalogueStandard } from '@/components/catalogue/catalogue-standard';
 import { CatalogueAbsentees } from '@/components/catalogue/catalogue-absentees';
+import { CatalogueByClass } from '@/components/catalogue/catalogue-by-class';
+import { CatalogueAlphabetical } from '@/components/catalogue/catalogue-alphabetical';
 import type { CatalogueEntry, CatalogueShowInfo } from '@/components/catalogue/catalogue-standard';
 import React from 'react';
 
@@ -25,8 +27,8 @@ export async function GET(
     return NextResponse.json({ error: 'Database not available' }, { status: 500 });
   }
 
-  if (!['standard', 'absentees'].includes(format)) {
-    return NextResponse.json({ error: 'Invalid format. Use "standard" or "absentees".' }, { status: 400 });
+  if (!['standard', 'absentees', 'by-class', 'alphabetical'].includes(format)) {
+    return NextResponse.json({ error: 'Invalid format. Use "standard", "by-class", "alphabetical", or "absentees".' }, { status: 400 });
   }
 
   const show = await db.query.shows.findFirst({
@@ -122,17 +124,25 @@ export async function GET(
 
   // Render PDF
   try {
-    const pdfDocument =
-      format === 'absentees'
-        ? React.createElement(CatalogueAbsentees, { show: showInfo, entries: catalogueEntries })
-        : React.createElement(CatalogueStandard, { show: showInfo, entries: catalogueEntries });
+    const formatComponents = {
+      standard: CatalogueStandard,
+      'by-class': CatalogueByClass,
+      alphabetical: CatalogueAlphabetical,
+      absentees: CatalogueAbsentees,
+    } as const;
+
+    const Component = formatComponents[format as keyof typeof formatComponents];
+    const pdfDocument = React.createElement(Component, { show: showInfo, entries: catalogueEntries });
 
     const buffer = await renderToBuffer(pdfDocument);
 
-    const filename =
-      format === 'absentees'
-        ? `${show.name.replace(/[^a-zA-Z0-9]/g, '-')}-Absentees.pdf`
-        : `${show.name.replace(/[^a-zA-Z0-9]/g, '-')}-Catalogue.pdf`;
+    const formatLabels: Record<string, string> = {
+      standard: 'Catalogue',
+      'by-class': 'Catalogue-By-Class',
+      alphabetical: 'Catalogue-Alphabetical',
+      absentees: 'Absentees',
+    };
+    const filename = `${show.name.replace(/[^a-zA-Z0-9]/g, '-')}-${formatLabels[format] ?? 'Catalogue'}.pdf`;
 
     return new Response(buffer, {
       headers: {
