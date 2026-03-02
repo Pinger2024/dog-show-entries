@@ -52,7 +52,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
     Resend({
-      from: process.env.EMAIL_FROM ?? 'Remi <noreply@remi.dog>',
+      apiKey: process.env.RESEND_API_KEY,
+      from: process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>',
     }),
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID,
