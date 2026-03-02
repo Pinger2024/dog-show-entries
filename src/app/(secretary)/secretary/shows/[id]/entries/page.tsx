@@ -517,6 +517,7 @@ function AddEntryDialog({
   const [dogSearch, setDogSearch] = useState('');
   const [selectedDogId, setSelectedDogId] = useState<string | null>(null);
   const [selectedDogName, setSelectedDogName] = useState('');
+  const [selectedDogSex, setSelectedDogSex] = useState<string | null>(null);
   const [exhibitorEmail, setExhibitorEmail] = useState('');
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<string>('postal');
@@ -558,6 +559,7 @@ function AddEntryDialog({
       toast.success(`Dog "${dog.registeredName}" registered`);
       setSelectedDogId(dog.id);
       setSelectedDogName(dog.registeredName);
+      setSelectedDogSex(regSex || null);
       setStep('classes');
       utils.secretary.searchDogs.invalidate();
     },
@@ -627,6 +629,7 @@ function AddEntryDialog({
                     onClick={() => {
                       setSelectedDogId(dog.id);
                       setSelectedDogName(dog.registeredName);
+                      setSelectedDogSex(dog.sex);
                       // Pre-fill exhibitor email from primary owner
                       const primaryOwner = dog.owners?.[0];
                       if (primaryOwner?.ownerEmail) {
@@ -825,7 +828,9 @@ function AddEntryDialog({
               <label className="text-sm font-medium">Classes</label>
               <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border p-3">
                 {classesData && classesData.length > 0 ? (
-                  classesData.map((sc) => (
+                  classesData
+                    .filter((sc) => !sc.sex || !selectedDogSex || sc.sex === selectedDogSex)
+                    .map((sc) => (
                     <label
                       key={sc.id}
                       className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-muted/50"

@@ -268,11 +268,11 @@ export const secretaryRouter = createTRPCRouter({
       if (sorted.length > 0) {
         const ids = sorted.map((e) => e.id);
         const cases = sorted
-          .map((e, i) => `WHEN '${e.id}' THEN '${i + 1}'`)
+          .map((e, i) => `WHEN id = '${e.id}' THEN '${i + 1}'`)
           .join(' ');
 
         await ctx.db.execute(
-          sql`UPDATE entries SET catalogue_number = CASE id ${sql.raw(cases)} END, updated_at = NOW() WHERE id = ANY(${ids})`
+          sql`UPDATE entries SET catalogue_number = CASE ${sql.raw(cases)} END, updated_at = NOW() WHERE id = ANY(${ids})`
         );
       }
 
