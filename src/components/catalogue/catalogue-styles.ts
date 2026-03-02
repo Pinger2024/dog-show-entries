@@ -1,12 +1,15 @@
+import path from 'path';
 import { StyleSheet, Font } from '@react-pdf/renderer';
 
-// Register Times New Roman font family (standard for KC catalogues)
+// Register Times New Roman from bundled local files (no CDN dependency)
+const fontsDir = path.join(process.cwd(), 'public', 'fonts');
+
 Font.register({
   family: 'Times',
   fonts: [
-    { src: 'https://cdn.jsdelivr.net/npm/@canvas-fonts/times-new-roman@1.0.4/Times New Roman.ttf' },
-    { src: 'https://cdn.jsdelivr.net/npm/@canvas-fonts/times-new-roman-bold@1.0.4/Times New Roman Bold.ttf', fontWeight: 'bold' },
-    { src: 'https://cdn.jsdelivr.net/npm/@canvas-fonts/times-new-roman-italic@1.0.4/Times New Roman Italic.ttf', fontStyle: 'italic' },
+    { src: path.join(fontsDir, 'times-new-roman.ttf') },
+    { src: path.join(fontsDir, 'times-new-roman-bold.ttf'), fontWeight: 'bold' },
+    { src: path.join(fontsDir, 'times-new-roman-italic.ttf'), fontStyle: 'italic' },
   ],
 });
 
