@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { format, differenceInDays } from 'date-fns';
 import { formatDateRange } from '@/lib/date-utils';
@@ -16,6 +16,7 @@ import {
   X,
   Navigation,
   Locate,
+  ChevronDown,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
 import { Input } from '@/components/ui/input';
@@ -28,6 +29,32 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+
+/* ─── Debounce hook ────────────────────────────────── */
+
+function useDebounce<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(timer);
+  }, [value, delayMs]);
+  return debounced;
+}
+
+/* ─── Types ────────────────────────────────────────── */
+
+type ShowListItem = {
+  id: string;
+  name: string;
+  showType: string;
+  status: string;
+  startDate: string;
+  endDate: string;
+  entriesOpenDate: string | Date | null;
+  entryCloseDate: string | Date | null;
+  organisation: { name: string } | null;
+  venue: { name: string } | null;
+};
 
 /* ─── Show type config ──────────────────────────────── */
 
@@ -313,10 +340,13 @@ function NearMeControls({
 
 /* ─── Main component ────────────────────────────────── */
 
+const PAGE_SIZE = 24;
+
 export default function ShowsList() {
   const [search, setSearch] = useState('');
   const [showType, setShowType] = useState<string>('all');
   const [status, setStatus] = useState<string>('all');
+  const debouncedSearch = useDebounce(search, 300);
 
   // Near Me state
   const [nearMeActive, setNearMeActive] = useState(false);
@@ -327,8 +357,16 @@ export default function ShowsList() {
   const [postcodeError, setPostcodeError] = useState('');
   const [isLocating, setIsLocating] = useState(false);
 
+  // Pagination state — accumulated items + current cursor
+  const [cursor, setCursor] = useState(0);
+  const [allItems, setAllItems] = useState<ShowListItem[]>([]);
+  const prevKeyRef = useRef('');
+
+  // Build query key for detecting filter changes
+  const queryKey = `${debouncedSearch}|${showType}|${status}`;
+
   // Standard list query (only when near me is not active)
-  const { data, isLoading } = trpc.shows.list.useQuery(
+  const { data, isLoading, isFetching } = trpc.shows.list.useQuery(
     {
       showType:
         showType !== 'all'
@@ -351,10 +389,32 @@ export default function ShowsList() {
               | 'completed'
               | 'cancelled')
           : undefined,
-      limit: 50,
+      search: debouncedSearch || undefined,
+      limit: PAGE_SIZE,
+      cursor,
     },
     { enabled: !nearMeActive || !location },
   );
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    if (queryKey !== prevKeyRef.current) {
+      prevKeyRef.current = queryKey;
+      setCursor(0);
+      setAllItems([]);
+    }
+  }, [queryKey]);
+
+  // Accumulate items as pages load
+  useEffect(() => {
+    if (data?.items) {
+      if (cursor === 0) {
+        setAllItems(data.items);
+      } else {
+        setAllItems((prev) => [...prev, ...data.items]);
+      }
+    }
+  }, [data?.items, cursor]);
 
   // Nearby query (only when near me is active and we have a location)
   const {
@@ -423,20 +483,21 @@ export default function ShowsList() {
     setNearMeActive(true);
   }, []);
 
+  const handleLoadMore = useCallback(() => {
+    if (data?.nextCursor != null) {
+      setCursor(data.nextCursor);
+    }
+  }, [data?.nextCursor]);
+
   // Determine which data to show
   const isNearMeMode = nearMeActive && !!location;
-  const currentLoading = isNearMeMode ? isNearbyLoading : isLoading;
+  const currentLoading = isNearMeMode ? isNearbyLoading : (isLoading && cursor === 0);
+  const isLoadingMore = isFetching && cursor > 0;
 
-  // Standard list shows
-  const listShows = data?.items ?? [];
-  const filteredShows = search
-    ? listShows.filter(
-        (s) =>
-          s.name.toLowerCase().includes(search.toLowerCase()) ||
-          s.organisation?.name?.toLowerCase().includes(search.toLowerCase()) ||
-          s.venue?.name?.toLowerCase().includes(search.toLowerCase())
-      )
-    : listShows;
+  // Use accumulated items for standard list (server handles search now)
+  const filteredShows = allItems;
+  const totalShows = data?.total ?? 0;
+  const hasMore = data?.nextCursor != null;
 
   /* Split into entries-open vs others for visual grouping */
   const openShows = filteredShows.filter((s) => s.status === 'entries_open');
@@ -602,7 +663,9 @@ export default function ShowsList() {
         <>
           {/* ─── Results count ───────────────────── */}
           <p className="mb-6 text-sm text-muted-foreground">
-            {filteredShows.length} show{filteredShows.length !== 1 ? 's' : ''}
+            {totalShows > filteredShows.length
+              ? `Showing ${filteredShows.length} of ${totalShows} show${totalShows !== 1 ? 's' : ''}`
+              : `${filteredShows.length} show${filteredShows.length !== 1 ? 's' : ''}`}
             {openShows.length > 0 && (
               <span className="ml-1">
                 · <span className="font-medium text-emerald-600">{openShows.length} accepting entries</span>
@@ -645,6 +708,26 @@ export default function ShowsList() {
               </div>
             </div>
           )}
+
+          {/* ─── Load More ─────────────────────────── */}
+          {hasMore && (
+            <div className="mt-10 flex justify-center">
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={handleLoadMore}
+                disabled={isLoadingMore}
+                className="h-12 gap-2 rounded-xl px-8"
+              >
+                {isLoadingMore ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <ChevronDown className="size-4" />
+                )}
+                {isLoadingMore ? 'Loading...' : `Show More (${totalShows - filteredShows.length} remaining)`}
+              </Button>
+            </div>
+          )}
         </>
       )}
     </>
@@ -653,18 +736,7 @@ export default function ShowsList() {
 
 /* ─── Show Card ─────────────────────────────────────── */
 
-function ShowCard({ show, distance }: { show: {
-  id: string;
-  name: string;
-  showType: string;
-  status: string;
-  startDate: string;
-  endDate: string;
-  entriesOpenDate: string | Date | null;
-  entryCloseDate: string | Date | null;
-  organisation: { name: string } | null;
-  venue: { name: string } | null;
-}; distance?: number }) {
+function ShowCard({ show, distance }: { show: ShowListItem; distance?: number }) {
   const meta = showTypeMeta[show.showType];
   const isOpen = show.status === 'entries_open';
 

@@ -40,6 +40,7 @@ export const showsRouter = createTRPCRouter({
             'cancelled',
           ])
           .optional(),
+        search: z.string().max(200).optional(),
         breedId: z.string().uuid().optional(),
         startDate: z.string().optional(),
         endDate: z.string().optional(),
@@ -68,6 +69,38 @@ export const showsRouter = createTRPCRouter({
       }
       if (input.endDate) {
         conditions.push(lte(shows.endDate, input.endDate));
+      }
+
+      // Server-side text search across show name, organisation, and venue
+      if (input.search && input.search.trim()) {
+        const term = `%${input.search.trim()}%`;
+        conditions.push(
+          or(
+            sql`${shows.name} ILIKE ${term}`,
+            exists(
+              ctx.db
+                .select({ one: sql`1` })
+                .from(organisations)
+                .where(
+                  and(
+                    eq(organisations.id, shows.organisationId),
+                    sql`${organisations.name} ILIKE ${term}`
+                  )
+                )
+            ),
+            exists(
+              ctx.db
+                .select({ one: sql`1` })
+                .from(venues)
+                .where(
+                  and(
+                    eq(venues.id, shows.venueId),
+                    sql`${venues.name} ILIKE ${term}`
+                  )
+                )
+            )
+          )!
+        );
       }
 
       const where =
