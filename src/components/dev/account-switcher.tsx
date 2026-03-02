@@ -54,7 +54,9 @@ export function AccountSwitcher() {
     },
   });
 
-  if (!session?.user || session.user.role !== 'admin') return null;
+  // Only visible to Michael and Amanda for testing
+  const ALLOWED_EMAILS = ['michael@prometheus-it.com', 'mandy@hundarkgsd.co.uk'];
+  if (!session?.user || !ALLOWED_EMAILS.includes(session.user.email ?? '')) return null;
 
   const currentUser = session.user;
   const currentRoleConfig = ROLE_CONFIG[currentUser.role] ?? ROLE_CONFIG.exhibitor!;
