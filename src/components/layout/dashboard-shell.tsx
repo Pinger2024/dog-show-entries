@@ -10,6 +10,7 @@ import {
   CalendarDays,
   Inbox,
   UserPlus,
+  Database,
   LogOut,
   ChevronRight,
 } from 'lucide-react';
@@ -38,6 +39,7 @@ const navItems = [
 const adminNavItems = [
   { href: '/feedback', label: 'Feedback', icon: Inbox },
   { href: '/admin/invitations', label: 'Invitations', icon: UserPlus },
+  { href: '/admin/reference-data', label: 'Reference Data', icon: Database },
 ];
 
 function getInitials(name?: string | null, email?: string | null) {
