@@ -93,6 +93,7 @@ function EntryReportContent({ showId }: { showId: string }) {
   const { data: entries, isLoading } =
     trpc.secretary.getEntryReport.useQuery({ showId });
   const [search, setSearch] = useState('');
+  const [groupByExhibitor, setGroupByExhibitor] = useState(false);
 
   const filtered = useMemo(() => {
     if (!entries) return [];
@@ -105,6 +106,32 @@ function EntryReportContent({ showId }: { showId: string }) {
         e.dog?.breed?.name?.toLowerCase().includes(q)
     );
   }, [entries, search]);
+
+  // Group entries by exhibitor
+  const exhibitorGroups = useMemo(() => {
+    if (!groupByExhibitor) return null;
+    const groups = new Map<string, {
+      name: string;
+      email: string;
+      entries: typeof filtered;
+      totalFee: number;
+    }>();
+    for (const entry of filtered) {
+      const key = entry.exhibitor?.email ?? 'unknown';
+      if (!groups.has(key)) {
+        groups.set(key, {
+          name: entry.exhibitor?.name ?? '—',
+          email: key,
+          entries: [],
+          totalFee: 0,
+        });
+      }
+      const group = groups.get(key)!;
+      group.entries.push(entry);
+      group.totalFee += entry.totalFee;
+    }
+    return Array.from(groups.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [filtered, groupByExhibitor]);
 
   // Summary stats
   const stats = useMemo(() => {
@@ -201,6 +228,15 @@ function EntryReportContent({ showId }: { showId: string }) {
                   className="pl-9 h-9"
                 />
               </div>
+              <Button
+                variant={groupByExhibitor ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setGroupByExhibitor(!groupByExhibitor)}
+                title="Group entries by exhibitor"
+              >
+                <Users className="size-4" />
+                <span className="hidden sm:inline">By Exhibitor</span>
+              </Button>
               <Button variant="outline" size="sm" onClick={exportCsv}>
                 <Download className="size-4" />
                 <span className="hidden sm:inline">Export CSV</span>
@@ -213,6 +249,63 @@ function EntryReportContent({ showId }: { showId: string }) {
             <p className="py-8 text-center text-sm text-muted-foreground">
               {search ? 'No entries match your search.' : 'No entries yet.'}
             </p>
+          ) : groupByExhibitor && exhibitorGroups ? (
+            /* Grouped by exhibitor view */
+            <div className="space-y-4">
+              {exhibitorGroups.map((group) => (
+                <div key={group.email} className="rounded-lg border">
+                  <div className="flex items-center justify-between bg-muted/50 px-3 py-2.5 sm:px-4">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-sm">{group.name}</p>
+                      <p className="text-xs text-muted-foreground">{group.email}</p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-sm font-medium">{formatCurrency(group.totalFee)}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {group.entries.length} {group.entries.length === 1 ? 'entry' : 'entries'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="divide-y">
+                    {group.entries.map((entry) => (
+                      <div key={entry.id} className="flex items-start gap-3 px-3 py-2.5 sm:px-4">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-medium">
+                              {entry.dog?.registeredName ?? 'Junior Handler'}
+                            </p>
+                            {entry.isNfc && (
+                              <Badge variant="outline" className="text-[10px]">NFC</Badge>
+                            )}
+                            <Badge
+                              variant={entryStatusConfig[entry.status]?.variant ?? 'outline'}
+                              className="text-[10px]"
+                            >
+                              {entryStatusConfig[entry.status]?.label ?? entry.status}
+                            </Badge>
+                          </div>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            {entry.dog?.breed?.name ?? '—'}
+                            {entry.dog?.sex ? ` · ${entry.dog.sex}` : ''}
+                          </p>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {entry.entryClasses.map((ec, i) => (
+                              <Badge key={i} variant="secondary" className="text-[10px]">
+                                {ec.showClass?.classDefinition?.name ?? '?'}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="text-sm font-medium">{formatCurrency(entry.totalFee)}</p>
+                          <p className="text-xs text-muted-foreground">{formatDate(entry.entryDate)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : (
             <>
               {/* Mobile card view */}

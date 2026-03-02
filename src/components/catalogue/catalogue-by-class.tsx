@@ -17,14 +17,24 @@ function formatDob(dob: string | null | undefined) {
   });
 }
 
-// Group entries by class
+// Group entries by class, preserving sort metadata
 function groupByClass(entries: CatalogueEntry[]) {
-  const classes: Record<string, { sex: string | null | undefined; entries: CatalogueEntry[] }> = {};
+  const classes: Record<string, {
+    sex: string | null | undefined;
+    classNumber: number | null | undefined;
+    sortOrder: number | undefined;
+    entries: CatalogueEntry[];
+  }> = {};
 
   for (const entry of entries) {
     for (const cls of entry.classes) {
       const className = cls.name ?? 'Unknown Class';
-      classes[className] ??= { sex: cls.sex, entries: [] };
+      classes[className] ??= {
+        sex: cls.sex,
+        classNumber: cls.classNumber,
+        sortOrder: cls.sortOrder,
+        entries: [],
+      };
       classes[className].entries.push(entry);
     }
   }
@@ -34,7 +44,18 @@ function groupByClass(entries: CatalogueEntry[]) {
 
 export function CatalogueByClass({ show, entries }: Props) {
   const grouped = groupByClass(entries);
-  const classNames = Object.keys(grouped).sort();
+  // Sort by classNumber if assigned, otherwise by sortOrder, then alphabetically
+  const classNames = Object.keys(grouped).sort((a, b) => {
+    const aNum = grouped[a].classNumber;
+    const bNum = grouped[b].classNumber;
+    if (aNum != null && bNum != null) return aNum - bNum;
+    if (aNum != null) return -1;
+    if (bNum != null) return 1;
+    const aSort = grouped[a].sortOrder ?? 0;
+    const bSort = grouped[b].sortOrder ?? 0;
+    if (aSort !== bSort) return aSort - bSort;
+    return a.localeCompare(b);
+  });
 
   return (
     <Document>
@@ -50,7 +71,7 @@ export function CatalogueByClass({ show, entries }: Props) {
         />
 
         {classNames.map((className) => {
-          const { sex, entries: classEntries } = grouped[className];
+          const { sex, classNumber, entries: classEntries } = grouped[className];
           const sorted = [...classEntries].sort(
             (a, b) => (a.catalogueNumber ?? '').localeCompare(b.catalogueNumber ?? '', undefined, { numeric: true })
           );
@@ -58,7 +79,7 @@ export function CatalogueByClass({ show, entries }: Props) {
           return (
             <View key={className}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', ...styles.groupHeading }}>
-                <Text>{className}</Text>
+                <Text>{classNumber ? `Class ${classNumber}: ${className}` : className}</Text>
                 {sex && (
                   <Text style={{ fontSize: 9, fontStyle: 'italic' }}>
                     ({sex === 'dog' ? 'Dogs' : sex === 'bitch' ? 'Bitches' : 'Open'})

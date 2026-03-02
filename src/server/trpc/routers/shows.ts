@@ -112,7 +112,7 @@ export const showsRouter = createTRPCRouter({
           showClasses: {
             with: {
               classDefinition: true,
-              breed: true,
+              breed: { with: { group: true } },
             },
             orderBy: [asc(showClasses.sortOrder)],
           },

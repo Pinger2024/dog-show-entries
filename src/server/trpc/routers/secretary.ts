@@ -184,7 +184,7 @@ export const secretaryRouter = createTRPCRouter({
 
   listClassDefinitions: publicProcedure.query(async ({ ctx }) => {
     return ctx.db.query.classDefinitions.findMany({
-      orderBy: (cd, { asc }) => [asc(cd.name)],
+      orderBy: (cd, { asc }) => [asc(cd.type), asc(cd.sortOrder), asc(cd.name)],
     });
   }),
 
@@ -590,7 +590,13 @@ export const secretaryRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
 
-      let sortOrder = 0;
+      // Start from max existing sortOrder so we don't collide with existing classes
+      const [maxSort] = await ctx.db
+        .select({ max: sql<number>`coalesce(max(${showClasses.sortOrder}), -1)` })
+        .from(showClasses)
+        .where(eq(showClasses.showId, input.showId));
+      let sortOrder = (Number(maxSort?.max) ?? -1) + 1;
+
       const values: Array<{
         showId: string;
         breedId: string;

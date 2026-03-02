@@ -97,6 +97,8 @@ export async function GET(
     classes: entry.entryClasses.map((ec) => ({
       name: ec.showClass?.classDefinition?.name,
       sex: ec.showClass?.sex,
+      classNumber: ec.showClass?.classNumber,
+      sortOrder: ec.showClass?.sortOrder,
     })),
     status: entry.status,
     entryType: entry.entryType,

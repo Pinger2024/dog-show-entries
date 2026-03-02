@@ -197,16 +197,22 @@ export default function ShowDetailPage() {
   const hasResults = show.status === 'in_progress' || show.status === 'completed';
   const meta = showTypeMeta[show.showType];
 
-  /* Group classes by breed */
-  const breedMap = new Map<string, typeof show.showClasses>();
+  /* Group classes by breed, sorted by group sortOrder then breed name */
+  const breedMap = new Map<string, { groupSortOrder: number; classes: typeof show.showClasses }>();
   for (const sc of show.showClasses ?? []) {
     const name = sc.breed?.name ?? 'Any Breed';
-    if (!breedMap.has(name)) breedMap.set(name, []);
-    breedMap.get(name)!.push(sc);
+    if (!breedMap.has(name)) {
+      breedMap.set(name, {
+        groupSortOrder: sc.breed?.group?.sortOrder ?? 999,
+        classes: [],
+      });
+    }
+    breedMap.get(name)!.classes.push(sc);
   }
-  const breeds = Array.from(breedMap.entries()).sort(([a], [b]) =>
-    a.localeCompare(b)
-  );
+  const breeds = Array.from(breedMap.entries()).sort(([a, aData], [b, bData]) => {
+    if (aData.groupSortOrder !== bData.groupSortOrder) return aData.groupSortOrder - bData.groupSortOrder;
+    return a.localeCompare(b);
+  });
 
   /* Build breed → judge/ring lookup from judge assignments */
   const breedJudgeMap = new Map<string, { judgeName: string; ringName?: string }>();
@@ -451,7 +457,7 @@ export default function ShowDetailPage() {
               Breeds ({breeds.length})
             </h2>
             <div className="space-y-2">
-              {breeds.map(([breedName, classes], i) => {
+              {breeds.map(([breedName, { classes }], i) => {
                 const judgeInfo = breedJudgeMap.get(breedName) ?? allBreedsJudge;
                 return (
                   <BreedSection

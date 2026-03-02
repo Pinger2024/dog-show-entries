@@ -14,7 +14,7 @@ export interface CatalogueEntry {
   breeder: string | null | undefined;
   owners: { name: string; address: string | null }[];
   exhibitor: string | undefined;
-  classes: { name: string | undefined; sex: string | null | undefined }[];
+  classes: { name: string | undefined; sex: string | null | undefined; classNumber: number | null | undefined; sortOrder: number | undefined }[];
   status: string;
   entryType: string;
 }
