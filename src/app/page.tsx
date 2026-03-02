@@ -11,7 +11,7 @@ import {
   Dog,
   CalendarDays,
   Shield,
-  Lock,
+  Zap,
   Star,
   Sparkles,
 } from 'lucide-react';
@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
+import { AnimateIn } from '@/components/animate-in';
 
 const steps = [
   {
@@ -71,7 +72,7 @@ const secretaryFeatures = [
   {
     icon: CalendarDays,
     title: 'Generate Catalogues',
-    description: 'Automatic catalogue numbering and PDF generation.',
+    description: 'Automatic catalogue numbering and four PDF formats.',
   },
   {
     icon: Shield,
@@ -80,31 +81,10 @@ const secretaryFeatures = [
   },
 ];
 
-const testimonials = [
-  {
-    quote:
-      'Finally, a show entry system that actually understands how dog shows work. I entered three dogs for an open show in under five minutes.',
-    name: 'Margaret H.',
-    detail: 'Showing Border Collies for 28 years',
-  },
-  {
-    quote:
-      'As a show secretary, Remi has saved me hours of manual data entry. The catalogue generation alone is worth its weight in gold.',
-    name: 'David P.',
-    detail: 'Secretary, Midlands Canine Society',
-  },
-  {
-    quote:
-      'I was nervous about entering online but Remi made it so straightforward. The confirmation email came through right away.',
-    name: 'Sarah T.',
-    detail: 'Junior Handler, age 16',
-  },
-];
-
 const stats = [
   { label: 'Show Types Supported', value: '6', icon: CalendarDays },
   { label: 'KC Recognised Breeds', value: '220+', icon: Dog },
-  { label: 'Secure Payments', value: 'Stripe', icon: Lock },
+  { label: 'Live Result Updates', value: '10s', icon: Zap },
 ];
 
 export default function HomePage() {
@@ -166,8 +146,8 @@ export default function HomePage() {
         <section className="border-y bg-card">
           <div className="mx-auto max-w-5xl px-3 py-8 sm:px-4 sm:py-10 lg:px-6">
             <div className="grid grid-cols-3 gap-4 sm:gap-8">
-              {stats.map((stat) => (
-                <div key={stat.label} className="text-center">
+              {stats.map((stat, i) => (
+                <AnimateIn key={stat.label} delay={i * 80} className="text-center">
                   <div className="mx-auto mb-2 sm:mb-3 flex size-8 sm:size-10 items-center justify-center rounded-full bg-primary/10">
                     <stat.icon className="size-4 sm:size-5 text-primary" />
                   </div>
@@ -177,7 +157,7 @@ export default function HomePage() {
                   <p className="mt-1 text-xs font-medium text-muted-foreground sm:text-sm lg:text-[0.9375rem]">
                     {stat.label}
                   </p>
-                </div>
+                </AnimateIn>
               ))}
             </div>
           </div>
@@ -186,7 +166,7 @@ export default function HomePage() {
         {/* How It Works */}
         <section>
           <div className="mx-auto max-w-7xl px-3 py-16 sm:px-4 sm:py-24 lg:px-6">
-            <div className="mx-auto max-w-2xl text-center">
+            <AnimateIn className="mx-auto max-w-2xl text-center">
               <h2 className="gold-rule-center font-serif text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
                 Three Steps to Your Next Entry
               </h2>
@@ -194,10 +174,10 @@ export default function HomePage() {
                 From finding a show to confirmed entry — simple, quick, and
                 secure.
               </p>
-            </div>
+            </AnimateIn>
             <div className="mx-auto mt-10 sm:mt-20 grid max-w-5xl gap-8 sm:gap-10 sm:grid-cols-3">
               {steps.map((step, i) => (
-                <div key={step.title} className="relative text-center">
+                <AnimateIn key={step.title} delay={i * 120} className="relative text-center">
                   {i < steps.length - 1 && (
                     <div className="absolute left-1/2 top-10 hidden h-px w-full bg-border sm:block" />
                   )}
@@ -211,7 +191,7 @@ export default function HomePage() {
                   <p className="mt-2 text-sm sm:text-base leading-relaxed text-muted-foreground">
                     {step.description}
                   </p>
-                </div>
+                </AnimateIn>
               ))}
             </div>
           </div>
@@ -220,7 +200,7 @@ export default function HomePage() {
         {/* Features */}
         <section className="border-t bg-card">
           <div className="mx-auto max-w-7xl px-3 py-16 sm:px-4 sm:py-24 lg:px-6">
-            <div className="mx-auto max-w-2xl text-center">
+            <AnimateIn className="mx-auto max-w-2xl text-center">
               <h2 className="gold-rule-center font-serif text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
                 Built for the Show Ring
               </h2>
@@ -228,153 +208,143 @@ export default function HomePage() {
                 Every feature designed with exhibitors in mind — because we
                 understand what matters at a dog show.
               </p>
-            </div>
+            </AnimateIn>
             <div className="mx-auto mt-10 sm:mt-16 grid max-w-5xl gap-4 sm:gap-8 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-              {features.map((feature) => (
-                <div
-                  key={feature.title}
-                  className="group rounded-xl border bg-background p-4 sm:p-7 transition-all hover:border-primary/20 hover:shadow-md hover:shadow-primary/5"
-                >
-                  <div className="mb-3 sm:mb-5 flex size-10 sm:size-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
-                    <feature.icon className="size-5 sm:size-6" strokeWidth={1.5} />
+              {features.map((feature, i) => (
+                <AnimateIn key={feature.title} delay={i * 80}>
+                  <div className="group rounded-xl border bg-background p-4 sm:p-7 transition-all hover:border-primary/20 hover:shadow-md hover:shadow-primary/5">
+                    <div className="mb-3 sm:mb-5 flex size-10 sm:size-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                      <feature.icon className="size-5 sm:size-6" strokeWidth={1.5} />
+                    </div>
+                    <h3 className="font-serif text-base sm:text-lg font-bold">{feature.title}</h3>
+                    <p className="mt-2 text-sm sm:text-base leading-relaxed text-muted-foreground">
+                      {feature.description}
+                    </p>
                   </div>
-                  <h3 className="font-serif text-base sm:text-lg font-bold">{feature.title}</h3>
-                  <p className="mt-2 text-sm sm:text-base leading-relaxed text-muted-foreground">
-                    {feature.description}
-                  </p>
-                </div>
+                </AnimateIn>
               ))}
             </div>
           </div>
         </section>
 
-        {/* Testimonials */}
+        {/* Testimonial */}
         <section className="border-t">
           <div className="mx-auto max-w-7xl px-3 py-16 sm:px-4 sm:py-24 lg:px-6">
-            <div className="mx-auto max-w-2xl text-center">
-              <h2 className="gold-rule-center font-serif text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
-                Trusted by Exhibitors
-              </h2>
-              <p className="mt-3 sm:mt-5 text-sm sm:text-lg text-muted-foreground">
-                Hear from the people who use Remi every week.
-              </p>
-            </div>
-            <div className="mx-auto mt-10 sm:mt-16 grid max-w-5xl gap-4 sm:gap-8 grid-cols-1 sm:grid-cols-3">
-              {testimonials.map((t) => (
-                <div
-                  key={t.name}
-                  className="relative rounded-xl border bg-card p-4 sm:p-7"
-                >
-                  <div className="mb-3 sm:mb-4 flex gap-1">
-                    {[...Array(5)].map((_, i) => (
-                      <Star
-                        key={i}
-                        className="size-3.5 sm:size-4 fill-gold text-gold"
-                      />
-                    ))}
-                  </div>
-                  <blockquote className="text-sm sm:text-base leading-relaxed text-foreground/90">
-                    &ldquo;{t.quote}&rdquo;
-                  </blockquote>
-                  <div className="mt-4 sm:mt-5 border-t pt-3 sm:pt-4">
-                    <p className="text-sm sm:text-base font-semibold">{t.name}</p>
-                    <p className="text-xs sm:text-sm text-muted-foreground">{t.detail}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <AnimateIn className="mx-auto max-w-3xl text-center">
+              <div className="mb-6 flex justify-center gap-1">
+                {[...Array(5)].map((_, i) => (
+                  <Star key={i} className="size-4 sm:size-5 fill-gold text-gold" />
+                ))}
+              </div>
+              <blockquote className="font-serif text-xl leading-relaxed sm:text-2xl lg:text-3xl">
+                &ldquo;Remi has completely transformed how we manage our shows.
+                What used to take weeks of admin now happens automatically.
+                The exhibitors love it too — they can enter from their phones
+                and get confirmation straight away.&rdquo;
+              </blockquote>
+              <div className="mt-6">
+                <p className="font-semibold">Amanda Sheridan</p>
+                <p className="text-sm text-muted-foreground">
+                  Show Secretary, Clyde Valley GSD Club
+                </p>
+              </div>
+            </AnimateIn>
           </div>
         </section>
 
         {/* Secretary callout */}
         <section className="border-t bg-card">
           <div className="mx-auto max-w-7xl px-3 py-16 sm:px-4 sm:py-24 lg:px-6">
-            <div className="mx-auto max-w-4xl overflow-hidden rounded-2xl border bg-background p-4 sm:p-8 lg:p-12">
-              <div className="flex flex-col gap-6 sm:gap-10 sm:flex-row sm:items-start">
-                <div className="flex-1">
-                  <Badge
-                    variant="secondary"
-                    className="mb-3 sm:mb-4 border-gold/30 bg-gold/10 text-gold"
-                  >
-                    For Show Secretaries
-                  </Badge>
-                  <h3 className="font-serif text-xl font-bold tracking-tight sm:text-2xl lg:text-3xl">
-                    Run Your Show with Remi
-                  </h3>
-                  <p className="mt-3 sm:mt-4 text-sm sm:text-base leading-relaxed text-muted-foreground">
-                    Manage entries, generate catalogues, track payments, and
-                    communicate with exhibitors — all from one dashboard.
-                    No more spreadsheets, no more chasing paper forms.
-                  </p>
-                  <div className="mt-4 sm:mt-6 grid gap-3 grid-cols-1 sm:grid-cols-3">
-                    {secretaryFeatures.map((f) => (
-                      <div key={f.title} className="flex items-start gap-2">
-                        <f.icon className="mt-0.5 size-4 shrink-0 text-primary" />
-                        <div>
-                          <p className="text-sm font-semibold">{f.title}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {f.description}
-                          </p>
+            <AnimateIn>
+              <div className="mx-auto max-w-4xl overflow-hidden rounded-2xl border bg-background p-4 sm:p-8 lg:p-12">
+                <div className="flex flex-col gap-6 sm:gap-10 sm:flex-row sm:items-start">
+                  <div className="flex-1">
+                    <Badge
+                      variant="secondary"
+                      className="mb-3 sm:mb-4 border-gold/30 bg-gold/10 text-gold"
+                    >
+                      For Show Secretaries
+                    </Badge>
+                    <h3 className="font-serif text-xl font-bold tracking-tight sm:text-2xl lg:text-3xl">
+                      Run Your Show with Remi
+                    </h3>
+                    <p className="mt-3 sm:mt-4 text-sm sm:text-base leading-relaxed text-muted-foreground">
+                      Manage entries, generate catalogues, track payments, and
+                      communicate with exhibitors — all from one dashboard.
+                      No more spreadsheets, no more chasing paper forms.
+                    </p>
+                    <div className="mt-4 sm:mt-6 grid gap-3 grid-cols-1 sm:grid-cols-3">
+                      {secretaryFeatures.map((f) => (
+                        <div key={f.title} className="flex items-start gap-2">
+                          <f.icon className="mt-0.5 size-4 shrink-0 text-primary" />
+                          <div>
+                            <p className="text-sm font-semibold">{f.title}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {f.description}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-6 sm:mt-8 flex flex-wrap gap-3">
-                    <Button className="h-11 sm:h-12 px-5 sm:px-6 text-sm sm:text-[0.9375rem]" asChild>
-                      <Link href="/login">
-                        Get Started
-                        <ArrowRight className="ml-1 size-4" />
-                      </Link>
-                    </Button>
-                    <Button variant="outline" className="h-11 sm:h-12 px-5 sm:px-6 text-sm sm:text-[0.9375rem]" asChild>
-                      <Link href="/about">Learn More</Link>
-                    </Button>
+                      ))}
+                    </div>
+                    <div className="mt-6 sm:mt-8 flex flex-wrap gap-3">
+                      <Button className="h-11 sm:h-12 px-5 sm:px-6 text-sm sm:text-[0.9375rem]" asChild>
+                        <Link href="/pricing">
+                          View Pricing
+                          <ArrowRight className="ml-1 size-4" />
+                        </Link>
+                      </Button>
+                      <Button variant="outline" className="h-11 sm:h-12 px-5 sm:px-6 text-sm sm:text-[0.9375rem]" asChild>
+                        <Link href="/about">Learn More</Link>
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            </AnimateIn>
           </div>
         </section>
 
         {/* Final CTA */}
         <section className="border-t">
           <div className="mx-auto max-w-7xl px-3 py-16 sm:px-4 sm:py-24 lg:px-6">
-            <div className="relative overflow-hidden rounded-2xl bg-primary px-4 py-14 text-center shadow-xl shadow-primary/15 sm:px-16 sm:py-20">
-              <div className="pointer-events-none absolute inset-0 -z-0">
-                <div className="absolute -right-20 -top-20 size-72 rounded-full bg-white/10 blur-3xl" />
-                <div className="absolute -bottom-20 -left-20 size-72 rounded-full bg-gold/15 blur-3xl" />
-              </div>
-              <div className="relative z-10">
-                <h2 className="font-serif text-2xl font-bold tracking-tight text-primary-foreground sm:text-3xl lg:text-4xl">
-                  Ready to Enter Your Next Show?
-                </h2>
-                <p className="mx-auto mt-3 sm:mt-5 max-w-xl text-sm sm:text-lg leading-relaxed text-primary-foreground/80">
-                  Join exhibitors and show secretaries who are already using Remi
-                  to make dog show entries simple, secure, and reliable.
-                </p>
-                <div className="mt-8 sm:mt-10 flex flex-col items-center justify-center gap-3 sm:gap-4 sm:flex-row">
-                  <Button
-                    size="lg"
-                    variant="secondary"
-                    className="h-11 sm:h-13 px-6 sm:px-8 text-sm sm:text-base font-semibold w-full sm:w-auto"
-                    asChild
-                  >
-                    <Link href="/register">
-                      Create Your Free Account
-                      <ArrowRight className="ml-1 size-4" />
-                    </Link>
-                  </Button>
-                  <Button
-                    size="lg"
-                    variant="ghost"
-                    className="h-11 sm:h-13 px-6 sm:px-8 text-sm sm:text-base text-primary-foreground hover:bg-white/10 hover:text-primary-foreground w-full sm:w-auto"
-                    asChild
-                  >
-                    <Link href="/shows">Find a Show</Link>
-                  </Button>
+            <AnimateIn>
+              <div className="relative overflow-hidden rounded-2xl bg-primary px-4 py-14 text-center shadow-xl shadow-primary/15 sm:px-16 sm:py-20">
+                <div className="pointer-events-none absolute inset-0 -z-0">
+                  <div className="absolute -right-20 -top-20 size-72 rounded-full bg-white/10 blur-3xl" />
+                  <div className="absolute -bottom-20 -left-20 size-72 rounded-full bg-gold/15 blur-3xl" />
+                </div>
+                <div className="relative z-10">
+                  <h2 className="font-serif text-2xl font-bold tracking-tight text-primary-foreground sm:text-3xl lg:text-4xl">
+                    Ready to Enter Your Next Show?
+                  </h2>
+                  <p className="mx-auto mt-3 sm:mt-5 max-w-xl text-sm sm:text-lg leading-relaxed text-primary-foreground/80">
+                    Join exhibitors and show secretaries who are already using Remi
+                    to make dog show entries simple, secure, and reliable.
+                  </p>
+                  <div className="mt-8 sm:mt-10 flex flex-col items-center justify-center gap-3 sm:gap-4 sm:flex-row">
+                    <Button
+                      size="lg"
+                      variant="secondary"
+                      className="h-11 sm:h-13 px-6 sm:px-8 text-sm sm:text-base font-semibold w-full sm:w-auto"
+                      asChild
+                    >
+                      <Link href="/register">
+                        Create Your Free Account
+                        <ArrowRight className="ml-1 size-4" />
+                      </Link>
+                    </Button>
+                    <Button
+                      size="lg"
+                      variant="ghost"
+                      className="h-11 sm:h-13 px-6 sm:px-8 text-sm sm:text-base text-primary-foreground hover:bg-white/10 hover:text-primary-foreground w-full sm:w-auto"
+                      asChild
+                    >
+                      <Link href="/shows">Find a Show</Link>
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
+            </AnimateIn>
           </div>
         </section>
       </main>
