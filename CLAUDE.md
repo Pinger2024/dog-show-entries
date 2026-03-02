@@ -4,7 +4,7 @@
 
 Remi is a dog show entry management platform for the UK Kennel Club show circuit. It handles show creation, online entries, payments (Stripe), and catalogue generation. Built with Next.js App Router, tRPC, Drizzle ORM (PostgreSQL), and shadcn/ui.
 
-**Live URL:** https://remi-pf1p.onrender.com
+**Live URL:** https://remishowmanager.co.uk
 **Hosting:** Render (web service `srv-d6g578a4d50c73dj4rpg`)
 **Database:** PostgreSQL on Render
 **Email:** Resend (sending from `noreply@lettiva.com`)

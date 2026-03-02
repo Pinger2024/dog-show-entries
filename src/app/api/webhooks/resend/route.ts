@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
 <hr>
 <p>${preview}</p>
 <hr>
-<p><a href="https://remi-pf1p.onrender.com/feedback">View in Remi</a></p>`,
+<p><a href="https://remishowmanager.co.uk/feedback">View in Remi</a></p>`,
         })
         .catch((err) =>
           console.error('[resend-webhook] Notification email failed:', err)

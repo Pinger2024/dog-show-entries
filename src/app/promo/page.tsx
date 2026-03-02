@@ -1,30 +1,34 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+const BASE_URL = "https://remishowmanager.co.uk";
+
 export const metadata: Metadata = {
   title: "Remi — The Future of Dog Show Management",
   description:
     "Enter shows, pay securely, get confirmed instantly. Built for exhibitors and secretaries on the UK Kennel Club circuit.",
+  metadataBase: new URL(BASE_URL),
   openGraph: {
     title: "Remi — The Future of Dog Show Management",
     description:
       "Enter shows, pay securely, get confirmed instantly. Built for exhibitors and secretaries on the UK Kennel Club circuit.",
     images: [
       {
-        url: "/promo/poster.png",
+        url: `${BASE_URL}/promo/poster.png`,
         width: 1080,
         height: 1920,
         alt: "Remi — Modern dog show entry management",
       },
     ],
     type: "website",
+    url: `${BASE_URL}/promo`,
   },
   twitter: {
     card: "summary_large_image",
     title: "Remi — The Future of Dog Show Management",
     description:
       "Enter shows, pay securely, get confirmed instantly. Built for exhibitors and secretaries on the UK Kennel Club circuit.",
-    images: ["/promo/poster.png"],
+    images: [`${BASE_URL}/promo/poster.png`],
   },
 };
 
