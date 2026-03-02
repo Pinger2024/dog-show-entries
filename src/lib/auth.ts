@@ -22,11 +22,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   pages: {
     signIn: '/login',
-    newUser: '/register',
+    newUser: '/onboarding',
     verifyRequest: '/login?verify=true',
   },
   providers: [
-    // Demo login — sign in with just an email, no verification
+    // Admin-only demo login — used by AccountSwitcher for role testing.
+    // Not exposed in the public login/register UI.
     Credentials({
       id: 'demo',
       name: 'Demo',

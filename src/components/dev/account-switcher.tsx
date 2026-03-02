@@ -54,7 +54,7 @@ export function AccountSwitcher() {
     },
   });
 
-  if (!session?.user) return null;
+  if (!session?.user || session.user.role !== 'admin') return null;
 
   const currentUser = session.user;
   const currentRoleConfig = ROLE_CONFIG[currentUser.role] ?? ROLE_CONFIG.exhibitor!;

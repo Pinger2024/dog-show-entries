@@ -9,6 +9,7 @@ import {
   Ticket,
   CalendarDays,
   Inbox,
+  UserPlus,
   LogOut,
   ChevronRight,
 } from 'lucide-react';
@@ -36,6 +37,7 @@ const navItems = [
 
 const adminNavItems = [
   { href: '/feedback', label: 'Feedback', icon: Inbox },
+  { href: '/admin/invitations', label: 'Invitations', icon: UserPlus },
 ];
 
 function getInitials(name?: string | null, email?: string | null) {

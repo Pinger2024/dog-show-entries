@@ -14,6 +14,7 @@ import { memberships } from './memberships';
 import { dogOwners } from './dog-owners';
 import { orders } from './orders';
 import { stewardAssignments } from './steward-assignments';
+import { invitations } from './invitations';
 
 export const users = pgTable(
   'users',
@@ -28,6 +29,7 @@ export const users = pgTable(
     postcode: text('postcode'),
     kcAccountNo: text('kc_account_no'),
     role: userRoleEnum('role').notNull().default('exhibitor'),
+    onboardingCompletedAt: timestamp('onboarding_completed_at', { withTimezone: true }),
     stripeCustomerId: text('stripe_customer_id'),
     preferences: jsonb('preferences'),
     createdAt: timestamp('created_at', { withTimezone: true })
@@ -52,4 +54,6 @@ export const usersRelations = relations(users, ({ many }) => ({
   dogOwnerships: many(dogOwners),
   orders: many(orders),
   stewardAssignments: many(stewardAssignments),
+  invitationsSent: many(invitations, { relationName: 'invitationsSent' }),
+  invitationsAccepted: many(invitations, { relationName: 'invitationsAccepted' }),
 }));

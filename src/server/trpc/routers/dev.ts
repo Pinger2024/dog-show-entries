@@ -1,15 +1,14 @@
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
-import { protectedProcedure } from '../procedures';
+import { adminProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { users } from '@/server/db/schema';
 
 export const devRouter = createTRPCRouter({
   /**
-   * List all users for the account switcher.
-   * Available to any authenticated user (it's a demo app).
+   * List all users for the account switcher. Admin-only.
    */
-  listUsers: protectedProcedure.query(async ({ ctx }) => {
+  listUsers: adminProcedure.query(async ({ ctx }) => {
     const allUsers = await ctx.db.query.users.findMany({
       columns: {
         id: true,
@@ -24,10 +23,9 @@ export const devRouter = createTRPCRouter({
   }),
 
   /**
-   * Change a user's role. Available to any authenticated user in demo mode.
-   * In production this would be admin-only.
+   * Change a user's role. Admin-only.
    */
-  setRole: protectedProcedure
+  setRole: adminProcedure
     .input(
       z.object({
         userId: z.string().uuid(),

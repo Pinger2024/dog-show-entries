@@ -53,7 +53,25 @@ const isSteward = middleware(async ({ ctx, next }) => {
   });
 });
 
+const isAdmin = middleware(async ({ ctx, next }) => {
+  if (!ctx.session?.user) {
+    throw new TRPCError({ code: 'UNAUTHORIZED' });
+  }
+  if (ctx.session.user.role !== 'admin') {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'Admin access required',
+    });
+  }
+  return next({
+    ctx: {
+      session: ctx.session,
+    },
+  });
+});
+
 export const publicProcedure = baseProcedure;
 export const protectedProcedure = baseProcedure.use(isAuthed);
 export const secretaryProcedure = baseProcedure.use(isSecretary);
 export const stewardProcedure = baseProcedure.use(isSteward);
+export const adminProcedure = baseProcedure.use(isAdmin);

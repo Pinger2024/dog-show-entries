@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { trpc } from '@/lib/trpc/client';
+import { OnboardingChecklist } from '@/components/dashboard/onboarding-checklist';
 
 const statusColors: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-800',
@@ -77,6 +78,9 @@ export default function DashboardPage() {
           Here&apos;s what&apos;s happening with your shows and dogs.
         </p>
       </div>
+
+      {/* Onboarding checklist */}
+      <OnboardingChecklist />
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">

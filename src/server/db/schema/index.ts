@@ -21,6 +21,7 @@ export {
   clubTypeEnum,
   serviceTierEnum,
   subscriptionStatusEnum,
+  invitationStatusEnum,
 } from './enums';
 
 // Tables
@@ -84,3 +85,4 @@ export {
   orderSundryItems,
   orderSundryItemsRelations,
 } from './order-sundry-items';
+export { invitations, invitationsRelations } from './invitations';

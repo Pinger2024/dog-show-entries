@@ -12,6 +12,8 @@ import { devRouter } from './routers/dev';
 import { feedbackRouter } from './routers/feedback';
 import { subscriptionRouter } from './routers/subscription';
 import { stewardRouter } from './routers/steward';
+import { onboardingRouter } from './routers/onboarding';
+import { invitationsRouter } from './routers/invitations';
 
 export const appRouter = createTRPCRouter({
   shows: showsRouter,
@@ -27,6 +29,8 @@ export const appRouter = createTRPCRouter({
   feedback: feedbackRouter,
   subscription: subscriptionRouter,
   steward: stewardRouter,
+  onboarding: onboardingRouter,
+  invitations: invitationsRouter,
 });
 
 export type AppRouter = typeof appRouter;

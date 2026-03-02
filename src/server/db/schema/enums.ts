@@ -159,3 +159,10 @@ export const subscriptionStatusEnum = pgEnum('subscription_status', [
   'cancelled',
   'none',
 ]);
+
+export const invitationStatusEnum = pgEnum('invitation_status', [
+  'pending',
+  'accepted',
+  'expired',
+  'revoked',
+]);
