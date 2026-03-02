@@ -7,12 +7,16 @@ export interface CatalogueEntry {
   dogName: string | null;
   breed: string | undefined;
   group: string | undefined;
+  groupSortOrder: number | undefined;
   sex: string | undefined;
   dateOfBirth: string | null | undefined;
+  kcRegNumber: string | null | undefined;
+  colour: string | null | undefined;
   sire: string | null | undefined;
   dam: string | null | undefined;
   breeder: string | null | undefined;
   owners: { name: string; address: string | null }[];
+  handler: string | undefined;
   exhibitor: string | undefined;
   classes: { name: string | undefined; sex: string | null | undefined; classNumber: number | null | undefined; sortOrder: number | undefined }[];
   status: string;
@@ -21,8 +25,10 @@ export interface CatalogueEntry {
 
 export interface CatalogueShowInfo {
   name: string;
+  showType: string | undefined;
   date: string;
   venue: string | undefined;
+  venueAddress: string | undefined;
   organisation: string | undefined;
   kcLicenceNo: string | null | undefined;
   logoUrl?: string;
@@ -42,22 +48,45 @@ function formatDob(dob: string | null | undefined) {
   });
 }
 
-// Group entries: group → breed → sex
+/** Format class list with numbers: "1. Minor Puppy, 3. Novice" */
+function formatClassList(classes: CatalogueEntry['classes']) {
+  return classes
+    .sort((a, b) => {
+      if (a.classNumber != null && b.classNumber != null) return a.classNumber - b.classNumber;
+      if (a.classNumber != null) return -1;
+      if (b.classNumber != null) return 1;
+      return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+    })
+    .map((c) => {
+      if (c.classNumber != null && c.name) return `${c.classNumber}. ${c.name}`;
+      return c.name;
+    })
+    .filter(Boolean)
+    .join(', ');
+}
+
+// Group entries: group → breed → sex, preserving sort order
 function groupEntries(entries: CatalogueEntry[]) {
-  const groups: Record<
+  const groups: Map<
     string,
-    Record<string, Record<string, CatalogueEntry[]>>
-  > = {};
+    { sortOrder: number; breeds: Map<string, Record<string, CatalogueEntry[]>> }
+  > = new Map();
 
   for (const entry of entries) {
     const group = entry.group ?? 'Unclassified';
     const breed = entry.breed ?? 'Unknown Breed';
     const sex = entry.sex ?? 'unknown';
 
-    groups[group] ??= {};
-    groups[group][breed] ??= {};
-    groups[group][breed][sex] ??= [];
-    groups[group][breed][sex].push(entry);
+    if (!groups.has(group)) {
+      groups.set(group, { sortOrder: entry.groupSortOrder ?? 999, breeds: new Map() });
+    }
+    const breedMap = groups.get(group)!.breeds;
+    if (!breedMap.has(breed)) {
+      breedMap.set(breed, {});
+    }
+    const sexGroups = breedMap.get(breed)!;
+    sexGroups[sex] ??= [];
+    sexGroups[sex].push(entry);
   }
 
   return groups;
@@ -65,26 +94,33 @@ function groupEntries(entries: CatalogueEntry[]) {
 
 export function CatalogueStandard({ show, entries }: Props) {
   const grouped = groupEntries(entries);
-  const groupNames = Object.keys(grouped).sort();
+
+  // Sort groups by sortOrder, then alphabetically
+  const sortedGroups = [...grouped.entries()].sort(([, a], [, b]) => {
+    if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+    return 0;
+  });
 
   return (
     <Document>
-      <Page size="A4" style={styles.page}>
+      <Page size="A4" style={styles.page} wrap>
         <CatalogueHeader
           showName={show.name}
+          showType={show.showType}
           organisationName={show.organisation}
           date={show.date}
           venue={show.venue}
+          venueAddress={show.venueAddress}
           kcLicenceNo={show.kcLicenceNo ?? undefined}
           logoUrl={show.logoUrl}
           subtitle="Official Catalogue"
         />
 
-        {groupNames.map((groupName) => (
+        {sortedGroups.map(([groupName, { breeds }]) => (
           <View key={groupName}>
             <Text style={styles.groupHeading}>{groupName}</Text>
 
-            {Object.entries(grouped[groupName])
+            {[...breeds.entries()]
               .sort(([a], [b]) => a.localeCompare(b))
               .map(([breedName, sexGroups]) => (
                 <View key={breedName}>
@@ -101,8 +137,13 @@ export function CatalogueStandard({ show, entries }: Props) {
                         )}
 
                         {sexGroups[sex].map((entry) => (
-                          <View key={entry.catalogueNumber} style={styles.entryRow}>
-                            <View style={{ flexDirection: 'row', gap: 8 }}>
+                          <View
+                            key={entry.catalogueNumber}
+                            style={styles.entryRowWrap}
+                            wrap={false}
+                          >
+                            {/* Catalogue number + dog name */}
+                            <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
                               <Text style={styles.catalogueNumber}>
                                 {entry.catalogueNumber ?? '—'}
                               </Text>
@@ -111,45 +152,56 @@ export function CatalogueStandard({ show, entries }: Props) {
                               </Text>
                             </View>
 
-                            {entry.dateOfBirth && (
-                              <Text style={styles.entryDetail}>
-                                D.O.B: {formatDob(entry.dateOfBirth)}
-                                {entry.sex && ` — ${entry.sex === 'dog' ? 'Dog' : 'Bitch'}`}
-                              </Text>
-                            )}
+                            {/* KC reg + DOB + colour on one line */}
+                            <Text style={styles.entryDetail}>
+                              {[
+                                entry.kcRegNumber,
+                                entry.dateOfBirth ? `D.O.B: ${formatDob(entry.dateOfBirth)}` : null,
+                                entry.colour,
+                                entry.sex === 'dog' ? 'Dog' : entry.sex === 'bitch' ? 'Bitch' : null,
+                              ].filter(Boolean).join('  —  ')}
+                            </Text>
 
                             {entry.sire && (
                               <Text style={styles.entryDetail}>
-                                Sire: {entry.sire}
+                                <Text style={styles.entryDetailLabel}>Sire: </Text>
+                                {entry.sire}
                               </Text>
                             )}
 
                             {entry.dam && (
                               <Text style={styles.entryDetail}>
-                                Dam: {entry.dam}
+                                <Text style={styles.entryDetailLabel}>Dam: </Text>
+                                {entry.dam}
                               </Text>
                             )}
 
                             {entry.breeder && (
                               <Text style={styles.entryDetail}>
-                                Breeder: {entry.breeder}
+                                <Text style={styles.entryDetailLabel}>Breeder: </Text>
+                                {entry.breeder}
                               </Text>
                             )}
 
                             {entry.owners.length > 0 && (
                               <Text style={styles.entryDetail}>
-                                Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
+                                <Text style={styles.entryDetailLabel}>
+                                  Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
+                                </Text>
                                 {entry.owners.map((o) => o.name).join(' & ')}
+                              </Text>
+                            )}
+
+                            {entry.handler && entry.handler !== entry.exhibitor && (
+                              <Text style={styles.entryDetail}>
+                                <Text style={styles.entryDetailLabel}>Handler: </Text>
+                                {entry.handler}
                               </Text>
                             )}
 
                             {entry.classes.length > 0 && (
                               <Text style={styles.entryClasses}>
-                                Entered in:{' '}
-                                {entry.classes
-                                  .map((c) => c.name)
-                                  .filter(Boolean)
-                                  .join(', ')}
+                                Entered in: {formatClassList(entry.classes)}
                               </Text>
                             )}
                           </View>
@@ -164,7 +216,7 @@ export function CatalogueStandard({ show, entries }: Props) {
         <Text
           style={styles.footer}
           render={({ pageNumber, totalPages }) =>
-            `Page ${pageNumber} of ${totalPages} — Generated by Remi`
+            `Page ${pageNumber} of ${totalPages}  ·  Generated by Remi`
           }
           fixed
         />

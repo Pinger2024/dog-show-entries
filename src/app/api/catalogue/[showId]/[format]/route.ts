@@ -70,6 +70,7 @@ export async function GET(
         },
       },
       exhibitor: true,
+      handler: true,
       entryClasses: {
         with: {
           showClass: { with: { classDefinition: true } },
@@ -84,8 +85,11 @@ export async function GET(
     dogName: entry.dog ? formatDogName(entry.dog) : null,
     breed: entry.dog?.breed?.name,
     group: entry.dog?.breed?.group?.name,
+    groupSortOrder: entry.dog?.breed?.group?.sortOrder,
     sex: entry.dog?.sex,
     dateOfBirth: entry.dog?.dateOfBirth,
+    kcRegNumber: entry.dog?.kcRegNumber,
+    colour: entry.dog?.colour,
     sire: entry.dog?.sireName,
     dam: entry.dog?.damName,
     breeder: entry.dog?.breederName,
@@ -93,6 +97,7 @@ export async function GET(
       name: o.ownerName,
       address: o.ownerAddress,
     })) ?? [],
+    handler: entry.handler?.name,
     exhibitor: entry.exhibitor?.name,
     classes: entry.entryClasses.map((ec) => ({
       name: ec.showClass?.classDefinition?.name,
@@ -106,8 +111,10 @@ export async function GET(
 
   const showInfo: CatalogueShowInfo = {
     name: show.name,
+    showType: show.showType,
     date: show.startDate,
     venue: show.venue?.name,
+    venueAddress: show.venue?.address ?? undefined,
     organisation: show.organisation?.name,
     kcLicenceNo: show.kcLicenceNo,
     logoUrl: show.organisation?.logoUrl ?? undefined,
