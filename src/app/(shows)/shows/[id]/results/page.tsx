@@ -23,6 +23,17 @@ const achievementLabels: Record<string, string> = {
   best_of_breed: 'Best of Breed',
   best_puppy_in_breed: 'Best Puppy in Breed',
   best_veteran_in_breed: 'Best Veteran in Breed',
+  dog_cc: 'Dog CC',
+  reserve_dog_cc: 'Reserve Dog CC',
+  bitch_cc: 'Bitch CC',
+  reserve_bitch_cc: 'Reserve Bitch CC',
+  best_puppy_dog: 'Best Puppy Dog',
+  best_puppy_bitch: 'Best Puppy Bitch',
+  best_long_coat_dog: 'Best Long Coat Dog',
+  best_long_coat_bitch: 'Best Long Coat Bitch',
+  best_long_coat_in_show: 'Best Long Coat in Show',
+  cc: 'CC',
+  reserve_cc: 'Reserve CC',
 };
 
 const placementColors: Record<number, string> = {
@@ -87,11 +98,19 @@ export default function LiveResultsPage({
   const isCompleted = show.status === 'completed';
 
   // Group achievements by type for display
+  const showLevelTypes = ['best_in_show', 'reserve_best_in_show', 'best_puppy_in_show', 'best_long_coat_in_show'];
+  const breedLevelTypes = [
+    'best_of_breed', 'best_puppy_in_breed', 'best_veteran_in_breed',
+    'dog_cc', 'reserve_dog_cc', 'bitch_cc', 'reserve_bitch_cc',
+    'best_puppy_dog', 'best_puppy_bitch',
+    'best_long_coat_dog', 'best_long_coat_bitch',
+    'cc', 'reserve_cc',
+  ];
   const showAwards = (achievements ?? []).filter((a) =>
-    ['best_in_show', 'reserve_best_in_show', 'best_puppy_in_show'].includes(a.type)
+    showLevelTypes.includes(a.type)
   );
   const breedAwards = (achievements ?? []).filter((a) =>
-    ['best_of_breed', 'best_puppy_in_breed', 'best_veteran_in_breed'].includes(a.type)
+    breedLevelTypes.includes(a.type)
   );
   const breedAwardsByBreed = new Map<string, typeof breedAwards>();
   for (const a of breedAwards) {

@@ -71,6 +71,16 @@ export const achievementTypeEnum = pgEnum('achievement_type', [
   'class_placement',
   'junior_warrant',
   'stud_book',
+  // Championship & breed-specific awards
+  'dog_cc',
+  'reserve_dog_cc',
+  'bitch_cc',
+  'reserve_bitch_cc',
+  'best_puppy_dog',
+  'best_puppy_bitch',
+  'best_long_coat_dog',
+  'best_long_coat_bitch',
+  'best_long_coat_in_show',
 ]);
 
 export const classTypeEnum = pgEnum('class_type', [

@@ -163,6 +163,7 @@ export default function StewardShowPage({
         <BestOfBreedSection
           showId={showId}
           showDate={showData.startDate}
+          showType={showData.showType}
           liveResults={liveResults}
           existingAchievements={existingAchievements ?? []}
         />
@@ -180,7 +181,16 @@ type AchievementType =
   | 'group_placement'
   | 'best_in_show'
   | 'reserve_best_in_show'
-  | 'best_puppy_in_show';
+  | 'best_puppy_in_show'
+  | 'dog_cc'
+  | 'reserve_dog_cc'
+  | 'bitch_cc'
+  | 'reserve_bitch_cc'
+  | 'best_puppy_dog'
+  | 'best_puppy_bitch'
+  | 'best_long_coat_dog'
+  | 'best_long_coat_bitch'
+  | 'best_long_coat_in_show';
 
 const BOB_AWARDS: { type: AchievementType; label: string }[] = [
   { type: 'best_of_breed', label: 'Best of Breed' },
@@ -188,15 +198,28 @@ const BOB_AWARDS: { type: AchievementType; label: string }[] = [
   { type: 'best_veteran_in_breed', label: 'Best Veteran in Breed' },
 ];
 
+const CHAMPIONSHIP_AWARDS: { type: AchievementType; label: string }[] = [
+  { type: 'dog_cc', label: 'Dog CC' },
+  { type: 'reserve_dog_cc', label: 'Reserve Dog CC' },
+  { type: 'best_puppy_dog', label: 'Best Puppy Dog' },
+  { type: 'best_long_coat_dog', label: 'Best Long Coat Dog' },
+  { type: 'bitch_cc', label: 'Bitch CC' },
+  { type: 'reserve_bitch_cc', label: 'Reserve Bitch CC' },
+  { type: 'best_puppy_bitch', label: 'Best Puppy Bitch' },
+  { type: 'best_long_coat_bitch', label: 'Best Long Coat Bitch' },
+];
+
 const BIS_AWARDS: { type: AchievementType; label: string }[] = [
   { type: 'best_in_show', label: 'Best in Show' },
   { type: 'reserve_best_in_show', label: 'Reserve Best in Show' },
   { type: 'best_puppy_in_show', label: 'Best Puppy in Show' },
+  { type: 'best_long_coat_in_show', label: 'Best Long Coat in Show' },
 ];
 
 interface BestOfBreedSectionProps {
   showId: string;
   showDate: string;
+  showType: string;
   liveResults?: {
     breedGroups: {
       breedName: string;
@@ -222,9 +245,11 @@ interface BestOfBreedSectionProps {
 function BestOfBreedSection({
   showId,
   showDate,
+  showType,
   liveResults,
   existingAchievements,
 }: BestOfBreedSectionProps) {
+  const isChampionship = showType === 'championship';
   const utils = trpc.useUtils();
 
   const recordAchievement = trpc.steward.recordAchievement.useMutation({
@@ -311,54 +336,42 @@ function BestOfBreedSection({
               (a) => a.type === award.type && winners.some((w) => w.dogId === a.dogId)
             );
             return (
-              <div key={award.type} className="flex items-center gap-2 sm:gap-3">
-                <span className="text-xs sm:text-sm font-medium w-36 sm:w-44 shrink-0">
-                  {award.label}
-                </span>
-                <Select
-                  value={existing?.dogId ?? 'none'}
-                  onValueChange={(dogId) => {
-                    if (dogId === 'none') {
-                      if (existing) {
-                        removeAchievement.mutate({
-                          showId,
-                          dogId: existing.dogId,
-                          type: award.type,
-                        });
-                      }
-                    } else {
-                      // Remove old if exists
-                      if (existing && existing.dogId !== dogId) {
-                        removeAchievement.mutate({
-                          showId,
-                          dogId: existing.dogId,
-                          type: award.type,
-                        });
-                      }
-                      recordAchievement.mutate({
-                        showId,
-                        dogId,
-                        type: award.type,
-                        date: showDate,
-                      });
-                    }
-                  }}
-                >
-                  <SelectTrigger className="h-9 flex-1 text-xs sm:text-sm">
-                    <SelectValue placeholder="Select winner..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">— None —</SelectItem>
-                    {winners.map((w) => (
-                      <SelectItem key={w.dogId} value={w.dogId}>
-                        {w.catalogueNumber ? `#${w.catalogueNumber} ` : ''}{w.dogName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <AwardSelect
+                key={award.type}
+                label={award.label}
+                type={award.type}
+                existingDogId={existing?.dogId}
+                candidates={winners}
+                showId={showId}
+                showDate={showDate}
+                onRecord={(dogId, type) => recordAchievement.mutate({ showId, dogId, type, date: showDate })}
+                onRemove={(dogId, type) => removeAchievement.mutate({ showId, dogId, type })}
+              />
             );
           })}
+          {isChampionship && (
+            <>
+              <div className="mt-2 border-t pt-2" />
+              {CHAMPIONSHIP_AWARDS.map((award) => {
+                const existing = existingAchievements.find(
+                  (a) => a.type === award.type && winners.some((w) => w.dogId === a.dogId)
+                );
+                return (
+                  <AwardSelect
+                    key={award.type}
+                    label={award.label}
+                    type={award.type}
+                    existingDogId={existing?.dogId}
+                    candidates={winners}
+                    showId={showId}
+                    showDate={showDate}
+                    onRecord={(dogId, type) => recordAchievement.mutate({ showId, dogId, type, date: showDate })}
+                    onRemove={(dogId, type) => removeAchievement.mutate({ showId, dogId, type })}
+                  />
+                );
+              })}
+            </>
+          )}
         </div>
       ))}
 
@@ -368,58 +381,85 @@ function BestOfBreedSection({
           <h3 className="text-xs sm:text-sm font-semibold uppercase tracking-wider text-amber-700">
             Show Awards
           </h3>
-          {BIS_AWARDS.map((award) => {
+          {BIS_AWARDS
+            .filter((award) => award.type !== 'best_long_coat_in_show' || isChampionship)
+            .map((award) => {
             const existing = existingAchievements.find((a) => a.type === award.type);
             return (
-              <div key={award.type} className="flex items-center gap-2 sm:gap-3">
-                <span className="text-xs sm:text-sm font-medium w-36 sm:w-44 shrink-0">
-                  {award.label}
-                </span>
-                <Select
-                  value={existing?.dogId ?? 'none'}
-                  onValueChange={(dogId) => {
-                    if (dogId === 'none') {
-                      if (existing) {
-                        removeAchievement.mutate({
-                          showId,
-                          dogId: existing.dogId,
-                          type: award.type,
-                        });
-                      }
-                    } else {
-                      if (existing && existing.dogId !== dogId) {
-                        removeAchievement.mutate({
-                          showId,
-                          dogId: existing.dogId,
-                          type: award.type,
-                        });
-                      }
-                      recordAchievement.mutate({
-                        showId,
-                        dogId,
-                        type: award.type,
-                        date: showDate,
-                      });
-                    }
-                  }}
-                >
-                  <SelectTrigger className="h-9 flex-1 text-xs sm:text-sm">
-                    <SelectValue placeholder="Select winner..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">— None —</SelectItem>
-                    {allWinners.map((w) => (
-                      <SelectItem key={w.dogId} value={w.dogId}>
-                        {w.dogName} ({w.breedName})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <AwardSelect
+                key={award.type}
+                label={award.label}
+                type={award.type}
+                existingDogId={existing?.dogId}
+                candidates={allWinners.map((w) => ({
+                  dogId: w.dogId,
+                  dogName: `${w.dogName} (${w.breedName})`,
+                  catalogueNumber: null,
+                  exhibitorName: '',
+                }))}
+                showId={showId}
+                showDate={showDate}
+                onRecord={(dogId, type) => recordAchievement.mutate({ showId, dogId, type, date: showDate })}
+                onRemove={(dogId, type) => removeAchievement.mutate({ showId, dogId, type })}
+              />
             );
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+// Reusable award select dropdown
+function AwardSelect({
+  label,
+  type,
+  existingDogId,
+  candidates,
+  showId,
+  showDate,
+  onRecord,
+  onRemove,
+}: {
+  label: string;
+  type: AchievementType;
+  existingDogId?: string;
+  candidates: { dogId: string; dogName: string; catalogueNumber: string | null; exhibitorName: string }[];
+  showId: string;
+  showDate: string;
+  onRecord: (dogId: string, type: AchievementType) => void;
+  onRemove: (dogId: string, type: AchievementType) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 sm:gap-3">
+      <span className="text-xs sm:text-sm font-medium w-36 sm:w-44 shrink-0">
+        {label}
+      </span>
+      <Select
+        value={existingDogId ?? 'none'}
+        onValueChange={(dogId) => {
+          if (dogId === 'none') {
+            if (existingDogId) onRemove(existingDogId, type);
+          } else {
+            if (existingDogId && existingDogId !== dogId) {
+              onRemove(existingDogId, type);
+            }
+            onRecord(dogId, type);
+          }
+        }}
+      >
+        <SelectTrigger className="h-9 flex-1 text-xs sm:text-sm">
+          <SelectValue placeholder="Select winner..." />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="none">— None —</SelectItem>
+          {candidates.map((w) => (
+            <SelectItem key={w.dogId} value={w.dogId}>
+              {w.catalogueNumber ? `#${w.catalogueNumber} ` : ''}{w.dogName}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 }
