@@ -205,6 +205,8 @@ function ShowList({
     startDate: string;
     organisation?: { name: string } | null;
     venue?: { name: string } | null;
+    entryCount?: number;
+    showRevenue?: number;
   }>;
   emptyMessage: string;
 }) {
@@ -235,6 +237,9 @@ function ShowList({
           label: show.status,
           variant: 'outline' as const,
         };
+        const entryCount = show.entryCount ?? 0;
+        const revenue = show.showRevenue ?? 0;
+
         return (
           <Link
             key={show.id}
@@ -246,7 +251,7 @@ function ShowList({
                 <p className="truncate font-medium">{show.name}</p>
                 <Badge variant={status.variant}>{status.label}</Badge>
               </div>
-              <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-muted-foreground">
                 <span>{formatDate(show.startDate)}</span>
                 {show.organisation && (
                   <>
@@ -263,6 +268,19 @@ function ShowList({
                   </>
                 )}
               </div>
+              {entryCount > 0 && (
+                <div className="mt-1.5 flex items-center gap-3 text-xs">
+                  <span className="inline-flex items-center gap-1 font-medium text-primary">
+                    <Ticket className="size-3" />
+                    {entryCount} entr{entryCount !== 1 ? 'ies' : 'y'}
+                  </span>
+                  {revenue > 0 && (
+                    <span className="font-medium text-emerald-600">
+                      {formatCurrency(revenue)}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
             <ArrowRight className="ml-4 size-4 shrink-0 text-muted-foreground" />
           </Link>

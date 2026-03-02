@@ -119,10 +119,43 @@ export const secretaryRouter = createTRPCRouter({
       activeRevenue = Number(activeStats[0]?.revenue ?? 0);
     }
 
+    // Per-show entry counts (single query, grouped)
+    const perShowStats: Record<string, { entryCount: number; revenue: number }> = {};
+    if (allShowIds.length > 0) {
+      const perShow = await ctx.db
+        .select({
+          showId: entries.showId,
+          entryCount: sql<number>`count(*)`,
+          revenue: sql<number>`coalesce(sum(${entries.totalFee}), 0)`,
+        })
+        .from(entries)
+        .where(
+          and(
+            inArray(entries.showId, allShowIds),
+            isNull(entries.deletedAt),
+            inArray(entries.status, ['pending', 'confirmed'])
+          )
+        )
+        .groupBy(entries.showId);
+
+      for (const row of perShow) {
+        perShowStats[row.showId] = {
+          entryCount: Number(row.entryCount),
+          revenue: Number(row.revenue),
+        };
+      }
+    }
+
+    const enrichShow = (s: (typeof orgShows)[number]) => ({
+      ...s,
+      entryCount: perShowStats[s.id]?.entryCount ?? 0,
+      showRevenue: perShowStats[s.id]?.revenue ?? 0,
+    });
+
     return {
       organisations: userMemberships.map((m) => m.organisation),
-      activeShows,
-      pastShows,
+      activeShows: activeShows.map(enrichShow),
+      pastShows: pastShows.map(enrichShow),
       totalShows: orgShows.length,
       activeShowsCount: activeShows.length,
       totalEntries,
