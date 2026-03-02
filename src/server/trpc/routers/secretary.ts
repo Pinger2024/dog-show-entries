@@ -264,16 +264,16 @@ export const secretaryRouter = createTRPCRouter({
         return new Date(a.entryDate).getTime() - new Date(b.entryDate).getTime();
       });
 
-      // Assign sequential numbers in a single query using CASE
+      // Assign sequential catalogue numbers
       if (sorted.length > 0) {
-        const ids = sorted.map((e) => e.id);
-        const cases = sorted
-          .map((e, i) => `WHEN id = '${e.id}' THEN '${i + 1}'`)
-          .join(' ');
-
-        await ctx.db.execute(
-          sql`UPDATE entries SET catalogue_number = CASE ${sql.raw(cases)} END, updated_at = NOW() WHERE id = ANY(${ids})`
-        );
+        await ctx.db.transaction(async (tx) => {
+          for (let i = 0; i < sorted.length; i++) {
+            await tx
+              .update(entries)
+              .set({ catalogueNumber: String(i + 1), updatedAt: new Date() })
+              .where(eq(entries.id, sorted[i].id));
+          }
+        });
       }
 
       return { assigned: sorted.length };
