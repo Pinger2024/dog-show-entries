@@ -15,6 +15,7 @@ import { stewardRouter } from './routers/steward';
 import { onboardingRouter } from './routers/onboarding';
 import { invitationsRouter } from './routers/invitations';
 import { adminRouter } from './routers/admin';
+import { secretaryApplicationsRouter } from './routers/secretary-applications';
 
 export const appRouter = createTRPCRouter({
   shows: showsRouter,
@@ -33,6 +34,7 @@ export const appRouter = createTRPCRouter({
   onboarding: onboardingRouter,
   invitations: invitationsRouter,
   admin: adminRouter,
+  applications: secretaryApplicationsRouter,
 });
 
 export type AppRouter = typeof appRouter;

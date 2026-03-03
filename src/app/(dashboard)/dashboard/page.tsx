@@ -24,6 +24,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { trpc } from '@/lib/trpc/client';
 import { OnboardingChecklist } from '@/components/dashboard/onboarding-checklist';
+import { SecretaryCTA } from '@/components/dashboard/secretary-cta';
 
 const statusColors: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-800',
@@ -53,7 +54,7 @@ export default function DashboardPage() {
       label: 'Upcoming Shows',
       value: upcomingCount,
       icon: CalendarDays,
-      href: '/shows',
+      href: '/browse',
     },
     { label: 'My Entries', value: entryCount, icon: Ticket, href: '/entries' },
   ];
@@ -81,6 +82,9 @@ export default function DashboardPage() {
 
       {/* Onboarding checklist */}
       <OnboardingChecklist />
+
+      {/* Secretary application CTA */}
+      <SecretaryCTA />
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
@@ -110,7 +114,7 @@ export default function DashboardPage() {
       {/* Quick actions */}
       <div className="flex flex-wrap gap-2 sm:gap-3">
         <Button className="h-11 sm:h-12 px-4 sm:px-6 text-sm sm:text-[0.9375rem]" asChild>
-          <Link href="/shows">
+          <Link href="/browse">
             <Plus className="size-4" />
             Enter a Show
           </Link>
@@ -147,7 +151,7 @@ export default function DashboardPage() {
                 available shows to find your next ring.
               </p>
               <Button className="mt-4 sm:mt-5 h-11 px-5 sm:px-6 text-sm" asChild>
-                <Link href="/shows">
+                <Link href="/browse">
                   Find a Show
                   <ArrowRight className="ml-1 size-4" />
                 </Link>
@@ -214,7 +218,7 @@ export default function DashboardPage() {
                 </CardDescription>
               </div>
               <Button variant="outline" className="h-9 sm:h-10 text-xs sm:text-sm shrink-0" asChild>
-                <Link href="/shows">
+                <Link href="/browse">
                   View All
                   <ArrowRight className="ml-1 size-3.5 sm:size-4" />
                 </Link>

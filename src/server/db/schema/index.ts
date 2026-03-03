@@ -22,6 +22,7 @@ export {
   serviceTierEnum,
   subscriptionStatusEnum,
   invitationStatusEnum,
+  secretaryApplicationStatusEnum,
 } from './enums';
 
 // Tables
@@ -86,3 +87,7 @@ export {
   orderSundryItemsRelations,
 } from './order-sundry-items';
 export { invitations, invitationsRelations } from './invitations';
+export {
+  secretaryApplications,
+  secretaryApplicationsRelations,
+} from './secretary-applications';

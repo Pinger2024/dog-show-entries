@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { eq, desc, and } from 'drizzle-orm';
-import { randomBytes } from 'crypto';
 import { Resend } from 'resend';
 import { TRPCError } from '@trpc/server';
 import { createTRPCRouter } from '../init';
@@ -10,22 +9,11 @@ import {
   secretaryProcedure,
 } from '../procedures';
 import { invitations, users, organisations } from '@/server/db/schema';
+import { generateToken, getBaseUrl } from '@/server/lib/utils';
 
 const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
   : null;
-
-function generateToken(): string {
-  return randomBytes(32).toString('hex');
-}
-
-function getBaseUrl(): string {
-  return (
-    process.env.NEXTAUTH_URL ??
-    process.env.NEXT_PUBLIC_APP_URL ??
-    'https://remishowmanager.co.uk'
-  );
-}
 
 export const invitationsRouter = createTRPCRouter({
   send: secretaryProcedure

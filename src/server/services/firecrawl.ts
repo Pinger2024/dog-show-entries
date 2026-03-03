@@ -91,6 +91,21 @@ export async function scrapeKcDog(query: string): Promise<KcDogResult | null> {
   return results[0] ?? null;
 }
 
+/** Decode common HTML entities (named + numeric) */
+function decodeHtmlEntities(text: string): string {
+  const named: Record<string, string> = {
+    '&amp;': '&',
+    '&apos;': "'",
+    '&quot;': '"',
+    '&lt;': '<',
+    '&gt;': '>',
+  };
+  return text
+    .replace(/&(?:amp|apos|quot|lt|gt);/g, (m) => named[m] ?? m)
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)));
+}
+
 /** Extract text between a marker and a closing tag */
 function extractBetween(html: string, startMarker: string, endMarker: string): string | null {
   const startIdx = html.indexOf(startMarker);
@@ -98,7 +113,7 @@ function extractBetween(html: string, startMarker: string, endMarker: string): s
   const contentStart = startIdx + startMarker.length;
   const endIdx = html.indexOf(endMarker, contentStart);
   if (endIdx === -1) return null;
-  return html.substring(contentStart, endIdx).replace(/&amp;/g, '&').replace(/&#x2B;/g, '+').trim();
+  return decodeHtmlEntities(html.substring(contentStart, endIdx)).trim();
 }
 
 /**
@@ -119,5 +134,5 @@ function extractSummaryField(html: string, fieldName: string): string | null {
   const endIdx = html.indexOf('</dd>', contentStart);
   if (endIdx === -1) return null;
 
-  return html.substring(contentStart, endIdx).replace(/&amp;/g, '&').trim();
+  return decodeHtmlEntities(html.substring(contentStart, endIdx)).trim();
 }

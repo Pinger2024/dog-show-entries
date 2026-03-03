@@ -12,6 +12,7 @@ import {
   FileText,
   Users,
 } from 'lucide-react';
+import { auth } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { PricingCards } from './pricing-cards';
 
@@ -88,7 +89,23 @@ const faqs = [
   },
 ];
 
-export default function PricingPage() {
+export default async function PricingPage() {
+  const session = await auth();
+  const user = session?.user;
+  const isExhibitor = user?.role === 'exhibitor';
+  const isSecretary = user?.role === 'secretary' || user?.role === 'admin';
+
+  const bottomCtaHref = isSecretary
+    ? '/secretary'
+    : isExhibitor
+      ? '/apply'
+      : '/register';
+  const bottomCtaLabel = isSecretary
+    ? 'Go to Dashboard'
+    : isExhibitor
+      ? 'Apply to Run Shows'
+      : 'Create Your Account';
+
   return (
     <div>
       {/* Hero */}
@@ -115,7 +132,7 @@ export default function PricingPage() {
       {/* Pricing section */}
       <section className="border-t bg-card">
         <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
-          <PricingCards />
+          <PricingCards ctaHref={bottomCtaHref} ctaLabel={bottomCtaLabel} />
         </div>
       </section>
 
@@ -282,8 +299,8 @@ export default function PricingPage() {
                   className="h-13 px-8 text-base font-semibold"
                   asChild
                 >
-                  <Link href="/register">
-                    Create Your Account
+                  <Link href={bottomCtaHref}>
+                    {bottomCtaLabel}
                     <ArrowRight className="ml-1 size-4" />
                   </Link>
                 </Button>

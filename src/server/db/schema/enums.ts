@@ -176,3 +176,9 @@ export const invitationStatusEnum = pgEnum('invitation_status', [
   'expired',
   'revoked',
 ]);
+
+export const secretaryApplicationStatusEnum = pgEnum('secretary_application_status', [
+  'pending',
+  'approved',
+  'rejected',
+]);

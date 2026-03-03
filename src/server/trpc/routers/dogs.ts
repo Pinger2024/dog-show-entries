@@ -524,7 +524,7 @@ export const dogsRouter = createTRPCRouter({
       if (results.length === 0) {
         throw new TRPCError({
           code: 'NOT_FOUND',
-          message: 'Could not find a dog matching that name or registration number on the KC website.',
+          message: 'No dogs found. The name must be typed exactly as it appears on the KC registration certificate — including apostrophes and special characters.',
         });
       }
       return results;

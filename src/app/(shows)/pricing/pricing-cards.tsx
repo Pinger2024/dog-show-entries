@@ -52,7 +52,15 @@ const managedFeatures = [
   'Pre-publication review',
 ];
 
-export function PricingCards() {
+interface PricingCardsProps {
+  ctaHref?: string;
+  ctaLabel?: string;
+}
+
+export function PricingCards({
+  ctaHref = '/register',
+  ctaLabel = 'Get Started',
+}: PricingCardsProps) {
   const [clubType, setClubType] = useState<ClubType>('single');
 
   const plans = pricing[clubType];
@@ -141,8 +149,8 @@ export function PricingCards() {
               className="h-12 w-full text-[0.9375rem] font-semibold"
               asChild
             >
-              <Link href="/register">
-                Get Started
+              <Link href={ctaHref}>
+                {ctaLabel}
                 <ArrowRight className="ml-1 size-4" />
               </Link>
             </Button>
@@ -218,8 +226,8 @@ export function PricingCards() {
               className="h-12 w-full text-[0.9375rem] font-semibold shadow-lg shadow-primary/15 transition-all hover:shadow-xl hover:shadow-primary/20"
               asChild
             >
-              <Link href="/register">
-                Get Started
+              <Link href={ctaHref}>
+                {ctaLabel}
                 <ArrowRight className="ml-1 size-4" />
               </Link>
             </Button>

@@ -508,7 +508,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                   <FormLabel>Sex</FormLabel>
                   <Select
                     onValueChange={field.onChange}
-                    defaultValue={field.value}
+                    value={field.value}
                   >
                     <FormControl>
                       <SelectTrigger className="w-full">

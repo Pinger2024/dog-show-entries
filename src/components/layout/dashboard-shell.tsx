@@ -11,6 +11,8 @@ import {
   Inbox,
   UserPlus,
   Database,
+  ClipboardCheck,
+  Sparkles,
   LogOut,
   ChevronRight,
 } from 'lucide-react';
@@ -38,6 +40,7 @@ const navItems = [
 
 const adminNavItems = [
   { href: '/feedback', label: 'Feedback', icon: Inbox },
+  { href: '/admin/applications', label: 'Applications', icon: ClipboardCheck },
   { href: '/admin/invitations', label: 'Invitations', icon: UserPlus },
   { href: '/admin/reference-data', label: 'Reference Data', icon: Database },
 ];
@@ -115,6 +118,23 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
               </Link>
             );
           })}
+          {user.role === 'exhibitor' && (
+            <>
+              <Separator className="my-2" />
+              <Link
+                href="/apply"
+                className={cn(
+                  'flex items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-medium transition-colors',
+                  pathname === '/apply'
+                    ? 'bg-sidebar-accent text-sidebar-primary'
+                    : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
+                )}
+              >
+                <Sparkles className="size-5" />
+                Run Shows
+              </Link>
+            </>
+          )}
           {user.role === 'admin' && (
             <>
               <Separator className="my-2" />
