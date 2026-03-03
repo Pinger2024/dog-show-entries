@@ -22,7 +22,7 @@ export const users = pgTable(
     id: uuid('id').defaultRandom().primaryKey(),
     email: text('email').notNull().unique(),
     emailVerified: timestamp('email_verified', { mode: 'date' }),
-    name: text('name').notNull(),
+    name: text('name').notNull().default(''),
     image: text('image'),
     address: text('address'),
     phone: text('phone'),
