@@ -293,7 +293,7 @@ async function main() {
     const result = await db
       .insert(schema.breeds)
       .values(breeds.map((name) => ({ name, groupId })))
-      .onConflictDoNothing()
+      .onConflictDoNothing({ target: [schema.breeds.name, schema.breeds.groupId] })
       .returning();
 
     totalInserted += result.length;

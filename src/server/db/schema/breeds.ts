@@ -1,4 +1,4 @@
-import { index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { index, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { breedGroups } from './breed-groups';
 import { dogs } from './dogs';
@@ -22,7 +22,10 @@ export const breeds = pgTable(
       .notNull()
       .$onUpdate(() => new Date()),
   },
-  (table) => [index('breeds_group_id_idx').on(table.groupId)]
+  (table) => [
+    index('breeds_group_id_idx').on(table.groupId),
+    unique('breeds_name_group_id_key').on(table.name, table.groupId),
+  ]
 );
 
 export const breedsRelations = relations(breeds, ({ one, many }) => ({
