@@ -159,8 +159,38 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
 
   // KC lookup — returns an array of results
   const [kcResults, setKcResults] = useState<
-    { registeredName: string; breed: string; sex: string; dateOfBirth: string; colour?: string; sire: string; dam: string; breeder: string }[]
+    { registeredName: string; breed: string; sex: string; dateOfBirth: string; colour?: string; sire: string; dam: string; breeder: string; dogId?: string }[]
   >([]);
+
+  // Phase 2: Fetch enriched pedigree data from the KC dog profile page
+  const kcProfileLookup = trpc.dogs.kcLookupProfile.useMutation({
+    onSuccess: (profile) => {
+      if (!profile) return;
+      // Only fill sire/dam/breeder if not already populated (don't overwrite manual entries)
+      if (profile.sire && !form.getValues('sireName')) {
+        form.setValue('sireName', profile.sire);
+      }
+      if (profile.dam && !form.getValues('damName')) {
+        form.setValue('damName', profile.dam);
+      }
+      if (profile.breeder && !form.getValues('breederName')) {
+        form.setValue('breederName', profile.breeder);
+      }
+      // Colour from profile page may be more detailed
+      if (profile.colour && !form.getValues('colour')) {
+        form.setValue('colour', profile.colour);
+      }
+
+      const enriched = [profile.sire, profile.dam, profile.breeder].filter(Boolean);
+      if (enriched.length > 0) {
+        toast.success('Pedigree details populated from KC', {
+          description: `Sire, dam, and breeder info filled in from the Kennel Club.`,
+        });
+      }
+    },
+    // Silent failure — profile enrichment is optional
+    onError: () => {},
+  });
 
   function applyKcResult(data: typeof kcResults[number]) {
     if (data.registeredName) form.setValue('registeredName', data.registeredName);
@@ -192,6 +222,11 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
     toast.success('Dog details found on KC website!', {
       description: `${data.registeredName} — fields have been populated.`,
     });
+
+    // Phase 2: If we have a dogId, fetch the profile page for sire/dam/breeder
+    if (data.dogId) {
+      kcProfileLookup.mutate({ dogId: data.dogId });
+    }
   }
 
   const kcLookup = trpc.dogs.kcLookup.useMutation({
@@ -327,7 +362,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                     Enter the KC registration number (e.g. BC28843204) or registered
                     name above, then click the button below. This will look up the
                     dog on the KC website and auto-fill the breed, sex, date of
-                    birth, and colour.
+                    birth, colour, sire, dam, and breeder.
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     A registration number gives an exact match. Searching by name can
@@ -603,6 +638,12 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
               Your dog&apos;s lineage details. These are often required for show
               entries.
             </CardDescription>
+            {kcProfileLookup.isPending && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="size-3.5 animate-spin" />
+                Fetching pedigree details from KC...
+              </div>
+            )}
           </CardHeader>
           <CardContent className="space-y-3 sm:space-y-4">
             <FormField

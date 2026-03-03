@@ -5,7 +5,7 @@ import { protectedProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { dogs, dogOwners, dogTitles, dogPhotos, users, entries, entryClasses, showClasses, shows, results, classDefinitions, achievements } from '@/server/db/schema';
 import { deleteFromR2 } from '@/server/services/storage';
-import { scrapeKcDog, searchKcDogs } from '@/server/services/firecrawl';
+import { scrapeKcDog, searchKcDogs, fetchKcDogProfile } from '@/server/services/firecrawl';
 
 /**
  * Recommend the highest achievement class a dog is still eligible for,
@@ -528,6 +528,18 @@ export const dogsRouter = createTRPCRouter({
         });
       }
       return results;
+    }),
+
+  /** Fetch enriched pedigree data from the KC dog profile page. */
+  kcLookupProfile: protectedProcedure
+    .input(z.object({ dogId: z.string().min(1).max(100) }))
+    .mutation(async ({ input }) => {
+      const profile = await fetchKcDogProfile(input.dogId);
+      if (!profile) {
+        // Not an error — we just couldn't get the data (timeout, slow page, etc.)
+        return null;
+      }
+      return profile;
     }),
 
   // ── Owner profiles (reuse previous owners) ────────────────
