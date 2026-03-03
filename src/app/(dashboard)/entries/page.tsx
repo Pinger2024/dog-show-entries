@@ -84,7 +84,7 @@ export default function EntriesPage() {
               Browse upcoming shows and enter your dog.
             </p>
             <Button asChild>
-              <Link href="/shows">Find Shows</Link>
+              <Link href="/browse">Find Shows</Link>
             </Button>
           </CardContent>
         </Card>

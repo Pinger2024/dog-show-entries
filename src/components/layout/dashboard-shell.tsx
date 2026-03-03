@@ -33,7 +33,7 @@ const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dogs', label: 'My Dogs', icon: Dog },
   { href: '/entries', label: 'My Entries', icon: Ticket },
-  { href: '/shows', label: 'Find a Show', icon: CalendarDays },
+  { href: '/browse', label: 'Find a Show', icon: CalendarDays },
 ];
 
 const adminNavItems = [

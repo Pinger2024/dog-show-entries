@@ -1,4 +1,4 @@
-import ShowsList from './shows-list';
+import ShowsList from '@/components/shows/shows-list';
 
 export const dynamic = 'force-dynamic';
 
