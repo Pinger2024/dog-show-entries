@@ -299,6 +299,7 @@ export function useEntryCart() {
   return {
     ...state,
     activeEntry,
+    entriesTotal,
     grandTotal,
     sundryTotal,
     startNewEntry,

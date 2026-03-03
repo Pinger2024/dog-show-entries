@@ -16,6 +16,7 @@ import {
   payments,
   entryAuditLog,
   users,
+  dogOwners,
 } from '@/server/db/schema';
 import { createPaymentIntent, getStripe } from '@/server/services/stripe';
 
@@ -551,6 +552,51 @@ export const entriesRouter = createTRPCRouter({
 
       if (!user) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
+      }
+
+      // If name or address are missing, try to auto-fill from the user's
+      // dog owner records — they already entered this info when adding a dog.
+      const missingName = !user.name;
+      const missingAddress = !user.address;
+
+      if (missingName || missingAddress) {
+        const primaryOwner = await ctx.db.query.dogOwners.findFirst({
+          where: and(
+            eq(dogOwners.userId, ctx.session.user.id),
+            eq(dogOwners.isPrimary, true),
+          ),
+          orderBy: [desc(dogOwners.createdAt)],
+        });
+
+        if (primaryOwner) {
+          const updates: Record<string, string> = {};
+          if (missingName && primaryOwner.ownerName) updates.name = primaryOwner.ownerName;
+          if (missingAddress && primaryOwner.ownerAddress) updates.address = primaryOwner.ownerAddress;
+          if (!user.phone && primaryOwner.ownerPhone) updates.phone = primaryOwner.ownerPhone;
+
+          if (Object.keys(updates).length > 0) {
+            await ctx.db.update(users).set(updates).where(eq(users.id, ctx.session.user.id));
+            // Re-read after update so we return the fresh data
+            const updated = await ctx.db.query.users.findFirst({
+              where: eq(users.id, ctx.session.user.id),
+            });
+            if (updated) {
+              return {
+                valid: !!(updated.name && updated.address),
+                issues: [
+                  ...(!updated.name ? ['Name is required'] : []),
+                  ...(!updated.address ? ['Address is required for show entries'] : []),
+                ],
+                user: {
+                  name: updated.name,
+                  address: updated.address,
+                  phone: updated.phone,
+                  kcAccountNo: updated.kcAccountNo,
+                },
+              };
+            }
+          }
+        }
       }
 
       const issues: string[] = [];

@@ -100,10 +100,10 @@ export default function EnterShowPage() {
       { enabled: cart.step === 'select_classes' }
     );
 
-  // Fetch sundry items for checkout
+  // Pre-fetch sundry items from select_classes onwards so they're ready at cart_review
   const { data: sundryItemsData } = trpc.shows.getSundryItems.useQuery(
     { showId },
-    { enabled: cart.step === 'cart_review' }
+    { enabled: cart.step === 'select_classes' || cart.step === 'cart_review' }
   );
 
   // Win summary for smart class recommendations — pass showId so suggestions
@@ -847,22 +847,13 @@ export default function EnterShowPage() {
             </Button>
           </div>
 
-          {/* Grand total */}
-          <div className="rounded-lg border bg-muted/50 p-3 sm:p-4">
-            <div className="flex justify-between text-sm font-bold sm:text-base">
-              <span>Grand Total</span>
-              <span>{formatFee(cart.grandTotal)}</span>
-            </div>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {cart.entries.filter((e) => e.classIds.length > 0).length} entr
-              {cart.entries.filter((e) => e.classIds.length > 0).length !== 1 ? 'ies' : 'y'}
-            </p>
-          </div>
-
-          {/* Sundry items (catalogues, memberships, donations, etc.) */}
+          {/* Sundry items (catalogues, memberships, donations, etc.) — shown BEFORE total */}
           {sundryItemsData && sundryItemsData.length > 0 && (
             <div className="space-y-2">
               <h3 className="text-sm font-semibold">Add-ons</h3>
+              <p className="text-xs text-muted-foreground">
+                Optional extras available for this show — catalogues, memberships, and more.
+              </p>
               {sundryItemsData.map((item) => {
                 const inCart = cart.sundryItems.find((s) => s.sundryItemId === item.id);
                 const isCheckbox = item.maxPerOrder === 1;
@@ -960,13 +951,31 @@ export default function EnterShowPage() {
                   </div>
                 );
               })}
-              {cart.sundryTotal > 0 && (
-                <p className="text-right text-sm text-muted-foreground">
-                  Add-ons subtotal: <span className="font-medium text-foreground">{formatFee(cart.sundryTotal)}</span>
-                </p>
-              )}
             </div>
           )}
+
+          {/* Grand total with breakdown */}
+          <div className="rounded-lg border bg-muted/50 p-3 sm:p-4">
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-sm text-muted-foreground">
+                <span>
+                  {cart.entries.filter((e) => e.classIds.length > 0).length} entr
+                  {cart.entries.filter((e) => e.classIds.length > 0).length !== 1 ? 'ies' : 'y'}
+                </span>
+                <span>{formatFee(cart.entriesTotal)}</span>
+              </div>
+              {cart.sundryTotal > 0 && (
+                <div className="flex justify-between text-sm text-muted-foreground">
+                  <span>Add-ons</span>
+                  <span>{formatFee(cart.sundryTotal)}</span>
+                </div>
+              )}
+              <div className="flex justify-between border-t pt-1.5 text-sm font-bold sm:text-base">
+                <span>Grand Total</span>
+                <span>{formatFee(cart.grandTotal)}</span>
+              </div>
+            </div>
+          </div>
 
           {/* Declarations */}
           <div className="space-y-4">
