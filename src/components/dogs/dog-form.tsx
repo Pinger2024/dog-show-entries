@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { format } from 'date-fns';
+import { format, parse, isValid } from 'date-fns';
 import { CalendarIcon, Check, ChevronsUpDown, Loader2, Plus, Trash2, Award, Search, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
@@ -104,6 +104,10 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
   const { data: breeds, isLoading: breedsLoading } =
     trpc.breeds.list.useQuery();
 
+  // If KC lookup returns before breeds have loaded, stash the breed name
+  // and apply it once the breeds query resolves.
+  const pendingBreedName = useRef<string | null>(null);
+
   // Fetch existing dog data for titles in edit mode
   const { data: dogData } = trpc.dogs.getById.useQuery(
     { id: dogId! },
@@ -166,19 +170,20 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
   const kcProfileLookup = trpc.dogs.kcLookupProfile.useMutation({
     onSuccess: (profile) => {
       if (!profile) return;
+      const sv = { shouldValidate: true, shouldDirty: true } as const;
       // Only fill sire/dam/breeder if not already populated (don't overwrite manual entries)
       if (profile.sire && !form.getValues('sireName')) {
-        form.setValue('sireName', profile.sire);
+        form.setValue('sireName', profile.sire, sv);
       }
       if (profile.dam && !form.getValues('damName')) {
-        form.setValue('damName', profile.dam);
+        form.setValue('damName', profile.dam, sv);
       }
       if (profile.breeder && !form.getValues('breederName')) {
-        form.setValue('breederName', profile.breeder);
+        form.setValue('breederName', profile.breeder, sv);
       }
       // Colour from profile page may be more detailed
       if (profile.colour && !form.getValues('colour')) {
-        form.setValue('colour', profile.colour);
+        form.setValue('colour', profile.colour, sv);
       }
 
       const enriched = [profile.sire, profile.dam, profile.breeder].filter(Boolean);
@@ -193,28 +198,47 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
   });
 
   function applyKcResult(data: typeof kcResults[number]) {
-    if (data.registeredName) form.setValue('registeredName', data.registeredName);
-    if (data.sex) form.setValue('sex', data.sex as 'dog' | 'bitch');
+    const sv = { shouldValidate: true, shouldDirty: true } as const;
+
+    if (data.registeredName) form.setValue('registeredName', data.registeredName, sv);
+    if (data.sex) form.setValue('sex', data.sex as 'dog' | 'bitch', sv);
     if (data.dateOfBirth) {
-      const parsed = new Date(data.dateOfBirth);
-      if (!isNaN(parsed.getTime())) {
-        form.setValue('dateOfBirth', format(parsed, 'yyyy-MM-dd'));
+      // Parse KC dates robustly — Safari doesn't handle "18 January 2024" via new Date()
+      const dateStr = data.dateOfBirth.trim();
+      const formats = ['dd MMMM yyyy', 'dd/MM/yyyy', 'dd MMM yyyy', 'yyyy-MM-dd'];
+      let parsed: Date | null = null;
+      for (const fmt of formats) {
+        const attempt = parse(dateStr, fmt, new Date());
+        if (isValid(attempt)) { parsed = attempt; break; }
+      }
+      // Fallback to native Date (works in Chrome)
+      if (!parsed) {
+        const fallback = new Date(dateStr);
+        if (isValid(fallback)) parsed = fallback;
+      }
+      if (parsed) {
+        form.setValue('dateOfBirth', format(parsed, 'yyyy-MM-dd'), sv);
       }
     }
-    if (data.sire) form.setValue('sireName', data.sire);
-    if (data.dam) form.setValue('damName', data.dam);
-    if (data.breeder) form.setValue('breederName', data.breeder);
-    if (data.colour) form.setValue('colour', data.colour);
+    if (data.sire) form.setValue('sireName', data.sire, sv);
+    if (data.dam) form.setValue('damName', data.dam, sv);
+    if (data.breeder) form.setValue('breederName', data.breeder, sv);
+    if (data.colour) form.setValue('colour', data.colour, sv);
 
-    if (data.breed && breeds) {
-      const breedNameLower = data.breed.toLowerCase();
-      const matchedBreed = breeds.find(
-        (b) => b.name.toLowerCase() === breedNameLower
-          || b.name.toLowerCase().includes(breedNameLower)
-          || breedNameLower.includes(b.name.toLowerCase())
-      );
-      if (matchedBreed) {
-        form.setValue('breedId', matchedBreed.id);
+    if (data.breed) {
+      if (breeds) {
+        const breedNameLower = data.breed.toLowerCase();
+        const matchedBreed = breeds.find(
+          (b) => b.name.toLowerCase() === breedNameLower
+            || b.name.toLowerCase().includes(breedNameLower)
+            || breedNameLower.includes(b.name.toLowerCase())
+        );
+        if (matchedBreed) {
+          form.setValue('breedId', matchedBreed.id, sv);
+        }
+      } else {
+        // Breeds haven't loaded yet — stash for the useEffect to pick up
+        pendingBreedName.current = data.breed;
       }
     }
 
@@ -269,6 +293,22 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
       ...defaultValues,
     },
   });
+
+  // When breeds load after a KC lookup already stashed a breed name, apply it
+  useEffect(() => {
+    if (breeds && pendingBreedName.current && !form.getValues('breedId')) {
+      const breedNameLower = pendingBreedName.current.toLowerCase();
+      const matched = breeds.find(
+        (b) => b.name.toLowerCase() === breedNameLower
+          || b.name.toLowerCase().includes(breedNameLower)
+          || breedNameLower.includes(b.name.toLowerCase())
+      );
+      if (matched) {
+        form.setValue('breedId', matched.id, { shouldValidate: true, shouldDirty: true });
+      }
+      pendingBreedName.current = null;
+    }
+  }, [breeds, form]);
 
   const { fields: ownerFields, append: appendOwner, remove: removeOwner } =
     useFieldArray({ control: form.control, name: 'owners' });
