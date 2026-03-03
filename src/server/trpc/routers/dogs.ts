@@ -250,7 +250,7 @@ export const dogsRouter = createTRPCRouter({
         .insert(dogs)
         .values({
           ...dogData,
-          kcRegNumber: dogData.kcRegNumber ?? null,
+          kcRegNumber: dogData.kcRegNumber || null,
           sireName: dogData.sireName ?? null,
           damName: dogData.damName ?? null,
           breederName: dogData.breederName ?? null,
@@ -309,7 +309,7 @@ export const dogsRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { id, ...data } = input;
+      const { id, kcRegNumber, ...rest } = input;
 
       const existing = await ctx.db.query.dogs.findFirst({
         where: and(eq(dogs.id, id), isNull(dogs.deletedAt)),
@@ -328,6 +328,11 @@ export const dogsRouter = createTRPCRouter({
           message: 'You do not own this dog',
         });
       }
+
+      const data = {
+        ...rest,
+        ...(kcRegNumber !== undefined ? { kcRegNumber: kcRegNumber || null } : {}),
+      };
 
       const [updated] = await ctx.db
         .update(dogs)
