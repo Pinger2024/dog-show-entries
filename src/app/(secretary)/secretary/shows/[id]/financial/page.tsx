@@ -125,7 +125,7 @@ export default function FinancialPage({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">
+            <p className="text-xl font-bold sm:text-2xl">
               {formatCurrency(stats?.totalRevenue ?? 0)}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -170,7 +170,7 @@ export default function FinancialPage({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">
+            <p className="text-xl font-bold sm:text-2xl">
               {catalogueOrders?.length ?? 0}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">

@@ -107,7 +107,7 @@ export default function EntriesPage() {
       </div>
 
       {/* Status filter pills */}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {filterOptions.map((opt) => {
           const count = opt.value === 'all'
             ? allEntries.length
@@ -121,7 +121,7 @@ export default function EntriesPage() {
             <button
               key={opt.value}
               onClick={() => setStatusFilter(opt.value)}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`rounded-full px-3 py-2 min-h-[44px] text-xs font-medium transition-colors ${
                 statusFilter === opt.value
                   ? 'bg-primary text-primary-foreground shadow-sm'
                   : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'

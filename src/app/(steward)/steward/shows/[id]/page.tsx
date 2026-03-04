@@ -432,7 +432,7 @@ function AwardSelect({
 }) {
   return (
     <div className="flex items-center gap-2 sm:gap-3">
-      <span className="text-xs sm:text-sm font-medium w-36 sm:w-44 shrink-0">
+      <span className="text-xs sm:text-sm font-medium w-28 sm:w-44 shrink-0 truncate" title={label}>
         {label}
       </span>
       <Select
@@ -448,7 +448,7 @@ function AwardSelect({
           }
         }}
       >
-        <SelectTrigger className="h-9 flex-1 text-xs sm:text-sm">
+        <SelectTrigger className="h-11 flex-1 text-xs sm:text-sm">
           <SelectValue placeholder="Select winner..." />
         </SelectTrigger>
         <SelectContent>

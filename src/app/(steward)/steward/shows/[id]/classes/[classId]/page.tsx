@@ -77,7 +77,7 @@ function CritiqueInput({
           <Button
             size="sm"
             variant="outline"
-            className="h-7 text-xs"
+            className="h-11 text-sm px-4"
             disabled={isSaving}
             onClick={() => onSave(entryClassId, value, placement, specialAward)}
           >
@@ -265,54 +265,57 @@ export default function StewardClassResultsPage({
               key={entry.entryClassId}
               className={`rounded-lg border ${entry.absent ? 'opacity-50' : ''}`}
             >
-              <div className="flex items-center gap-3 p-3">
-                {/* Catalogue number — large for ringside visibility */}
-                <div className={`flex size-12 shrink-0 items-center justify-center rounded-lg text-lg font-bold ${entry.absent ? 'bg-amber-100 text-amber-600' : 'bg-muted'}`}>
-                  {entry.absent ? 'Abs' : (entry.catalogueNumber ?? '—')}
-                </div>
+              <div className="flex flex-col gap-2 p-3">
+                {/* Top row: catalogue number + dog info + absent toggle */}
+                <div className="flex items-center gap-2 sm:gap-3">
+                  {/* Catalogue number — large for ringside visibility */}
+                  <div className={`flex size-12 shrink-0 items-center justify-center rounded-lg text-lg font-bold ${entry.absent ? 'bg-amber-100 text-amber-600' : 'bg-muted'}`}>
+                    {entry.absent ? 'Abs' : (entry.catalogueNumber ?? '—')}
+                  </div>
 
-                {/* Dog info */}
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <p className={`truncate text-sm font-medium ${entry.absent ? 'line-through' : ''}`}>
-                      {entry.dogName}
+                  {/* Dog info */}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <p className={`truncate text-sm font-medium ${entry.absent ? 'line-through' : ''}`}>
+                        {entry.dogName}
+                      </p>
+                      {entry.absent && (
+                        <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300 shrink-0">
+                          Absent
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {entry.exhibitorName}
+                      {!entry.absent && entry.catalogueNumber && ` · #${entry.catalogueNumber}`}
                     </p>
-                    {entry.absent && (
-                      <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300 shrink-0">
-                        Absent
+                    {entry.result?.specialAward && (
+                      <Badge variant="secondary" className="mt-1 text-[10px] bg-amber-50 text-amber-700">
+                        <Award className="mr-0.5 size-3" />
+                        {entry.result.specialAward}
                       </Badge>
                     )}
                   </div>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {entry.exhibitorName}
-                    {!entry.absent && entry.catalogueNumber && ` · #${entry.catalogueNumber}`}
-                  </p>
-                  {entry.result?.specialAward && (
-                    <Badge variant="secondary" className="mt-1 text-[10px] bg-amber-50 text-amber-700">
-                      <Award className="mr-0.5 size-3" />
-                      {entry.result.specialAward}
-                    </Badge>
-                  )}
+
+                  {/* Absent toggle */}
+                  <Button
+                    variant={entry.absent ? 'default' : 'ghost'}
+                    size="icon"
+                    className={`size-11 shrink-0 ${entry.absent ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'text-muted-foreground/40'}`}
+                    title={entry.absent ? 'Mark as present' : 'Mark as absent'}
+                    onClick={() =>
+                      markAbsent.mutate({
+                        entryId: entry.entryId,
+                        absent: !entry.absent,
+                      })
+                    }
+                  >
+                    <UserX className="size-4" />
+                  </Button>
                 </div>
 
-                {/* Absent toggle */}
-                <Button
-                  variant={entry.absent ? 'default' : 'ghost'}
-                  size="icon"
-                  className={`size-10 shrink-0 ${entry.absent ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'text-muted-foreground/40'}`}
-                  title={entry.absent ? 'Mark as present' : 'Mark as absent'}
-                  onClick={() =>
-                    markAbsent.mutate({
-                      entryId: entry.entryId,
-                      absent: !entry.absent,
-                    })
-                  }
-                >
-                  <UserX className="size-4" />
-                </Button>
-
-                {/* Placement select */}
-                <div className={`flex items-center gap-1 ${entry.absent ? 'pointer-events-none opacity-30' : ''}`}>
+                {/* Bottom row: placement select + award button — indented past catalogue number */}
+                <div className={`flex items-center gap-2 pl-14 ${entry.absent ? 'pointer-events-none opacity-30' : ''}`}>
                   <Select
                     value={
                       entry.result?.placement
@@ -327,7 +330,7 @@ export default function StewardClassResultsPage({
                       )
                     }
                   >
-                    <SelectTrigger className="h-10 w-24">
+                    <SelectTrigger className="h-11 flex-1">
                       <SelectValue placeholder="—" />
                     </SelectTrigger>
                     <SelectContent>
@@ -346,7 +349,7 @@ export default function StewardClassResultsPage({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="size-10 shrink-0"
+                        className="size-11 shrink-0"
                         title="Special Award"
                       >
                         <Award className={`size-4 ${entry.result?.specialAward ? 'text-amber-500' : 'text-muted-foreground/40'}`} />
@@ -367,7 +370,7 @@ export default function StewardClassResultsPage({
                                 ? 'default'
                                 : 'outline'
                             }
-                            className="justify-start"
+                            className="justify-start h-11"
                             onClick={() =>
                               handleSpecialAward(
                                 entry.entryClassId,
@@ -384,7 +387,7 @@ export default function StewardClassResultsPage({
                         {entry.result?.specialAward && (
                           <Button
                             variant="ghost"
-                            className="text-destructive"
+                            className="text-destructive h-11"
                             onClick={() =>
                               handleSpecialAward(
                                 entry.entryClassId,
@@ -405,11 +408,11 @@ export default function StewardClassResultsPage({
 
               {/* Critique section — only show for entries with a placement */}
               {entry.result?.placement && (
-                <div className="border-t px-3 py-1.5">
+                <div className="border-t px-3">
                   <button
                     type="button"
                     onClick={() => toggleCritique(entry.entryClassId)}
-                    className="flex w-full items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    className="flex w-full items-center gap-1.5 min-h-[44px] py-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
                   >
                     <MessageSquare className={`size-3 ${entry.result?.critiqueText ? 'text-blue-500' : ''}`} />
                     <span>
@@ -441,7 +444,7 @@ export default function StewardClassResultsPage({
       {/* Previous / Next class navigation */}
       <div className="mt-8 flex items-center justify-between gap-2 sm:gap-4">
         {prevClass ? (
-          <Button variant="outline" asChild className="min-w-0 max-w-[45%]">
+          <Button variant="outline" asChild className="min-w-0 max-w-[45%] h-11">
             <Link href={`/steward/shows/${showId}/classes/${prevClass.id}`}>
               <ChevronLeft className="mr-1 size-4 shrink-0" />
               <span className="truncate">{prevClass.classDefinition.name}</span>
@@ -451,7 +454,7 @@ export default function StewardClassResultsPage({
           <div />
         )}
         {nextClass ? (
-          <Button variant="outline" asChild className="min-w-0 max-w-[45%]">
+          <Button variant="outline" asChild className="min-w-0 max-w-[45%] h-11">
             <Link href={`/steward/shows/${showId}/classes/${nextClass.id}`}>
               <span className="truncate">{nextClass.classDefinition.name}</span>
               <ChevronRight className="ml-1 size-4 shrink-0" />

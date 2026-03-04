@@ -64,16 +64,16 @@ export function StewardShell({ user, children }: StewardShellProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="size-9"
+            className="size-11"
             onClick={() => signOut({ callbackUrl: '/' })}
           >
-            <LogOut className="size-4" />
+            <LogOut className="size-5" />
           </Button>
         </div>
       </header>
 
       {/* Main content — full width for phone-first */}
-      <main className="flex-1 overflow-y-auto overflow-x-hidden pb-20 md:pb-8">
+      <main className="flex-1 overflow-y-auto pb-24 md:pb-8">
         <div className="mx-auto max-w-2xl px-3 py-6 sm:px-4">
           {children}
         </div>
@@ -89,7 +89,7 @@ export function StewardShell({ user, children }: StewardShellProps) {
               key={item.href}
               href={item.href}
               className={cn(
-                'flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[10px] sm:text-xs font-medium transition-colors',
+                'flex flex-1 flex-col items-center justify-center gap-0.5 min-h-[48px] py-2 text-[10px] sm:text-xs font-medium transition-colors',
                 isActive
                   ? 'text-blue-600'
                   : 'text-muted-foreground hover:text-foreground'

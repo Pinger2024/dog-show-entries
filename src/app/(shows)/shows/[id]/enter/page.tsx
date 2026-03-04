@@ -328,6 +328,7 @@ export default function EnterShowPage() {
                   placeholder="Your full name"
                   value={profileName || profileCheck.user.name || ''}
                   onChange={(e) => setProfileName(e.target.value)}
+                  className="h-11"
                 />
               </div>
               <div>
@@ -337,6 +338,7 @@ export default function EnterShowPage() {
                   placeholder="Your full address"
                   value={profileAddress || profileCheck.user.address || ''}
                   onChange={(e) => setProfileAddress(e.target.value)}
+                  className="h-11"
                 />
               </div>
               <Button
@@ -572,6 +574,7 @@ export default function EnterShowPage() {
                 value={jhName}
                 onChange={(e) => setJhName(e.target.value)}
                 placeholder="Full name of handler"
+                className="h-11"
               />
             </div>
             <div>
@@ -581,6 +584,7 @@ export default function EnterShowPage() {
                 type="date"
                 value={jhDob}
                 onChange={(e) => setJhDob(e.target.value)}
+                className="h-11"
               />
             </div>
             <div>
@@ -590,6 +594,7 @@ export default function EnterShowPage() {
                 value={jhKcNumber}
                 onChange={(e) => setJhKcNumber(e.target.value)}
                 placeholder="If registered with the KC"
+                className="h-11"
               />
             </div>
           </div>
@@ -718,7 +723,7 @@ export default function EnterShowPage() {
           )}
 
           {/* Running total */}
-          <div className="sticky bottom-0 rounded-lg border bg-background p-3 shadow-sm sm:p-4">
+          <div className="sticky bottom-16 md:bottom-0 rounded-lg border bg-background p-3 shadow-sm sm:p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-xs text-muted-foreground sm:text-sm">
@@ -799,18 +804,18 @@ export default function EnterShowPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="size-8"
+                        className="size-10"
                         onClick={() => cart.editEntry(entry.id)}
                       >
-                        <Pencil className="size-3.5" />
+                        <Pencil className="size-4" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="size-8 text-destructive"
+                        className="size-10 text-destructive"
                         onClick={() => cart.removeEntry(entry.id)}
                       >
-                        <Trash2 className="size-3.5" />
+                        <Trash2 className="size-4" />
                       </Button>
                     </div>
                   </div>
@@ -912,7 +917,7 @@ export default function EnterShowPage() {
                       <Button
                         variant="outline"
                         size="icon"
-                        className="size-8"
+                        className="size-10"
                         disabled={qty === 0}
                         onClick={() => {
                           if (qty <= 1) {
@@ -928,13 +933,13 @@ export default function EnterShowPage() {
                           }
                         }}
                       >
-                        <Minus className="size-3.5" />
+                        <Minus className="size-4" />
                       </Button>
                       <span className="w-6 text-center text-sm font-medium">{qty}</span>
                       <Button
                         variant="outline"
                         size="icon"
-                        className="size-8"
+                        className="size-10"
                         disabled={max != null && qty >= max}
                         onClick={() => {
                           cart.setSundryItem({

@@ -520,7 +520,7 @@ export default function ShowsList() {
             disabled={isNearMeMode}
           />
         </div>
-        <div className="grid grid-cols-3 gap-2 sm:flex sm:gap-3">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-3">
           <Select value={showType} onValueChange={setShowType} disabled={isNearMeMode}>
             <SelectTrigger className="h-11 w-full rounded-xl border-border/60 bg-white shadow-sm sm:w-[170px]">
               <SelectValue placeholder="Show Type" />

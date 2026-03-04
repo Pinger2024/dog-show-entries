@@ -33,10 +33,10 @@ interface DashboardShellProps {
 }
 
 const navItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/dogs', label: 'My Dogs', icon: Dog },
-  { href: '/entries', label: 'My Entries', icon: Ticket },
-  { href: '/browse', label: 'Find a Show', icon: CalendarDays },
+  { href: '/dashboard', label: 'Dashboard', mobileLabel: 'Home', icon: LayoutDashboard },
+  { href: '/dogs', label: 'My Dogs', mobileLabel: 'Dogs', icon: Dog },
+  { href: '/entries', label: 'My Entries', mobileLabel: 'Entries', icon: Ticket },
+  { href: '/browse', label: 'Find a Show', mobileLabel: 'Shows', icon: CalendarDays },
 ];
 
 const adminNavItems = [
@@ -215,19 +215,26 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
           <Link href="/" className="font-serif text-xl font-bold tracking-tight text-primary">
             Remi
           </Link>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="size-10"
-            onClick={() => signOut({ callbackUrl: '/' })}
-          >
-            <LogOut className="size-5" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" className="size-11" asChild>
+              <Link href="/settings">
+                <Settings className="size-5" />
+              </Link>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="size-11"
+              onClick={() => signOut({ callbackUrl: '/' })}
+            >
+              <LogOut className="size-5" />
+            </Button>
+          </div>
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden">
-          <div className="mx-auto max-w-6xl px-3 py-8 pb-24 sm:px-4 md:pb-8 lg:px-8">
+        <main className="flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-6xl px-3 py-4 pb-28 sm:py-6 sm:px-4 md:pb-8 lg:px-8">
             {children}
           </div>
         </main>
@@ -243,14 +250,14 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[10px] sm:text-xs font-medium transition-colors',
+                  'flex flex-1 flex-col items-center justify-center gap-0.5 min-h-[48px] py-2 text-[10px] sm:text-xs font-medium transition-colors',
                   isActive
                     ? 'text-primary'
                     : 'text-muted-foreground hover:text-foreground'
                 )}
               >
                 <item.icon className="size-5" />
-                <span className="truncate max-w-[60px]">{item.label}</span>
+                <span className="truncate max-w-full">{item.mobileLabel}</span>
               </Link>
             );
           })}

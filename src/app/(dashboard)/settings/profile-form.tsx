@@ -116,10 +116,10 @@ export function ProfileForm() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 pt-2">
+          <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:items-center sm:gap-3">
             <Button
               type="submit"
-              className="h-11"
+              className="h-11 w-full sm:w-auto"
               disabled={updateProfile.isPending}
             >
               {updateProfile.isPending ? 'Saving...' : 'Save changes'}

@@ -129,7 +129,7 @@ export function PasswordForm() {
               <button
                 type="button"
                 onClick={() => setShowPasswordVisible(!showPasswordVisible)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center justify-center size-10 text-muted-foreground hover:text-foreground"
                 tabIndex={-1}
               >
                 {showPasswordVisible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
@@ -165,7 +165,7 @@ export function PasswordForm() {
             </div>
           )}
 
-          <Button type="submit" className="h-11" disabled={isPending}>
+          <Button type="submit" className="h-11 w-full sm:w-auto" disabled={isPending}>
             {isPending
               ? 'Saving...'
               : hasPassword ? 'Change password' : 'Set password'}

@@ -42,7 +42,7 @@ export function ShowSectionNav({ showId }: { showId: string }) {
               key={section.path}
               href={href}
               className={cn(
-                'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors',
+                'inline-flex items-center gap-1.5 rounded-full px-3 py-2 min-h-[2.75rem] text-sm font-medium whitespace-nowrap transition-colors',
                 isActive
                   ? 'bg-primary text-primary-foreground shadow-sm'
                   : 'text-muted-foreground hover:bg-muted hover:text-foreground'
