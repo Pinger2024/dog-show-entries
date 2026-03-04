@@ -8,7 +8,7 @@ import {
   protectedProcedure,
   secretaryProcedure,
 } from '../procedures';
-import { invitations, users, organisations } from '@/server/db/schema';
+import { invitations, users, organisations, memberships } from '@/server/db/schema';
 import { generateToken, getBaseUrl } from '@/server/lib/utils';
 
 const resend = process.env.RESEND_API_KEY
@@ -155,6 +155,15 @@ export const invitationsRouter = createTRPCRouter({
           onboardingCompletedAt: new Date(),
         })
         .where(eq(users.id, ctx.session.user.id));
+
+      // Create membership linking user to organisation (if invitation has one)
+      if (invitation.organisationId) {
+        await ctx.db.insert(memberships).values({
+          userId: ctx.session.user.id,
+          organisationId: invitation.organisationId,
+          status: 'active',
+        });
+      }
 
       // Mark invitation as accepted
       await ctx.db

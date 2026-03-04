@@ -9,6 +9,7 @@ import {
   secretaryApplicationStatusEnum,
   clubTypeEnum,
   invitations,
+  organisations,
 } from '@/server/db/schema';
 import { generateToken, getBaseUrl } from '@/server/lib/utils';
 
@@ -196,6 +197,19 @@ export const secretaryApplicationsRouter = createTRPCRouter({
       };
 
       if (input.action === 'approve') {
+        // Create the organisation from application data
+        const [org] = await ctx.db
+          .insert(organisations)
+          .values({
+            name: application.organisationName,
+            type: application.clubType,
+            kcRegNumber: application.kcRegNumber ?? null,
+            contactEmail: application.contactEmail,
+            contactPhone: application.contactPhone ?? null,
+            website: application.website ?? null,
+          })
+          .returning();
+
         // Create an invitation for the applicant (use account email, not contact email)
         const token = generateToken();
         const expiresAt = new Date();
@@ -206,6 +220,7 @@ export const secretaryApplicationsRouter = createTRPCRouter({
           .values({
             email: application.user.email!,
             role: 'secretary',
+            organisationId: org!.id,
             token,
             status: 'pending',
             invitedById: ctx.session.user.id,
