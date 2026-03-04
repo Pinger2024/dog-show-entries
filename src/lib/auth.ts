@@ -3,7 +3,7 @@ import Google from 'next-auth/providers/google';
 import Resend from 'next-auth/providers/resend';
 import Credentials from 'next-auth/providers/credentials';
 import { DrizzleAdapter } from '@auth/drizzle-adapter';
-import { eq } from 'drizzle-orm';
+import { eq, ilike } from 'drizzle-orm';
 import { db } from '@/server/db';
 import * as schema from '@/server/db/schema';
 import { Resend as ResendClient } from 'resend';
@@ -27,31 +27,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     verifyRequest: '/login?verify=true',
   },
   providers: [
-    // Admin-only demo login — used by AccountSwitcher for role testing.
-    // Not exposed in the public login/register UI.
-    Credentials({
-      id: 'demo',
-      name: 'Demo',
-      credentials: {
-        email: { label: 'Email', type: 'email' },
-      },
-      async authorize(credentials) {
-        if (!credentials?.email || !db) return null;
-        const email = credentials.email as string;
-        const [user] = await db
-          .select()
-          .from(schema.users)
-          .where(eq(schema.users.email, email))
-          .limit(1);
-        if (!user) return null;
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-        };
-      },
-    }),
     Resend({
       apiKey: process.env.RESEND_API_KEY,
       from: process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>',
@@ -147,7 +122,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const [user] = await db
           .select()
           .from(schema.users)
-          .where(eq(schema.users.email, email))
+          .where(ilike(schema.users.email, email))
           .limit(1);
 
         if (!user?.passwordHash) return null;
@@ -173,7 +148,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, user, trigger }) {
       if (user) {
         token.id = user.id;
-        token.role = (user as typeof user & { role: string }).role;
+        token.role = (user as typeof user & { role?: string }).role ?? 'exhibitor';
       }
       // On explicit session update (e.g. after role change), refresh role from DB.
       // We only do this on "update" trigger, not every request, because the JWT

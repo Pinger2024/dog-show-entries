@@ -247,6 +247,18 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      // Verify user is a member of this organisation
+      const membership = await ctx.db.query.memberships.findFirst({
+        where: and(
+          eq(memberships.userId, ctx.session.user.id),
+          eq(memberships.organisationId, input.organisationId),
+          eq(memberships.status, 'active')
+        ),
+      });
+      if (!membership) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'You do not have access to this organisation' });
+      }
+
       const [updated] = await ctx.db
         .update(organisations)
         .set({ logoUrl: input.logoUrl })
@@ -378,7 +390,7 @@ export const secretaryRouter = createTRPCRouter({
       return ctx.db.query.entries.findMany({
         where: and(
           eq(entries.showId, input.showId),
-          eq(entries.status, 'withdrawn'),
+          sql`(${entries.status} = 'withdrawn' OR ${entries.absent} = true)`,
           isNull(entries.deletedAt)
         ),
         with: {
@@ -764,6 +776,14 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      // Verify ownership via show
+      const sc = await ctx.db.query.showClasses.findFirst({
+        where: eq(showClasses.id, input.showClassId),
+        columns: { showId: true },
+      });
+      if (!sc) throw new TRPCError({ code: 'NOT_FOUND', message: 'Class not found' });
+      await verifyShowAccess(ctx.db, ctx.session.user.id, sc.showId);
+
       const updates: Record<string, unknown> = {};
       if (input.entryFee !== undefined) updates.entryFee = input.entryFee;
       if (input.sortOrder !== undefined) updates.sortOrder = input.sortOrder;
@@ -792,16 +812,19 @@ export const secretaryRouter = createTRPCRouter({
   deleteShowClass: secretaryProcedure
     .input(z.object({ showClassId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
+      const sc = await ctx.db.query.showClasses.findFirst({
+        where: eq(showClasses.id, input.showClassId),
+        columns: { showId: true },
+      });
+      if (!sc) throw new TRPCError({ code: 'NOT_FOUND', message: 'Class not found' });
+      await verifyShowAccess(ctx.db, ctx.session.user.id, sc.showId);
+
       const [deleted] = await ctx.db
         .delete(showClasses)
         .where(eq(showClasses.id, input.showClassId))
         .returning({ id: showClasses.id });
 
-      if (!deleted) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Class not found' });
-      }
-
-      return deleted;
+      return deleted!;
     }),
 
   reorderClasses: secretaryProcedure
@@ -833,6 +856,7 @@ export const secretaryRouter = createTRPCRouter({
   assignClassNumbers: secretaryProcedure
     .input(
       z.object({
+        showId: z.string().uuid(),
         assignments: z.array(
           z.object({
             classId: z.string().uuid(),
@@ -842,11 +866,13 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
       for (const { classId, classNumber } of input.assignments) {
         await ctx.db
           .update(showClasses)
           .set({ classNumber })
-          .where(eq(showClasses.id, classId));
+          .where(and(eq(showClasses.id, classId), eq(showClasses.showId, input.showId)));
       }
       return { updated: input.assignments.length };
     }),
@@ -975,16 +1001,31 @@ export const secretaryRouter = createTRPCRouter({
   removeSteward: secretaryProcedure
     .input(z.object({ assignmentId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      const [deleted] = await ctx.db
-        .delete(stewardAssignments)
-        .where(eq(stewardAssignments.id, input.assignmentId))
-        .returning({ id: stewardAssignments.id });
+      // Look up assignment to verify show ownership
+      const assignment = await ctx.db.query.stewardAssignments.findFirst({
+        where: eq(stewardAssignments.id, input.assignmentId),
+      });
+      if (!assignment) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Steward assignment not found' });
+      }
+      await verifyShowAccess(ctx.db, ctx.session.user.id, assignment.showId);
 
-      if (!deleted) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Steward assignment not found',
+      await ctx.db
+        .delete(stewardAssignments)
+        .where(eq(stewardAssignments.id, input.assignmentId));
+
+      // Revert role if this was their only steward assignment
+      const remainingAssignments = await ctx.db.query.stewardAssignments.findFirst({
+        where: eq(stewardAssignments.userId, assignment.userId),
+      });
+      if (!remainingAssignments) {
+        const user = await ctx.db.query.users.findFirst({
+          where: eq(users.id, assignment.userId),
+          columns: { role: true },
         });
+        if (user?.role === 'steward') {
+          await ctx.db.update(users).set({ role: 'exhibitor' }).where(eq(users.id, assignment.userId));
+        }
       }
 
       return { removed: true };
@@ -1097,6 +1138,13 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const ring = await ctx.db.query.rings.findFirst({
+        where: eq(rings.id, input.ringId),
+        columns: { showId: true },
+      });
+      if (!ring) throw new TRPCError({ code: 'NOT_FOUND', message: 'Ring not found' });
+      await verifyShowAccess(ctx.db, ctx.session.user.id, ring.showId);
+
       const { ringId, ...data } = input;
       const updateData: Record<string, unknown> = {};
       if (data.number !== undefined) updateData.number = data.number;
@@ -1118,14 +1166,14 @@ export const secretaryRouter = createTRPCRouter({
   removeRing: secretaryProcedure
     .input(z.object({ ringId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      const [deleted] = await ctx.db
-        .delete(rings)
-        .where(eq(rings.id, input.ringId))
-        .returning({ id: rings.id });
+      const ring = await ctx.db.query.rings.findFirst({
+        where: eq(rings.id, input.ringId),
+        columns: { showId: true },
+      });
+      if (!ring) throw new TRPCError({ code: 'NOT_FOUND', message: 'Ring not found' });
+      await verifyShowAccess(ctx.db, ctx.session.user.id, ring.showId);
 
-      if (!deleted) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Ring not found' });
-      }
+      await ctx.db.delete(rings).where(eq(rings.id, input.ringId));
       return { removed: true };
     }),
 
@@ -1201,17 +1249,14 @@ export const secretaryRouter = createTRPCRouter({
   removeJudgeAssignment: secretaryProcedure
     .input(z.object({ assignmentId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      const [deleted] = await ctx.db
-        .delete(judgeAssignments)
-        .where(eq(judgeAssignments.id, input.assignmentId))
-        .returning({ id: judgeAssignments.id });
+      const ja = await ctx.db.query.judgeAssignments.findFirst({
+        where: eq(judgeAssignments.id, input.assignmentId),
+        columns: { showId: true },
+      });
+      if (!ja) throw new TRPCError({ code: 'NOT_FOUND', message: 'Judge assignment not found' });
+      await verifyShowAccess(ctx.db, ctx.session.user.id, ja.showId);
 
-      if (!deleted) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Judge assignment not found',
-        });
-      }
+      await ctx.db.delete(judgeAssignments).where(eq(judgeAssignments.id, input.assignmentId));
       return { removed: true };
     }),
 

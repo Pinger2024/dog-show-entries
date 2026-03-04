@@ -60,7 +60,14 @@ export async function POST(request: Request) {
       .returning({ id: users.id, email: users.email });
 
     return NextResponse.json({ user: newUser }, { status: 201 });
-  } catch {
+  } catch (err: unknown) {
+    // Catch unique constraint violation (concurrent registration with same email)
+    if (err && typeof err === 'object' && 'code' in err && err.code === '23505') {
+      return NextResponse.json(
+        { error: 'Unable to create account. Try signing in instead.' },
+        { status: 409 }
+      );
+    }
     return NextResponse.json(
       { error: 'Something went wrong' },
       { status: 500 }

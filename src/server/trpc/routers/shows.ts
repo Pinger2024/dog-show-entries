@@ -13,7 +13,9 @@ import {
   venues,
   organisations,
   sundryItems,
+  memberships,
 } from '@/server/db/schema';
+import { verifyShowAccess } from '../verify-show-access';
 
 export const showsRouter = createTRPCRouter({
   list: publicProcedure
@@ -381,6 +383,21 @@ export const showsRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      // Verify user is a member of this organisation
+      const membership = await ctx.db.query.memberships.findFirst({
+        where: and(
+          eq(memberships.userId, ctx.session.user.id),
+          eq(memberships.organisationId, input.organisationId),
+          eq(memberships.status, 'active')
+        ),
+      });
+      if (!membership) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'You do not have access to this organisation',
+        });
+      }
+
       const { classDefinitionIds, entryFee, firstEntryFee, subsequentEntryFee, nfcEntryFee, ...showData } = input;
 
       const [show] = await ctx.db
@@ -461,16 +478,7 @@ export const showsRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const { id, entriesOpenDate, entryCloseDate, postalCloseDate, ...rest } = input;
 
-      const existing = await ctx.db.query.shows.findFirst({
-        where: eq(shows.id, id),
-      });
-
-      if (!existing) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Show not found',
-        });
-      }
+      await verifyShowAccess(ctx.db, ctx.session.user.id, id);
 
       const updateData: Record<string, unknown> = { ...rest };
       if (entriesOpenDate !== undefined) {

@@ -446,7 +446,16 @@ export const entriesRouter = createTRPCRouter({
       }
 
       const oldFee = entry.totalFee;
-      const newFee = newClasses.reduce((sum, sc) => sum + sc.entryFee, 0);
+      // Use show-level tiered pricing if available, otherwise sum per-class fees
+      let newFee: number;
+      if (entry.show.firstEntryFee != null) {
+        const subsequentRate = entry.show.subsequentEntryFee ?? entry.show.firstEntryFee;
+        newFee = newClasses.length > 0
+          ? entry.show.firstEntryFee + subsequentRate * (newClasses.length - 1)
+          : 0;
+      } else {
+        newFee = newClasses.reduce((sum, sc) => sum + sc.entryFee, 0);
+      }
       const feeDiff = newFee - oldFee;
 
       const oldClassIds = entry.entryClasses.map((ec) => ec.showClassId);
@@ -512,9 +521,19 @@ export const entriesRouter = createTRPCRouter({
         };
       } else if (feeDiff < 0) {
         // Refund needed — find the original successful payment
-        const originalPayment = entry.payments.find(
+        // Check entry-level payments first, then order-level payments
+        let originalPayment = entry.payments.find(
           (p) => p.status === 'succeeded' && p.stripePaymentId
         );
+
+        if (!originalPayment && entry.orderId) {
+          originalPayment = await ctx.db.query.payments.findFirst({
+            where: and(
+              eq(payments.orderId, entry.orderId),
+              eq(payments.status, 'succeeded'),
+            ),
+          }) ?? undefined;
+        }
 
         if (originalPayment?.stripePaymentId) {
           const stripe = getStripe();

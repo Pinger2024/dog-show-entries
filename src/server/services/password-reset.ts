@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { eq, and, isNull, gt } from 'drizzle-orm';
+import { eq, and, isNull, gt, ilike } from 'drizzle-orm';
 import { hash } from 'bcryptjs';
 import { Resend } from 'resend';
 import { db } from '@/server/db';
@@ -19,11 +19,35 @@ export async function requestPasswordReset(email: string) {
   const [user] = await db
     .select({ id: users.id, email: users.email })
     .from(users)
-    .where(eq(users.email, normalizedEmail))
+    .where(ilike(users.email, normalizedEmail))
     .limit(1);
 
   // Don't reveal whether the account exists
   if (!user) return;
+
+  // Rate limit: skip if a token was created in the last 60 seconds
+  const [recent] = await db
+    .select({ id: passwordResetTokens.id })
+    .from(passwordResetTokens)
+    .where(
+      and(
+        eq(passwordResetTokens.userId, user.id),
+        gt(passwordResetTokens.createdAt, new Date(Date.now() - 60_000))
+      )
+    )
+    .limit(1);
+  if (recent) return; // Silently skip — don't reveal anything
+
+  // Invalidate any existing unused tokens for this user
+  await db
+    .update(passwordResetTokens)
+    .set({ usedAt: new Date() })
+    .where(
+      and(
+        eq(passwordResetTokens.userId, user.id),
+        isNull(passwordResetTokens.usedAt)
+      )
+    );
 
   const token = crypto.randomUUID();
   const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
@@ -132,21 +156,27 @@ export async function validateResetToken(token: string) {
  * Reset the user's password using a valid token.
  */
 export async function resetPassword(token: string, newPassword: string) {
-  const record = await validateResetToken(token);
-  if (!record) return { success: false, error: 'Invalid or expired link' };
+  // Atomically claim the token — prevents TOCTOU race
+  const [claimed] = await db
+    .update(passwordResetTokens)
+    .set({ usedAt: new Date() })
+    .where(
+      and(
+        eq(passwordResetTokens.token, token),
+        isNull(passwordResetTokens.usedAt),
+        gt(passwordResetTokens.expiresAt, new Date())
+      )
+    )
+    .returning({ userId: passwordResetTokens.userId });
+
+  if (!claimed) return { success: false, error: 'Invalid or expired link' };
 
   const passwordHash = await hash(newPassword, 12);
 
   await db
     .update(users)
     .set({ passwordHash })
-    .where(eq(users.id, record.userId));
-
-  // Mark token as used
-  await db
-    .update(passwordResetTokens)
-    .set({ usedAt: new Date() })
-    .where(eq(passwordResetTokens.id, record.id));
+    .where(eq(users.id, claimed.userId));
 
   return { success: true };
 }

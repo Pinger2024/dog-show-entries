@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, sql, isNull, inArray, asc } from 'drizzle-orm';
+import { and, eq, isNull, asc } from 'drizzle-orm';
 import { stewardProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import type { Database } from '@/server/db';
@@ -201,11 +201,12 @@ export const stewardRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // Verify this entry class exists and get its show
+      // Verify this entry class exists, is confirmed, and get its show
       const ec = await ctx.db.query.entryClasses.findFirst({
         where: eq(entryClasses.id, input.entryClassId),
         with: {
           showClass: true,
+          entry: { columns: { status: true, deletedAt: true, absent: true } },
         },
       });
 
@@ -213,6 +214,13 @@ export const stewardRouter = createTRPCRouter({
         throw new TRPCError({
           code: 'NOT_FOUND',
           message: 'Entry class not found',
+        });
+      }
+
+      if (ec.entry.status !== 'confirmed' || ec.entry.deletedAt) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Cannot record result for a non-confirmed entry',
         });
       }
 
@@ -288,10 +296,18 @@ export const stewardRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const entry = await ctx.db.query.entries.findFirst({
         where: eq(entries.id, input.entryId),
+        with: { show: { columns: { status: true } } },
       });
 
       if (!entry) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Entry not found' });
+      }
+
+      if (['completed', 'cancelled'].includes(entry.show.status)) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Cannot modify attendance for a completed or cancelled show',
+        });
       }
 
       await verifyStewardAssignment(ctx.db, ctx.session.user.id, entry.showId);
@@ -336,6 +352,23 @@ export const stewardRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       await verifyStewardAssignment(ctx.db, ctx.session.user.id, input.showId);
+
+      // Verify the dog is entered in this show
+      const dogEntry = await ctx.db.query.entries.findFirst({
+        where: and(
+          eq(entries.showId, input.showId),
+          eq(entries.dogId, input.dogId),
+          eq(entries.status, 'confirmed'),
+          isNull(entries.deletedAt)
+        ),
+        columns: { id: true },
+      });
+      if (!dogEntry) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'This dog is not entered in this show',
+        });
+      }
 
       // Upsert: remove existing same type for this show + dog, then insert
       await ctx.db

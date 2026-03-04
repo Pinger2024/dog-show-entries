@@ -20,7 +20,7 @@ export const onboardingRouter = createTRPCRouter({
     const [entryCount] = await ctx.db
       .select({ count: count() })
       .from(entries)
-      .where(eq(entries.userId, userId));
+      .where(eq(entries.exhibitorId, userId));
 
     const hasProfile = !!(user?.name && user?.address && user?.postcode);
 

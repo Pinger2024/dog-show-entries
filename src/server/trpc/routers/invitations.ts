@@ -147,6 +147,14 @@ export const invitationsRouter = createTRPCRouter({
         });
       }
 
+      // Verify the logged-in user's email matches the invitation
+      if (invitation.email.toLowerCase() !== ctx.session.user.email?.toLowerCase()) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'This invitation was sent to a different email address',
+        });
+      }
+
       // Upgrade user role
       await ctx.db
         .update(users)
