@@ -2,6 +2,7 @@ import { Document, Page, View, Text } from '@react-pdf/renderer';
 import { styles } from './catalogue-styles';
 import { CatalogueHeader } from './catalogue-header';
 import type { CatalogueEntry, CatalogueShowInfo } from './catalogue-standard';
+import { uppercaseName } from './catalogue-utils';
 
 interface Props {
   show: CatalogueShowInfo;
@@ -71,7 +72,7 @@ export function CatalogueAbsentees({ show, entries }: Props) {
                   {entry.catalogueNumber ?? '—'}
                 </Cell>
                 <Cell width={colWidths.dog}>
-                  {entry.dogName ?? '—'}
+                  {uppercaseName(entry.dogName) || '—'}
                 </Cell>
                 <Cell width={colWidths.breed}>
                   {entry.breed ?? '—'}

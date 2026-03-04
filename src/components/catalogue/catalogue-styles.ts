@@ -186,6 +186,123 @@ export const styles = StyleSheet.create({
     color: '#666',
   },
 
+  // ── KC standard: class heading within breed/sex ──
+  classHeadingInBreed: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    marginTop: 8,
+    marginBottom: 3,
+    paddingLeft: 4,
+  },
+
+  // ── Judge label under breed heading ─────────
+  judgeLabel: {
+    fontSize: 9,
+    fontStyle: 'italic',
+    marginBottom: 4,
+    paddingLeft: 2,
+  },
+
+  // ── See class reference (abbreviated entry) ─
+  seeClassRef: {
+    fontSize: 8,
+    fontStyle: 'italic',
+    color: '#333',
+  },
+
+  // ── Cover page styles ──────────────────────
+  coverPage: {
+    fontFamily: 'Times',
+    padding: '80 50 50 50',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  coverOrganisation: {
+    fontSize: 12,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  coverShowName: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    letterSpacing: 3,
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  coverSubtitle: {
+    fontSize: 11,
+    fontStyle: 'italic',
+    marginBottom: 6,
+    textAlign: 'center',
+    color: '#333',
+  },
+  coverDetail: {
+    fontSize: 10,
+    marginTop: 4,
+    textAlign: 'center',
+    color: '#333',
+  },
+  coverRegulatory: {
+    fontSize: 8,
+    marginTop: 20,
+    textAlign: 'center',
+    color: '#555',
+    fontStyle: 'italic',
+  },
+
+  // ── Front matter pages ─────────────────────
+  frontMatterPage: {
+    fontFamily: 'Times',
+    fontSize: 9,
+    padding: '36 40 52 40',
+    lineHeight: 1.35,
+  },
+  frontMatterTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    textAlign: 'center',
+    letterSpacing: 1,
+    marginBottom: 16,
+    borderBottomWidth: 2,
+    borderBottomColor: '#000',
+    paddingBottom: 6,
+  },
+
+  // ── Judges list table ──────────────────────
+  judgesListRow: {
+    flexDirection: 'row',
+    paddingVertical: 3,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#ddd',
+  },
+  judgesListBreed: {
+    fontSize: 9,
+    width: '50%',
+    fontWeight: 'bold',
+  },
+  judgesListJudge: {
+    fontSize: 9,
+    width: '50%',
+  },
+
+  // ── Class definitions ──────────────────────
+  classDefName: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    marginTop: 6,
+    marginBottom: 1,
+  },
+  classDefDescription: {
+    fontSize: 8,
+    color: '#333',
+    marginBottom: 4,
+    lineHeight: 1.4,
+  },
+
   // ── Ring plan styles ─────────────────────────
   ringCard: {
     marginBottom: 12,

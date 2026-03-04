@@ -1,11 +1,13 @@
 import { Document, Page, View, Text } from '@react-pdf/renderer';
 import { styles } from './catalogue-styles';
-import { CatalogueHeader } from './catalogue-header';
+import { CoverPage, JudgesListPage, ClassDefinitionsPage } from './catalogue-front-matter';
+import { formatDobKC, formatPedigreeKC, formatOwnerKC, uppercaseName } from './catalogue-utils';
 
 export interface CatalogueEntry {
   catalogueNumber: string | null;
   dogName: string | null;
   breed: string | undefined;
+  breedId?: string | undefined;
   group: string | undefined;
   groupSortOrder: number | undefined;
   sex: string | undefined;
@@ -32,6 +34,9 @@ export interface CatalogueShowInfo {
   organisation: string | undefined;
   kcLicenceNo: string | null | undefined;
   logoUrl?: string;
+  secretaryEmail?: string;
+  judgesByBreedName?: Record<string, string>;
+  classDefinitions?: { name: string; description: string | null }[];
 }
 
 interface Props {
@@ -39,38 +44,31 @@ interface Props {
   entries: CatalogueEntry[];
 }
 
-function formatDob(dob: string | null | undefined) {
-  if (!dob) return '';
-  return new Date(dob).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
+// ── KC layout grouping ──────────────────────────────────────
+
+interface ClassBucket {
+  className: string;
+  classNumber: number | null | undefined;
+  sortOrder: number | undefined;
+  sex: string | null | undefined;
+  entries: CatalogueEntry[];
 }
 
-/** Format class list with numbers: "1. Minor Puppy, 3. Novice" */
-function formatClassList(classes: CatalogueEntry['classes']) {
-  return classes
-    .sort((a, b) => {
-      if (a.classNumber != null && b.classNumber != null) return a.classNumber - b.classNumber;
-      if (a.classNumber != null) return -1;
-      if (b.classNumber != null) return 1;
-      return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
-    })
-    .map((c) => {
-      if (c.classNumber != null && c.name) return `${c.classNumber}. ${c.name}`;
-      return c.name;
-    })
-    .filter(Boolean)
-    .join(', ');
+interface BreedBucket {
+  sexes: Record<string, ClassBucket[]>;
 }
 
-// Group entries: group → breed → sex, preserving sort order
-function groupEntries(entries: CatalogueEntry[]) {
-  const groups: Map<
-    string,
-    { sortOrder: number; breeds: Map<string, Record<string, CatalogueEntry[]>> }
-  > = new Map();
+interface GroupBucket {
+  sortOrder: number;
+  breeds: Map<string, BreedBucket>;
+}
+
+/**
+ * Group entries KC-style: Group > Breed > Sex > Class.
+ * Each entry appears under every class it's entered in.
+ */
+function groupEntriesKC(entries: CatalogueEntry[]) {
+  const groups = new Map<string, GroupBucket>();
 
   for (const entry of entries) {
     const group = entry.group ?? 'Unclassified';
@@ -82,134 +80,247 @@ function groupEntries(entries: CatalogueEntry[]) {
     }
     const breedMap = groups.get(group)!.breeds;
     if (!breedMap.has(breed)) {
-      breedMap.set(breed, {});
+      breedMap.set(breed, { sexes: {} });
     }
-    const sexGroups = breedMap.get(breed)!;
-    sexGroups[sex] ??= [];
-    sexGroups[sex].push(entry);
+    const breedBucket = breedMap.get(breed)!;
+    breedBucket.sexes[sex] ??= [];
+
+    // Place entry into each class it's entered in
+    for (const cls of entry.classes) {
+      const className = cls.name ?? 'Unknown Class';
+      const classKey = `${cls.classNumber ?? ''}-${className}`;
+
+      let classBucket = breedBucket.sexes[sex].find(
+        (cb) => `${cb.classNumber ?? ''}-${cb.className}` === classKey
+      );
+      if (!classBucket) {
+        classBucket = {
+          className,
+          classNumber: cls.classNumber,
+          sortOrder: cls.sortOrder,
+          sex: cls.sex,
+          entries: [],
+        };
+        breedBucket.sexes[sex].push(classBucket);
+      }
+      classBucket.entries.push(entry);
+    }
+  }
+
+  // Sort class buckets within each sex
+  for (const [, groupBucket] of groups) {
+    for (const [, breedBucket] of groupBucket.breeds) {
+      for (const sex of Object.keys(breedBucket.sexes)) {
+        breedBucket.sexes[sex].sort((a, b) => {
+          if (a.classNumber != null && b.classNumber != null) return a.classNumber - b.classNumber;
+          if (a.classNumber != null) return -1;
+          if (b.classNumber != null) return 1;
+          return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+        });
+      }
+    }
   }
 
   return groups;
 }
 
-export function CatalogueStandard({ show, entries }: Props) {
-  const grouped = groupEntries(entries);
+/** Sort entries within a class by catalogue number */
+function sortByCatNo(entries: CatalogueEntry[]) {
+  return [...entries].sort((a, b) =>
+    (a.catalogueNumber ?? '').localeCompare(b.catalogueNumber ?? '', undefined, { numeric: true })
+  );
+}
 
-  // Sort groups by sortOrder, then alphabetically
-  const sortedGroups = [...grouped.entries()].sort(([, a], [, b]) => {
-    if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
-    return 0;
-  });
+/** Build a label for a class heading: "Class 1. Minor Puppy Dog (4 entries)" */
+function classHeadingLabel(bucket: ClassBucket, sex: string) {
+  const parts: string[] = [];
+  if (bucket.classNumber != null) {
+    parts.push(`Class ${bucket.classNumber}.`);
+  }
+  parts.push(bucket.className);
+  // Append sex qualifier
+  if (sex === 'dog') parts.push('Dog');
+  else if (sex === 'bitch') parts.push('Bitch');
+  const count = bucket.entries.length;
+  parts.push(`(${count} ${count === 1 ? 'entry' : 'entries'})`);
+  return parts.join(' ');
+}
+
+export function CatalogueStandard({ show, entries }: Props) {
+  const grouped = groupEntriesKC(entries);
+
+  // Track first appearance of each catalogue number → class label for "[see class X]"
+  const firstSeenClass = new Map<string, string>();
+
+  // Sort groups by sortOrder
+  const sortedGroups = [...grouped.entries()].sort(([, a], [, b]) => a.sortOrder - b.sortOrder);
+
+  // Pre-compute first seen class for each entry
+  for (const [, { breeds }] of sortedGroups) {
+    for (const [, breedBucket] of [...breeds.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+      for (const sex of ['dog', 'bitch', 'unknown']) {
+        const classBuckets = breedBucket.sexes[sex];
+        if (!classBuckets) continue;
+        for (const bucket of classBuckets) {
+          for (const entry of sortByCatNo(bucket.entries)) {
+            const catNo = entry.catalogueNumber;
+            if (catNo && !firstSeenClass.has(catNo)) {
+              const label = bucket.classNumber != null
+                ? `class ${bucket.classNumber}`
+                : bucket.className;
+              firstSeenClass.set(catNo, label);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Reset for rendering pass — we'll track "already rendered full" per catalogue number
+  const renderedFull = new Set<string>();
 
   return (
     <Document>
-      <Page size="A4" style={styles.page} wrap>
-        <CatalogueHeader
-          showName={show.name}
-          showType={show.showType}
-          organisationName={show.organisation}
-          date={show.date}
-          venue={show.venue}
-          venueAddress={show.venueAddress}
-          kcLicenceNo={show.kcLicenceNo ?? undefined}
-          logoUrl={show.logoUrl}
-          subtitle="Official Catalogue"
-        />
+      {/* Front matter pages */}
+      <CoverPage show={show} />
+      <JudgesListPage show={show} />
+      <ClassDefinitionsPage show={show} />
 
+      {/* Main catalogue content */}
+      <Page size="A4" style={styles.page} wrap>
         {sortedGroups.map(([groupName, { breeds }]) => (
           <View key={groupName}>
             <Text style={styles.groupHeading}>{groupName}</Text>
 
             {[...breeds.entries()]
               .sort(([a], [b]) => a.localeCompare(b))
-              .map(([breedName, sexGroups]) => (
-                <View key={breedName}>
-                  <Text style={styles.breedHeading}>{breedName}</Text>
+              .map(([breedName, breedBucket]) => {
+                const judge = show.judgesByBreedName?.[breedName];
+                return (
+                  <View key={breedName}>
+                    <Text style={styles.breedHeading}>{breedName}</Text>
+                    {judge && (
+                      <Text style={styles.judgeLabel}>Judge: {judge}</Text>
+                    )}
 
-                  {['dog', 'bitch', 'unknown']
-                    .filter((sex) => sexGroups[sex]?.length)
-                    .map((sex) => (
-                      <View key={sex}>
-                        {sex !== 'unknown' && (
-                          <Text style={styles.sexHeading}>
-                            {sex === 'dog' ? 'Dogs' : 'Bitches'}
-                          </Text>
-                        )}
-
-                        {sexGroups[sex].map((entry) => (
-                          <View
-                            key={entry.catalogueNumber}
-                            style={styles.entryRowWrap}
-                            wrap={false}
-                          >
-                            {/* Catalogue number + dog name */}
-                            <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                              <Text style={styles.catalogueNumber}>
-                                {entry.catalogueNumber ?? '—'}
-                              </Text>
-                              <Text style={styles.dogName}>
-                                {entry.dogName ?? 'Unnamed'}
-                              </Text>
-                            </View>
-
-                            {/* KC reg + DOB + colour on one line */}
-                            <Text style={styles.entryDetail}>
-                              {[
-                                entry.kcRegNumber,
-                                entry.dateOfBirth ? `D.O.B: ${formatDob(entry.dateOfBirth)}` : null,
-                                entry.colour,
-                                entry.sex === 'dog' ? 'Dog' : entry.sex === 'bitch' ? 'Bitch' : null,
-                              ].filter(Boolean).join('  —  ')}
+                    {['dog', 'bitch', 'unknown']
+                      .filter((sex) => breedBucket.sexes[sex]?.length)
+                      .map((sex) => (
+                        <View key={sex}>
+                          {sex !== 'unknown' && (
+                            <Text style={styles.sexHeading}>
+                              {sex === 'dog' ? 'Dogs' : 'Bitches'}
                             </Text>
+                          )}
 
-                            {entry.sire && (
-                              <Text style={styles.entryDetail}>
-                                <Text style={styles.entryDetailLabel}>Sire: </Text>
-                                {entry.sire}
+                          {breedBucket.sexes[sex].map((bucket) => (
+                            <View key={`${bucket.classNumber}-${bucket.className}`}>
+                              <Text style={styles.classHeadingInBreed}>
+                                {classHeadingLabel(bucket, sex)}
                               </Text>
-                            )}
 
-                            {entry.dam && (
-                              <Text style={styles.entryDetail}>
-                                <Text style={styles.entryDetailLabel}>Dam: </Text>
-                                {entry.dam}
-                              </Text>
-                            )}
+                              {sortByCatNo(bucket.entries).map((entry) => {
+                                const catNo = entry.catalogueNumber ?? '';
+                                const isFirstAppearance = !renderedFull.has(catNo);
 
-                            {entry.breeder && (
-                              <Text style={styles.entryDetail}>
-                                <Text style={styles.entryDetailLabel}>Breeder: </Text>
-                                {entry.breeder}
-                              </Text>
-                            )}
+                                if (isFirstAppearance && catNo) {
+                                  renderedFull.add(catNo);
+                                }
 
-                            {entry.owners.length > 0 && (
-                              <Text style={styles.entryDetail}>
-                                <Text style={styles.entryDetailLabel}>
-                                  Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
-                                </Text>
-                                {entry.owners.map((o) => o.name).join(' & ')}
-                              </Text>
-                            )}
+                                if (!isFirstAppearance) {
+                                  // Abbreviated entry — [see class X]
+                                  const firstClass = firstSeenClass.get(catNo) ?? '';
+                                  return (
+                                    <View
+                                      key={`${catNo}-abbrev`}
+                                      style={{ ...styles.entryRowWrap, paddingLeft: 6 }}
+                                      wrap={false}
+                                    >
+                                      <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                                        <Text style={styles.catalogueNumber}>
+                                          {catNo || '—'}
+                                        </Text>
+                                        <Text style={styles.dogName}>
+                                          {entry.dogName ?? 'Unnamed'}
+                                        </Text>
+                                        <Text style={styles.seeClassRef}>
+                                          {'  '}[see {firstClass}]
+                                        </Text>
+                                      </View>
+                                    </View>
+                                  );
+                                }
 
-                            {entry.handler && entry.handler !== entry.exhibitor && (
-                              <Text style={styles.entryDetail}>
-                                <Text style={styles.entryDetailLabel}>Handler: </Text>
-                                {entry.handler}
-                              </Text>
-                            )}
+                                // Full entry — first appearance
+                                const pedigree = formatPedigreeKC(entry.sire, entry.dam);
+                                return (
+                                  <View
+                                    key={catNo || entry.dogName}
+                                    style={styles.entryRowWrap}
+                                    wrap={false}
+                                  >
+                                    {/* Catalogue number + dog name */}
+                                    <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                                      <Text style={styles.catalogueNumber}>
+                                        {catNo || '—'}
+                                      </Text>
+                                      <Text style={styles.dogName}>
+                                        {entry.dogName ?? 'Unnamed'}
+                                      </Text>
+                                    </View>
 
-                            {entry.classes.length > 0 && (
-                              <Text style={styles.entryClasses}>
-                                Entered in: {formatClassList(entry.classes)}
-                              </Text>
-                            )}
-                          </View>
-                        ))}
-                      </View>
-                    ))}
-                </View>
-              ))}
+                                    {/* KC reg + DOB + colour */}
+                                    <Text style={styles.entryDetail}>
+                                      {[
+                                        entry.kcRegNumber,
+                                        entry.dateOfBirth ? `D.O.B: ${formatDobKC(entry.dateOfBirth)}` : null,
+                                        entry.colour,
+                                        entry.sex === 'dog' ? 'Dog' : entry.sex === 'bitch' ? 'Bitch' : null,
+                                      ].filter(Boolean).join('  —  ')}
+                                    </Text>
+
+                                    {/* Pedigree: By [sire] ex [dam] */}
+                                    {pedigree && (
+                                      <Text style={styles.entryDetail}>
+                                        {pedigree}
+                                      </Text>
+                                    )}
+
+                                    {/* Breeder */}
+                                    {entry.breeder && (
+                                      <Text style={styles.entryDetail}>
+                                        <Text style={styles.entryDetailLabel}>Breeder: </Text>
+                                        {entry.breeder}
+                                      </Text>
+                                    )}
+
+                                    {/* Owner(s) — UPPER CASE + address */}
+                                    {entry.owners.length > 0 && (
+                                      <Text style={styles.entryDetail}>
+                                        <Text style={styles.entryDetailLabel}>
+                                          Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
+                                        </Text>
+                                        {formatOwnerKC(entry.owners)}
+                                      </Text>
+                                    )}
+
+                                    {/* Handler (if different from exhibitor) */}
+                                    {entry.handler && entry.handler !== entry.exhibitor && (
+                                      <Text style={styles.entryDetail}>
+                                        <Text style={styles.entryDetailLabel}>Handler: </Text>
+                                        {entry.handler}
+                                      </Text>
+                                    )}
+                                  </View>
+                                );
+                              })}
+                            </View>
+                          ))}
+                        </View>
+                      ))}
+                  </View>
+                );
+              })}
           </View>
         ))}
 

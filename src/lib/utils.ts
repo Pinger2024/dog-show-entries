@@ -54,3 +54,25 @@ export function formatDogName(
   const prefix = sorted.map((t) => getTitleDisplay(t.title)).join(' ');
   return `${prefix} ${dog.registeredName}`;
 }
+
+/**
+ * Formats a dog's name for KC catalogue output.
+ * Title prefix in Title Case ("Ch.") + registered name in UPPER CASE.
+ * e.g. "Ch. DONABERG DOYEN AT DONABERG"
+ */
+export function formatDogNameForCatalogue(
+  dog: { registeredName: string; titles?: { title: string }[] | null }
+): string {
+  const upperName = dog.registeredName.toUpperCase();
+
+  if (!dog.titles || dog.titles.length === 0) {
+    return upperName;
+  }
+
+  const sorted = [...dog.titles].sort(
+    (a, b) => (TITLE_RANK[b.title] ?? 0) - (TITLE_RANK[a.title] ?? 0)
+  );
+
+  const prefix = sorted.map((t) => getTitleDisplay(t.title)).join(' ');
+  return `${prefix} ${upperName}`;
+}

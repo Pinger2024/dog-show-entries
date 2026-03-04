@@ -3,7 +3,7 @@ import { auth } from '@/lib/auth';
 import { db } from '@/server/db';
 import { and, eq, isNull, asc } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
-import { formatDogName } from '@/lib/utils';
+import { formatDogName, formatDogNameForCatalogue } from '@/lib/utils';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { CatalogueStandard } from '@/components/catalogue/catalogue-standard';
 import { CatalogueAbsentees } from '@/components/catalogue/catalogue-absentees';
@@ -53,6 +53,60 @@ export async function GET(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  // Query judge assignments for this show (breed → judge name lookup)
+  const judgeAssignmentRows = await db.query.judgeAssignments.findMany({
+    where: eq(schema.judgeAssignments.showId, showId),
+    with: {
+      judge: true,
+      breed: true,
+    },
+  });
+
+  const judgesByBreedName: Record<string, string> = {};
+  for (const ja of judgeAssignmentRows) {
+    if (ja.breed?.name && ja.judge?.name) {
+      judgesByBreedName[ja.breed.name] = ja.judge.name;
+    }
+  }
+
+  // Query show classes with class definitions for front matter
+  const showClassRows = await db.query.showClasses.findMany({
+    where: eq(schema.showClasses.showId, showId),
+    with: { classDefinition: true },
+    orderBy: [asc(schema.showClasses.sortOrder), asc(schema.showClasses.classNumber)],
+  });
+
+  // Deduplicate class definitions for front matter
+  const seenDefIds = new Set<string>();
+  const classDefinitions: { name: string; description: string | null }[] = [];
+  for (const sc of showClassRows) {
+    if (sc.classDefinition && !seenDefIds.has(sc.classDefinition.id)) {
+      seenDefIds.add(sc.classDefinition.id);
+      classDefinitions.push({
+        name: sc.classDefinition.name,
+        description: sc.classDefinition.description,
+      });
+    }
+  }
+
+  // Build show class lookup for catalogue (classNumber → name, sex, etc.)
+  const showClassLookup: Record<string, {
+    classNumber: number | null;
+    className: string | undefined;
+    sex: string | null;
+    sortOrder: number;
+    breedId: string | null;
+  }> = {};
+  for (const sc of showClassRows) {
+    showClassLookup[sc.id] = {
+      classNumber: sc.classNumber,
+      className: sc.classDefinition?.name,
+      sex: sc.sex,
+      sortOrder: sc.sortOrder,
+      breedId: sc.breedId,
+    };
+  }
+
   const entries = await db.query.entries.findMany({
     where: and(
       eq(schema.entries.showId, showId),
@@ -80,10 +134,16 @@ export async function GET(
     orderBy: [asc(schema.entries.catalogueNumber)],
   });
 
+  // Use KC catalogue formatting for standard format, regular for others
+  const useKCFormat = format === 'standard';
+
   const catalogueEntries: CatalogueEntry[] = entries.map((entry) => ({
     catalogueNumber: entry.catalogueNumber,
-    dogName: entry.dog ? formatDogName(entry.dog) : null,
+    dogName: entry.dog
+      ? (useKCFormat ? formatDogNameForCatalogue(entry.dog) : formatDogName(entry.dog))
+      : null,
     breed: entry.dog?.breed?.name,
+    breedId: entry.dog?.breed?.id,
     group: entry.dog?.breed?.group?.name,
     groupSortOrder: entry.dog?.breed?.group?.sortOrder,
     sex: entry.dog?.sex,
@@ -118,6 +178,9 @@ export async function GET(
     organisation: show.organisation?.name,
     kcLicenceNo: show.kcLicenceNo,
     logoUrl: show.organisation?.logoUrl ?? undefined,
+    secretaryEmail: show.secretaryEmail ?? undefined,
+    judgesByBreedName,
+    classDefinitions,
   };
 
   // Check if JSON format was explicitly requested (for data export)
