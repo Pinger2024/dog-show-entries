@@ -856,7 +856,7 @@ function StewardsSection({ showId }: { showId: string }) {
               The user must have a Remi account. If they&apos;re currently an exhibitor,
               their role will be upgraded to steward.
             </p>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <Input
                 type="email"
                 inputMode="email"
@@ -869,7 +869,7 @@ function StewardsSection({ showId }: { showId: string }) {
                     assignMutation.mutate({ showId, email: email.trim() });
                   }
                 }}
-                className="flex-1"
+                className="flex-1 h-11"
               />
               <Button
                 onClick={() =>

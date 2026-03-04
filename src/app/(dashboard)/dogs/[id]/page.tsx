@@ -697,7 +697,7 @@ export default function DogDetailPage({
 
       {/* Danger zone */}
       <Separator />
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-medium">Remove Dog</p>
           <p className="text-sm text-muted-foreground">
@@ -706,7 +706,7 @@ export default function DogDetailPage({
         </div>
         <Dialog>
           <DialogTrigger asChild>
-            <Button variant="destructive" size="sm">
+            <Button variant="destructive" className="h-11 w-full sm:w-auto">
               <Trash2 className="size-4" />
               Remove
             </Button>

@@ -197,7 +197,7 @@ export default function FinancialPage({
               Number of entries and revenue per class
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -241,7 +241,7 @@ export default function FinancialPage({
               Add-on items purchased alongside entries (paid orders only)
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -278,7 +278,7 @@ export default function FinancialPage({
         <CardHeader>
           <CardTitle>Breakdown by Entry Type</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>

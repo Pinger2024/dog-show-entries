@@ -624,7 +624,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                         </Button>
                       </FormControl>
                     </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
+                    <PopoverContent className="w-auto max-w-[calc(100vw-2rem)] p-0" align="start">
                       <Calendar
                         mode="single"
                         captionLayout="dropdown"
@@ -856,7 +856,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                         Use Previous Owner
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-80 p-0" align="start">
+                    <PopoverContent className="w-72 max-w-[calc(100vw-1rem)] p-0" align="start">
                       <div className="border-b px-3 py-2">
                         <p className="text-sm font-medium">Select a previous owner</p>
                         <p className="text-xs text-muted-foreground">
@@ -957,8 +957,8 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
         )}
 
         {/* Submit */}
-        <div className="flex gap-3">
-          <Button type="submit" disabled={isPending} size="lg">
+        <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
+          <Button type="submit" disabled={isPending} size="lg" className="w-full sm:w-auto">
             {isPending && <Loader2 className="size-4 animate-spin" />}
             {mode === 'create' ? 'Add Dog' : 'Save Changes'}
           </Button>
@@ -966,6 +966,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
             type="button"
             variant="outline"
             size="lg"
+            className="w-full sm:w-auto"
             onClick={() => router.back()}
           >
             Cancel

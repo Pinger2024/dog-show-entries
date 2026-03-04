@@ -226,7 +226,7 @@ export default function EntryDetailPage() {
       </Card>
 
       {/* Actions */}
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-3">
         <Button variant="outline" asChild>
           <Link href={`/shows/${entry.showId}`}>View Show</Link>
         </Button>

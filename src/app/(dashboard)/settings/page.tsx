@@ -6,7 +6,7 @@ import { PasswordForm } from './password-form';
 
 export default function SettingsPage() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-16 md:pb-0">
       <div className="flex items-center gap-3">
         <Settings className="size-6 text-primary" />
         <h1 className="font-serif text-2xl font-bold tracking-tight">Settings</h1>

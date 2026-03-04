@@ -45,21 +45,24 @@ export default function ReportsPage({
   return (
     <Tabs defaultValue="entries" className="space-y-4">
       <TabsList className="grid w-full grid-cols-4">
-        <TabsTrigger value="entries" className="gap-1.5">
+        <TabsTrigger value="entries" className="gap-1.5 text-xs sm:text-sm">
           <FileText className="size-3.5 hidden sm:block" />
           Entries
         </TabsTrigger>
-        <TabsTrigger value="payments" className="gap-1.5">
+        <TabsTrigger value="payments" className="gap-1.5 text-xs sm:text-sm">
           <PoundSterling className="size-3.5 hidden sm:block" />
-          Payments
+          <span className="sm:hidden">Pay</span>
+          <span className="hidden sm:inline">Payments</span>
         </TabsTrigger>
-        <TabsTrigger value="catalogue" className="gap-1.5">
+        <TabsTrigger value="catalogue" className="gap-1.5 text-xs sm:text-sm">
           <BookOpen className="size-3.5 hidden sm:block" />
-          Catalogues
+          <span className="sm:hidden">Cat.</span>
+          <span className="hidden sm:inline">Catalogues</span>
         </TabsTrigger>
-        <TabsTrigger value="audit" className="gap-1.5">
+        <TabsTrigger value="audit" className="gap-1.5 text-xs sm:text-sm">
           <History className="size-3.5 hidden sm:block" />
-          Audit Log
+          <span className="sm:hidden">Audit</span>
+          <span className="hidden sm:inline">Audit Log</span>
         </TabsTrigger>
       </TabsList>
 

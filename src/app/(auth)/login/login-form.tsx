@@ -283,15 +283,15 @@ export function LoginForm() {
               </Button>
 
               {showPasswordField ? (
-                <div className="flex items-center justify-center gap-3 text-sm text-muted-foreground">
-                  <Link href="/forgot-password" className="hover:text-primary hover:underline">
+                <div className="flex flex-col items-center gap-1 sm:flex-row sm:justify-center sm:gap-3 text-sm text-muted-foreground">
+                  <Link href="/forgot-password" className="py-2 hover:text-primary hover:underline">
                     Forgot password?
                   </Link>
-                  <span>|</span>
+                  <span className="hidden sm:inline">|</span>
                   <button
                     type="button"
                     onClick={handleSendMagicLink}
-                    className="hover:text-primary hover:underline"
+                    className="py-2 hover:text-primary hover:underline"
                     disabled={loading || !email}
                   >
                     Send magic link instead
@@ -302,7 +302,7 @@ export function LoginForm() {
                   <button
                     type="button"
                     onClick={() => setShowPasswordField(true)}
-                    className="text-sm text-muted-foreground hover:text-primary hover:underline"
+                    className="py-2 text-sm text-muted-foreground hover:text-primary hover:underline"
                   >
                     I have a password
                   </button>
