@@ -422,14 +422,40 @@ export const showsRouter = createTRPCRouter({
 
       // Create show classes from selected class definitions
       if (classDefinitionIds && classDefinitionIds.length > 0) {
-        await ctx.db.insert(showClasses).values(
-          classDefinitionIds.map((classDefId, idx) => ({
-            showId: show!.id,
-            classDefinitionId: classDefId,
-            entryFee: entryFee ?? 0,
-            sortOrder: idx,
-          }))
-        );
+        const isSeparateSex = showData.classSexArrangement === 'separate_sex';
+
+        if (isSeparateSex) {
+          // Create two rows per class definition: one for dogs, one for bitches
+          const values: { showId: string; classDefinitionId: string; entryFee: number; sortOrder: number; sex: 'dog' | 'bitch' }[] = [];
+          let sortOrder = 0;
+          for (const classDefId of classDefinitionIds) {
+            values.push({
+              showId: show!.id,
+              classDefinitionId: classDefId,
+              entryFee: entryFee ?? 0,
+              sortOrder: sortOrder++,
+              sex: 'dog',
+            });
+            values.push({
+              showId: show!.id,
+              classDefinitionId: classDefId,
+              entryFee: entryFee ?? 0,
+              sortOrder: sortOrder++,
+              sex: 'bitch',
+            });
+          }
+          await ctx.db.insert(showClasses).values(values);
+        } else {
+          // Combined: one row per class definition, sex = null
+          await ctx.db.insert(showClasses).values(
+            classDefinitionIds.map((classDefId, idx) => ({
+              showId: show!.id,
+              classDefinitionId: classDefId,
+              entryFee: entryFee ?? 0,
+              sortOrder: idx,
+            }))
+          );
+        }
       }
 
       return show!;
