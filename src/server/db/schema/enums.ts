@@ -182,3 +182,8 @@ export const secretaryApplicationStatusEnum = pgEnum('secretary_application_stat
   'approved',
   'rejected',
 ]);
+
+export const classSexArrangementEnum = pgEnum('class_sex_arrangement', [
+  'separate_sex',
+  'combined_sex',
+]);

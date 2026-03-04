@@ -513,38 +513,48 @@ function PaymentReportContent({ showId }: { showId: string }) {
             <>
               {/* Mobile card view */}
               <div className="space-y-3 sm:hidden">
-                {filtered.map((entry) => (
-                  <div key={entry.id} className="rounded-lg border p-3 space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium text-sm truncate">{entry.exhibitor?.name ?? '—'}</p>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {entry.dog?.registeredName ?? 'Junior Handler'}
-                        </p>
+                {filtered.map((entry) => {
+                  const entryTotal = entry.totalFee + (entry.sundryTotal ?? 0);
+                  return (
+                    <div key={entry.id} className="rounded-lg border p-3 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-sm truncate">{entry.exhibitor?.name ?? '—'}</p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {entry.dog?.registeredName ?? 'Junior Handler'}
+                          </p>
+                        </div>
+                        <Badge
+                          variant={entryStatusConfig[entry.status]?.variant ?? 'outline'}
+                          className="shrink-0"
+                        >
+                          {entryStatusConfig[entry.status]?.label ?? entry.status}
+                        </Badge>
                       </div>
-                      <Badge
-                        variant={entryStatusConfig[entry.status]?.variant ?? 'outline'}
-                        className="shrink-0"
-                      >
-                        {entryStatusConfig[entry.status]?.label ?? entry.status}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-medium">{formatCurrency(entry.totalFee)}</span>
-                      <div className="flex flex-wrap gap-1 justify-end">
-                        {entry.payments.map((p, i) => (
-                          <Badge
-                            key={i}
-                            variant={p.status === 'succeeded' ? 'default' : 'outline'}
-                            className="text-[10px]"
-                          >
-                            £{(p.amount / 100).toFixed(2)} ({p.status})
-                          </Badge>
-                        ))}
+                      <div className="flex items-center justify-between text-xs">
+                        <div>
+                          <span className="font-medium">{formatCurrency(entryTotal)}</span>
+                          {(entry.sundryTotal ?? 0) > 0 && (
+                            <span className="ml-1 text-muted-foreground">
+                              (incl. {formatCurrency(entry.sundryTotal ?? 0)} add-ons)
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-1 justify-end">
+                          {entry.payments.map((p, i) => (
+                            <Badge
+                              key={i}
+                              variant={p.status === 'succeeded' ? 'default' : 'outline'}
+                              className="text-[10px]"
+                            >
+                              £{(p.amount / 100).toFixed(2)} ({p.status})
+                            </Badge>
+                          ))}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               {/* Desktop table */}
               <div className="hidden sm:block">
@@ -553,46 +563,57 @@ function PaymentReportContent({ showId }: { showId: string }) {
                     <TableRow>
                       <TableHead>Exhibitor</TableHead>
                       <TableHead>Dog</TableHead>
-                      <TableHead>Fee</TableHead>
+                      <TableHead>Entry Fee</TableHead>
+                      <TableHead>Add-ons</TableHead>
+                      <TableHead>Total</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Payments</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filtered.map((entry) => (
-                      <TableRow key={entry.id}>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium">{entry.exhibitor?.name ?? '—'}</p>
-                            <p className="text-xs text-muted-foreground">{entry.exhibitor?.email ?? ''}</p>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {entry.dog?.registeredName ?? 'Junior Handler'}
-                        </TableCell>
-                        <TableCell>{formatCurrency(entry.totalFee)}</TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={entryStatusConfig[entry.status]?.variant ?? 'outline'}
-                          >
-                            {entryStatusConfig[entry.status]?.label ?? entry.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {entry.payments.map((p, i) => (
-                              <Badge
-                                key={i}
-                                variant={p.status === 'succeeded' ? 'default' : 'outline'}
-                                className="text-[10px]"
-                              >
-                                £{(p.amount / 100).toFixed(2)} ({p.status})
-                              </Badge>
-                            ))}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {filtered.map((entry) => {
+                      const entryTotal = entry.totalFee + (entry.sundryTotal ?? 0);
+                      return (
+                        <TableRow key={entry.id}>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{entry.exhibitor?.name ?? '—'}</p>
+                              <p className="text-xs text-muted-foreground">{entry.exhibitor?.email ?? ''}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {entry.dog?.registeredName ?? 'Junior Handler'}
+                          </TableCell>
+                          <TableCell>{formatCurrency(entry.totalFee)}</TableCell>
+                          <TableCell>
+                            {(entry.sundryTotal ?? 0) > 0
+                              ? formatCurrency(entry.sundryTotal ?? 0)
+                              : <span className="text-muted-foreground">—</span>}
+                          </TableCell>
+                          <TableCell className="font-medium">{formatCurrency(entryTotal)}</TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={entryStatusConfig[entry.status]?.variant ?? 'outline'}
+                            >
+                              {entryStatusConfig[entry.status]?.label ?? entry.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1">
+                              {entry.payments.map((p, i) => (
+                                <Badge
+                                  key={i}
+                                  variant={p.status === 'succeeded' ? 'default' : 'outline'}
+                                  className="text-[10px]"
+                                >
+                                  £{(p.amount / 100).toFixed(2)} ({p.status})
+                                </Badge>
+                              ))}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>

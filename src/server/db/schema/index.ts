@@ -23,6 +23,7 @@ export {
   subscriptionStatusEnum,
   invitationStatusEnum,
   secretaryApplicationStatusEnum,
+  classSexArrangementEnum,
 } from './enums';
 
 // Tables

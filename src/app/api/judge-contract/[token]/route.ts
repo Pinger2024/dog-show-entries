@@ -321,8 +321,11 @@ export async function POST(
       const resend = new Resend(process.env.RESEND_API_KEY);
       const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>';
 
-      // Get secretary/admin users for the show's organisation
-      const notifyEmail = process.env.FEEDBACK_NOTIFY_EMAIL ?? 'michael@prometheus-it.com';
+      // Notify both the system admin and the show secretary if one is set
+      const adminEmail = process.env.FEEDBACK_NOTIFY_EMAIL ?? 'michael@prometheus-it.com';
+      const secretaryEmail = show.secretaryEmail;
+      const toAddresses = [adminEmail, ...(secretaryEmail && secretaryEmail !== adminEmail ? [secretaryEmail] : [])];
+      const notifyEmail = toAddresses;
 
       await resend.emails.send({
         from: emailFrom,
@@ -351,9 +354,9 @@ export async function POST(
           The next step is to send the formal confirmation letter. You can do this from the Judges tab in the show management page.
         </p>
         <div style="text-align: center; margin: 24px 0;">
-          <a href="${process.env.RENDER_EXTERNAL_URL ?? 'http://localhost:3000'}/secretary/shows/${show.id}"
+          <a href="${process.env.RENDER_EXTERNAL_URL ?? 'https://remishowmanager.co.uk'}/secretary/shows/${show.id}/people"
              style="display: inline-block; background: #2D5F3F; color: #ffffff; padding: 12px 24px; border-radius: 8px; font-size: 15px; font-weight: 600; text-decoration: none;">
-            View Show
+            View Judges in Remi
           </a>
         </div>
       </div>
@@ -392,7 +395,9 @@ export async function POST(
     try {
       const resend = new Resend(process.env.RESEND_API_KEY);
       const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>';
-      const notifyEmail = process.env.FEEDBACK_NOTIFY_EMAIL ?? 'michael@prometheus-it.com';
+      const adminEmail = process.env.FEEDBACK_NOTIFY_EMAIL ?? 'michael@prometheus-it.com';
+      const secretaryEmail = show.secretaryEmail;
+      const notifyEmail = [adminEmail, ...(secretaryEmail && secretaryEmail !== adminEmail ? [secretaryEmail] : [])];
 
       await resend.emails.send({
         from: emailFrom,
@@ -420,9 +425,9 @@ export async function POST(
           You may need to find a replacement judge and send a new offer.
         </p>
         <div style="text-align: center; margin: 24px 0;">
-          <a href="${process.env.RENDER_EXTERNAL_URL ?? 'http://localhost:3000'}/secretary/shows/${show.id}"
+          <a href="${process.env.RENDER_EXTERNAL_URL ?? 'https://remishowmanager.co.uk'}/secretary/shows/${show.id}/people"
              style="display: inline-block; background: #2D5F3F; color: #ffffff; padding: 12px 24px; border-radius: 8px; font-size: 15px; font-weight: 600; text-decoration: none;">
-            View Show
+            View Judges in Remi
           </a>
         </div>
       </div>

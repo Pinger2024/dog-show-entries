@@ -421,17 +421,42 @@ export const secretaryRouter = createTRPCRouter({
         },
       });
 
-      const totalRevenue = showEntries.reduce((sum, e) => sum + e.totalFee, 0);
-      const paidEntries = showEntries.filter((e) => e.status === 'confirmed');
-      const pendingEntries = showEntries.filter((e) => e.status === 'pending');
+      // Compute sundry totals per order so we can include them in per-entry totals
+      const orderIds = showEntries.map((e) => e.orderId).filter(Boolean) as string[];
+      const sundryTotalsMap = new Map<string, number>();
+      if (orderIds.length > 0) {
+        const sundryTotals = await ctx.db
+          .select({
+            orderId: orderSundryItems.orderId,
+            total: sql<number>`sum(${orderSundryItems.quantity} * ${orderSundryItems.unitPrice})`,
+          })
+          .from(orderSundryItems)
+          .where(inArray(orderSundryItems.orderId, orderIds))
+          .groupBy(orderSundryItems.orderId);
+        for (const row of sundryTotals) {
+          sundryTotalsMap.set(row.orderId, Number(row.total));
+        }
+      }
+
+      const enrichedEntries = showEntries.map((e) => ({
+        ...e,
+        sundryTotal: (e.orderId ? sundryTotalsMap.get(e.orderId) : undefined) ?? 0,
+      }));
+
+      const totalRevenue = enrichedEntries.reduce(
+        (sum, e) => sum + e.totalFee + e.sundryTotal,
+        0
+      );
+      const paidEntries = enrichedEntries.filter((e) => e.status === 'confirmed');
+      const pendingEntries = enrichedEntries.filter((e) => e.status === 'pending');
 
       return {
-        entries: showEntries,
+        entries: enrichedEntries,
         summary: {
           totalRevenue,
           paidCount: paidEntries.length,
           pendingCount: pendingEntries.length,
-          totalEntries: showEntries.length,
+          totalEntries: enrichedEntries.length,
         },
       };
     }),
@@ -1320,6 +1345,9 @@ export const secretaryRouter = createTRPCRouter({
         handlerName: z.string().optional(),
         isNfc: z.boolean().default(false),
         paymentMethod: z.enum(['postal', 'cash', 'bank_transfer', 'online']).default('postal'),
+        sundryItems: z
+          .array(z.object({ sundryItemId: z.string().uuid(), quantity: z.number().int().min(1) }))
+          .optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -1372,11 +1400,43 @@ export const secretaryRouter = createTRPCRouter({
         });
       }
 
-      // Calculate total fee
-      const totalFee = selectedClasses.reduce(
-        (sum, sc) => sum + sc.entryFee,
-        0
-      );
+      // Validate and price sundry items
+      const sundryInputs = input.sundryItems ?? [];
+      let selectedSundryItems: { id: string; name: string; priceInPence: number; quantity: number }[] = [];
+      if (sundryInputs.length > 0) {
+        const sundryIds = sundryInputs.map((s) => s.sundryItemId);
+        const foundItems = await ctx.db.query.sundryItems.findMany({
+          where: and(
+            inArray(sundryItems.id, sundryIds),
+            eq(sundryItems.showId, input.showId),
+            eq(sundryItems.enabled, true)
+          ),
+        });
+        if (foundItems.length !== sundryIds.length) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'One or more sundry items are invalid' });
+        }
+        selectedSundryItems = foundItems.map((item) => ({
+          id: item.id,
+          name: item.name,
+          priceInPence: item.priceInPence,
+          quantity: sundryInputs.find((s) => s.sundryItemId === item.id)!.quantity,
+        }));
+      }
+
+      const classFee = selectedClasses.reduce((sum, sc) => sum + sc.entryFee, 0);
+      const sundryFee = selectedSundryItems.reduce((sum, s) => sum + s.priceInPence * s.quantity, 0);
+      const totalAmount = classFee + sundryFee;
+
+      // Create an order record (enables sundry item tracking + consistent reporting)
+      const [order] = await ctx.db
+        .insert(orders)
+        .values({
+          showId: input.showId,
+          exhibitorId,
+          status: 'paid',
+          totalAmount,
+        })
+        .returning();
 
       // Create entry — auto-confirmed for secretary entries
       const [entry] = await ctx.db
@@ -1386,7 +1446,8 @@ export const secretaryRouter = createTRPCRouter({
           dogId: input.dogId,
           exhibitorId,
           isNfc: input.isNfc,
-          totalFee,
+          totalFee: classFee,
+          orderId: order!.id,
           status: 'confirmed',
         })
         .returning();
@@ -1400,10 +1461,23 @@ export const secretaryRouter = createTRPCRouter({
         }))
       );
 
-      // Create a payment record (manual — no Stripe)
+      // Create sundry item records
+      if (selectedSundryItems.length > 0) {
+        await ctx.db.insert(orderSundryItems).values(
+          selectedSundryItems.map((s) => ({
+            orderId: order!.id,
+            sundryItemId: s.id,
+            quantity: s.quantity,
+            unitPrice: s.priceInPence,
+          }))
+        );
+      }
+
+      // Create a payment record (manual — no Stripe), linked to the order
       await ctx.db.insert(payments).values({
         entryId: entry!.id,
-        amount: totalFee,
+        orderId: order!.id,
+        amount: totalAmount,
         status: 'succeeded',
         type: 'initial',
       });
@@ -1418,6 +1492,7 @@ export const secretaryRouter = createTRPCRouter({
           paymentMethod: input.paymentMethod,
           exhibitorEmail: input.exhibitorEmail,
           handlerName: input.handlerName ?? null,
+          sundryItems: selectedSundryItems.map((s) => ({ name: s.name, quantity: s.quantity })),
         },
         reason: `Entry created by secretary (${input.paymentMethod} payment)`,
       });

@@ -55,6 +55,7 @@ import { EntryItem, entryStatusConfig, formatDate } from '../_lib/show-utils';
 export default function EntriesPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: showId } = use(params);
 
+  const { data: showData } = trpc.shows.getById.useQuery({ id: showId });
   const { data: entriesData, isLoading: entriesLoading } = trpc.entries.getForShow.useQuery({ showId, limit: 100 });
   const entries = entriesData?.items ?? [];
   const total = entriesData?.total ?? 0;
@@ -349,6 +350,7 @@ export default function EntriesPage({ params }: { params: Promise<{ id: string }
         {showAddEntry && (
           <AddEntryDialog
             showId={showId}
+            showDate={showData?.startDate ?? null}
             onClose={() => setShowAddEntry(false)}
           />
         )}
@@ -508,9 +510,11 @@ function EditDogDialog({
 
 function AddEntryDialog({
   showId,
+  showDate,
   onClose,
 }: {
   showId: string;
+  showDate: string | null;
   onClose: () => void;
 }) {
   const [step, setStep] = useState<'search' | 'register' | 'classes'>('search');
@@ -518,10 +522,13 @@ function AddEntryDialog({
   const [selectedDogId, setSelectedDogId] = useState<string | null>(null);
   const [selectedDogName, setSelectedDogName] = useState('');
   const [selectedDogSex, setSelectedDogSex] = useState<string | null>(null);
+  const [selectedDogDob, setSelectedDogDob] = useState<string | null>(null);
+  const [selectedDogBreedId, setSelectedDogBreedId] = useState<string | null>(null);
   const [exhibitorEmail, setExhibitorEmail] = useState('');
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<string>('postal');
   const [isNfc, setIsNfc] = useState(false);
+  const [sundryQuantities, setSundryQuantities] = useState<Record<string, number>>({});
 
   // Register dog form
   const [regName, setRegName] = useState('');
@@ -543,8 +550,14 @@ function AddEntryDialog({
       { enabled: dogSearch.length >= 2 }
     );
 
-  // Get show classes for the class selection
+  // Get show classes for the class selection — filtered to dog's breed, excluding JH classes
   const { data: classesData } = trpc.shows.getClasses.useQuery(
+    { showId, breedId: selectedDogBreedId ?? undefined },
+    { enabled: step === 'classes' }
+  );
+
+  // Get sundry items available for this show
+  const { data: sundryItemsData } = trpc.shows.getSundryItems.useQuery(
     { showId },
     { enabled: step === 'classes' }
   );
@@ -560,6 +573,8 @@ function AddEntryDialog({
       setSelectedDogId(dog.id);
       setSelectedDogName(dog.registeredName);
       setSelectedDogSex(regSex || null);
+      setSelectedDogDob(regDob || null);
+      setSelectedDogBreedId(regBreed || null);
       setStep('classes');
       utils.secretary.searchDogs.invalidate();
     },
@@ -630,6 +645,8 @@ function AddEntryDialog({
                       setSelectedDogId(dog.id);
                       setSelectedDogName(dog.registeredName);
                       setSelectedDogSex(dog.sex);
+                      setSelectedDogDob(dog.dateOfBirth);
+                      setSelectedDogBreedId(dog.breedId);
                       // Pre-fill exhibitor email from primary owner
                       const primaryOwner = dog.owners?.[0];
                       if (primaryOwner?.ownerEmail) {
@@ -827,10 +844,22 @@ function AddEntryDialog({
             <div className="space-y-1">
               <label className="text-sm font-medium">Classes</label>
               <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border p-3">
-                {classesData && classesData.length > 0 ? (
-                  classesData
-                    .filter((sc) => !sc.sex || !selectedDogSex || sc.sex === selectedDogSex)
-                    .map((sc) => (
+                {classesData && classesData.length > 0 ? (() => {
+                  // Filter: correct sex, exclude JH classes, apply age eligibility
+                  const eligible = classesData.filter((sc) => {
+                    if (sc.classDefinition?.type === 'junior_handler') return false;
+                    if (sc.sex && selectedDogSex && sc.sex !== selectedDogSex) return false;
+                    if (sc.classDefinition?.type === 'age' && selectedDogDob && showDate) {
+                      const ageMonths =
+                        (new Date(showDate).getFullYear() - new Date(selectedDogDob).getFullYear()) * 12 +
+                        (new Date(showDate).getMonth() - new Date(selectedDogDob).getMonth());
+                      const { minAgeMonths, maxAgeMonths } = sc.classDefinition;
+                      if (minAgeMonths !== null && ageMonths < minAgeMonths) return false;
+                      if (maxAgeMonths !== null && ageMonths >= maxAgeMonths) return false;
+                    }
+                    return true;
+                  });
+                  return eligible.length > 0 ? eligible.map((sc) => (
                     <label
                       key={sc.id}
                       className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-muted/50"
@@ -839,9 +868,7 @@ function AddEntryDialog({
                         checked={selectedClassIds.includes(sc.id)}
                         onCheckedChange={(checked) => {
                           setSelectedClassIds((prev) =>
-                            checked
-                              ? [...prev, sc.id]
-                              : prev.filter((id) => id !== sc.id)
+                            checked ? [...prev, sc.id] : prev.filter((id) => id !== sc.id)
                           );
                         }}
                       />
@@ -853,8 +880,12 @@ function AddEntryDialog({
                         {formatCurrency(sc.entryFee)}
                       </span>
                     </label>
-                  ))
-                ) : (
+                  )) : (
+                    <p className="py-4 text-center text-sm text-muted-foreground">
+                      No eligible classes for this dog.
+                    </p>
+                  );
+                })() : (
                   <p className="py-4 text-center text-sm text-muted-foreground">
                     No classes defined for this show yet.
                   </p>
@@ -862,7 +893,7 @@ function AddEntryDialog({
               </div>
               {selectedClassIds.length > 0 && (
                 <p className="text-sm font-medium">
-                  Total: {formatCurrency(
+                  Entry fees: {formatCurrency(
                     (classesData ?? [])
                       .filter((sc) => selectedClassIds.includes(sc.id))
                       .reduce((sum, sc) => sum + sc.entryFee, 0)
@@ -870,6 +901,62 @@ function AddEntryDialog({
                 </p>
               )}
             </div>
+
+            {/* Sundry items */}
+            {sundryItemsData && sundryItemsData.length > 0 && (
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Add-ons (optional)</label>
+                <div className="space-y-1 rounded-lg border p-3">
+                  {sundryItemsData.map((item) => {
+                    const qty = sundryQuantities[item.id] ?? 0;
+                    const isCheckbox = item.maxPerOrder === 1;
+                    if (isCheckbox) {
+                      return (
+                        <label key={item.id} className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-muted/50">
+                          <Checkbox
+                            checked={qty > 0}
+                            onCheckedChange={(checked) =>
+                              setSundryQuantities((prev) => ({ ...prev, [item.id]: checked ? 1 : 0 }))
+                            }
+                          />
+                          <span className="flex-1 text-sm">{item.name}</span>
+                          <span className="text-xs text-muted-foreground">{formatCurrency(item.priceInPence)}</span>
+                        </label>
+                      );
+                    }
+                    return (
+                      <div key={item.id} className="flex items-center gap-2 rounded px-2 py-1.5">
+                        <span className="flex-1 text-sm">{item.name}</span>
+                        <span className="text-xs text-muted-foreground mr-2">{formatCurrency(item.priceInPence)} each</span>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            type="button" variant="outline" size="icon" className="size-6"
+                            disabled={qty === 0}
+                            onClick={() => setSundryQuantities((prev) => ({ ...prev, [item.id]: Math.max(0, qty - 1) }))}
+                          >−</Button>
+                          <span className="w-5 text-center text-sm">{qty}</span>
+                          <Button
+                            type="button" variant="outline" size="icon" className="size-6"
+                            disabled={item.maxPerOrder != null && qty >= item.maxPerOrder}
+                            onClick={() => setSundryQuantities((prev) => ({ ...prev, [item.id]: qty + 1 }))}
+                          >+</Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {Object.values(sundryQuantities).some((q) => q > 0) && (
+                  <p className="text-sm font-medium">
+                    Add-ons: {formatCurrency(
+                      (sundryItemsData ?? []).reduce(
+                        (sum, item) => sum + item.priceInPence * (sundryQuantities[item.id] ?? 0),
+                        0
+                      )
+                    )}
+                  </p>
+                )}
+              </div>
+            )}
 
             <DialogFooter>
               <Button variant="outline" onClick={() => setStep('search')}>
@@ -880,7 +967,10 @@ function AddEntryDialog({
                   !selectedDogId || !exhibitorEmail || selectedClassIds.length === 0 ||
                   createEntryMutation.isPending
                 }
-                onClick={() =>
+                onClick={() => {
+                  const sundryItems = Object.entries(sundryQuantities)
+                    .filter(([, qty]) => qty > 0)
+                    .map(([sundryItemId, quantity]) => ({ sundryItemId, quantity }));
                   createEntryMutation.mutate({
                     showId,
                     dogId: selectedDogId!,
@@ -888,8 +978,9 @@ function AddEntryDialog({
                     exhibitorEmail,
                     isNfc,
                     paymentMethod: paymentMethod as 'postal' | 'cash' | 'bank_transfer' | 'online',
-                  })
-                }
+                    sundryItems: sundryItems.length > 0 ? sundryItems : undefined,
+                  });
+                }}
               >
                 {createEntryMutation.isPending && <Loader2 className="size-4 animate-spin" />}
                 Create Entry

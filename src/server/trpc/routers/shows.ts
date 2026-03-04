@@ -371,6 +371,8 @@ export const showsRouter = createTRPCRouter({
         kcLicenceNo: z.string().optional(),
         scheduleUrl: z.string().url().optional(),
         description: z.string().optional(),
+        secretaryEmail: z.string().email().optional(),
+        classSexArrangement: z.enum(['separate_sex', 'combined_sex']).optional(),
         classDefinitionIds: z.array(z.string().uuid()).optional(),
         entryFee: z.number().int().min(0).optional(),
         firstEntryFee: z.number().int().min(0).optional(),
@@ -452,6 +454,8 @@ export const showsRouter = createTRPCRouter({
         kcLicenceNo: z.string().nullable().optional(),
         scheduleUrl: z.string().url().nullable().optional(),
         description: z.string().nullable().optional(),
+        secretaryEmail: z.string().email().nullable().optional(),
+        classSexArrangement: z.enum(['separate_sex', 'combined_sex']).nullable().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {

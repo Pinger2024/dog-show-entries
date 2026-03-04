@@ -4,6 +4,12 @@ import { NextResponse } from 'next/server';
 const publicRoutes = ['/', '/login', '/register'];
 const publicPrefixes = ['/shows', '/api/auth', '/api/trpc', '/api/upload', '/api/webhooks', '/api/catalogue', '/about', '/help', '/privacy', '/terms', '/invite', '/pricing', '/promo'];
 
+// Routes that match a public prefix but require authentication
+const authRequiredPatterns = [
+  /^\/shows\/[^/]+\/enter(\/|$)/,
+  /^\/shows\/[^/]+\/entries\/[^/]+\/edit(\/|$)/,
+];
+
 function isPublicRoute(pathname: string) {
   if (publicRoutes.includes(pathname)) return true;
   return publicPrefixes.some((prefix) => pathname.startsWith(prefix));
@@ -18,6 +24,13 @@ export default auth((req) => {
   // Redirect authenticated users away from auth pages
   if (isAuthenticated && authRoutes.includes(pathname)) {
     return NextResponse.redirect(new URL('/dashboard', req.url));
+  }
+
+  // Check routes that require auth even if they match a public prefix
+  if (!isAuthenticated && authRequiredPatterns.some((p) => p.test(pathname))) {
+    const loginUrl = new URL('/login', req.url);
+    loginUrl.searchParams.set('callbackUrl', pathname);
+    return NextResponse.redirect(loginUrl);
   }
 
   // Allow public routes

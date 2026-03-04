@@ -128,6 +128,20 @@ export default function OverviewPage({
                 {show.showScope.replace('_', ' ')}
               </dd>
             </div>
+            {show.classSexArrangement && (
+              <div>
+                <dt className="text-sm text-muted-foreground">Class Structure</dt>
+                <dd className="font-medium">
+                  {show.classSexArrangement === 'separate_sex' ? 'Separate Dog & Bitch' : 'Combined Dog & Bitch'}
+                </dd>
+              </div>
+            )}
+            {show.secretaryEmail && (
+              <div>
+                <dt className="text-sm text-muted-foreground">Secretary Email</dt>
+                <dd className="font-medium">{show.secretaryEmail}</dd>
+              </div>
+            )}
             <div>
               <dt className="text-sm text-muted-foreground">
                 Entry Close Date
@@ -191,6 +205,8 @@ function EditShowDetailsDialog({
     name: string;
     showType: string;
     showScope: string;
+    classSexArrangement: string | null;
+    secretaryEmail: string | null;
     startDate: string;
     endDate: string;
     entryCloseDate: Date | string | null;
@@ -204,6 +220,8 @@ function EditShowDetailsDialog({
   const [name, setName] = useState(show.name);
   const [showType, setShowType] = useState(show.showType);
   const [showScope, setShowScope] = useState(show.showScope);
+  const [classSexArrangement, setClassSexArrangement] = useState(show.classSexArrangement ?? '');
+  const [secretaryEmail, setSecretaryEmail] = useState(show.secretaryEmail ?? '');
   const [startDate, setStartDate] = useState(show.startDate);
   const [endDate, setEndDate] = useState(show.endDate);
   const [entryCloseDate, setEntryCloseDate] = useState(
@@ -235,6 +253,8 @@ function EditShowDetailsDialog({
       name,
       showType: showType as 'companion' | 'primary' | 'limited' | 'open' | 'premier_open' | 'championship',
       showScope: showScope as 'single_breed' | 'group' | 'general',
+      classSexArrangement: (classSexArrangement as 'separate_sex' | 'combined_sex') || null,
+      secretaryEmail: secretaryEmail || null,
       startDate,
       endDate,
       entryCloseDate: entryCloseDate
@@ -268,6 +288,8 @@ function EditShowDetailsDialog({
       );
       setKcLicenceNo(show.kcLicenceNo ?? '');
       setDescription(show.description ?? '');
+      setClassSexArrangement(show.classSexArrangement ?? '');
+      setSecretaryEmail(show.secretaryEmail ?? '');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, show.name, show.showType, show.startDate]);
@@ -324,6 +346,30 @@ function EditShowDetailsDialog({
                     <SelectItem value="general">General</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Class Structure</Label>
+                <Select value={classSexArrangement} onValueChange={setClassSexArrangement}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select class structure" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="separate_sex">Separate Dog & Bitch</SelectItem>
+                    <SelectItem value="combined_sex">Combined Dog & Bitch</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-secretary-email">Secretary Contact Email</Label>
+                <Input
+                  id="edit-secretary-email"
+                  type="email"
+                  value={secretaryEmail}
+                  onChange={(e) => setSecretaryEmail(e.target.value)}
+                  placeholder="e.g. secretary@club.co.uk"
+                />
               </div>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">

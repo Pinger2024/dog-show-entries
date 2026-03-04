@@ -63,6 +63,11 @@ const showScopes = [
   { value: 'group', label: 'Group' },
 ] as const;
 
+const classSexArrangements = [
+  { value: 'separate_sex', label: 'Separate Dog & Bitch' },
+  { value: 'combined_sex', label: 'Combined Dog & Bitch' },
+] as const;
+
 const createShowSchema = z.object({
   // Step 1 - Basic Info
   name: z.string().min(1, 'Show name is required').max(255),
@@ -75,6 +80,8 @@ const createShowSchema = z.object({
     'championship',
   ]),
   showScope: z.enum(['single_breed', 'group', 'general']),
+  classSexArrangement: z.enum(['separate_sex', 'combined_sex']).optional(),
+  secretaryEmail: z.string().email('Enter a valid email').optional().or(z.literal('')),
   organisationId: z.string().uuid('Please select an organisation'),
   startDate: z.string().min(1, 'Start date is required'),
   endDate: z.string().min(1, 'End date is required'),
@@ -130,6 +137,8 @@ export default function NewShowPage() {
       name: '',
       showType: 'open',
       showScope: 'general',
+      classSexArrangement: undefined,
+      secretaryEmail: '',
       organisationId: '',
       startDate: '',
       endDate: '',
@@ -187,6 +196,8 @@ export default function NewShowPage() {
         name: values.name,
         showType: values.showType,
         showScope: values.showScope,
+        classSexArrangement: values.classSexArrangement || undefined,
+        secretaryEmail: values.secretaryEmail || undefined,
         organisationId: values.organisationId,
         venueId: venueId || undefined,
         startDate: values.startDate,
@@ -240,6 +251,17 @@ export default function NewShowPage() {
   const watchedOrgId = form.watch('organisationId');
   const watchedStartDate = form.watch('startDate');
   const watchedEndDate = form.watch('endDate');
+  const watchedDescription = form.watch('description');
+
+  // Auto-populate description when show type + scope are selected and description is empty
+  function autoPopulateDescription() {
+    if (watchedDescription) return; // Don't overwrite user's text
+    const typeLabel = showTypes.find((t) => t.value === watchedShowType)?.label ?? '';
+    const scopeLabel = showScopes.find((s) => s.value === watchedShowScope)?.label ?? '';
+    if (typeLabel && scopeLabel) {
+      form.setValue('description', `${typeLabel} Show — ${scopeLabel}`);
+    }
+  }
 
   function canProceed(): boolean {
     switch (step) {
@@ -353,7 +375,10 @@ export default function NewShowPage() {
                       <FormItem>
                         <FormLabel>Show Type</FormLabel>
                         <Select
-                          onValueChange={field.onChange}
+                          onValueChange={(v) => {
+                            field.onChange(v);
+                            autoPopulateDescription();
+                          }}
                           defaultValue={field.value}
                         >
                           <FormControl>
@@ -381,7 +406,10 @@ export default function NewShowPage() {
                       <FormItem>
                         <FormLabel>Show Scope</FormLabel>
                         <Select
-                          onValueChange={field.onChange}
+                          onValueChange={(v) => {
+                            field.onChange(v);
+                            autoPopulateDescription();
+                          }}
                           defaultValue={field.value}
                         >
                           <FormControl>
@@ -397,6 +425,54 @@ export default function NewShowPage() {
                             ))}
                           </SelectContent>
                         </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="classSexArrangement"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Class Structure</FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value ?? ''}
+                        >
+                          <FormControl>
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select class structure" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {classSexArrangements.map((a) => (
+                              <SelectItem key={a.value} value={a.value}>
+                                {a.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="secretaryEmail"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Secretary Contact Email</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="email"
+                            placeholder="e.g. secretary@club.co.uk"
+                            {...field}
+                          />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -979,7 +1055,7 @@ export default function NewShowPage() {
           )}
 
           {/* Step 5: Review */}
-          {step === 4 && <ReviewStep form={form} organisations={organisations} venues={venues ?? []} classDefinitions={classDefinitions ?? []} createVenue={createVenue} />}
+          {step === 4 && <ReviewStep form={form} organisations={organisations} venues={venues ?? []} classDefinitions={classDefinitions ?? []} createVenue={createVenue} classSexArrangements={classSexArrangements} />}
 
           {/* Navigation */}
           <div className="mt-6 flex items-center justify-between gap-2">
@@ -1092,12 +1168,14 @@ function ReviewStep({
   venues,
   classDefinitions,
   createVenue,
+  classSexArrangements,
 }: {
   form: ReturnType<typeof useForm<CreateShowValues>>;
   organisations: { id: string; name: string }[];
   venues: { id: string; name: string; postcode: string | null }[];
   classDefinitions: { id: string; name: string }[];
   createVenue: boolean;
+  classSexArrangements: readonly { value: string; label: string }[];
 }) {
   const values = form.getValues();
   const org = organisations.find((o) => o.id === values.organisationId);
@@ -1107,6 +1185,7 @@ function ReviewStep({
   );
   const showType = showTypes.find((t) => t.value === values.showType);
   const showScope = showScopes.find((s) => s.value === values.showScope);
+  const classSexArrangement = classSexArrangements.find((a) => a.value === values.classSexArrangement);
 
   return (
     <Card>
@@ -1134,6 +1213,18 @@ function ReviewStep({
               <dt className="text-sm text-muted-foreground">Scope</dt>
               <dd className="font-medium">{showScope?.label}</dd>
             </div>
+            {classSexArrangement && (
+              <div>
+                <dt className="text-sm text-muted-foreground">Class Structure</dt>
+                <dd className="font-medium">{classSexArrangement.label}</dd>
+              </div>
+            )}
+            {values.secretaryEmail && (
+              <div>
+                <dt className="text-sm text-muted-foreground">Secretary Email</dt>
+                <dd className="font-medium">{values.secretaryEmail}</dd>
+              </div>
+            )}
             <div>
               <dt className="text-sm text-muted-foreground">Organisation</dt>
               <dd className="font-medium">{org?.name ?? 'Not set'}</dd>

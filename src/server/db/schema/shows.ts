@@ -8,7 +8,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
-import { showTypeEnum, showScopeEnum, showStatusEnum } from './enums';
+import { showTypeEnum, showScopeEnum, showStatusEnum, classSexArrangementEnum } from './enums';
 import { organisations } from './organisations';
 import { venues } from './venues';
 import { showClasses } from './show-classes';
@@ -42,6 +42,8 @@ export const shows = pgTable(
     kcLicenceNo: text('kc_licence_no'),
     scheduleUrl: text('schedule_url'),
     description: text('description'),
+    secretaryEmail: text('secretary_email'),
+    classSexArrangement: classSexArrangementEnum('class_sex_arrangement'),
     firstEntryFee: integer('first_entry_fee'),
     subsequentEntryFee: integer('subsequent_entry_fee'),
     nfcEntryFee: integer('nfc_entry_fee'),
