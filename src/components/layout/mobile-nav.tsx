@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { signOut } from 'next-auth/react';
-import { Menu, Dog, Ticket, LayoutDashboard, LogOut, Eye, ClipboardList } from 'lucide-react';
+import { Menu, Dog, Ticket, LayoutDashboard, LogOut, Eye, ClipboardList, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Sheet,
@@ -109,6 +109,14 @@ export function MobileNav({ user, isSecretary, isSteward }: MobileNavProps) {
                   <p className="text-sm text-muted-foreground">{user.email}</p>
                 )}
               </div>
+              <Link
+                href="/settings"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <Settings className="size-5" />
+                Settings
+              </Link>
               <button
                 onClick={() => {
                   setOpen(false);

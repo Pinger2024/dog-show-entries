@@ -92,3 +92,7 @@ export {
   secretaryApplications,
   secretaryApplicationsRelations,
 } from './secretary-applications';
+export {
+  passwordResetTokens,
+  passwordResetTokensRelations,
+} from './password-reset-tokens';

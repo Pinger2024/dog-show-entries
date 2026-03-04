@@ -1,7 +1,7 @@
 import { auth } from '@/lib/auth';
 import { NextResponse } from 'next/server';
 
-const publicRoutes = ['/', '/login', '/register'];
+const publicRoutes = ['/', '/login', '/register', '/forgot-password', '/reset-password'];
 const publicPrefixes = ['/shows', '/api/auth', '/api/trpc', '/api/upload', '/api/webhooks', '/api/catalogue', '/about', '/help', '/privacy', '/terms', '/invite', '/pricing', '/promo'];
 
 // Routes that match a public prefix but require authentication
@@ -15,7 +15,7 @@ function isPublicRoute(pathname: string) {
   return publicPrefixes.some((prefix) => pathname.startsWith(prefix));
 }
 
-const authRoutes = ['/login', '/register'];
+const authRoutes = ['/login', '/register', '/forgot-password', '/reset-password'];
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;

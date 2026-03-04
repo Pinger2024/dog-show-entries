@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { signIn } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Mail } from 'lucide-react';
+import { Mail, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -43,10 +43,45 @@ export function LoginForm() {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get('callbackUrl') ?? '/dashboard';
   const verify = searchParams.get('verify');
+  const resetSuccess = searchParams.get('reset') === 'success';
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPasswordField, setShowPasswordField] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(!!verify);
+  const [error, setError] = useState('');
+  const [showPasswordVisible, setShowPasswordVisible] = useState(false);
+  const hiddenPasswordRef = useRef<HTMLInputElement>(null);
+
+  // Detect browser autofill on the hidden password field
+  useEffect(() => {
+    const el = hiddenPasswordRef.current;
+    if (!el) return;
+
+    function handleAutofill() {
+      // Browser autofilled the password — reveal the password UI
+      setShowPasswordField(true);
+      if (el && el.value) {
+        setPassword(el.value);
+      }
+    }
+
+    // Chrome/Safari fire an animationstart event when autofill styles kick in
+    el.addEventListener('animationstart', handleAutofill);
+
+    // Fallback: check after a short delay for autofilled values
+    const timer = setTimeout(() => {
+      if (el && el.value) {
+        handleAutofill();
+      }
+    }, 600);
+
+    return () => {
+      el.removeEventListener('animationstart', handleAutofill);
+      clearTimeout(timer);
+    };
+  }, []);
 
   async function handleGoogleSignIn() {
     setGoogleLoading(true);
@@ -55,13 +90,50 @@ export function LoginForm() {
 
   async function handleEmailSignIn(e: React.FormEvent) {
     e.preventDefault();
+    setError('');
     setLoading(true);
-    try {
-      await signIn('resend', { email, callbackUrl });
-      setEmailSent(true);
-    } finally {
-      setLoading(false);
+
+    if (showPasswordField && password) {
+      // Password login
+      try {
+        const result = await signIn('password', {
+          email,
+          password,
+          redirect: false,
+        });
+
+        if (result?.error) {
+          setError('Incorrect email or password');
+          setLoading(false);
+          return;
+        }
+
+        // Successful login — redirect
+        window.location.href = callbackUrl;
+      } catch {
+        setError('Something went wrong. Please try again.');
+        setLoading(false);
+      }
+    } else {
+      // Magic link
+      try {
+        await signIn('resend', { email, callbackUrl });
+        setEmailSent(true);
+      } finally {
+        setLoading(false);
+      }
     }
+  }
+
+  function handleSendMagicLink() {
+    setError('');
+    setShowPasswordField(false);
+    setPassword('');
+    // Trigger magic link send
+    setLoading(true);
+    signIn('resend', { email, callbackUrl })
+      .then(() => setEmailSent(true))
+      .finally(() => setLoading(false));
   }
 
   if (emailSent) {
@@ -101,6 +173,12 @@ export function LoginForm() {
           </p>
         </div>
 
+        {resetSuccess && (
+          <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+            Password reset successfully. You can now sign in with your new password.
+          </div>
+        )}
+
         <Card>
           <CardContent className="space-y-4 pt-6">
             {/* Google sign-in */}
@@ -131,7 +209,25 @@ export function LoginForm() {
               </div>
             </div>
 
-            {/* Email magic link */}
+            {/* Hidden password field for autofill detection */}
+            {!showPasswordField && (
+              <input
+                ref={hiddenPasswordRef}
+                type="password"
+                autoComplete="current-password"
+                tabIndex={-1}
+                aria-hidden="true"
+                className="absolute h-0 w-0 opacity-0"
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setShowPasswordField(true);
+                    setPassword(e.target.value);
+                  }
+                }}
+              />
+            )}
+
+            {/* Email + optional password */}
             <form onSubmit={handleEmailSignIn} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-sm sm:text-[0.9375rem]">Email address</Label>
@@ -142,14 +238,76 @@ export function LoginForm() {
                   autoComplete="email"
                   placeholder="you@example.com"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => { setEmail(e.target.value); setError(''); }}
                   required
                   className="h-11 sm:h-12 text-sm sm:text-[0.9375rem]"
                 />
               </div>
+
+              {showPasswordField && (
+                <div className="space-y-2">
+                  <Label htmlFor="password" className="text-sm sm:text-[0.9375rem]">Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPasswordVisible ? 'text' : 'password'}
+                      autoComplete="current-password"
+                      placeholder="Enter your password"
+                      value={password}
+                      onChange={(e) => { setPassword(e.target.value); setError(''); }}
+                      className="h-11 sm:h-12 pr-10 text-sm sm:text-[0.9375rem]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPasswordVisible(!showPasswordVisible)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      tabIndex={-1}
+                    >
+                      {showPasswordVisible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {error && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                  {error}
+                </div>
+              )}
+
               <Button type="submit" className="h-11 sm:h-12 w-full text-sm sm:text-[0.9375rem]" disabled={loading}>
-                {loading ? 'Sending link...' : 'Send sign-in link'}
+                {loading
+                  ? (showPasswordField && password ? 'Signing in...' : 'Sending link...')
+                  : (showPasswordField && password ? 'Sign in' : 'Send sign-in link')
+                }
               </Button>
+
+              {showPasswordField ? (
+                <div className="flex items-center justify-center gap-3 text-sm text-muted-foreground">
+                  <Link href="/forgot-password" className="hover:text-primary hover:underline">
+                    Forgot password?
+                  </Link>
+                  <span>|</span>
+                  <button
+                    type="button"
+                    onClick={handleSendMagicLink}
+                    className="hover:text-primary hover:underline"
+                    disabled={loading || !email}
+                  >
+                    Send magic link instead
+                  </button>
+                </div>
+              ) : (
+                <div className="text-center">
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswordField(true)}
+                    className="text-sm text-muted-foreground hover:text-primary hover:underline"
+                  >
+                    I have a password
+                  </button>
+                </div>
+              )}
             </form>
           </CardContent>
           <CardFooter className="justify-center">

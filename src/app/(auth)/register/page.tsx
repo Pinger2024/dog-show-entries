@@ -3,10 +3,11 @@
 import { useState } from 'react';
 import { signIn } from 'next-auth/react';
 import Link from 'next/link';
-import { Mail } from 'lucide-react';
+import { Mail, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Card,
   CardContent,
@@ -41,23 +42,78 @@ function GoogleIcon({ className }: { className?: string }) {
 
 export default function RegisterPage() {
   const [email, setEmail] = useState('');
+  const [wantsPassword, setWantsPassword] = useState(false);
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPasswordVisible, setShowPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
+  const [error, setError] = useState('');
 
   async function handleGoogleSignIn() {
     setGoogleLoading(true);
     await signIn('google', { callbackUrl: '/onboarding' });
   }
 
-  async function handleEmailSignIn(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setError('');
     setLoading(true);
-    try {
-      await signIn('resend', { email, callbackUrl: '/onboarding' });
-      setEmailSent(true);
-    } finally {
-      setLoading(false);
+
+    if (wantsPassword) {
+      // Register with password
+      if (password.length < 8) {
+        setError('Password must be at least 8 characters');
+        setLoading(false);
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError('Passwords do not match');
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+
+        if (!res.ok) {
+          const data = await res.json();
+          setError(data.error ?? 'Unable to create account');
+          setLoading(false);
+          return;
+        }
+
+        // Auto sign in with the new password
+        const result = await signIn('password', {
+          email,
+          password,
+          redirect: false,
+        });
+
+        if (result?.error) {
+          setError('Account created but sign-in failed. Please sign in manually.');
+          setLoading(false);
+          return;
+        }
+
+        window.location.href = '/onboarding';
+      } catch {
+        setError('Something went wrong. Please try again.');
+        setLoading(false);
+      }
+    } else {
+      // Magic link registration (existing flow)
+      try {
+        await signIn('resend', { email, callbackUrl: '/onboarding' });
+        setEmailSent(true);
+      } finally {
+        setLoading(false);
+      }
     }
   }
 
@@ -136,8 +192,8 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            {/* Email magic link */}
-            <form onSubmit={handleEmailSignIn} className="space-y-4">
+            {/* Email + optional password */}
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-sm sm:text-[0.9375rem]">Email address</Label>
                 <Input
@@ -147,13 +203,85 @@ export default function RegisterPage() {
                   autoComplete="email"
                   placeholder="you@example.com"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => { setEmail(e.target.value); setError(''); }}
                   required
                   className="h-11 sm:h-12 text-sm sm:text-[0.9375rem]"
                 />
               </div>
+
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="wants-password"
+                  checked={wantsPassword}
+                  onCheckedChange={(checked) => {
+                    setWantsPassword(checked === true);
+                    if (!checked) {
+                      setPassword('');
+                      setConfirmPassword('');
+                    }
+                  }}
+                />
+                <Label htmlFor="wants-password" className="text-sm text-muted-foreground font-normal cursor-pointer">
+                  Set a password (optional)
+                </Label>
+              </div>
+
+              {wantsPassword && (
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="password" className="text-sm sm:text-[0.9375rem]">Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="password"
+                        type={showPasswordVisible ? 'text' : 'password'}
+                        autoComplete="new-password"
+                        placeholder="At least 8 characters"
+                        value={password}
+                        onChange={(e) => { setPassword(e.target.value); setError(''); }}
+                        minLength={8}
+                        maxLength={128}
+                        required={wantsPassword}
+                        className="h-11 sm:h-12 pr-10 text-sm sm:text-[0.9375rem]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPasswordVisible(!showPasswordVisible)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        tabIndex={-1}
+                      >
+                        {showPasswordVisible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="confirm-password" className="text-sm sm:text-[0.9375rem]">Confirm password</Label>
+                    <Input
+                      id="confirm-password"
+                      type={showPasswordVisible ? 'text' : 'password'}
+                      autoComplete="new-password"
+                      placeholder="Repeat your password"
+                      value={confirmPassword}
+                      onChange={(e) => { setConfirmPassword(e.target.value); setError(''); }}
+                      minLength={8}
+                      maxLength={128}
+                      required={wantsPassword}
+                      className="h-11 sm:h-12 text-sm sm:text-[0.9375rem]"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {error && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                  {error}
+                </div>
+              )}
+
               <Button type="submit" className="h-11 sm:h-12 w-full text-sm sm:text-[0.9375rem]" disabled={loading}>
-                {loading ? 'Sending link...' : 'Send sign-up link'}
+                {loading
+                  ? (wantsPassword ? 'Creating account...' : 'Sending link...')
+                  : (wantsPassword ? 'Create account' : 'Send sign-up link')
+                }
               </Button>
             </form>
           </CardContent>

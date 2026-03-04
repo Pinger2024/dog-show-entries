@@ -39,6 +39,7 @@ export const users = pgTable(
       .defaultNow()
       .notNull()
       .$onUpdate(() => new Date()),
+    passwordHash: text('password_hash'),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => [

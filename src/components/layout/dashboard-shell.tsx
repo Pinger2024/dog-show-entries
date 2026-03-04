@@ -13,6 +13,7 @@ import {
   Database,
   ClipboardCheck,
   Sparkles,
+  Settings,
   LogOut,
   ChevronRight,
 } from 'lucide-react';
@@ -162,6 +163,18 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
 
         {/* Sidebar footer */}
         <div className="border-t p-3">
+          <Link
+            href="/settings"
+            className={cn(
+              'flex items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-medium transition-colors',
+              pathname === '/settings'
+                ? 'bg-sidebar-accent text-sidebar-primary'
+                : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
+            )}
+          >
+            <Settings className="size-5" />
+            Settings
+          </Link>
           <button
             onClick={() => signOut({ callbackUrl: '/' })}
             className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"

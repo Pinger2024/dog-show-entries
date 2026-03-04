@@ -8,6 +8,7 @@ import {
   Ticket,
   LogOut,
   ClipboardList,
+  Settings,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -118,6 +119,12 @@ export function UserNav({ user, isSecretary }: UserNavProps) {
           )}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link href="/settings" className="text-[0.9375rem]">
+            <Settings />
+            Settings
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => signOut({ callbackUrl: '/' })}
           className="text-[0.9375rem]"
