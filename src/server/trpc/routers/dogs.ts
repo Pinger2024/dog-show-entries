@@ -40,10 +40,15 @@ function getClassRecommendation(
     allEligible = ['Open'];
   }
 
-  // Filter to only classes available in this show's schedule
+  // Filter to only classes available in this show's schedule.
+  // Use flatMap to match breed-specific variants (e.g. "Special Long Coat Open" → "Open")
   const eligible = availableClassNames
-    ? allEligible.filter((name) =>
-        availableClassNames.some((avail) => avail.toLowerCase() === name.toLowerCase())
+    ? allEligible.flatMap((name) =>
+        availableClassNames.filter(
+          (avail) =>
+            avail.toLowerCase() === name.toLowerCase() ||
+            avail.toLowerCase().endsWith(` ${name.toLowerCase()}`)
+        )
       )
     : allEligible;
 

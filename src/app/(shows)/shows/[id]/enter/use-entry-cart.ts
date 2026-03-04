@@ -1,4 +1,4 @@
-import { useReducer, useCallback } from 'react';
+import { useReducer, useCallback, useEffect } from 'react';
 
 export type EntryType = 'standard' | 'junior_handler';
 
@@ -223,8 +223,40 @@ const initialState: CartState = {
   editingExisting: false,
 };
 
-export function useEntryCart() {
-  const [state, dispatch] = useReducer(cartReducer, initialState);
+function getStorageKey(showId: string) {
+  return `remi-entry-cart-${showId}`;
+}
+
+function loadSavedState(showId: string): CartState {
+  if (typeof window === 'undefined') return initialState;
+  try {
+    const saved = sessionStorage.getItem(getStorageKey(showId));
+    if (!saved) return initialState;
+    const parsed = JSON.parse(saved) as CartState;
+    // Don't restore if already checked out
+    if (parsed.step === 'confirmation' || parsed.step === 'payment') return initialState;
+    return parsed;
+  } catch {
+    return initialState;
+  }
+}
+
+export function useEntryCart(showId?: string) {
+  const [state, dispatch] = useReducer(
+    cartReducer,
+    initialState,
+    () => (showId ? loadSavedState(showId) : initialState)
+  );
+
+  // Persist cart state to sessionStorage so it survives navigation (e.g. adding a new dog)
+  useEffect(() => {
+    if (!showId) return;
+    if (state.step === 'confirmation') {
+      sessionStorage.removeItem(getStorageKey(showId));
+    } else if (state.entries.length > 0 || state.sundryItems.length > 0) {
+      sessionStorage.setItem(getStorageKey(showId), JSON.stringify(state));
+    }
+  }, [showId, state]);
 
   const activeEntry = state.entries.find(
     (e) => e.id === state.activeEntryId
@@ -294,7 +326,10 @@ export function useEntryCart() {
     (sundryItemId: string) => dispatch({ type: 'REMOVE_SUNDRY_ITEM', sundryItemId }),
     []
   );
-  const reset = useCallback(() => dispatch({ type: 'RESET' }), []);
+  const reset = useCallback(() => {
+    if (showId) sessionStorage.removeItem(getStorageKey(showId));
+    dispatch({ type: 'RESET' });
+  }, [showId]);
 
   return {
     ...state,
