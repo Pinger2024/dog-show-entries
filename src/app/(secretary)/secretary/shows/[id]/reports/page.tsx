@@ -626,69 +626,157 @@ function PaymentReportContent({ showId }: { showId: string }) {
 }
 
 function CatalogueOrdersContent({ showId }: { showId: string }) {
-  const { data: orders, isLoading } =
+  const { data, isLoading } =
     trpc.secretary.getCatalogueOrders.useQuery({ showId });
 
   if (isLoading) return <LoadingCard />;
 
+  const printed = data?.printed ?? [];
+  const online = data?.online ?? [];
+  const totalOrders = printed.length + online.length;
+
+  function exportCsv() {
+    const headers = ['Type', 'Name', 'Email', 'Quantity'];
+    const rows = [
+      ...printed.map((p) => ['Printed', p.name, p.email, String(p.quantity)]),
+      ...online.map((o) => ['Online', o.name, o.email, String(o.quantity)]),
+    ];
+    downloadCsv(headers, rows, `catalogue-orders-${showId}`);
+  }
+
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-start justify-between">
-          <div>
-            <CardTitle className="text-base">Catalogue Orders ({orders?.length ?? 0})</CardTitle>
-            <CardDescription>
-              Exhibitors who requested a printed catalogue
-            </CardDescription>
+    <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-3">
+        <Card>
+          <CardContent className="pt-4 pb-3">
+            <p className="text-xs font-medium text-muted-foreground">Total Orders</p>
+            <p className="text-2xl font-bold">{totalOrders}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3">
+            <p className="text-xs font-medium text-muted-foreground">Printed</p>
+            <p className="text-2xl font-bold">{printed.length}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3">
+            <p className="text-xs font-medium text-muted-foreground">Online</p>
+            <p className="text-2xl font-bold">{online.length}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Printed Catalogues */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-start justify-between">
+            <div>
+              <CardTitle className="text-base">Printed Catalogues ({printed.length})</CardTitle>
+              <CardDescription>
+                Exhibitors who ordered a printed catalogue
+              </CardDescription>
+            </div>
+            {totalOrders > 0 && (
+              <Button variant="outline" size="sm" onClick={exportCsv}>
+                <Download className="size-4" />
+                <span className="hidden sm:inline">Export CSV</span>
+              </Button>
+            )}
           </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {(orders?.length ?? 0) === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            No catalogue orders yet.
-          </p>
-        ) : (
-          <>
-            {/* Mobile card view */}
-            <div className="space-y-2 sm:hidden">
-              {orders?.map((entry) => (
-                <div key={entry.id} className="flex items-center gap-3 rounded-lg border p-3">
-                  <Users className="size-4 text-muted-foreground shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-sm truncate">{entry.exhibitor?.name ?? '—'}</p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {entry.dog?.registeredName ?? 'Junior Handler'}
-                    </p>
+        </CardHeader>
+        <CardContent>
+          {printed.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              No printed catalogue orders.
+            </p>
+          ) : (
+            <>
+              <div className="space-y-2 sm:hidden">
+                {printed.map((p, i) => (
+                  <div key={i} className="flex items-center gap-3 rounded-lg border p-3">
+                    <ClipboardList className="size-4 text-muted-foreground shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-sm truncate">{p.name}</p>
+                      {p.quantity > 1 && (
+                        <p className="text-xs text-muted-foreground">Qty: {p.quantity}</p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-            {/* Desktop table */}
-            <div className="hidden sm:block">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Exhibitor</TableHead>
-                    <TableHead>Dog</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {orders?.map((entry) => (
-                    <TableRow key={entry.id}>
-                      <TableCell>{entry.exhibitor?.name ?? '—'}</TableCell>
-                      <TableCell>
-                        {entry.dog?.registeredName ?? 'Junior Handler'}
-                      </TableCell>
+                ))}
+              </div>
+              <div className="hidden sm:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Quantity</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {printed.map((p, i) => (
+                      <TableRow key={i}>
+                        <TableCell className="font-medium">{p.name}</TableCell>
+                        <TableCell>{p.quantity}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Online Catalogues */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Online Catalogues ({online.length})</CardTitle>
+          <CardDescription>
+            Exhibitors who ordered online access — use these email addresses to send the digital catalogue
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {online.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              No online catalogue orders.
+            </p>
+          ) : (
+            <>
+              <div className="space-y-2 sm:hidden">
+                {online.map((o, i) => (
+                  <div key={i} className="flex items-center gap-3 rounded-lg border p-3">
+                    <BookOpen className="size-4 text-muted-foreground shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-sm truncate">{o.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{o.email}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="hidden sm:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Email</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {online.map((o, i) => (
+                      <TableRow key={i}>
+                        <TableCell className="font-medium">{o.name}</TableCell>
+                        <TableCell>{o.email}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 

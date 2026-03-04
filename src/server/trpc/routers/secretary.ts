@@ -262,7 +262,7 @@ export const secretaryRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
 
-      // Fetch all confirmed entries with breed info, ordered for catalogue
+      // Fetch all confirmed entries with breed + class info for ordering
       const confirmedEntries = await ctx.db.query.entries.findMany({
         where: and(
           eq(entries.showId, input.showId),
@@ -275,12 +275,28 @@ export const secretaryRouter = createTRPCRouter({
               breed: { with: { group: true } },
             },
           },
+          entryClasses: {
+            with: {
+              showClass: true,
+            },
+          },
         },
         orderBy: [asc(entries.entryDate)],
       });
 
-      // Sort: group → breed → sex (dogs first) → entry date
+      // Sort by: lowest class number → group → breed → sex → entry date
+      // This ensures catalogue numbers follow class order in the catalogue
       const sorted = [...confirmedEntries].sort((a, b) => {
+        // First: sort by the entry's lowest class number
+        const aMinClass = Math.min(
+          ...a.entryClasses.map((ec) => ec.showClass?.classNumber ?? ec.showClass?.sortOrder ?? 999)
+        );
+        const bMinClass = Math.min(
+          ...b.entryClasses.map((ec) => ec.showClass?.classNumber ?? ec.showClass?.sortOrder ?? 999)
+        );
+        if (aMinClass !== bMinClass) return aMinClass - bMinClass;
+
+        // Then: group → breed → sex → entry date (as before)
         const aGroup = a.dog?.breed?.group?.sortOrder ?? 99;
         const bGroup = b.dog?.breed?.group?.sortOrder ?? 99;
         if (aGroup !== bGroup) return aGroup - bGroup;
@@ -466,17 +482,53 @@ export const secretaryRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
 
-      return ctx.db.query.entries.findMany({
-        where: and(
-          eq(entries.showId, input.showId),
-          eq(entries.catalogueRequested, true),
-          isNull(entries.deletedAt)
-        ),
-        with: {
-          exhibitor: true,
-          dog: true,
-        },
-      });
+      // Find catalogue sundry items for this show
+      const catalogueItems = await ctx.db
+        .select({ id: sundryItems.id, name: sundryItems.name })
+        .from(sundryItems)
+        .where(
+          and(
+            eq(sundryItems.showId, input.showId),
+            ilike(sundryItems.name, '%catalogue%')
+          )
+        );
+
+      if (catalogueItems.length === 0) return { printed: [], online: [] };
+
+      const catalogueItemIds = catalogueItems.map((i) => i.id);
+
+      // Find all orders for these catalogue items with exhibitor info
+      const catalogueOrders = await ctx.db
+        .select({
+          itemName: sundryItems.name,
+          quantity: orderSundryItems.quantity,
+          exhibitorName: users.name,
+          exhibitorEmail: users.email,
+        })
+        .from(orderSundryItems)
+        .innerJoin(sundryItems, eq(orderSundryItems.sundryItemId, sundryItems.id))
+        .innerJoin(orders, eq(orderSundryItems.orderId, orders.id))
+        .innerJoin(users, eq(orders.exhibitorId, users.id))
+        .where(inArray(orderSundryItems.sundryItemId, catalogueItemIds));
+
+      // Split into printed vs online
+      const printed: { name: string; email: string; quantity: number }[] = [];
+      const online: { name: string; email: string; quantity: number }[] = [];
+
+      for (const row of catalogueOrders) {
+        const entry = {
+          name: row.exhibitorName ?? '—',
+          email: row.exhibitorEmail,
+          quantity: row.quantity,
+        };
+        if (row.itemName.toLowerCase().includes('print')) {
+          printed.push(entry);
+        } else {
+          online.push(entry);
+        }
+      }
+
+      return { printed, online };
     }),
 
   // ── Dog editing (for secretary) ──────────────────────────
