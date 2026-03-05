@@ -425,24 +425,19 @@ export const showsRouter = createTRPCRouter({
         const isSeparateSex = showData.classSexArrangement === 'separate_sex';
 
         if (isSeparateSex) {
-          // Create two rows per class definition: one for dogs, one for bitches
+          // All Dog classes first (age then achievement), then all Bitch classes
           const values: { showId: string; classDefinitionId: string; entryFee: number; sortOrder: number; sex: 'dog' | 'bitch' }[] = [];
           let sortOrder = 0;
-          for (const classDefId of classDefinitionIds) {
-            values.push({
-              showId: show!.id,
-              classDefinitionId: classDefId,
-              entryFee: entryFee ?? 0,
-              sortOrder: sortOrder++,
-              sex: 'dog',
-            });
-            values.push({
-              showId: show!.id,
-              classDefinitionId: classDefId,
-              entryFee: entryFee ?? 0,
-              sortOrder: sortOrder++,
-              sex: 'bitch',
-            });
+          for (const sex of ['dog', 'bitch'] as const) {
+            for (const classDefId of classDefinitionIds) {
+              values.push({
+                showId: show!.id,
+                classDefinitionId: classDefId,
+                entryFee: entryFee ?? 0,
+                sortOrder: sortOrder++,
+                sex,
+              });
+            }
           }
           await ctx.db.insert(showClasses).values(values);
         } else {

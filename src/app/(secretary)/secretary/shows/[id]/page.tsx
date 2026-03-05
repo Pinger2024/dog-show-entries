@@ -704,21 +704,37 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
     });
   }
 
-  // Group by type for nicer display
-  const grouped: Record<string, typeof classes> = {};
-  for (const sc of classes) {
-    const type = sc.classDefinition?.type ?? 'other';
-    grouped[type] ??= [];
-    grouped[type]!.push(sc);
-  }
+  // Group by sex first, then by type within each sex group
+  const sexOrder = ['dog', 'bitch', null] as const;
+  const typeOrder = ['age', 'achievement', 'special', 'junior_handler', 'other'];
+  const grouped: { sex: string | null; type: string; label: string; classes: typeof classes }[] = [];
 
-  const typeLabels: Record<string, string> = {
-    age: 'Age Classes',
-    achievement: 'Achievement Classes',
-    special: 'Special Classes',
-    junior_handler: 'Junior Handler Classes',
-    other: 'Other',
-  };
+  for (const sex of sexOrder) {
+    const sexClasses = classes.filter((sc) =>
+      sex === null ? !sc.sex : sc.sex === sex
+    );
+    if (sexClasses.length === 0) continue;
+
+    // Sub-group by type
+    for (const type of typeOrder) {
+      const matchingClasses = sexClasses.filter(
+        (sc) => (sc.classDefinition?.type ?? 'other') === type
+      );
+      if (matchingClasses.length === 0) continue;
+      const sexLabel = sex === 'dog' ? 'Dog' : sex === 'bitch' ? 'Bitch' : 'Any Sex';
+      const typeLabel =
+        type === 'age' ? 'Age' :
+        type === 'achievement' ? 'Achievement' :
+        type === 'special' ? 'Special' :
+        type === 'junior_handler' ? 'Junior Handler' : 'Other';
+      grouped.push({
+        sex,
+        type,
+        label: `${sexLabel} — ${typeLabel} Classes`,
+        classes: matchingClasses,
+      });
+    }
+  }
 
   return (
     <Card>
@@ -744,14 +760,14 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {Object.entries(grouped).map(([type, typeClasses]) => (
-          <div key={type}>
+        {grouped.map((group) => (
+          <div key={`${group.sex}-${group.type}`}>
             <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              {typeLabels[type] ?? type}
+              {group.label}
             </h4>
             {/* Mobile card view */}
             <div className="space-y-2 sm:hidden">
-              {typeClasses.map((sc) => (
+              {group.classes.map((sc) => (
                 <div key={sc.id} className="flex items-center justify-between rounded-lg border p-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
@@ -834,7 +850,7 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {typeClasses.map((sc) => {
+                  {group.classes.map((sc) => {
                     const isEditing = editingFees[sc.id] !== undefined;
                     const isEditingNum = editingNumbers[sc.id] !== undefined;
                     return (

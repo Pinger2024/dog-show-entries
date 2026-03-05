@@ -730,9 +730,10 @@ export const secretaryRouter = createTRPCRouter({
       }> = [];
 
       for (const breedId of input.breedIds) {
-        for (const classDefId of input.classDefinitionIds) {
-          if (input.splitBySex) {
-            for (const sex of ['dog', 'bitch'] as const) {
+        if (input.splitBySex) {
+          // All Dog classes first, then all Bitch classes (within each breed)
+          for (const sex of ['dog', 'bitch'] as const) {
+            for (const classDefId of input.classDefinitionIds) {
               values.push({
                 showId: input.showId,
                 breedId,
@@ -743,7 +744,9 @@ export const secretaryRouter = createTRPCRouter({
                 isBreedSpecific: true,
               });
             }
-          } else {
+          }
+        } else {
+          for (const classDefId of input.classDefinitionIds) {
             values.push({
               showId: input.showId,
               breedId,

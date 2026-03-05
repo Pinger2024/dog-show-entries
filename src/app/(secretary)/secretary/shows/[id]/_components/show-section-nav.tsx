@@ -28,8 +28,8 @@ export function ShowSectionNav({ showId }: { showId: string }) {
   const basePath = `/secretary/shows/${showId}`;
 
   return (
-    <nav className="overflow-x-auto scrollbar-hide -mx-3 sm:mx-0">
-      <div className="flex gap-1 px-3 sm:px-0 sm:flex-wrap">
+    <nav>
+      <div className="flex flex-wrap gap-1">
         {sections.map((section) => {
           const href = `${basePath}${section.path}`;
           const isActive = section.exact

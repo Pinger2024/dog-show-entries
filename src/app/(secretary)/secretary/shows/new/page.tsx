@@ -303,8 +303,8 @@ export default function NewShowPage() {
       </div>
 
       {/* Step indicator */}
-      <nav className="overflow-x-auto scrollbar-hide -mx-3 sm:mx-0 pb-1 -mb-1">
-        <div className="flex items-center gap-1 px-3 sm:px-0">
+      <nav className="pb-1 -mb-1">
+        <div className="flex flex-wrap items-center gap-1">
         {STEPS.map((label, i) => (
           <button
             key={label}
