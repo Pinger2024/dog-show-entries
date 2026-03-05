@@ -13,6 +13,7 @@ import {
   stewardAssignments,
   classDefinitions,
   achievements,
+  dogs,
 } from '@/server/db/schema';
 
 async function verifyStewardAssignment(
@@ -370,6 +371,24 @@ export const stewardRouter = createTRPCRouter({
         });
       }
 
+      // Validate sex matches award type (Dog CC → dogs only, Bitch CC → bitches only)
+      const DOG_ONLY_AWARDS = ['dog_cc', 'reserve_dog_cc', 'best_puppy_dog', 'best_long_coat_dog'];
+      const BITCH_ONLY_AWARDS = ['bitch_cc', 'reserve_bitch_cc', 'best_puppy_bitch', 'best_long_coat_bitch'];
+
+      if (DOG_ONLY_AWARDS.includes(input.type) || BITCH_ONLY_AWARDS.includes(input.type)) {
+        const dog = await ctx.db.query.dogs.findFirst({
+          where: eq(dogs.id, input.dogId),
+          columns: { sex: true },
+        });
+        const requiredSex = DOG_ONLY_AWARDS.includes(input.type) ? 'dog' : 'bitch';
+        if (dog?.sex !== requiredSex) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `This award is for ${requiredSex === 'dog' ? 'dogs' : 'bitches'} only`,
+          });
+        }
+      }
+
       // Upsert: remove existing same type for this show + dog, then insert
       await ctx.db
         .delete(achievements)
@@ -480,7 +499,7 @@ export const stewardRouter = createTRPCRouter({
                 },
                 with: {
                   dog: {
-                    columns: { id: true, registeredName: true },
+                    columns: { id: true, registeredName: true, sex: true },
                     with: { breed: true },
                   },
                   exhibitor: { columns: { name: true } },
@@ -537,6 +556,7 @@ export const stewardRouter = createTRPCRouter({
             catalogueNumber: ec.entry.catalogueNumber,
             dogId: ec.entry.dog?.id ?? null,
             dogName: ec.entry.dog?.registeredName ?? 'Unknown',
+            dogSex: ec.entry.dog?.sex ?? null,
             exhibitorName: ec.entry.exhibitor?.name ?? '',
           }))
           .sort((a, b) => (a.placement ?? 99) - (b.placement ?? 99));

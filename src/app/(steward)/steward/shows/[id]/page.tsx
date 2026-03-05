@@ -216,6 +216,13 @@ const BIS_AWARDS: { type: AchievementType; label: string }[] = [
   { type: 'best_long_coat_in_show', label: 'Best Long Coat in Show' },
 ];
 
+/** Returns the required sex for an award type, or null if either sex is allowed */
+function requiredSexForAward(type: AchievementType): 'dog' | 'bitch' | null {
+  if (['dog_cc', 'reserve_dog_cc', 'best_puppy_dog', 'best_long_coat_dog'].includes(type)) return 'dog';
+  if (['bitch_cc', 'reserve_bitch_cc', 'best_puppy_bitch', 'best_long_coat_bitch'].includes(type)) return 'bitch';
+  return null;
+}
+
 interface BestOfBreedSectionProps {
   showId: string;
   showDate: string;
@@ -228,6 +235,7 @@ interface BestOfBreedSectionProps {
           placement: number | null;
           dogId: string | null;
           dogName: string;
+          dogSex: string | null;
           exhibitorName: string;
           catalogueNumber: string | null;
         }[];
@@ -269,7 +277,7 @@ function BestOfBreedSection({
   });
 
   // Build a list of 1st-placed dogs per breed from live results (class winners)
-  const classWinnersByBreed = new Map<string, { dogId: string; dogName: string; exhibitorName: string; catalogueNumber: string | null }[]>();
+  const classWinnersByBreed = new Map<string, { dogId: string; dogName: string; dogSex: string | null; exhibitorName: string; catalogueNumber: string | null }[]>();
 
   if (liveResults) {
     for (const bg of liveResults.breedGroups) {
@@ -280,6 +288,7 @@ function BestOfBreedSection({
           winners.push({
             dogId: firstPlaced.dogId,
             dogName: firstPlaced.dogName,
+            dogSex: firstPlaced.dogSex ?? null,
             exhibitorName: firstPlaced.exhibitorName,
             catalogueNumber: firstPlaced.catalogueNumber,
           });
@@ -353,6 +362,10 @@ function BestOfBreedSection({
             <>
               <div className="mt-2 border-t pt-2" />
               {CHAMPIONSHIP_AWARDS.map((award) => {
+                const sexFilter = requiredSexForAward(award.type);
+                const filtered = sexFilter
+                  ? winners.filter((w) => w.dogSex === sexFilter)
+                  : winners;
                 const existing = existingAchievements.find(
                   (a) => a.type === award.type && winners.some((w) => w.dogId === a.dogId)
                 );
@@ -362,7 +375,7 @@ function BestOfBreedSection({
                     label={award.label}
                     type={award.type}
                     existingDogId={existing?.dogId}
-                    candidates={winners}
+                    candidates={filtered}
                     showId={showId}
                     showDate={showDate}
                     onRecord={(dogId, type) => recordAchievement.mutate({ showId, dogId, type, date: showDate })}
