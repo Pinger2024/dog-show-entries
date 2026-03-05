@@ -82,11 +82,19 @@ export default function EnterShowPage() {
   }, []);
 
   // Fetch data
+  const utils = trpc.useUtils();
   const { data: show, isLoading: showLoading } = trpc.shows.getById.useQuery(
     { id: showId }
   );
 
   const { data: dogs, isLoading: dogsLoading } = trpc.dogs.list.useQuery();
+
+  // Refetch dogs list when user returns to this tab (e.g. after adding a new dog in another tab)
+  useEffect(() => {
+    function handleFocus() { utils.dogs.list.invalidate(); }
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [utils]);
 
   const selectedDog = dogs?.find((d) => d.id === cart.activeEntry?.dogId);
   const selectedDogSex = selectedDog?.sex as 'dog' | 'bitch' | undefined;
@@ -162,17 +170,29 @@ export default function EnterShowPage() {
     };
   }, [showClasses, selectedDogSex]);
 
-  // Filter classes by entry type
+  // Filter classes by entry type (and by handler age for JH entries)
   const availableClasses = useMemo(() => {
     if (cart.activeEntry?.entryType === 'junior_handler') {
-      return groupedClasses.junior_handler;
+      const handlerDob = cart.activeEntry?.handlerDob;
+      if (!handlerDob) return groupedClasses.junior_handler;
+      const handlerAgeMonths = differenceInMonths(
+        show?.startDate ? new Date(show.startDate) : new Date(),
+        new Date(handlerDob)
+      );
+      return groupedClasses.junior_handler.filter((sc) => {
+        const { minAgeMonths, maxAgeMonths } = sc.classDefinition;
+        if (minAgeMonths === null && maxAgeMonths === null) return true;
+        const aboveMin = minAgeMonths === null || handlerAgeMonths >= minAgeMonths;
+        const belowMax = maxAgeMonths === null || handlerAgeMonths < maxAgeMonths;
+        return aboveMin && belowMax;
+      });
     }
     return [
       ...groupedClasses.age,
       ...groupedClasses.achievement,
       ...groupedClasses.special,
     ];
-  }, [cart.activeEntry?.entryType, groupedClasses]);
+  }, [cart.activeEntry?.entryType, cart.activeEntry?.handlerDob, groupedClasses, show?.startDate]);
 
   // Calculate total for current selection using show-level fee tiers
   const selectedTotal = useMemo(() => {

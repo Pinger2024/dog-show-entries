@@ -230,7 +230,7 @@ function getStorageKey(showId: string) {
 function loadSavedState(showId: string): CartState {
   if (typeof window === 'undefined') return initialState;
   try {
-    const saved = sessionStorage.getItem(getStorageKey(showId));
+    const saved = localStorage.getItem(getStorageKey(showId));
     if (!saved) return initialState;
     const parsed = JSON.parse(saved) as CartState;
     // Don't restore if already checked out
@@ -252,9 +252,9 @@ export function useEntryCart(showId?: string) {
   useEffect(() => {
     if (!showId) return;
     if (state.step === 'confirmation') {
-      sessionStorage.removeItem(getStorageKey(showId));
+      localStorage.removeItem(getStorageKey(showId));
     } else if (state.entries.length > 0 || state.sundryItems.length > 0) {
-      sessionStorage.setItem(getStorageKey(showId), JSON.stringify(state));
+      localStorage.setItem(getStorageKey(showId), JSON.stringify(state));
     }
   }, [showId, state]);
 
@@ -327,7 +327,7 @@ export function useEntryCart(showId?: string) {
     []
   );
   const reset = useCallback(() => {
-    if (showId) sessionStorage.removeItem(getStorageKey(showId));
+    if (showId) localStorage.removeItem(getStorageKey(showId));
     dispatch({ type: 'RESET' });
   }, [showId]);
 

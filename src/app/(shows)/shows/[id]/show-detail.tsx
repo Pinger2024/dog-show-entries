@@ -390,8 +390,18 @@ export function ShowDetailClient() {
               )}
               {show.judgeAssignments && show.judgeAssignments.length > 0 && (
                 <div className="flex flex-col sm:flex-row sm:justify-between">
-                  <span className="text-muted-foreground">Judges</span>
-                  <span className="font-medium">{show.judgeAssignments.length}</span>
+                  <span className="text-muted-foreground">Judge{show.judgeAssignments.length > 1 ? 's' : ''}</span>
+                  <span className="font-medium">
+                    {[...new Set(show.judgeAssignments.map(ja => ja.judge?.name).filter(Boolean))].join(', ')}
+                  </span>
+                </div>
+              )}
+              {show.secretaryEmail && (
+                <div className="flex flex-col sm:flex-row sm:justify-between">
+                  <span className="text-muted-foreground">Secretary</span>
+                  <a href={`mailto:${show.secretaryEmail}`} className="font-medium text-primary hover:underline">
+                    {show.secretaryEmail}
+                  </a>
                 </div>
               )}
             </CardContent>

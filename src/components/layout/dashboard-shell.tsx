@@ -163,6 +163,20 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
 
         {/* Sidebar footer */}
         <div className="border-t p-3">
+          {(user.role === 'secretary' || user.role === 'admin') && (
+            <Link
+              href="/secretary"
+              className={cn(
+                'flex items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-medium transition-colors',
+                pathname.startsWith('/secretary')
+                  ? 'bg-sidebar-accent text-sidebar-primary'
+                  : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
+              )}
+            >
+              <ClipboardCheck className="size-5" />
+              Secretary View
+            </Link>
+          )}
           <Link
             href="/settings"
             className={cn(
@@ -216,6 +230,13 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
             Remi
           </Link>
           <div className="flex items-center gap-1">
+            {(user.role === 'secretary' || user.role === 'admin') && (
+              <Button variant="ghost" size="sm" className="size-11" asChild>
+                <Link href="/secretary">
+                  <ClipboardCheck className="size-5" />
+                </Link>
+              </Button>
+            )}
             <Button variant="ghost" size="sm" className="size-11" asChild>
               <Link href="/settings">
                 <Settings className="size-5" />
