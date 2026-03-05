@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -128,6 +129,7 @@ function formatDateDisplay(dateStr: string) {
 
 export default function NewShowPage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const [step, setStep] = useState(0);
   const [createVenue, setCreateVenue] = useState(false);
 
@@ -167,6 +169,15 @@ export default function NewShowPage() {
   const createShowMutation = trpc.shows.create.useMutation();
 
   const organisations = dashboardData?.organisations ?? [];
+
+  // Auto-populate secretary email from session when it loads
+  const sessionEmail = session?.user?.email;
+  useEffect(() => {
+    if (sessionEmail && !form.getValues('secretaryEmail')) {
+      form.setValue('secretaryEmail', sessionEmail);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionEmail]);
 
   // Auto-select the organisation if there's only one
   const currentOrgId = form.watch('organisationId');

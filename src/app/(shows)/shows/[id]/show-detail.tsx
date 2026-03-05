@@ -17,7 +17,6 @@ import {
   Dog,
   Trophy,
   FileText,
-  ListChecks,
   User,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -31,10 +30,6 @@ import {
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-
-function formatFee(pence: number) {
-  return `£${(pence / 100).toFixed(2)}`;
-}
 
 const showTypeLabels: Record<string, string> = {
   companion: 'Companion',
@@ -90,7 +85,6 @@ function BreedSection({
   defaultOpen: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
-  const fee = classes[0]?.entryFee ?? 0;
 
   return (
     <div className="overflow-hidden rounded-lg border border-border/60 bg-white">
@@ -110,9 +104,6 @@ function BreedSection({
             </span>
           )}
         </div>
-        <span className="hidden text-xs font-medium text-muted-foreground sm:inline">
-          {formatFee(fee)}/class
-        </span>
         {open ? (
           <ChevronUp className="size-4 shrink-0 text-muted-foreground/50" />
         ) : (
@@ -133,7 +124,6 @@ function BreedSection({
                   Ring: {ringName}
                 </span>
               )}
-              <span>{formatFee(fee)} per class</span>
             </div>
           )}
           <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3 md:grid-cols-4">
@@ -466,21 +456,48 @@ export function ShowDetailClient() {
             <h2 className="mb-4 text-lg font-semibold">
               Breeds ({breeds.length})
             </h2>
-            <div className="space-y-2">
-              {breeds.map(([breedName, { classes }], i) => {
-                const judgeInfo = breedJudgeMap.get(breedName) ?? allBreedsJudge;
-                return (
-                  <BreedSection
-                    key={breedName}
-                    breedName={breedName}
-                    classes={classes as { id: string; classDefinition: { name: string; description: string | null; type: string }; entryFee: number }[]}
-                    judgeName={judgeInfo?.judgeName}
-                    ringName={judgeInfo?.ringName}
-                    defaultOpen={i === 0}
-                  />
-                );
-              })}
-            </div>
+
+            {breeds.length >= 3 ? (
+              /* Multi-breed show — compact breed list, no accordion */
+              <div className="overflow-hidden rounded-lg border border-border/60 bg-white">
+                <div className="divide-y divide-border/40">
+                  {breeds.map(([breedName]) => {
+                    const judgeInfo = breedJudgeMap.get(breedName) ?? allBreedsJudge;
+                    return (
+                      <div
+                        key={breedName}
+                        className="flex items-center gap-2 px-3 py-2.5 sm:px-4"
+                      >
+                        <Dog className="size-4 shrink-0 text-muted-foreground/40" />
+                        <span className="flex-1 text-sm font-medium">{breedName}</span>
+                        {judgeInfo?.judgeName && (
+                          <span className="text-xs text-muted-foreground">
+                            {judgeInfo.judgeName}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              /* Few-breed show — expandable accordion with class details */
+              <div className="space-y-2">
+                {breeds.map(([breedName, { classes }], i) => {
+                  const judgeInfo = breedJudgeMap.get(breedName) ?? allBreedsJudge;
+                  return (
+                    <BreedSection
+                      key={breedName}
+                      breedName={breedName}
+                      classes={classes as { id: string; classDefinition: { name: string; description: string | null; type: string }; entryFee: number }[]}
+                      judgeName={judgeInfo?.judgeName}
+                      ringName={judgeInfo?.ringName}
+                      defaultOpen={i === 0}
+                    />
+                  );
+                })}
+              </div>
+            )}
 
             {isOpen && (
               <div className="mt-8 text-center">
