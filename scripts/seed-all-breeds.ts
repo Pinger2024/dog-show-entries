@@ -13,8 +13,8 @@ const connectionString = process.env.DATABASE_URL!;
 const client = postgres(connectionString);
 const db = drizzle(client, { schema });
 
-// All KC-recognized breeds organized by group
-const breedsByGroup: Record<string, string[]> = {
+// All KC-recognized breeds organized by group (Crufts 2025, Fossedata source)
+export const breedsByGroup: Record<string, string[]> = {
   Gundog: [
     'Bracco Italiano',
     'Brittany',

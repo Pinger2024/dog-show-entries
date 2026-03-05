@@ -704,71 +704,76 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
     });
   }
 
-  // Detect multi-breed show (3+ distinct breeds)
-  const distinctBreeds = new Set(classes.filter((c) => c.breed).map((c) => c.breed!.name));
-  const isMultiBreed = distinctBreeds.size >= 3;
+  // Detect multi-breed show and compute grouped class sections.
+  // Memoized to avoid re-computing on every keystroke in fee/number editors.
+  const { isMultiBreed, grouped } = useMemo(() => {
+    const distinctBreeds = new Set(classes.filter((c) => c.breed).map((c) => c.breed!.name));
+    const multiBreed = distinctBreeds.size >= 3;
 
-  type GroupEntry = { key: string; label: string; classes: typeof classes };
-  const grouped: GroupEntry[] = [];
+    type GroupEntry = { key: string; label: string; classes: typeof classes };
+    const groups: GroupEntry[] = [];
 
-  if (isMultiBreed) {
-    // Group by breed, sorted by group sortOrder then breed name (KC catalogue order)
-    const breedMap = new Map<string, { groupSort: number; groupName: string; classes: typeof classes }>();
-    for (const sc of classes) {
-      const breedName = sc.breed?.name ?? 'Other';
-      const entry = breedMap.get(breedName) ?? {
-        groupSort: sc.breed?.group?.sortOrder ?? 999,
-        groupName: sc.breed?.group?.name ?? '',
-        classes: [],
-      };
-      entry.classes.push(sc);
-      breedMap.set(breedName, entry);
-    }
+    if (multiBreed) {
+      // Group by breed, sorted by group sortOrder then breed name (KC catalogue order)
+      const breedMap = new Map<string, { groupSort: number; classes: typeof classes }>();
+      for (const sc of classes) {
+        const breedName = sc.breed?.name ?? 'Other';
+        const entry = breedMap.get(breedName) ?? {
+          groupSort: sc.breed?.group?.sortOrder ?? 999,
+          classes: [],
+        };
+        entry.classes.push(sc);
+        breedMap.set(breedName, entry);
+      }
 
-    const sortedBreeds = [...breedMap.entries()].sort((a, b) => {
-      if (a[1].groupSort !== b[1].groupSort) return a[1].groupSort - b[1].groupSort;
-      return a[0].localeCompare(b[0]);
-    });
-
-    for (const [breedName, { classes: breedClasses }] of sortedBreeds) {
-      // Sort within breed: dog before bitch, then by sortOrder
-      const sorted = [...breedClasses].sort((a, b) => {
-        const sexRank = (s: string | null) => s === 'dog' ? 0 : s === 'bitch' ? 1 : 2;
-        if (sexRank(a.sex) !== sexRank(b.sex)) return sexRank(a.sex) - sexRank(b.sex);
-        return a.sortOrder - b.sortOrder;
+      const sortedBreeds = [...breedMap.entries()].sort((a, b) => {
+        if (a[1].groupSort !== b[1].groupSort) return a[1].groupSort - b[1].groupSort;
+        return a[0].localeCompare(b[0]);
       });
-      grouped.push({ key: `breed-${breedName}`, label: breedName, classes: sorted });
-    }
-  } else {
-    // Single-breed show: group by sex then type
-    const sexOrder = ['dog', 'bitch', null] as const;
-    const typeOrder = ['age', 'achievement', 'special', 'junior_handler', 'other'];
 
-    for (const sex of sexOrder) {
-      const sexClasses = classes.filter((sc) =>
-        sex === null ? !sc.sex : sc.sex === sex
-      );
-      if (sexClasses.length === 0) continue;
-
-      for (const type of typeOrder) {
-        const matchingClasses = sexClasses.filter(
-          (sc) => (sc.classDefinition?.type ?? 'other') === type
-        );
-        if (matchingClasses.length === 0) continue;
-        const sexLabel = sex === 'dog' ? 'Dog' : sex === 'bitch' ? 'Bitch' : 'Any Sex';
-        const typeLabel =
-          type === 'age' ? 'Age' :
-          type === 'achievement' ? 'Achievement' :
-          type === 'special' ? 'Special' :
-          type === 'junior_handler' ? 'Junior Handler' : 'Other';
-        grouped.push({
-          key: `${sex}-${type}`,
-          label: `${sexLabel} — ${typeLabel} Classes`,
-          classes: matchingClasses,
+      const sexRank = (s: string | null) => s === 'dog' ? 0 : s === 'bitch' ? 1 : 2;
+      for (const [breedName, { classes: breedClasses }] of sortedBreeds) {
+        // Sort within breed: dog before bitch, then by sortOrder
+        const sorted = [...breedClasses].sort((a, b) => {
+          const ra = sexRank(a.sex), rb = sexRank(b.sex);
+          if (ra !== rb) return ra - rb;
+          return a.sortOrder - b.sortOrder;
         });
+        groups.push({ key: `breed-${breedName}`, label: breedName, classes: sorted });
+      }
+    } else {
+      // Single-breed show: group by sex then type
+      const sexOrder = ['dog', 'bitch', null] as const;
+      const typeOrder = ['age', 'achievement', 'special', 'junior_handler', 'other'];
+
+      for (const sex of sexOrder) {
+        const sexClasses = classes.filter((sc) =>
+          sex === null ? !sc.sex : sc.sex === sex
+        );
+        if (sexClasses.length === 0) continue;
+
+        for (const type of typeOrder) {
+          const matchingClasses = sexClasses.filter(
+            (sc) => (sc.classDefinition?.type ?? 'other') === type
+          );
+          if (matchingClasses.length === 0) continue;
+          const sexLabel = sex === 'dog' ? 'Dog' : sex === 'bitch' ? 'Bitch' : 'Any Sex';
+          const typeLabel =
+            type === 'age' ? 'Age' :
+            type === 'achievement' ? 'Achievement' :
+            type === 'special' ? 'Special' :
+            type === 'junior_handler' ? 'Junior Handler' : 'Other';
+          groups.push({
+            key: `${sex}-${type}`,
+            label: `${sexLabel} — ${typeLabel} Classes`,
+            classes: matchingClasses,
+          });
+        }
       }
     }
-  }
+
+    return { isMultiBreed: multiBreed, grouped: groups };
+  }, [classes]);
 
   return (
     <Card>
