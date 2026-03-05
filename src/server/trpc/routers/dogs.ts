@@ -8,20 +8,66 @@ import { deleteFromR2 } from '@/server/services/storage';
 import { scrapeKcDog, searchKcDogs, fetchKcDogProfile } from '@/server/services/firecrawl';
 
 /**
- * Recommend the highest achievement class a dog is still eligible for,
- * based on their first-place wins at qualifying shows.
+ * Recommend the best class for a dog based on age eligibility first,
+ * then achievement wins. Age classes (Puppy, Junior, etc.) take priority
+ * when the dog is still within an age bracket.
  * If availableClassNames is provided, only suggest from classes in the show schedule.
  */
 function getClassRecommendation(
   firsts: number,
   hasCC: boolean,
   availableClassNames?: string[],
+  ageInfo?: {
+    ageMonths: number;
+    availableAgeClasses: { name: string; minMonths: number | null; maxMonths: number | null }[];
+  },
 ): {
   eligible: string[];
   suggested: string | null;
   reason: string;
 } {
-  // Full eligibility based on wins (KC rules)
+  // Check age classes first — if the dog qualifies for an age class, suggest it
+  if (ageInfo) {
+    const eligibleAgeClasses = ageInfo.availableAgeClasses.filter((cls) => {
+      const aboveMin = cls.minMonths === null || ageInfo.ageMonths >= cls.minMonths;
+      const belowMax = cls.maxMonths === null || ageInfo.ageMonths < cls.maxMonths;
+      return aboveMin && belowMax;
+    });
+
+    if (eligibleAgeClasses.length > 0) {
+      // Suggest the most specific age class (smallest age range)
+      const bestAgeClass = eligibleAgeClasses[0];
+
+      // Still compute achievement eligibility for the full eligible list
+      const achievementEligible = getAchievementEligible(firsts, hasCC, availableClassNames);
+
+      return {
+        eligible: achievementEligible,
+        suggested: bestAgeClass.name,
+        reason: `${ageInfo.ageMonths} months old — eligible for ${bestAgeClass.name}`,
+      };
+    }
+  }
+
+  // No age class eligible — fall back to achievement classes
+  const eligible = getAchievementEligible(firsts, hasCC, availableClassNames);
+  const suggested = eligible[0] ?? null;
+
+  const reason = hasCC
+    ? 'Has won a CC — eligible for Open only'
+    : firsts === 0
+      ? 'No qualifying wins recorded — eligible for all achievement classes'
+      : `${firsts} first-place win${firsts !== 1 ? 's' : ''} recorded on Remi`;
+
+  return { eligible, suggested, reason };
+}
+
+/** Compute achievement class eligibility based on KC win rules */
+function getAchievementEligible(
+  firsts: number,
+  hasCC: boolean,
+  availableClassNames?: string[],
+): string[] {
   let allEligible: string[];
 
   if (hasCC) {
@@ -42,7 +88,7 @@ function getClassRecommendation(
 
   // Filter to only classes available in this show's schedule.
   // Use flatMap to match breed-specific variants (e.g. "Special Long Coat Open" → "Open")
-  const eligible = availableClassNames
+  return availableClassNames
     ? allEligible.flatMap((name) =>
         availableClassNames.filter(
           (avail) =>
@@ -51,17 +97,6 @@ function getClassRecommendation(
         )
       )
     : allEligible;
-
-  // Suggest the most restrictive eligible class that's in the schedule
-  const suggested = eligible[0] ?? null;
-
-  const reason = hasCC
-    ? 'Has won a CC — eligible for Open only'
-    : firsts === 0
-      ? 'No qualifying wins recorded — eligible for all achievement classes'
-      : `${firsts} first-place win${firsts !== 1 ? 's' : ''} recorded on Remi`;
-
-  return { eligible, suggested, reason };
 }
 
 export const dogsRouter = createTRPCRouter({
@@ -530,6 +565,14 @@ export const dogsRouter = createTRPCRouter({
   kcLookup: protectedProcedure
     .input(z.object({ query: z.string().min(2).max(255) }))
     .mutation(async ({ input }) => {
+      // Require at least a space in the query to prevent overly broad searches
+      // (e.g. just "Hundark" returns hundreds — need "Hundark D" or "Hundark Phantom")
+      if (!input.query.trim().includes(' ')) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Please enter at least the kennel name and the first letter of the dog\'s name (e.g. "Hundark D") for a more accurate search.',
+        });
+      }
       const results = await searchKcDogs(input.query);
       if (results.length === 0) {
         throw new TRPCError({
@@ -625,6 +668,8 @@ export const dogsRouter = createTRPCRouter({
 
       // Get achievement class names actually in this show's schedule
       let availableClassNames: string[] | undefined;
+      let ageInfo: { ageMonths: number; availableAgeClasses: { name: string; minMonths: number | null; maxMonths: number | null }[] } | undefined;
+
       if (input.showId) {
         const showAchievementClasses = await ctx.db
           .select({ name: classDefinitions.name })
@@ -637,12 +682,59 @@ export const dogsRouter = createTRPCRouter({
             )
           );
         availableClassNames = showAchievementClasses.map((c) => c.name);
+
+        // Fetch dog DOB and show date to calculate age for age class suggestions
+        const [dog, show] = await Promise.all([
+          ctx.db.query.dogs.findFirst({
+            where: eq(dogs.id, input.dogId),
+            columns: { dateOfBirth: true },
+          }),
+          ctx.db.query.shows.findFirst({
+            where: eq(shows.id, input.showId),
+            columns: { startDate: true },
+          }),
+        ]);
+
+        if (dog?.dateOfBirth && show?.startDate) {
+          const showDate = new Date(show.startDate);
+          const dob = new Date(dog.dateOfBirth);
+          const ageMonths = (showDate.getFullYear() - dob.getFullYear()) * 12
+            + showDate.getMonth() - dob.getMonth()
+            - (showDate.getDate() < dob.getDate() ? 1 : 0);
+
+          // Get age classes available in this show's schedule
+          const showAgeClasses = await ctx.db
+            .select({
+              name: classDefinitions.name,
+              minMonths: classDefinitions.minAgeMonths,
+              maxMonths: classDefinitions.maxAgeMonths,
+            })
+            .from(showClasses)
+            .innerJoin(classDefinitions, eq(showClasses.classDefinitionId, classDefinitions.id))
+            .where(
+              and(
+                eq(showClasses.showId, input.showId),
+                eq(classDefinitions.type, 'age'),
+              )
+            );
+
+          if (showAgeClasses.length > 0) {
+            ageInfo = {
+              ageMonths,
+              availableAgeClasses: showAgeClasses.map((c) => ({
+                name: c.name,
+                minMonths: c.minMonths,
+                maxMonths: c.maxMonths,
+              })),
+            };
+          }
+        }
       }
 
       return {
         totalFirsts: firstsAtQualifyingShows,
         hasCC,
-        recommendation: getClassRecommendation(firstsAtQualifyingShows, hasCC, availableClassNames),
+        recommendation: getClassRecommendation(firstsAtQualifyingShows, hasCC, availableClassNames, ageInfo),
       };
     }),
 
@@ -774,72 +866,39 @@ export const dogsRouter = createTRPCRouter({
   getShowResults: protectedProcedure
     .input(z.object({ dogId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      // Fetch all confirmed entries with results that have a placement
-      const dogEntries = await ctx.db.query.entries.findMany({
-        where: and(
-          eq(entries.dogId, input.dogId),
-          eq(entries.status, 'confirmed'),
-          isNull(entries.deletedAt),
-        ),
-        with: {
-          show: true,
-          entryClasses: {
-            with: {
-              showClass: {
-                with: {
-                  classDefinition: true,
+      // Run entries fetch and dog breedId lookup in parallel
+      const [dogEntries, dog] = await Promise.all([
+        ctx.db.query.entries.findMany({
+          where: and(
+            eq(entries.dogId, input.dogId),
+            eq(entries.status, 'confirmed'),
+            isNull(entries.deletedAt),
+          ),
+          with: {
+            show: { columns: { id: true, name: true, startDate: true } },
+            entryClasses: {
+              with: {
+                showClass: {
+                  with: {
+                    classDefinition: { columns: { name: true, sex: true } },
+                  },
                 },
+                result: true,
               },
-              result: true,
             },
           },
-        },
-      });
+        }),
+        ctx.db.query.dogs.findFirst({
+          where: eq(dogs.id, input.dogId),
+          columns: { breedId: true },
+        }),
+      ]);
 
-      // Flatten to results with placements
-      const flatResults: Array<{
-        id: string;
-        showId: string;
-        showName: string;
-        showDate: string;
-        className: string;
-        classNumber: number;
-        sex: string;
-        placement: number;
-        specialAward: string | null;
-        critiqueText: string | null;
-        judgeName: string | null;
-      }> = [];
+      // Build judge lookup map upfront (before flattening)
+      const showIds = [...new Set(dogEntries.map((e) => e.show.id))];
+      let judgeByShow = new Map<string, string>();
 
-      for (const entry of dogEntries) {
-        for (const ec of entry.entryClasses) {
-          if (!ec.result?.placement) continue;
-          flatResults.push({
-            id: ec.id,
-            showId: entry.show.id,
-            showName: entry.show.name,
-            showDate: entry.show.startDate,
-            className: ec.showClass.classDefinition.name,
-            classNumber: ec.showClass.classNumber,
-            sex: ec.showClass.classDefinition.sex ?? '',
-            placement: ec.result.placement,
-            specialAward: ec.result.specialAward,
-            critiqueText: ec.result.critiqueText,
-            judgeName: null, // resolved below
-          });
-        }
-      }
-
-      if (flatResults.length === 0) return [];
-
-      // Resolve judge names via judge_assignments (show + breed)
-      const dog = await ctx.db.query.dogs.findFirst({
-        where: eq(dogs.id, input.dogId),
-        columns: { breedId: true },
-      });
-
-      if (dog?.breedId) {
-        const showIds = [...new Set(flatResults.map((r) => r.showId))];
+      if (dog?.breedId && showIds.length > 0) {
         const assignments = await ctx.db
           .select({
             showId: judgeAssignments.showId,
@@ -854,14 +913,29 @@ export const dogsRouter = createTRPCRouter({
             )
           );
 
-        const judgeByShow = new Map(
+        judgeByShow = new Map(
           assignments.map((a) => [a.showId, a.judgeName])
         );
-
-        for (const r of flatResults) {
-          r.judgeName = judgeByShow.get(r.showId) ?? null;
-        }
       }
+
+      // Flatten to results with placements in a single pass
+      const flatResults = dogEntries.flatMap((entry) =>
+        entry.entryClasses
+          .filter((ec) => ec.result?.placement)
+          .map((ec) => ({
+            id: ec.id,
+            showId: entry.show.id,
+            showName: entry.show.name,
+            showDate: entry.show.startDate,
+            className: ec.showClass.classDefinition.name,
+            classNumber: ec.showClass.classNumber,
+            sex: ec.showClass.classDefinition.sex ?? '',
+            placement: ec.result!.placement!,
+            specialAward: ec.result!.specialAward,
+            critiqueText: ec.result!.critiqueText,
+            judgeName: judgeByShow.get(entry.show.id) ?? null,
+          }))
+      );
 
       // Sort by show date descending, then class number
       flatResults.sort((a, b) => {

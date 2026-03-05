@@ -90,8 +90,25 @@ export async function searchKcDogs(query: string): Promise<KcDogResult[]> {
       });
     }
 
-    console.log(`[kc-lookup] Found ${results.length} dogs`);
-    return results;
+    // Filter out dogs older than 18 years — unlikely to be entering shows
+    const cutoff = new Date();
+    cutoff.setFullYear(cutoff.getFullYear() - 18);
+
+    const filtered = results.filter((r) => {
+      if (!r.dateOfBirth) return true; // keep if no DOB available
+      // KC dates are DD/MM/YYYY — parse accordingly
+      const parts = r.dateOfBirth.split('/');
+      if (parts.length === 3) {
+        const dob = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+        return dob >= cutoff;
+      }
+      // Fallback: try ISO parse
+      const dob = new Date(r.dateOfBirth);
+      return isNaN(dob.getTime()) || dob >= cutoff;
+    });
+
+    console.log(`[kc-lookup] Found ${results.length} dogs, ${filtered.length} within last 18 years`);
+    return filtered;
   } catch (error) {
     console.error('[kc-lookup] KC lookup failed:', error);
     return [];

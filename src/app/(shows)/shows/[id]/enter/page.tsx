@@ -21,7 +21,7 @@ import {
   Trash2,
   Users,
 } from 'lucide-react';
-import { differenceInMonths } from 'date-fns';
+import { differenceInMonths, format, parseISO } from 'date-fns';
 import { trpc } from '@/lib/trpc/client';
 import { formatDogName } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -424,7 +424,7 @@ export default function EnterShowPage() {
         </Link>
         <h1 className="mt-2 text-lg font-bold sm:text-xl lg:text-2xl">Enter {show.name}</h1>
         <p className="text-xs text-muted-foreground sm:text-sm">
-          {show.startDate} &middot; {show.venue?.name ?? 'Venue TBC'}
+          {format(parseISO(show.startDate), 'd MMMM yyyy')} &middot; {show.venue?.name ?? 'Venue TBC'}
         </p>
       </div>
 
@@ -825,7 +825,7 @@ export default function EnterShowPage() {
             <CardContent className="space-y-1 text-sm">
               <p className="font-medium">{show.name}</p>
               <p className="text-muted-foreground">
-                {show.startDate} &middot; {show.venue?.name ?? 'TBC'}
+                {format(parseISO(show.startDate), 'd MMMM yyyy')} &middot; {show.venue?.name ?? 'TBC'}
               </p>
             </CardContent>
           </Card>
