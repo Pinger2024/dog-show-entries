@@ -524,6 +524,7 @@ function AddEntryDialog({
   const [selectedDogSex, setSelectedDogSex] = useState<string | null>(null);
   const [selectedDogDob, setSelectedDogDob] = useState<string | null>(null);
   const [selectedDogBreedId, setSelectedDogBreedId] = useState<string | null>(null);
+  const [selectedDogBreedName, setSelectedDogBreedName] = useState<string | null>(null);
   const [exhibitorEmail, setExhibitorEmail] = useState('');
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<string>('postal');
@@ -575,6 +576,7 @@ function AddEntryDialog({
       setSelectedDogSex(regSex || null);
       setSelectedDogDob(regDob || null);
       setSelectedDogBreedId(regBreed || null);
+      setSelectedDogBreedName(allBreeds?.find((b) => b.id === regBreed)?.name ?? null);
       setStep('classes');
       utils.secretary.searchDogs.invalidate();
     },
@@ -647,6 +649,7 @@ function AddEntryDialog({
                       setSelectedDogSex(dog.sex);
                       setSelectedDogDob(dog.dateOfBirth);
                       setSelectedDogBreedId(dog.breedId);
+                      setSelectedDogBreedName(dog.breed?.name ?? null);
                       // Pre-fill exhibitor email from primary owner
                       const primaryOwner = dog.owners?.[0];
                       if (primaryOwner?.ownerEmail) {
@@ -845,17 +848,31 @@ function AddEntryDialog({
               <label className="text-sm font-medium">Classes</label>
               <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border p-3">
                 {classesData && classesData.length > 0 ? (() => {
-                  // Filter: correct sex, exclude JH classes, apply age eligibility
+                  // "Special Long Coat" classes only apply to German Shepherd Dogs
+                  const isGsdOnly = (name: string) => /^Special Long Coat/i.test(name);
+                  const isGsd = /german shepherd/i.test(selectedDogBreedName ?? '');
+
+                  // Filter: correct sex, exclude JH classes, apply age eligibility, GSD-only classes
+                  let filteredBySex = 0;
+                  let filteredByAge = 0;
+                  let filteredByBreedClass = 0;
                   const eligible = classesData.filter((sc) => {
                     if (sc.classDefinition?.type === 'junior_handler') return false;
-                    if (sc.sex && selectedDogSex && sc.sex !== selectedDogSex) return false;
+                    if (isGsdOnly(sc.classDefinition?.name ?? '') && !isGsd) {
+                      filteredByBreedClass++;
+                      return false;
+                    }
+                    if (sc.sex && selectedDogSex && sc.sex !== selectedDogSex) {
+                      filteredBySex++;
+                      return false;
+                    }
                     if (sc.classDefinition?.type === 'age' && selectedDogDob && showDate) {
                       const ageMonths =
                         (new Date(showDate).getFullYear() - new Date(selectedDogDob).getFullYear()) * 12 +
                         (new Date(showDate).getMonth() - new Date(selectedDogDob).getMonth());
                       const { minAgeMonths, maxAgeMonths } = sc.classDefinition;
-                      if (minAgeMonths !== null && ageMonths < minAgeMonths) return false;
-                      if (maxAgeMonths !== null && ageMonths >= maxAgeMonths) return false;
+                      if (minAgeMonths !== null && ageMonths < minAgeMonths) { filteredByAge++; return false; }
+                      if (maxAgeMonths !== null && ageMonths >= maxAgeMonths) { filteredByAge++; return false; }
                     }
                     return true;
                   });
@@ -881,13 +898,22 @@ function AddEntryDialog({
                       </span>
                     </label>
                   )) : (
-                    <p className="py-4 text-center text-sm text-muted-foreground">
-                      No eligible classes for this dog.
-                    </p>
+                    <div className="py-4 text-center text-sm text-muted-foreground space-y-1">
+                      <p className="font-medium">No eligible classes for this dog.</p>
+                      {filteredBySex > 0 && (
+                        <p>{filteredBySex} class{filteredBySex !== 1 ? 'es' : ''} excluded — wrong sex ({selectedDogSex === 'dog' ? 'bitch' : 'dog'} classes only)</p>
+                      )}
+                      {filteredByAge > 0 && (
+                        <p>{filteredByAge} class{filteredByAge !== 1 ? 'es' : ''} excluded — age not eligible</p>
+                      )}
+                      {filteredByBreedClass > 0 && (
+                        <p>{filteredByBreedClass} class{filteredByBreedClass !== 1 ? 'es' : ''} excluded — breed-specific class</p>
+                      )}
+                    </div>
                   );
                 })() : (
                   <p className="py-4 text-center text-sm text-muted-foreground">
-                    No classes defined for this show yet.
+                    No classes defined for this breed in this show.
                   </p>
                 )}
               </div>

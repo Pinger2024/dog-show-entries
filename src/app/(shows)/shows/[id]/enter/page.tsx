@@ -114,6 +114,28 @@ export default function EnterShowPage() {
     { enabled: cart.step === 'select_classes' || cart.step === 'cart_review' }
   );
 
+  // Sync cart sundry item prices/names with server data (handles secretary price changes)
+  useEffect(() => {
+    if (!sundryItemsData) return;
+    for (const cartItem of cart.sundryItems) {
+      const serverItem = sundryItemsData.find((s) => s.id === cartItem.sundryItemId);
+      if (!serverItem) continue;
+      if (
+        serverItem.priceInPence !== cartItem.unitPrice ||
+        serverItem.name !== cartItem.name ||
+        serverItem.maxPerOrder !== cartItem.maxPerOrder
+      ) {
+        cart.setSundryItem({
+          ...cartItem,
+          unitPrice: serverItem.priceInPence,
+          name: serverItem.name,
+          maxPerOrder: serverItem.maxPerOrder,
+        });
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sundryItemsData]);
+
   // Win summary for smart class recommendations — pass showId so suggestions
   // are filtered to classes actually in this show's schedule
   const { data: winSummary } = trpc.dogs.getWinSummary.useQuery(
@@ -155,9 +177,15 @@ export default function EnterShowPage() {
     const isAvnsc = (name: string) =>
       /avnsc|not separately classified/i.test(name);
 
-    const eligible = hasBreedClasses
+    // "Special Long Coat" classes only apply to German Shepherd Dogs
+    const isGsdOnly = (name: string) => /^Special Long Coat/i.test(name);
+    const breedName = selectedDog?.breed?.name ?? '';
+    const isGsd = /german shepherd/i.test(breedName);
+
+    const eligible = (hasBreedClasses
       ? sexFiltered.filter((sc) => sc.breedId != null || !isAvnsc(sc.classDefinition.name))
-      : sexFiltered;
+      : sexFiltered
+    ).filter((sc) => !isGsdOnly(sc.classDefinition.name) || isGsd);
 
     const byCanonicalOrder = (a: (typeof eligible)[0], b: (typeof eligible)[0]) =>
       (a.classDefinition.sortOrder ?? 0) - (b.classDefinition.sortOrder ?? 0);
@@ -168,7 +196,7 @@ export default function EnterShowPage() {
       special: eligible.filter((sc) => sc.classDefinition.type === 'special').sort(byCanonicalOrder),
       junior_handler: eligible.filter((sc) => sc.classDefinition.type === 'junior_handler').sort(byCanonicalOrder),
     };
-  }, [showClasses, selectedDogSex]);
+  }, [showClasses, selectedDogSex, selectedDog?.breed?.name]);
 
   // Filter classes by entry type (and by handler age for JH entries)
   const availableClasses = useMemo(() => {
