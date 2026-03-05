@@ -286,13 +286,25 @@ export default function ApplyPage() {
               <label className="text-sm font-medium">
                 Breed or Group
               </label>
-              <Input
+              <Select
                 value={breedOrGroup}
-                onChange={(e) => setBreedOrGroup(e.target.value)}
-                placeholder="e.g. German Shepherd Dog"
-              />
+                onValueChange={setBreedOrGroup}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a group..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Gundog">Gundog</SelectItem>
+                  <SelectItem value="Hound">Hound</SelectItem>
+                  <SelectItem value="Pastoral">Pastoral</SelectItem>
+                  <SelectItem value="Terrier">Terrier</SelectItem>
+                  <SelectItem value="Toy">Toy</SelectItem>
+                  <SelectItem value="Utility">Utility</SelectItem>
+                  <SelectItem value="Working">Working</SelectItem>
+                </SelectContent>
+              </Select>
               <p className="text-xs text-muted-foreground">
-                Relevant for single breed clubs.
+                Select the KC breed group your club covers.
               </p>
             </div>
 

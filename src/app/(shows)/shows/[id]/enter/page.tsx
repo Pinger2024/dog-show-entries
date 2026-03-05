@@ -1040,9 +1040,10 @@ export default function EnterShowPage() {
                 className="mt-0.5"
               />
               <span className="text-sm leading-relaxed">
-                I declare that to the best of my knowledge my dog(s) are not
-                suffering from any infectious or contagious disease, and have not
-                been exposed to such disease during the 21 days prior to the show.
+                I declare that at the time of entries closing, to the best of my
+                knowledge, my dog(s) are not suffering from any infectious or
+                contagious disease. Should any such disease be identified within
+                21 days of the show, my entry will be withdrawn.
               </span>
             </label>
             <label className="flex cursor-pointer items-start gap-3">

@@ -40,6 +40,7 @@ export default function FinancialPage({
   params: Promise<{ id: string }>;
 }) {
   const { id: showId } = use(params);
+  const { data: show } = trpc.shows.getById.useQuery({ id: showId });
   const { data: stats } = trpc.secretary.getShowStats.useQuery({ showId });
   const { data: entriesData } = trpc.entries.getForShow.useQuery({ showId, limit: 100 });
   const { data: entryReport } = trpc.secretary.getEntryReport.useQuery({ showId });
@@ -99,6 +100,42 @@ export default function FinancialPage({
       }
     }
     return Array.from(classMap.values()).sort((a, b) => b.entries - a.entries);
+  }, [entryReport]);
+
+  // Per-breed breakdown with nested classes (for all-breed shows)
+  const breedBreakdown = useMemo(() => {
+    if (!entryReport) return [];
+    const breedMap = new Map<string, {
+      name: string;
+      entries: number;
+      revenue: number;
+      classes: Map<string, { name: string; entries: number; revenue: number }>;
+    }>();
+    for (const entry of entryReport) {
+      if (entry.status === 'cancelled' || entry.status === 'withdrawn') continue;
+      const breedName = entry.dog?.breed?.name ?? 'Unknown';
+      if (!breedMap.has(breedName)) {
+        breedMap.set(breedName, { name: breedName, entries: 0, revenue: 0, classes: new Map() });
+      }
+      const breed = breedMap.get(breedName)!;
+      breed.entries += 1;
+      for (const ec of entry.entryClasses ?? []) {
+        breed.revenue += ec.fee;
+        const className = ec.showClass?.classDefinition?.name ?? 'Unknown';
+        if (!breed.classes.has(className)) {
+          breed.classes.set(className, { name: className, entries: 0, revenue: 0 });
+        }
+        const cls = breed.classes.get(className)!;
+        cls.entries += 1;
+        cls.revenue += ec.fee;
+      }
+    }
+    return Array.from(breedMap.values())
+      .sort((a, b) => b.entries - a.entries)
+      .map((b) => ({
+        ...b,
+        classes: Array.from(b.classes.values()).sort((a, c) => c.entries - a.entries),
+      }));
   }, [entryReport]);
 
   function handleExportCsv() {
@@ -221,6 +258,56 @@ export default function FinancialPage({
                   </TableCell>
                   <TableCell className="text-right">
                     {formatCurrency(classBreakdown.reduce((s, c) => s + c.revenue, 0))}
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Per-breed breakdown with classes (only for all-breed / group shows) */}
+      {breedBreakdown.length > 0 && show?.showScope !== 'single_breed' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Entries by Breed &amp; Class</CardTitle>
+            <CardDescription>
+              Breakdown of entries and revenue per breed, with class detail
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Breed / Class</TableHead>
+                  <TableHead className="text-right">Entries</TableHead>
+                  <TableHead className="text-right">Revenue</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {breedBreakdown.map((b) => (
+                  <>
+                    <TableRow key={b.name} className="bg-muted/30">
+                      <TableCell className="font-bold">{b.name}</TableCell>
+                      <TableCell className="text-right font-bold">{b.entries}</TableCell>
+                      <TableCell className="text-right font-bold">{formatCurrency(b.revenue)}</TableCell>
+                    </TableRow>
+                    {b.classes.map((cls) => (
+                      <TableRow key={`${b.name}-${cls.name}`}>
+                        <TableCell className="pl-8 text-muted-foreground">{cls.name}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{cls.entries}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{formatCurrency(cls.revenue)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </>
+                ))}
+                <TableRow className="font-bold border-t-2">
+                  <TableCell>Total</TableCell>
+                  <TableCell className="text-right">
+                    {breedBreakdown.reduce((s, b) => s + b.entries, 0)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatCurrency(breedBreakdown.reduce((s, b) => s + b.revenue, 0))}
                   </TableCell>
                 </TableRow>
               </TableBody>
