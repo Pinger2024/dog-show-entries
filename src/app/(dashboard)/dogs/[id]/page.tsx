@@ -19,10 +19,13 @@ import {
   ImagePlus,
   Star,
   X,
+  Medal,
+  FileText,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { formatDogName, getTitleDisplay } from '@/lib/utils';
+import { getPlacementLabel, placementColors } from '@/lib/placements';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -238,6 +241,126 @@ function TitleProgressCard({ dogId }: { dogId: string }) {
         <p className="text-xs text-muted-foreground/70 italic">
           {data.disclaimer}
         </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PlacingsHistoryCard({ dogId }: { dogId: string }) {
+  const { data, isLoading } = trpc.dogs.getShowResults.useQuery({ dogId });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Medal className="size-4" />
+          Placings History
+        </CardTitle>
+        <CardDescription>
+          All placings earned across shows.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="size-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : !data?.length ? (
+          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-8 text-center">
+            <Medal className="mb-3 size-8 text-muted-foreground/50" />
+            <p className="font-medium">No placings yet</p>
+            <p className="mt-1 max-w-xs text-sm text-muted-foreground">
+              Results will appear here as shows are judged.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {data.map((r) => (
+              <div
+                key={r.id}
+                className="flex items-center gap-3 rounded-lg border p-3"
+              >
+                <Badge
+                  variant="outline"
+                  className={`w-14 justify-center text-xs font-semibold ${placementColors[r.placement] ?? ''}`}
+                >
+                  {getPlacementLabel(r.placement)}
+                </Badge>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">{r.showName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {format(parseISO(r.showDate), 'd MMM yyyy')} · {r.className}
+                  </p>
+                </div>
+                {r.specialAward && (
+                  <Badge variant="secondary" className="shrink-0 text-xs">
+                    {r.specialAward}
+                  </Badge>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function CritiquesCard({ dogId }: { dogId: string }) {
+  const { data, isLoading } = trpc.dogs.getShowResults.useQuery({ dogId });
+  const critiques = data?.filter((r) => r.critiqueText?.trim()) ?? [];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <FileText className="size-4" />
+          Judge Critiques
+        </CardTitle>
+        <CardDescription>
+          Written critiques from judges.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="size-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : critiques.length === 0 ? (
+          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-8 text-center">
+            <FileText className="mb-3 size-8 text-muted-foreground/50" />
+            <p className="font-medium">No critiques yet</p>
+            <p className="mt-1 max-w-xs text-sm text-muted-foreground">
+              Judge critiques will appear here when recorded.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {critiques.map((r) => (
+              <div key={r.id} className="rounded-lg border p-4">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className={`text-xs font-semibold ${placementColors[r.placement] ?? ''}`}
+                  >
+                    {getPlacementLabel(r.placement)}
+                  </Badge>
+                  <span className="text-sm font-medium">{r.showName}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {format(parseISO(r.showDate), 'd MMM yyyy')}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {r.className}
+                  {r.judgeName && ` · Judge: ${r.judgeName}`}
+                </p>
+                <p className="mt-2 text-sm italic text-muted-foreground">
+                  &ldquo;{r.critiqueText}&rdquo;
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -604,6 +727,10 @@ export default function DogDetailPage({
         {/* Entry History */}
         <EntryHistoryCard dogId={id} />
       </div>
+
+      {/* Placings & Critiques */}
+      <PlacingsHistoryCard dogId={id} />
+      <CritiquesCard dogId={id} />
 
       {/* Photos */}
       <PhotoGalleryCard dogId={id} />

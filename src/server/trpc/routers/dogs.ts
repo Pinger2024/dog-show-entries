@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, isNull, asc, desc, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, asc, desc, sql } from 'drizzle-orm';
 import { protectedProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
-import { dogs, dogOwners, dogTitles, dogPhotos, users, entries, entryClasses, showClasses, shows, results, classDefinitions, achievements } from '@/server/db/schema';
+import { dogs, dogOwners, dogTitles, dogPhotos, users, entries, entryClasses, showClasses, shows, results, classDefinitions, achievements, judgeAssignments, judges } from '@/server/db/schema';
 import { deleteFromR2 } from '@/server/services/storage';
 import { scrapeKcDog, searchKcDogs, fetchKcDogProfile } from '@/server/services/firecrawl';
 
@@ -768,6 +768,109 @@ export const dogsRouter = createTRPCRouter({
         },
         disclaimer: 'Progress shown is based on results recorded in Remi only. Wins at shows not using Remi are not included.',
       };
+    }),
+
+  // ── Show Results (placings & critiques) ─────────────────
+  getShowResults: protectedProcedure
+    .input(z.object({ dogId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      // Fetch all confirmed entries with results that have a placement
+      const dogEntries = await ctx.db.query.entries.findMany({
+        where: and(
+          eq(entries.dogId, input.dogId),
+          eq(entries.status, 'confirmed'),
+          isNull(entries.deletedAt),
+        ),
+        with: {
+          show: true,
+          entryClasses: {
+            with: {
+              showClass: {
+                with: {
+                  classDefinition: true,
+                },
+              },
+              result: true,
+            },
+          },
+        },
+      });
+
+      // Flatten to results with placements
+      const flatResults: Array<{
+        id: string;
+        showId: string;
+        showName: string;
+        showDate: string;
+        className: string;
+        classNumber: number;
+        sex: string;
+        placement: number;
+        specialAward: string | null;
+        critiqueText: string | null;
+        judgeName: string | null;
+      }> = [];
+
+      for (const entry of dogEntries) {
+        for (const ec of entry.entryClasses) {
+          if (!ec.result?.placement) continue;
+          flatResults.push({
+            id: ec.id,
+            showId: entry.show.id,
+            showName: entry.show.name,
+            showDate: entry.show.startDate,
+            className: ec.showClass.classDefinition.name,
+            classNumber: ec.showClass.classNumber,
+            sex: ec.showClass.classDefinition.sex ?? '',
+            placement: ec.result.placement,
+            specialAward: ec.result.specialAward,
+            critiqueText: ec.result.critiqueText,
+            judgeName: null, // resolved below
+          });
+        }
+      }
+
+      if (flatResults.length === 0) return [];
+
+      // Resolve judge names via judge_assignments (show + breed)
+      const dog = await ctx.db.query.dogs.findFirst({
+        where: eq(dogs.id, input.dogId),
+        columns: { breedId: true },
+      });
+
+      if (dog?.breedId) {
+        const showIds = [...new Set(flatResults.map((r) => r.showId))];
+        const assignments = await ctx.db
+          .select({
+            showId: judgeAssignments.showId,
+            judgeName: judges.name,
+          })
+          .from(judgeAssignments)
+          .innerJoin(judges, eq(judgeAssignments.judgeId, judges.id))
+          .where(
+            and(
+              inArray(judgeAssignments.showId, showIds),
+              eq(judgeAssignments.breedId, dog.breedId),
+            )
+          );
+
+        const judgeByShow = new Map(
+          assignments.map((a) => [a.showId, a.judgeName])
+        );
+
+        for (const r of flatResults) {
+          r.judgeName = judgeByShow.get(r.showId) ?? null;
+        }
+      }
+
+      // Sort by show date descending, then class number
+      flatResults.sort((a, b) => {
+        const dateCompare = b.showDate.localeCompare(a.showDate);
+        if (dateCompare !== 0) return dateCompare;
+        return a.classNumber - b.classNumber;
+      });
+
+      return flatResults;
     }),
 
   // ── Dog Photos ────────────────────────────────────────

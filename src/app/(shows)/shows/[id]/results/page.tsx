@@ -13,7 +13,7 @@ import {
   Award,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
-import { getPlacementLabel } from '@/lib/placements';
+import { getPlacementLabel, placementColors } from '@/lib/placements';
 import { Badge } from '@/components/ui/badge';
 
 const achievementLabels: Record<string, string> = {
@@ -34,16 +34,6 @@ const achievementLabels: Record<string, string> = {
   best_long_coat_in_show: 'Best Long Coat in Show',
   cc: 'CC',
   reserve_cc: 'Reserve CC',
-};
-
-const placementColors: Record<number, string> = {
-  1: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-  2: 'bg-gray-100 text-gray-700 border-gray-200',
-  3: 'bg-amber-100 text-amber-800 border-amber-200',
-  4: 'bg-blue-50 text-blue-700 border-blue-200',
-  5: 'bg-purple-50 text-purple-700 border-purple-200',
-  6: 'bg-teal-50 text-teal-700 border-teal-200',
-  7: 'bg-slate-50 text-slate-600 border-slate-200',
 };
 
 export default function LiveResultsPage({
