@@ -40,6 +40,7 @@ import { Separator } from '@/components/ui/separator';
 import { StripeProvider } from '@/components/providers/stripe-provider';
 import { PaymentForm } from './payment-form';
 import { cn } from '@/lib/utils';
+import { isGsdOnlyClass, isGsdBreed } from '@/lib/class-templates';
 import { useEntryCart, type WizardStep } from './use-entry-cart';
 
 const STEPS: { key: WizardStep; label: string; icon: React.ElementType }[] = [
@@ -178,14 +179,12 @@ export default function EnterShowPage() {
       /avnsc|not separately classified/i.test(name);
 
     // "Special Long Coat" classes only apply to German Shepherd Dogs
-    const isGsdOnly = (name: string) => /^Special Long Coat/i.test(name);
-    const breedName = selectedDog?.breed?.name ?? '';
-    const isGsd = /german shepherd/i.test(breedName);
+    const isGsd = isGsdBreed(selectedDog?.breed?.name ?? '');
 
     const eligible = (hasBreedClasses
       ? sexFiltered.filter((sc) => sc.breedId != null || !isAvnsc(sc.classDefinition.name))
       : sexFiltered
-    ).filter((sc) => !isGsdOnly(sc.classDefinition.name) || isGsd);
+    ).filter((sc) => !isGsdOnlyClass(sc.classDefinition.name) || isGsd);
 
     const byCanonicalOrder = (a: (typeof eligible)[0], b: (typeof eligible)[0]) =>
       (a.classDefinition.sortOrder ?? 0) - (b.classDefinition.sortOrder ?? 0);

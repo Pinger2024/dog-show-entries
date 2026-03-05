@@ -50,6 +50,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { isGsdOnlyClass, isGsdBreed } from '@/lib/class-templates';
 import { EntryItem, entryStatusConfig, formatDate } from '../_lib/show-utils';
 
 export default function EntriesPage({ params }: { params: Promise<{ id: string }> }) {
@@ -849,8 +850,7 @@ function AddEntryDialog({
               <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border p-3">
                 {classesData && classesData.length > 0 ? (() => {
                   // "Special Long Coat" classes only apply to German Shepherd Dogs
-                  const isGsdOnly = (name: string) => /^Special Long Coat/i.test(name);
-                  const isGsd = /german shepherd/i.test(selectedDogBreedName ?? '');
+                  const isGsd = isGsdBreed(selectedDogBreedName ?? '');
 
                   // Filter: correct sex, exclude JH classes, apply age eligibility, GSD-only classes
                   let filteredBySex = 0;
@@ -858,7 +858,7 @@ function AddEntryDialog({
                   let filteredByBreedClass = 0;
                   const eligible = classesData.filter((sc) => {
                     if (sc.classDefinition?.type === 'junior_handler') return false;
-                    if (isGsdOnly(sc.classDefinition?.name ?? '') && !isGsd) {
+                    if (isGsdOnlyClass(sc.classDefinition?.name ?? '') && !isGsd) {
                       filteredByBreedClass++;
                       return false;
                     }

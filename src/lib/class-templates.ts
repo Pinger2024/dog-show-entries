@@ -3,6 +3,13 @@
  * Each template defines which class definition names to include.
  */
 
+/** "Special Long Coat" classes are restricted to German Shepherd Dogs only. */
+const GSD_ONLY_CLASS_RE = /^Special Long Coat/i;
+const GSD_BREED_RE = /german shepherd/i;
+
+export const isGsdOnlyClass = (className: string) => GSD_ONLY_CLASS_RE.test(className);
+export const isGsdBreed = (breedName: string) => GSD_BREED_RE.test(breedName);
+
 export interface ClassTemplate {
   id: string;
   name: string;
