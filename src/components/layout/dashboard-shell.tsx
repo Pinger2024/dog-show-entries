@@ -40,10 +40,10 @@ const navItems = [
 ];
 
 const adminNavItems = [
-  { href: '/feedback', label: 'Feedback', icon: Inbox },
-  { href: '/admin/applications', label: 'Applications', icon: ClipboardCheck },
-  { href: '/admin/invitations', label: 'Invitations', icon: UserPlus },
-  { href: '/admin/reference-data', label: 'Reference Data', icon: Database },
+  { href: '/feedback', label: 'Feedback', mobileLabel: 'Feedback', icon: Inbox },
+  { href: '/admin/applications', label: 'Applications', mobileLabel: 'Apps', icon: ClipboardCheck },
+  { href: '/admin/invitations', label: 'Invitations', mobileLabel: 'Invites', icon: UserPlus },
+  { href: '/admin/reference-data', label: 'Reference Data', mobileLabel: 'Ref Data', icon: Database },
 ];
 
 function getInitials(name?: string | null, email?: string | null) {
@@ -231,9 +231,10 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
           </Link>
           <div className="flex items-center gap-1">
             {(user.role === 'secretary' || user.role === 'admin') && (
-              <Button variant="ghost" size="sm" className="size-11" asChild>
+              <Button variant="outline" size="sm" className="h-9 gap-1.5 px-3 text-xs font-medium" asChild>
                 <Link href="/secretary">
-                  <ClipboardCheck className="size-5" />
+                  <ClipboardCheck className="size-4" />
+                  Secretary
                 </Link>
               </Button>
             )}
@@ -278,6 +279,24 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
                 )}
               >
                 <item.icon className="size-5" />
+                <span className="truncate max-w-full">{item.mobileLabel}</span>
+              </Link>
+            );
+          })}
+          {user.role === 'admin' && adminNavItems.map((item) => {
+            const isActive = pathname.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  'flex flex-1 flex-col items-center justify-center gap-0.5 min-h-[48px] py-2 text-[10px] sm:text-xs font-medium transition-colors',
+                  isActive
+                    ? 'text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <item.icon className="size-4" />
                 <span className="truncate max-w-full">{item.mobileLabel}</span>
               </Link>
             );
