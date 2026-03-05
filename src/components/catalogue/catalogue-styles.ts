@@ -210,6 +210,15 @@ export const styles = StyleSheet.create({
     color: '#333',
   },
 
+  // ── By-breed format: compact class summary ──
+  classListSummary: {
+    fontSize: 8,
+    fontStyle: 'italic',
+    color: '#333',
+    marginBottom: 1.5,
+    paddingLeft: 4,
+  },
+
   // ── Cover page styles ──────────────────────
   coverPage: {
     fontFamily: 'Times',

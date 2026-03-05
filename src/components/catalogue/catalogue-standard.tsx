@@ -37,6 +37,7 @@ export interface CatalogueShowInfo {
   secretaryEmail?: string;
   judgesByBreedName?: Record<string, string>;
   classDefinitions?: { name: string; description: string | null }[];
+  showScope?: string;
 }
 
 interface Props {

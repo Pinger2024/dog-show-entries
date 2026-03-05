@@ -8,6 +8,7 @@ import { renderToBuffer } from '@react-pdf/renderer';
 import { CatalogueStandard } from '@/components/catalogue/catalogue-standard';
 import { CatalogueAbsentees } from '@/components/catalogue/catalogue-absentees';
 import { CatalogueByClass } from '@/components/catalogue/catalogue-by-class';
+import { CatalogueByBreed } from '@/components/catalogue/catalogue-by-breed';
 import { CatalogueAlphabetical } from '@/components/catalogue/catalogue-alphabetical';
 import type { CatalogueEntry, CatalogueShowInfo } from '@/components/catalogue/catalogue-standard';
 import React from 'react';
@@ -134,8 +135,8 @@ export async function GET(
     orderBy: [asc(schema.entries.catalogueNumber)],
   });
 
-  // Use KC catalogue formatting for standard format, regular for others
-  const useKCFormat = format === 'standard';
+  // Use KC catalogue formatting for standard and by-breed formats
+  const useKCFormat = format === 'standard' || (format === 'by-class' && show.showScope !== 'single_breed');
 
   const catalogueEntries: CatalogueEntry[] = entries.map((entry) => ({
     catalogueNumber: entry.catalogueNumber,
@@ -181,6 +182,7 @@ export async function GET(
     secretaryEmail: show.secretaryEmail ?? undefined,
     judgesByBreedName,
     classDefinitions,
+    showScope: show.showScope ?? undefined,
   };
 
   // Check if JSON format was explicitly requested (for data export)
@@ -196,9 +198,11 @@ export async function GET(
 
   // Render PDF
   try {
+    // For all-breed shows, the "by-class" format uses the Crufts-style breed-grouped layout
+    const isAllBreed = show.showScope !== 'single_breed';
     const formatComponents = {
       standard: CatalogueStandard,
-      'by-class': CatalogueByClass,
+      'by-class': isAllBreed ? CatalogueByBreed : CatalogueByClass,
       alphabetical: CatalogueAlphabetical,
       absentees: CatalogueAbsentees,
     } as const;
@@ -210,7 +214,7 @@ export async function GET(
 
     const formatLabels: Record<string, string> = {
       standard: 'Catalogue',
-      'by-class': 'Catalogue-By-Class',
+      'by-class': isAllBreed ? 'Catalogue-By-Breed' : 'Catalogue-By-Class',
       alphabetical: 'Catalogue-Alphabetical',
       absentees: 'Absentees',
     };
