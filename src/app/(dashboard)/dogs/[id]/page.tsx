@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useRef, useState, useCallback } from 'react';
+import { use, useMemo, useRef, useState, useCallback } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -185,7 +185,7 @@ function TitleProgressCard({ dogId }: { dogId: string }) {
           KC Title Progress
         </CardTitle>
         <CardDescription>
-          Track progress toward Kennel Club titles.
+          Track progress toward Royal Kennel Club titles.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -308,7 +308,10 @@ function PlacingsHistoryCard({ dogId }: { dogId: string }) {
 
 function CritiquesCard({ dogId }: { dogId: string }) {
   const { data, isLoading } = trpc.dogs.getShowResults.useQuery({ dogId });
-  const critiques = data?.filter((r) => r.critiqueText?.trim()) ?? [];
+  const critiques = useMemo(
+    () => data?.filter((r) => r.critiqueText?.trim()) ?? [],
+    [data],
+  );
 
   return (
     <Card>

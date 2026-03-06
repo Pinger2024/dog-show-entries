@@ -53,7 +53,7 @@ const faqs = [
     icon: HelpCircle,
     question: 'What show types are supported?',
     answer:
-      'Remi supports Companion, Primary, Limited, Open, Premier Open, and Championship shows across all Kennel Club recognised breeds.',
+      'Remi supports Companion, Primary, Limited, Open, Premier Open, and Championship shows across all Royal Kennel Club recognised breeds.',
   },
 ];
 

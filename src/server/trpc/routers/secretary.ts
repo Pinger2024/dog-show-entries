@@ -2096,7 +2096,7 @@ export const secretaryRouter = createTRPCRouter({
         ${input.notes ? `<p style="font-size: 14px; color: #555; line-height: 1.6; padding: 12px; background: #f9f8f6; border-radius: 8px;">${input.notes}</p>` : ''}
 
         <p style="font-size: 15px; color: #333; line-height: 1.6;">
-          If you are willing to accept this appointment, please confirm by clicking the button below. This constitutes the formal written offer as required under Kennel Club regulations.
+          If you are willing to accept this appointment, please confirm by clicking the button below. This constitutes the formal written offer as required under Royal Kennel Club regulations.
         </p>
 
         <!-- Buttons -->

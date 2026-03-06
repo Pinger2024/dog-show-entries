@@ -359,7 +359,7 @@ function ProfileStep({
                     />
                   </FormControl>
                   <FormDescription>
-                    Your Kennel Club account number, if you have one
+                    Your Royal Kennel Club account number, if you have one
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -553,7 +553,7 @@ function DogStep({
         </CardTitle>
         <CardDescription className="text-sm sm:text-[0.9375rem]">
           Enter your dog&apos;s details, or use the KC Lookup to auto-fill from
-          the Kennel Club website.
+          the Royal Kennel Club website.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -604,7 +604,7 @@ function DogStep({
                 <Search className="mt-0.5 size-5 shrink-0 text-primary" />
                 <div className="flex-1">
                   <p className="text-sm font-medium">
-                    Auto-fill from Kennel Club
+                    Auto-fill from Royal Kennel Club
                   </p>
                   <p className="mt-0.5 text-sm text-muted-foreground">
                     Enter a KC number or registered name above, then click

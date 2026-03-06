@@ -357,7 +357,7 @@ export default function EnterShowPage() {
             <CardTitle>Complete Your Profile</CardTitle>
             <CardDescription>
               Your profile needs updating before you can enter a show.
-              The Kennel Club requires exhibitor name and address on all entries.
+              The Royal Kennel Club requires exhibitor name and address on all entries.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -1053,7 +1053,7 @@ export default function EnterShowPage() {
                 className="mt-0.5"
               />
               <span className="text-sm leading-relaxed">
-                I agree to abide by the Kennel Club Rules and Regulations.
+                I agree to abide by the Royal Kennel Club Rules and Regulations.
               </span>
             </label>
           </div>

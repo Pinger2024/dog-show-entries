@@ -112,7 +112,7 @@ export default function AboutPage() {
             </AnimateIn>
             <AnimateIn delay={200}>
               <p className="gold-rule-center mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl">
-                Remi is the trusted platform for the UK Kennel Club circuit.
+                Remi is the trusted platform for the UK Royal Kennel Club circuit.
                 Online entries, secure payments, live results, and automatic
                 catalogues — everything exhibitors and secretaries need, in
                 one place.

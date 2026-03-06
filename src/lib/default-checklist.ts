@@ -34,7 +34,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
   {
     title: 'Apply for KC show licence',
     description:
-      'Submit licence application and fee to the Kennel Club. Per regulation F4, this must be done at least 12 months before the show date.',
+      'Submit licence application and fee to the Royal Kennel Club. Per regulation F4, this must be done at least 12 months before the show date.',
     phase: 'pre_planning',
     sortOrder: 0,
     relativeDueDays: 365,
@@ -181,7 +181,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
   },
   {
     title: 'Obtain challenge certificates from KC',
-    description: 'Championship shows only — request and receive the physical CCs from the Kennel Club.',
+    description: 'Championship shows only — request and receive the physical CCs from the Royal Kennel Club.',
     phase: 'pre_show',
     sortOrder: 6,
     relativeDueDays: 21,

@@ -1,5 +1,5 @@
 /**
- * Kennel Club registration number utilities.
+ * Royal Kennel Club registration number utilities.
  *
  * This module provides:
  * - Registration number format validation
@@ -8,7 +8,7 @@
  */
 
 /**
- * Validate a Kennel Club registration number format.
+ * Validate a Royal Kennel Club registration number format.
  *
  * KC registration numbers come in several formats:
  * - Standard pedigree: 2-4 letters followed by 5-6 digits (e.g., "AK03456789")

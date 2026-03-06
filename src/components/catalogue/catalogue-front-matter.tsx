@@ -47,7 +47,7 @@ export function CoverPage({ show }: FrontMatterProps) {
       )}
 
       <Text style={styles.coverRegulatory}>
-        held under Kennel Club Rules &amp; Show Regulations F(1)
+        held under Royal Kennel Club Rules &amp; Show Regulations F(1)
       </Text>
 
       <Text style={styles.coverDetail}>{formatCoverDate(show.date)}</Text>

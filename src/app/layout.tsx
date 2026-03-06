@@ -28,7 +28,7 @@ export const metadata: Metadata = {
     'dog shows',
     'dog show entries',
     'KC shows',
-    'kennel club',
+    'royal kennel club',
     'conformation',
     'show entries online',
     'championship shows',

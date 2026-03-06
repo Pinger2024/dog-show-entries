@@ -127,7 +127,7 @@ export default function DogsPage() {
               <h2 className="text-xl font-semibold">No dogs yet</h2>
               <p className="mx-auto mt-2 max-w-md text-muted-foreground">
                 Add your first dog to start entering shows. You&apos;ll need
-                their Kennel Club registration details.
+                their Royal Kennel Club registration details.
               </p>
               <Button className="mt-6" size="lg" asChild>
                 <Link href="/dogs/new">

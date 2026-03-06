@@ -189,7 +189,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
       const enriched = [profile.sire, profile.dam, profile.breeder].filter(Boolean);
       if (enriched.length > 0) {
         toast.success('Pedigree details populated from KC', {
-          description: `Sire, dam, and breeder info filled in from the Kennel Club.`,
+          description: `Sire, dam, and breeder info filled in from the Royal Kennel Club.`,
         });
       }
     },
@@ -343,7 +343,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
           <CardHeader>
             <CardTitle>Registration Details</CardTitle>
             <CardDescription>
-              Enter the details as they appear on your Kennel Club registration
+              Enter the details as they appear on your Royal Kennel Club registration
               certificate, or use the KC Lookup to auto-fill.
             </CardDescription>
           </CardHeader>
@@ -361,7 +361,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                     />
                   </FormControl>
                   <FormDescription>
-                    Found on your Kennel Club registration certificate. Leave
+                    Found on your Royal Kennel Club registration certificate. Leave
                     blank if not yet registered.
                   </FormDescription>
                   <FormMessage />
@@ -396,7 +396,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                 <Search className="mt-0.5 size-5 shrink-0 text-primary" />
                 <div className="flex-1">
                   <p className="text-sm font-medium">
-                    Auto-fill from Kennel Club
+                    Auto-fill from Royal Kennel Club
                   </p>
                   <p className="mt-0.5 text-sm text-muted-foreground">
                     Enter the KC registration number (e.g. BC28843204) or registered
@@ -566,7 +566,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                     </PopoverContent>
                   </Popover>
                   <FormDescription>
-                    Select your dog&apos;s breed from the Kennel Club breed
+                    Select your dog&apos;s breed from the Royal Kennel Club breed
                     register.
                   </FormDescription>
                   <FormMessage />

@@ -6,12 +6,12 @@ const BASE_URL = "https://remishowmanager.co.uk";
 export const metadata: Metadata = {
   title: "Remi — The Future of Dog Show Management",
   description:
-    "Enter shows, pay securely, get confirmed instantly. Built for exhibitors and secretaries on the UK Kennel Club circuit.",
+    "Enter shows, pay securely, get confirmed instantly. Built for exhibitors and secretaries on the UK Royal Kennel Club circuit.",
   metadataBase: new URL(BASE_URL),
   openGraph: {
     title: "Remi — The Future of Dog Show Management",
     description:
-      "Enter shows, pay securely, get confirmed instantly. Built for exhibitors and secretaries on the UK Kennel Club circuit.",
+      "Enter shows, pay securely, get confirmed instantly. Built for exhibitors and secretaries on the UK Royal Kennel Club circuit.",
     images: [
       {
         url: `${BASE_URL}/promo/poster.png`,
@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Remi — The Future of Dog Show Management",
     description:
-      "Enter shows, pay securely, get confirmed instantly. Built for exhibitors and secretaries on the UK Kennel Club circuit.",
+      "Enter shows, pay securely, get confirmed instantly. Built for exhibitors and secretaries on the UK Royal Kennel Club circuit.",
     images: [`${BASE_URL}/promo/poster.png`],
   },
 };
@@ -65,7 +65,7 @@ export default function PromoPage() {
           </div>
 
           <p className="text-[#a8b5a0] text-sm leading-relaxed max-w-xs mx-auto">
-            Modern show management for the Kennel Club circuit. Online entries,
+            Modern show management for the Royal Kennel Club circuit. Online entries,
             integrated payments, automatic catalogues.
           </p>
 

@@ -112,7 +112,7 @@ async function seed() {
       { name: 'Special Long Coat Yearling', type: 'age' as const, sortOrder: 8, minAgeMonths: 12, maxAgeMonths: 24, description: 'For Long Coat dogs aged 12-24 months' },
       { name: 'Special Long Coat Open', type: 'achievement' as const, sortOrder: 9, description: 'For Long Coat German Shepherd Dogs eligible for entry at the show. No restrictions.' },
       // Special
-      { name: 'Good Citizen Dog Scheme', type: 'special' as const, sortOrder: 1, description: 'For dogs that have passed any level of the Kennel Club Good Citizen Dog Scheme.' },
+      { name: 'Good Citizen Dog Scheme', type: 'special' as const, sortOrder: 1, description: 'For dogs that have passed any level of the Royal Kennel Club Good Citizen Dog Scheme.' },
       { name: 'Special Beginners', type: 'special' as const, sortOrder: 2, description: 'For dogs whose owners/handlers have never won a CC or Reserve CC at Championship Shows.' },
       // Junior Handler classes
       { name: 'Junior Handler (6-11)', type: 'junior_handler' as const, sortOrder: 1, minAgeMonths: 72, maxAgeMonths: 143, description: 'For handlers aged 6-11 years on the day of the show. Judged on handling skill, not the dog.' },
