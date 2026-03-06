@@ -151,6 +151,10 @@
     font-size: 1.0625rem;
     line-height: 1.6;
     overflow-x: hidden;
+    /* Safe area padding for notched devices in standalone mode */
+    padding-top: env(safe-area-inset-top);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
   }
 }
 

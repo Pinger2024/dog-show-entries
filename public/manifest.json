@@ -1,9 +1,41 @@
 {
-  "name": "Remi - Dog Show Entries",
+  "name": "Remi — Dog Show Entries",
   "short_name": "Remi",
-  "description": "The modern way to enter dog shows",
-  "start_url": "/",
+  "description": "The modern way to enter dog shows. Find KC-licensed shows, enter your dogs, and manage entries from home or ringside.",
+  "start_url": "/dashboard",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#4f46e5"
+  "theme_color": "#2D5F3F",
+  "orientation": "portrait-primary",
+  "categories": ["lifestyle", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
 }

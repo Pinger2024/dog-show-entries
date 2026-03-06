@@ -262,7 +262,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
         </main>
 
         {/* Mobile bottom tab bar */}
-        <nav className="fixed bottom-0 left-0 right-0 z-50 flex border-t bg-background md:hidden">
+        <nav className="fixed bottom-0 left-0 right-0 z-50 flex border-t bg-background pb-[env(safe-area-inset-bottom)] md:hidden">
           {navItems.map((item) => {
             const isActive =
               pathname === item.href ||

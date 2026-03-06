@@ -3,6 +3,9 @@ import { Inter, Libre_Baskerville } from 'next/font/google';
 import { Toaster } from '@/components/ui/sonner';
 import { Providers } from '@/components/providers';
 import { AccountSwitcher } from '@/components/dev/account-switcher';
+import { ServiceWorkerRegistration } from '@/components/pwa/sw-registration';
+import { InstallPrompt } from '@/components/pwa/install-prompt';
+import { UpdateNotification } from '@/components/pwa/update-notification';
 import './globals.css';
 
 const inter = Inter({
@@ -34,6 +37,18 @@ export const metadata: Metadata = {
     'championship shows',
     'open shows',
   ],
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Remi',
+  },
+  icons: {
+    icon: [
+      { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
+  },
 };
 
 export const viewport: Viewport = {
@@ -41,6 +56,7 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 5,
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({
@@ -56,6 +72,9 @@ export default function RootLayout({
         <Providers>
           {children}
           <Toaster richColors position="top-right" />
+          <ServiceWorkerRegistration />
+          <InstallPrompt />
+          <UpdateNotification />
           <AccountSwitcher />
         </Providers>
       </body>
