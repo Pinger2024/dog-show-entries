@@ -189,8 +189,9 @@ export const styles = StyleSheet.create({
 
   // ── KC standard: class heading within breed/sex ──
   classHeadingInBreed: {
-    fontSize: 7.5,
+    fontSize: 9,
     fontWeight: 'bold',
+    textTransform: 'uppercase',
     marginTop: 5,
     marginBottom: 2,
     paddingLeft: 3,

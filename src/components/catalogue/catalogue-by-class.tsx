@@ -9,9 +9,12 @@ interface Props {
   entries: CatalogueEntry[];
 }
 
-// Group entries by class, preserving sort metadata
+// Group entries by class, preserving sort metadata.
+// Uses classNumber as the unique key (not class name) so that
+// dog and bitch classes with the same definition name stay separate.
 function groupByClass(entries: CatalogueEntry[]) {
   const classes: Record<string, {
+    className: string;
     sex: string | null | undefined;
     classNumber: number | null | undefined;
     sortOrder: number | undefined;
@@ -21,13 +24,17 @@ function groupByClass(entries: CatalogueEntry[]) {
   for (const entry of entries) {
     for (const cls of entry.classes) {
       const className = cls.name ?? 'Unknown Class';
-      classes[className] ??= {
+      const classKey = cls.classNumber != null
+        ? String(cls.classNumber)
+        : `${className}-${cls.sex ?? 'any'}`;
+      classes[classKey] ??= {
+        className,
         sex: cls.sex,
         classNumber: cls.classNumber,
         sortOrder: cls.sortOrder,
         entries: [],
       };
-      classes[className].entries.push(entry);
+      classes[classKey].entries.push(entry);
     }
   }
 
@@ -37,7 +44,7 @@ function groupByClass(entries: CatalogueEntry[]) {
 export function CatalogueByClass({ show, entries }: Props) {
   const grouped = groupByClass(entries);
   // Sort by classNumber if assigned, otherwise by sortOrder, then alphabetically
-  const classNames = Object.keys(grouped).sort((a, b) => {
+  const classKeys = Object.keys(grouped).sort((a, b) => {
     const aNum = grouped[a].classNumber;
     const bNum = grouped[b].classNumber;
     if (aNum != null && bNum != null) return aNum - bNum;
@@ -64,14 +71,14 @@ export function CatalogueByClass({ show, entries }: Props) {
           subtitle="Catalogue — By Class"
         />
 
-        {classNames.map((className) => {
-          const { sex, classNumber, entries: classEntries } = grouped[className];
+        {classKeys.map((classKey) => {
+          const { className, sex, classNumber, entries: classEntries } = grouped[classKey];
           const sorted = [...classEntries].sort(
             (a, b) => (a.catalogueNumber ?? '').localeCompare(b.catalogueNumber ?? '', undefined, { numeric: true })
           );
 
           return (
-            <View key={className}>
+            <View key={classKey}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', ...styles.groupHeading }}>
                 <Text>{classNumber ? `Class ${classNumber}: ${className}` : className}</Text>
                 {sex && (
