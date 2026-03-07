@@ -18,6 +18,9 @@ export function InstallPrompt() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
+    // Don't show on desktop-sized screens
+    if (window.matchMedia('(min-width: 768px)').matches) return;
+
     // Don't show if already installed as standalone
     if (window.matchMedia('(display-mode: standalone)').matches) return;
 
