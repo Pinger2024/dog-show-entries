@@ -28,7 +28,7 @@ export function CoverPage({ show }: FrontMatterProps) {
   const showTypeLabel = show.showType ? SHOW_TYPE_LABELS[show.showType] : undefined;
 
   return (
-    <Page size="A4" style={styles.coverPage}>
+    <Page size="A5" style={styles.coverPage}>
       {show.logoUrl && (
         <Image
           src={show.logoUrl}
@@ -89,7 +89,7 @@ export function JudgesListPage({ show }: FrontMatterProps) {
   if (sortedBreeds.length === 0) return null;
 
   return (
-    <Page size="A4" style={styles.frontMatterPage}>
+    <Page size="A5" style={styles.frontMatterPage}>
       <Text style={styles.frontMatterTitle}>List of Judges</Text>
 
       {/* Table header */}
@@ -125,7 +125,7 @@ export function ClassDefinitionsPage({ show }: FrontMatterProps) {
   if (defsWithDesc.length === 0) return null;
 
   return (
-    <Page size="A4" style={styles.frontMatterPage}>
+    <Page size="A5" style={styles.frontMatterPage}>
       <Text style={styles.frontMatterTitle}>Definitions of Classes</Text>
 
       {defsWithDesc.map((def) => (

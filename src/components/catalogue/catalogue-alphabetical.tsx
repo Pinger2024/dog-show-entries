@@ -31,7 +31,7 @@ export function CatalogueAlphabetical({ show, entries }: Props) {
 
   return (
     <Document>
-      <Page size="A4" style={styles.page} wrap>
+      <Page size="A5" style={styles.page} wrap>
         <CatalogueHeader
           showName={show.name}
           showType={show.showType}

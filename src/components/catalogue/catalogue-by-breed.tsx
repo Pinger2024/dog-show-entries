@@ -136,7 +136,7 @@ export function CatalogueByBreed({ show, entries }: Props) {
       <ClassDefinitionsPage show={show} />
 
       {/* Main catalogue content */}
-      <Page size="A4" style={styles.page} wrap>
+      <Page size="A5" style={styles.page} wrap>
         {sortedGroups.map(([groupName, { breeds }]) => (
           <View key={groupName}>
             <Text style={styles.groupHeading}>{groupName}</Text>
