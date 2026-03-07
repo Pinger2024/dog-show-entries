@@ -4,6 +4,7 @@ import { use, useState } from 'react';
 import {
   Award,
   BookOpen,
+  Calendar,
   ClipboardList,
   Download,
   FileText,
@@ -89,6 +90,16 @@ export default function DocumentsPage({
       ]
     : [];
 
+  const preShowDocuments: DocumentLink[] = [
+    {
+      label: 'Show Schedule',
+      href: `/api/schedule/${showId}`,
+      icon: <Calendar className="size-4" />,
+      description:
+        'Complete schedule with cover page, judges, classes, entry fees, and postal entry form',
+    },
+  ];
+
   const showDayDocuments: DocumentLink[] = [
     ...(hasNumbers
       ? [
@@ -138,6 +149,42 @@ export default function DocumentsPage({
           </CardContent>
         </Card>
       )}
+
+      {/* Pre-Show Documents */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Calendar className="size-5" />
+            Pre-Show Documents
+          </CardTitle>
+          <CardDescription>
+            Documents needed before show day — schedule, entry forms
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {preShowDocuments.map((doc) => (
+              <a
+                key={doc.label}
+                href={doc.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted"
+              >
+                <div className="mt-0.5 shrink-0 text-muted-foreground">
+                  {doc.icon}
+                </div>
+                <div className="min-w-0">
+                  <p className="font-medium">{doc.label}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {doc.description}
+                  </p>
+                </div>
+              </a>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Catalogues */}
       {catalogueDocuments.length > 0 && (
