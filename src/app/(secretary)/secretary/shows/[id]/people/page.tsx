@@ -86,6 +86,14 @@ function JudgesSection({ showId }: { showId: string }) {
   const [offerJudgeId, setOfferJudgeId] = useState('');
   const [offerEmail, setOfferEmail] = useState('');
   const [offerNotes, setOfferNotes] = useState('');
+  // KC judge search state
+  const [kcSearchSurname, setKcSearchSurname] = useState('');
+  const [kcSearchBreed, setKcSearchBreed] = useState('');
+  const [kcSelectedJudge, setKcSelectedJudge] = useState<{
+    name: string;
+    location: string | null;
+    kcJudgeId: string;
+  } | null>(null);
   const utils = trpc.useUtils();
 
   const { data: assignments, isLoading } =
@@ -146,6 +154,9 @@ function JudgesSection({ showId }: { showId: string }) {
     },
     onError: (err) => toast.error(err.message ?? 'Failed to resend offer'),
   });
+
+  const kcSearchMutation = trpc.secretary.kcJudgeSearch.useMutation();
+  const kcProfileMutation = trpc.secretary.kcJudgeProfile.useMutation();
 
   const [expandedExpenses, setExpandedExpenses] = useState<string | null>(null);
   const [expenseForm, setExpenseForm] = useState({
@@ -238,7 +249,7 @@ function JudgesSection({ showId }: { showId: string }) {
                 Judges
               </CardTitle>
               <CardDescription>
-                Add judges to the system and assign them to this show.
+                Search the KC database or add judges manually.
               </CardDescription>
             </div>
             {!adding && (
@@ -250,9 +261,133 @@ function JudgesSection({ showId }: { showId: string }) {
           </div>
         </CardHeader>
         {adding && (
-          <CardContent>
+          <CardContent className="space-y-4">
+            {/* KC Judge Search */}
+            <div className="rounded-lg border bg-blue-50/50 p-4 dark:bg-blue-950/20">
+              <p className="mb-3 text-sm font-medium">Search KC Judge Database</p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div>
+                  <Label htmlFor="kc-surname" className="text-xs text-muted-foreground">Surname *</Label>
+                  <Input
+                    id="kc-surname"
+                    placeholder="e.g. Smith"
+                    value={kcSearchSurname}
+                    onChange={(e) => setKcSearchSurname(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && kcSearchSurname.trim().length >= 2) {
+                        kcSearchMutation.mutate({
+                          surname: kcSearchSurname.trim(),
+                          breed: kcSearchBreed.trim() || undefined,
+                        });
+                      }
+                    }}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="kc-breed" className="text-xs text-muted-foreground">Breed (optional)</Label>
+                  <Input
+                    id="kc-breed"
+                    placeholder="e.g. German Shepherd Dog"
+                    value={kcSearchBreed}
+                    onChange={(e) => setKcSearchBreed(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-end">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() =>
+                      kcSearchMutation.mutate({
+                        surname: kcSearchSurname.trim(),
+                        breed: kcSearchBreed.trim() || undefined,
+                      })
+                    }
+                    disabled={kcSearchSurname.trim().length < 2 || kcSearchMutation.isPending}
+                  >
+                    {kcSearchMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+                    Search KC
+                  </Button>
+                </div>
+              </div>
+
+              {/* KC Search Results */}
+              {kcSearchMutation.isPending && (
+                <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" />
+                  Searching KC database (this takes a few seconds)...
+                </div>
+              )}
+
+              {kcSearchMutation.isError && (
+                <p className="mt-3 text-sm text-destructive">{kcSearchMutation.error.message}</p>
+              )}
+
+              {kcSearchMutation.data && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    {kcSearchMutation.data.length} judge{kcSearchMutation.data.length !== 1 ? 's' : ''} found — select one to auto-fill
+                  </p>
+                  <div className="max-h-48 space-y-1 overflow-y-auto">
+                    {kcSearchMutation.data.map((j) => (
+                      <button
+                        key={j.kcJudgeId}
+                        type="button"
+                        onClick={() => {
+                          setKcSelectedJudge(j);
+                          setJudgeName(j.name);
+                          // Fetch profile for breed/level details
+                          kcProfileMutation.mutate({ kcJudgeId: j.kcJudgeId });
+                        }}
+                        className={cn(
+                          'flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition-colors hover:bg-accent',
+                          kcSelectedJudge?.kcJudgeId === j.kcJudgeId && 'border-primary bg-primary/5'
+                        )}
+                      >
+                        <span className="font-medium">{j.name}</span>
+                        {j.location && (
+                          <span className="text-xs text-muted-foreground">{j.location}</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Selected judge's breed approvals */}
+              {kcSelectedJudge && kcProfileMutation.isPending && (
+                <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" />
+                  Loading judge approvals...
+                </div>
+              )}
+              {kcSelectedJudge && kcProfileMutation.data && (
+                <div className="mt-3">
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">
+                    Approved breeds for {kcSelectedJudge.name}
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {kcProfileMutation.data.breeds.map((b, i) => (
+                      <Badge
+                        key={i}
+                        variant="outline"
+                        className="text-[10px]"
+                      >
+                        {b.breed} (L{b.level})
+                      </Badge>
+                    ))}
+                    {kcProfileMutation.data.breeds.length === 0 && (
+                      <span className="text-xs text-muted-foreground">No breed approvals found</span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Manual judge entry */}
             <div className="rounded-lg border bg-muted/30 p-4">
-              <p className="mb-3 text-sm font-medium">Create New Judge</p>
+              <p className="mb-3 text-sm font-medium">
+                {kcSelectedJudge ? 'Confirm Judge Details' : 'Or Enter Manually'}
+              </p>
               <div className="grid gap-3 sm:grid-cols-3">
                 <Input
                   placeholder="Name *"
@@ -288,7 +423,18 @@ function JudgesSection({ showId }: { showId: string }) {
                   {addJudgeMutation.isPending && <Loader2 className="size-4 animate-spin" />}
                   Create Judge
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => setAdding(false)}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setAdding(false);
+                    setKcSearchSurname('');
+                    setKcSearchBreed('');
+                    setKcSelectedJudge(null);
+                    kcSearchMutation.reset();
+                    kcProfileMutation.reset();
+                  }}
+                >
                   Cancel
                 </Button>
               </div>

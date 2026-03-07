@@ -35,6 +35,7 @@ import {
 } from '@/lib/default-checklist';
 import { getStripe } from '@/server/services/stripe';
 import { Resend } from 'resend';
+import { searchKcJudges, fetchKcJudgeProfile } from '@/server/services/kc-judges';
 
 export const secretaryRouter = createTRPCRouter({
   getDashboard: secretaryProcedure.query(async ({ ctx }) => {
@@ -1267,6 +1268,39 @@ export const secretaryRouter = createTRPCRouter({
 
       await ctx.db.delete(judgeAssignments).where(eq(judgeAssignments.id, input.assignmentId));
       return { removed: true };
+    }),
+
+  // ─── KC Judge Lookup ────────────────────────────────
+
+  kcJudgeSearch: secretaryProcedure
+    .input(
+      z.object({
+        surname: z.string().min(2).max(100),
+        breed: z.string().max(100).optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const results = await searchKcJudges(input.surname, input.breed || undefined);
+      if (results.length === 0) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: `No KC judges found matching "${input.surname}"${input.breed ? ` for ${input.breed}` : ''}. Check the spelling and try again.`,
+        });
+      }
+      return results;
+    }),
+
+  kcJudgeProfile: secretaryProcedure
+    .input(z.object({ kcJudgeId: z.string().min(1).max(100) }))
+    .mutation(async ({ input }) => {
+      const profile = await fetchKcJudgeProfile(input.kcJudgeId);
+      if (!profile) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Could not fetch judge profile from KC. Try again in a moment.',
+        });
+      }
+      return profile;
     }),
 
   // ─── Refund Management ────────────────────────────────
