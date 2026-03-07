@@ -67,6 +67,14 @@ export const entriesRouter = createTRPCRouter({
         });
       }
 
+      // Also reject if entry close date has passed
+      if (show.entryCloseDate && new Date(show.entryCloseDate).getTime() < Date.now()) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Entry closing date has passed',
+        });
+      }
+
       // Check for duplicate classes (same dog can enter multiple classes, but not the same class twice)
       const existingEntry = await ctx.db.query.entries.findFirst({
         where: and(

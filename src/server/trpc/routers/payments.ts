@@ -59,6 +59,14 @@ export const paymentsRouter = createTRPCRouter({
         });
       }
 
+      // Also reject if entry close date has passed
+      if (show.entryCloseDate && new Date(show.entryCloseDate).getTime() < Date.now()) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Entry closing date has passed',
+        });
+      }
+
       // Validate classes exist and belong to the show
       const selectedClasses = await ctx.db.query.showClasses.findMany({
         where: and(

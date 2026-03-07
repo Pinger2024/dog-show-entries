@@ -59,6 +59,14 @@ export const ordersRouter = createTRPCRouter({
         });
       }
 
+      // Also reject if entry close date has passed
+      if (show.entryCloseDate && new Date(show.entryCloseDate).getTime() < Date.now()) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Entry closing date has passed',
+        });
+      }
+
       // Validate all dogs belong to user (for standard entries)
       const dogIds = input.entries
         .filter((e) => e.entryType === 'standard' && e.dogId)

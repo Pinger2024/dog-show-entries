@@ -93,6 +93,14 @@ const radiusOptions = [
   { value: 200, label: '200 miles' },
 ];
 
+/* ─── Date helpers ─────────────────────────────────── */
+
+function isEntryCloseDatePast(date: string | Date | null) {
+  if (!date) return false;
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return d.getTime() < Date.now();
+}
+
 /* ─── Closing countdown ─────────────────────────────── */
 
 function ClosingCountdown({ date }: { date: string | Date | null }) {
@@ -738,7 +746,8 @@ export default function ShowsList() {
 
 function ShowCard({ show, distance }: { show: ShowListItem; distance?: number }) {
   const meta = showTypeMeta[show.showType];
-  const isOpen = show.status === 'entries_open';
+  // Entries are only "open" if the status says so AND the close date hasn't passed
+  const isOpen = show.status === 'entries_open' && !isEntryCloseDatePast(show.entryCloseDate);
 
   return (
     <Link href={`/shows/${show.id}`} className="group block">
@@ -818,7 +827,9 @@ function ShowCard({ show, distance }: { show: ShowListItem; distance?: number })
               <div className="flex items-center justify-between">
                 <div className="flex flex-col gap-1">
                   <Badge variant="outline" className="w-fit text-[11px] font-medium">
-                    {statusLabels[show.status] ?? show.status}
+                    {show.status === 'entries_open' && isEntryCloseDatePast(show.entryCloseDate)
+                      ? 'Entries Closed'
+                      : (statusLabels[show.status] ?? show.status)}
                   </Badge>
                   {show.status === 'published' && show.entriesOpenDate && (
                     <span className="text-[11px] text-muted-foreground">

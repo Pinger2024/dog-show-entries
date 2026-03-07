@@ -183,7 +183,11 @@ export function ShowDetailClient() {
     );
   }
 
-  const isOpen = show.status === 'entries_open';
+  // Entries are only "open" if the status says so AND the close date hasn't passed
+  const closeDatePast = show.entryCloseDate
+    ? new Date(show.entryCloseDate).getTime() < Date.now()
+    : false;
+  const isOpen = show.status === 'entries_open' && !closeDatePast;
   const hasResults = show.status === 'in_progress' || show.status === 'completed';
   const meta = showTypeMeta[show.showType];
 
@@ -256,7 +260,10 @@ export function ShowDetailClient() {
                 )}
                 {!isOpen && (
                   <Badge variant="outline" className="text-[11px]">
-                    {show.status.replace(/_/g, ' ')}
+                    {(show.status === 'entries_open' && closeDatePast
+                      ? 'Entries Closed'
+                      : show.status
+                    ).replace(/_/g, ' ')}
                   </Badge>
                 )}
               </div>
