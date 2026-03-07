@@ -60,6 +60,7 @@ export default function DocumentsPage({
   // Prize card options
   const [prizeCardPlacements, setPrizeCardPlacements] = useState('5');
   const [includeJudge, setIncludeJudge] = useState(true);
+  const [prizeCardStyle, setPrizeCardStyle] = useState<'filled' | 'outline'>('filled');
 
   const catalogueDocuments: DocumentLink[] = hasNumbers
     ? [
@@ -121,7 +122,7 @@ export default function DocumentsPage({
     },
   ];
 
-  const prizeCardHref = `/api/prize-cards/${showId}?placements=${prizeCardPlacements}&judge=${includeJudge}`;
+  const prizeCardHref = `/api/prize-cards/${showId}?placements=${prizeCardPlacements}&judge=${includeJudge}&style=${prizeCardStyle}`;
 
   return (
     <div className="space-y-6">
@@ -298,6 +299,21 @@ export default function DocumentsPage({
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="card-style">Card Style</Label>
+              <Select
+                value={prizeCardStyle}
+                onValueChange={(v) => setPrizeCardStyle(v as 'filled' | 'outline')}
+              >
+                <SelectTrigger id="card-style" className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectItem value="filled">Filled (coloured bg)</SelectItem>
+                  <SelectItem value="outline">Outline (white bg)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex items-center gap-2">
               <Switch
                 id="judge"
@@ -343,11 +359,11 @@ export default function DocumentsPage({
                 5: 'VHC',
               };
               const colours: Record<number, string> = {
-                1: 'bg-amber-100 text-amber-800 border-amber-300',
-                2: 'bg-slate-100 text-slate-700 border-slate-300',
-                3: 'bg-orange-100 text-orange-800 border-orange-300',
-                4: 'bg-blue-100 text-blue-700 border-blue-300',
-                5: 'bg-purple-100 text-purple-700 border-purple-300',
+                1: 'bg-red-100 text-red-800 border-red-300',
+                2: 'bg-blue-100 text-blue-800 border-blue-300',
+                3: 'bg-yellow-100 text-yellow-800 border-yellow-300',
+                4: 'bg-green-100 text-green-800 border-green-300',
+                5: 'bg-orange-100 text-orange-800 border-orange-300',
               };
               return (
                 <div

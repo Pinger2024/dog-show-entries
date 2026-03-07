@@ -34,6 +34,7 @@ interface PrizeCardsProps {
   classes: PrizeCardClass[];
   includeJudgeName: boolean;
   placements: number; // 1-5, how many placement cards per class
+  cardStyle?: PrizeCardStyle; // 'filled' = coloured background, 'outline' = white bg + coloured text/frame
 }
 
 const SHOW_TYPE_LABELS: Record<string, string> = {
@@ -61,14 +62,16 @@ const PLACEMENT_ABBREVIATIONS: Record<number, string> = {
   5: 'VHC',
 };
 
-// Elegant colour scheme for each placement
-const PLACEMENT_COLOURS: Record<number, { accent: string; light: string }> = {
-  1: { accent: '#B8860B', light: '#FFF8E1' }, // Gold
-  2: { accent: '#708090', light: '#F0F4F8' }, // Silver
-  3: { accent: '#8B4513', light: '#FFF3E0' }, // Bronze
-  4: { accent: '#2E5090', light: '#E8EEF6' }, // Blue
-  5: { accent: '#5B3A6B', light: '#F3EDF7' }, // Purple
+// Traditional UK dog show prize card colours
+const PLACEMENT_COLOURS: Record<number, { accent: string; filled: string; outline: string }> = {
+  1: { accent: '#C41E3A', filled: '#FDE8EC', outline: '#FAFAFA' }, // Red
+  2: { accent: '#1E4D8C', filled: '#E3ECF6', outline: '#FAFAFA' }, // Blue
+  3: { accent: '#C5960C', filled: '#FDF6E0', outline: '#FAFAFA' }, // Yellow
+  4: { accent: '#1E7A3A', filled: '#E4F5EA', outline: '#FAFAFA' }, // Green
+  5: { accent: '#D45B07', filled: '#FDF0E4', outline: '#FAFAFA' }, // Orange
 };
+
+export type PrizeCardStyle = 'filled' | 'outline';
 
 const s = StyleSheet.create({
   // A5 landscape: 595 x 420 pts (A5 = 148mm × 210mm)
@@ -113,7 +116,8 @@ const s = StyleSheet.create({
   },
   // Club name
   clubName: {
-    fontSize: 11,
+    fontSize: 14,
+    fontWeight: 'bold',
     textTransform: 'uppercase',
     letterSpacing: 2,
     color: '#333',
@@ -217,7 +221,7 @@ const s = StyleSheet.create({
   },
 });
 
-export function PrizeCards({ show, classes, includeJudgeName, placements }: PrizeCardsProps) {
+export function PrizeCards({ show, classes, includeJudgeName, placements, cardStyle = 'filled' }: PrizeCardsProps) {
   const showDate = new Date(show.date).toLocaleDateString('en-GB', {
     day: 'numeric',
     month: 'long',
@@ -240,13 +244,14 @@ export function PrizeCards({ show, classes, includeJudgeName, placements }: Priz
         return Array.from({ length: placementCount }, (_, placeIdx) => {
           const placement = placeIdx + 1;
           const colours = PLACEMENT_COLOURS[placement];
+          const bgColor = cardStyle === 'outline' ? colours.outline : colours.filled;
 
           return (
             <Page
               key={`${classIdx}-${placement}`}
               size="A5"
               orientation="landscape"
-              style={{ ...s.page, backgroundColor: colours.light }}
+              style={{ ...s.page, backgroundColor: bgColor }}
             >
               {/* Decorative double border */}
               <View style={{ ...s.outerBorder, borderColor: colours.accent }} />

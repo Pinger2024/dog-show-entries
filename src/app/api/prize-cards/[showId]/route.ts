@@ -5,7 +5,7 @@ import { and, eq, asc } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { PrizeCards } from '@/components/prize-cards/prize-cards';
-import type { PrizeCardShowInfo, PrizeCardClass } from '@/components/prize-cards/prize-cards';
+import type { PrizeCardShowInfo, PrizeCardClass, PrizeCardStyle } from '@/components/prize-cards/prize-cards';
 import React from 'react';
 
 export async function GET(
@@ -49,6 +49,7 @@ export async function GET(
   const searchParams = request.nextUrl.searchParams;
   const includeJudgeName = searchParams.get('judge') !== 'false';
   const placements = Math.min(Math.max(parseInt(searchParams.get('placements') ?? '5'), 1), 5);
+  const cardStyle = (searchParams.get('style') === 'outline' ? 'outline' : 'filled') as PrizeCardStyle;
 
   // Fetch show classes
   const showClasses = await db.query.showClasses.findMany({
@@ -93,6 +94,7 @@ export async function GET(
       classes,
       includeJudgeName,
       placements,
+      cardStyle,
     });
     const buffer = await renderToBuffer(pdfDocument);
     const filename = `${show.name.replace(/[^a-zA-Z0-9]/g, '-')}-Prize-Cards.pdf`;
