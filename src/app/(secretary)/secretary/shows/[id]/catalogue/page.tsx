@@ -3,6 +3,7 @@
 import { use, useMemo } from 'react';
 import {
   BookOpen,
+  ClipboardList,
   Download,
   Hash,
   Loader2,
@@ -128,6 +129,16 @@ export default function CataloguePage({
               >
                 <Download className="size-4" />
                 Absentees
+              </a>
+            </Button>
+            <Button variant="outline" asChild>
+              <a
+                href={`/api/judges-book/${showId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <ClipboardList className="size-4" />
+                Judge&apos;s Book
               </a>
             </Button>
           </>
