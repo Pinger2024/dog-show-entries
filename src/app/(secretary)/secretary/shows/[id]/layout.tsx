@@ -155,7 +155,7 @@ export default function ShowManagementLayout({
           <SelectTrigger className="w-full sm:w-44">
             <SelectValue placeholder="Change status" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent position="popper" className="max-h-60">
             <SelectItem value="draft">Draft</SelectItem>
             <SelectItem value="published">Published</SelectItem>
             <SelectItem value="entries_open">Entries Open</SelectItem>

@@ -1,5 +1,6 @@
 import {
   index,
+  integer,
   pgEnum,
   pgTable,
   text,
@@ -37,6 +38,10 @@ export const judgeContracts = pgTable(
     offerToken: uuid('offer_token').defaultRandom().notNull().unique(),
     tokenExpiresAt: timestamp('token_expires_at', { withTimezone: true }),
     notes: text('notes'),
+    hotelCost: integer('hotel_cost'),
+    travelCost: integer('travel_cost'),
+    otherExpenses: integer('other_expenses'),
+    expenseNotes: text('expense_notes'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useForm } from 'react-hook-form';
@@ -17,7 +17,8 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { trpc } from '@/lib/trpc';
-import { poundsToPence } from '@/lib/date-utils';
+import { poundsToPence, formatCurrency } from '@/lib/date-utils';
+import { CLASS_TEMPLATES } from '@/lib/class-templates';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -105,7 +106,39 @@ const createShowSchema = z.object({
 
   // Step 4 - Classes
   selectedClassIds: z.array(z.string().uuid()).default([]),
-});
+}).refine(
+  (data) => {
+    if (data.entriesOpenDate && data.entryCloseDate) {
+      return new Date(data.entryCloseDate) >= new Date(data.entriesOpenDate);
+    }
+    return true;
+  },
+  { message: 'Entry close date must be on or after the entries open date', path: ['entryCloseDate'] }
+).refine(
+  (data) => {
+    if (data.entriesOpenDate && data.postalCloseDate) {
+      return new Date(data.postalCloseDate) >= new Date(data.entriesOpenDate);
+    }
+    return true;
+  },
+  { message: 'Postal close date must be on or after the entries open date', path: ['postalCloseDate'] }
+).refine(
+  (data) => {
+    if (data.startDate && data.endDate) {
+      return new Date(data.endDate) >= new Date(data.startDate);
+    }
+    return true;
+  },
+  { message: 'End date must be on or after the start date', path: ['endDate'] }
+).refine(
+  (data) => {
+    if (data.entryCloseDate && data.startDate) {
+      return new Date(data.startDate) >= new Date(data.entryCloseDate);
+    }
+    return true;
+  },
+  { message: 'Entry close date must be before the show start date', path: ['entryCloseDate'] }
+);
 
 type CreateShowValues = z.infer<typeof createShowSchema>;
 
@@ -132,6 +165,7 @@ export default function NewShowPage() {
   const { data: session } = useSession();
   const [step, setStep] = useState(0);
   const [createVenue, setCreateVenue] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
 
   const form = useForm<CreateShowValues>({
     resolver: zodResolver(createShowSchema) as never,
@@ -296,12 +330,28 @@ export default function NewShowPage() {
     }
   }
 
-  const ageClasses =
-    classDefinitions?.filter((cd) => cd.type === 'age') ?? [];
-  const achievementClasses =
-    classDefinitions?.filter((cd) => cd.type === 'achievement') ?? [];
-  const specialClasses =
-    classDefinitions?.filter((cd) => cd.type === 'special') ?? [];
+  // When a template is selected, auto-populate class IDs
+  const matchedTemplateClasses = useMemo(() => {
+    if (!selectedTemplate || !classDefinitions) return [];
+    const template = CLASS_TEMPLATES.find((t) => t.id === selectedTemplate);
+    if (!template) return [];
+    return classDefinitions.filter((cd) => template.classNames.includes(cd.name));
+  }, [selectedTemplate, classDefinitions]);
+
+  function handleSelectTemplate(templateId: string) {
+    const template = CLASS_TEMPLATES.find((t) => t.id === templateId);
+    setSelectedTemplate(templateId);
+    if (template && classDefinitions) {
+      const ids = classDefinitions
+        .filter((cd) => template.classNames.includes(cd.name))
+        .map((cd) => cd.id);
+      form.setValue('selectedClassIds', ids);
+      // Auto-set class sex arrangement from template
+      if (template.splitBySex && !form.getValues('classSexArrangement')) {
+        form.setValue('classSexArrangement', 'separate_sex');
+      }
+    }
+  }
 
   return (
     <div className="space-y-6 pb-16 md:pb-0">
@@ -537,7 +587,7 @@ export default function NewShowPage() {
                               >
                                 <CalendarIcon className="size-4" />
                                 {field.value
-                                  ? format(new Date(field.value), 'PPP')
+                                  ? format(new Date(field.value), 'd MMMM yyyy')
                                   : 'Pick a date'}
                               </Button>
                             </FormControl>
@@ -584,7 +634,7 @@ export default function NewShowPage() {
                               >
                                 <CalendarIcon className="size-4" />
                                 {field.value
-                                  ? format(new Date(field.value), 'PPP')
+                                  ? format(new Date(field.value), 'd MMMM yyyy')
                                   : 'Pick a date'}
                               </Button>
                             </FormControl>
@@ -638,7 +688,7 @@ export default function NewShowPage() {
                               >
                                 <CalendarIcon className="size-4" />
                                 {field.value
-                                  ? format(new Date(field.value), 'PPP')
+                                  ? format(new Date(field.value), 'd MMMM yyyy')
                                   : 'Optional'}
                               </Button>
                             </FormControl>
@@ -684,7 +734,7 @@ export default function NewShowPage() {
                               >
                                 <CalendarIcon className="size-4" />
                                 {field.value
-                                  ? format(new Date(field.value), 'PPP')
+                                  ? format(new Date(field.value), 'd MMMM yyyy')
                                   : 'Optional'}
                               </Button>
                             </FormControl>
@@ -730,7 +780,7 @@ export default function NewShowPage() {
                               >
                                 <CalendarIcon className="size-4" />
                                 {field.value
-                                  ? format(new Date(field.value), 'PPP')
+                                  ? format(new Date(field.value), 'd MMMM yyyy')
                                   : 'Optional'}
                               </Button>
                             </FormControl>
@@ -999,66 +1049,76 @@ export default function NewShowPage() {
               <CardHeader>
                 <CardTitle>Classes</CardTitle>
                 <CardDescription>
-                  Select which standard classes to offer at this show. You can
-                  refine class configuration after creating the show.
+                  Choose a class template to get started quickly. You can add or
+                  remove individual classes after creating the show.
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                {classDefinitions && classDefinitions.length > 0 ? (
-                  <div className="space-y-6">
-                    {ageClasses.length > 0 && (
-                      <div>
-                        <h3 className="mb-2 text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                          Age-Based Classes
-                        </h3>
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          {ageClasses.map((cd) => (
-                            <ClassCheckbox
-                              key={cd.id}
-                              classDefinition={cd}
-                              form={form}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {achievementClasses.length > 0 && (
-                      <div>
-                        <h3 className="mb-2 text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                          Achievement-Based Classes
-                        </h3>
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          {achievementClasses.map((cd) => (
-                            <ClassCheckbox
-                              key={cd.id}
-                              classDefinition={cd}
-                              form={form}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {specialClasses.length > 0 && (
-                      <div>
-                        <h3 className="mb-2 text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                          Special Classes
-                        </h3>
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          {specialClasses.map((cd) => (
-                            <ClassCheckbox
-                              key={cd.id}
-                              classDefinition={cd}
-                              form={form}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
+              <CardContent className="space-y-4">
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {CLASS_TEMPLATES.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => handleSelectTemplate(t.id)}
+                      className={cn(
+                        'rounded-lg border p-3 text-left transition-colors',
+                        selectedTemplate === t.id
+                          ? 'border-primary bg-primary/5'
+                          : 'hover:bg-muted/50'
+                      )}
+                    >
+                      <p className="font-medium text-sm">{t.name}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {t.description}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {t.classNames.length} classes
+                        {t.splitBySex ? ' · Split by sex' : ''}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+
+                {selectedTemplate && matchedTemplateClasses.length > 0 && (
+                  <div className="rounded-lg border p-3 space-y-2">
+                    <p className="text-sm font-medium">
+                      Classes included ({form.watch('selectedClassIds').length})
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {matchedTemplateClasses.map((cd) => {
+                        const isSelected = form.watch('selectedClassIds').includes(cd.id);
+                        return (
+                          <button
+                            key={cd.id}
+                            type="button"
+                            onClick={() => {
+                              const current = form.getValues('selectedClassIds');
+                              form.setValue(
+                                'selectedClassIds',
+                                isSelected
+                                  ? current.filter((id) => id !== cd.id)
+                                  : [...current, cd.id]
+                              );
+                            }}
+                            className={cn(
+                              'rounded-full px-3 py-1 text-xs font-medium border transition-colors',
+                              isSelected
+                                ? 'bg-primary text-primary-foreground border-primary'
+                                : 'bg-muted/50 text-muted-foreground border-transparent'
+                            )}
+                          >
+                            {cd.name}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                ) : (
+                )}
+
+                {!selectedTemplate && (
                   <p className="text-sm text-muted-foreground">
-                    No class definitions found. You can add classes after
-                    creating the show.
+                    Select a template above, or skip this step — you can add classes
+                    after creating the show.
                   </p>
                 )}
               </CardContent>

@@ -3,7 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { eq, asc, desc, sql, ilike, and } from 'drizzle-orm';
 import { adminProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
-import { breeds, breedGroups, classDefinitions } from '@/server/db/schema';
+import { breeds, breedGroups, classDefinitions, showClasses } from '@/server/db/schema';
 
 export const adminRouter = createTRPCRouter({
   // ── Breed Groups ──────────────────────────────────────────
@@ -164,11 +164,21 @@ export const adminRouter = createTRPCRouter({
       sortOrder: z.number().int().min(0),
     }))
     .mutation(async ({ ctx, input }) => {
-      const [created] = await ctx.db
-        .insert(classDefinitions)
-        .values(input)
-        .returning();
-      return created;
+      try {
+        const [created] = await ctx.db
+          .insert(classDefinitions)
+          .values(input)
+          .returning();
+        return created;
+      } catch (err: unknown) {
+        if (err instanceof Error && err.message.includes('unique')) {
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message: `A class definition named "${input.name}" already exists`,
+          });
+        }
+        throw err;
+      }
     }),
 
   updateClassDefinition: adminProcedure
@@ -196,6 +206,17 @@ export const adminRouter = createTRPCRouter({
   deleteClassDefinition: adminProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
+      // Check if any show classes reference this class definition
+      const [usage] = await ctx.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(showClasses)
+        .where(eq(showClasses.classDefinitionId, input.id));
+      if (usage && usage.count > 0) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: `Cannot delete: this class definition is used by ${usage.count} show class${usage.count === 1 ? '' : 'es'}. Remove it from all shows first.`,
+        });
+      }
       await ctx.db.delete(classDefinitions).where(eq(classDefinitions.id, input.id));
       return { success: true };
     }),

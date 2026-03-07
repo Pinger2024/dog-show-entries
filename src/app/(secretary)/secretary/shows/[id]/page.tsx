@@ -142,6 +142,23 @@ export default function OverviewPage({
                 <dd className="font-medium">{show.secretaryEmail}</dd>
               </div>
             )}
+            {show.judgeAssignments && show.judgeAssignments.length > 0 && (
+              <div>
+                <dt className="text-sm text-muted-foreground">
+                  {show.judgeAssignments.length === 1 ? 'Judge' : 'Judges'}
+                </dt>
+                <dd className="font-medium">
+                  {(() => {
+                    const uniqueJudges = Array.from(
+                      new Map(
+                        show.judgeAssignments.map((a) => [a.judge.id, a.judge.name])
+                      ).values()
+                    );
+                    return uniqueJudges.join(', ');
+                  })()}
+                </dd>
+              </div>
+            )}
             <div>
               <dt className="text-sm text-muted-foreground">
                 Entry Close Date
@@ -1717,13 +1734,14 @@ function SundryItemManager({ showId }: { showId: string }) {
                       </p>
                     </div>
                     <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" className="size-8" onClick={() => openEditDialog(item)}>
+                      <Button variant="outline" size="sm" className="h-9 px-2.5" onClick={() => openEditDialog(item)}>
                         <Edit3 className="size-3.5" />
+                        Edit
                       </Button>
                       <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8 text-destructive"
+                        variant="outline"
+                        size="sm"
+                        className="h-9 px-2.5 text-destructive hover:bg-destructive/10"
                         onClick={() => deleteMutation.mutate({ id: item.id, showId })}
                       >
                         <Trash2 className="size-3.5" />
@@ -1742,7 +1760,7 @@ function SundryItemManager({ showId }: { showId: string }) {
                       <TableHead>Price</TableHead>
                       <TableHead>Limit</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead className="w-20" />
+                      <TableHead className="w-24" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1765,13 +1783,14 @@ function SundryItemManager({ showId }: { showId: string }) {
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-1">
-                            <Button variant="ghost" size="icon" className="size-8" onClick={() => openEditDialog(item)}>
+                            <Button variant="outline" size="sm" className="h-8 px-2" onClick={() => openEditDialog(item)}>
                               <Edit3 className="size-3.5" />
+                              Edit
                             </Button>
                             <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8 text-destructive"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 px-2 text-destructive hover:bg-destructive/10"
                               onClick={() => deleteMutation.mutate({ id: item.id, showId })}
                             >
                               <Trash2 className="size-3.5" />

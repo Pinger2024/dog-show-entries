@@ -1943,6 +1943,36 @@ export const secretaryRouter = createTRPCRouter({
       });
     }),
 
+  updateJudgeExpenses: secretaryProcedure
+    .input(
+      z.object({
+        contractId: z.string().uuid(),
+        hotelCost: z.number().int().min(0).nullable(),
+        travelCost: z.number().int().min(0).nullable(),
+        otherExpenses: z.number().int().min(0).nullable(),
+        expenseNotes: z.string().max(500).nullable(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const contract = await ctx.db.query.judgeContracts.findFirst({
+        where: eq(judgeContracts.id, input.contractId),
+      });
+      if (!contract) throw new TRPCError({ code: 'NOT_FOUND' });
+      await verifyShowAccess(ctx.db, ctx.session.user.id, contract.showId);
+
+      const [updated] = await ctx.db
+        .update(judgeContracts)
+        .set({
+          hotelCost: input.hotelCost,
+          travelCost: input.travelCost,
+          otherExpenses: input.otherExpenses,
+          expenseNotes: input.expenseNotes,
+        })
+        .where(eq(judgeContracts.id, input.contractId))
+        .returning();
+      return updated!;
+    }),
+
   sendJudgeOffer: secretaryProcedure
     .input(
       z.object({

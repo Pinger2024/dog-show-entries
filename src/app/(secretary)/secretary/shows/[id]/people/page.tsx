@@ -3,6 +3,7 @@
 import { use, useState, useMemo } from 'react';
 import {
   Check,
+  ChevronDown,
   ChevronsUpDown,
   CircleDot,
   Eye,
@@ -11,6 +12,7 @@ import {
   Loader2,
   Mail,
   Plus,
+  PoundSterling,
   RefreshCw,
   Send,
   Trash2,
@@ -18,6 +20,7 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { cn } from '@/lib/utils';
+import { formatCurrency, poundsToPence, penceToPoundsString } from '@/lib/date-utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -142,6 +145,22 @@ function JudgesSection({ showId }: { showId: string }) {
       utils.secretary.getJudgeContracts.invalidate({ showId });
     },
     onError: (err) => toast.error(err.message ?? 'Failed to resend offer'),
+  });
+
+  const [expandedExpenses, setExpandedExpenses] = useState<string | null>(null);
+  const [expenseForm, setExpenseForm] = useState({
+    hotelCost: '',
+    travelCost: '',
+    otherExpenses: '',
+    expenseNotes: '',
+  });
+
+  const expenseMutation = trpc.secretary.updateJudgeExpenses.useMutation({
+    onSuccess: () => {
+      toast.success('Expenses updated');
+      utils.secretary.getJudgeContracts.invalidate({ showId });
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to update expenses'),
   });
 
   const confirmMutation = trpc.secretary.sendJudgeConfirmation.useMutation({
@@ -526,6 +545,108 @@ function JudgesSection({ showId }: { showId: string }) {
                         </Button>
                       </div>
                     </div>
+
+                    {/* Expenses section */}
+                    {contract && (
+                      <div className="mt-3 border-t pt-3">
+                        <button
+                          type="button"
+                          className="flex w-full items-center justify-between text-sm text-muted-foreground hover:text-foreground transition-colors"
+                          onClick={() => {
+                            if (expandedExpenses === contract.id) {
+                              setExpandedExpenses(null);
+                            } else {
+                              setExpandedExpenses(contract.id);
+                              setExpenseForm({
+                                hotelCost: contract.hotelCost ? penceToPoundsString(contract.hotelCost) : '',
+                                travelCost: contract.travelCost ? penceToPoundsString(contract.travelCost) : '',
+                                otherExpenses: contract.otherExpenses ? penceToPoundsString(contract.otherExpenses) : '',
+                                expenseNotes: contract.expenseNotes ?? '',
+                              });
+                            }
+                          }}
+                        >
+                          <span className="flex items-center gap-1.5 font-medium">
+                            <PoundSterling className="size-3.5" />
+                            Expenses
+                            {(contract.hotelCost || contract.travelCost || contract.otherExpenses) && (
+                              <span className="text-xs font-normal">
+                                — {formatCurrency((contract.hotelCost ?? 0) + (contract.travelCost ?? 0) + (contract.otherExpenses ?? 0))} total
+                              </span>
+                            )}
+                          </span>
+                          <ChevronDown className={cn('size-4 transition-transform', expandedExpenses === contract.id && 'rotate-180')} />
+                        </button>
+
+                        {expandedExpenses === contract.id && (
+                          <div className="mt-3 space-y-3">
+                            <div className="grid gap-3 sm:grid-cols-3">
+                              <div>
+                                <Label className="text-xs">Hotel (£)</Label>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  step={0.01}
+                                  placeholder="0.00"
+                                  value={expenseForm.hotelCost}
+                                  onChange={(e) => setExpenseForm({ ...expenseForm, hotelCost: e.target.value })}
+                                  className="mt-1"
+                                />
+                              </div>
+                              <div>
+                                <Label className="text-xs">Travel (£)</Label>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  step={0.01}
+                                  placeholder="0.00"
+                                  value={expenseForm.travelCost}
+                                  onChange={(e) => setExpenseForm({ ...expenseForm, travelCost: e.target.value })}
+                                  className="mt-1"
+                                />
+                              </div>
+                              <div>
+                                <Label className="text-xs">Other (£)</Label>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  step={0.01}
+                                  placeholder="0.00"
+                                  value={expenseForm.otherExpenses}
+                                  onChange={(e) => setExpenseForm({ ...expenseForm, otherExpenses: e.target.value })}
+                                  className="mt-1"
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <Label className="text-xs">Notes</Label>
+                              <Input
+                                placeholder="e.g. 2 nights at Premier Inn"
+                                value={expenseForm.expenseNotes}
+                                onChange={(e) => setExpenseForm({ ...expenseForm, expenseNotes: e.target.value })}
+                                className="mt-1"
+                              />
+                            </div>
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                expenseMutation.mutate({
+                                  contractId: contract.id,
+                                  hotelCost: expenseForm.hotelCost ? poundsToPence(parseFloat(expenseForm.hotelCost)) : null,
+                                  travelCost: expenseForm.travelCost ? poundsToPence(parseFloat(expenseForm.travelCost)) : null,
+                                  otherExpenses: expenseForm.otherExpenses ? poundsToPence(parseFloat(expenseForm.otherExpenses)) : null,
+                                  expenseNotes: expenseForm.expenseNotes.trim() || null,
+                                });
+                              }}
+                              disabled={expenseMutation.isPending}
+                            >
+                              {expenseMutation.isPending && <Loader2 className="size-3.5 animate-spin" />}
+                              Save Expenses
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
