@@ -24,6 +24,7 @@ import {
   Crown,
   Lock,
   Sparkles,
+  Plus,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
@@ -38,7 +39,16 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -656,6 +666,223 @@ function PhotoGalleryCard({ dogId }: { dogId: string }) {
   );
 }
 
+const achievementTypes = [
+  { value: 'cc', label: 'Challenge Certificate (CC)' },
+  { value: 'reserve_cc', label: 'Reserve CC' },
+  { value: 'best_of_breed', label: 'Best of Breed' },
+  { value: 'best_in_show', label: 'Best in Show' },
+  { value: 'reserve_best_in_show', label: 'Reserve Best in Show' },
+  { value: 'best_puppy_in_breed', label: 'Best Puppy in Breed' },
+  { value: 'best_puppy_in_show', label: 'Best Puppy in Show' },
+  { value: 'best_veteran_in_breed', label: 'Best Veteran in Breed' },
+  { value: 'group_placement', label: 'Group Placement' },
+  { value: 'class_placement', label: 'Class Placement (1st)' },
+  { value: 'dog_cc', label: 'Dog CC' },
+  { value: 'reserve_dog_cc', label: 'Reserve Dog CC' },
+  { value: 'bitch_cc', label: 'Bitch CC' },
+  { value: 'reserve_bitch_cc', label: 'Reserve Bitch CC' },
+] as const;
+
+function AchievementsCard({
+  dogId,
+  achievements,
+}: {
+  dogId: string;
+  achievements: Array<{
+    id: string;
+    type: string;
+    date: string;
+    showId: string | null;
+    details: unknown;
+  }>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [showName, setShowName] = useState('');
+  const [date, setDate] = useState('');
+  const [type, setType] = useState('');
+  const [judgeName, setJudgeName] = useState('');
+  const utils = trpc.useUtils();
+
+  const addResult = trpc.dogs.addExternalResult.useMutation({
+    onSuccess: () => {
+      utils.dogs.getById.invalidate({ id: dogId });
+      utils.dogs.getTitleProgress.invalidate({ dogId });
+      toast.success('Result added');
+      setOpen(false);
+      setShowName('');
+      setDate('');
+      setType('');
+      setJudgeName('');
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const removeResult = trpc.dogs.removeExternalResult.useMutation({
+    onSuccess: () => {
+      utils.dogs.getById.invalidate({ id: dogId });
+      utils.dogs.getTitleProgress.invalidate({ dogId });
+      toast.success('Result removed');
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!showName || !date || !type) return;
+    addResult.mutate({
+      dogId,
+      showName,
+      date,
+      type: type as (typeof achievementTypes)[number]['value'],
+      judgeName: judgeName || undefined,
+    });
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Trophy className="size-4" />
+              Achievements
+            </CardTitle>
+            <CardDescription>
+              Major awards from all shows — including those not on Remi.
+            </CardDescription>
+          </div>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="min-h-[44px] px-4 sm:min-h-0">
+                <Plus className="size-3.5" />
+                Add Result
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add External Result</DialogTitle>
+                <DialogDescription>
+                  Record a result from a show not managed by Remi (e.g. Crufts, club matches).
+                  This will count toward your title progress tracking.
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+                <div className="space-y-2">
+                  <Label htmlFor="ext-show">Show Name</Label>
+                  <Input
+                    id="ext-show"
+                    placeholder="e.g. Crufts 2026"
+                    value={showName}
+                    onChange={(e) => setShowName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ext-date">Date</Label>
+                  <Input
+                    id="ext-date"
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Award Type</Label>
+                  <Select value={type} onValueChange={setType} required>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select award type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {achievementTypes.map((t) => (
+                        <SelectItem key={t.value} value={t.value}>
+                          {t.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ext-judge">Judge Name (optional)</Label>
+                  <Input
+                    id="ext-judge"
+                    placeholder="e.g. Mrs J. Smith"
+                    value={judgeName}
+                    onChange={(e) => setJudgeName(e.target.value)}
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={addResult.isPending || !showName || !date || !type}
+                >
+                  {addResult.isPending && <Loader2 className="size-4 animate-spin" />}
+                  Add Result
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {achievements.length === 0 ? (
+          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-8 text-center">
+            <Trophy className="mb-3 size-8 text-muted-foreground/50" />
+            <p className="font-medium">No achievements yet</p>
+            <p className="mt-1 max-w-xs text-sm text-muted-foreground">
+              Add results from external shows to build your dog&apos;s complete record.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {achievements
+              .sort((a, b) => b.date.localeCompare(a.date))
+              .map((a) => {
+                const details = a.details as { showName?: string; judgeName?: string; selfReported?: boolean } | null;
+                const isSelfReported = !a.showId;
+                return (
+                  <div
+                    key={a.id}
+                    className="flex items-center gap-3 rounded-lg border p-3"
+                  >
+                    <Badge variant={isSelfReported ? 'outline' : 'secondary'} className="shrink-0">
+                      {a.type.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
+                    </Badge>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium">
+                        {details?.showName ?? 'Remi Show'}
+                        {isSelfReported && (
+                          <span className="ml-1.5 text-xs text-muted-foreground">(self-reported)</span>
+                        )}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {format(parseISO(a.date), 'd MMM yyyy')}
+                        {details?.judgeName && ` · Judge: ${details.judgeName}`}
+                      </p>
+                    </div>
+                    {isSelfReported && (
+                      <button
+                        onClick={() => {
+                          if (confirm('Remove this result?')) {
+                            removeResult.mutate({ id: a.id });
+                          }
+                        }}
+                        className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:text-destructive"
+                        title="Remove"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function DogDetailPage({
   params,
 }: {
@@ -896,31 +1123,8 @@ export default function DogDetailPage({
       {/* KC Title Progress */}
       <TitleProgressCard dogId={id} />
 
-      {/* Achievements */}
-      {dog.achievements && dog.achievements.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Achievements</CardTitle>
-            <CardDescription>
-              Major awards and placements earned.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-2">
-              {dog.achievements.map((a) => (
-                <Badge key={a.id} variant="secondary">
-                  {a.type.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
-                  {a.date && (
-                    <span className="ml-1 opacity-70">
-                      ({format(parseISO(a.date), 'd MMM yyyy')})
-                    </span>
-                  )}
-                </Badge>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Achievements (with self-report) */}
+      <AchievementsCard dogId={id} achievements={dog.achievements ?? []} />
 
       {/* Danger zone */}
       <Separator />

@@ -1134,6 +1134,89 @@ export const dogsRouter = createTRPCRouter({
       return { success: true };
     }),
 
+  // ── Self-Reported Results (external shows) ────────────────
+  addExternalResult: protectedProcedure
+    .input(
+      z.object({
+        dogId: z.string().uuid(),
+        type: z.enum([
+          'cc',
+          'reserve_cc',
+          'best_of_breed',
+          'best_in_show',
+          'reserve_best_in_show',
+          'best_puppy_in_breed',
+          'best_puppy_in_show',
+          'best_veteran_in_breed',
+          'group_placement',
+          'class_placement',
+          'junior_warrant',
+          'stud_book',
+          'dog_cc',
+          'reserve_dog_cc',
+          'bitch_cc',
+          'reserve_bitch_cc',
+          'best_puppy_dog',
+          'best_puppy_bitch',
+        ]),
+        date: z.string(), // YYYY-MM-DD
+        showName: z.string().min(1).max(255),
+        judgeName: z.string().max(255).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const dog = await ctx.db.query.dogs.findFirst({
+        where: and(eq(dogs.id, input.dogId), isNull(dogs.deletedAt)),
+      });
+
+      if (!dog || dog.ownerId !== ctx.session.user.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
+      }
+
+      // Store showName and judgeName in the details jsonb field
+      // No showId — marks this as an external/self-reported result
+      const [achievement] = await ctx.db
+        .insert(achievements)
+        .values({
+          dogId: input.dogId,
+          type: input.type,
+          date: input.date,
+          showId: null,
+          details: {
+            showName: input.showName,
+            judgeName: input.judgeName ?? null,
+            selfReported: true,
+          },
+        })
+        .returning();
+
+      return achievement!;
+    }),
+
+  removeExternalResult: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const achievement = await ctx.db.query.achievements.findFirst({
+        where: eq(achievements.id, input.id),
+        with: { dog: true },
+      });
+
+      if (!achievement || achievement.dog.ownerId !== ctx.session.user.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
+      }
+
+      // Only allow deleting self-reported results (no showId)
+      if (achievement.showId) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Cannot remove results recorded by show officials',
+        });
+      }
+
+      await ctx.db.delete(achievements).where(eq(achievements.id, input.id));
+      return { success: true };
+    }),
+
   deletePhoto: protectedProcedure
     .input(z.object({ photoId: z.string().uuid(), dogId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
