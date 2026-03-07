@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
   BookOpen,
   FileText,
+  FolderOpen,
   LayoutDashboard,
   ListChecks,
   PoundSterling,
@@ -21,6 +22,7 @@ const sections = [
   { path: '/catalogue', label: 'Catalogue', icon: BookOpen },
   { path: '/reports', label: 'Reports', icon: FileText },
   { path: '/people', label: 'People', icon: Users },
+  { path: '/documents', label: 'Documents', icon: FolderOpen },
 ];
 
 export function ShowSectionNav({ showId }: { showId: string }) {

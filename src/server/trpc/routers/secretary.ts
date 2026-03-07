@@ -184,11 +184,17 @@ export const secretaryRouter = createTRPCRouter({
           )
         );
 
+      const classCount = await ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(showClasses)
+        .where(eq(showClasses.showId, input.showId));
+
       return {
         totalEntries: Number(entryCounts[0]?.count ?? 0),
         totalRevenue: Number(entryCounts[0]?.revenue ?? 0),
         confirmedEntries: Number(entryCounts[0]?.confirmed ?? 0),
         pendingEntries: Number(entryCounts[0]?.pending ?? 0),
+        totalClasses: Number(classCount[0]?.count ?? 0),
       };
     }),
 
