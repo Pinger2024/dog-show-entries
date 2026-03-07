@@ -298,15 +298,17 @@ export default function EnterShowPage() {
       const result = await checkoutMutation.mutateAsync({
         showId,
         catalogueRequested: false,
-        entries: cart.entries.map((e) => ({
-          entryType: e.entryType,
-          dogId: e.dogId,
-          classIds: e.classIds,
-          isNfc: e.isNfc,
-          handlerName: e.handlerName,
-          handlerDob: e.handlerDob,
-          handlerKcNumber: e.handlerKcNumber,
-        })),
+        entries: cart.entries
+          .filter((e) => e.classIds.length > 0)
+          .map((e) => ({
+            entryType: e.entryType,
+            dogId: e.dogId,
+            classIds: e.classIds,
+            isNfc: e.isNfc,
+            handlerName: e.handlerName,
+            handlerDob: e.handlerDob,
+            handlerKcNumber: e.handlerKcNumber,
+          })),
         sundryItems: cart.sundryItems.map((s) => ({
           sundryItemId: s.sundryItemId,
           quantity: s.quantity,
