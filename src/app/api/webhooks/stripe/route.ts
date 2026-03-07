@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { and, eq, isNull } from 'drizzle-orm';
 import { getStripe } from '@/server/services/stripe';
 import { db } from '@/server/db';
-import { entries, orders, payments, organisations, plans } from '@/server/db/schema';
+import { entries, orders, payments, organisations, plans, users } from '@/server/db/schema';
 import { sendEntryConfirmationEmail, sendSecretaryNotificationEmail } from '@/server/services/email';
 import type Stripe from 'stripe';
 
@@ -120,12 +120,6 @@ export async function POST(request: NextRequest) {
       // Only handle subscription checkouts
       if (session.mode !== 'subscription') break;
 
-      const organisationId = session.metadata?.organisationId;
-      if (!organisationId) {
-        console.error('[webhook] checkout.session.completed missing organisationId in metadata');
-        break;
-      }
-
       const subscriptionId =
         typeof session.subscription === 'string'
           ? session.subscription
@@ -146,6 +140,34 @@ export async function POST(request: NextRequest) {
       const subscription = await stripe.subscriptions.retrieve(subscriptionId);
       const subscriptionItem = subscription.items.data[0];
       const priceId = subscriptionItem?.price.id;
+      const periodEnd = subscriptionItem?.current_period_end;
+
+      // Check if this is a Pro user subscription
+      const isPro = session.metadata?.type === 'pro';
+      const userId = session.metadata?.userId;
+
+      if (isPro && userId) {
+        // Handle Remi Pro subscription
+        await db
+          .update(users)
+          .set({
+            stripeCustomerId: customerId,
+            proStripeSubscriptionId: subscriptionId,
+            proSubscriptionStatus: 'active',
+            ...(periodEnd
+              ? { proCurrentPeriodEnd: new Date(periodEnd * 1000) }
+              : {}),
+          })
+          .where(eq(users.id, userId));
+        break;
+      }
+
+      // Handle organisation subscription
+      const organisationId = session.metadata?.organisationId;
+      if (!organisationId) {
+        console.error('[webhook] checkout.session.completed missing organisationId in metadata');
+        break;
+      }
 
       // Look up the plan by Stripe price ID
       let planId: string | null = null;
@@ -155,9 +177,6 @@ export async function POST(request: NextRequest) {
         });
         planId = plan?.id ?? null;
       }
-
-      // Period end is on the subscription item in Stripe v20+
-      const periodEnd = subscriptionItem?.current_period_end;
 
       await db
         .update(organisations)
@@ -177,18 +196,6 @@ export async function POST(request: NextRequest) {
 
     case 'customer.subscription.updated': {
       const subscription = event.data.object as Stripe.Subscription;
-
-      // Find the organisation by subscription ID
-      const org = await db.query.organisations.findFirst({
-        where: eq(organisations.stripeSubscriptionId, subscription.id),
-      });
-
-      if (!org) {
-        console.error(
-          `[webhook] customer.subscription.updated: no org found for subscription ${subscription.id}`
-        );
-        break;
-      }
 
       // Map Stripe subscription status to our enum
       let subscriptionStatus: 'active' | 'trial' | 'past_due' | 'cancelled' | 'none';
@@ -210,8 +217,39 @@ export async function POST(request: NextRequest) {
           subscriptionStatus = 'none';
       }
 
-      // Check if the plan has changed by looking at the price ID
       const subscriptionItem = subscription.items.data[0];
+      const periodEnd = subscriptionItem?.current_period_end;
+
+      // Check if this is a Pro user subscription
+      const isPro = subscription.metadata?.type === 'pro';
+      const userId = subscription.metadata?.userId;
+
+      if (isPro && userId) {
+        await db
+          .update(users)
+          .set({
+            proSubscriptionStatus: subscriptionStatus,
+            ...(periodEnd
+              ? { proCurrentPeriodEnd: new Date(periodEnd * 1000) }
+              : {}),
+          })
+          .where(eq(users.id, userId));
+        break;
+      }
+
+      // Find the organisation by subscription ID
+      const org = await db.query.organisations.findFirst({
+        where: eq(organisations.stripeSubscriptionId, subscription.id),
+      });
+
+      if (!org) {
+        console.error(
+          `[webhook] customer.subscription.updated: no org found for subscription ${subscription.id}`
+        );
+        break;
+      }
+
+      // Check if the plan has changed by looking at the price ID
       const priceId = subscriptionItem?.price.id;
       let planId: string | null = org.planId;
       if (priceId) {
@@ -220,9 +258,6 @@ export async function POST(request: NextRequest) {
         });
         planId = plan?.id ?? org.planId;
       }
-
-      // Period end is on the subscription item in Stripe v20+
-      const periodEnd = subscriptionItem?.current_period_end;
 
       await db
         .update(organisations)
@@ -240,6 +275,17 @@ export async function POST(request: NextRequest) {
 
     case 'customer.subscription.deleted': {
       const subscription = event.data.object as Stripe.Subscription;
+
+      // Check if this is a Pro user subscription
+      if (subscription.metadata?.type === 'pro' && subscription.metadata?.userId) {
+        await db
+          .update(users)
+          .set({
+            proSubscriptionStatus: 'cancelled',
+          })
+          .where(eq(users.id, subscription.metadata.userId));
+        break;
+      }
 
       // Find the organisation by subscription ID
       const org = await db.query.organisations.findFirst({

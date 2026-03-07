@@ -21,6 +21,9 @@ import {
   X,
   Medal,
   FileText,
+  Crown,
+  Lock,
+  Sparkles,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
@@ -177,26 +180,47 @@ function TitleProgressCard({ dogId }: { dogId: string }) {
 
   if (!data) return null;
 
+  const isPro = data.isPro;
+
+  // Stats to show — Pro users get extra stats
+  const statItems = [
+    { label: 'CCs', value: data.stats.ccs },
+    { label: 'Res. CCs', value: data.stats.reserveCCs },
+    { label: 'BOBs', value: data.stats.bobs },
+    { label: 'JW Points', value: data.stats.jwPoints },
+  ];
+  if (isPro && data.stats.uniqueJudges !== undefined) {
+    statItems.push({ label: 'Unique Judges', value: data.stats.uniqueJudges });
+  }
+  if (isPro && data.stats.shcexPoints !== undefined) {
+    statItems.push({ label: 'ShCEx Pts', value: data.stats.shcexPoints });
+  }
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Trophy className="size-4" />
-          KC Title Progress
-        </CardTitle>
-        <CardDescription>
-          Track progress toward Royal Kennel Club titles.
-        </CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Trophy className="size-4" />
+              KC Title Progress
+              {isPro && (
+                <Badge className="bg-gradient-to-r from-amber-500 to-yellow-500 text-white text-[10px] gap-0.5">
+                  <Crown className="size-3" />
+                  PRO
+                </Badge>
+              )}
+            </CardTitle>
+            <CardDescription>
+              Track progress toward Royal Kennel Club titles.
+            </CardDescription>
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Stats summary */}
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {[
-            { label: 'CCs', value: data.stats.ccs },
-            { label: 'Res. CCs', value: data.stats.reserveCCs },
-            { label: 'BOBs', value: data.stats.bobs },
-            { label: 'JW Points', value: data.stats.jwPoints },
-          ].map((s) => (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+          {statItems.map((s) => (
             <div key={s.label} className="rounded-lg border p-2 text-center">
               <p className="text-lg font-bold">{s.value}</p>
               <p className="text-xs text-muted-foreground">{s.label}</p>
@@ -206,11 +230,16 @@ function TitleProgressCard({ dogId }: { dogId: string }) {
 
         {/* Title progress bars */}
         {data.titleProgress.length > 0 ? (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {data.titleProgress.map((tp) => (
-              <div key={tp.code}>
-                <div className="mb-1 flex items-center justify-between">
-                  <span className="text-sm font-medium">{tp.title}</span>
+              <div key={tp.code} className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-medium">{tp.title}</span>
+                    {tp.proOnly && (
+                      <Crown className="size-3 text-amber-500" />
+                    )}
+                  </div>
                   {tp.milestoneReached && (
                     <Badge className="bg-emerald-100 text-emerald-800 text-xs">
                       Milestone reached
@@ -219,13 +248,51 @@ function TitleProgressCard({ dogId }: { dogId: string }) {
                 </div>
                 <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
                   <div
-                    className="h-full rounded-full bg-primary transition-all"
+                    className={`h-full rounded-full transition-all ${
+                      tp.milestoneReached
+                        ? 'bg-emerald-500'
+                        : tp.proOnly
+                          ? 'bg-gradient-to-r from-amber-500 to-yellow-500'
+                          : 'bg-primary'
+                    }`}
                     style={{ width: `${Math.round(tp.progress * 100)}%` }}
                   />
                 </div>
-                <p className="mt-0.5 text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {tp.detail}
                 </p>
+
+                {/* Pro: show alternative routes for Champion */}
+                {tp.routes && tp.routes.length > 0 && (
+                  <div className="mt-2 space-y-2 rounded-lg border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-900 dark:bg-amber-950/20">
+                    <p className="text-xs font-medium text-amber-800 dark:text-amber-200">
+                      Championship Routes
+                    </p>
+                    {tp.routes.map((route) => (
+                      <div key={route.name} className="space-y-0.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium">{route.name}</span>
+                          {route.met && (
+                            <Badge className="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0">
+                              Met
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-amber-200/50 dark:bg-amber-900/50">
+                          <div
+                            className={`h-full rounded-full transition-all ${
+                              route.met ? 'bg-emerald-500' : 'bg-amber-500'
+                            }`}
+                            style={{ width: `${Math.round(route.progress * 100)}%` }}
+                          />
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          {route.detail}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -235,6 +302,36 @@ function TitleProgressCard({ dogId }: { dogId: string }) {
               ? 'All tracked titles have been achieved!'
               : 'Enter championship shows to start tracking progress toward KC titles.'}
           </p>
+        )}
+
+        {/* Pro upsell for non-Pro users */}
+        {!isPro && (
+          <div className="rounded-lg border border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50 p-4 dark:border-amber-900 dark:from-amber-950/30 dark:to-yellow-950/20">
+            <div className="flex items-start gap-3">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-yellow-500 shadow-sm">
+                <Crown className="size-4 text-white" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                  Unlock Remi Pro
+                </p>
+                <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-300">
+                  See alternative Champion routes, ShCEx progress, Veteran Warrant
+                  tracking, unique judge counts, and detailed breakdowns.
+                </p>
+                <Button
+                  size="sm"
+                  className="mt-2 h-8 bg-gradient-to-r from-amber-500 to-yellow-500 text-white hover:from-amber-600 hover:to-yellow-600"
+                  asChild
+                >
+                  <Link href="/settings?tab=pro">
+                    <Sparkles className="size-3.5" />
+                    Upgrade to Pro
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Disclaimer */}

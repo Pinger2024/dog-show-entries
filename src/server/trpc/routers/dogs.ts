@@ -755,6 +755,13 @@ export const dogsRouter = createTRPCRouter({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Dog not found' });
       }
 
+      // Check if the user has Pro subscription
+      const user = await ctx.db.query.users.findFirst({
+        where: eq(users.id, ctx.session.user.id),
+        columns: { proSubscriptionStatus: true },
+      });
+      const isPro = user?.proSubscriptionStatus === 'active' || user?.proSubscriptionStatus === 'trial';
+
       const now = new Date();
       const dob = new Date(dog.dateOfBirth);
       const ageMonths = (now.getFullYear() - dob.getFullYear()) * 12 + (now.getMonth() - dob.getMonth());
@@ -764,19 +771,29 @@ export const dogsRouter = createTRPCRouter({
       const reserveCCs = dog.achievements.filter((a) => a.type === 'reserve_cc');
       const bobs = dog.achievements.filter((a) => a.type === 'best_of_breed');
 
-      // Count unique judges who awarded CCs
+      // Count unique judges who awarded CCs and RCCs
       const ccJudgeIds = new Set(ccAchievements.map((a) => a.judgeId).filter(Boolean));
+      const rccJudgeIds = new Set(reserveCCs.map((a) => a.judgeId).filter(Boolean));
+      // Combined unique judges across CCs and RCCs (for 2CC+5RCC route)
+      const allCcRccJudgeIds = new Set([...ccJudgeIds, ...rccJudgeIds]);
 
-      // Count first-place wins from results for JW calculation
+      // RCCs awarded from July 2023 onwards (when the alternative champion route started)
+      const rccCutoffDate = '2023-07-01';
+      const qualifyingRCCs = reserveCCs.filter((a) => a.date >= rccCutoffDate);
+
+      // Count first-place wins from results for JW and ShCEx calculation
       const firstPlaceWins = await ctx.db
         .select({
           showType: shows.showType,
           showDate: shows.startDate,
+          className: classDefinitions.name,
         })
         .from(results)
         .innerJoin(entryClasses, eq(results.entryClassId, entryClasses.id))
         .innerJoin(entries, eq(entryClasses.entryId, entries.id))
         .innerJoin(shows, eq(entries.showId, shows.id))
+        .innerJoin(showClasses, eq(entryClasses.showClassId, showClasses.id))
+        .innerJoin(classDefinitions, eq(showClasses.classDefinitionId, classDefinitions.id))
         .where(
           and(
             eq(entries.dogId, input.dogId),
@@ -786,34 +803,97 @@ export const dogsRouter = createTRPCRouter({
           )
         );
 
-      // Junior Warrant: 25 points from firsts before 18 months
-      // Championship show first = 3 points, Open show first = 1 point
+      // Junior Warrant: 25 points from firsts between 6-18 months
+      // Championship show first = 3 points, Open/Premier Open show first = 1 point
+      const sixMonths = new Date(dob);
+      sixMonths.setMonth(sixMonths.getMonth() + 6);
       const eighteenMonths = new Date(dob);
       eighteenMonths.setMonth(eighteenMonths.getMonth() + 18);
 
-      const jwWins = firstPlaceWins.filter(
-        (w) => new Date(w.showDate) <= eighteenMonths
+      const jwWins = firstPlaceWins.filter((w) => {
+        const showDate = new Date(w.showDate);
+        return showDate >= sixMonths && showDate <= eighteenMonths;
+      });
+      const jwChampionshipWins = jwWins.filter((w) => w.showType === 'championship').length;
+      const jwOpenWins = jwWins.filter((w) => w.showType === 'open' || w.showType === 'premier_open').length;
+      const jwPoints = jwChampionshipWins * 3 + jwOpenWins * 1;
+
+      // ShCEx: 50 points from firsts at open shows
+      // Points scale: 1st in class = depends on entries (simplified: 1 point per first at open show)
+      const shcexWins = firstPlaceWins.filter(
+        (w) => w.showType === 'open' || w.showType === 'premier_open'
       );
-      const jwPoints = jwWins.reduce((sum, w) => {
-        if (w.showType === 'championship') return sum + 3;
-        if (w.showType === 'open' || w.showType === 'premier_open') return sum + 1;
-        return sum;
-      }, 0);
+      const shcexPoints = shcexWins.length; // Simplified — 1 point per first at open shows
+
+      // Veteran Warrant: 25 points from veteran classes at open shows
+      const veteranWins = firstPlaceWins.filter(
+        (w) =>
+          (w.showType === 'open' || w.showType === 'premier_open') &&
+          w.className.toLowerCase().includes('veteran')
+      );
+      const veteranPoints = veteranWins.length; // 1 point per veteran class first
 
       const existingTitles = new Set(dog.titles.map((t) => t.title));
 
-      const titleProgress = [];
+      const titleProgress: Array<{
+        title: string;
+        code: string;
+        current: number;
+        required: number;
+        progress: number;
+        detail: string;
+        milestoneReached: boolean;
+        proOnly?: boolean;
+        routes?: Array<{
+          name: string;
+          current: number;
+          required: number;
+          progress: number;
+          detail: string;
+          met: boolean;
+        }>;
+      }> = [];
 
       // Champion: 3 CCs under 3 different judges
+      // OR (from July 2023): 2 CCs + 5 RCCs under at least 7 different judges
       if (!existingTitles.has('ch')) {
+        const classicProgress = Math.min(ccAchievements.length / 3, 1);
+        const altCCProgress = Math.min(ccAchievements.length / 2, 1);
+        const altRCCProgress = Math.min(qualifyingRCCs.length / 5, 1);
+        const altJudgeProgress = Math.min(allCcRccJudgeIds.size / 7, 1);
+        const altOverallProgress = Math.min((altCCProgress + altRCCProgress + altJudgeProgress) / 3, 1);
+
+        const classicMet = ccAchievements.length >= 3 && ccJudgeIds.size >= 3;
+        const altMet = ccAchievements.length >= 2 && qualifyingRCCs.length >= 5 && allCcRccJudgeIds.size >= 7;
+
         titleProgress.push({
           title: 'Champion (Ch)',
-          code: 'ch' as const,
+          code: 'ch',
           current: ccAchievements.length,
           required: 3,
-          progress: Math.min(ccAchievements.length / 3, 1),
+          progress: Math.max(classicProgress, altOverallProgress),
           detail: `${ccAchievements.length}/3 CCs${ccJudgeIds.size > 0 ? ` (${ccJudgeIds.size} judge${ccJudgeIds.size !== 1 ? 's' : ''})` : ''}`,
-          milestoneReached: ccAchievements.length >= 3 && ccJudgeIds.size >= 3,
+          milestoneReached: classicMet || altMet,
+          routes: isPro
+            ? [
+                {
+                  name: 'Classic Route',
+                  current: ccAchievements.length,
+                  required: 3,
+                  progress: classicProgress,
+                  detail: `${ccAchievements.length}/3 CCs under ${ccJudgeIds.size}/3 judges`,
+                  met: classicMet,
+                },
+                {
+                  name: 'Alternative Route (from July 2023)',
+                  current: ccAchievements.length + qualifyingRCCs.length,
+                  required: 7,
+                  progress: altOverallProgress,
+                  detail: `${ccAchievements.length}/2 CCs + ${qualifyingRCCs.length}/5 RCCs under ${allCcRccJudgeIds.size}/7 judges`,
+                  met: altMet,
+                },
+              ]
+            : undefined,
         });
       }
 
@@ -822,28 +902,67 @@ export const dogsRouter = createTRPCRouter({
       if (!existingTitles.has('sh_ch') && isGundog) {
         titleProgress.push({
           title: 'Show Champion (Sh Ch)',
-          code: 'sh_ch' as const,
+          code: 'sh_ch',
           current: ccAchievements.length,
           required: 3,
           progress: Math.min(ccAchievements.length / 3, 1),
           detail: `${ccAchievements.length}/3 CCs (+ qualifying field trial win required)`,
-          milestoneReached: false, // Can't auto-detect field trial wins
+          milestoneReached: false,
         });
       }
 
-      // Junior Warrant: 25 points before 18 months
+      // Junior Warrant: 25 points between 6-18 months
       if (ageMonths < 18 || jwPoints > 0) {
         const isStillEligible = ageMonths < 18;
+        const daysRemaining = isStillEligible
+          ? Math.ceil((eighteenMonths.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+          : 0;
+
+        let detail = isStillEligible
+          ? `${jwPoints}/25 points (${daysRemaining} days remaining)`
+          : `${jwPoints}/25 points (age limit reached)`;
+
+        if (isPro && isStillEligible) {
+          detail = `${jwPoints}/25 points · ${jwChampionshipWins} champ (×3) + ${jwOpenWins} open (×1) · ${daysRemaining} days left`;
+        }
+
         titleProgress.push({
           title: 'Junior Warrant (JW)',
-          code: 'jw' as const,
+          code: 'jw',
           current: jwPoints,
           required: 25,
           progress: Math.min(jwPoints / 25, 1),
-          detail: isStillEligible
-            ? `${jwPoints}/25 points (${Math.ceil((eighteenMonths.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))} days remaining)`
-            : `${jwPoints}/25 points (age limit reached)`,
+          detail,
           milestoneReached: jwPoints >= 25,
+        });
+      }
+
+      // Pro-only: Show Certificate of Excellence (ShCEx)
+      if (isPro && !existingTitles.has('sh_ch')) {
+        titleProgress.push({
+          title: 'Show Certificate of Excellence (ShCEx)',
+          code: 'shcex',
+          current: shcexPoints,
+          required: 50,
+          progress: Math.min(shcexPoints / 50, 1),
+          detail: `${shcexPoints}/50 points from ${shcexWins.length} first${shcexWins.length !== 1 ? 's' : ''} at open shows`,
+          milestoneReached: shcexPoints >= 50,
+          proOnly: true,
+        });
+      }
+
+      // Pro-only: Veteran Warrant
+      if (isPro && ageMonths >= 84) {
+        // Dogs 7+ years old
+        titleProgress.push({
+          title: 'Veteran Warrant (VW)',
+          code: 'vw',
+          current: veteranPoints,
+          required: 25,
+          progress: Math.min(veteranPoints / 25, 1),
+          detail: `${veteranPoints}/25 points from ${veteranWins.length} veteran class first${veteranWins.length !== 1 ? 's' : ''} at open shows`,
+          milestoneReached: veteranPoints >= 25,
+          proOnly: true,
         });
       }
 
@@ -851,12 +970,16 @@ export const dogsRouter = createTRPCRouter({
         dogName: dog.registeredName,
         existingTitles: dog.titles,
         titleProgress,
+        isPro,
         stats: {
           ccs: ccAchievements.length,
           reserveCCs: reserveCCs.length,
           bobs: bobs.length,
           totalFirsts: firstPlaceWins.length,
           jwPoints,
+          shcexPoints: isPro ? shcexPoints : undefined,
+          veteranPoints: isPro && ageMonths >= 84 ? veteranPoints : undefined,
+          uniqueJudges: isPro ? ccJudgeIds.size : undefined,
         },
         disclaimer: 'Progress shown is based on results recorded in Remi only. Wins at shows not using Remi are not included.',
       };

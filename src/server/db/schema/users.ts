@@ -7,7 +7,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
-import { userRoleEnum } from './enums';
+import { userRoleEnum, subscriptionStatusEnum } from './enums';
 import { dogs } from './dogs';
 import { entries } from './entries';
 import { memberships } from './memberships';
@@ -31,6 +31,9 @@ export const users = pgTable(
     role: userRoleEnum('role').notNull().default('exhibitor'),
     onboardingCompletedAt: timestamp('onboarding_completed_at', { withTimezone: true }),
     stripeCustomerId: text('stripe_customer_id'),
+    proSubscriptionStatus: subscriptionStatusEnum('pro_subscription_status').notNull().default('none'),
+    proStripeSubscriptionId: text('pro_stripe_subscription_id'),
+    proCurrentPeriodEnd: timestamp('pro_current_period_end', { withTimezone: true }),
     preferences: jsonb('preferences'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
