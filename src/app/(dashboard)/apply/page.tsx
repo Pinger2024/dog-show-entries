@@ -53,6 +53,7 @@ export default function ApplyPage() {
   const [clubType, setClubType] = useState<string>('');
   const [organisationName, setOrganisationName] = useState('');
   const [breedOrGroup, setBreedOrGroup] = useState('');
+  const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
   const [kcRegNumber, setKcRegNumber] = useState('');
   const [contactEmail, setContactEmail] = useState('');
   const [contactPhone, setContactPhone] = useState('');
@@ -190,10 +191,13 @@ export default function ApplyPage() {
     e.preventDefault();
     if (!clubType || !organisationName || !contactEmail) return;
 
+    const groupValue = clubType === 'multi_breed'
+      ? (selectedGroups.length > 0 ? selectedGroups.join(', ') : undefined)
+      : (breedOrGroup || undefined);
     submitMutation.mutate({
       organisationName,
       clubType: clubType as 'single_breed' | 'multi_breed',
-      breedOrGroup: breedOrGroup || undefined,
+      breedOrGroup: groupValue,
       kcRegNumber: kcRegNumber || undefined,
       contactEmail,
       contactPhone: contactPhone || undefined,
@@ -282,31 +286,64 @@ export default function ApplyPage() {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Breed or Group
-              </label>
-              <Select
-                value={breedOrGroup}
-                onValueChange={setBreedOrGroup}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a group..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Gundog">Gundog</SelectItem>
-                  <SelectItem value="Hound">Hound</SelectItem>
-                  <SelectItem value="Pastoral">Pastoral</SelectItem>
-                  <SelectItem value="Terrier">Terrier</SelectItem>
-                  <SelectItem value="Toy">Toy</SelectItem>
-                  <SelectItem value="Utility">Utility</SelectItem>
-                  <SelectItem value="Working">Working</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Select the KC breed group your club covers.
-              </p>
-            </div>
+            {clubType === 'multi_breed' ? (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  Breed Groups
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {['Gundog', 'Hound', 'Pastoral', 'Terrier', 'Toy', 'Utility', 'Working'].map((group) => (
+                    <label
+                      key={group}
+                      className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer hover:bg-muted/50 transition-colors has-[:checked]:border-primary has-[:checked]:bg-primary/5"
+                    >
+                      <input
+                        type="checkbox"
+                        className="size-4 rounded border-muted-foreground/30 accent-primary"
+                        checked={selectedGroups.includes(group)}
+                        onChange={(e) => {
+                          setSelectedGroups(
+                            e.target.checked
+                              ? [...selectedGroups, group]
+                              : selectedGroups.filter((g) => g !== group)
+                          );
+                        }}
+                      />
+                      {group}
+                    </label>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Select all KC breed groups your club covers.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  Breed Group
+                </label>
+                <Select
+                  value={breedOrGroup}
+                  onValueChange={setBreedOrGroup}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a group..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Gundog">Gundog</SelectItem>
+                    <SelectItem value="Hound">Hound</SelectItem>
+                    <SelectItem value="Pastoral">Pastoral</SelectItem>
+                    <SelectItem value="Terrier">Terrier</SelectItem>
+                    <SelectItem value="Toy">Toy</SelectItem>
+                    <SelectItem value="Utility">Utility</SelectItem>
+                    <SelectItem value="Working">Working</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Select the KC breed group your club covers.
+                </p>
+              </div>
+            )}
 
             <div className="space-y-2">
               <label className="text-sm font-medium">

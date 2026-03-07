@@ -14,14 +14,16 @@ describe('CLASS_TEMPLATES', () => {
     }
   });
 
-  it('has positive default fees', () => {
+  it('has non-negative default fees', () => {
     for (const template of CLASS_TEMPLATES) {
-      expect(template.defaultFeePence).toBeGreaterThan(0);
+      expect(template.defaultFeePence).toBeGreaterThanOrEqual(0);
     }
   });
 
   it('stores fees in pence (not pounds)', () => {
-    for (const template of CLASS_TEMPLATES) {
+    // Junior Handling is traditionally free entry, so exclude from minimum check
+    const paidTemplates = CLASS_TEMPLATES.filter((t) => t.defaultFeePence > 0);
+    for (const template of paidTemplates) {
       // Fees should be round numbers of pence (no decimals)
       expect(Number.isInteger(template.defaultFeePence)).toBe(true);
       // Sanity: fees should be at least 100 pence (£1.00)

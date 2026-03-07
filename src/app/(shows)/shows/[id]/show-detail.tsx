@@ -137,15 +137,18 @@ function BreedSection({
                     ? 'bg-sky-400'
                     : sc.classDefinition.type === 'achievement'
                       ? 'bg-amber-400'
-                      : 'bg-violet-400'
+                      : sc.classDefinition.type === 'junior_handler'
+                        ? 'bg-emerald-400'
+                        : 'bg-violet-400'
                 }`} />
                 <span className="text-muted-foreground">{sc.classDefinition.name}</span>
               </div>
             ))}
           </div>
-          <div className="mt-2 flex gap-3 border-t border-dashed pt-2 text-[10px] text-muted-foreground/70">
+          <div className="mt-2 flex flex-wrap gap-3 border-t border-dashed pt-2 text-[10px] text-muted-foreground/70">
             <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-sky-400" /> Age</span>
             <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-amber-400" /> Achievement</span>
+            <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-emerald-400" /> Junior Handler</span>
           </div>
         </div>
       )}

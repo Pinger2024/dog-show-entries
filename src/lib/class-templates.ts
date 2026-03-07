@@ -133,4 +133,16 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
     defaultFeePence: 200,
     splitBySex: false,
   },
+  {
+    id: 'junior_handling',
+    name: 'Junior Handling',
+    description: 'KC Junior Handling classes by age group. Add alongside any other template.',
+    classNames: [
+      'Junior Handler (6-11)',
+      'Junior Handler (12-16)',
+      'Junior Handler (17-24)',
+    ],
+    defaultFeePence: 0,
+    splitBySex: false,
+  },
 ];
