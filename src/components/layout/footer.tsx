@@ -21,6 +21,12 @@ export function Footer() {
               About
             </Link>
             <Link
+              href="/features"
+              className="text-sm sm:text-[0.9375rem] text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Features
+            </Link>
+            <Link
               href="/help"
               className="text-sm sm:text-[0.9375rem] text-muted-foreground transition-colors hover:text-foreground"
             >
