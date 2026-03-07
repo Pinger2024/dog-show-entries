@@ -149,11 +149,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, user, trigger }) {
       if (user) {
         token.id = user.id;
-        token.role = (user as typeof user & { role?: string }).role ?? 'exhibitor';
+        // Always fetch role from DB on sign-in. The Resend/Google providers
+        // go through the DrizzleAdapter which strips custom fields (like role)
+        // from the user object, so user.role is undefined and defaults to
+        // 'exhibitor'. Only the Credentials provider returns role explicitly.
+        if (db) {
+          try {
+            const [dbUser] = await db
+              .select({ role: schema.users.role })
+              .from(schema.users)
+              .where(eq(schema.users.id, user.id as string))
+              .limit(1);
+            token.role = dbUser?.role ?? 'exhibitor';
+          } catch {
+            token.role = (user as typeof user & { role?: string }).role ?? 'exhibitor';
+          }
+        } else {
+          token.role = (user as typeof user & { role?: string }).role ?? 'exhibitor';
+        }
       }
       // On explicit session update (e.g. after role change), refresh role from DB.
-      // We only do this on "update" trigger, not every request, because the JWT
-      // callback runs in edge runtime where DB access can be unreliable.
       if (trigger === 'update' && token.id && db) {
         try {
           const [dbUser] = await db
