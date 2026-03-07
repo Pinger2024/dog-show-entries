@@ -67,7 +67,7 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
   return (
     <div className="flex min-h-screen overflow-x-hidden">
       {/* Desktop Sidebar */}
-      <aside className="hidden w-64 shrink-0 border-r bg-sidebar md:flex md:flex-col">
+      <aside className="hidden w-64 shrink-0 border-r bg-sidebar md:flex md:flex-col sticky top-0 h-screen overflow-y-auto">
         <div className="flex h-[4.5rem] items-center gap-3 border-b px-5">
           <Link href="/" className="font-serif text-[1.375rem] font-bold tracking-tight text-primary">
             Remi
