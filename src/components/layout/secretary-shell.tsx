@@ -10,6 +10,7 @@ import {
   CreditCard,
   LogOut,
   ChevronRight,
+  ChevronLeft,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -60,9 +61,27 @@ function getBreadcrumbs(pathname: string) {
   }));
 }
 
+const rootPaths = new Set(['/secretary', '/secretary/shows', '/secretary/shows/new', '/secretary/billing']);
+
+function getParentPath(pathname: string): string | null {
+  if (rootPaths.has(pathname)) return null;
+  const segments = pathname.split('/').filter(Boolean);
+  if (segments.length <= 1) return null;
+  return '/' + segments.slice(0, -1).join('/');
+}
+
+function getMobileTitle(pathname: string): string | null {
+  const segments = pathname.split('/').filter(Boolean);
+  if (segments.length <= 2) return null;
+  const last = segments[segments.length - 1];
+  return last.charAt(0).toUpperCase() + last.slice(1).replace(/-/g, ' ');
+}
+
 export function SecretaryShell({ user, children }: SecretaryShellProps) {
   const pathname = usePathname();
   const breadcrumbs = getBreadcrumbs(pathname);
+  const parentPath = getParentPath(pathname);
+  const mobileTitle = getMobileTitle(pathname);
 
   return (
     <div className="flex min-h-screen overflow-x-hidden">
@@ -159,13 +178,31 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
 
         {/* Mobile header */}
         <header className="flex h-16 items-center justify-between border-b px-3 sm:px-4 md:hidden">
-          <div className="flex items-center gap-2">
-            <Link href="/" className="font-serif text-xl font-bold tracking-tight text-primary">
-              Remi
-            </Link>
-            <span className="rounded-md bg-gold/15 px-2 py-0.5 text-xs font-semibold text-gold">
-              Secretary
-            </span>
+          <div className="flex items-center gap-2 min-w-0">
+            {parentPath ? (
+              <>
+                <Link
+                  href={parentPath}
+                  className="flex size-10 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground"
+                >
+                  <ChevronLeft className="size-5" />
+                </Link>
+                {mobileTitle && (
+                  <span className="truncate text-[0.9375rem] font-medium">
+                    {mobileTitle}
+                  </span>
+                )}
+              </>
+            ) : (
+              <>
+                <Link href="/" className="font-serif text-xl font-bold tracking-tight text-primary">
+                  Remi
+                </Link>
+                <span className="rounded-md bg-gold/15 px-2 py-0.5 text-xs font-semibold text-gold">
+                  Secretary
+                </span>
+              </>
+            )}
           </div>
           <Button
             variant="ghost"
