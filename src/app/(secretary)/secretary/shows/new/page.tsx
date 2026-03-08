@@ -603,7 +603,7 @@ export default function NewShowPage() {
                               onSelect={(date) =>
                                 field.onChange(
                                   date
-                                    ? date.toISOString().split('T')[0]
+                                    ? format(date, 'yyyy-MM-dd')
                                     : ''
                                 )
                               }
@@ -650,7 +650,7 @@ export default function NewShowPage() {
                               onSelect={(date) =>
                                 field.onChange(
                                   date
-                                    ? date.toISOString().split('T')[0]
+                                    ? format(date, 'yyyy-MM-dd')
                                     : ''
                                 )
                               }
@@ -704,7 +704,7 @@ export default function NewShowPage() {
                               onSelect={(date) =>
                                 field.onChange(
                                   date
-                                    ? date.toISOString().split('T')[0]
+                                    ? format(date, 'yyyy-MM-dd')
                                     : ''
                                 )
                               }
@@ -750,7 +750,7 @@ export default function NewShowPage() {
                               onSelect={(date) =>
                                 field.onChange(
                                   date
-                                    ? date.toISOString().split('T')[0]
+                                    ? format(date, 'yyyy-MM-dd')
                                     : ''
                                 )
                               }
@@ -796,7 +796,7 @@ export default function NewShowPage() {
                               onSelect={(date) =>
                                 field.onChange(
                                   date
-                                    ? date.toISOString().split('T')[0]
+                                    ? format(date, 'yyyy-MM-dd')
                                     : ''
                                 )
                               }
