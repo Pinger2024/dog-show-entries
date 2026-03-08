@@ -15,7 +15,7 @@ import {
   Plus,
   CalendarIcon,
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, addDays } from 'date-fns';
 import { trpc } from '@/lib/trpc';
 import { poundsToPence, formatCurrency } from '@/lib/date-utils';
 import { CLASS_TEMPLATES } from '@/lib/class-templates';
@@ -150,13 +150,15 @@ const STEPS = [
   'Review',
 ] as const;
 
+/** Parse a YYYY-MM-DD string as local midnight (not UTC). */
+function parseLocalDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
 function formatDateDisplay(dateStr: string) {
   if (!dateStr) return '';
-  return new Date(dateStr).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  return format(parseLocalDate(dateStr), 'd MMMM yyyy');
 }
 
 
@@ -248,13 +250,13 @@ export default function NewShowPage() {
         startDate: values.startDate,
         endDate: values.endDate,
         entriesOpenDate: values.entriesOpenDate
-          ? new Date(values.entriesOpenDate).toISOString()
+          ? parseLocalDate(values.entriesOpenDate).toISOString()
           : undefined,
         entryCloseDate: values.entryCloseDate
-          ? new Date(values.entryCloseDate).toISOString()
+          ? parseLocalDate(values.entryCloseDate).toISOString()
           : undefined,
         postalCloseDate: values.postalCloseDate
-          ? new Date(values.postalCloseDate).toISOString()
+          ? parseLocalDate(values.postalCloseDate).toISOString()
           : undefined,
         description: values.description || undefined,
         classDefinitionIds: values.selectedClassIds.length > 0
@@ -297,6 +299,18 @@ export default function NewShowPage() {
   const watchedStartDate = form.watch('startDate');
   const watchedEndDate = form.watch('endDate');
   const watchedDescription = form.watch('description');
+
+  // Auto-compute endDate from startDate + showDays
+  const [showDays, setShowDays] = useState(1);
+  useEffect(() => {
+    if (watchedStartDate) {
+      // Parse the date string as local date components to avoid timezone issues
+      const [y, m, d] = watchedStartDate.split('-').map(Number);
+      const start = new Date(y, m - 1, d);
+      const end = addDays(start, showDays - 1);
+      form.setValue('endDate', format(end, 'yyyy-MM-dd'));
+    }
+  }, [watchedStartDate, showDays, form]);
 
   // Auto-populate description when show type + scope are selected and description is empty
   function autoPopulateDescription() {
@@ -587,7 +601,7 @@ export default function NewShowPage() {
                               >
                                 <CalendarIcon className="size-4" />
                                 {field.value
-                                  ? format(new Date(field.value), 'd MMMM yyyy')
+                                  ? format(parseLocalDate(field.value), 'd MMMM yyyy')
                                   : 'Pick a date'}
                               </Button>
                             </FormControl>
@@ -597,7 +611,7 @@ export default function NewShowPage() {
                               mode="single"
                               selected={
                                 field.value
-                                  ? new Date(field.value)
+                                  ? parseLocalDate(field.value)
                                   : undefined
                               }
                               onSelect={(date) =>
@@ -616,57 +630,29 @@ export default function NewShowPage() {
                     )}
                   />
 
-                  <FormField
-                    control={form.control}
-                    name="endDate"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>End Date</FormLabel>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <FormControl>
-                              <Button
-                                variant="outline"
-                                className={cn(
-                                  'w-full justify-start text-left font-normal',
-                                  !field.value && 'text-muted-foreground'
-                                )}
-                              >
-                                <CalendarIcon className="size-4" />
-                                {field.value
-                                  ? format(new Date(field.value), 'd MMMM yyyy')
-                                  : 'Pick a date'}
-                              </Button>
-                            </FormControl>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={
-                                field.value
-                                  ? new Date(field.value)
-                                  : undefined
-                              }
-                              onSelect={(date) =>
-                                field.onChange(
-                                  date
-                                    ? format(date, 'yyyy-MM-dd')
-                                    : ''
-                                )
-                              }
-                              disabled={(date) => {
-                                const start = form.getValues('startDate');
-                                return start
-                                  ? date < new Date(start)
-                                  : date < new Date();
-                              }}
-                            />
-                          </PopoverContent>
-                        </Popover>
-                        <FormMessage />
-                      </FormItem>
+                  <div className="space-y-2">
+                    <Label>Number of Days</Label>
+                    <Select
+                      value={String(showDays)}
+                      onValueChange={(v) => setShowDays(Number(v))}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[1, 2, 3, 4, 5, 6].map((n) => (
+                          <SelectItem key={n} value={String(n)}>
+                            {n} {n === 1 ? 'day' : 'days'}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {watchedEndDate && (
+                      <p className="text-sm text-muted-foreground">
+                        End date: {format(parseLocalDate(watchedEndDate), 'd MMMM yyyy')}
+                      </p>
                     )}
-                  />
+                  </div>
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-3">
@@ -688,7 +674,7 @@ export default function NewShowPage() {
                               >
                                 <CalendarIcon className="size-4" />
                                 {field.value
-                                  ? format(new Date(field.value), 'd MMMM yyyy')
+                                  ? format(parseLocalDate(field.value), 'd MMMM yyyy')
                                   : 'Optional'}
                               </Button>
                             </FormControl>
@@ -698,7 +684,7 @@ export default function NewShowPage() {
                               mode="single"
                               selected={
                                 field.value
-                                  ? new Date(field.value)
+                                  ? parseLocalDate(field.value)
                                   : undefined
                               }
                               onSelect={(date) =>
@@ -734,7 +720,7 @@ export default function NewShowPage() {
                               >
                                 <CalendarIcon className="size-4" />
                                 {field.value
-                                  ? format(new Date(field.value), 'd MMMM yyyy')
+                                  ? format(parseLocalDate(field.value), 'd MMMM yyyy')
                                   : 'Optional'}
                               </Button>
                             </FormControl>
@@ -744,7 +730,7 @@ export default function NewShowPage() {
                               mode="single"
                               selected={
                                 field.value
-                                  ? new Date(field.value)
+                                  ? parseLocalDate(field.value)
                                   : undefined
                               }
                               onSelect={(date) =>
@@ -780,7 +766,7 @@ export default function NewShowPage() {
                               >
                                 <CalendarIcon className="size-4" />
                                 {field.value
-                                  ? format(new Date(field.value), 'd MMMM yyyy')
+                                  ? format(parseLocalDate(field.value), 'd MMMM yyyy')
                                   : 'Optional'}
                               </Button>
                             </FormControl>
@@ -790,7 +776,7 @@ export default function NewShowPage() {
                               mode="single"
                               selected={
                                 field.value
-                                  ? new Date(field.value)
+                                  ? parseLocalDate(field.value)
                                   : undefined
                               }
                               onSelect={(date) =>
