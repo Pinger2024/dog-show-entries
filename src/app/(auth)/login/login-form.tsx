@@ -298,15 +298,25 @@ export function LoginForm() {
                   </button>
                 </div>
               ) : (
-                <div className="text-center">
-                  <button
-                    type="button"
-                    onClick={() => setShowPasswordField(true)}
-                    className="py-2 text-sm text-muted-foreground hover:text-primary hover:underline"
-                  >
-                    I have a password
-                  </button>
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-card px-2 text-muted-foreground">or</span>
+                  </div>
                 </div>
+              )}
+
+              {!showPasswordField && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 sm:h-12 w-full text-sm sm:text-[0.9375rem] font-medium"
+                  onClick={() => setShowPasswordField(true)}
+                >
+                  Sign in with password
+                </Button>
               )}
             </form>
           </CardContent>
