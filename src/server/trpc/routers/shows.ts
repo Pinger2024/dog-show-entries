@@ -374,6 +374,11 @@ export const showsRouter = createTRPCRouter({
         scheduleUrl: z.string().url().optional(),
         description: z.string().optional(),
         secretaryEmail: z.string().email().optional(),
+        secretaryName: z.string().optional(),
+        secretaryAddress: z.string().optional(),
+        secretaryPhone: z.string().optional(),
+        showOpenTime: z.string().optional(),
+        onCallVet: z.string().optional(),
         classSexArrangement: z.enum(['separate_sex', 'combined_sex']).optional(),
         classDefinitionIds: z.array(z.string().uuid()).optional(),
         entryFee: z.number().int().min(0).optional(),
@@ -493,6 +498,11 @@ export const showsRouter = createTRPCRouter({
         scheduleUrl: z.string().url().nullable().optional(),
         description: z.string().nullable().optional(),
         secretaryEmail: z.string().email().nullable().optional(),
+        secretaryName: z.string().nullable().optional(),
+        secretaryAddress: z.string().nullable().optional(),
+        secretaryPhone: z.string().nullable().optional(),
+        showOpenTime: z.string().nullable().optional(),
+        onCallVet: z.string().nullable().optional(),
         classSexArrangement: z.enum(['separate_sex', 'combined_sex']).nullable().optional(),
       })
     )

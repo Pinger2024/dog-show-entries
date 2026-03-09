@@ -85,6 +85,9 @@ const createShowSchema = z.object({
   showScope: z.enum(['single_breed', 'group', 'general']),
   classSexArrangement: z.enum(['separate_sex', 'combined_sex']).optional(),
   secretaryEmail: z.string().email('Enter a valid email').optional().or(z.literal('')),
+  secretaryName: z.string().optional(),
+  secretaryPhone: z.string().optional(),
+  showOpenTime: z.string().optional(),
   organisationId: z.string().uuid('Please select an organisation'),
   startDate: z.string().min(1, 'Start date is required'),
   endDate: z.string().min(1, 'End date is required'),
@@ -178,6 +181,9 @@ export default function NewShowPage() {
       showScope: 'general',
       classSexArrangement: undefined,
       secretaryEmail: '',
+      secretaryName: '',
+      secretaryPhone: '',
+      showOpenTime: '',
       organisationId: '',
       startDate: '',
       endDate: '',
@@ -246,6 +252,9 @@ export default function NewShowPage() {
         showScope: values.showScope,
         classSexArrangement: values.classSexArrangement || undefined,
         secretaryEmail: values.secretaryEmail || undefined,
+        secretaryName: values.secretaryName || undefined,
+        secretaryPhone: values.secretaryPhone || undefined,
+        showOpenTime: values.showOpenTime || undefined,
         organisationId: values.organisationId,
         venueId: venueId || undefined,
         startDate: values.startDate,
@@ -569,6 +578,49 @@ export default function NewShowPage() {
                     )}
                   />
                 </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="secretaryName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Secretary Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g. Amanda Smith" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="secretaryPhone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Secretary Phone</FormLabel>
+                        <FormControl>
+                          <Input type="tel" placeholder="e.g. 07700 900000" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="showOpenTime"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Show Opens At</FormLabel>
+                      <FormControl>
+                        <Input type="time" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
                 <FormField
                   control={form.control}
@@ -1311,6 +1363,24 @@ function ReviewStep({
               <div>
                 <dt className="text-sm text-muted-foreground">Secretary Email</dt>
                 <dd className="font-medium">{values.secretaryEmail}</dd>
+              </div>
+            )}
+            {values.secretaryName && (
+              <div>
+                <dt className="text-sm text-muted-foreground">Secretary Name</dt>
+                <dd className="font-medium">{values.secretaryName}</dd>
+              </div>
+            )}
+            {values.secretaryPhone && (
+              <div>
+                <dt className="text-sm text-muted-foreground">Secretary Phone</dt>
+                <dd className="font-medium">{values.secretaryPhone}</dd>
+              </div>
+            )}
+            {values.showOpenTime && (
+              <div>
+                <dt className="text-sm text-muted-foreground">Show Opens At</dt>
+                <dd className="font-medium">{values.showOpenTime}</dd>
               </div>
             )}
             <div>

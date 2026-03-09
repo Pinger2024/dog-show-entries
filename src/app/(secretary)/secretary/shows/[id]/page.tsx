@@ -142,6 +142,18 @@ export default function OverviewPage({
                 <dd className="font-medium">{show.secretaryEmail}</dd>
               </div>
             )}
+            {show.secretaryName && (
+              <div>
+                <dt className="text-sm text-muted-foreground">Secretary Name</dt>
+                <dd className="font-medium">{show.secretaryName}</dd>
+              </div>
+            )}
+            {show.showOpenTime && (
+              <div>
+                <dt className="text-sm text-muted-foreground">Show Opens</dt>
+                <dd className="font-medium">{show.showOpenTime}</dd>
+              </div>
+            )}
             {show.judgeAssignments && show.judgeAssignments.length > 0 && (
               <div>
                 <dt className="text-sm text-muted-foreground">
@@ -224,6 +236,11 @@ function EditShowDetailsDialog({
     showScope: string;
     classSexArrangement: string | null;
     secretaryEmail: string | null;
+    secretaryName: string | null;
+    secretaryAddress: string | null;
+    secretaryPhone: string | null;
+    showOpenTime: string | null;
+    onCallVet: string | null;
     startDate: string;
     endDate: string;
     entryCloseDate: Date | string | null;
@@ -239,6 +256,11 @@ function EditShowDetailsDialog({
   const [showScope, setShowScope] = useState(show.showScope);
   const [classSexArrangement, setClassSexArrangement] = useState(show.classSexArrangement ?? '');
   const [secretaryEmail, setSecretaryEmail] = useState(show.secretaryEmail ?? '');
+  const [secretaryName, setSecretaryName] = useState(show.secretaryName ?? '');
+  const [secretaryAddress, setSecretaryAddress] = useState(show.secretaryAddress ?? '');
+  const [secretaryPhone, setSecretaryPhone] = useState(show.secretaryPhone ?? '');
+  const [showOpenTime, setShowOpenTime] = useState(show.showOpenTime ?? '');
+  const [onCallVet, setOnCallVet] = useState(show.onCallVet ?? '');
   const [startDate, setStartDate] = useState(show.startDate);
   const [endDate, setEndDate] = useState(show.endDate);
   const [entryCloseDate, setEntryCloseDate] = useState(
@@ -272,6 +294,11 @@ function EditShowDetailsDialog({
       showScope: showScope as 'single_breed' | 'group' | 'general',
       classSexArrangement: (classSexArrangement as 'separate_sex' | 'combined_sex') || null,
       secretaryEmail: secretaryEmail || null,
+      secretaryName: secretaryName || null,
+      secretaryAddress: secretaryAddress || null,
+      secretaryPhone: secretaryPhone || null,
+      showOpenTime: showOpenTime || null,
+      onCallVet: onCallVet || null,
       startDate,
       endDate,
       entryCloseDate: entryCloseDate
@@ -307,6 +334,11 @@ function EditShowDetailsDialog({
       setDescription(show.description ?? '');
       setClassSexArrangement(show.classSexArrangement ?? '');
       setSecretaryEmail(show.secretaryEmail ?? '');
+      setSecretaryName(show.secretaryName ?? '');
+      setSecretaryAddress(show.secretaryAddress ?? '');
+      setSecretaryPhone(show.secretaryPhone ?? '');
+      setShowOpenTime(show.showOpenTime ?? '');
+      setOnCallVet(show.onCallVet ?? '');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, show.name, show.showType, show.startDate]);
@@ -389,6 +421,60 @@ function EditShowDetailsDialog({
                 />
               </div>
             </div>
+
+            {/* Secretary & Schedule Details */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-secretary-name">Secretary Name</Label>
+                <Input
+                  id="edit-secretary-name"
+                  value={secretaryName}
+                  onChange={(e) => setSecretaryName(e.target.value)}
+                  placeholder="e.g. Amanda Smith"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-secretary-phone">Secretary Phone</Label>
+                <Input
+                  id="edit-secretary-phone"
+                  type="tel"
+                  value={secretaryPhone}
+                  onChange={(e) => setSecretaryPhone(e.target.value)}
+                  placeholder="e.g. 07700 900000"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-secretary-address">Secretary Address</Label>
+              <Input
+                id="edit-secretary-address"
+                value={secretaryAddress}
+                onChange={(e) => setSecretaryAddress(e.target.value)}
+                placeholder="Full postal address for schedule"
+              />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-show-open-time">Show Opens At</Label>
+                <Input
+                  id="edit-show-open-time"
+                  type="time"
+                  value={showOpenTime}
+                  onChange={(e) => setShowOpenTime(e.target.value)}
+                  placeholder="e.g. 09:00"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-on-call-vet">On-Call Vet</Label>
+                <Input
+                  id="edit-on-call-vet"
+                  value={onCallVet}
+                  onChange={(e) => setOnCallVet(e.target.value)}
+                  placeholder="Vet name & contact"
+                />
+              </div>
+            </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="edit-start">Start Date</Label>

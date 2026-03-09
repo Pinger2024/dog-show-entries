@@ -24,6 +24,11 @@ export interface ScheduleShowInfo {
   postalCloseDate: string | null;
   kcLicenceNo: string | null;
   secretaryEmail: string | null;
+  secretaryName: string | null;
+  secretaryAddress: string | null;
+  secretaryPhone: string | null;
+  showOpenTime: string | null;
+  onCallVet: string | null;
   description: string | null;
   firstEntryFee: number | null;
   subsequentEntryFee: number | null;
@@ -83,259 +88,280 @@ function formatShortDate(dateStr: string): string {
   });
 }
 
+function formatTime(timeStr: string): string {
+  // Convert "14:00" to "2:00 PM" or keep as-is if already formatted
+  if (timeStr.includes(':') && !timeStr.includes(' ')) {
+    const [h, m] = timeStr.split(':').map(Number);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const hour = h % 12 || 12;
+    return `${hour}:${String(m).padStart(2, '0')} ${ampm}`;
+  }
+  return timeStr;
+}
+
 function formatPence(pence: number): string {
   return `£${(pence / 100).toFixed(2)}`;
 }
 
+// ── A5 styles (420pt × 595pt) ──
 const s = StyleSheet.create({
-  page: {
-    fontFamily: 'Times',
-    fontSize: 10,
-    padding: '36 40 52 40',
-    lineHeight: 1.4,
-  },
   // ── Cover page ──
   coverPage: {
     fontFamily: 'Times',
-    padding: '60 50 50 50',
-    justifyContent: 'center',
+    padding: '40 30 36 30',
+    justifyContent: 'flex-start',
     alignItems: 'center',
   },
   coverLogo: {
-    width: 80,
-    height: 80,
-    marginBottom: 20,
+    width: 70,
+    height: 70,
+    marginBottom: 10,
   },
   coverOrg: {
-    fontSize: 14,
+    fontSize: 11,
     textTransform: 'uppercase',
-    letterSpacing: 3,
-    marginBottom: 12,
+    letterSpacing: 2.5,
+    marginBottom: 6,
     textAlign: 'center',
     color: '#333',
   },
   coverShowName: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: 'bold',
     textTransform: 'uppercase',
-    letterSpacing: 2,
-    marginBottom: 6,
+    letterSpacing: 1.5,
+    marginBottom: 4,
     textAlign: 'center',
   },
   coverShowType: {
-    fontSize: 13,
+    fontSize: 11,
     fontStyle: 'italic',
-    marginBottom: 4,
+    marginBottom: 2,
     textAlign: 'center',
     color: '#444',
   },
-  coverRegulatory: {
+  coverClassCount: {
     fontSize: 9,
+    marginBottom: 6,
+    textAlign: 'center',
+    color: '#555',
+  },
+  coverRegulatory: {
+    fontSize: 8,
     fontStyle: 'italic',
     color: '#666',
-    marginTop: 16,
+    marginTop: 8,
+    marginBottom: 8,
     textAlign: 'center',
-  },
-  coverDetail: {
-    fontSize: 11,
-    marginTop: 6,
-    textAlign: 'center',
-    color: '#333',
   },
   coverRule: {
-    width: '50%',
-    borderBottomWidth: 1,
+    width: '40%',
+    borderBottomWidth: 0.75,
     borderBottomColor: '#999',
-    marginTop: 20,
-    marginBottom: 20,
+    marginVertical: 8,
+  },
+  coverDetailRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginVertical: 2,
+  },
+  coverDetailLabel: {
+    fontSize: 7,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    color: '#888',
+    width: 65,
+    textAlign: 'right',
+    marginRight: 6,
+  },
+  coverDetailValue: {
+    fontSize: 9,
+    color: '#333',
   },
   coverSection: {
-    marginTop: 12,
-    textAlign: 'center',
+    marginTop: 8,
+    width: '100%',
+    paddingHorizontal: 20,
   },
-  coverLabel: {
-    fontSize: 8,
+  coverSectionTitle: {
+    fontSize: 7,
     textTransform: 'uppercase',
     letterSpacing: 1,
     color: '#888',
     marginBottom: 2,
     textAlign: 'center',
   },
-  coverValue: {
-    fontSize: 10,
+  coverSectionText: {
+    fontSize: 8.5,
     color: '#333',
     textAlign: 'center',
+    lineHeight: 1.4,
   },
-  // ── Section pages ──
+  // ── Content pages ──
+  page: {
+    fontFamily: 'Times',
+    fontSize: 8.5,
+    padding: '28 25 36 25',
+    lineHeight: 1.35,
+  },
   sectionTitle: {
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: 'bold',
     textTransform: 'uppercase',
     textAlign: 'center',
-    letterSpacing: 1.5,
-    marginBottom: 14,
-    borderBottomWidth: 2,
+    letterSpacing: 1.2,
+    marginBottom: 8,
+    borderBottomWidth: 1.5,
     borderBottomColor: '#000',
-    paddingBottom: 6,
+    paddingBottom: 4,
   },
-  // ── Judges list ──
+  // ── Judges ──
   judgeRow: {
     flexDirection: 'row',
-    paddingVertical: 4,
+    paddingVertical: 2.5,
     borderBottomWidth: 0.5,
     borderBottomColor: '#ddd',
   },
   judgeName: {
-    fontSize: 10,
+    fontSize: 8.5,
     fontWeight: 'bold',
     width: '35%',
   },
   judgeBreeds: {
-    fontSize: 10,
+    fontSize: 8.5,
     width: '65%',
     color: '#333',
+  },
+  // ── Info ──
+  infoBlock: {
+    marginBottom: 7,
+  },
+  infoLabel: {
+    fontSize: 7.5,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    color: '#555',
+    marginBottom: 1.5,
+  },
+  infoText: {
+    fontSize: 8.5,
+    lineHeight: 1.35,
+  },
+  feeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 2,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#ddd',
+  },
+  feeLabel: {
+    fontSize: 8.5,
+  },
+  feeValue: {
+    fontSize: 8.5,
+    fontWeight: 'bold',
   },
   // ── Class table ──
   classTableHeader: {
     flexDirection: 'row',
-    borderBottomWidth: 1.5,
+    borderBottomWidth: 1.2,
     borderBottomColor: '#000',
-    paddingBottom: 3,
-    marginBottom: 4,
+    paddingBottom: 2,
+    marginBottom: 3,
   },
   classRow: {
     flexDirection: 'row',
-    paddingVertical: 3,
+    paddingVertical: 2,
     borderBottomWidth: 0.5,
     borderBottomColor: '#ddd',
   },
-  colClassNo: { width: '10%' },
-  colClassName: { width: '30%' },
+  colClassNo: { width: '8%' },
+  colClassName: { width: '32%' },
   colClassSex: { width: '12%' },
   colClassBreed: { width: '20%' },
   colClassDesc: { width: '28%' },
   classHeaderText: {
-    fontSize: 8,
+    fontSize: 7,
     fontWeight: 'bold',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
   },
   classCellBold: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: 'bold',
   },
   classCell: {
-    fontSize: 9,
+    fontSize: 8,
   },
   classCellItalic: {
-    fontSize: 8,
+    fontSize: 7,
     fontStyle: 'italic',
     color: '#555',
   },
-  // ── Class definitions ──
+  // ── Definitions ──
   defBlock: {
-    marginBottom: 6,
+    marginBottom: 4,
   },
   defName: {
-    fontSize: 10,
+    fontSize: 8.5,
     fontWeight: 'bold',
-    marginBottom: 1,
+    marginBottom: 0.5,
   },
   defDescription: {
-    fontSize: 9,
+    fontSize: 7.5,
     color: '#333',
-    lineHeight: 1.4,
-  },
-  // ── Info section ──
-  infoBlock: {
-    marginBottom: 10,
-  },
-  infoLabel: {
-    fontSize: 9,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    color: '#555',
-    marginBottom: 2,
-  },
-  infoText: {
-    fontSize: 10,
-    lineHeight: 1.4,
+    lineHeight: 1.35,
   },
   // ── Entry form ──
   formField: {
     flexDirection: 'row',
-    marginBottom: 8,
+    marginBottom: 6,
     alignItems: 'flex-end',
   },
   formLabel: {
-    fontSize: 9,
+    fontSize: 7.5,
     fontWeight: 'bold',
-    width: 120,
+    width: 90,
   },
   formLine: {
     flex: 1,
     borderBottomWidth: 0.5,
     borderBottomColor: '#999',
-    height: 18,
-  },
-  formFieldTall: {
-    flexDirection: 'row',
-    marginBottom: 8,
-    alignItems: 'flex-start',
-  },
-  formBox: {
-    flex: 1,
-    borderWidth: 0.5,
-    borderColor: '#999',
-    height: 50,
+    height: 14,
   },
   formClassGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   formClassBox: {
     width: '18%',
     marginRight: '2%',
-    marginBottom: 6,
+    marginBottom: 5,
     borderWidth: 0.5,
     borderColor: '#999',
-    height: 22,
+    height: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
   formClassBoxLabel: {
-    fontSize: 7,
+    fontSize: 6,
     color: '#999',
-  },
-  // ── Fees table ──
-  feeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 3,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#ddd',
-  },
-  feeLabel: {
-    fontSize: 10,
-  },
-  feeValue: {
-    fontSize: 10,
-    fontWeight: 'bold',
   },
   // ── Footer ──
   footer: {
     position: 'absolute',
-    bottom: 18,
-    left: 40,
-    right: 40,
+    bottom: 14,
+    left: 25,
+    right: 25,
     textAlign: 'center',
-    fontSize: 7,
+    fontSize: 6,
     color: '#999',
     borderTopWidth: 0.5,
     borderTopColor: '#ddd',
-    paddingTop: 5,
+    paddingTop: 3,
   },
 });
 
@@ -350,8 +376,9 @@ export function ShowSchedule({
 }) {
   const showTypeLabel = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
   const showDate = formatDate(show.date);
+  const classCount = classes.length;
 
-  // Deduplicate class definitions for the definitions page
+  // Deduplicate class definitions
   const seenDefs = new Set<string>();
   const classDefinitions: { name: string; description: string }[] = [];
   for (const cls of classes) {
@@ -361,10 +388,13 @@ export function ShowSchedule({
     }
   }
 
+  const footerRender = ({ pageNumber, totalPages }: { pageNumber: number; totalPages: number }) =>
+    `${show.name} — Schedule — Page ${pageNumber} of ${totalPages}`;
+
   return (
     <Document title={`Schedule — ${show.name}`} author="Remi Show Manager">
       {/* ── Cover Page ── */}
-      <Page size="A4" style={s.coverPage}>
+      <Page size="A5" style={s.coverPage}>
         {show.organisation?.logoUrl && (
           <Image src={show.organisation.logoUrl} style={s.coverLogo} />
         )}
@@ -375,6 +405,9 @@ export function ShowSchedule({
 
         <Text style={s.coverShowName}>{show.name}</Text>
         <Text style={s.coverShowType}>{showTypeLabel}</Text>
+        <Text style={s.coverClassCount}>
+          {classCount} Class{classCount !== 1 ? 'es' : ''}
+        </Text>
 
         <Text style={s.coverRegulatory}>
           Held under Royal Kennel Club Rules &amp; Show Regulations F(1)
@@ -382,81 +415,102 @@ export function ShowSchedule({
 
         <View style={s.coverRule} />
 
-        <Text style={s.coverDetail}>{showDate}</Text>
+        {/* Key details in a compact label-value layout */}
+        <View style={s.coverDetailRow}>
+          <Text style={s.coverDetailLabel}>Date</Text>
+          <Text style={s.coverDetailValue}>{showDate}</Text>
+        </View>
 
         {show.venue && (
-          <Text style={s.coverDetail}>
-            {show.venue.name}
-            {show.venue.address ? `, ${show.venue.address}` : ''}
-            {show.venue.postcode ? ` ${show.venue.postcode}` : ''}
-          </Text>
+          <View style={s.coverDetailRow}>
+            <Text style={s.coverDetailLabel}>Venue</Text>
+            <Text style={s.coverDetailValue}>
+              {show.venue.name}
+              {show.venue.address ? `, ${show.venue.address}` : ''}
+              {show.venue.postcode ? ` ${show.venue.postcode}` : ''}
+            </Text>
+          </View>
+        )}
+
+        {judges.length > 0 && (
+          <View style={s.coverDetailRow}>
+            <Text style={s.coverDetailLabel}>Judge</Text>
+            <Text style={s.coverDetailValue}>
+              {judges.map((j) => j.name).join(', ')}
+            </Text>
+          </View>
         )}
 
         {show.startTime && (
-          <Text style={s.coverDetail}>Judging commences: {show.startTime}</Text>
+          <View style={s.coverDetailRow}>
+            <Text style={s.coverDetailLabel}>Judging</Text>
+            <Text style={s.coverDetailValue}>{formatTime(show.startTime)}</Text>
+          </View>
+        )}
+
+        {show.showOpenTime && (
+          <View style={s.coverDetailRow}>
+            <Text style={s.coverDetailLabel}>Doors Open</Text>
+            <Text style={s.coverDetailValue}>{formatTime(show.showOpenTime)}</Text>
+          </View>
         )}
 
         {show.kcLicenceNo && (
-          <View style={s.coverSection}>
-            <Text style={s.coverLabel}>KC Licence No</Text>
-            <Text style={s.coverValue}>{show.kcLicenceNo}</Text>
+          <View style={s.coverDetailRow}>
+            <Text style={s.coverDetailLabel}>KC Licence</Text>
+            <Text style={s.coverDetailValue}>{show.kcLicenceNo}</Text>
           </View>
         )}
 
-        {show.secretaryEmail && (
+        <View style={s.coverRule} />
+
+        {/* Secretary details */}
+        {(show.secretaryName || show.secretaryEmail) && (
           <View style={s.coverSection}>
-            <Text style={s.coverLabel}>Show Secretary</Text>
-            <Text style={s.coverValue}>{show.secretaryEmail}</Text>
+            <Text style={s.coverSectionTitle}>Show Secretary</Text>
+            {show.secretaryName && (
+              <Text style={s.coverSectionText}>{show.secretaryName}</Text>
+            )}
+            {show.secretaryAddress && (
+              <Text style={s.coverSectionText}>{show.secretaryAddress}</Text>
+            )}
+            {show.secretaryPhone && (
+              <Text style={s.coverSectionText}>Tel: {show.secretaryPhone}</Text>
+            )}
+            {show.secretaryEmail && (
+              <Text style={s.coverSectionText}>{show.secretaryEmail}</Text>
+            )}
           </View>
         )}
+
+        {/* On-call vet */}
+        {show.onCallVet && (
+          <View style={{ ...s.coverSection, marginTop: 6 }}>
+            <Text style={s.coverSectionTitle}>On-Call Veterinary Surgeon</Text>
+            <Text style={s.coverSectionText}>{show.onCallVet}</Text>
+          </View>
+        )}
+
+        {/* Online entries */}
+        <View style={{ ...s.coverSection, marginTop: 10 }}>
+          <Text style={{ ...s.coverSectionText, fontSize: 7.5, color: '#666' }}>
+            Enter online at remishowmanager.co.uk
+          </Text>
+        </View>
 
         {show.organisation?.website && (
-          <View style={s.coverSection}>
-            <Text style={s.coverLabel}>Website</Text>
-            <Text style={s.coverValue}>{show.organisation.website}</Text>
+          <View style={{ ...s.coverSection, marginTop: 2 }}>
+            <Text style={{ ...s.coverSectionText, fontSize: 7.5, color: '#666' }}>
+              {show.organisation.website}
+            </Text>
           </View>
         )}
 
-        <Text
-          style={s.footer}
-          render={({ pageNumber, totalPages }) =>
-            `${show.name} — Schedule — Page ${pageNumber} of ${totalPages} — Generated by Remi`
-          }
-          fixed
-        />
+        <Text style={s.footer} render={footerRender} fixed />
       </Page>
 
-      {/* ── Judges Page ── */}
-      {judges.length > 0 && (
-        <Page size="A4" style={s.page}>
-          <Text style={s.sectionTitle}>Judges</Text>
-
-          <View style={{ ...s.judgeRow, borderBottomWidth: 1.5, borderBottomColor: '#000', marginBottom: 4 }}>
-            <Text style={{ ...s.judgeName, fontWeight: 'bold' }}>Judge</Text>
-            <Text style={{ ...s.judgeBreeds, fontWeight: 'bold' }}>Breeds</Text>
-          </View>
-
-          {judges.map((judge, i) => (
-            <View key={i} style={s.judgeRow}>
-              <Text style={s.judgeName}>{judge.name}</Text>
-              <Text style={s.judgeBreeds}>
-                {judge.breeds.length > 0 ? judge.breeds.join(', ') : 'All breeds'}
-              </Text>
-            </View>
-          ))}
-
-          <Text
-            style={s.footer}
-            render={({ pageNumber, totalPages }) =>
-              `${show.name} — Schedule — Page ${pageNumber} of ${totalPages} — Generated by Remi`
-            }
-            fixed
-          />
-        </Page>
-      )}
-
-      {/* ── Entry Fees & Dates Page ── */}
-      <Page size="A4" style={s.page}>
+      {/* ── Entry Information Page ── */}
+      <Page size="A5" style={s.page}>
         <Text style={s.sectionTitle}>Entry Information</Text>
 
         {/* Fees */}
@@ -511,7 +565,7 @@ export function ShowSchedule({
           </View>
         </View>
 
-        {/* Venue details */}
+        {/* Venue */}
         {show.venue && (
           <View style={s.infoBlock}>
             <Text style={s.infoLabel}>Venue</Text>
@@ -525,6 +579,21 @@ export function ShowSchedule({
           </View>
         )}
 
+        {/* Judges */}
+        {judges.length > 0 && (
+          <View style={s.infoBlock}>
+            <Text style={s.infoLabel}>Judges</Text>
+            {judges.map((judge, i) => (
+              <View key={i} style={s.judgeRow}>
+                <Text style={s.judgeName}>{judge.name}</Text>
+                <Text style={s.judgeBreeds}>
+                  {judge.breeds.length > 0 ? judge.breeds.join(', ') : 'All breeds'}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+
         {/* Online entries */}
         <View style={s.infoBlock}>
           <Text style={s.infoLabel}>Online Entries</Text>
@@ -533,7 +602,7 @@ export function ShowSchedule({
           </Text>
         </View>
 
-        {/* Description / additional info */}
+        {/* Additional info */}
         {show.description && (
           <View style={s.infoBlock}>
             <Text style={s.infoLabel}>Additional Information</Text>
@@ -541,17 +610,11 @@ export function ShowSchedule({
           </View>
         )}
 
-        <Text
-          style={s.footer}
-          render={({ pageNumber, totalPages }) =>
-            `${show.name} — Schedule — Page ${pageNumber} of ${totalPages} — Generated by Remi`
-          }
-          fixed
-        />
+        <Text style={s.footer} render={footerRender} fixed />
       </Page>
 
-      {/* ── Classes Page ── */}
-      <Page size="A4" style={s.page}>
+      {/* ── Schedule of Classes ── */}
+      <Page size="A5" style={s.page}>
         <Text style={s.sectionTitle}>Schedule of Classes</Text>
 
         <View style={s.classTableHeader}>
@@ -577,9 +640,7 @@ export function ShowSchedule({
           return (
             <View key={i} style={s.classRow} wrap={false}>
               <View style={s.colClassNo}>
-                <Text style={s.classCellBold}>
-                  {cls.classNumber ?? ''}
-                </Text>
+                <Text style={s.classCellBold}>{cls.classNumber ?? ''}</Text>
               </View>
               <View style={s.colClassName}>
                 <Text style={s.classCellBold}>{cls.className}</Text>
@@ -591,26 +652,18 @@ export function ShowSchedule({
                 <Text style={s.classCell}>{cls.breedName ?? ''}</Text>
               </View>
               <View style={s.colClassDesc}>
-                <Text style={s.classCellItalic}>
-                  {cls.classDescription ?? ''}
-                </Text>
+                <Text style={s.classCellItalic}>{cls.classDescription ?? ''}</Text>
               </View>
             </View>
           );
         })}
 
-        <Text
-          style={s.footer}
-          render={({ pageNumber, totalPages }) =>
-            `${show.name} — Schedule — Page ${pageNumber} of ${totalPages} — Generated by Remi`
-          }
-          fixed
-        />
+        <Text style={s.footer} render={footerRender} fixed />
       </Page>
 
-      {/* ── Class Definitions Page ── */}
+      {/* ── Definitions of Classes ── */}
       {classDefinitions.length > 0 && (
-        <Page size="A4" style={s.page}>
+        <Page size="A5" style={s.page}>
           <Text style={s.sectionTitle}>Definitions of Classes</Text>
 
           {classDefinitions.map((def) => (
@@ -620,26 +673,19 @@ export function ShowSchedule({
             </View>
           ))}
 
-          <Text
-            style={s.footer}
-            render={({ pageNumber, totalPages }) =>
-              `${show.name} — Schedule — Page ${pageNumber} of ${totalPages} — Generated by Remi`
-            }
-            fixed
-          />
+          <Text style={s.footer} render={footerRender} fixed />
         </Page>
       )}
 
-      {/* ── Entry Form Page ── */}
-      <Page size="A4" style={s.page}>
+      {/* ── Entry Form ── */}
+      <Page size="A5" style={s.page}>
         <Text style={s.sectionTitle}>Entry Form</Text>
 
-        <Text style={{ fontSize: 8, color: '#666', marginBottom: 12, textAlign: 'center', fontStyle: 'italic' }}>
+        <Text style={{ fontSize: 7, color: '#666', marginBottom: 8, textAlign: 'center', fontStyle: 'italic' }}>
           Enter online at remishowmanager.co.uk — or complete this form and post to the show secretary
         </Text>
 
-        {/* Show name */}
-        <Text style={{ fontSize: 9, fontWeight: 'bold', marginBottom: 10 }}>
+        <Text style={{ fontSize: 8, fontWeight: 'bold', marginBottom: 8 }}>
           {show.organisation?.name} — {show.name} — {formatShortDate(show.date)}
         </Text>
 
@@ -658,8 +704,8 @@ export function ShowSchedule({
         </View>
         <View style={s.formField}>
           <Text style={s.formLabel}>Postcode</Text>
-          <View style={{ ...s.formLine, maxWidth: 120 }} />
-          <Text style={{ ...s.formLabel, marginLeft: 20 }}>Tel</Text>
+          <View style={{ ...s.formLine, maxWidth: 90 }} />
+          <Text style={{ ...s.formLabel, marginLeft: 12 }}>Tel</Text>
           <View style={s.formLine} />
         </View>
         <View style={s.formField}>
@@ -667,7 +713,7 @@ export function ShowSchedule({
           <View style={s.formLine} />
         </View>
 
-        <View style={{ borderBottomWidth: 0.5, borderBottomColor: '#ccc', marginVertical: 10 }} />
+        <View style={{ borderBottomWidth: 0.5, borderBottomColor: '#ccc', marginVertical: 6 }} />
 
         {/* Dog details */}
         <View style={s.formField}>
@@ -680,14 +726,14 @@ export function ShowSchedule({
         </View>
         <View style={s.formField}>
           <Text style={s.formLabel}>KC Reg. No.</Text>
-          <View style={{ ...s.formLine, maxWidth: 150 }} />
-          <Text style={{ ...s.formLabel, marginLeft: 20 }}>Sex</Text>
-          <View style={{ ...s.formLine, maxWidth: 80 }} />
+          <View style={{ ...s.formLine, maxWidth: 110 }} />
+          <Text style={{ ...s.formLabel, marginLeft: 12 }}>Sex</Text>
+          <View style={{ ...s.formLine, maxWidth: 60 }} />
         </View>
         <View style={s.formField}>
           <Text style={s.formLabel}>Date of Birth</Text>
-          <View style={{ ...s.formLine, maxWidth: 120 }} />
-          <Text style={{ ...s.formLabel, marginLeft: 20 }}>Colour</Text>
+          <View style={{ ...s.formLine, maxWidth: 90 }} />
+          <Text style={{ ...s.formLabel, marginLeft: 12 }}>Colour</Text>
           <View style={s.formLine} />
         </View>
         <View style={s.formField}>
@@ -703,10 +749,10 @@ export function ShowSchedule({
           <View style={s.formLine} />
         </View>
 
-        <View style={{ borderBottomWidth: 0.5, borderBottomColor: '#ccc', marginVertical: 10 }} />
+        <View style={{ borderBottomWidth: 0.5, borderBottomColor: '#ccc', marginVertical: 6 }} />
 
-        {/* Classes entered */}
-        <Text style={{ ...s.formLabel, marginBottom: 6 }}>
+        {/* Classes */}
+        <Text style={{ ...s.formLabel, marginBottom: 4 }}>
           Classes Entered (write class numbers)
         </Text>
         <View style={s.formClassGrid}>
@@ -717,23 +763,21 @@ export function ShowSchedule({
           ))}
         </View>
 
-        {/* Handler */}
         <View style={s.formField}>
           <Text style={s.formLabel}>Handler (if not owner)</Text>
           <View style={s.formLine} />
         </View>
 
-        {/* Fees */}
-        <View style={{ borderBottomWidth: 0.5, borderBottomColor: '#ccc', marginVertical: 10 }} />
+        <View style={{ borderBottomWidth: 0.5, borderBottomColor: '#ccc', marginVertical: 6 }} />
         <View style={s.formField}>
           <Text style={s.formLabel}>Total Fee Enclosed</Text>
-          <Text style={{ fontSize: 9, fontWeight: 'bold' }}>£</Text>
-          <View style={{ ...s.formLine, maxWidth: 80 }} />
+          <Text style={{ fontSize: 8, fontWeight: 'bold' }}>£</Text>
+          <View style={{ ...s.formLine, maxWidth: 60 }} />
         </View>
 
         {/* Declaration */}
-        <View style={{ marginTop: 12, padding: 8, borderWidth: 0.5, borderColor: '#999' }}>
-          <Text style={{ fontSize: 8, lineHeight: 1.5 }}>
+        <View style={{ marginTop: 6, padding: 6, borderWidth: 0.5, borderColor: '#999' }}>
+          <Text style={{ fontSize: 6.5, lineHeight: 1.5 }}>
             I/We agree to submit to and be bound by Royal Kennel Club Rules and Show Regulations F(1)
             in their present form or as they may be amended from time to time. I/We also agree to
             submit to the regulations of this show and not to bring to the show any dog which has
@@ -748,26 +792,20 @@ export function ShowSchedule({
         </View>
 
         {/* Signature */}
-        <View style={{ flexDirection: 'row', marginTop: 16, justifyContent: 'space-between' }}>
+        <View style={{ flexDirection: 'row', marginTop: 10, justifyContent: 'space-between' }}>
           <View style={{ width: '55%' }}>
-            <Text style={{ fontSize: 8, fontWeight: 'bold', marginBottom: 2 }}>
+            <Text style={{ fontSize: 7, fontWeight: 'bold', marginBottom: 2 }}>
               Signature of Owner
             </Text>
-            <View style={{ borderBottomWidth: 1, borderBottomColor: '#000', height: 24 }} />
+            <View style={{ borderBottomWidth: 1, borderBottomColor: '#000', height: 18 }} />
           </View>
           <View style={{ width: '30%' }}>
-            <Text style={{ fontSize: 8, fontWeight: 'bold', marginBottom: 2 }}>Date</Text>
-            <View style={{ borderBottomWidth: 1, borderBottomColor: '#000', height: 24 }} />
+            <Text style={{ fontSize: 7, fontWeight: 'bold', marginBottom: 2 }}>Date</Text>
+            <View style={{ borderBottomWidth: 1, borderBottomColor: '#000', height: 18 }} />
           </View>
         </View>
 
-        <Text
-          style={s.footer}
-          render={({ pageNumber, totalPages }) =>
-            `${show.name} — Schedule — Page ${pageNumber} of ${totalPages} — Generated by Remi`
-          }
-          fixed
-        />
+        <Text style={s.footer} render={footerRender} fixed />
       </Page>
     </Document>
   );
