@@ -1,11 +1,94 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { eq, desc, sql } from 'drizzle-orm';
+import { Resend } from 'resend';
 import { protectedProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { feedback } from '@/server/db/schema';
 
+const resend = new Resend(process.env.RESEND_API_KEY);
+
 export const feedbackRouter = createTRPCRouter({
+  submit: protectedProcedure
+    .input(
+      z.object({
+        subject: z.string().min(3).max(500),
+        body: z.string().min(5).max(5000),
+        pageUrl: z.string().max(2000),
+        userAgent: z.string().max(1000).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const user = ctx.session.user;
+      const fromEmail = user.email ?? 'unknown@user';
+      const fromName = user.name ?? undefined;
+
+      // Generate a unique ID for this widget submission (not from email)
+      const widgetId = `widget-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+      const diagnostics = [
+        `Page: ${input.pageUrl}`,
+        input.userAgent ? `Browser: ${input.userAgent}` : null,
+        `User: ${fromName ? `${fromName} (${fromEmail})` : fromEmail}`,
+        `Role: ${user.role ?? 'unknown'}`,
+        `User ID: ${user.id}`,
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      const fullBody = `${input.body}\n\n---\nDiagnostics:\n${diagnostics}`;
+
+      const [inserted] = await ctx.db
+        .insert(feedback)
+        .values({
+          resendEmailId: widgetId,
+          fromEmail,
+          fromName: fromName ?? null,
+          subject: input.subject,
+          textBody: fullBody,
+          htmlBody: null,
+          inReplyToSubject: null,
+          status: 'pending',
+        })
+        .returning();
+
+      // Notify Michael & Amanda
+      const notifyEmails = [
+        process.env.FEEDBACK_NOTIFY_EMAIL,
+        'mandy@hundarkgsd.co.uk',
+      ].filter(Boolean) as string[];
+
+      if (notifyEmails.length > 0) {
+        const displaySender = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
+        resend.emails
+          .send({
+            from: process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>',
+            to: notifyEmails,
+            replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+            subject: `Support request from ${fromName ?? fromEmail}: ${input.subject}`,
+            html: `<div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+<h2 style="color: #1a1a1a;">New Support Request</h2>
+<p><strong>From:</strong> ${displaySender}</p>
+<p><strong>Subject:</strong> ${input.subject}</p>
+<p><strong>Page:</strong> ${input.pageUrl}</p>
+<hr style="border: none; border-top: 1px solid #ddd; margin: 16px 0;">
+<p style="white-space: pre-wrap;">${input.body}</p>
+<hr style="border: none; border-top: 1px solid #ddd; margin: 16px 0;">
+<p style="color: #666; font-size: 13px;">
+<strong>Diagnostics:</strong><br>
+${diagnostics.replace(/\n/g, '<br>')}
+</p>
+<p style="margin-top: 20px;"><a href="https://remishowmanager.co.uk/feedback">View in Remi</a></p>
+</div>`,
+          })
+          .catch((err) =>
+            console.error('[feedback-widget] Notification email failed:', err)
+          );
+      }
+
+      return { id: inserted.id };
+    }),
+
   list: protectedProcedure
     .input(
       z.object({

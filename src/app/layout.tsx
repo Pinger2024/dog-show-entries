@@ -6,6 +6,7 @@ import { ImpersonationBannerWrapper } from '@/components/layout/impersonation-ba
 import { ServiceWorkerRegistration } from '@/components/pwa/sw-registration';
 import { InstallPrompt } from '@/components/pwa/install-prompt';
 import { UpdateNotification } from '@/components/pwa/update-notification';
+import { ReportProblemWidget } from '@/components/report-problem-widget';
 import './globals.css';
 
 const inter = Inter({
@@ -73,6 +74,7 @@ export default function RootLayout({
           <ImpersonationBannerWrapper />
           {children}
           <Toaster richColors position="top-right" />
+          <ReportProblemWidget />
           <ServiceWorkerRegistration />
           <InstallPrompt />
           <UpdateNotification />
