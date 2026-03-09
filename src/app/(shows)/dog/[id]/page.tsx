@@ -13,12 +13,18 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
 
-  const dog = await db?.query.dogs.findFirst({
-    where: and(eq(dogs.id, id), isNull(dogs.deletedAt)),
-    with: {
-      breed: true,
-    },
-  });
+  const [dog, primaryPhoto] = await Promise.all([
+    db?.query.dogs.findFirst({
+      where: and(eq(dogs.id, id), isNull(dogs.deletedAt)),
+      with: {
+        breed: true,
+      },
+    }),
+    db?.query.dogPhotos.findFirst({
+      where: and(eq(dogPhotos.dogId, id), eq(dogPhotos.isPrimary, true)),
+      columns: { url: true },
+    }),
+  ]);
 
   if (!dog) {
     return { title: 'Dog Not Found' };
@@ -27,6 +33,7 @@ export async function generateMetadata({
   const breedName = dog.breed?.name ?? 'Dog';
   const title = dog.registeredName;
   const description = `${breedName} — View profile, show history, and results on Remi.`;
+  const ogImages = primaryPhoto?.url ? [{ url: primaryPhoto.url, width: 1200, height: 630 }] : [];
 
   return {
     title,
@@ -36,11 +43,13 @@ export async function generateMetadata({
       description,
       type: 'profile',
       url: `${BASE_URL}/dog/${id}`,
+      ...(ogImages.length > 0 && { images: ogImages }),
     },
     twitter: {
       card: 'summary_large_image',
       title,
       description,
+      ...(ogImages.length > 0 && { images: [primaryPhoto!.url] }),
     },
   };
 }

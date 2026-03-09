@@ -20,6 +20,8 @@ import {
   Heart,
   BookOpen,
   Clock,
+  Camera,
+  Settings,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { Badge } from '@/components/ui/badge';
@@ -260,6 +262,7 @@ export function DogProfileClient({ id }: { id: string }) {
   }
 
   const { dog, titles, achievements, showHistory, stats } = data;
+  const isOwner = !!session?.user && (session.user as { id?: string }).id === dog.ownerId;
   const titlePrefix = getTitlePrefix(titles);
   const primaryPhoto = photos?.find((p) => p.isPrimary) ?? photos?.[0];
   const galleryPhotos = photos?.filter((p) => p.id !== primaryPhoto?.id) ?? [];
@@ -298,22 +301,33 @@ export function DogProfileClient({ id }: { id: string }) {
           <ArrowLeft className="size-3.5" />
           Back
         </button>
-        <button
-          onClick={handleShare}
-          className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-[0.8125rem] text-stone-500 transition-all hover:border-stone-300 hover:text-stone-700"
-        >
-          {copied ? (
-            <>
-              <Check className="size-3.5 text-emerald-500" />
-              Copied
-            </>
-          ) : (
-            <>
-              <Share2 className="size-3.5" />
-              Share
-            </>
+        <div className="flex items-center gap-2">
+          {isOwner && (
+            <Link
+              href={`/dogs/${id}`}
+              className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-[0.8125rem] text-stone-500 transition-all hover:border-stone-300 hover:text-stone-700"
+            >
+              <Settings className="size-3.5" />
+              Edit
+            </Link>
           )}
-        </button>
+          <button
+            onClick={handleShare}
+            className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-[0.8125rem] text-stone-500 transition-all hover:border-stone-300 hover:text-stone-700"
+          >
+            {copied ? (
+              <>
+                <Check className="size-3.5 text-emerald-500" />
+                Copied
+              </>
+            ) : (
+              <>
+                <Share2 className="size-3.5" />
+                Share
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* ─── Hero section ─── */}
@@ -334,6 +348,16 @@ export function DogProfileClient({ id }: { id: string }) {
                 priority
               />
             </div>
+          ) : isOwner ? (
+            <Link
+              href={`/dogs/${id}`}
+              className="group flex aspect-[4/5] w-full max-w-xs flex-col items-center justify-center gap-3 rounded-sm border-2 border-dashed border-stone-200 bg-stone-50 transition-colors hover:border-stone-300 hover:bg-stone-100 sm:max-w-sm"
+            >
+              <Camera className="size-10 text-stone-300 transition-colors group-hover:text-stone-400" />
+              <span className="text-sm font-medium text-stone-400 transition-colors group-hover:text-stone-500">
+                Add a profile photo
+              </span>
+            </Link>
           ) : (
             <div className="flex aspect-[4/5] w-full max-w-xs items-center justify-center rounded-sm bg-stone-100 sm:max-w-sm">
               <Dog className="size-16 text-stone-200" />
@@ -388,7 +412,7 @@ export function DogProfileClient({ id }: { id: string }) {
       <div className="mx-auto max-w-2xl px-5 sm:px-8">
         {/* Follow button + count */}
         <div className="mt-6 flex items-center justify-center gap-4">
-          {session?.user && data && (session.user as { id?: string }).id !== data.dog.ownerId && (
+          {session?.user && !isOwner && (
             <button
               onClick={() => toggleFollow.mutate({ dogId: id })}
               disabled={toggleFollow.isPending}
@@ -445,11 +469,7 @@ export function DogProfileClient({ id }: { id: string }) {
         {activeTab === 'timeline' ? (
           <DogTimeline
             dogId={id}
-            isOwner={
-              !!session?.user &&
-              !!data &&
-              (session.user as { id?: string }).id === data.dog.ownerId
-            }
+            isOwner={isOwner}
           />
         ) : (
         <>
