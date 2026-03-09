@@ -1,7 +1,10 @@
 import { initTRPC, TRPCError } from '@trpc/server';
 import superjson from 'superjson';
+import { eq } from 'drizzle-orm';
 import { db } from '@/server/db';
 import type { Database } from '@/server/db';
+import { getImpersonatedUserId } from '@/lib/impersonation';
+import * as schema from '@/server/db/schema';
 
 export interface Session {
   user: {
@@ -15,6 +18,12 @@ export interface Session {
 export interface TRPCContext {
   db: Database;
   session: Session | null;
+  impersonating: {
+    id: string;
+    email: string;
+    name: string;
+    role: string;
+  } | null;
 }
 
 export async function createTRPCContext(opts: {
@@ -41,9 +50,42 @@ export async function createTRPCContext(opts: {
     // Auth not fully wired yet — session stays null
   }
 
+  // Check for admin impersonation
+  let impersonating: TRPCContext['impersonating'] = null;
+
+  if (session?.user.role === 'admin') {
+    try {
+      const impersonatedUserId = await getImpersonatedUserId();
+      if (impersonatedUserId && impersonatedUserId !== session.user.id) {
+        const [targetUser] = await db
+          .select({
+            id: schema.users.id,
+            email: schema.users.email,
+            name: schema.users.name,
+            role: schema.users.role,
+          })
+          .from(schema.users)
+          .where(eq(schema.users.id, impersonatedUserId))
+          .limit(1);
+
+        if (targetUser) {
+          impersonating = {
+            id: targetUser.id,
+            email: targetUser.email ?? '',
+            name: targetUser.name ?? '',
+            role: targetUser.role,
+          };
+        }
+      }
+    } catch {
+      // Cookie read failed — continue without impersonation
+    }
+  }
+
   return {
     db,
     session,
+    impersonating,
   };
 }
 

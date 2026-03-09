@@ -10,6 +10,7 @@ import {
   CalendarDays,
   Inbox,
   UserPlus,
+  Users,
   Database,
   ClipboardCheck,
   Sparkles,
@@ -41,6 +42,7 @@ const navItems = [
 
 const adminNavItems = [
   { href: '/feedback', label: 'Feedback', mobileLabel: 'Feedback', icon: Inbox },
+  { href: '/admin/users', label: 'Users', mobileLabel: 'Users', icon: Users },
   { href: '/admin/applications', label: 'Applications', mobileLabel: 'Apps', icon: ClipboardCheck },
   { href: '/admin/invitations', label: 'Invitations', mobileLabel: 'Invites', icon: UserPlus },
   { href: '/admin/reference-data', label: 'Reference Data', mobileLabel: 'Ref Data', icon: Database },

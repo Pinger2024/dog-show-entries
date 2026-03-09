@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter, Libre_Baskerville } from 'next/font/google';
 import { Toaster } from '@/components/ui/sonner';
 import { Providers } from '@/components/providers';
-import { AccountSwitcher } from '@/components/dev/account-switcher';
+import { ImpersonationBannerWrapper } from '@/components/layout/impersonation-banner-wrapper';
 import { ServiceWorkerRegistration } from '@/components/pwa/sw-registration';
 import { InstallPrompt } from '@/components/pwa/install-prompt';
 import { UpdateNotification } from '@/components/pwa/update-notification';
@@ -70,12 +70,12 @@ export default function RootLayout({
         className={`${inter.variable} ${libreBaskerville.variable} antialiased`}
       >
         <Providers>
+          <ImpersonationBannerWrapper />
           {children}
           <Toaster richColors position="top-right" />
           <ServiceWorkerRegistration />
           <InstallPrompt />
           <UpdateNotification />
-          <AccountSwitcher />
         </Providers>
       </body>
     </html>

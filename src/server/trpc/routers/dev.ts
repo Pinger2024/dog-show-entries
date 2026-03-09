@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, middleware, baseProcedure } from '../init';
-import { users } from '@/server/db/schema';
+import { users, entries } from '@/server/db/schema';
 
 // Account switcher access: admin role OR specific allowed emails
 const ALLOWED_EMAILS = ['michael@prometheus-it.com', 'mandy@hundarkgsd.co.uk'];
@@ -27,19 +27,26 @@ const devProcedure = baseProcedure.use(isDevAuthorised);
 
 export const devRouter = createTRPCRouter({
   /**
-   * List all users for the account switcher.
+   * List all users for the account switcher / admin user management.
+   * Includes entry count and timestamps for richer admin views.
    */
   listUsers: devProcedure.query(async ({ ctx }) => {
-    const allUsers = await ctx.db.query.users.findMany({
-      columns: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        image: true,
-      },
-      orderBy: (u, { asc }) => [asc(u.name)],
-    });
+    const allUsers = await ctx.db
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        role: users.role,
+        image: users.image,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+        entryCount: sql<number>`cast(count(${entries.id}) as int)`,
+      })
+      .from(users)
+      .leftJoin(entries, eq(entries.exhibitorId, users.id))
+      .groupBy(users.id)
+      .orderBy(users.name);
+
     return allUsers;
   }),
 
