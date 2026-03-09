@@ -30,15 +30,7 @@ import {
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-
-const showTypeLabels: Record<string, string> = {
-  companion: 'Companion',
-  primary: 'Primary',
-  limited: 'Limited',
-  open: 'Open',
-  premier_open: 'Premier Open',
-  championship: 'Championship',
-};
+import { showTypeLabels } from '@/lib/show-types';
 
 const showTypeMeta: Record<string, { accent: string; bg: string }> = {
   companion:    { accent: 'bg-emerald-500', bg: 'bg-emerald-50 text-emerald-700' },

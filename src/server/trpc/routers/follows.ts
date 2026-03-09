@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { and, eq, sql, isNull } from 'drizzle-orm';
+import { and, eq, sql, isNull, inArray } from 'drizzle-orm';
 import { protectedProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { dogFollows, dogs, dogPhotos } from '@/server/db/schema';
@@ -76,7 +76,7 @@ export const followsRouter = createTRPCRouter({
     if (dogIds.length > 0) {
       const photos = await ctx.db.query.dogPhotos.findMany({
         where: and(
-          sql`${dogPhotos.dogId} = ANY(${dogIds})`,
+          inArray(dogPhotos.dogId, dogIds),
           eq(dogPhotos.isPrimary, true)
         ),
       });

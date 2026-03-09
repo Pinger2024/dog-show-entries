@@ -103,7 +103,7 @@ export const timelineRouter = createTRPCRouter({
         author: p.author,
       }));
 
-      // Filter show results by cursor if needed
+      // Filter show results by cursor
       const filteredResults = input.cursor
         ? showResults.filter((r) => r.createdAt < new Date(input.cursor!))
         : showResults;
@@ -112,12 +112,15 @@ export const timelineRouter = createTRPCRouter({
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
         .slice(0, input.limit);
 
-      const hasMore = userPosts.length > input.limit;
-      const nextCursor = allItems.length > 0
+      // hasMore if posts had more, or if we had to trim the merged results
+      const hasMore =
+        userPosts.length > input.limit ||
+        postItems.length + filteredResults.length > input.limit;
+      const nextCursor = hasMore && allItems.length > 0
         ? allItems[allItems.length - 1].createdAt.toISOString()
         : undefined;
 
-      return { items: allItems, nextCursor: hasMore ? nextCursor : undefined };
+      return { items: allItems, nextCursor };
     }),
 
   /** Create a timeline post (must be dog owner) */
@@ -216,17 +219,17 @@ export const timelineRouter = createTRPCRouter({
       })
     )
     .query(async ({ ctx, input }) => {
-      // Get followed dog IDs
-      const followedDogs = await ctx.db
-        .select({ dogId: dogFollows.dogId })
-        .from(dogFollows)
-        .where(eq(dogFollows.userId, ctx.session.user.id));
-
-      // Also include user's own dogs
-      const ownDogs = await ctx.db
-        .select({ id: dogs.id })
-        .from(dogs)
-        .where(and(eq(dogs.ownerId, ctx.session.user.id), isNull(dogs.deletedAt)));
+      // Get followed dog IDs and own dogs in parallel
+      const [followedDogs, ownDogs] = await Promise.all([
+        ctx.db
+          .select({ dogId: dogFollows.dogId })
+          .from(dogFollows)
+          .where(eq(dogFollows.userId, ctx.session.user.id)),
+        ctx.db
+          .select({ id: dogs.id })
+          .from(dogs)
+          .where(and(eq(dogs.ownerId, ctx.session.user.id), isNull(dogs.deletedAt))),
+      ]);
 
       const allDogIds = [
         ...new Set([
@@ -239,7 +242,7 @@ export const timelineRouter = createTRPCRouter({
         return { items: [], nextCursor: undefined };
       }
 
-      // Fetch timeline posts for all dogs
+      // Fetch posts, entries, and photos in parallel
       const postWhere = input.cursor
         ? and(
             inArray(dogTimelinePosts.dogId, allDogIds),
@@ -247,57 +250,54 @@ export const timelineRouter = createTRPCRouter({
           )
         : inArray(dogTimelinePosts.dogId, allDogIds);
 
-      const userPosts = await ctx.db.query.dogTimelinePosts.findMany({
-        where: postWhere,
-        orderBy: [desc(dogTimelinePosts.createdAt)],
-        limit: input.limit + 1,
-        with: {
-          author: { columns: { id: true, name: true } },
-          dog: {
-            columns: { id: true, registeredName: true },
-            with: {
-              breed: { columns: { name: true } },
+      const [userPosts, dogEntries, primaryPhotos] = await Promise.all([
+        ctx.db.query.dogTimelinePosts.findMany({
+          where: postWhere,
+          orderBy: [desc(dogTimelinePosts.createdAt)],
+          limit: input.limit + 1,
+          with: {
+            author: { columns: { id: true, name: true } },
+            dog: {
+              columns: { id: true, registeredName: true },
+              with: {
+                breed: { columns: { name: true } },
+              },
             },
           },
-        },
-      });
-
-      // Fetch show results for all followed dogs
-      const dogEntries = await ctx.db.query.entries.findMany({
-        where: and(
-          inArray(entries.dogId, allDogIds),
-          eq(entries.status, 'confirmed'),
-          isNull(entries.deletedAt)
-        ),
-        with: {
-          show: true,
-          dog: {
-            columns: { id: true, registeredName: true },
-            with: {
-              breed: { columns: { name: true } },
+        }),
+        ctx.db.query.entries.findMany({
+          where: and(
+            inArray(entries.dogId, allDogIds),
+            eq(entries.status, 'confirmed'),
+            isNull(entries.deletedAt)
+          ),
+          with: {
+            show: true,
+            dog: {
+              columns: { id: true, registeredName: true },
+              with: {
+                breed: { columns: { name: true } },
+              },
+            },
+            entryClasses: {
+              with: {
+                showClass: { with: { classDefinition: true } },
+                result: true,
+              },
             },
           },
-          entryClasses: {
-            with: {
-              showClass: { with: { classDefinition: true } },
-              result: true,
-            },
-          },
-        },
-      });
-
-      // Get primary photos for all dogs in the feed
-      const dogPhotoMap = new Map<string, string>();
-      if (allDogIds.length > 0) {
-        const primaryPhotos = await ctx.db.query.dogPhotos.findMany({
+        }),
+        ctx.db.query.dogPhotos.findMany({
           where: and(
             inArray(dogPhotos.dogId, allDogIds),
             eq(dogPhotos.isPrimary, true)
           ),
-        });
-        for (const photo of primaryPhotos) {
-          dogPhotoMap.set(photo.dogId, photo.url);
-        }
+        }),
+      ]);
+
+      const dogPhotoMap = new Map<string, string>();
+      for (const photo of primaryPhotos) {
+        dogPhotoMap.set(photo.dogId, photo.url);
       }
 
       const showResults = dogEntries
@@ -353,11 +353,14 @@ export const timelineRouter = createTRPCRouter({
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
         .slice(0, input.limit);
 
-      const hasMore = userPosts.length > input.limit || filteredResults.length > input.limit;
-      const nextCursor = allItems.length > 0
+      // hasMore if posts had more, or if we had to trim the merged results
+      const hasMore =
+        userPosts.length > input.limit ||
+        postItems.length + filteredResults.length > input.limit;
+      const nextCursor = hasMore && allItems.length > 0
         ? allItems[allItems.length - 1].createdAt.toISOString()
         : undefined;
 
-      return { items: allItems, nextCursor: hasMore ? nextCursor : undefined };
+      return { items: allItems, nextCursor };
     }),
 });

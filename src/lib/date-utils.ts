@@ -1,4 +1,4 @@
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, formatDistanceToNow, isToday, isYesterday } from 'date-fns';
 
 /**
  * Formats a date range for display.
@@ -55,4 +55,24 @@ export function penceToPounds(pence: number): number {
  */
 export function penceToPoundsString(pence: number): string {
   return (pence / 100).toFixed(2);
+}
+
+/**
+ * Formats a date as a human-friendly relative string.
+ * - Today: "Today at 3:15 PM"
+ * - Yesterday: "Yesterday"
+ * - Within 7 days: "3 days ago"
+ * - Older (same year): "15 March"
+ * - Older (different year): "15 March 2024"
+ */
+export function formatRelativeDate(date: Date): string {
+  if (isToday(date)) return `Today at ${format(date, 'h:mm a')}`;
+  if (isYesterday(date)) return 'Yesterday';
+  const daysDiff = (Date.now() - date.getTime()) / (1000 * 60 * 60 * 24);
+  if (daysDiff < 7) return formatDistanceToNow(date, { addSuffix: true });
+  const year = date.getFullYear();
+  const currentYear = new Date().getFullYear();
+  return year === currentYear
+    ? format(date, 'd MMMM')
+    : format(date, 'd MMMM yyyy');
 }

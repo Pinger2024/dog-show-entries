@@ -4,7 +4,7 @@ import { useState, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
-import { format, parseISO, formatDistanceToNow, isToday, isYesterday } from 'date-fns';
+import { format } from 'date-fns';
 import {
   Trophy,
   Award,
@@ -20,30 +20,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { getPlacementLabel, placementColors } from '@/lib/placements';
-
-const showTypeLabels: Record<string, string> = {
-  companion: 'Companion',
-  primary: 'Primary',
-  limited: 'Limited',
-  open: 'Open',
-  premier_open: 'Premier Open',
-  championship: 'Championship',
-};
-
-function formatRelativeDate(date: Date): string {
-  if (isToday(date)) return `Today at ${format(date, 'h:mm a')}`;
-  if (isYesterday(date)) return 'Yesterday';
-  const distance = formatDistanceToNow(date, { addSuffix: true });
-  // For anything within the last week, use relative
-  const daysDiff = (Date.now() - date.getTime()) / (1000 * 60 * 60 * 24);
-  if (daysDiff < 7) return distance;
-  // Older — use formatted date
-  const year = date.getFullYear();
-  const currentYear = new Date().getFullYear();
-  return year === currentYear
-    ? format(date, 'd MMMM')
-    : format(date, 'd MMMM yyyy');
-}
+import { formatRelativeDate } from '@/lib/date-utils';
+import { showTypeLabels } from '@/lib/show-types';
 
 /* ─── Post creation form ─── */
 
@@ -67,7 +45,10 @@ function CreatePost({
   const createPost = trpc.timeline.createPost.useMutation({
     onSuccess: () => {
       setCaption('');
-      setImagePreview(null);
+      setImagePreview((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
       setUploadedImage(null);
       setExpanded(false);
       onPostCreated();

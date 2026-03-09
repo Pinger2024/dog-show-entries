@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { format, formatDistanceToNow, isToday, isYesterday } from 'date-fns';
+import { format } from 'date-fns';
 import {
   Loader2,
   Trophy,
@@ -16,18 +16,7 @@ import { trpc } from '@/lib/trpc/client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { getPlacementLabel, placementColors } from '@/lib/placements';
-
-function formatRelativeDate(date: Date): string {
-  if (isToday(date)) return `Today at ${format(date, 'h:mm a')}`;
-  if (isYesterday(date)) return 'Yesterday';
-  const daysDiff = (Date.now() - date.getTime()) / (1000 * 60 * 60 * 24);
-  if (daysDiff < 7) return formatDistanceToNow(date, { addSuffix: true });
-  const year = date.getFullYear();
-  const currentYear = new Date().getFullYear();
-  return year === currentYear
-    ? format(date, 'd MMMM')
-    : format(date, 'd MMMM yyyy');
-}
+import { formatRelativeDate } from '@/lib/date-utils';
 
 export default function FeedPage() {
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =

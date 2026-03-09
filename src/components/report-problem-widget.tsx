@@ -175,7 +175,7 @@ export function ReportProblemWidget() {
       const canvas = await import('html2canvas').then((mod) =>
         mod.default(document.body, {
           useCORS: true,
-          scale: window.devicePixelRatio,
+          scale: Math.min(window.devicePixelRatio, 2),
           logging: false,
         })
       );

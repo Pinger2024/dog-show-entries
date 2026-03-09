@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { format, differenceInDays } from 'date-fns';
 import { formatDateRange } from '@/lib/date-utils';
+import { showTypeLabels } from '@/lib/show-types';
 import {
   CalendarDays,
   MapPin,
@@ -57,15 +58,6 @@ type ShowListItem = {
 };
 
 /* ─── Show type config ──────────────────────────────── */
-
-const showTypeLabels: Record<string, string> = {
-  companion: 'Companion',
-  primary: 'Primary',
-  limited: 'Limited',
-  open: 'Open',
-  premier_open: 'Premier Open',
-  championship: 'Championship',
-};
 
 const showTypeMeta: Record<string, { accent: string; bg: string; ring: string }> = {
   companion:    { accent: 'bg-emerald-500', bg: 'bg-emerald-50 text-emerald-700', ring: 'ring-emerald-200' },

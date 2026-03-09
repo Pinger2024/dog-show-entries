@@ -77,7 +77,7 @@ export default function FeedbackPage() {
   const [activeFilter, setActiveFilter] = useState<FeedbackStatus | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const isAdmin = (session?.user as { role?: string } | undefined)?.role === 'admin';
+  const isAdmin = session?.user?.role === 'admin';
 
   const { data: counts, isLoading: countsLoading } =
     trpc.feedback.counts.useQuery(undefined, { enabled: isAdmin });
@@ -229,14 +229,14 @@ export default function FeedbackPage() {
                           <p className="font-semibold">
                             {item.subject || '(No subject)'}
                           </p>
-                          {(item as { source?: string }).source === 'widget' && (
+                          {item.source === 'widget' && (
                             <Badge variant="outline" className="text-[10px] border-violet-300 text-violet-700 bg-violet-50">
                               Widget
                             </Badge>
                           )}
-                          {(item as { feedbackType?: string }).feedbackType && (item as { feedbackType?: string }).feedbackType !== 'general' && (
+                          {item.feedbackType && item.feedbackType !== 'general' && (
                             <Badge variant="outline" className="text-[10px] capitalize">
-                              {(item as { feedbackType?: string }).feedbackType}
+                              {item.feedbackType}
                             </Badge>
                           )}
                         </div>
@@ -272,7 +272,7 @@ export default function FeedbackPage() {
                     {isExpanded && (
                       <div className="border-t px-3 py-3 sm:px-4 sm:py-4">
                         {/* Workflow banner for widget submissions */}
-                        {(item as { source?: string }).source === 'widget' && (
+                        {item.source === 'widget' && (
                           <div className="mb-3 rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm">
                             <p className="font-medium text-violet-900">User support request</p>
                             <p className="mt-0.5 text-xs text-violet-700">
@@ -294,23 +294,23 @@ export default function FeedbackPage() {
                         )}
 
                         {/* Attachment */}
-                        {(item as { attachmentUrl?: string; attachmentFileName?: string }).attachmentUrl && (
+                        {item.attachmentUrl && (
                           <div className="mt-3">
                             <p className="mb-1.5 text-xs font-medium text-muted-foreground">Attachment</p>
                             <a
-                              href={(item as { attachmentUrl: string }).attachmentUrl}
+                              href={item.attachmentUrl}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="group block overflow-hidden rounded-lg border transition-colors hover:border-primary/30"
                             >
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
-                                src={(item as { attachmentUrl: string }).attachmentUrl}
-                                alt={(item as { attachmentFileName?: string }).attachmentFileName ?? 'Attachment'}
+                                src={item.attachmentUrl}
+                                alt={item.attachmentFileName ?? 'Attachment'}
                                 className="max-h-64 w-full object-contain bg-muted/20"
                               />
                               <div className="flex items-center gap-1.5 border-t bg-muted/30 px-2.5 py-1.5 text-xs text-muted-foreground group-hover:text-foreground">
-                                <span className="truncate">{(item as { attachmentFileName?: string }).attachmentFileName ?? 'View full size'}</span>
+                                <span className="truncate">{item.attachmentFileName ?? 'View full size'}</span>
                               </div>
                             </a>
                           </div>
