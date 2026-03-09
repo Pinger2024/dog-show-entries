@@ -99,8 +99,10 @@ When building new features (not bug fixes), always follow this research-first ap
    - UX patterns that would make the feature innovative rather than just functional
    - What data we already have in the schema that could make the feature richer
 
-2. **Design for innovation** — Remi isn't just digitising paper processes. Every feature should ask: "What can we do that paper/PDFs/spreadsheets never could?" Think real-time updates, smart automation, cross-referencing data, proactive notifications, and mobile-first workflows.
+2. **Think through the full user journey** — Before building, walk through every step a user takes. Ask: "What does Amanda do before this feature? What does she do after? Where does she expect to find it? What happens if something goes wrong?" Design the complete flow end-to-end, not just the technical piece. Features should feel finished from the user's perspective — not just functional from the developer's perspective.
 
-3. **Build and ship** — Implement, test (`npm run build`), commit, push, mark feedback completed, email Amanda.
+3. **Design for innovation** — Remi isn't just digitising paper processes. Every feature should ask: "What can we do that paper/PDFs/spreadsheets never could?" Think real-time updates, smart automation, cross-referencing data, proactive notifications, and mobile-first workflows.
 
-4. **Close the loop** — Always email Amanda when a feature ships, with clear instructions on how to use it and encouragement to share feedback.
+4. **Build and ship** — Implement, test (`npm run build`), commit, push, mark feedback completed, email Amanda.
+
+5. **Close the loop** — Always email Amanda when a feature ships, with clear instructions on how to use it and encouragement to share feedback.
