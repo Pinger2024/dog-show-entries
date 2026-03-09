@@ -24,12 +24,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-const ROLE_STYLES: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-  admin: { label: 'Admin', variant: 'destructive' },
-  secretary: { label: 'Secretary', variant: 'default' },
-  exhibitor: { label: 'Exhibitor', variant: 'secondary' },
-  steward: { label: 'Steward', variant: 'outline' },
-  judge: { label: 'Judge', variant: 'outline' },
+const ROLE_STYLES: Record<string, { label: string; plural: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+  admin: { label: 'Admin', plural: 'Admins', variant: 'destructive' },
+  secretary: { label: 'Secretary', plural: 'Secretaries', variant: 'default' },
+  exhibitor: { label: 'Exhibitor', plural: 'Exhibitors', variant: 'secondary' },
+  steward: { label: 'Steward', plural: 'Stewards', variant: 'outline' },
+  judge: { label: 'Judge', plural: 'Judges', variant: 'outline' },
 };
 
 export default function AdminUsersPage() {
@@ -106,7 +106,7 @@ export default function AdminUsersPage() {
               <Card key={role}>
                 <CardContent className="pt-4 pb-4">
                   <p className="text-2xl font-bold">{count}</p>
-                  <p className="text-xs text-muted-foreground">{style.label}s</p>
+                  <p className="text-xs text-muted-foreground">{style.plural}</p>
                 </CardContent>
               </Card>
             );

@@ -34,7 +34,7 @@ interface DashboardShellProps {
   children: React.ReactNode;
 }
 
-const navItems = [
+const personalNavItems = [
   { href: '/dashboard', label: 'Dashboard', mobileLabel: 'Home', icon: LayoutDashboard },
   { href: '/dogs', label: 'My Dogs', mobileLabel: 'Dogs', icon: Dog },
   { href: '/entries', label: 'My Entries', mobileLabel: 'Entries', icon: Ticket },
@@ -43,11 +43,20 @@ const navItems = [
 
 const adminNavItems = [
   { href: '/admin', label: 'Overview', mobileLabel: 'Admin', icon: Activity },
-  { href: '/feedback', label: 'Feedback', mobileLabel: 'Feedback', icon: Inbox },
   { href: '/admin/users', label: 'Users', mobileLabel: 'Users', icon: Users },
+  { href: '/feedback', label: 'Feedback', mobileLabel: 'Feedback', icon: Inbox },
   { href: '/admin/applications', label: 'Applications', mobileLabel: 'Apps', icon: ClipboardCheck },
   { href: '/admin/invitations', label: 'Invitations', mobileLabel: 'Invites', icon: UserPlus },
   { href: '/admin/reference-data', label: 'Reference Data', mobileLabel: 'Ref Data', icon: Database },
+];
+
+/** Mobile bottom bar: admin gets admin-focused tabs, others get personal tabs */
+const adminMobileItems = [
+  { href: '/admin', label: 'Overview', mobileLabel: 'Admin', icon: Activity },
+  { href: '/admin/users', label: 'Users', mobileLabel: 'Users', icon: Users },
+  { href: '/feedback', label: 'Feedback', mobileLabel: 'Feedback', icon: Inbox },
+  { href: '/dogs', label: 'My Dogs', mobileLabel: 'Dogs', icon: Dog },
+  { href: '/browse', label: 'Find a Show', mobileLabel: 'Shows', icon: CalendarDays },
 ];
 
 function getInitials(name?: string | null, email?: string | null) {
@@ -103,7 +112,39 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
 
         {/* Nav */}
         <nav className="flex-1 space-y-1 p-3">
-          {navItems.map((item) => {
+          {user.role === 'admin' && (
+            <>
+              <p className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/40">
+                Admin
+              </p>
+              {adminNavItems.map((item) => {
+                const isActive =
+                  item.href === '/admin'
+                    ? pathname === '/admin'
+                    : pathname.startsWith(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      'flex items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-medium transition-colors',
+                      isActive
+                        ? 'bg-sidebar-accent text-sidebar-primary'
+                        : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
+                    )}
+                  >
+                    <item.icon className="size-5" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+              <Separator className="my-2" />
+              <p className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/40">
+                Personal
+              </p>
+            </>
+          )}
+          {personalNavItems.map((item) => {
             const isActive =
               pathname === item.href ||
               (item.href !== '/dashboard' && pathname.startsWith(item.href));
@@ -138,33 +179,6 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
                 <Sparkles className="size-5" />
                 Run Shows
               </Link>
-            </>
-          )}
-          {user.role === 'admin' && (
-            <>
-              <Separator className="my-2" />
-              {adminNavItems.map((item) => {
-                // /admin uses exact match to avoid matching /admin/users etc.
-                const isActive =
-                  item.href === '/admin'
-                    ? pathname === '/admin'
-                    : pathname.startsWith(item.href);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={cn(
-                      'flex items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-medium transition-colors',
-                      isActive
-                        ? 'bg-sidebar-accent text-sidebar-primary'
-                        : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
-                    )}
-                  >
-                    <item.icon className="size-5" />
-                    {item.label}
-                  </Link>
-                );
-              })}
             </>
           )}
         </nav>
@@ -271,10 +285,12 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
 
         {/* Mobile bottom tab bar */}
         <nav className="fixed bottom-0 left-0 right-0 z-50 flex border-t bg-background pb-[env(safe-area-inset-bottom)] md:hidden">
-          {navItems.map((item) => {
+          {(user.role === 'admin' ? adminMobileItems : personalNavItems).map((item) => {
             const isActive =
-              pathname === item.href ||
-              (item.href !== '/dashboard' && pathname.startsWith(item.href));
+              item.href === '/admin'
+                ? pathname === '/admin'
+                : pathname === item.href ||
+                  (item.href !== '/dashboard' && pathname.startsWith(item.href));
             return (
               <Link
                 key={item.href}
@@ -287,27 +303,6 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
                 )}
               >
                 <item.icon className="size-5" />
-                <span className="truncate max-w-full">{item.mobileLabel}</span>
-              </Link>
-            );
-          })}
-          {user.role === 'admin' && adminNavItems.map((item) => {
-            const isActive =
-              item.href === '/admin'
-                ? pathname === '/admin'
-                : pathname.startsWith(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  'flex flex-1 flex-col items-center justify-center gap-0.5 min-h-[48px] py-2 text-[10px] sm:text-xs font-medium transition-colors',
-                  isActive
-                    ? 'text-primary'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                <item.icon className="size-4" />
                 <span className="truncate max-w-full">{item.mobileLabel}</span>
               </Link>
             );
