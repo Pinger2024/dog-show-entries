@@ -78,6 +78,10 @@ export {
   stewardAssignmentsRelations,
 } from './steward-assignments';
 export {
+  stewardBreedAssignments,
+  stewardBreedAssignmentsRelations,
+} from './steward-breed-assignments';
+export {
   checklistPhaseEnum,
   checklistItemStatusEnum,
   showChecklistItems,

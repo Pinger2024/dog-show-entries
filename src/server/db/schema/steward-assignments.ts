@@ -3,6 +3,7 @@ import { relations } from 'drizzle-orm';
 import { shows } from './shows';
 import { users } from './users';
 import { rings } from './rings';
+import { stewardBreedAssignments } from './steward-breed-assignments';
 
 export const stewardAssignments = pgTable(
   'steward_assignments',
@@ -31,7 +32,7 @@ export const stewardAssignments = pgTable(
 
 export const stewardAssignmentsRelations = relations(
   stewardAssignments,
-  ({ one }) => ({
+  ({ one, many }) => ({
     show: one(shows, {
       fields: [stewardAssignments.showId],
       references: [shows.id],
@@ -44,5 +45,6 @@ export const stewardAssignmentsRelations = relations(
       fields: [stewardAssignments.ringId],
       references: [rings.id],
     }),
+    breedAssignments: many(stewardBreedAssignments),
   })
 );

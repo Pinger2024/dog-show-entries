@@ -19,6 +19,7 @@ import {
   entryAuditLog,
   orders,
   stewardAssignments,
+  stewardBreedAssignments,
   users,
   judges,
   judgeAssignments,
@@ -946,6 +947,9 @@ export const secretaryRouter = createTRPCRouter({
             columns: { id: true, name: true, email: true, image: true },
           },
           ring: true,
+          breedAssignments: {
+            with: { breed: true },
+          },
         },
       });
     }),
@@ -1039,6 +1043,47 @@ export const secretaryRouter = createTRPCRouter({
       }
 
       return { removed: true };
+    }),
+
+  // ── Steward breed assignments ─────────────────────────
+  setStewardBreeds: secretaryProcedure
+    .input(
+      z.object({
+        stewardAssignmentId: z.string().uuid(),
+        breeds: z.array(
+          z.object({
+            breedId: z.string().uuid(),
+            showDate: z.string(), // YYYY-MM-DD
+          })
+        ),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Look up assignment to verify show ownership
+      const assignment = await ctx.db.query.stewardAssignments.findFirst({
+        where: eq(stewardAssignments.id, input.stewardAssignmentId),
+      });
+      if (!assignment) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Steward assignment not found' });
+      }
+      await verifyShowAccess(ctx.db, ctx.session.user.id, assignment.showId);
+
+      // Replace all breed assignments for this steward
+      await ctx.db
+        .delete(stewardBreedAssignments)
+        .where(eq(stewardBreedAssignments.stewardAssignmentId, input.stewardAssignmentId));
+
+      if (input.breeds.length > 0) {
+        await ctx.db.insert(stewardBreedAssignments).values(
+          input.breeds.map((b) => ({
+            stewardAssignmentId: input.stewardAssignmentId,
+            breedId: b.breedId,
+            showDate: b.showDate,
+          }))
+        );
+      }
+
+      return { updated: true };
     }),
 
   deleteShow: secretaryProcedure

@@ -1070,10 +1070,13 @@ function RingsSection({ showId }: { showId: string }) {
 function StewardsSection({ showId }: { showId: string }) {
   const [email, setEmail] = useState('');
   const [adding, setAdding] = useState(false);
+  const [breedDialogId, setBreedDialogId] = useState<string | null>(null);
   const utils = trpc.useUtils();
 
   const { data: stewards, isLoading } =
     trpc.secretary.getShowStewards.useQuery({ showId });
+  const { data: showData } = trpc.shows.getById.useQuery({ id: showId });
+  const { data: showClasses } = trpc.shows.getClasses.useQuery({ showId });
 
   const assignMutation = trpc.secretary.assignSteward.useMutation({
     onSuccess: () => {
@@ -1092,6 +1095,35 @@ function StewardsSection({ showId }: { showId: string }) {
     },
     onError: () => toast.error('Failed to remove steward'),
   });
+
+  // Unique breeds in the show (from show classes)
+  const showBreeds = useMemo(() => {
+    if (!showClasses) return [];
+    const breedMap = new Map<string, string>();
+    for (const sc of showClasses) {
+      const breed = sc.breed as { id: string; name: string } | null;
+      if (breed) breedMap.set(breed.id, breed.name);
+    }
+    return Array.from(breedMap.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [showClasses]);
+
+  // Show dates (each day of multi-day shows)
+  const showDates = useMemo(() => {
+    if (!showData) return [];
+    const dates: string[] = [];
+    const start = new Date(showData.startDate);
+    const end = showData.endDate ? new Date(showData.endDate) : start;
+    const d = new Date(start);
+    while (d <= end) {
+      dates.push(d.toISOString().split('T')[0]!);
+      d.setDate(d.getDate() + 1);
+    }
+    return dates;
+  }, [showData]);
+
+  const dialogAssignment = stewards?.find((s) => s.id === breedDialogId);
 
   return (
     <Card>
@@ -1170,66 +1202,31 @@ function StewardsSection({ showId }: { showId: string }) {
             </p>
           </div>
         ) : (
-          <>
-          {/* Mobile card view */}
-          <div className="space-y-2 sm:hidden">
-            {stewards.map((assignment) => (
-              <div key={assignment.id} className="flex items-center justify-between rounded-lg border p-3">
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium text-sm truncate">{assignment.user.name}</p>
-                  <p className="text-xs text-muted-foreground truncate">{assignment.user.email}</p>
-                  {assignment.ring && (
-                    <Badge variant="outline" className="mt-1 text-xs">Ring {assignment.ring.number}</Badge>
-                  )}
-                </div>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="size-9 shrink-0 text-destructive hover:text-destructive"
-                  onClick={() => {
-                    if (confirm('Remove this steward from the show?')) {
-                      removeMutation.mutate({ assignmentId: assignment.id });
-                    }
-                  }}
-                  disabled={removeMutation.isPending}
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              </div>
-            ))}
-          </div>
-          {/* Desktop table */}
-          <div className="hidden sm:block">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Ring</TableHead>
-                  <TableHead className="w-10" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {stewards.map((assignment) => (
-                  <TableRow key={assignment.id}>
-                    <TableCell className="font-medium">
-                      {assignment.user.name}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {assignment.user.email}
-                    </TableCell>
-                    <TableCell>
-                      {assignment.ring ? (
-                        <Badge variant="outline">Ring {assignment.ring.number}</Badge>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">All</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
+          <div className="space-y-3">
+            {stewards.map((assignment) => {
+              const assignedBreeds = assignment.breedAssignments ?? [];
+              const uniqueBreedNames = [...new Set(assignedBreeds.map((ba: { breed: { name: string } }) => ba.breed.name))];
+              return (
+                <div key={assignment.id} className="rounded-lg border p-3 sm:p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-sm">{assignment.user.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{assignment.user.email}</p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 text-xs"
+                        onClick={() => setBreedDialogId(assignment.id)}
+                      >
+                        <CircleDot className="size-3.5" />
+                        Breeds
+                      </Button>
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="size-7 text-destructive hover:text-destructive"
+                        className="size-8 text-destructive hover:text-destructive"
                         onClick={() => {
                           if (confirm('Remove this steward from the show?')) {
                             removeMutation.mutate({ assignmentId: assignment.id });
@@ -1239,16 +1236,198 @@ function StewardsSection({ showId }: { showId: string }) {
                       >
                         <Trash2 className="size-3.5" />
                       </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                    </div>
+                  </div>
+                  {uniqueBreedNames.length > 0 ? (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {uniqueBreedNames.map((name) => (
+                        <Badge key={name} variant="secondary" className="text-[10px]">
+                          {name}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-1 text-[10px] text-muted-foreground">All breeds (no filter)</p>
+                  )}
+                </div>
+              );
+            })}
           </div>
-          </>
+        )}
+
+        {/* Breed assignment dialog */}
+        {dialogAssignment && (
+          <BreedAssignmentDialog
+            assignmentId={dialogAssignment.id}
+            stewardName={dialogAssignment.user.name ?? 'Steward'}
+            currentAssignments={dialogAssignment.breedAssignments ?? []}
+            showBreeds={showBreeds}
+            showDates={showDates}
+            onClose={() => setBreedDialogId(null)}
+          />
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// ── Breed Assignment Dialog ─────────────────────────────────────
+
+function BreedAssignmentDialog({
+  assignmentId,
+  stewardName,
+  currentAssignments,
+  showBreeds,
+  showDates,
+  onClose,
+}: {
+  assignmentId: string;
+  stewardName: string;
+  currentAssignments: { breedId: string; showDate: string; breed: { id: string; name: string } }[];
+  showBreeds: { id: string; name: string }[];
+  showDates: string[];
+  onClose: () => void;
+}) {
+  const utils = trpc.useUtils();
+  const isMultiDay = showDates.length > 1;
+
+  // State: Set of "breedId:date" keys
+  const [selected, setSelected] = useState<Set<string>>(() => {
+    const set = new Set<string>();
+    for (const ba of currentAssignments) {
+      set.add(`${ba.breedId}:${ba.showDate}`);
+    }
+    return set;
+  });
+
+  const setBreedsMutation = trpc.secretary.setStewardBreeds.useMutation({
+    onSuccess: () => {
+      toast.success('Breed assignments updated');
+      utils.secretary.getShowStewards.invalidate();
+      onClose();
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to update'),
+  });
+
+  function toggleBreedDate(breedId: string, date: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      const key = `${breedId}:${date}`;
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function toggleBreedAllDays(breedId: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      const allKeys = showDates.map((d) => `${breedId}:${d}`);
+      const allSelected = allKeys.every((k) => next.has(k));
+      if (allSelected) {
+        allKeys.forEach((k) => next.delete(k));
+      } else {
+        allKeys.forEach((k) => next.add(k));
+      }
+      return next;
+    });
+  }
+
+  function handleSave() {
+    const breeds = Array.from(selected).map((key) => {
+      const [breedId, showDate] = key.split(':');
+      return { breedId: breedId!, showDate: showDate! };
+    });
+    setBreedsMutation.mutate({ stewardAssignmentId: assignmentId, breeds });
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Breed Assignments — {stewardName}</DialogTitle>
+          <DialogDescription>
+            Select which breeds this steward should see{isMultiDay ? ' on each day' : ''}.
+            Unassigned stewards see all breeds.
+          </DialogDescription>
+        </DialogHeader>
+
+        {showBreeds.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            No breeds found in this show&apos;s classes yet.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {showBreeds.map((breed) => {
+              const allDaysKeys = showDates.map((d) => `${breed.id}:${d}`);
+              const allChecked = allDaysKeys.every((k) => selected.has(k));
+              const someChecked = allDaysKeys.some((k) => selected.has(k));
+
+              return (
+                <div key={breed.id} className="rounded-lg border p-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={allChecked}
+                      ref={(el) => { if (el) el.indeterminate = someChecked && !allChecked; }}
+                      onChange={() => toggleBreedAllDays(breed.id)}
+                      className="size-4 rounded border-gray-300"
+                    />
+                    <span className="text-sm font-medium">{breed.name}</span>
+                    {isMultiDay && (
+                      <span className="ml-auto text-[10px] text-muted-foreground">
+                        {allChecked ? 'All days' : someChecked ? 'Some days' : ''}
+                      </span>
+                    )}
+                  </label>
+
+                  {isMultiDay && someChecked && (
+                    <div className="mt-2 ml-6 flex flex-wrap gap-2">
+                      {showDates.map((date) => {
+                        const key = `${breed.id}:${date}`;
+                        const checked = selected.has(key);
+                        return (
+                          <label key={date} className="flex items-center gap-1 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleBreedDate(breed.id, date)}
+                              className="size-3.5 rounded border-gray-300"
+                            />
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(date + 'T00:00:00').toLocaleDateString('en-GB', {
+                                weekday: 'short',
+                                day: 'numeric',
+                                month: 'short',
+                              })}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={setBreedsMutation.isPending}
+          >
+            {setBreedsMutation.isPending && (
+              <Loader2 className="size-4 animate-spin" />
+            )}
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

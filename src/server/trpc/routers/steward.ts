@@ -11,6 +11,7 @@ import {
   showClasses,
   results,
   stewardAssignments,
+  stewardBreedAssignments,
   classDefinitions,
   achievements,
   dogs,
@@ -49,6 +50,9 @@ export const stewardRouter = createTRPCRouter({
           },
         },
         ring: true,
+        breedAssignments: {
+          with: { breed: true },
+        },
       },
     });
 
@@ -61,14 +65,29 @@ export const stewardRouter = createTRPCRouter({
         ...a.show,
         ring: a.ring,
         assignmentId: a.id,
+        breedAssignments: a.breedAssignments,
       }));
   }),
 
   // ── Classes for a show (with entry counts + results status) ──
   getShowClasses: stewardProcedure
-    .input(z.object({ showId: z.string().uuid() }))
+    .input(z.object({ showId: z.string().uuid(), date: z.string().optional() }))
     .query(async ({ ctx, input }) => {
-      await verifyStewardAssignment(ctx.db, ctx.session.user.id, input.showId);
+      const assignment = await verifyStewardAssignment(ctx.db, ctx.session.user.id, input.showId);
+
+      // Check if this steward has breed-specific assignments
+      const breedAssignments = await ctx.db.query.stewardBreedAssignments.findMany({
+        where: eq(stewardBreedAssignments.stewardAssignmentId, assignment.id),
+      });
+
+      // If a date filter is provided, narrow to breeds assigned for that day
+      const assignedBreedIds = breedAssignments.length > 0
+        ? [...new Set(
+            breedAssignments
+              .filter((ba) => !input.date || ba.showDate === input.date)
+              .map((ba) => ba.breedId)
+          )]
+        : null; // null = show all (no breed filtering)
 
       const classes = await ctx.db.query.showClasses.findMany({
         where: eq(showClasses.showId, input.showId),
@@ -87,7 +106,12 @@ export const stewardRouter = createTRPCRouter({
         orderBy: [asc(showClasses.sortOrder)],
       });
 
-      return classes.map((sc) => {
+      // Filter to assigned breeds if applicable
+      const filtered = assignedBreedIds
+        ? classes.filter((sc) => sc.breedId && assignedBreedIds.includes(sc.breedId))
+        : classes;
+
+      return filtered.map((sc) => {
         const confirmedEntries = sc.entryClasses.filter(
           (ec) => ec.entry.status === 'confirmed' && !ec.entry.deletedAt
         );
