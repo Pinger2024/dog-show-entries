@@ -387,6 +387,11 @@ export function DogProfileClient({ id }: { id: string }) {
               <span className="text-stone-400">{dog.breed.group.name}</span>
             )}
           </p>
+          {dog.bio && (
+            <p className="mx-auto mt-4 max-w-md font-serif text-[0.9375rem] italic leading-relaxed text-stone-500">
+              &ldquo;{dog.bio}&rdquo;
+            </p>
+          )}
         </div>
 
         {/* ─── Titles ─── */}

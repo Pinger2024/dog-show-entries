@@ -193,6 +193,7 @@ export const dogsRouter = createTRPCRouter({
           damName: dog.damName,
           breederName: dog.breederName,
           colour: dog.colour,
+          bio: dog.bio,
           kcRegNumber: dog.kcRegNumber,
           ownerId: dog.ownerId,
         },
@@ -369,6 +370,7 @@ export const dogsRouter = createTRPCRouter({
         damName: z.string().nullable().optional(),
         breederName: z.string().nullable().optional(),
         colour: z.string().nullable().optional(),
+        bio: z.string().nullable().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {

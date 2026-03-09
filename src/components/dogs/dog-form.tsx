@@ -13,6 +13,7 @@ import { cn, getTitleDisplay } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Calendar } from '@/components/ui/calendar';
 import {
   Form,
@@ -75,6 +76,7 @@ const dogFormSchema = z.object({
   sireName: z.string().optional(),
   damName: z.string().optional(),
   breederName: z.string().optional(),
+  bio: z.string().optional(),
   owners: z.array(ownerSchema).optional(),
 });
 
@@ -296,6 +298,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
       sireName: '',
       damName: '',
       breederName: '',
+      bio: '',
       owners: [],
       ...defaultValues,
     },
@@ -751,6 +754,35 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                   <FormControl>
                     <Input
                       placeholder="Name of breeder"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </CardContent>
+        </Card>
+
+        {/* Bio */}
+        <Card>
+          <CardHeader>
+            <CardTitle>About</CardTitle>
+            <CardDescription>
+              A short biography for your dog&apos;s public profile. Temperament, achievements,
+              or anything that makes them special.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <FormField
+              control={form.control}
+              name="bio"
+              render={({ field }) => (
+                <FormItem>
+                  <FormControl>
+                    <Textarea
+                      placeholder="e.g. A confident and spirited youngster with a love of the ring..."
+                      rows={4}
                       {...field}
                     />
                   </FormControl>
