@@ -74,6 +74,16 @@ export default function EnterShowPage() {
   const [jhDob, setJhDob] = useState('');
   const [jhKcNumber, setJhKcNumber] = useState('');
 
+  // Restore JH form state when navigating back to the JH step
+  useEffect(() => {
+    if (cart.step === 'junior_handler' && cart.activeEntry) {
+      if (cart.activeEntry.handlerName && !jhName) setJhName(cart.activeEntry.handlerName);
+      if (cart.activeEntry.handlerDob && !jhDob) setJhDob(cart.activeEntry.handlerDob);
+      if (cart.activeEntry.handlerKcNumber && !jhKcNumber) setJhKcNumber(cart.activeEntry.handlerKcNumber);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cart.step]);
+
   // Start first entry automatically
   useEffect(() => {
     if (cart.entries.length === 0 && cart.step === 'entry_type') {
@@ -554,35 +564,52 @@ export default function EnterShowPage() {
             </div>
           ) : dogs && dogs.length > 0 ? (
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
-              {dogs.map((dog) => (
-                <button
-                  key={dog.id}
-                  type="button"
-                  onClick={() =>
-                    cart.setDog(
-                      dog.id,
-                      formatDogName(dog),
-                      dog.breed?.name ?? ''
-                    )
-                  }
-                  className="flex min-h-[44px] items-start gap-3 rounded-xl border p-3 text-left transition-all hover:border-primary/50 sm:p-4"
-                >
-                  <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                    <Dog className="size-5 text-primary" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium">{formatDogName(dog)}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {dog.breed?.name}
-                    </p>
-                    {dog.kcRegNumber && (
-                      <p className="text-xs text-muted-foreground">
-                        KC: {dog.kcRegNumber}
-                      </p>
+              {dogs.map((dog) => {
+                const alreadyInCart = cart.entries.some(
+                  (e) => e.dogId === dog.id && e.classIds.length > 0
+                );
+                return (
+                  <button
+                    key={dog.id}
+                    type="button"
+                    onClick={() =>
+                      cart.setDog(
+                        dog.id,
+                        formatDogName(dog),
+                        dog.breed?.name ?? ''
+                      )
+                    }
+                    className={cn(
+                      'flex min-h-[44px] items-start gap-3 rounded-xl border p-3 text-left transition-all sm:p-4',
+                      alreadyInCart
+                        ? 'border-primary/30 bg-primary/5'
+                        : 'hover:border-primary/50'
                     )}
-                  </div>
-                </button>
-              ))}
+                  >
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                      <Dog className="size-5 text-primary" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium">{formatDogName(dog)}</p>
+                        {alreadyInCart && (
+                          <Badge variant="secondary" className="text-[10px] shrink-0">
+                            In cart
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {dog.breed?.name}
+                      </p>
+                      {dog.kcRegNumber && (
+                        <p className="text-xs text-muted-foreground">
+                          KC: {dog.kcRegNumber}
+                        </p>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           ) : (
             <Card>
