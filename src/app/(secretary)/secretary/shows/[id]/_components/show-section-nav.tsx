@@ -10,6 +10,7 @@ import {
   ListChecks,
   PoundSterling,
   Ticket,
+  Trophy,
   Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -20,6 +21,7 @@ const sections = [
   { path: '/entries', label: 'Entries', icon: Ticket },
   { path: '/financial', label: 'Financial', icon: PoundSterling },
   { path: '/catalogue', label: 'Catalogue', icon: BookOpen },
+  { path: '/results', label: 'Results', icon: Trophy },
   { path: '/reports', label: 'Reports', icon: FileText },
   { path: '/people', label: 'People', icon: Users },
   { path: '/documents', label: 'Documents', icon: FolderOpen },

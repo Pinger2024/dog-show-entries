@@ -273,7 +273,12 @@ export default function RegisterPage() {
 
               {error && (
                 <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-                  {error}
+                  <p>{error}</p>
+                  {error.includes('signing in') && (
+                    <Link href="/login" className="mt-1 block font-medium text-red-900 underline hover:no-underline">
+                      Go to sign in page
+                    </Link>
+                  )}
                 </div>
               )}
 
