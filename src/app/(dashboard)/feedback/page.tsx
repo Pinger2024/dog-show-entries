@@ -225,9 +225,21 @@ export default function FeedbackPage() {
                       className="flex w-full items-start justify-between gap-3 p-3 text-left sm:p-4"
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="font-semibold">
-                          {item.subject || '(No subject)'}
-                        </p>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <p className="font-semibold">
+                            {item.subject || '(No subject)'}
+                          </p>
+                          {(item as { source?: string }).source === 'widget' && (
+                            <Badge variant="outline" className="text-[10px] border-violet-300 text-violet-700 bg-violet-50">
+                              Widget
+                            </Badge>
+                          )}
+                          {(item as { feedbackType?: string }).feedbackType && (item as { feedbackType?: string }).feedbackType !== 'general' && (
+                            <Badge variant="outline" className="text-[10px] capitalize">
+                              {(item as { feedbackType?: string }).feedbackType}
+                            </Badge>
+                          )}
+                        </div>
                         <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.9375rem] text-muted-foreground">
                           <span>
                             {item.fromName
@@ -259,6 +271,15 @@ export default function FeedbackPage() {
                     {/* Expanded detail */}
                     {isExpanded && (
                       <div className="border-t px-3 py-3 sm:px-4 sm:py-4">
+                        {/* Workflow banner for widget submissions */}
+                        {(item as { source?: string }).source === 'widget' && (
+                          <div className="mb-3 rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm">
+                            <p className="font-medium text-violet-900">User support request</p>
+                            <p className="mt-0.5 text-xs text-violet-700">
+                              Submitted via the Help & Feedback widget. If you need more info, contact Michael & Amanda — not the user directly. Email the user at <strong>{item.fromEmail}</strong> once resolved.
+                            </p>
+                          </div>
+                        )}
                         {/* Email body */}
                         {item.htmlBody ? (
                           <SanitizedHtml html={item.htmlBody} />

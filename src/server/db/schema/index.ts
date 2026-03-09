@@ -18,6 +18,8 @@ export {
   catalogueStatusEnum,
   paymentTypeEnum,
   feedbackStatusEnum,
+  feedbackSourceEnum,
+  feedbackTypeEnum,
   backlogStatusEnum,
   backlogPriorityEnum,
   clubTypeEnum,

@@ -188,6 +188,18 @@ export const classSexArrangementEnum = pgEnum('class_sex_arrangement', [
   'combined_sex',
 ]);
 
+export const feedbackSourceEnum = pgEnum('feedback_source', [
+  'email',
+  'widget',
+]);
+
+export const feedbackTypeEnum = pgEnum('feedback_type', [
+  'bug',
+  'feature',
+  'question',
+  'general',
+]);
+
 export const backlogStatusEnum = pgEnum('backlog_status', [
   'awaiting_feedback',
   'planned',

@@ -1,5 +1,5 @@
 import { index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { feedbackStatusEnum } from './enums';
+import { feedbackStatusEnum, feedbackSourceEnum, feedbackTypeEnum } from './enums';
 
 export const feedback = pgTable(
   'feedback',
@@ -13,6 +13,8 @@ export const feedback = pgTable(
     htmlBody: text('html_body'),
     inReplyToSubject: text('in_reply_to_subject'),
     status: feedbackStatusEnum('status').notNull().default('pending'),
+    source: feedbackSourceEnum('source').notNull().default('email'),
+    feedbackType: feedbackTypeEnum('feedback_type').notNull().default('general'),
     notes: text('notes'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()

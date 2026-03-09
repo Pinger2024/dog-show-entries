@@ -14,6 +14,7 @@ export const feedbackRouter = createTRPCRouter({
       z.object({
         subject: z.string().min(3).max(500),
         body: z.string().min(5).max(5000),
+        feedbackType: z.enum(['bug', 'feature', 'question', 'general']).default('general'),
         pageUrl: z.string().max(2000),
         userAgent: z.string().max(1000).optional(),
       })
@@ -49,6 +50,8 @@ export const feedbackRouter = createTRPCRouter({
           htmlBody: null,
           inReplyToSubject: null,
           status: 'pending',
+          source: 'widget',
+          feedbackType: input.feedbackType,
         })
         .returning();
 
