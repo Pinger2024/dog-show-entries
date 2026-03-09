@@ -259,6 +259,28 @@ export const dogsRouter = createTRPCRouter({
         });
       }
 
+      // Backfill: dogs created before the multi-owner feature have no owner records
+      if (dog.owners.length === 0) {
+        const owner = await ctx.db.query.users.findFirst({
+          where: eq(users.id, dog.ownerId),
+        });
+        if (owner) {
+          const [created] = await ctx.db.insert(dogOwners).values({
+            dogId: dog.id,
+            userId: dog.ownerId,
+            ownerName: owner.name ?? '',
+            ownerAddress: owner.address ?? '',
+            ownerEmail: owner.email ?? '',
+            ownerPhone: owner.phone ?? null,
+            isPrimary: true,
+            sortOrder: 0,
+          }).returning();
+          if (created) {
+            dog.owners = [created];
+          }
+        }
+      }
+
       return dog;
     }),
 
