@@ -314,6 +314,7 @@ export const proRouter = createTRPCRouter({
             rccProgress: altRCCProgress,
             complete: altHasCC && altRCCProgress >= 7,
           },
+          // Compare routes by percentage completion: classic needs 3 steps, alternative needs 8 (1 CC + 7 RCCs)
           bestRoute:
             classicProgress >= 3 || classicProgress / 3 >= (altRCCProgress + (altHasCC ? 1 : 0)) / 8
               ? 'classic'

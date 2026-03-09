@@ -16,6 +16,7 @@ import {
   dogPhotos,
 } from '@/server/db/schema';
 import { deleteFromR2 } from '@/server/services/storage';
+import { isSupportedVideoUrl } from '@/lib/video-utils';
 
 export const timelineRouter = createTRPCRouter({
   /** Get timeline for a specific dog — user posts + show results merged chronologically */
@@ -133,12 +134,7 @@ export const timelineRouter = createTRPCRouter({
         imageUrl: z.string().max(2000).optional(),
         imageStorageKey: z.string().max(500).optional(),
         videoUrl: z.string().url().max(2000).refine(
-          (url) => {
-            try {
-              const host = new URL(url).hostname.replace(/^www\./, '');
-              return ['youtube.com', 'youtu.be', 'youtube-nocookie.com', 'vimeo.com'].includes(host);
-            } catch { return false; }
-          },
+          isSupportedVideoUrl,
           { message: 'Only YouTube and Vimeo URLs are supported' }
         ).optional(),
         type: z.enum(['photo', 'note', 'milestone', 'video']).default('photo'),
