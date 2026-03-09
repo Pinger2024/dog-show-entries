@@ -11,6 +11,7 @@ import {
 } from 'drizzle-orm';
 import { adminProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
+import { formatCurrency } from '@/lib/date-utils';
 import {
   users,
   shows,
@@ -22,6 +23,20 @@ import {
   dogs,
   organisations,
 } from '@/server/db/schema';
+
+/** Compute a percentage-change delta for KPI cards. */
+function getDelta(
+  current: number,
+  previous: number
+): { label: string; positive: boolean } | null {
+  if (previous === 0 && current === 0) return null;
+  if (previous === 0) return { label: 'New', positive: true };
+  const pct = Math.round(((current - previous) / previous) * 100);
+  return {
+    label: `${pct >= 0 ? '+' : ''}${pct}%`,
+    positive: pct >= 0,
+  };
+}
 
 export const adminDashboardRouter = createTRPCRouter({
   getDashboard: adminProcedure.query(async ({ ctx }) => {
@@ -36,16 +51,12 @@ export const adminDashboardRouter = createTRPCRouter({
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
     const [
-      // ── KPI stats (13 queries) ───────────────────────────────
+      // ── KPI stats (10 queries, down from 13) ────────────────
       [totalUsersRow],
       [newUsersWeekRow],
       [activeShowsRow],
-      [totalShowsRow],
-      [entriesThisMonthRow],
-      [entriesLastMonthRow],
-      [revenueThisMonthRow],
-      [revenueLastMonthRow],
-      [totalRevenueRow],
+      [entriesMonthlyRow],
+      [revenueAggRow],
       [pendingFeedbackRow],
       [pendingAppsRow],
       [totalDogsRow],
@@ -57,7 +68,7 @@ export const adminDashboardRouter = createTRPCRouter({
       showsClosingSoonList,
       pendingApplicationsList,
 
-      // ── Show pipeline (1 query) ──────────────────────────────
+      // ── Show pipeline (1 query — also derives totalShows) ────
       showPipelineRows,
 
       // ── Recent activity (4 queries) ──────────────────────────
@@ -85,55 +96,28 @@ export const adminDashboardRouter = createTRPCRouter({
         .where(
           notInArray(shows.status, ['completed', 'cancelled', 'draft'])
         ),
-      ctx.db.select({ v: sql<number>`count(*)::int` }).from(shows),
+
+      // Entries: this month + last month in one query via FILTER
       ctx.db
-        .select({ v: sql<number>`count(*)::int` })
+        .select({
+          thisMonth: sql<number>`count(*) filter (where ${entries.createdAt} >= ${thisMonthStart})::int`,
+          lastMonth: sql<number>`count(*) filter (where ${entries.createdAt} < ${thisMonthStart})::int`,
+        })
         .from(entries)
         .where(
-          and(
-            isNull(entries.deletedAt),
-            gte(entries.createdAt, thisMonthStart)
-          )
+          and(isNull(entries.deletedAt), gte(entries.createdAt, lastMonthStart))
         ),
-      ctx.db
-        .select({ v: sql<number>`count(*)::int` })
-        .from(entries)
-        .where(
-          and(
-            isNull(entries.deletedAt),
-            gte(entries.createdAt, lastMonthStart),
-            lt(entries.createdAt, thisMonthStart)
-          )
-        ),
+
+      // Revenue: this month + last month + total in one query via FILTER
       ctx.db
         .select({
-          v: sql<number>`coalesce(sum(${payments.amount}), 0)::int`,
-        })
-        .from(payments)
-        .where(
-          and(
-            eq(payments.status, 'succeeded'),
-            gte(payments.createdAt, thisMonthStart)
-          )
-        ),
-      ctx.db
-        .select({
-          v: sql<number>`coalesce(sum(${payments.amount}), 0)::int`,
-        })
-        .from(payments)
-        .where(
-          and(
-            eq(payments.status, 'succeeded'),
-            gte(payments.createdAt, lastMonthStart),
-            lt(payments.createdAt, thisMonthStart)
-          )
-        ),
-      ctx.db
-        .select({
-          v: sql<number>`coalesce(sum(${payments.amount}), 0)::int`,
+          thisMonth: sql<number>`coalesce(sum(${payments.amount}) filter (where ${payments.createdAt} >= ${thisMonthStart}), 0)::int`,
+          lastMonth: sql<number>`coalesce(sum(${payments.amount}) filter (where ${payments.createdAt} >= ${lastMonthStart} and ${payments.createdAt} < ${thisMonthStart}), 0)::int`,
+          total: sql<number>`coalesce(sum(${payments.amount}), 0)::int`,
         })
         .from(payments)
         .where(eq(payments.status, 'succeeded')),
+
       ctx.db
         .select({ v: sql<number>`count(*)::int` })
         .from(feedback)
@@ -345,7 +329,7 @@ export const adminDashboardRouter = createTRPCRouter({
       ...recentPaymentsList.map((p) => ({
         type: 'payment' as const,
         timestamp: p.createdAt!,
-        title: `£${((p.amount ?? 0) / 100).toFixed(2)} payment received`,
+        title: `${formatCurrency(p.amount ?? 0)} payment received`,
         subtitle: `from ${p.exhibitorName ?? 'Unknown'}`,
       })),
       ...recentFeedbackList.map((f) => ({
@@ -355,16 +339,15 @@ export const adminDashboardRouter = createTRPCRouter({
         subtitle: `from ${f.fromName ?? 'Unknown'}`,
       })),
     ]
-      .sort(
-        (a, b) =>
-          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-      )
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
       .slice(0, 15);
 
-    // ── Build pipeline map ─────────────────────────────────────
+    // ── Build pipeline map + derive totalShows ─────────────────
     const pipeline: Record<string, number> = {};
+    let totalShows = 0;
     for (const row of showPipelineRows) {
       pipeline[row.status] = row.count;
+      totalShows += row.count;
     }
 
     return {
@@ -372,12 +355,18 @@ export const adminDashboardRouter = createTRPCRouter({
         totalUsers: totalUsersRow.v,
         newUsersThisWeek: newUsersWeekRow.v,
         activeShows: activeShowsRow.v,
-        totalShows: totalShowsRow.v,
-        entriesThisMonth: entriesThisMonthRow.v,
-        entriesLastMonth: entriesLastMonthRow.v,
-        revenueThisMonth: revenueThisMonthRow.v,
-        revenueLastMonth: revenueLastMonthRow.v,
-        totalRevenue: totalRevenueRow.v,
+        totalShows,
+        entriesThisMonth: entriesMonthlyRow.thisMonth,
+        entryDelta: getDelta(
+          entriesMonthlyRow.thisMonth,
+          entriesMonthlyRow.lastMonth
+        ),
+        revenueThisMonth: revenueAggRow.thisMonth,
+        revenueDelta: getDelta(
+          revenueAggRow.thisMonth,
+          revenueAggRow.lastMonth
+        ),
+        totalRevenue: revenueAggRow.total,
         pendingFeedback: pendingFeedbackRow.v,
         pendingApplications: pendingAppsRow.v,
         totalDogs: totalDogsRow.v,

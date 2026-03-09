@@ -26,10 +26,13 @@ export function formatDateRange(startDate: string, endDate: string): string {
 }
 
 /**
- * Formats a currency amount in pence to GBP display.
+ * Formats a currency amount in pence to GBP display (e.g. 150050 → "£1,500.50").
  */
 export function formatCurrency(pence: number): string {
-  return `£${(pence / 100).toFixed(2)}`;
+  return `£${(pence / 100).toLocaleString('en-GB', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 /**

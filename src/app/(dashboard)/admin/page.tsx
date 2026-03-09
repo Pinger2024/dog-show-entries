@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import {
@@ -19,7 +20,6 @@ import {
   AlertTriangle,
   TrendingUp,
   TrendingDown,
-  Loader2,
   UserPlus,
   MessageSquare,
   CheckCircle,
@@ -32,6 +32,7 @@ import {
   Building2,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
+import { formatCurrency } from '@/lib/date-utils';
 import {
   Card,
   CardContent,
@@ -42,13 +43,6 @@ import {
 import { cn } from '@/lib/utils';
 
 // ── Helpers ──────────────────────────────────────────────────────
-
-function formatCurrency(pence: number): string {
-  return `£${(pence / 100).toLocaleString('en-GB', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
 
 function formatChartDate(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00');
@@ -76,19 +70,6 @@ function getGreeting(): string {
   return 'Good evening';
 }
 
-function getDelta(
-  current: number,
-  previous: number
-): { label: string; positive: boolean } | null {
-  if (previous === 0 && current === 0) return null;
-  if (previous === 0) return { label: 'New', positive: true };
-  const pct = Math.round(((current - previous) / previous) * 100);
-  return {
-    label: `${pct >= 0 ? '+' : ''}${pct}%`,
-    positive: pct >= 0,
-  };
-}
-
 function fillChartDays(
   sparse: { date: string; count?: number; amount?: number }[],
   key: 'count' | 'amount',
@@ -106,32 +87,14 @@ function fillChartDays(
   return result;
 }
 
-// ── Activity feed config ─────────────────────────────────────────
+// ── Config ───────────────────────────────────────────────────────
 
 const ACTIVITY_CONFIG = {
-  entry: {
-    icon: Ticket,
-    bg: 'bg-primary/10',
-    color: 'text-primary',
-  },
-  signup: {
-    icon: UserPlus,
-    bg: 'bg-blue-100',
-    color: 'text-blue-600',
-  },
-  payment: {
-    icon: PoundSterling,
-    bg: 'bg-emerald-100',
-    color: 'text-emerald-600',
-  },
-  feedback: {
-    icon: MessageSquare,
-    bg: 'bg-amber-100',
-    color: 'text-amber-600',
-  },
+  entry: { icon: Ticket, bg: 'bg-primary/10', color: 'text-primary' },
+  signup: { icon: UserPlus, bg: 'bg-blue-100', color: 'text-blue-600' },
+  payment: { icon: PoundSterling, bg: 'bg-emerald-100', color: 'text-emerald-600' },
+  feedback: { icon: MessageSquare, bg: 'bg-amber-100', color: 'text-amber-600' },
 } as const;
-
-// ── Show pipeline stages ─────────────────────────────────────────
 
 const PIPELINE_STAGES = [
   { key: 'draft', label: 'Draft', bar: 'bg-gray-300' },
@@ -143,16 +106,18 @@ const PIPELINE_STAGES = [
   { key: 'cancelled', label: 'Cancelled', bar: 'bg-red-400' },
 ];
 
-// ── Custom chart tooltips ────────────────────────────────────────
+// ── Reusable sub-components ──────────────────────────────────────
 
-function EntryTooltip({
+function ChartTooltip({
   active,
   payload,
   label,
+  formatValue,
 }: {
   active?: boolean;
   payload?: Array<{ value: number }>;
   label?: string;
+  formatValue: (v: number) => string;
 }) {
   if (!active || !payload?.length) return null;
   return (
@@ -160,32 +125,109 @@ function EntryTooltip({
       <p className="text-xs text-muted-foreground">
         {formatChartDate(label ?? '')}
       </p>
-      <p className="text-sm font-semibold">
-        {payload[0].value} {payload[0].value === 1 ? 'entry' : 'entries'}
-      </p>
+      <p className="text-sm font-semibold">{formatValue(payload[0].value)}</p>
     </div>
   );
 }
 
-function RevenueTooltip({
-  active,
-  payload,
-  label,
+function MetricChart({
+  title,
+  description,
+  data,
+  color,
+  gradientId,
+  yFormatter,
+  yWidth,
+  tooltipFormatter,
 }: {
-  active?: boolean;
-  payload?: Array<{ value: number }>;
-  label?: string;
+  title: string;
+  description: string;
+  data: { date: string; value: number }[];
+  color: string;
+  gradientId: string;
+  yFormatter?: (v: number) => string;
+  yWidth?: number;
+  tooltipFormatter: (v: number) => string;
 }) {
-  if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border bg-popover px-3 py-2 shadow-md text-popover-foreground">
-      <p className="text-xs text-muted-foreground">
-        {formatChartDate(label ?? '')}
-      </p>
-      <p className="text-sm font-semibold">
-        {formatCurrency(payload[0].value)}
-      </p>
-    </div>
+    <Card>
+      <CardHeader className="p-4 pb-2">
+        <CardTitle className="text-base font-semibold">{title}</CardTitle>
+        <CardDescription className="text-xs">{description}</CardDescription>
+      </CardHeader>
+      <CardContent className="p-4 pt-0">
+        <div className="h-[200px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={data}>
+              <defs>
+                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={color} stopOpacity={0.3} />
+                  <stop offset="95%" stopColor={color} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="hsl(var(--border))"
+                vertical={false}
+              />
+              <XAxis
+                dataKey="date"
+                tickFormatter={formatChartDate}
+                tick={{ fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
+                minTickGap={40}
+              />
+              <YAxis
+                tickFormatter={yFormatter}
+                tick={{ fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
+                width={yWidth ?? 30}
+                allowDecimals={false}
+              />
+              <Tooltip
+                content={
+                  <ChartTooltip formatValue={tooltipFormatter} />
+                }
+              />
+              <Area
+                type="monotone"
+                dataKey="value"
+                stroke={color}
+                fill={`url(#${gradientId})`}
+                strokeWidth={2}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DeltaBadge({
+  delta,
+}: {
+  delta: { label: string; positive: boolean } | null;
+}) {
+  if (!delta) {
+    return <p className="text-xs text-muted-foreground mt-1">this month</p>;
+  }
+  return (
+    <p
+      className={cn(
+        'text-xs font-medium mt-1 flex items-center gap-0.5',
+        delta.positive ? 'text-emerald-600' : 'text-red-500'
+      )}
+    >
+      {delta.positive ? (
+        <TrendingUp className="size-3" />
+      ) : (
+        <TrendingDown className="size-3" />
+      )}
+      {delta.label} vs last month
+    </p>
   );
 }
 
@@ -213,17 +255,16 @@ export default function AdminDashboardPage() {
 
   const { stats, attention, activity, showPipeline, charts } = data;
   const firstName = session?.user?.name?.split(' ')[0] ?? 'there';
-
   const totalPending = stats.pendingFeedback + stats.pendingApplications;
 
-  const entryDelta = getDelta(stats.entriesThisMonth, stats.entriesLastMonth);
-  const revenueDelta = getDelta(
-    stats.revenueThisMonth,
-    stats.revenueLastMonth
+  const entryChartData = useMemo(
+    () => fillChartDays(charts.dailyEntries, 'count'),
+    [charts.dailyEntries]
   );
-
-  const entryChartData = fillChartDays(charts.dailyEntries, 'count');
-  const revenueChartData = fillChartDays(charts.dailyRevenue, 'amount');
+  const revenueChartData = useMemo(
+    () => fillChartDays(charts.dailyRevenue, 'amount'),
+    [charts.dailyRevenue]
+  );
 
   const hasAttention =
     attention.failedPayments.length > 0 ||
@@ -301,25 +342,7 @@ export default function AdminDashboardPage() {
             <p className="text-2xl sm:text-3xl font-bold">
               {stats.entriesThisMonth.toLocaleString()}
             </p>
-            {entryDelta ? (
-              <p
-                className={cn(
-                  'text-xs font-medium mt-1 flex items-center gap-0.5',
-                  entryDelta.positive
-                    ? 'text-emerald-600'
-                    : 'text-red-500'
-                )}
-              >
-                {entryDelta.positive ? (
-                  <TrendingUp className="size-3" />
-                ) : (
-                  <TrendingDown className="size-3" />
-                )}
-                {entryDelta.label} vs last month
-              </p>
-            ) : (
-              <p className="text-xs text-muted-foreground mt-1">this month</p>
-            )}
+            <DeltaBadge delta={stats.entryDelta} />
           </CardContent>
         </Card>
 
@@ -337,25 +360,7 @@ export default function AdminDashboardPage() {
             <p className="text-2xl sm:text-3xl font-bold">
               {formatCurrency(stats.revenueThisMonth)}
             </p>
-            {revenueDelta ? (
-              <p
-                className={cn(
-                  'text-xs font-medium mt-1 flex items-center gap-0.5',
-                  revenueDelta.positive
-                    ? 'text-emerald-600'
-                    : 'text-red-500'
-                )}
-              >
-                {revenueDelta.positive ? (
-                  <TrendingUp className="size-3" />
-                ) : (
-                  <TrendingDown className="size-3" />
-                )}
-                {revenueDelta.label} vs last month
-              </p>
-            ) : (
-              <p className="text-xs text-muted-foreground mt-1">this month</p>
-            )}
+            <DeltaBadge delta={stats.revenueDelta} />
           </CardContent>
         </Card>
 
@@ -463,8 +468,8 @@ export default function AdminDashboardPage() {
                 >
                   <Timer className="size-4 text-blue-500 shrink-0" />
                   <span className="flex-1 min-w-0 truncate">
-                    {s.name} closes in {daysLeft} day{daysLeft !== 1 ? 's' : ''}{' '}
-                    ({s.entryCount} entries)
+                    {s.name} closes in {daysLeft} day
+                    {daysLeft !== 1 ? 's' : ''} ({s.entryCount} entries)
                   </span>
                   <ChevronRight className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                 </Link>
@@ -494,144 +499,26 @@ export default function AdminDashboardPage() {
       <div className="grid gap-6 lg:grid-cols-5">
         {/* Charts column */}
         <div className="lg:col-span-3 space-y-6">
-          {/* Entry volume chart */}
-          <Card>
-            <CardHeader className="p-4 pb-2">
-              <CardTitle className="text-base font-semibold">
-                Entry Volume
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Last 30 days
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-4 pt-0">
-              <div className="h-[200px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={entryChartData}>
-                    <defs>
-                      <linearGradient
-                        id="entryGradient"
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop
-                          offset="5%"
-                          stopColor="hsl(142, 40%, 28%)"
-                          stopOpacity={0.3}
-                        />
-                        <stop
-                          offset="95%"
-                          stopColor="hsl(142, 40%, 28%)"
-                          stopOpacity={0}
-                        />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="hsl(var(--border))"
-                      vertical={false}
-                    />
-                    <XAxis
-                      dataKey="date"
-                      tickFormatter={formatChartDate}
-                      tick={{ fontSize: 11 }}
-                      tickLine={false}
-                      axisLine={false}
-                      minTickGap={40}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 11 }}
-                      tickLine={false}
-                      axisLine={false}
-                      width={30}
-                      allowDecimals={false}
-                    />
-                    <Tooltip content={<EntryTooltip />} />
-                    <Area
-                      type="monotone"
-                      dataKey="value"
-                      stroke="hsl(142, 40%, 28%)"
-                      fill="url(#entryGradient)"
-                      strokeWidth={2}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Revenue chart */}
-          <Card>
-            <CardHeader className="p-4 pb-2">
-              <CardTitle className="text-base font-semibold">
-                Revenue
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Last 30 days
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-4 pt-0">
-              <div className="h-[200px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={revenueChartData}>
-                    <defs>
-                      <linearGradient
-                        id="revenueGradient"
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop
-                          offset="5%"
-                          stopColor="#10b981"
-                          stopOpacity={0.3}
-                        />
-                        <stop
-                          offset="95%"
-                          stopColor="#10b981"
-                          stopOpacity={0}
-                        />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="hsl(var(--border))"
-                      vertical={false}
-                    />
-                    <XAxis
-                      dataKey="date"
-                      tickFormatter={formatChartDate}
-                      tick={{ fontSize: 11 }}
-                      tickLine={false}
-                      axisLine={false}
-                      minTickGap={40}
-                    />
-                    <YAxis
-                      tickFormatter={(v: number) =>
-                        v === 0 ? '£0' : `£${Math.round(v / 100)}`
-                      }
-                      tick={{ fontSize: 11 }}
-                      tickLine={false}
-                      axisLine={false}
-                      width={45}
-                      allowDecimals={false}
-                    />
-                    <Tooltip content={<RevenueTooltip />} />
-                    <Area
-                      type="monotone"
-                      dataKey="value"
-                      stroke="#10b981"
-                      fill="url(#revenueGradient)"
-                      strokeWidth={2}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
+          <MetricChart
+            title="Entry Volume"
+            description="Last 30 days"
+            data={entryChartData}
+            color="hsl(142, 40%, 28%)"
+            gradientId="entryGradient"
+            tooltipFormatter={(v) =>
+              `${v} ${v === 1 ? 'entry' : 'entries'}`
+            }
+          />
+          <MetricChart
+            title="Revenue"
+            description="Last 30 days"
+            data={revenueChartData}
+            color="#10b981"
+            gradientId="revenueGradient"
+            yFormatter={(v) => (v === 0 ? '£0' : `£${Math.round(v / 100)}`)}
+            yWidth={45}
+            tooltipFormatter={formatCurrency}
+          />
         </div>
 
         {/* Activity feed column */}
