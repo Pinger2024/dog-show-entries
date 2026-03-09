@@ -13,7 +13,6 @@ import {
   Dog,
   Loader2,
   Star,
-  Camera,
   X,
   Share2,
   Check,
@@ -389,7 +388,7 @@ export function DogProfileClient({ id }: { id: string }) {
       <div className="mx-auto max-w-2xl px-5 sm:px-8">
         {/* Follow button + count */}
         <div className="mt-6 flex items-center justify-center gap-4">
-          {session?.user && data && (session.user as { id?: string }).id !== data.dog.id && (
+          {session?.user && data && (session.user as { id?: string }).id !== data.dog.ownerId && (
             <button
               onClick={() => toggleFollow.mutate({ dogId: id })}
               disabled={toggleFollow.isPending}

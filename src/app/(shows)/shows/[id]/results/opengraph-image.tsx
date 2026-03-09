@@ -1,7 +1,7 @@
 import { ImageResponse } from 'next/og';
-import { eq, and, isNull } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db } from '@/server/db';
-import { shows, showClasses, entryClasses, entries, results } from '@/server/db/schema';
+import { shows, showClasses } from '@/server/db/schema';
 import { format } from 'date-fns';
 
 export const runtime = 'nodejs';
@@ -16,15 +16,6 @@ const SHOW_TYPE_LABELS: Record<string, string> = {
   open: 'Open Show',
   premier_open: 'Premier Open Show',
   championship: 'Championship Show',
-};
-
-const AWARD_LABELS: Record<string, string> = {
-  best_in_show: 'Best in Show',
-  reserve_best_in_show: 'Reserve BIS',
-  best_of_breed: 'Best of Breed',
-  best_puppy_in_show: 'Best Puppy in Show',
-  dog_cc: 'Dog CC',
-  bitch_cc: 'Bitch CC',
 };
 
 export default async function OGImage({
@@ -97,7 +88,6 @@ export default async function OGImage({
 
   let judgedCount = 0;
   let totalEntries = 0;
-  const topAwards: { award: string; dogName: string }[] = [];
 
   for (const cls of classes ?? []) {
     const confirmed = cls.entryClasses.filter(
@@ -105,15 +95,6 @@ export default async function OGImage({
     );
     totalEntries += confirmed.length;
     if (confirmed.some((ec) => ec.result)) judgedCount++;
-
-    for (const ec of confirmed) {
-      if (ec.result?.specialAward && AWARD_LABELS[ec.result.specialAward]) {
-        topAwards.push({
-          award: AWARD_LABELS[ec.result.specialAward],
-          dogName: '', // We'd need to join the dog table for names
-        });
-      }
-    }
   }
 
   const showDate = format(new Date(show.startDate), 'EEEE d MMMM yyyy');

@@ -1,17 +1,11 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { eq, and, isNull, inArray } from 'drizzle-orm';
+import { eq, and, isNull } from 'drizzle-orm';
 import { protectedProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import {
   users,
-  dogs,
   entries,
-  entryClasses,
-  results,
-  showClasses,
-  classDefinitions,
-  shows,
   achievements,
 } from '@/server/db/schema';
 import { getStripe } from '@/server/services/stripe';
