@@ -1,11 +1,10 @@
 import Link from 'next/link';
-import { auth } from '@/lib/auth';
+import { getCurrentUser } from '@/lib/auth-utils';
 import { UserNav } from './user-nav';
 import { MobileNav } from './mobile-nav';
 
 export async function Header() {
-  const session = await auth();
-  const user = session?.user;
+  const user = await getCurrentUser();
   const isSecretary = user?.role === 'secretary' || user?.role === 'admin';
   const isSteward =
     user?.role === 'steward' ||

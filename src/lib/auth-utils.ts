@@ -1,9 +1,35 @@
 import { redirect } from 'next/navigation';
+import { eq } from 'drizzle-orm';
 import { auth } from '@/lib/auth';
+import { getImpersonatedUserId } from '@/lib/impersonation';
+import { db } from '@/server/db';
+import { users } from '@/server/db/schema';
 
 export async function getCurrentUser() {
   const session = await auth();
-  return session?.user ?? null;
+  if (!session?.user) return null;
+
+  // When impersonating, return the impersonated user's identity
+  const impersonatedUserId = await getImpersonatedUserId();
+  if (impersonatedUserId && db) {
+    const [impersonatedUser] = await db
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        image: users.image,
+        role: users.role,
+      })
+      .from(users)
+      .where(eq(users.id, impersonatedUserId))
+      .limit(1);
+
+    if (impersonatedUser) {
+      return impersonatedUser;
+    }
+  }
+
+  return session.user;
 }
 
 export async function requireAuth() {
