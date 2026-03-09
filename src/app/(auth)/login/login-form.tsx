@@ -44,13 +44,16 @@ export function LoginForm() {
   const callbackUrl = searchParams.get('callbackUrl') ?? '/dashboard';
   const verify = searchParams.get('verify');
   const resetSuccess = searchParams.get('reset') === 'success';
+  const authError = searchParams.get('error');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPasswordField, setShowPasswordField] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(!!verify);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(
+    authError ? 'Sign-in failed. Please try again, or use a different sign-in method.' : ''
+  );
   const [showPasswordVisible, setShowPasswordVisible] = useState(false);
   const hiddenPasswordRef = useRef<HTMLInputElement>(null);
 

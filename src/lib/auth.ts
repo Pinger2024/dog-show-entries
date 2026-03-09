@@ -24,6 +24,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   pages: {
     signIn: '/login',
+    error: '/login',
     newUser: '/onboarding',
     verifyRequest: '/login?verify=true',
   },
