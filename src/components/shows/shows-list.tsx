@@ -137,18 +137,22 @@ function FilterPills({
   search,
   showType,
   status,
+  breedName,
   onClearSearch,
   onClearShowType,
   onClearStatus,
+  onClearBreed,
 }: {
   search: string;
   showType: string;
   status: string;
+  breedName: string | null;
   onClearSearch: () => void;
   onClearShowType: () => void;
   onClearStatus: () => void;
+  onClearBreed: () => void;
 }) {
-  const hasFilters = search || showType !== 'all' || status !== 'all';
+  const hasFilters = search || showType !== 'all' || status !== 'all' || breedName;
   if (!hasFilters) return null;
 
   return (
@@ -178,6 +182,15 @@ function FilterPills({
           className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground transition-colors hover:bg-secondary/80"
         >
           {statusLabels[status]}
+          <X className="size-3" />
+        </button>
+      )}
+      {breedName && (
+        <button
+          onClick={onClearBreed}
+          className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground transition-colors hover:bg-secondary/80"
+        >
+          {breedName}
           <X className="size-3" />
         </button>
       )}
@@ -363,6 +376,9 @@ export default function ShowsList() {
   const [breedId, setBreedId] = useState<string>('all');
   const [postcode, setPostcode] = useState('');
   const [postcodeError, setPostcodeError] = useState('');
+
+  // Fetch breeds for breed filter
+  const { data: breeds } = trpc.breeds.list.useQuery();
   const [isLocating, setIsLocating] = useState(false);
 
   // Pagination state — accumulated items + current cursor
@@ -371,7 +387,7 @@ export default function ShowsList() {
   const prevKeyRef = useRef('');
 
   // Build query key for detecting filter changes
-  const queryKey = `${debouncedSearch}|${showType}|${status}`;
+  const queryKey = `${debouncedSearch}|${showType}|${status}|${breedId}`;
 
   // Standard list query (only when near me is not active)
   const { data, isLoading, isFetching } = trpc.shows.list.useQuery(
@@ -398,6 +414,7 @@ export default function ShowsList() {
               | 'cancelled')
           : undefined,
       search: debouncedSearch || undefined,
+      breedId: breedId !== 'all' ? breedId : undefined,
       limit: PAGE_SIZE,
       cursor,
     },
@@ -528,7 +545,7 @@ export default function ShowsList() {
             disabled={isNearMeMode}
           />
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-3">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-3">
           <Select value={showType} onValueChange={setShowType} disabled={isNearMeMode}>
             <SelectTrigger className="h-11 w-full rounded-xl border-border/60 bg-white shadow-sm sm:w-[170px]">
               <SelectValue placeholder="Show Type" />
@@ -551,6 +568,19 @@ export default function ShowsList() {
               {Object.entries(statusLabels).map(([value, label]) => (
                 <SelectItem key={value} value={value}>
                   {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={breedId} onValueChange={setBreedId} disabled={isNearMeMode}>
+            <SelectTrigger className="h-11 w-full rounded-xl border-border/60 bg-white shadow-sm sm:w-[200px]">
+              <SelectValue placeholder="Breed" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Breeds</SelectItem>
+              {breeds?.map((breed) => (
+                <SelectItem key={breed.id} value={breed.id}>
+                  {breed.name}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -595,9 +625,11 @@ export default function ShowsList() {
           search={search}
           showType={showType}
           status={status}
+          breedName={breedId !== 'all' ? breeds?.find((b) => b.id === breedId)?.name ?? null : null}
           onClearSearch={() => setSearch('')}
           onClearShowType={() => setShowType('all')}
           onClearStatus={() => setStatus('all')}
+          onClearBreed={() => setBreedId('all')}
         />
       )}
 
