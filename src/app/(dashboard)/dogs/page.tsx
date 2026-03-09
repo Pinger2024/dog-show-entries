@@ -220,7 +220,7 @@ export default function DogsPage() {
                           </Link>
                         </Button>
                         <Button variant="outline" size="sm" className="min-h-[2.75rem] sm:min-h-0" asChild>
-                          <Link href={`/dog/${dog.id}`} target="_blank">
+                          <Link href={`/dog/${dog.id}`}>
                             <Globe className="size-3.5" />
                             Profile
                           </Link>

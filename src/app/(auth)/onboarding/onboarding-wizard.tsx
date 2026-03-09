@@ -124,7 +124,6 @@ const profileSchema = z.object({
   address: z.string().min(1, 'Address is required'),
   postcode: z.string().min(1, 'Postcode is required'),
   phone: z.string().optional(),
-  kcAccountNo: z.string().optional(),
 });
 
 type ProfileValues = z.infer<typeof profileSchema>;
@@ -241,7 +240,6 @@ function ProfileStep({
       address: profile?.address ?? '',
       postcode: profile?.postcode ?? '',
       phone: profile?.phone ?? '',
-      kcAccountNo: profile?.kcAccountNo ?? '',
     },
   });
 
@@ -343,31 +341,6 @@ function ProfileStep({
                       {...field}
                     />
                   </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="kcAccountNo"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>
-                    KC Account Number{' '}
-                    <span className="text-muted-foreground font-normal">
-                      (optional)
-                    </span>
-                  </FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="e.g. 12345"
-                      className="h-11 sm:h-12"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Your Royal Kennel Club account number, if you have one
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

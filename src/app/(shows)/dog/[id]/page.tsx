@@ -121,10 +121,10 @@ export default function DogProfilePage({
         <Dog className="size-12 text-muted-foreground/40" />
         <p className="text-muted-foreground">Dog not found.</p>
         <Link
-          href="/shows"
+          href="/dogs"
           className="text-sm text-primary underline hover:no-underline"
         >
-          Back to shows
+          Back to my dogs
         </Link>
       </div>
     );
@@ -138,13 +138,13 @@ export default function DogProfilePage({
       {/* Hero header */}
       <div className="relative overflow-hidden border-b bg-gradient-to-b from-primary/[0.04] to-transparent">
         <div className="relative mx-auto max-w-4xl px-4 pb-6 pt-6 sm:px-6">
-          <Link
-            href="/shows"
+          <button
+            onClick={() => window.history.length > 1 ? window.history.back() : window.location.href = '/dogs'}
             className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             <ArrowLeft className="size-4" />
-            Shows
-          </Link>
+            Back
+          </button>
 
           <div className="mt-4">
             <div className="flex items-start gap-4">
