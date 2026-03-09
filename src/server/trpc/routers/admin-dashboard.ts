@@ -51,12 +51,15 @@ export const adminDashboardRouter = createTRPCRouter({
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
     const [
-      // ── KPI stats (10 queries, down from 13) ────────────────
+      // ── KPI stats ───────────────────────────────────────────
       [totalUsersRow],
       [newUsersWeekRow],
       [activeShowsRow],
-      [entriesMonthlyRow],
-      [revenueAggRow],
+      [entriesThisMonthRow],
+      [entriesLastMonthRow],
+      [revenueThisMonthRow],
+      [revenueLastMonthRow],
+      [revenueTotalRow],
       [pendingFeedbackRow],
       [pendingAppsRow],
       [totalDogsRow],
@@ -97,23 +100,53 @@ export const adminDashboardRouter = createTRPCRouter({
           notInArray(shows.status, ['completed', 'cancelled', 'draft'])
         ),
 
-      // Entries: this month + last month in one query via FILTER
+      // Entries: this month
       ctx.db
-        .select({
-          thisMonth: sql<number>`count(*) filter (where ${entries.createdAt} >= ${thisMonthStart})::int`,
-          lastMonth: sql<number>`count(*) filter (where ${entries.createdAt} < ${thisMonthStart})::int`,
-        })
+        .select({ v: sql<number>`count(*)::int` })
         .from(entries)
         .where(
-          and(isNull(entries.deletedAt), gte(entries.createdAt, lastMonthStart))
+          and(isNull(entries.deletedAt), gte(entries.createdAt, thisMonthStart))
         ),
-
-      // Revenue: this month + last month + total in one query via FILTER
+      // Entries: last month
+      ctx.db
+        .select({ v: sql<number>`count(*)::int` })
+        .from(entries)
+        .where(
+          and(
+            isNull(entries.deletedAt),
+            gte(entries.createdAt, lastMonthStart),
+            lt(entries.createdAt, thisMonthStart)
+          )
+        ),
+      // Revenue: this month
       ctx.db
         .select({
-          thisMonth: sql<number>`coalesce(sum(${payments.amount}) filter (where ${payments.createdAt} >= ${thisMonthStart}), 0)::int`,
-          lastMonth: sql<number>`coalesce(sum(${payments.amount}) filter (where ${payments.createdAt} >= ${lastMonthStart} and ${payments.createdAt} < ${thisMonthStart}), 0)::int`,
-          total: sql<number>`coalesce(sum(${payments.amount}), 0)::int`,
+          v: sql<number>`coalesce(sum(${payments.amount}), 0)::int`,
+        })
+        .from(payments)
+        .where(
+          and(
+            eq(payments.status, 'succeeded'),
+            gte(payments.createdAt, thisMonthStart)
+          )
+        ),
+      // Revenue: last month
+      ctx.db
+        .select({
+          v: sql<number>`coalesce(sum(${payments.amount}), 0)::int`,
+        })
+        .from(payments)
+        .where(
+          and(
+            eq(payments.status, 'succeeded'),
+            gte(payments.createdAt, lastMonthStart),
+            lt(payments.createdAt, thisMonthStart)
+          )
+        ),
+      // Revenue: total
+      ctx.db
+        .select({
+          v: sql<number>`coalesce(sum(${payments.amount}), 0)::int`,
         })
         .from(payments)
         .where(eq(payments.status, 'succeeded')),
@@ -356,17 +389,17 @@ export const adminDashboardRouter = createTRPCRouter({
         newUsersThisWeek: newUsersWeekRow.v,
         activeShows: activeShowsRow.v,
         totalShows,
-        entriesThisMonth: entriesMonthlyRow.thisMonth,
+        entriesThisMonth: entriesThisMonthRow.v,
         entryDelta: getDelta(
-          entriesMonthlyRow.thisMonth,
-          entriesMonthlyRow.lastMonth
+          entriesThisMonthRow.v,
+          entriesLastMonthRow.v
         ),
-        revenueThisMonth: revenueAggRow.thisMonth,
+        revenueThisMonth: revenueThisMonthRow.v,
         revenueDelta: getDelta(
-          revenueAggRow.thisMonth,
-          revenueAggRow.lastMonth
+          revenueThisMonthRow.v,
+          revenueLastMonthRow.v
         ),
-        totalRevenue: revenueAggRow.total,
+        totalRevenue: revenueTotalRow.v,
         pendingFeedback: pendingFeedbackRow.v,
         pendingApplications: pendingAppsRow.v,
         totalDogs: totalDogsRow.v,
