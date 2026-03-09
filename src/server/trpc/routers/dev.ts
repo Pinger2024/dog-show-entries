@@ -1,36 +1,15 @@
 import { z } from 'zod';
 import { eq, sql } from 'drizzle-orm';
-import { TRPCError } from '@trpc/server';
-import { createTRPCRouter, middleware, baseProcedure } from '../init';
+import { createTRPCRouter } from '../init';
+import { adminProcedure } from '../procedures';
 import { users, entries } from '@/server/db/schema';
-
-// Account switcher access: admin role OR specific allowed emails
-const ALLOWED_EMAILS = ['michael@prometheus-it.com', 'mandy@hundarkgsd.co.uk'];
-
-const isDevAuthorised = middleware(async ({ ctx, next }) => {
-  if (!ctx.session?.user) {
-    throw new TRPCError({ code: 'UNAUTHORIZED' });
-  }
-  if (
-    ctx.session.user.role !== 'admin' &&
-    !ALLOWED_EMAILS.includes(ctx.session.user.email)
-  ) {
-    throw new TRPCError({
-      code: 'FORBIDDEN',
-      message: 'Dev tools access required',
-    });
-  }
-  return next({ ctx: { session: ctx.session } });
-});
-
-const devProcedure = baseProcedure.use(isDevAuthorised);
 
 export const devRouter = createTRPCRouter({
   /**
-   * List all users for the account switcher / admin user management.
+   * List all users for admin user management.
    * Includes entry count and timestamps for richer admin views.
    */
-  listUsers: devProcedure.query(async ({ ctx }) => {
+  listUsers: adminProcedure.query(async ({ ctx }) => {
     const allUsers = await ctx.db
       .select({
         id: users.id,
@@ -53,7 +32,7 @@ export const devRouter = createTRPCRouter({
   /**
    * Change a user's role.
    */
-  setRole: devProcedure
+  setRole: adminProcedure
     .input(
       z.object({
         userId: z.string().uuid(),

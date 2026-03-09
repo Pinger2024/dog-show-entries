@@ -17,6 +17,7 @@ import {
   Settings,
   LogOut,
   ChevronRight,
+  Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -41,6 +42,7 @@ const navItems = [
 ];
 
 const adminNavItems = [
+  { href: '/admin', label: 'Overview', mobileLabel: 'Admin', icon: Activity },
   { href: '/feedback', label: 'Feedback', mobileLabel: 'Feedback', icon: Inbox },
   { href: '/admin/users', label: 'Users', mobileLabel: 'Users', icon: Users },
   { href: '/admin/applications', label: 'Applications', mobileLabel: 'Apps', icon: ClipboardCheck },
@@ -142,7 +144,11 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
             <>
               <Separator className="my-2" />
               {adminNavItems.map((item) => {
-                const isActive = pathname.startsWith(item.href);
+                // /admin uses exact match to avoid matching /admin/users etc.
+                const isActive =
+                  item.href === '/admin'
+                    ? pathname === '/admin'
+                    : pathname.startsWith(item.href);
                 return (
                   <Link
                     key={item.href}
@@ -286,7 +292,10 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
             );
           })}
           {user.role === 'admin' && adminNavItems.map((item) => {
-            const isActive = pathname.startsWith(item.href);
+            const isActive =
+              item.href === '/admin'
+                ? pathname === '/admin'
+                : pathname.startsWith(item.href);
             return (
               <Link
                 key={item.href}

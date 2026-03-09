@@ -1,19 +1,22 @@
 import { TRPCError } from '@trpc/server';
+import type { TRPCContext, Session } from './init';
 import { baseProcedure, middleware } from './init';
+
+/** Returns the impersonated session when active, otherwise the real session. */
+function getEffectiveSession(ctx: TRPCContext): Session {
+  return ctx.impersonating
+    ? { user: ctx.impersonating }
+    : ctx.session!;
+}
 
 const isAuthed = middleware(async ({ ctx, next }) => {
   if (!ctx.session?.user) {
     throw new TRPCError({ code: 'UNAUTHORIZED' });
   }
 
-  // When impersonating, use the impersonated user's session data
-  const effectiveSession = ctx.impersonating
-    ? { user: ctx.impersonating }
-    : ctx.session;
-
   return next({
     ctx: {
-      session: effectiveSession,
+      session: getEffectiveSession(ctx),
     },
   });
 });
@@ -23,10 +26,7 @@ const isSecretary = middleware(async ({ ctx, next }) => {
     throw new TRPCError({ code: 'UNAUTHORIZED' });
   }
 
-  // When impersonating, use the impersonated user's role for access checks
-  const effectiveSession = ctx.impersonating
-    ? { user: ctx.impersonating }
-    : ctx.session;
+  const effectiveSession = getEffectiveSession(ctx);
 
   if (
     effectiveSession.user.role !== 'secretary' &&
@@ -49,10 +49,7 @@ const isSteward = middleware(async ({ ctx, next }) => {
     throw new TRPCError({ code: 'UNAUTHORIZED' });
   }
 
-  // When impersonating, use the impersonated user's role for access checks
-  const effectiveSession = ctx.impersonating
-    ? { user: ctx.impersonating }
-    : ctx.session;
+  const effectiveSession = getEffectiveSession(ctx);
 
   if (
     effectiveSession.user.role !== 'steward' &&

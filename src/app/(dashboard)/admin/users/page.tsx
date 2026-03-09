@@ -60,10 +60,12 @@ export default function AdminUsersPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId }),
       });
-      if (res.ok) {
-        router.push('/');
-        router.refresh();
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? 'Failed to impersonate');
       }
+      router.push('/');
+      router.refresh();
     } finally {
       setImpersonating(null);
     }
@@ -77,7 +79,7 @@ export default function AdminUsersPage() {
   }
 
   // Only admin can access
-  if (session?.user && (session.user as any).role !== 'admin') {
+  if (session?.user && (session.user as Record<string, unknown>).role !== 'admin') {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <p className="text-muted-foreground">Admin access required</p>

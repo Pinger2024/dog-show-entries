@@ -1,12 +1,11 @@
-import { cookies } from 'next/headers';
 import { db } from '@/server/db';
 import { eq } from 'drizzle-orm';
 import { users } from '@/server/db/schema';
+import { getImpersonatedUserId } from '@/lib/impersonation';
 import { ImpersonationBanner } from './impersonation-banner';
 
 export async function ImpersonationBannerWrapper() {
-  const cookieStore = await cookies();
-  const impersonatedUserId = cookieStore.get('remi_impersonate_user')?.value;
+  const impersonatedUserId = await getImpersonatedUserId();
 
   if (!impersonatedUserId) return null;
 
