@@ -52,11 +52,11 @@ const adminNavItems = [
 
 /** Mobile bottom bar: admin gets admin-focused tabs, others get personal tabs */
 const adminMobileItems = [
-  { href: '/admin', label: 'Overview', mobileLabel: 'Admin', icon: Activity },
+  { href: '/admin', label: 'Overview', mobileLabel: 'Overview', icon: Activity },
   { href: '/admin/users', label: 'Users', mobileLabel: 'Users', icon: Users },
   { href: '/feedback', label: 'Feedback', mobileLabel: 'Feedback', icon: Inbox },
-  { href: '/dogs', label: 'My Dogs', mobileLabel: 'Dogs', icon: Dog },
-  { href: '/browse', label: 'Find a Show', mobileLabel: 'Shows', icon: CalendarDays },
+  { href: '/admin/applications', label: 'Applications', mobileLabel: 'Apps', icon: ClipboardCheck },
+  { href: '/admin/reference-data', label: 'Reference Data', mobileLabel: 'Ref Data', icon: Database },
 ];
 
 function getInitials(name?: string | null, email?: string | null) {
@@ -112,16 +112,34 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
 
         {/* Nav */}
         <nav className="flex-1 space-y-1 p-3">
-          {user.role === 'admin' && (
+          {user.role === 'admin' ? (
+            adminNavItems.map((item) => {
+              const isActive =
+                item.href === '/admin'
+                  ? pathname === '/admin'
+                  : pathname.startsWith(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    'flex items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-medium transition-colors',
+                    isActive
+                      ? 'bg-sidebar-accent text-sidebar-primary'
+                      : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
+                  )}
+                >
+                  <item.icon className="size-5" />
+                  {item.label}
+                </Link>
+              );
+            })
+          ) : (
             <>
-              <p className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/40">
-                Admin
-              </p>
-              {adminNavItems.map((item) => {
+              {personalNavItems.map((item) => {
                 const isActive =
-                  item.href === '/admin'
-                    ? pathname === '/admin'
-                    : pathname.startsWith(item.href);
+                  pathname === item.href ||
+                  (item.href !== '/dashboard' && pathname.startsWith(item.href));
                 return (
                   <Link
                     key={item.href}
@@ -138,54 +156,30 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
                   </Link>
                 );
               })}
-              <Separator className="my-2" />
-              <p className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/40">
-                Personal
-              </p>
-            </>
-          )}
-          {personalNavItems.map((item) => {
-            const isActive =
-              pathname === item.href ||
-              (item.href !== '/dashboard' && pathname.startsWith(item.href));
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  'flex items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-medium transition-colors',
-                  isActive
-                    ? 'bg-sidebar-accent text-sidebar-primary'
-                    : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
-                )}
-              >
-                <item.icon className="size-5" />
-                {item.label}
-              </Link>
-            );
-          })}
-          {user.role === 'exhibitor' && (
-            <>
-              <Separator className="my-2" />
-              <Link
-                href="/apply"
-                className={cn(
-                  'flex items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-medium transition-colors',
-                  pathname === '/apply'
-                    ? 'bg-sidebar-accent text-sidebar-primary'
-                    : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
-                )}
-              >
-                <Sparkles className="size-5" />
-                Run Shows
-              </Link>
+              {user.role === 'exhibitor' && (
+                <>
+                  <Separator className="my-2" />
+                  <Link
+                    href="/apply"
+                    className={cn(
+                      'flex items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-medium transition-colors',
+                      pathname === '/apply'
+                        ? 'bg-sidebar-accent text-sidebar-primary'
+                        : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
+                    )}
+                  >
+                    <Sparkles className="size-5" />
+                    Run Shows
+                  </Link>
+                </>
+              )}
             </>
           )}
         </nav>
 
         {/* Sidebar footer */}
         <div className="border-t p-3">
-          {(user.role === 'secretary' || user.role === 'admin') && (
+          {user.role === 'secretary' && (
             <Link
               href="/secretary"
               className={cn(
@@ -252,7 +246,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
             Remi
           </Link>
           <div className="flex items-center gap-1">
-            {(user.role === 'secretary' || user.role === 'admin') && (
+            {user.role === 'secretary' && (
               <Button variant="outline" size="sm" className="h-9 gap-1.5 px-3 text-xs font-medium" asChild>
                 <Link href="/secretary">
                   <ClipboardCheck className="size-4" />
