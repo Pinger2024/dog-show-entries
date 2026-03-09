@@ -168,7 +168,7 @@ export default function NewShowPage() {
   const { data: session } = useSession();
   const [step, setStep] = useState(0);
   const [createVenue, setCreateVenue] = useState(false);
-  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  const [selectedTemplates, setSelectedTemplates] = useState<string[]>([]);
 
   const form = useForm<CreateShowValues>({
     resolver: zodResolver(createShowSchema) as never,
@@ -345,24 +345,39 @@ export default function NewShowPage() {
     }
   }
 
-  // When a template is selected, auto-populate class IDs
+  // When templates are selected, compute the combined matched classes
   const matchedTemplateClasses = useMemo(() => {
-    if (!selectedTemplate || !classDefinitions) return [];
-    const template = CLASS_TEMPLATES.find((t) => t.id === selectedTemplate);
-    if (!template) return [];
-    return classDefinitions.filter((cd) => template.classNames.includes(cd.name));
-  }, [selectedTemplate, classDefinitions]);
+    if (selectedTemplates.length === 0 || !classDefinitions) return [];
+    const allClassNames = new Set<string>();
+    for (const tid of selectedTemplates) {
+      const template = CLASS_TEMPLATES.find((t) => t.id === tid);
+      if (template) template.classNames.forEach((n) => allClassNames.add(n));
+    }
+    return classDefinitions.filter((cd) => allClassNames.has(cd.name));
+  }, [selectedTemplates, classDefinitions]);
 
   function handleSelectTemplate(templateId: string) {
-    const template = CLASS_TEMPLATES.find((t) => t.id === templateId);
-    setSelectedTemplate(templateId);
-    if (template && classDefinitions) {
+    const isSelected = selectedTemplates.includes(templateId);
+    const newTemplates = isSelected
+      ? selectedTemplates.filter((id) => id !== templateId)
+      : [...selectedTemplates, templateId];
+    setSelectedTemplates(newTemplates);
+
+    if (classDefinitions) {
+      // Combine class IDs from all selected templates
+      const allClassNames = new Set<string>();
+      for (const tid of newTemplates) {
+        const template = CLASS_TEMPLATES.find((t) => t.id === tid);
+        if (template) template.classNames.forEach((n) => allClassNames.add(n));
+      }
       const ids = classDefinitions
-        .filter((cd) => template.classNames.includes(cd.name))
+        .filter((cd) => allClassNames.has(cd.name))
         .map((cd) => cd.id);
       form.setValue('selectedClassIds', ids);
-      // Auto-set class sex arrangement from template
-      if (template.splitBySex && !form.getValues('classSexArrangement')) {
+
+      // Auto-set class sex arrangement if any template uses split by sex
+      const anySplitBySex = newTemplates.some((tid) => CLASS_TEMPLATES.find((t) => t.id === tid)?.splitBySex);
+      if (anySplitBySex && !form.getValues('classSexArrangement')) {
         form.setValue('classSexArrangement', 'separate_sex');
       }
     }
@@ -1049,31 +1064,39 @@ export default function NewShowPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {CLASS_TEMPLATES.map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => handleSelectTemplate(t.id)}
-                      className={cn(
-                        'rounded-lg border p-3 text-left transition-colors',
-                        selectedTemplate === t.id
-                          ? 'border-primary bg-primary/5'
-                          : 'hover:bg-muted/50'
-                      )}
-                    >
-                      <p className="font-medium text-sm">{t.name}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {t.description}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {t.classNames.length} classes
-                        {t.splitBySex ? ' · Split by sex' : ''}
-                      </p>
-                    </button>
-                  ))}
+                  {CLASS_TEMPLATES.map((t) => {
+                    const isActive = selectedTemplates.includes(t.id);
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => handleSelectTemplate(t.id)}
+                        className={cn(
+                          'rounded-lg border p-3 text-left transition-colors relative',
+                          isActive
+                            ? 'border-primary bg-primary/5'
+                            : 'hover:bg-muted/50'
+                        )}
+                      >
+                        {isActive && (
+                          <div className="absolute top-2 right-2 size-5 rounded-full bg-primary flex items-center justify-center">
+                            <Check className="size-3 text-primary-foreground" />
+                          </div>
+                        )}
+                        <p className="font-medium text-sm">{t.name}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {t.description}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {t.classNames.length} classes
+                          {t.splitBySex ? ' · Split by sex' : ''}
+                        </p>
+                      </button>
+                    );
+                  })}
                 </div>
 
-                {selectedTemplate && matchedTemplateClasses.length > 0 && (
+                {selectedTemplates.length > 0 && matchedTemplateClasses.length > 0 && (
                   <div className="rounded-lg border p-3 space-y-2">
                     <p className="text-sm font-medium">
                       Classes included ({form.watch('selectedClassIds').length})
@@ -1109,7 +1132,7 @@ export default function NewShowPage() {
                   </div>
                 )}
 
-                {!selectedTemplate && (
+                {selectedTemplates.length === 0 && (
                   <p className="text-sm text-muted-foreground">
                     Select a template above, or skip this step — you can add classes
                     after creating the show.

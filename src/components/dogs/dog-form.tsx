@@ -278,6 +278,12 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
     { enabled: mode === 'create' }
   );
 
+  // Fetch current user's profile to pre-populate the primary owner
+  const { data: userProfile } = trpc.users.getProfile.useQuery(
+    undefined,
+    { enabled: mode === 'create' }
+  );
+
   const form = useForm<DogFormValues>({
     resolver: zodResolver(dogFormSchema),
     defaultValues: {
@@ -294,6 +300,21 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
       ...defaultValues,
     },
   });
+
+  // Pre-populate primary owner from user profile when creating a new dog
+  const ownerPrepopulated = useRef(false);
+  useEffect(() => {
+    if (mode === 'create' && userProfile && !ownerPrepopulated.current && form.getValues('owners').length === 0) {
+      ownerPrepopulated.current = true;
+      form.setValue('owners', [{
+        ownerName: userProfile.name ?? '',
+        ownerAddress: [userProfile.address, userProfile.postcode].filter(Boolean).join(', '),
+        ownerEmail: userProfile.email ?? '',
+        ownerPhone: userProfile.phone ?? '',
+        isPrimary: true,
+      }]);
+    }
+  }, [mode, userProfile, form]);
 
   // When breeds load after a KC lookup already stashed a breed name, apply it
   useEffect(() => {
@@ -907,7 +928,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
 
             {ownerFields.length === 0 && (
               <p className="text-sm text-muted-foreground">
-                No owners added yet. An owner record will be created automatically from your profile when you add this dog.
+                No owners added yet. Click &quot;Add New Owner&quot; to add one.
               </p>
             )}
           </CardContent>
