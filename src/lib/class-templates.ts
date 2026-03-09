@@ -140,7 +140,6 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
     classNames: [
       'Junior Handler (6-11)',
       'Junior Handler (12-16)',
-      'Junior Handler (17-24)',
     ],
     defaultFeePence: 0,
     splitBySex: false,

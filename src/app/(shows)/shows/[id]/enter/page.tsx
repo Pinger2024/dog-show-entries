@@ -554,7 +554,7 @@ export default function EnterShowPage() {
                 <div>
                   <p className="text-sm font-medium sm:text-base">Junior Handler</p>
                   <p className="text-xs text-muted-foreground sm:text-sm">
-                    Handler aged 6-24, judged on handling skill.
+                    Handler aged 6-16, judged on handling skill.
                   </p>
                 </div>
               </button>
@@ -659,7 +659,7 @@ export default function EnterShowPage() {
         <div className="space-y-6">
           <h2 className="text-lg font-semibold">Junior Handler Details</h2>
           <p className="text-sm text-muted-foreground">
-            Enter the details of the young handler. They must be aged 6-24 years on the day of the show.
+            Enter the details of the young handler. They must be aged 6-16 years on the day of the show.
           </p>
 
           <div className="space-y-4">
@@ -693,7 +693,7 @@ export default function EnterShowPage() {
             <Button
               className="h-11 flex-1 text-sm sm:flex-none"
               onClick={() => {
-                // Validate handler age (6-24 years on day of show)
+                // Validate handler age (6-16 years on day of show)
                 if (jhDob && show?.startDate) {
                   const ageMonths = differenceInMonths(new Date(show.startDate), new Date(jhDob));
                   const ageYears = ageMonths / 12;
@@ -701,8 +701,8 @@ export default function EnterShowPage() {
                     alert('The handler must be at least 6 years old on the day of the show.');
                     return;
                   }
-                  if (ageYears >= 25) {
-                    alert('The handler must be under 25 years old on the day of the show.');
+                  if (ageYears >= 17) {
+                    alert('The handler must be under 17 years old on the day of the show.');
                     return;
                   }
                 }

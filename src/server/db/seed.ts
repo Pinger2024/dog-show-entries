@@ -117,7 +117,6 @@ async function seed() {
       // Junior Handler classes
       { name: 'Junior Handler (6-11)', type: 'junior_handler' as const, sortOrder: 1, minAgeMonths: 72, maxAgeMonths: 143, description: 'For handlers aged 6-11 years on the day of the show. Judged on handling skill, not the dog.' },
       { name: 'Junior Handler (12-16)', type: 'junior_handler' as const, sortOrder: 2, minAgeMonths: 144, maxAgeMonths: 203, description: 'For handlers aged 12-16 years on the day of the show. Judged on handling skill, not the dog.' },
-      { name: 'Junior Handler (17-24)', type: 'junior_handler' as const, sortOrder: 3, minAgeMonths: 204, maxAgeMonths: 299, description: 'For handlers aged 17-24 years on the day of the show. Judged on handling skill, not the dog.' },
     ])
     .onConflictDoNothing({ target: schema.classDefinitions.name })
     .returning();
