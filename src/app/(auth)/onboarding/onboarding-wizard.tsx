@@ -22,7 +22,7 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc/client';
 import { cn } from '@/lib/utils';
-import { PostcodeLookup } from '@/components/postcode-lookup';
+import { PostcodeLookup, formatAddress } from '@/components/postcode-lookup';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Calendar } from '@/components/ui/calendar';
@@ -281,7 +281,7 @@ function ProfileStep({
             />
             <PostcodeLookup
               onSelect={(result) => {
-                form.setValue('address', result.address + (result.town ? ', ' + result.town : ''));
+                form.setValue('address', formatAddress(result));
                 form.setValue('postcode', result.postcode);
               }}
             />

@@ -5,7 +5,7 @@ import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PostcodeLookup } from '@/components/postcode-lookup';
+import { PostcodeLookup, formatAddress } from '@/components/postcode-lookup';
 import {
   Card,
   CardContent,
@@ -88,7 +88,7 @@ export function ProfileForm() {
             <PostcodeLookup
               compact
               onSelect={(result) => {
-                setAddress(result.address + (result.town ? ', ' + result.town : '') + ', ' + result.postcode);
+                setAddress(formatAddress(result) + ', ' + result.postcode);
               }}
             />
             <Input

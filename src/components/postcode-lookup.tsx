@@ -13,6 +13,13 @@ export type AddressResult = {
   uprn: string;
 };
 
+/** Format an AddressResult as a single-line string (address, town). Postcode excluded — use result.postcode separately. */
+export function formatAddress(result: AddressResult): string {
+  const parts = [result.address];
+  if (result.town) parts.push(result.town);
+  return parts.join(', ');
+}
+
 interface PostcodeLookupProps {
   onSelect: (result: AddressResult) => void;
   /** Compact mode hides the label and uses smaller sizing */
@@ -83,6 +90,7 @@ export function PostcodeLookup({ onSelect, compact }: PostcodeLookupProps) {
           onClick={handleSearch}
           disabled={loading || !postcode.trim()}
           className={compact ? 'h-9 px-3' : 'h-11 sm:h-12 px-4'}
+          aria-label="Search for address"
         >
           {loading ? (
             <Loader2 className="size-4 animate-spin" />

@@ -41,7 +41,7 @@ import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
-import { PostcodeLookup } from '@/components/postcode-lookup';
+import { PostcodeLookup, formatAddress } from '@/components/postcode-lookup';
 import {
   Form,
   FormControl,
@@ -900,7 +900,7 @@ export default function NewShowPage() {
                     <PostcodeLookup
                       compact
                       onSelect={(result) => {
-                        form.setValue('newVenueAddress', result.address + (result.town ? ', ' + result.town : ''));
+                        form.setValue('newVenueAddress', formatAddress(result));
                         form.setValue('newVenuePostcode', result.postcode);
                       }}
                     />

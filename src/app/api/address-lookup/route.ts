@@ -8,6 +8,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Postcode is required' }, { status: 400 });
   }
 
+  // Validate UK postcode format before forwarding to OS Places
+  const postcodeRegex = /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i;
+  if (!postcodeRegex.test(postcode.trim())) {
+    return NextResponse.json({ error: 'Invalid postcode format' }, { status: 400 });
+  }
+
   const apiKey = process.env.OS_PLACES_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: 'Address lookup not configured' }, { status: 503 });
@@ -19,9 +25,7 @@ export async function GET(req: NextRequest) {
     url.searchParams.set('key', apiKey);
     url.searchParams.set('dataset', 'DPA'); // Delivery Point Address (Royal Mail PAF equivalent)
 
-    const res = await fetch(url.toString(), {
-      next: { revalidate: 86400 }, // Cache for 24 hours — addresses don't change often
-    });
+    const res = await fetch(url.toString());
 
     if (!res.ok) {
       console.error('[address-lookup] OS Places returned', res.status);
@@ -48,16 +52,20 @@ export async function GET(req: NextRequest) {
       const postTown = dpa.POST_TOWN ?? '';
       const postcode = dpa.POSTCODE ?? '';
 
+      const address = lines.join(', ');
+
       return {
-        address: lines.join(', '),
+        address,
         town: postTown,
         postcode,
-        fullAddress: dpa.ADDRESS,
+        fullAddress: dpa.ADDRESS ?? [address, postTown, postcode].filter(Boolean).join(', '),
         uprn: dpa.UPRN,
       };
     }).filter(Boolean);
 
-    return NextResponse.json({ results });
+    return NextResponse.json({ results }, {
+      headers: { 'Cache-Control': 'public, max-age=86400, stale-while-revalidate=3600' },
+    });
   } catch (error) {
     console.error('[address-lookup] Error:', error);
     return NextResponse.json({ error: 'Lookup failed' }, { status: 500 });
