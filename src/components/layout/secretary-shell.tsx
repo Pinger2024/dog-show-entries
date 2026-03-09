@@ -204,14 +204,23 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
               </>
             )}
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="size-10"
-            onClick={() => signOut({ callbackUrl: '/' })}
-          >
-            <LogOut className="size-5" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" className="h-9 gap-1.5 px-2.5 text-xs" asChild>
+              <Link href="/dashboard">
+                <LayoutDashboard className="size-4" />
+                <span className="sr-only sm:not-sr-only">Exhibitor</span>
+              </Link>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9 gap-1.5 px-2.5 text-xs text-muted-foreground"
+              onClick={() => signOut({ callbackUrl: '/' })}
+            >
+              <LogOut className="size-4" />
+              <span className="sr-only sm:not-sr-only">Sign Out</span>
+            </Button>
+          </div>
         </header>
 
         <main className="flex-1 overflow-y-auto">

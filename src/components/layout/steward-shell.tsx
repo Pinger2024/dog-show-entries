@@ -63,11 +63,12 @@ export function StewardShell({ user, children }: StewardShellProps) {
           </Button>
           <Button
             variant="ghost"
-            size="icon"
-            className="size-11"
+            size="sm"
+            className="h-9 gap-1.5 px-2.5 text-xs text-muted-foreground"
             onClick={() => signOut({ callbackUrl: '/' })}
           >
-            <LogOut className="size-5" />
+            <LogOut className="size-4" />
+            <span className="hidden sm:inline">Sign Out</span>
           </Button>
         </div>
       </header>

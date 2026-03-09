@@ -156,6 +156,16 @@ export default function EnterShowPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sundryItemsData]);
 
+  // Warn user before leaving the page if they have entries in the cart
+  useEffect(() => {
+    if (cart.entries.length === 0 || cart.step === 'confirmation') return;
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      e.preventDefault();
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [cart.entries.length, cart.step]);
+
   // Win summary for smart class recommendations — pass showId so suggestions
   // are filtered to classes actually in this show's schedule
   const { data: winSummary } = trpc.dogs.getWinSummary.useQuery(
@@ -731,6 +741,18 @@ export default function EnterShowPage() {
               {/* Render class groups */}
               {cart.activeEntry?.entryType === 'standard' ? (
                 <>
+                  {winSummary && (groupedClasses.age.length > 0 || groupedClasses.achievement.length > 0) && (
+                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm dark:border-blue-800 dark:bg-blue-950">
+                      <p className="font-medium text-blue-900 dark:text-blue-100">
+                        {winSummary.recommendation.suggested
+                          ? <>Suggested class: <span className="font-bold">{winSummary.recommendation.suggested}</span></>
+                          : 'Eligible for all achievement classes'}
+                      </p>
+                      <p className="mt-0.5 text-xs text-blue-700 dark:text-blue-300">
+                        {winSummary.recommendation.reason}
+                      </p>
+                    </div>
+                  )}
                   {groupedClasses.age.length > 0 && (
                     <ClassGroup
                       title="Age Classes"
@@ -738,31 +760,18 @@ export default function EnterShowPage() {
                       selectedIds={selectedClassIds}
                       onToggle={toggleClass}
                       getAgeEligibility={getAgeEligibility}
+                      suggestedClassName={winSummary?.recommendation.suggested}
                     />
                   )}
                   {groupedClasses.achievement.length > 0 && (
-                    <>
-                      {winSummary && (
-                        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm dark:border-blue-800 dark:bg-blue-950">
-                          <p className="font-medium text-blue-900 dark:text-blue-100">
-                            {winSummary.recommendation.suggested
-                              ? <>Suggested class: <span className="font-bold">{winSummary.recommendation.suggested}</span></>
-                              : 'Eligible for all achievement classes'}
-                          </p>
-                          <p className="mt-0.5 text-xs text-blue-700 dark:text-blue-300">
-                            {winSummary.recommendation.reason}
-                          </p>
-                        </div>
-                      )}
-                      <ClassGroup
-                        title="Achievement Classes"
-                        classes={groupedClasses.achievement}
-                        selectedIds={selectedClassIds}
-                        onToggle={toggleClass}
-                        eligibleClassNames={winSummary?.recommendation.eligible}
-                        suggestedClassName={winSummary?.recommendation.suggested}
-                      />
-                    </>
+                    <ClassGroup
+                      title="Achievement Classes"
+                      classes={groupedClasses.achievement}
+                      selectedIds={selectedClassIds}
+                      onToggle={toggleClass}
+                      eligibleClassNames={winSummary?.recommendation.eligible}
+                      suggestedClassName={winSummary?.recommendation.suggested}
+                    />
                   )}
                   {groupedClasses.special.length > 0 && (
                     <ClassGroup

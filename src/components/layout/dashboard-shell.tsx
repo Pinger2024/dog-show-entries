@@ -262,10 +262,11 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
             <Button
               variant="ghost"
               size="sm"
-              className="size-11"
+              className="h-9 gap-1.5 px-2.5 text-xs text-muted-foreground"
               onClick={() => signOut({ callbackUrl: '/' })}
             >
-              <LogOut className="size-5" />
+              <LogOut className="size-4" />
+              <span className="sr-only sm:not-sr-only">Sign Out</span>
             </Button>
           </div>
         </header>
