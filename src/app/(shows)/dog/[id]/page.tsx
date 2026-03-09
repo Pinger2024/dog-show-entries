@@ -3,6 +3,7 @@
 import { use, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
 import { format, parseISO, differenceInYears, differenceInMonths } from 'date-fns';
 import {
   ArrowLeft,
@@ -17,10 +18,14 @@ import {
   Share2,
   Check,
   ExternalLink,
+  Heart,
+  BookOpen,
+  Clock,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { getPlacementLabel, placementColors } from '@/lib/placements';
+import { DogTimeline } from '@/components/dog-timeline';
 
 /* ─── Constants ────────────────────────────────────────────────── */
 
@@ -199,11 +204,27 @@ export default function DogProfilePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const { data: session } = useSession();
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [activeTab, setActiveTab] = useState<'profile' | 'timeline'>('profile');
 
   const { data, isLoading } = trpc.dogs.getPublicProfile.useQuery({ id });
   const { data: photos } = trpc.dogs.getPublicPhotos.useQuery({ dogId: id });
+
+  // Follow system
+  const { data: followData } = trpc.follows.isFollowing.useQuery(
+    { dogId: id },
+    { enabled: !!session?.user }
+  );
+  const { data: followerCount } = trpc.follows.count.useQuery({ dogId: id });
+  const utils = trpc.useUtils();
+  const toggleFollow = trpc.follows.toggle.useMutation({
+    onSuccess: () => {
+      utils.follows.isFollowing.invalidate({ dogId: id });
+      utils.follows.count.invalidate({ dogId: id });
+    },
+  });
 
   async function handleShare() {
     const url = window.location.href;
@@ -373,8 +394,75 @@ export default function DogProfilePage({
         )}
       </div>
 
+      {/* ─── Follow & tab bar ─── */}
+      <div className="mx-auto max-w-2xl px-5 sm:px-8">
+        {/* Follow button + count */}
+        <div className="mt-6 flex items-center justify-center gap-4">
+          {session?.user && data && (session.user as { id?: string }).id !== data.dog.id && (
+            <button
+              onClick={() => toggleFollow.mutate({ dogId: id })}
+              disabled={toggleFollow.isPending}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-[0.8125rem] font-medium transition-all ${
+                followData?.following
+                  ? 'border-stone-300 bg-stone-100 text-stone-600'
+                  : 'border-stone-200 bg-white text-stone-500 hover:border-stone-300 hover:text-stone-700'
+              }`}
+            >
+              <Heart
+                className={`size-3.5 ${
+                  followData?.following ? 'fill-stone-500 text-stone-500' : ''
+                }`}
+              />
+              {followData?.following ? 'Following' : 'Follow'}
+            </button>
+          )}
+          {(followerCount?.count ?? 0) > 0 && (
+            <span className="text-xs text-stone-400">
+              {followerCount!.count} follower{followerCount!.count !== 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+
+        {/* Tabs */}
+        <div className="mt-6 flex justify-center gap-1">
+          <button
+            onClick={() => setActiveTab('profile')}
+            className={`inline-flex items-center gap-1.5 rounded-sm px-4 py-2 text-[0.8125rem] font-medium transition-colors ${
+              activeTab === 'profile'
+                ? 'bg-stone-100 text-stone-800'
+                : 'text-stone-400 hover:text-stone-600'
+            }`}
+          >
+            <BookOpen className="size-3.5" />
+            Profile
+          </button>
+          <button
+            onClick={() => setActiveTab('timeline')}
+            className={`inline-flex items-center gap-1.5 rounded-sm px-4 py-2 text-[0.8125rem] font-medium transition-colors ${
+              activeTab === 'timeline'
+                ? 'bg-stone-100 text-stone-800'
+                : 'text-stone-400 hover:text-stone-600'
+            }`}
+          >
+            <Clock className="size-3.5" />
+            Timeline
+          </button>
+        </div>
+      </div>
+
       {/* ─── Content ─── */}
       <div className="mx-auto max-w-2xl px-5 pb-16 pt-10 sm:px-8 md:pb-8">
+        {activeTab === 'timeline' ? (
+          <DogTimeline
+            dogId={id}
+            isOwner={
+              !!session?.user &&
+              !!data &&
+              (session.user as { id?: string }).id === data.dog.ownerId
+            }
+          />
+        ) : (
+        <>
         {/* ─── Particulars ─── */}
         <SectionHeading>Particulars</SectionHeading>
         <div className="mx-auto max-w-md">
@@ -585,6 +673,8 @@ export default function DogProfilePage({
             Remi Show Manager
           </p>
         </div>
+        </>
+        )}
       </div>
 
       {/* ─── Lightbox ─── */}

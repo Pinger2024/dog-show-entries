@@ -19,6 +19,7 @@ import {
   ChevronRight,
   Activity,
   ListTodo,
+  Rss,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -40,6 +41,7 @@ const personalNavItems = [
   { href: '/dogs', label: 'My Dogs', mobileLabel: 'Dogs', icon: Dog },
   { href: '/entries', label: 'My Entries', mobileLabel: 'Entries', icon: Ticket },
   { href: '/browse', label: 'Find a Show', mobileLabel: 'Shows', icon: CalendarDays },
+  { href: '/feed', label: 'My Feed', mobileLabel: 'Feed', icon: Rss },
 ];
 
 const adminNavItems = [

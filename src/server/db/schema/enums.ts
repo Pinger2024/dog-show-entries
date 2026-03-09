@@ -213,3 +213,9 @@ export const backlogPriorityEnum = pgEnum('backlog_priority', [
   'medium',
   'low',
 ]);
+
+export const timelinePostTypeEnum = pgEnum('timeline_post_type', [
+  'photo',
+  'note',
+  'milestone',
+]);

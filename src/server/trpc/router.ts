@@ -19,6 +19,8 @@ import { adminDashboardRouter } from './routers/admin-dashboard';
 import { secretaryApplicationsRouter } from './routers/secretary-applications';
 import { proRouter } from './routers/pro';
 import { backlogRouter } from './routers/backlog';
+import { timelineRouter } from './routers/timeline';
+import { followsRouter } from './routers/follows';
 
 export const appRouter = createTRPCRouter({
   shows: showsRouter,
@@ -41,6 +43,8 @@ export const appRouter = createTRPCRouter({
   applications: secretaryApplicationsRouter,
   pro: proRouter,
   backlog: backlogRouter,
+  timeline: timelineRouter,
+  follows: followsRouter,
 });
 
 export type AppRouter = typeof appRouter;

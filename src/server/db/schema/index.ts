@@ -28,6 +28,7 @@ export {
   invitationStatusEnum,
   secretaryApplicationStatusEnum,
   classSexArrangementEnum,
+  timelinePostTypeEnum,
 } from './enums';
 
 // Tables
@@ -101,3 +102,8 @@ export {
   passwordResetTokens,
   passwordResetTokensRelations,
 } from './password-reset-tokens';
+export {
+  dogTimelinePosts,
+  dogTimelinePostsRelations,
+} from './dog-timeline-posts';
+export { dogFollows, dogFollowsRelations } from './dog-follows';

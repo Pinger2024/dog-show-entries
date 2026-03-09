@@ -194,6 +194,7 @@ export const dogsRouter = createTRPCRouter({
           breederName: dog.breederName,
           colour: dog.colour,
           kcRegNumber: dog.kcRegNumber,
+          ownerId: dog.ownerId,
         },
         titles: dog.titles,
         achievements: dog.achievements,
