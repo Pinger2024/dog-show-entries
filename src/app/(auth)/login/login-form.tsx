@@ -275,15 +275,6 @@ export function LoginForm() {
                 </div>
               )}
 
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  defaultChecked
-                  className="size-4 rounded border-input accent-primary"
-                />
-                <span className="text-sm text-muted-foreground">Stay signed in</span>
-              </label>
-
               <Button type="submit" className="h-11 sm:h-12 w-full text-sm sm:text-[0.9375rem]" disabled={loading}>
                 {loading
                   ? (showPasswordField && password ? 'Signing in...' : 'Sending link...')
