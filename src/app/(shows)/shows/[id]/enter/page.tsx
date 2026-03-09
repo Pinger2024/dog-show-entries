@@ -620,7 +620,7 @@ export default function EnterShowPage() {
                   You need to add a dog before entering a show.
                 </p>
                 <Button asChild>
-                  <Link href="/dogs/new" target="_blank">Add a Dog</Link>
+                  <Link href="/dogs/new">Add a Dog</Link>
                 </Button>
               </CardContent>
             </Card>
@@ -629,7 +629,6 @@ export default function EnterShowPage() {
           {dogs && dogs.length > 0 && (
             <Link
               href="/dogs/new"
-              target="_blank"
               className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
             >
               + Add a new dog
@@ -671,16 +670,6 @@ export default function EnterShowPage() {
                 type="date"
                 value={jhDob}
                 onChange={(e) => setJhDob(e.target.value)}
-                className="h-11"
-              />
-            </div>
-            <div>
-              <Label htmlFor="jh-kc">KC Number (optional)</Label>
-              <Input
-                id="jh-kc"
-                value={jhKcNumber}
-                onChange={(e) => setJhKcNumber(e.target.value)}
-                placeholder="If registered with the KC"
                 className="h-11"
               />
             </div>
