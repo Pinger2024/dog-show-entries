@@ -22,6 +22,7 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc/client';
 import { cn } from '@/lib/utils';
+import { PostcodeLookup } from '@/components/postcode-lookup';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Calendar } from '@/components/ui/calendar';
@@ -278,6 +279,12 @@ function ProfileStep({
                 </FormItem>
               )}
             />
+            <PostcodeLookup
+              onSelect={(result) => {
+                form.setValue('address', result.address + (result.town ? ', ' + result.town : ''));
+                form.setValue('postcode', result.postcode);
+              }}
+            />
             <FormField
               control={form.control}
               name="address"
@@ -292,7 +299,7 @@ function ProfileStep({
                     />
                   </FormControl>
                   <FormDescription>
-                    Required for show entry forms
+                    Use the postcode finder above, or type your address manually
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

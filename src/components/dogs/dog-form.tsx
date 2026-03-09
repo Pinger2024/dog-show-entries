@@ -50,6 +50,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { PostcodeLookup } from '@/components/postcode-lookup';
 
 const ownerSchema = z.object({
   ownerName: z.string().min(1, 'Name is required'),
@@ -800,6 +801,12 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                     )}
                   />
                 </div>
+                <PostcodeLookup
+                  compact
+                  onSelect={(result) => {
+                    form.setValue(`owners.${index}.ownerAddress`, result.address + (result.town ? ', ' + result.town : '') + ', ' + result.postcode);
+                  }}
+                />
                 <FormField
                   control={form.control}
                   name={`owners.${index}.ownerAddress`}
