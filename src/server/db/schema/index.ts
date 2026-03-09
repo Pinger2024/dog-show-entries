@@ -18,6 +18,8 @@ export {
   catalogueStatusEnum,
   paymentTypeEnum,
   feedbackStatusEnum,
+  backlogStatusEnum,
+  backlogPriorityEnum,
   clubTypeEnum,
   serviceTierEnum,
   subscriptionStatusEnum,
@@ -65,6 +67,7 @@ export {
 export { fileUploads, fileUploadsRelations } from './file-uploads';
 export { catalogues, cataloguesRelations } from './catalogues';
 export { feedback } from './feedback';
+export { backlog } from './backlog';
 export { dogPhotos, dogPhotosRelations } from './dog-photos';
 export { plans, plansRelations } from './plans';
 export {

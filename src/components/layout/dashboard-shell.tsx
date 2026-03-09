@@ -18,6 +18,7 @@ import {
   LogOut,
   ChevronRight,
   Activity,
+  ListTodo,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -45,6 +46,7 @@ const adminNavItems = [
   { href: '/admin', label: 'Overview', mobileLabel: 'Admin', icon: Activity },
   { href: '/admin/users', label: 'Users', mobileLabel: 'Users', icon: Users },
   { href: '/feedback', label: 'Feedback', mobileLabel: 'Feedback', icon: Inbox },
+  { href: '/backlog', label: 'Backlog', mobileLabel: 'Backlog', icon: ListTodo },
   { href: '/admin/applications', label: 'Applications', mobileLabel: 'Apps', icon: ClipboardCheck },
   { href: '/admin/invitations', label: 'Invitations', mobileLabel: 'Invites', icon: UserPlus },
   { href: '/admin/reference-data', label: 'Reference Data', mobileLabel: 'Ref Data', icon: Database },
@@ -53,10 +55,10 @@ const adminNavItems = [
 /** Mobile bottom bar: admin gets admin-focused tabs, others get personal tabs */
 const adminMobileItems = [
   { href: '/admin', label: 'Overview', mobileLabel: 'Overview', icon: Activity },
-  { href: '/admin/users', label: 'Users', mobileLabel: 'Users', icon: Users },
   { href: '/feedback', label: 'Feedback', mobileLabel: 'Feedback', icon: Inbox },
+  { href: '/backlog', label: 'Backlog', mobileLabel: 'Backlog', icon: ListTodo },
+  { href: '/admin/users', label: 'Users', mobileLabel: 'Users', icon: Users },
   { href: '/admin/applications', label: 'Applications', mobileLabel: 'Apps', icon: ClipboardCheck },
-  { href: '/admin/reference-data', label: 'Reference Data', mobileLabel: 'Ref Data', icon: Database },
 ];
 
 function getInitials(name?: string | null, email?: string | null) {

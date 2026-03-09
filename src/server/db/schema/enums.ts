@@ -187,3 +187,17 @@ export const classSexArrangementEnum = pgEnum('class_sex_arrangement', [
   'separate_sex',
   'combined_sex',
 ]);
+
+export const backlogStatusEnum = pgEnum('backlog_status', [
+  'awaiting_feedback',
+  'planned',
+  'in_progress',
+  'completed',
+  'dismissed',
+]);
+
+export const backlogPriorityEnum = pgEnum('backlog_priority', [
+  'high',
+  'medium',
+  'low',
+]);
