@@ -12,6 +12,7 @@ import { entryStatusEnum, entryTypeEnum } from './enums';
 import { shows } from './shows';
 import { dogs } from './dogs';
 import { users } from './users';
+import { orders } from './orders';
 import { entryClasses } from './entry-classes';
 import { payments } from './payments';
 import { entryAuditLog } from './entry-audit-log';
@@ -77,6 +78,10 @@ export const entriesRelations = relations(entries, ({ one, many }) => ({
     fields: [entries.handlerId],
     references: [users.id],
     relationName: 'handlerEntries',
+  }),
+  order: one(orders, {
+    fields: [entries.orderId],
+    references: [orders.id],
   }),
   entryClasses: many(entryClasses),
   payments: many(payments),
