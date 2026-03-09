@@ -221,11 +221,12 @@ export const proRouter = createTRPCRouter({
 
       // Also collect from achievements table (may have pre-Remi data)
       for (const ach of dogAchievements) {
+        const achShowId = ach.showId ?? '';
         if (CC_TYPES.includes(ach.type)) {
-          // Avoid duplicates by checking showId
-          if (!ccAwards.some((a) => a.showId === ach.showId && a.date === ach.date)) {
+          // Avoid duplicates — normalize null showIds to empty string for comparison
+          if (!ccAwards.some((a) => a.showId === achShowId && a.date === ach.date)) {
             ccAwards.push({
-              showId: ach.showId ?? '',
+              showId: achShowId,
               showName: '',
               date: ach.date,
               judgeId: ach.judgeId,
@@ -233,9 +234,9 @@ export const proRouter = createTRPCRouter({
             });
           }
         } else if (RCC_TYPES.includes(ach.type)) {
-          if (!rccAwards.some((a) => a.showId === ach.showId && a.date === ach.date)) {
+          if (!rccAwards.some((a) => a.showId === achShowId && a.date === ach.date)) {
             rccAwards.push({
-              showId: ach.showId ?? '',
+              showId: achShowId,
               showName: '',
               date: ach.date,
               judgeId: ach.judgeId,
@@ -314,7 +315,7 @@ export const proRouter = createTRPCRouter({
             complete: altHasCC && altRCCProgress >= 7,
           },
           bestRoute:
-            classicProgress >= 3 || classicProgress >= altRCCProgress + (altHasCC ? 1 : 0)
+            classicProgress >= 3 || classicProgress / 3 >= (altRCCProgress + (altHasCC ? 1 : 0)) / 8
               ? 'classic'
               : 'alternative',
         },

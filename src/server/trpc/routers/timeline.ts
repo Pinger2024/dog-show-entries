@@ -132,7 +132,15 @@ export const timelineRouter = createTRPCRouter({
         caption: z.string().max(2000).optional(),
         imageUrl: z.string().max(2000).optional(),
         imageStorageKey: z.string().max(500).optional(),
-        videoUrl: z.string().url().max(2000).optional(),
+        videoUrl: z.string().url().max(2000).refine(
+          (url) => {
+            try {
+              const host = new URL(url).hostname.replace(/^www\./, '');
+              return ['youtube.com', 'youtu.be', 'youtube-nocookie.com', 'vimeo.com'].includes(host);
+            } catch { return false; }
+          },
+          { message: 'Only YouTube and Vimeo URLs are supported' }
+        ).optional(),
         type: z.enum(['photo', 'note', 'milestone', 'video']).default('photo'),
       })
     )

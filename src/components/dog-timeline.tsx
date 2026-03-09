@@ -392,11 +392,6 @@ interface UserPostItem {
 /* ─── Show result card ─── */
 
 function ShowResultCard({ item }: { item: ShowResultItem }) {
-  const bestPlacement = Math.min(
-    ...item.classes.map((c) => c.placement ?? 99)
-  );
-  const hasSpecialAward = item.classes.some((c) => c.specialAward);
-
   return (
     <div className="rounded-sm border border-amber-200/40 bg-gradient-to-b from-amber-50/30 to-transparent p-4">
       <div className="flex items-start gap-3">
