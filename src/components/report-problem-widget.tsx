@@ -237,7 +237,7 @@ export function ReportProblemWidget() {
       {/* Floating trigger button */}
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-20 right-3 z-40 flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105 active:scale-95 md:bottom-6 md:right-6"
+        className="fixed bottom-24 right-3 z-40 flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105 active:scale-95 md:bottom-6 md:right-6"
         aria-label="Help & Feedback"
       >
         <MessageCircleQuestion className="size-5" />
