@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
-import { CalendarDays, MapPin, Eye, Loader2 } from 'lucide-react';
+import { CalendarDays, MapPin, Eye, Loader2, ChevronRight } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -51,11 +51,21 @@ export default function StewardDashboard() {
           const status = statusConfig[show.status];
           return (
             <Link key={show.id} href={`/steward/shows/${show.id}`}>
-              <Card className="transition-colors hover:bg-muted/30">
+              <Card className="transition-all hover:bg-muted/30 hover:border-primary/20 hover:shadow-sm active:bg-muted/50">
                 <CardContent className="p-3 sm:p-4">
-                  <div className="flex items-start justify-between gap-2 sm:gap-3">
+                  <div className="flex items-center gap-2 sm:gap-3">
                     <div className="min-w-0 flex-1">
-                      <h3 className="text-sm sm:text-base font-semibold">{show.name}</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm sm:text-base font-semibold">{show.name}</h3>
+                        {status && (
+                          <Badge
+                            variant="secondary"
+                            className={`text-xs shrink-0 ${status.className}`}
+                          >
+                            {status.label}
+                          </Badge>
+                        )}
+                      </div>
                       <div className="mt-1 sm:mt-1.5 flex flex-wrap items-center gap-x-2 sm:gap-x-3 gap-y-1 text-xs sm:text-sm text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <CalendarDays className="size-3 sm:size-3.5" />
@@ -74,14 +84,7 @@ export default function StewardDashboard() {
                         </p>
                       )}
                     </div>
-                    {status && (
-                      <Badge
-                        variant="secondary"
-                        className={`text-xs shrink-0 ${status.className}`}
-                      >
-                        {status.label}
-                      </Badge>
-                    )}
+                    <ChevronRight className="size-5 shrink-0 text-muted-foreground/40" />
                   </div>
                 </CardContent>
               </Card>

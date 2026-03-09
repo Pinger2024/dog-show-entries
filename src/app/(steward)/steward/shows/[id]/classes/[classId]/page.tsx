@@ -9,8 +9,6 @@ import {
   Loader2,
   Award,
   X,
-  MessageSquare,
-  ChevronDown,
   UserX,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -19,7 +17,6 @@ import { KC_PLACEMENTS, SPECIAL_AWARDS } from '@/lib/placements';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -35,63 +32,6 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 
-function CritiqueInput({
-  entryClassId,
-  initialValue,
-  placement,
-  specialAward,
-  onSave,
-  isSaving,
-}: {
-  entryClassId: string;
-  initialValue: string;
-  placement: number | null;
-  specialAward: string | null;
-  onSave: (
-    entryClassId: string,
-    critiqueText: string,
-    placement: number | null,
-    specialAward: string | null,
-  ) => void;
-  isSaving: boolean;
-}) {
-  const [value, setValue] = useState(initialValue);
-  const isDirty = value !== initialValue;
-
-  return (
-    <div className="mt-1.5 mb-1 space-y-1.5">
-      <Textarea
-        rows={3}
-        placeholder="Enter judge's critique..."
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={() => {
-          if (isDirty) {
-            onSave(entryClassId, value, placement, specialAward);
-          }
-        }}
-        className="text-sm min-h-[4.5rem]"
-      />
-      {isDirty && (
-        <div className="flex justify-end">
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-11 text-sm px-4"
-            disabled={isSaving}
-            onClick={() => onSave(entryClassId, value, placement, specialAward)}
-          >
-            {isSaving ? (
-              <Loader2 className="mr-1 size-3 animate-spin" />
-            ) : null}
-            Save Critique
-          </Button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function StewardClassResultsPage({
   params,
 }: {
@@ -99,7 +39,6 @@ export default function StewardClassResultsPage({
 }) {
   const { id: showId, classId } = use(params);
   const [specialAwardOpen, setSpecialAwardOpen] = useState(false);
-  const [expandedCritiques, setExpandedCritiques] = useState<Set<string>>(new Set());
 
   const utils = trpc.useUtils();
 
@@ -194,32 +133,6 @@ export default function StewardClassResultsPage({
       specialAward: award,
     });
     setSpecialAwardOpen(false);
-  }
-
-  function toggleCritique(entryClassId: string) {
-    setExpandedCritiques((prev) => {
-      const next = new Set(prev);
-      if (next.has(entryClassId)) {
-        next.delete(entryClassId);
-      } else {
-        next.add(entryClassId);
-      }
-      return next;
-    });
-  }
-
-  function handleCritiqueSave(
-    entryClassId: string,
-    critiqueText: string,
-    currentPlacement: number | null,
-    currentSpecialAward: string | null,
-  ) {
-    recordResult.mutate({
-      entryClassId,
-      placement: currentPlacement,
-      specialAward: currentSpecialAward,
-      critiqueText: critiqueText.trim() || null,
-    });
   }
 
   return (
@@ -406,36 +319,6 @@ export default function StewardClassResultsPage({
                 </div>
               </div>
 
-              {/* Critique section — only show for entries with a placement */}
-              {entry.result?.placement && (
-                <div className="border-t px-3">
-                  <button
-                    type="button"
-                    onClick={() => toggleCritique(entry.entryClassId)}
-                    className="flex w-full items-center gap-1.5 min-h-[44px] py-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    <MessageSquare className={`size-3 ${entry.result?.critiqueText ? 'text-blue-500' : ''}`} />
-                    <span>
-                      {entry.result?.critiqueText ? 'Critique' : 'Add Critique'}
-                    </span>
-                    <ChevronDown
-                      className={`ml-auto size-3 transition-transform ${
-                        expandedCritiques.has(entry.entryClassId) ? 'rotate-180' : ''
-                      }`}
-                    />
-                  </button>
-                  {expandedCritiques.has(entry.entryClassId) && (
-                    <CritiqueInput
-                      entryClassId={entry.entryClassId}
-                      initialValue={entry.result?.critiqueText ?? ''}
-                      placement={entry.result?.placement ?? null}
-                      specialAward={entry.result?.specialAward ?? null}
-                      onSave={handleCritiqueSave}
-                      isSaving={recordResult.isPending}
-                    />
-                  )}
-                </div>
-              )}
             </div>
           ))
         )}
@@ -444,19 +327,19 @@ export default function StewardClassResultsPage({
       {/* Previous / Next class navigation */}
       <div className="mt-8 flex items-center justify-between gap-2 sm:gap-4">
         {prevClass ? (
-          <Button variant="outline" asChild className="min-w-0 max-w-[45%] h-11">
+          <Button variant="outline" asChild className="h-11">
             <Link href={`/steward/shows/${showId}/classes/${prevClass.id}`}>
               <ChevronLeft className="mr-1 size-4 shrink-0" />
-              <span className="truncate">{prevClass.classDefinition.name}</span>
+              Previous Class
             </Link>
           </Button>
         ) : (
           <div />
         )}
         {nextClass ? (
-          <Button variant="outline" asChild className="min-w-0 max-w-[45%] h-11">
+          <Button variant="outline" asChild className="h-11">
             <Link href={`/steward/shows/${showId}/classes/${nextClass.id}`}>
-              <span className="truncate">{nextClass.classDefinition.name}</span>
+              Next Class
               <ChevronRight className="ml-1 size-4 shrink-0" />
             </Link>
           </Button>
