@@ -109,6 +109,15 @@ export default function EnterShowPage() {
       { enabled: cart.step === 'select_classes' }
     );
 
+  // Check if show has JH classes (to conditionally show "Add Junior Handler" button)
+  const { data: allShowClasses } = trpc.shows.getClasses.useQuery(
+    { showId },
+    { enabled: cart.step === 'entry_type' || cart.step === 'cart_review' }
+  );
+  const hasJhClasses = allShowClasses?.some(
+    (sc) => sc.classDefinition.type === 'junior_handler'
+  ) ?? false;
+
   // Pre-fetch sundry items from select_classes onwards so they're ready at cart_review
   const { data: sundryItemsData } = trpc.shows.getSundryItems.useQuery(
     { showId },
@@ -513,21 +522,23 @@ export default function EnterShowPage() {
               </div>
             </button>
 
-            <button
-              type="button"
-              onClick={() => cart.setEntryType('junior_handler')}
-              className="flex min-h-[44px] items-start gap-3 rounded-xl border p-3 text-left transition-all hover:border-primary/50 sm:p-4"
-            >
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-900/30">
-                <Users className="size-5 text-orange-600 dark:text-orange-400" />
-              </div>
-              <div>
-                <p className="text-sm font-medium sm:text-base">Junior Handler</p>
-                <p className="text-xs text-muted-foreground sm:text-sm">
-                  Handler aged 6-24, judged on handling skill.
-                </p>
-              </div>
-            </button>
+            {hasJhClasses && (
+              <button
+                type="button"
+                onClick={() => cart.setEntryType('junior_handler')}
+                className="flex min-h-[44px] items-start gap-3 rounded-xl border p-3 text-left transition-all hover:border-primary/50 sm:p-4"
+              >
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-900/30">
+                  <Users className="size-5 text-orange-600 dark:text-orange-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium sm:text-base">Junior Handler</p>
+                  <p className="text-xs text-muted-foreground sm:text-sm">
+                    Handler aged 6-24, judged on handling skill.
+                  </p>
+                </div>
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -656,6 +667,19 @@ export default function EnterShowPage() {
             <Button
               className="h-11 flex-1 text-sm sm:flex-none"
               onClick={() => {
+                // Validate handler age (6-24 years on day of show)
+                if (jhDob && show?.startDate) {
+                  const ageMonths = differenceInMonths(new Date(show.startDate), new Date(jhDob));
+                  const ageYears = ageMonths / 12;
+                  if (ageYears < 6) {
+                    alert('The handler must be at least 6 years old on the day of the show.');
+                    return;
+                  }
+                  if (ageYears >= 25) {
+                    alert('The handler must be under 25 years old on the day of the show.');
+                    return;
+                  }
+                }
                 cart.setJHDetails(jhName, jhDob, jhKcNumber || undefined);
                 setJhName('');
                 setJhDob('');
@@ -896,10 +920,12 @@ export default function EnterShowPage() {
               <Plus className="size-4" />
               Add Another Dog
             </Button>
-            <Button variant="outline" className="flex-1" onClick={handleAddJuniorHandler}>
-              <Users className="size-4" />
-              Add Junior Handler
-            </Button>
+            {hasJhClasses && (
+              <Button variant="outline" className="flex-1" onClick={handleAddJuniorHandler}>
+                <Users className="size-4" />
+                Add Junior Handler
+              </Button>
+            )}
           </div>
 
           {/* Sundry items (catalogues, memberships, donations, etc.) — shown BEFORE total */}
@@ -1055,7 +1081,16 @@ export default function EnterShowPage() {
                 className="mt-0.5"
               />
               <span className="text-sm leading-relaxed">
-                I agree to abide by the Royal Kennel Club Rules and Regulations.
+                I agree to abide by the{' '}
+                <a
+                  href="https://www.thekennelclub.org.uk/media/2876/f-regulations.pdf"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary underline hover:no-underline"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Royal Kennel Club Rules and Regulations
+                </a>.
               </span>
             </label>
           </div>
