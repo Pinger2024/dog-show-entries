@@ -18,6 +18,7 @@ export const dogTimelinePosts = pgTable(
     caption: text('caption'),
     imageUrl: text('image_url'),
     imageStorageKey: text('image_storage_key'),
+    videoUrl: text('video_url'),
     pinned: boolean('pinned').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()

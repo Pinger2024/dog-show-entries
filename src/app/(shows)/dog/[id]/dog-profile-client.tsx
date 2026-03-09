@@ -26,6 +26,7 @@ import { trpc } from '@/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { getPlacementLabel, placementColors } from '@/lib/placements';
 import { DogTimeline } from '@/components/dog-timeline';
+import { ChampionshipProgress } from '@/components/championship-progress';
 import { showTypeLabels } from '@/lib/show-types';
 
 /* ─── Constants ────────────────────────────────────────────────── */
@@ -198,6 +199,9 @@ export function DogProfileClient({ id }: { id: string }) {
 
   const { data, isLoading } = trpc.dogs.getPublicProfile.useQuery({ id });
   const { data: photos } = trpc.dogs.getPublicPhotos.useQuery({ dogId: id });
+  const { data: proStatus } = trpc.pro.getSubscription.useQuery(undefined, {
+    enabled: !!session?.user,
+  });
 
   // Follow system
   const { data: followData } = trpc.follows.isFollowing.useQuery(
@@ -479,6 +483,17 @@ export function DogProfileClient({ id }: { id: string }) {
                 </>
               )}
             </div>
+          </div>
+        )}
+
+        {/* ─── Championship & Analytics ─── */}
+        {stats.totalShows > 0 && (
+          <div className="mt-12">
+            <SectionHeading>Championship & Analytics</SectionHeading>
+            <ChampionshipProgress
+              dogId={id}
+              isPro={proStatus?.status === 'active'}
+            />
           </div>
         )}
 

@@ -13,6 +13,7 @@ import {
   Trash2,
   X,
   PenLine,
+  Video,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc/client';
@@ -38,6 +39,8 @@ function CreatePost({
     url: string;
     key: string;
   } | null>(null);
+  const [videoUrl, setVideoUrl] = useState('');
+  const [showVideoInput, setShowVideoInput] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -50,6 +53,8 @@ function CreatePost({
         return null;
       });
       setUploadedImage(null);
+      setVideoUrl('');
+      setShowVideoInput(false);
       setExpanded(false);
       onPostCreated();
     },
@@ -100,13 +105,15 @@ function CreatePost({
   }
 
   function handleSubmit() {
-    if (!caption.trim() && !uploadedImage) return;
+    const trimmedVideo = videoUrl.trim();
+    if (!caption.trim() && !uploadedImage && !trimmedVideo) return;
     createPost.mutate({
       dogId,
       caption: caption.trim() || undefined,
       imageUrl: uploadedImage?.url,
       imageStorageKey: uploadedImage?.key,
-      type: uploadedImage ? 'photo' : 'note',
+      videoUrl: trimmedVideo || undefined,
+      type: trimmedVideo ? 'video' : uploadedImage ? 'photo' : 'note',
     });
   }
 
@@ -157,6 +164,25 @@ function CreatePost({
         </div>
       )}
 
+      {/* Video URL input */}
+      {showVideoInput && (
+        <div className="mt-3 flex items-center gap-2">
+          <input
+            type="url"
+            value={videoUrl}
+            onChange={(e) => setVideoUrl(e.target.value)}
+            placeholder="Paste YouTube or Vimeo link"
+            className="flex-1 rounded-sm border border-stone-200 bg-white px-2.5 py-1.5 text-sm text-stone-700 placeholder:text-stone-300 focus:border-stone-400 focus:outline-none"
+          />
+          <button
+            onClick={() => { setShowVideoInput(false); setVideoUrl(''); }}
+            className="flex size-6 items-center justify-center rounded-full text-stone-300 hover:text-stone-500"
+          >
+            <X className="size-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Actions */}
       <div className="mt-3 flex items-center justify-between border-t border-stone-100 pt-3">
         <div className="flex gap-2">
@@ -167,6 +193,14 @@ function CreatePost({
           >
             <ImagePlus className="size-3.5" />
             Photo
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowVideoInput(!showVideoInput)}
+            className="inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-xs text-stone-500 transition-colors hover:bg-stone-50 hover:text-stone-700"
+          >
+            <Video className="size-3.5" />
+            Video
           </button>
           <input
             ref={fileInputRef}
@@ -187,6 +221,8 @@ function CreatePost({
             onClick={() => {
               setExpanded(false);
               setCaption('');
+              setVideoUrl('');
+              setShowVideoInput(false);
               removeImage();
             }}
             className="h-8 text-xs"
@@ -199,7 +235,7 @@ function CreatePost({
             disabled={
               createPost.isPending ||
               uploading ||
-              (!caption.trim() && !uploadedImage)
+              (!caption.trim() && !uploadedImage && !videoUrl.trim())
             }
             className="h-8 text-xs"
           >
@@ -348,6 +384,7 @@ interface UserPostItem {
   type: string;
   caption: string | null;
   imageUrl: string | null;
+  videoUrl: string | null;
   pinned: boolean;
   author: { id: string; name: string | null } | null;
 }
@@ -437,6 +474,7 @@ function UserPostCard({
           />
         </div>
       )}
+      {item.videoUrl && <VideoEmbed url={item.videoUrl} />}
       <div className="mt-2.5 flex items-center justify-between">
         <p className="text-[0.6875rem] text-stone-300">
           {item.author?.name && (
@@ -457,4 +495,52 @@ function UserPostCard({
       </div>
     </div>
   );
+}
+
+/* ─── Video embed (YouTube / Vimeo) ─── */
+
+function VideoEmbed({ url }: { url: string }) {
+  const embedUrl = getEmbedUrl(url);
+
+  if (!embedUrl) {
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-3 flex items-center gap-2 rounded-sm border border-stone-100 bg-stone-50 px-3 py-2.5 text-xs text-stone-500 transition-colors hover:border-stone-200 hover:text-stone-700"
+      >
+        <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <polygon points="5 3 19 12 5 21 5 3" />
+        </svg>
+        Watch video
+      </a>
+    );
+  }
+
+  return (
+    <div className="mt-3 aspect-video overflow-hidden rounded-sm bg-stone-50">
+      <iframe
+        src={embedUrl}
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowFullScreen
+        className="h-full w-full border-0"
+        title="Video"
+      />
+    </div>
+  );
+}
+
+function getEmbedUrl(url: string): string | null {
+  // YouTube
+  const ytMatch = url.match(
+    /(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
+  );
+  if (ytMatch) return `https://www.youtube-nocookie.com/embed/${ytMatch[1]}`;
+
+  // Vimeo
+  const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
+  if (vimeoMatch) return `https://player.vimeo.com/video/${vimeoMatch[1]}`;
+
+  return null;
 }

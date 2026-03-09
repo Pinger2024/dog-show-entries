@@ -99,6 +99,7 @@ export const timelineRouter = createTRPCRouter({
         type: p.type,
         caption: p.caption,
         imageUrl: p.imageUrl,
+        videoUrl: p.videoUrl,
         pinned: p.pinned,
         author: p.author,
       }));
@@ -131,7 +132,8 @@ export const timelineRouter = createTRPCRouter({
         caption: z.string().max(2000).optional(),
         imageUrl: z.string().max(2000).optional(),
         imageStorageKey: z.string().max(500).optional(),
-        type: z.enum(['photo', 'note', 'milestone']).default('photo'),
+        videoUrl: z.string().url().max(2000).optional(),
+        type: z.enum(['photo', 'note', 'milestone', 'video']).default('photo'),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -151,10 +153,10 @@ export const timelineRouter = createTRPCRouter({
         });
       }
 
-      if (!input.caption && !input.imageUrl) {
+      if (!input.caption && !input.imageUrl && !input.videoUrl) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
-          message: 'Post must have either a caption or an image',
+          message: 'Post must have a caption, image, or video',
         });
       }
 
@@ -167,6 +169,7 @@ export const timelineRouter = createTRPCRouter({
           caption: input.caption ?? null,
           imageUrl: input.imageUrl ?? null,
           imageStorageKey: input.imageStorageKey ?? null,
+          videoUrl: input.videoUrl ?? null,
         })
         .returning();
 
@@ -339,6 +342,7 @@ export const timelineRouter = createTRPCRouter({
         type: p.type,
         caption: p.caption,
         imageUrl: p.imageUrl,
+        videoUrl: p.videoUrl,
         pinned: p.pinned,
         author: p.author,
         dog: {

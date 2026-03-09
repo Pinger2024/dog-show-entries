@@ -218,4 +218,5 @@ export const timelinePostTypeEnum = pgEnum('timeline_post_type', [
   'photo',
   'note',
   'milestone',
+  'video',
 ]);

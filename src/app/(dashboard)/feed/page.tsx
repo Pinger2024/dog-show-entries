@@ -171,6 +171,7 @@ type FeedItemData = {
   // User post fields
   caption?: string | null;
   imageUrl?: string | null;
+  videoUrl?: string | null;
   type?: string;
   author?: { id: string; name: string | null } | null;
 };
