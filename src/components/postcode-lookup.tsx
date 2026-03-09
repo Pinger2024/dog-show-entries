@@ -1,8 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { Search, Loader2, MapPin } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Loader2, MapPin } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
 export type AddressResult = {
@@ -10,7 +9,6 @@ export type AddressResult = {
   town: string;
   postcode: string;
   fullAddress: string;
-  uprn: string;
 };
 
 /** Format an AddressResult as a single-line string (address, town). Postcode excluded — use result.postcode separately. */
@@ -26,102 +24,215 @@ interface PostcodeLookupProps {
   compact?: boolean;
 }
 
-export function PostcodeLookup({ onSelect, compact }: PostcodeLookupProps) {
-  const [postcode, setPostcode] = useState('');
-  const [results, setResults] = useState<AddressResult[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [searched, setSearched] = useState(false);
+type Suggestion = {
+  placeId: string;
+  mainText: string;
+  secondaryText: string;
+  fullText: string;
+};
 
-  async function handleSearch() {
-    const trimmed = postcode.trim();
-    if (!trimmed) return;
+/** Extract structured address fields from Google Places addressComponents */
+function parseAddressComponents(
+  components: google.maps.places.AddressComponent[],
+  formattedAddress: string | null,
+): AddressResult {
+  let streetNumber = '';
+  let route = '';
+  let subpremise = '';
+  let premise = '';
+  let locality = '';
+  let postalTown = '';
+  let postcode = '';
 
-    setError('');
-    setLoading(true);
-    setResults([]);
-    setSearched(true);
-
-    try {
-      const res = await fetch(`/api/address-lookup?postcode=${encodeURIComponent(trimmed)}`);
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error ?? 'Lookup failed');
-        return;
-      }
-
-      if (data.results.length === 0) {
-        setError('No addresses found for this postcode');
-        return;
-      }
-
-      setResults(data.results);
-    } catch {
-      setError('Failed to look up address');
-    } finally {
-      setLoading(false);
+  for (const c of components) {
+    const type = c.types[0];
+    switch (type) {
+      case 'street_number': streetNumber = c.longText ?? ''; break;
+      case 'route': route = c.longText ?? ''; break;
+      case 'subpremise': subpremise = c.longText ?? ''; break;
+      case 'premise': premise = c.longText ?? ''; break;
+      case 'locality': locality = c.longText ?? ''; break;
+      case 'postal_town': postalTown = c.longText ?? ''; break;
+      case 'postal_code': postcode = c.longText ?? ''; break;
     }
   }
 
-  function handleSelect(result: AddressResult) {
-    onSelect(result);
-    setResults([]);
-    setPostcode('');
-    setSearched(false);
+  // Build street address
+  const parts: string[] = [];
+  if (subpremise) parts.push(subpremise);
+  if (premise) parts.push(premise);
+  const street = [streetNumber, route].filter(Boolean).join(' ');
+  if (street) parts.push(street);
+
+  return {
+    address: parts.join(', ') || formattedAddress?.split(',')[0] || '',
+    town: postalTown || locality,
+    postcode,
+    fullAddress: formattedAddress ?? [parts.join(', '), postalTown || locality, postcode].filter(Boolean).join(', '),
+  };
+}
+
+export function PostcodeLookup({ onSelect, compact }: PostcodeLookupProps) {
+  const [query, setQuery] = useState('');
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selecting, setSelecting] = useState(false);
+  const [focused, setFocused] = useState(false);
+
+  const placesLibRef = useRef<google.maps.PlacesLibrary | null>(null);
+  const sessionTokenRef = useRef<google.maps.places.AutocompleteSessionToken | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Load the Places library once
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const { importLibrary } = await import('@googlemaps/js-api-loader');
+        const { Loader } = await import('@googlemaps/js-api-loader');
+        const loader = new Loader({
+          apiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY ?? '',
+          version: 'weekly',
+        });
+        const lib = await loader.importLibrary('places');
+        if (cancelled) return;
+        placesLibRef.current = lib;
+        sessionTokenRef.current = new lib.AutocompleteSessionToken();
+      } catch {
+        // Silently fail — address lookup is a convenience, not critical
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  const fetchSuggestions = useCallback(async (input: string) => {
+    const lib = placesLibRef.current;
+    if (!lib || !input || input.length < 3) {
+      setSuggestions([]);
+      return;
+    }
+
+    try {
+      const response = await lib.AutocompleteSuggestion.fetchAutocompleteSuggestions({
+        input,
+        sessionToken: sessionTokenRef.current!,
+        includedRegionCodes: ['gb'],
+        language: 'en-GB',
+      });
+
+      const mapped: Suggestion[] = response.suggestions
+        .map((s) => s.placePrediction)
+        .filter(Boolean)
+        .map((p) => ({
+          placeId: p!.placeId,
+          mainText: p!.mainText?.text ?? '',
+          secondaryText: p!.secondaryText?.text ?? '',
+          fullText: p!.text?.text ?? '',
+        }));
+
+      setSuggestions(mapped);
+    } catch {
+      setSuggestions([]);
+    }
+  }, []);
+
+  function handleInputChange(value: string) {
+    setQuery(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (value.length < 3) {
+      setSuggestions([]);
+      return;
+    }
+    setLoading(true);
+    debounceRef.current = setTimeout(async () => {
+      await fetchSuggestions(value);
+      setLoading(false);
+    }, 300);
+  }
+
+  async function handleSelect(suggestion: Suggestion) {
+    const lib = placesLibRef.current;
+    if (!lib) return;
+
+    setSelecting(true);
+    setSuggestions([]);
+
+    try {
+      const place = new lib.Place({ id: suggestion.placeId });
+      await place.fetchFields({
+        fields: ['formattedAddress', 'addressComponents'],
+      });
+
+      const result = parseAddressComponents(
+        place.addressComponents ?? [],
+        place.formattedAddress,
+      );
+
+      onSelect(result);
+      setQuery('');
+
+      // Reset session token for next search
+      sessionTokenRef.current = new lib.AutocompleteSessionToken();
+    } catch {
+      // If place details fail, use the suggestion text as a fallback
+      onSelect({
+        address: suggestion.mainText,
+        town: suggestion.secondaryText.replace(/, UK$/, ''),
+        postcode: '',
+        fullAddress: suggestion.fullText,
+      });
+      setQuery('');
+    } finally {
+      setSelecting(false);
+    }
   }
 
   return (
-    <div className="space-y-2">
+    <div className="relative space-y-2">
       {!compact && (
         <p className="text-sm font-medium">Find address</p>
       )}
-      <div className="flex gap-2">
+      <div className="relative">
         <Input
-          placeholder="Enter postcode"
-          value={postcode}
-          onChange={(e) => { setPostcode(e.target.value.toUpperCase()); setError(''); }}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSearch(); } }}
+          placeholder="Start typing your address..."
+          value={query}
+          onChange={(e) => handleInputChange(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => {
+            // Delay hiding so click on suggestion registers
+            setTimeout(() => setFocused(false), 200);
+          }}
           className={compact ? 'h-9 text-sm' : 'h-11 sm:h-12 text-sm sm:text-[0.9375rem]'}
+          autoComplete="off"
         />
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={handleSearch}
-          disabled={loading || !postcode.trim()}
-          className={compact ? 'h-9 px-3' : 'h-11 sm:h-12 px-4'}
-          aria-label="Search for address"
-        >
-          {loading ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <Search className="size-4" />
-          )}
-        </Button>
+        {(loading || selecting) && (
+          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+            <Loader2 className="size-4 animate-spin text-muted-foreground" />
+          </div>
+        )}
       </div>
 
-      {error && (
-        <p className="text-sm text-destructive">{error}</p>
-      )}
-
-      {results.length > 0 && (
-        <div className="max-h-48 overflow-y-auto rounded-md border bg-background">
-          {results.map((result) => (
+      {focused && suggestions.length > 0 && (
+        <div className="absolute z-50 w-full max-h-48 overflow-y-auto rounded-md border bg-background shadow-md">
+          {suggestions.map((s) => (
             <button
-              key={result.uprn}
+              key={s.placeId}
               type="button"
               className="flex w-full items-start gap-2 px-3 py-2.5 text-left text-sm hover:bg-accent transition-colors border-b last:border-b-0"
-              onClick={() => handleSelect(result)}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => handleSelect(s)}
             >
               <MapPin className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
-              <span className="min-w-0">{result.fullAddress}</span>
+              <span className="min-w-0">
+                <span className="font-medium">{s.mainText}</span>
+                {s.secondaryText && (
+                  <span className="text-muted-foreground"> {s.secondaryText}</span>
+                )}
+              </span>
             </button>
           ))}
         </div>
-      )}
-
-      {searched && !loading && results.length === 0 && !error && (
-        <p className="text-sm text-muted-foreground">No results</p>
       )}
     </div>
   );
