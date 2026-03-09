@@ -1,9 +1,21 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { usePathname } from 'next/navigation';
-import { MessageCircleQuestion, Send, Loader2, Bug, Lightbulb, HelpCircle, MessageSquare } from 'lucide-react';
+import {
+  MessageCircleQuestion,
+  Send,
+  Loader2,
+  Bug,
+  Lightbulb,
+  HelpCircle,
+  MessageSquare,
+  Paperclip,
+  Camera,
+  X,
+  Image as ImageIcon,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -47,6 +59,14 @@ const placeholders: Record<FeedbackType, { subject: string; body: string }> = {
   },
 };
 
+interface AttachmentState {
+  file: File;
+  preview: string;
+  uploading: boolean;
+  uploaded?: { url: string; key: string; fileName: string };
+  error?: string;
+}
+
 export function ReportProblemWidget() {
   const { data: session } = useSession();
   const pathname = usePathname();
@@ -55,12 +75,15 @@ export function ReportProblemWidget() {
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [attachment, setAttachment] = useState<AttachmentState | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const submit = trpc.feedback.submit.useMutation({
     onSuccess: () => {
       setSubmitted(true);
       setSubject('');
       setBody('');
+      setAttachment(null);
     },
     onError: (err) => {
       toast.error(err.message || 'Failed to submit. Please try again.');
@@ -75,9 +98,112 @@ export function ReportProblemWidget() {
     return null;
   }
 
+  async function uploadFile(file: File): Promise<{ url: string; key: string; fileName: string } | null> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const res = await fetch('/api/upload/feedback-attachment', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || 'Upload failed');
+    }
+
+    return res.json();
+  }
+
+  function handleFileSelect(file: File) {
+    // Validate client-side
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Only images are supported (JPEG, PNG, WebP)');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be under 5MB');
+      return;
+    }
+
+    const preview = URL.createObjectURL(file);
+    const state: AttachmentState = { file, preview, uploading: true };
+    setAttachment(state);
+
+    // Upload immediately
+    uploadFile(file)
+      .then((result) => {
+        if (result) {
+          setAttachment((prev) =>
+            prev ? { ...prev, uploading: false, uploaded: result } : null
+          );
+        }
+      })
+      .catch((err) => {
+        setAttachment((prev) =>
+          prev
+            ? { ...prev, uploading: false, error: err.message }
+            : null
+        );
+        toast.error(err.message || 'Failed to upload image');
+      });
+  }
+
+  function handleFileInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) handleFileSelect(file);
+    // Reset so the same file can be re-selected
+    e.target.value = '';
+  }
+
+  function removeAttachment() {
+    if (attachment?.preview) {
+      URL.revokeObjectURL(attachment.preview);
+    }
+    setAttachment(null);
+  }
+
+  const handleScreenshot = useCallback(async () => {
+    try {
+      // Close dialog temporarily so it's not in the screenshot
+      setOpen(false);
+
+      // Small delay to let the dialog close
+      await new Promise((r) => setTimeout(r, 300));
+
+      const canvas = await import('html2canvas').then((mod) =>
+        mod.default(document.body, {
+          useCORS: true,
+          scale: window.devicePixelRatio,
+          logging: false,
+        })
+      );
+
+      // Re-open dialog
+      setOpen(true);
+
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const file = new File([blob], `screenshot-${Date.now()}.png`, {
+            type: 'image/png',
+          });
+          handleFileSelect(file);
+        }
+      }, 'image/png');
+    } catch {
+      setOpen(true);
+      toast.error('Screenshot failed. Try attaching an image instead.');
+    }
+  }, []);
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!subject.trim() || !body.trim()) return;
+    if (attachment?.uploading) {
+      toast.error('Please wait for the image to finish uploading');
+      return;
+    }
 
     submit.mutate({
       subject: subject.trim(),
@@ -85,6 +211,9 @@ export function ReportProblemWidget() {
       feedbackType,
       pageUrl: window.location.href,
       userAgent: navigator.userAgent,
+      attachmentUrl: attachment?.uploaded?.url,
+      attachmentFileName: attachment?.uploaded?.fileName,
+      attachmentStorageKey: attachment?.uploaded?.key,
     });
   }
 
@@ -95,10 +224,13 @@ export function ReportProblemWidget() {
       setFeedbackType('bug');
       setSubject('');
       setBody('');
+      if (attachment?.preview) URL.revokeObjectURL(attachment.preview);
+      setAttachment(null);
     }, 200);
   }
 
   const ph = placeholders[feedbackType];
+  const isUploading = attachment?.uploading ?? false;
 
   return (
     <>
@@ -191,6 +323,76 @@ export function ReportProblemWidget() {
                     rows={4}
                   />
                 </div>
+
+                {/* Attachment section */}
+                <div className="space-y-2">
+                  <Label className="text-sm">Attach an image</Label>
+                  {attachment ? (
+                    <div className="relative overflow-hidden rounded-lg border">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={attachment.preview}
+                        alt="Attachment preview"
+                        className="max-h-40 w-full object-contain bg-muted/30"
+                      />
+                      {attachment.uploading && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-background/60">
+                          <Loader2 className="size-5 animate-spin text-primary" />
+                        </div>
+                      )}
+                      {attachment.error && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-background/80">
+                          <p className="text-xs text-destructive">{attachment.error}</p>
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={removeAttachment}
+                        className="absolute right-1.5 top-1.5 flex size-6 items-center justify-center rounded-full bg-background/80 text-muted-foreground shadow-sm transition-colors hover:bg-background hover:text-foreground"
+                        aria-label="Remove attachment"
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                      {attachment.uploaded && (
+                        <div className="flex items-center gap-1.5 border-t bg-emerald-50 px-2.5 py-1.5 text-xs text-emerald-700">
+                          <ImageIcon className="size-3" />
+                          <span className="truncate">{attachment.uploaded.fileName}</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 gap-1.5"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <Paperclip className="size-3.5" />
+                        Choose image
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 gap-1.5"
+                        onClick={handleScreenshot}
+                      >
+                        <Camera className="size-3.5" />
+                        Screenshot
+                      </Button>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="hidden"
+                        onChange={handleFileInput}
+                      />
+                    </div>
+                  )}
+                </div>
+
                 <p className="text-xs text-muted-foreground">
                   We&apos;ll automatically include the page you&apos;re on and your browser details.
                   We&apos;ll email you at{' '}
@@ -200,7 +402,10 @@ export function ReportProblemWidget() {
                   <Button type="button" variant="ghost" onClick={handleClose}>
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={submit.isPending || !subject.trim() || !body.trim()}>
+                  <Button
+                    type="submit"
+                    disabled={submit.isPending || !subject.trim() || !body.trim() || isUploading}
+                  >
                     {submit.isPending ? (
                       <>
                         <Loader2 className="mr-1.5 size-4 animate-spin" />

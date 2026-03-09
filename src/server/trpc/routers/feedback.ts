@@ -17,6 +17,9 @@ export const feedbackRouter = createTRPCRouter({
         feedbackType: z.enum(['bug', 'feature', 'question', 'general']).default('general'),
         pageUrl: z.string().max(2000),
         userAgent: z.string().max(1000).optional(),
+        attachmentUrl: z.string().max(2000).optional(),
+        attachmentFileName: z.string().max(500).optional(),
+        attachmentStorageKey: z.string().max(500).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -52,6 +55,9 @@ export const feedbackRouter = createTRPCRouter({
           status: 'pending',
           source: 'widget',
           feedbackType: input.feedbackType,
+          attachmentUrl: input.attachmentUrl ?? null,
+          attachmentFileName: input.attachmentFileName ?? null,
+          attachmentStorageKey: input.attachmentStorageKey ?? null,
         })
         .returning();
 
@@ -76,6 +82,7 @@ export const feedbackRouter = createTRPCRouter({
 <p><strong>Page:</strong> ${input.pageUrl}</p>
 <hr style="border: none; border-top: 1px solid #ddd; margin: 16px 0;">
 <p style="white-space: pre-wrap;">${input.body}</p>
+${input.attachmentUrl ? `<p style="margin: 12px 0;"><strong>Attachment:</strong> <a href="${input.attachmentUrl}">${input.attachmentFileName ?? 'View attachment'}</a></p><img src="${input.attachmentUrl}" alt="Attachment" style="max-width: 100%; border-radius: 8px; border: 1px solid #ddd;">` : ''}
 <hr style="border: none; border-top: 1px solid #ddd; margin: 16px 0;">
 <p style="color: #666; font-size: 13px;">
 <strong>Diagnostics:</strong><br>

@@ -16,6 +16,9 @@ export const feedback = pgTable(
     source: feedbackSourceEnum('source').notNull().default('email'),
     feedbackType: feedbackTypeEnum('feedback_type').notNull().default('general'),
     notes: text('notes'),
+    attachmentUrl: text('attachment_url'),
+    attachmentFileName: text('attachment_file_name'),
+    attachmentStorageKey: text('attachment_storage_key'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),

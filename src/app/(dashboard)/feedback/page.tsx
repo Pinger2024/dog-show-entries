@@ -293,6 +293,29 @@ export default function FeedbackPage() {
                           </p>
                         )}
 
+                        {/* Attachment */}
+                        {(item as { attachmentUrl?: string; attachmentFileName?: string }).attachmentUrl && (
+                          <div className="mt-3">
+                            <p className="mb-1.5 text-xs font-medium text-muted-foreground">Attachment</p>
+                            <a
+                              href={(item as { attachmentUrl: string }).attachmentUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="group block overflow-hidden rounded-lg border transition-colors hover:border-primary/30"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={(item as { attachmentUrl: string }).attachmentUrl}
+                                alt={(item as { attachmentFileName?: string }).attachmentFileName ?? 'Attachment'}
+                                className="max-h-64 w-full object-contain bg-muted/20"
+                              />
+                              <div className="flex items-center gap-1.5 border-t bg-muted/30 px-2.5 py-1.5 text-xs text-muted-foreground group-hover:text-foreground">
+                                <span className="truncate">{(item as { attachmentFileName?: string }).attachmentFileName ?? 'View full size'}</span>
+                              </div>
+                            </a>
+                          </div>
+                        )}
+
                         {/* Status buttons */}
                         <div className="mt-4 flex flex-wrap gap-2">
                           {(
