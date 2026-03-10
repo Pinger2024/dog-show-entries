@@ -82,6 +82,7 @@ export const entriesRelations = relations(entries, ({ one, many }) => ({
   order: one(orders, {
     fields: [entries.orderId],
     references: [orders.id],
+    relationName: 'orderEntries',
   }),
   entryClasses: many(entryClasses),
   payments: many(payments),

@@ -35,11 +35,15 @@ export function ServiceWorkerRegistration() {
       navigator.serviceWorker.register('/serwist/sw.js');
     }
 
-    // Clear all reload guards after a successful page load so future deploys
-    // can trigger recovery again.
-    sessionStorage.removeItem('remi-chunk-reload');
-    sessionStorage.removeItem('remi-error-reload');
-    sessionStorage.removeItem('remi-global-error-reload');
+    // Clear reload guards after the page has been stable for 30 seconds.
+    // This delay is critical: if we clear immediately, a chunk error that fires
+    // AFTER mount (e.g. during lazy loading) would find the guard cleared and
+    // trigger another recovery → reload → clear → loop forever.
+    const guardTimer = setTimeout(() => {
+      sessionStorage.removeItem('remi-chunk-reload');
+      sessionStorage.removeItem('remi-error-reload');
+      sessionStorage.removeItem('remi-global-error-reload');
+    }, 30_000);
 
     // Recover from chunk loading failures caused by stale service worker cache
     // after deploys. Detects failed dynamic imports and forces a hard reload.
@@ -56,6 +60,7 @@ export function ServiceWorkerRegistration() {
     window.addEventListener('error', handleError);
     window.addEventListener('unhandledrejection', handleRejection);
     return () => {
+      clearTimeout(guardTimer);
       window.removeEventListener('error', handleError);
       window.removeEventListener('unhandledrejection', handleRejection);
     };

@@ -51,7 +51,7 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
     fields: [orders.exhibitorId],
     references: [users.id],
   }),
-  entries: many(entries),
+  entries: many(entries, { relationName: 'orderEntries' }),
   payments: many(payments),
   orderSundryItems: many(orderSundryItems),
 }));
