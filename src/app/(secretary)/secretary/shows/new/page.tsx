@@ -237,10 +237,19 @@ export default function NewShowPage() {
   }
 
   // Fetch org members for the secretary picker
-  const { data: orgMembers } = trpc.secretary.orgMembers.useQuery(
+  const { data: orgMembersData } = trpc.secretary.orgMembers.useQuery(
     { organisationId: currentOrgId },
     { enabled: !!currentOrgId, staleTime: Infinity }
   );
+
+  // Always include current user as a fallback so the dropdown is never empty
+  const orgMembers = useMemo(() => {
+    if (orgMembersData?.length) return orgMembersData;
+    if (session?.user?.id) {
+      return [{ id: session.user.id, name: session.user.name ?? null, email: session.user.email ?? null, phone: null, address: null, postcode: null }];
+    }
+    return [];
+  }, [orgMembersData, session?.user]);
 
   // Populate secretary contact fields from a member record
   function applySecretaryMember(member: { name?: string | null; email?: string | null; phone?: string | null }) {
