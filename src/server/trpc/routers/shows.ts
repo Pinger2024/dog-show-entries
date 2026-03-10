@@ -373,12 +373,14 @@ export const showsRouter = createTRPCRouter({
         kcLicenceNo: z.string().optional(),
         scheduleUrl: z.string().url().optional(),
         description: z.string().optional(),
+        secretaryUserId: z.string().uuid().optional(),
         secretaryEmail: z.string().email().optional(),
         secretaryName: z.string().optional(),
         secretaryAddress: z.string().optional(),
         secretaryPhone: z.string().optional(),
         showOpenTime: z.string().optional(),
         onCallVet: z.string().optional(),
+        acceptsPostalEntries: z.boolean().optional(),
         classSexArrangement: z.enum(['separate_sex', 'combined_sex']).optional(),
         classDefinitionIds: z.array(z.string().uuid()).optional(),
         entryFee: z.number().int().min(0).optional(),
@@ -400,6 +402,25 @@ export const showsRouter = createTRPCRouter({
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'You do not have access to this organisation',
+        });
+      }
+
+      // Check subscription: first show is free, subsequent shows require an active subscription
+      const [org, [showCount]] = await Promise.all([
+        ctx.db.query.organisations.findFirst({
+          where: eq(organisations.id, input.organisationId),
+          columns: { subscriptionStatus: true },
+        }),
+        ctx.db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(shows)
+          .where(eq(shows.organisationId, input.organisationId)),
+      ]);
+
+      if ((showCount?.count ?? 0) > 0 && org?.subscriptionStatus !== 'active') {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'A subscription is required to create additional shows. Your first show was free — subscribe to keep going!',
         });
       }
 
@@ -497,6 +518,7 @@ export const showsRouter = createTRPCRouter({
         kcLicenceNo: z.string().nullable().optional(),
         scheduleUrl: z.string().url().nullable().optional(),
         description: z.string().nullable().optional(),
+        secretaryUserId: z.string().uuid().nullable().optional(),
         secretaryEmail: z.string().email().nullable().optional(),
         secretaryName: z.string().nullable().optional(),
         secretaryAddress: z.string().nullable().optional(),

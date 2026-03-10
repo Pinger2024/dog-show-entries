@@ -14,7 +14,12 @@ import {
   Loader2,
   Plus,
   CalendarIcon,
+  User,
+  Lock,
+  Sparkles,
+  CreditCard,
 } from 'lucide-react';
+import Link from 'next/link';
 import { format, addDays } from 'date-fns';
 import { trpc } from '@/lib/trpc';
 import { poundsToPence, formatCurrency } from '@/lib/date-utils';
@@ -22,7 +27,7 @@ import { CLASS_TEMPLATES } from '@/lib/class-templates';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -84,10 +89,12 @@ const createShowSchema = z.object({
   ]),
   showScope: z.enum(['single_breed', 'group', 'general']),
   classSexArrangement: z.enum(['separate_sex', 'combined_sex']).optional(),
+  secretaryUserId: z.string().uuid().optional(),
   secretaryEmail: z.string().email('Enter a valid email').optional().or(z.literal('')),
   secretaryName: z.string().optional(),
   secretaryPhone: z.string().optional(),
   showOpenTime: z.string().optional(),
+  acceptsPostalEntries: z.boolean().default(false),
   organisationId: z.string().uuid('Please select an organisation'),
   startDate: z.string().min(1, 'Start date is required'),
   endDate: z.string().min(1, 'End date is required'),
@@ -180,10 +187,12 @@ export default function NewShowPage() {
       showType: 'open',
       showScope: 'general',
       classSexArrangement: undefined,
+      secretaryUserId: undefined,
       secretaryEmail: '',
       secretaryName: '',
       secretaryPhone: '',
       showOpenTime: '',
+      acceptsPostalEntries: false,
       organisationId: '',
       startDate: '',
       endDate: '',
@@ -213,20 +222,35 @@ export default function NewShowPage() {
 
   const organisations = dashboardData?.organisations ?? [];
 
-  // Auto-populate secretary email from session when it loads
-  const sessionEmail = session?.user?.email;
-  useEffect(() => {
-    if (sessionEmail && !form.getValues('secretaryEmail')) {
-      form.setValue('secretaryEmail', sessionEmail);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionEmail]);
-
   // Auto-select the organisation if there's only one
   const currentOrgId = form.watch('organisationId');
   if (organisations.length === 1 && !currentOrgId) {
     form.setValue('organisationId', organisations[0].id);
   }
+
+  // Fetch org members for the secretary picker
+  const { data: orgMembers } = trpc.secretary.orgMembers.useQuery(
+    { organisationId: currentOrgId },
+    { enabled: !!currentOrgId }
+  );
+
+  // Auto-select "myself" as secretary when session/members load
+  const sessionUserId = session?.user?.id;
+  useEffect(() => {
+    if (sessionUserId && !form.getValues('secretaryUserId')) {
+      form.setValue('secretaryUserId', sessionUserId);
+      const me = orgMembers?.find((m) => m.id === sessionUserId);
+      if (me) {
+        form.setValue('secretaryName', me.name ?? '');
+        form.setValue('secretaryEmail', me.email ?? '');
+        form.setValue('secretaryPhone', me.phone ?? '');
+      } else if (session?.user) {
+        form.setValue('secretaryName', session.user.name ?? '');
+        form.setValue('secretaryEmail', session.user.email ?? '');
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionUserId, orgMembers]);
 
   const isSubmitting =
     createVenueMutation.isPending || createShowMutation.isPending;
@@ -251,6 +275,7 @@ export default function NewShowPage() {
         showType: values.showType,
         showScope: values.showScope,
         classSexArrangement: values.classSexArrangement || undefined,
+        secretaryUserId: values.secretaryUserId || undefined,
         secretaryEmail: values.secretaryEmail || undefined,
         secretaryName: values.secretaryName || undefined,
         secretaryPhone: values.secretaryPhone || undefined,
@@ -305,10 +330,9 @@ export default function NewShowPage() {
   const watchedName = form.watch('name');
   const watchedShowType = form.watch('showType');
   const watchedShowScope = form.watch('showScope');
-  const watchedOrgId = form.watch('organisationId');
   const watchedStartDate = form.watch('startDate');
   const watchedEndDate = form.watch('endDate');
-  const watchedDescription = form.watch('description');
+  const watchedAcceptsPostal = form.watch('acceptsPostalEntries');
 
   // Auto-compute endDate from startDate + showDays
   const [showDays, setShowDays] = useState(1);
@@ -322,16 +346,6 @@ export default function NewShowPage() {
     }
   }, [watchedStartDate, showDays, form]);
 
-  // Auto-populate description when show type + scope are selected and description is empty
-  function autoPopulateDescription() {
-    if (watchedDescription) return; // Don't overwrite user's text
-    const typeLabel = showTypes.find((t) => t.value === watchedShowType)?.label ?? '';
-    const scopeLabel = showScopes.find((s) => s.value === watchedShowScope)?.label ?? '';
-    if (typeLabel && scopeLabel) {
-      form.setValue('description', `${typeLabel} Show — ${scopeLabel}`);
-    }
-  }
-
   function canProceed(): boolean {
     switch (step) {
       case 0:
@@ -339,7 +353,7 @@ export default function NewShowPage() {
           watchedName &&
           watchedShowType &&
           watchedShowScope &&
-          watchedOrgId &&
+          currentOrgId &&
           watchedStartDate &&
           watchedEndDate
         );
@@ -457,15 +471,37 @@ export default function NewShowPage() {
                     <FormItem>
                       <FormLabel>Show Name</FormLabel>
                       <FormControl>
-                        <Input
-                          placeholder="e.g. Spring Championship 2026"
-                          {...field}
-                        />
+                        <Input placeholder="e.g. Spring Championship 2026" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+
+                {organisations.length > 1 && (
+                  <FormField
+                    control={form.control}
+                    name="organisationId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Club</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select your club" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {organisations.map((org) => (
+                              <SelectItem key={org.id} value={org.id}>{org.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <FormField
@@ -474,13 +510,7 @@ export default function NewShowPage() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Show Type</FormLabel>
-                        <Select
-                          onValueChange={(v) => {
-                            field.onChange(v);
-                            autoPopulateDescription();
-                          }}
-                          defaultValue={field.value}
-                        >
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
                           <FormControl>
                             <SelectTrigger className="w-full">
                               <SelectValue placeholder="Select type" />
@@ -488,9 +518,7 @@ export default function NewShowPage() {
                           </FormControl>
                           <SelectContent>
                             {showTypes.map((t) => (
-                              <SelectItem key={t.value} value={t.value}>
-                                {t.label}
-                              </SelectItem>
+                              <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -498,20 +526,13 @@ export default function NewShowPage() {
                       </FormItem>
                     )}
                   />
-
                   <FormField
                     control={form.control}
                     name="showScope"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Show Scope</FormLabel>
-                        <Select
-                          onValueChange={(v) => {
-                            field.onChange(v);
-                            autoPopulateDescription();
-                          }}
-                          defaultValue={field.value}
-                        >
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
                           <FormControl>
                             <SelectTrigger className="w-full">
                               <SelectValue placeholder="Select scope" />
@@ -519,9 +540,7 @@ export default function NewShowPage() {
                           </FormControl>
                           <SelectContent>
                             {showScopes.map((s) => (
-                              <SelectItem key={s.value} value={s.value}>
-                                {s.label}
-                              </SelectItem>
+                              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -531,117 +550,21 @@ export default function NewShowPage() {
                   />
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <FormField
-                    control={form.control}
-                    name="classSexArrangement"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Class Structure</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          value={field.value ?? ''}
-                        >
-                          <FormControl>
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Select class structure" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {classSexArrangements.map((a) => (
-                              <SelectItem key={a.value} value={a.value}>
-                                {a.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="secretaryEmail"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Secretary Contact Email</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="email"
-                            placeholder="e.g. secretary@club.co.uk"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <FormField
-                    control={form.control}
-                    name="secretaryName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Secretary Name</FormLabel>
-                        <FormControl>
-                          <Input placeholder="e.g. Amanda Smith" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="secretaryPhone"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Secretary Phone</FormLabel>
-                        <FormControl>
-                          <Input type="tel" placeholder="e.g. 07700 900000" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
                 <FormField
                   control={form.control}
-                  name="showOpenTime"
+                  name="classSexArrangement"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Show Opens At</FormLabel>
-                      <FormControl>
-                        <Input type="time" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="organisationId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Organisation</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        defaultValue={field.value}
-                      >
+                      <FormLabel>Class Structure</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value ?? ''}>
                         <FormControl>
                           <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select organisation" />
+                            <SelectValue placeholder="Select class structure" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {organisations.map((org) => (
-                            <SelectItem key={org.id} value={org.id}>
-                              {org.name}
-                            </SelectItem>
+                          {classSexArrangements.map((a) => (
+                            <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -650,236 +573,153 @@ export default function NewShowPage() {
                   )}
                 />
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <FormField
-                    control={form.control}
-                    name="startDate"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Start Date</FormLabel>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <FormControl>
-                              <Button
-                                variant="outline"
-                                className={cn(
-                                  'w-full justify-start text-left font-normal',
-                                  !field.value && 'text-muted-foreground'
-                                )}
-                              >
-                                <CalendarIcon className="size-4" />
-                                {field.value
-                                  ? format(parseLocalDate(field.value), 'd MMMM yyyy')
-                                  : 'Pick a date'}
-                              </Button>
-                            </FormControl>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={
-                                field.value
-                                  ? parseLocalDate(field.value)
-                                  : undefined
-                              }
-                              onSelect={(date) =>
-                                field.onChange(
-                                  date
-                                    ? format(date, 'yyyy-MM-dd')
-                                    : ''
-                                )
-                              }
-                              disabled={(date) => date < new Date()}
-                            />
-                          </PopoverContent>
-                        </Popover>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
+                {/* Date, days, and time together */}
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <DatePickerField control={form.control} name="startDate" label="Show Date" placeholder="Pick a date" disablePast />
                   <div className="space-y-2">
                     <Label>Number of Days</Label>
-                    <Select
-                      value={String(showDays)}
-                      onValueChange={(v) => setShowDays(Number(v))}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
+                    <Select value={String(showDays)} onValueChange={(v) => setShowDays(Number(v))}>
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {[1, 2, 3, 4, 5, 6].map((n) => (
-                          <SelectItem key={n} value={String(n)}>
-                            {n} {n === 1 ? 'day' : 'days'}
-                          </SelectItem>
+                          <SelectItem key={n} value={String(n)}>{n} {n === 1 ? 'day' : 'days'}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                     {watchedEndDate && (
-                      <p className="text-sm text-muted-foreground">
-                        End date: {format(parseLocalDate(watchedEndDate), 'd MMMM yyyy')}
-                      </p>
+                      <p className="text-xs text-muted-foreground">Ends: {format(parseLocalDate(watchedEndDate), 'd MMM yyyy')}</p>
                     )}
                   </div>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-3">
                   <FormField
                     control={form.control}
-                    name="entriesOpenDate"
+                    name="showOpenTime"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Entries Open Date</FormLabel>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <FormControl>
-                              <Button
-                                variant="outline"
-                                className={cn(
-                                  'w-full justify-start text-left font-normal',
-                                  !field.value && 'text-muted-foreground'
-                                )}
-                              >
-                                <CalendarIcon className="size-4" />
-                                {field.value
-                                  ? format(parseLocalDate(field.value), 'd MMMM yyyy')
-                                  : 'Optional'}
-                              </Button>
-                            </FormControl>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={
-                                field.value
-                                  ? parseLocalDate(field.value)
-                                  : undefined
-                              }
-                              onSelect={(date) =>
-                                field.onChange(
-                                  date
-                                    ? format(date, 'yyyy-MM-dd')
-                                    : ''
-                                )
-                              }
-                            />
-                          </PopoverContent>
-                        </Popover>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="entryCloseDate"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Entry Close Date</FormLabel>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <FormControl>
-                              <Button
-                                variant="outline"
-                                className={cn(
-                                  'w-full justify-start text-left font-normal',
-                                  !field.value && 'text-muted-foreground'
-                                )}
-                              >
-                                <CalendarIcon className="size-4" />
-                                {field.value
-                                  ? format(parseLocalDate(field.value), 'd MMMM yyyy')
-                                  : 'Optional'}
-                              </Button>
-                            </FormControl>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={
-                                field.value
-                                  ? parseLocalDate(field.value)
-                                  : undefined
-                              }
-                              onSelect={(date) =>
-                                field.onChange(
-                                  date
-                                    ? format(date, 'yyyy-MM-dd')
-                                    : ''
-                                )
-                              }
-                            />
-                          </PopoverContent>
-                        </Popover>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="postalCloseDate"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Postal Close Date</FormLabel>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <FormControl>
-                              <Button
-                                variant="outline"
-                                className={cn(
-                                  'w-full justify-start text-left font-normal',
-                                  !field.value && 'text-muted-foreground'
-                                )}
-                              >
-                                <CalendarIcon className="size-4" />
-                                {field.value
-                                  ? format(parseLocalDate(field.value), 'd MMMM yyyy')
-                                  : 'Optional'}
-                              </Button>
-                            </FormControl>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={
-                                field.value
-                                  ? parseLocalDate(field.value)
-                                  : undefined
-                              }
-                              onSelect={(date) =>
-                                field.onChange(
-                                  date
-                                    ? format(date, 'yyyy-MM-dd')
-                                    : ''
-                                )
-                              }
-                            />
-                          </PopoverContent>
-                        </Popover>
+                        <FormLabel>Show Opens At</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value ?? ''}>
+                          <FormControl>
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select time" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {showTimes.map((t) => (
+                              <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
                 </div>
 
+                {/* Entry dates */}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <DatePickerField control={form.control} name="entriesOpenDate" label="Entries Open" placeholder="Optional" />
+                  <DatePickerField control={form.control} name="entryCloseDate" label="Entries Close" placeholder="Optional" />
+                </div>
+
+                {/* Postal entries toggle */}
                 <FormField
                   control={form.control}
-                  name="description"
+                  name="acceptsPostalEntries"
                   render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Description</FormLabel>
+                    <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                      <div className="space-y-0.5">
+                        <FormLabel className="text-sm font-medium">Accept Postal Entries</FormLabel>
+                        <p className="text-xs text-muted-foreground">Allow exhibitors to send entries by post</p>
+                      </div>
                       <FormControl>
-                        <Textarea
-                          placeholder="Optional description for exhibitors..."
-                          rows={3}
-                          {...field}
-                        />
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
                       </FormControl>
-                      <FormMessage />
                     </FormItem>
                   )}
                 />
+
+                {watchedAcceptsPostal && (
+                  <DatePickerField control={form.control} name="postalCloseDate" label="Postal Close Date" placeholder="Pick a date" />
+                )}
+
+                {/* Secretary — person picker + contact details */}
+                <div className="space-y-4 rounded-lg border p-4">
+                  <FormField
+                    control={form.control}
+                    name="secretaryUserId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Show Secretary</FormLabel>
+                        <Select
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            const member = orgMembers?.find((m) => m.id === value);
+                            if (member) {
+                              form.setValue('secretaryName', member.name ?? '');
+                              form.setValue('secretaryEmail', member.email ?? '');
+                              form.setValue('secretaryPhone', member.phone ?? '');
+                            }
+                          }}
+                          value={field.value ?? ''}
+                        >
+                          <FormControl>
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select a person" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {orgMembers?.map((member) => (
+                              <SelectItem key={member.id} value={member.id}>
+                                <div className="flex items-center gap-2">
+                                  <User className="size-3.5 text-muted-foreground" />
+                                  {member.name || member.email}
+                                  {member.id === session?.user?.id && (
+                                    <span className="text-xs text-muted-foreground">(you)</span>
+                                  )}
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <FormField
+                      control={form.control}
+                      name="secretaryName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Name</FormLabel>
+                          <FormControl><Input placeholder="e.g. Amanda Smith" {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="secretaryEmail"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Email</FormLabel>
+                          <FormControl><Input type="email" placeholder="e.g. secretary@club.co.uk" {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="secretaryPhone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Phone</FormLabel>
+                          <FormControl><Input type="tel" placeholder="e.g. 07700 900000" {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -1255,6 +1095,71 @@ export default function NewShowPage() {
   );
 }
 
+function DatePickerField({
+  control,
+  name,
+  label,
+  placeholder,
+  disablePast,
+}: {
+  control: ReturnType<typeof useForm<CreateShowValues>>['control'];
+  name: 'startDate' | 'entriesOpenDate' | 'entryCloseDate' | 'postalCloseDate';
+  label: string;
+  placeholder: string;
+  disablePast?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <FormField
+      control={control}
+      name={name}
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>{label}</FormLabel>
+          <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+              <FormControl>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    'w-full justify-start text-left font-normal',
+                    !field.value && 'text-muted-foreground'
+                  )}
+                >
+                  <CalendarIcon className="size-4" />
+                  {field.value
+                    ? format(parseLocalDate(field.value), 'd MMM yyyy')
+                    : placeholder}
+                </Button>
+              </FormControl>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={
+                  field.value ? parseLocalDate(field.value) : undefined
+                }
+                onSelect={(date) => {
+                  field.onChange(
+                    date ? format(date, 'yyyy-MM-dd') : ''
+                  );
+                  setOpen(false);
+                }}
+                disabled={
+                  disablePast
+                    ? (date) => date < new Date()
+                    : undefined
+                }
+              />
+            </PopoverContent>
+          </Popover>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  );
+}
+
 function ClassCheckbox({
   classDefinition,
   form,
@@ -1384,7 +1289,7 @@ function ReviewStep({
               </div>
             )}
             <div>
-              <dt className="text-sm text-muted-foreground">Organisation</dt>
+              <dt className="text-sm text-muted-foreground">Club</dt>
               <dd className="font-medium">{org?.name ?? 'Not set'}</dd>
             </div>
             <div>

@@ -1,4 +1,5 @@
 import {
+  boolean,
   date,
   index,
   integer,
@@ -10,6 +11,7 @@ import {
 import { relations } from 'drizzle-orm';
 import { showTypeEnum, showScopeEnum, showStatusEnum, classSexArrangementEnum } from './enums';
 import { organisations } from './organisations';
+import { users } from './users';
 import { venues } from './venues';
 import { showClasses } from './show-classes';
 import { entries } from './entries';
@@ -42,12 +44,14 @@ export const shows = pgTable(
     kcLicenceNo: text('kc_licence_no'),
     scheduleUrl: text('schedule_url'),
     description: text('description'),
+    secretaryUserId: uuid('secretary_user_id').references(() => users.id),
     secretaryEmail: text('secretary_email'),
     secretaryName: text('secretary_name'),
     secretaryAddress: text('secretary_address'),
     secretaryPhone: text('secretary_phone'),
     showOpenTime: text('show_open_time'),
     onCallVet: text('on_call_vet'),
+    acceptsPostalEntries: boolean('accepts_postal_entries').notNull().default(false),
     classSexArrangement: classSexArrangementEnum('class_sex_arrangement'),
     firstEntryFee: integer('first_entry_fee'),
     subsequentEntryFee: integer('subsequent_entry_fee'),
@@ -76,6 +80,11 @@ export const showsRelations = relations(shows, ({ one, many }) => ({
   venue: one(venues, {
     fields: [shows.venueId],
     references: [venues.id],
+  }),
+  secretary: one(users, {
+    fields: [shows.secretaryUserId],
+    references: [users.id],
+    relationName: 'showSecretary',
   }),
   showClasses: many(showClasses),
   entries: many(entries),

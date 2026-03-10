@@ -97,8 +97,8 @@ export function PostcodeLookup({ onSelect, compact }: PostcodeLookupProps) {
         if (cancelled) return;
         placesLibRef.current = lib;
         sessionTokenRef.current = new lib.AutocompleteSessionToken();
-      } catch {
-        // Silently fail — address lookup is a convenience, not critical
+      } catch (err) {
+        console.error('[PostcodeLookup] Failed to load Google Places:', err);
       }
     }
     load();
@@ -131,7 +131,8 @@ export function PostcodeLookup({ onSelect, compact }: PostcodeLookupProps) {
         }));
 
       setSuggestions(mapped);
-    } catch {
+    } catch (err) {
+      console.error('[PostcodeLookup] Autocomplete error:', err);
       setSuggestions([]);
     }
   }, []);
