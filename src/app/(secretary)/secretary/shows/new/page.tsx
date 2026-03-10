@@ -672,11 +672,22 @@ export default function NewShowPage() {
                         <FormLabel>Show Secretary</FormLabel>
                         <Select
                           onValueChange={(value) => {
-                            field.onChange(value);
-                            const member = orgMembers?.find((m) => m.id === value);
-                            if (member) applySecretaryMember(member);
+                            if (value === '__other__') {
+                              field.onChange(undefined);
+                              form.setValue('secretaryName', '');
+                              form.setValue('secretaryEmail', '');
+                              form.setValue('secretaryPhone', '');
+                            } else {
+                              field.onChange(value);
+                              const member = orgMembers?.find((m) => m.id === value);
+                              if (member) {
+                                form.setValue('secretaryName', member.name ?? '');
+                                form.setValue('secretaryEmail', member.email ?? '');
+                                form.setValue('secretaryPhone', member.phone ?? '');
+                              }
+                            }
                           }}
-                          value={field.value ?? ''}
+                          value={field.value ?? '__other__'}
                         >
                           <FormControl>
                             <SelectTrigger className="w-full">
@@ -695,6 +706,12 @@ export default function NewShowPage() {
                                 </div>
                               </SelectItem>
                             ))}
+                            <SelectItem value="__other__">
+                              <div className="flex items-center gap-2">
+                                <Plus className="size-3.5 text-muted-foreground" />
+                                Someone else
+                              </div>
+                            </SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
