@@ -5,27 +5,32 @@ import { getImpersonatedUserId } from '@/lib/impersonation';
 import { ImpersonationBanner } from './impersonation-banner';
 
 export async function ImpersonationBannerWrapper() {
-  const impersonatedUserId = await getImpersonatedUserId();
+  try {
+    const impersonatedUserId = await getImpersonatedUserId();
 
-  if (!impersonatedUserId) return null;
+    if (!impersonatedUserId) return null;
 
-  const [user] = await db
-    .select({
-      name: users.name,
-      email: users.email,
-      role: users.role,
-    })
-    .from(users)
-    .where(eq(users.id, impersonatedUserId))
-    .limit(1);
+    const [user] = await db
+      .select({
+        name: users.name,
+        email: users.email,
+        role: users.role,
+      })
+      .from(users)
+      .where(eq(users.id, impersonatedUserId))
+      .limit(1);
 
-  if (!user) return null;
+    if (!user) return null;
 
-  return (
-    <ImpersonationBanner
-      userName={user.name ?? ''}
-      userEmail={user.email ?? ''}
-      userRole={user.role}
-    />
-  );
+    return (
+      <ImpersonationBanner
+        userName={user.name ?? ''}
+        userEmail={user.email ?? ''}
+        userRole={user.role}
+      />
+    );
+  } catch {
+    // Never crash the root layout — impersonation banner is non-critical
+    return null;
+  }
 }

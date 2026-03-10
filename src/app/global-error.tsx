@@ -1,11 +1,42 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import {
-  isChunkError,
-  clearCachesAndReload,
-  RELOAD_GUARD_KEYS,
-} from '@/lib/chunk-recovery';
+
+// ─── Inlined chunk recovery ──────────────────────────────────────
+// global-error.tsx is the ABSOLUTE last resort.  It renders OUTSIDE
+// the root layout (no Tailwind, no providers, no shared chunks).
+// Every helper is inlined — zero external imports beyond React.
+// ─────────────────────────────────────────────────────────────────
+
+const RELOAD_GUARD_KEY = 'remi-global-error-reload';
+
+function isChunkError(msg: string): boolean {
+  return (
+    msg.includes('ChunkLoadError') ||
+    msg.includes('Loading chunk') ||
+    msg.includes('Failed to fetch dynamically imported module') ||
+    msg.includes('Importing a module script failed') ||
+    msg.includes('error loading dynamically imported module')
+  );
+}
+
+async function clearCachesAndReload() {
+  try {
+    if ('caches' in window) {
+      const names = await caches.keys();
+      await Promise.all(names.map((n) => caches.delete(n)));
+    }
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((reg) => reg.unregister()));
+    }
+  } catch {
+    // Best-effort — proceed to reload even if cleanup fails
+  }
+  window.location.reload();
+}
+
+// ─── Component ───────────────────────────────────────────────────
 
 export default function GlobalError({
   error,
@@ -16,12 +47,10 @@ export default function GlobalError({
 }) {
   const [autoRecovering, setAutoRecovering] = useState(false);
 
-  // Auto-recover for chunk loading errors — clear caches and reload without
-  // requiring user interaction. Guard against infinite reload loops.
   useEffect(() => {
     if (isChunkError(error.message || '')) {
-      if (!sessionStorage.getItem(RELOAD_GUARD_KEYS.globalError)) {
-        sessionStorage.setItem(RELOAD_GUARD_KEYS.globalError, '1');
+      if (!sessionStorage.getItem(RELOAD_GUARD_KEY)) {
+        sessionStorage.setItem(RELOAD_GUARD_KEY, '1');
         setAutoRecovering(true);
         clearCachesAndReload();
       }
