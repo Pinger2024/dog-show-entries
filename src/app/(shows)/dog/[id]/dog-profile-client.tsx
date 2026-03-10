@@ -262,8 +262,10 @@ export function DogProfileClient({ id }: { id: string }) {
   }
 
   const { dog, titles, achievements, showHistory, stats } = data;
-  const isOwner = !!session?.user && (session.user as { id?: string }).id === dog.ownerId;
-  const canEdit = isOwner || (session?.user as { role?: string })?.role === 'admin';
+  const userId = session?.user?.id;
+  const userRole = session?.user?.role;
+  const isOwner = !!userId && (dog.ownerUserIds ?? [dog.ownerId]).includes(userId);
+  const canEdit = isOwner || userRole === 'admin';
   const titlePrefix = getTitlePrefix(titles);
   const primaryPhoto = photos?.find((p) => p.isPrimary) ?? photos?.[0];
   const galleryPhotos = photos?.filter((p) => p.id !== primaryPhoto?.id) ?? [];

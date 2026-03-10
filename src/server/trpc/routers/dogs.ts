@@ -115,6 +115,9 @@ export const dogsRouter = createTRPCRouter({
           },
           titles: true,
           achievements: true,
+          owners: {
+            columns: { userId: true },
+          },
         },
       });
 
@@ -196,6 +199,12 @@ export const dogsRouter = createTRPCRouter({
           bio: dog.bio,
           kcRegNumber: dog.kcRegNumber,
           ownerId: dog.ownerId,
+          ownerUserIds: [
+            dog.ownerId,
+            ...dog.owners
+              .map((o) => o.userId)
+              .filter((id): id is string => id !== null),
+          ],
         },
         titles: dog.titles,
         achievements: dog.achievements,
