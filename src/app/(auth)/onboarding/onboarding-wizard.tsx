@@ -1166,23 +1166,13 @@ function SuccessStep({
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        {showRunMessage ? (
-          <Button
-            className="h-11 sm:h-12 w-full text-sm sm:text-[0.9375rem]"
-            onClick={() => router.push('/shows/new')}
-          >
-            <CalendarDays className="size-4" />
-            Create Your First Show
-          </Button>
-        ) : (
-          <Button
-            className="h-11 sm:h-12 w-full text-sm sm:text-[0.9375rem]"
-            onClick={() => router.push('/shows')}
-          >
-            <CalendarDays className="size-4" />
-            Browse Shows
-          </Button>
-        )}
+        <Button
+          className="h-11 sm:h-12 w-full text-sm sm:text-[0.9375rem]"
+          onClick={() => router.push(showRunMessage ? '/shows/new' : '/shows')}
+        >
+          <CalendarDays className="size-4" />
+          {showRunMessage ? 'Create Your First Show' : 'Browse Shows'}
+        </Button>
         {dogsAdded === 0 && intent !== 'run' && (
           <Button
             variant="outline"

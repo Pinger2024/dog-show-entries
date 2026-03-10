@@ -9,51 +9,11 @@ import {
   secretaryProcedure,
 } from '../procedures';
 import { invitations, users, organisations, memberships } from '@/server/db/schema';
-import { generateToken, getBaseUrl } from '@/server/lib/utils';
-import type { Database } from '@/server/db';
+import { generateToken, getBaseUrl, assignRole } from '@/server/lib/utils';
 
 const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
   : null;
-
-/** Upgrade a user's role and create an org membership (if applicable). */
-async function assignRole(
-  db: Database,
-  userId: string,
-  role: string,
-  organisationId: string | null,
-) {
-  const ops: Promise<unknown>[] = [
-    db
-      .update(users)
-      .set({ role, onboardingCompletedAt: new Date() })
-      .where(eq(users.id, userId)),
-  ];
-
-  if (organisationId) {
-    // Only create membership if one doesn't already exist
-    ops.push(
-      db.query.memberships
-        .findFirst({
-          where: and(
-            eq(memberships.userId, userId),
-            eq(memberships.organisationId, organisationId),
-          ),
-        })
-        .then((existing) => {
-          if (!existing) {
-            return db.insert(memberships).values({
-              userId,
-              organisationId,
-              status: 'active',
-            });
-          }
-        }),
-    );
-  }
-
-  await Promise.all(ops);
-}
 
 export const invitationsRouter = createTRPCRouter({
   send: secretaryProcedure

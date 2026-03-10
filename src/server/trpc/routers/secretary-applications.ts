@@ -10,10 +10,8 @@ import {
   clubTypeEnum,
   invitations,
   organisations,
-  users,
-  memberships,
 } from '@/server/db/schema';
-import { generateToken, getBaseUrl } from '@/server/lib/utils';
+import { generateToken, getBaseUrl, assignRole } from '@/server/lib/utils';
 
 const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
@@ -44,6 +42,20 @@ export const secretaryApplicationsRouter = createTRPCRouter({
         throw new TRPCError({
           code: 'BAD_REQUEST',
           message: 'You already have secretary or admin access',
+        });
+      }
+
+      // Guard against duplicate submissions
+      const existing = await ctx.db.query.secretaryApplications.findFirst({
+        where: and(
+          eq(secretaryApplications.userId, ctx.session.user.id),
+          eq(secretaryApplications.status, 'approved'),
+        ),
+      });
+      if (existing) {
+        throw new TRPCError({
+          code: 'CONFLICT',
+          message: 'You have already registered a club',
         });
       }
 
@@ -78,18 +90,7 @@ export const secretaryApplicationsRouter = createTRPCRouter({
             reviewedAt: new Date(),
           })
           .returning(),
-        ctx.db
-          .update(users)
-          .set({
-            role: 'secretary',
-            onboardingCompletedAt: new Date(),
-          })
-          .where(eq(users.id, ctx.session.user.id)),
-        ctx.db.insert(memberships).values({
-          userId: ctx.session.user.id,
-          organisationId: org!.id,
-          status: 'active',
-        }),
+        assignRole(ctx.db, ctx.session.user.id, 'secretary', org!.id),
       ]);
 
       // Notify admin about the new secretary (fire-and-forget)
