@@ -170,18 +170,7 @@ export const secretaryRouter = createTRPCRouter({
   orgMembers: secretaryProcedure
     .input(z.object({ organisationId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      // Verify caller is a member of this org
-      const callerMembership = await ctx.db.query.memberships.findFirst({
-        where: and(
-          eq(memberships.userId, ctx.session.user.id),
-          eq(memberships.organisationId, input.organisationId),
-          eq(memberships.status, 'active')
-        ),
-      });
-      if (!callerMembership) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not a member of this organisation' });
-      }
-
+      // Single query: fetch all active members and verify caller is among them
       const members = await ctx.db.query.memberships.findMany({
         where: and(
           eq(memberships.organisationId, input.organisationId),
@@ -193,6 +182,10 @@ export const secretaryRouter = createTRPCRouter({
           },
         },
       });
+
+      if (!members.some((m) => m.userId === ctx.session.user.id)) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not a member of this organisation' });
+      }
 
       return members.map((m) => m.user);
     }),

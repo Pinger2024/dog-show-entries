@@ -234,6 +234,13 @@ export default function NewShowPage() {
     { enabled: !!currentOrgId }
   );
 
+  // Populate secretary contact fields from a member record
+  function applySecretaryMember(member: { name?: string | null; email?: string | null; phone?: string | null }) {
+    form.setValue('secretaryName', member.name ?? '');
+    form.setValue('secretaryEmail', member.email ?? '');
+    form.setValue('secretaryPhone', member.phone ?? '');
+  }
+
   // Auto-select "myself" as secretary when session/members load
   const sessionUserId = session?.user?.id;
   useEffect(() => {
@@ -241,12 +248,9 @@ export default function NewShowPage() {
       form.setValue('secretaryUserId', sessionUserId);
       const me = orgMembers?.find((m) => m.id === sessionUserId);
       if (me) {
-        form.setValue('secretaryName', me.name ?? '');
-        form.setValue('secretaryEmail', me.email ?? '');
-        form.setValue('secretaryPhone', me.phone ?? '');
+        applySecretaryMember(me);
       } else if (session?.user) {
-        form.setValue('secretaryName', session.user.name ?? '');
-        form.setValue('secretaryEmail', session.user.email ?? '');
+        applySecretaryMember(session.user);
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -653,11 +657,7 @@ export default function NewShowPage() {
                           onValueChange={(value) => {
                             field.onChange(value);
                             const member = orgMembers?.find((m) => m.id === value);
-                            if (member) {
-                              form.setValue('secretaryName', member.name ?? '');
-                              form.setValue('secretaryEmail', member.email ?? '');
-                              form.setValue('secretaryPhone', member.phone ?? '');
-                            }
+                            if (member) applySecretaryMember(member);
                           }}
                           value={field.value ?? ''}
                         >

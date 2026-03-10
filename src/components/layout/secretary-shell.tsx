@@ -83,6 +83,7 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
   const breadcrumbs = getBreadcrumbs(pathname);
   const parentPath = getParentPath(pathname);
   const mobileTitle = getMobileTitle(pathname);
+  const hasExactMatch = sidebarNavItems.some((i) => i.href === pathname);
 
   return (
     <div className="flex min-h-screen overflow-x-hidden">
@@ -112,7 +113,6 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
 
         <nav className="flex-1 space-y-1 p-3">
           {sidebarNavItems.map((item) => {
-            const hasExactMatch = sidebarNavItems.some((i) => i.href === pathname);
             const isActive = hasExactMatch
               ? pathname === item.href
               : item.href !== '/secretary' && pathname.startsWith(item.href);

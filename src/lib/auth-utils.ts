@@ -11,11 +11,13 @@ export async function getCurrentUser() {
 
   // When impersonating, return the impersonated user's identity
   const impersonatedUserId = await getImpersonatedUserId();
+
+  // Read from DB when impersonating, or for exhibitors whose role may be
+  // stale in the JWT (e.g. right after secretary registration)
+  const needsDbLookup = impersonatedUserId || session.user.role === 'exhibitor';
   const targetUserId = impersonatedUserId || session.user.id;
 
-  // Always read the latest role from DB to avoid stale JWT issues
-  // (e.g. after secretary registration the JWT may not have refreshed yet)
-  if (targetUserId && db) {
+  if (needsDbLookup && targetUserId && db) {
     const [dbUser] = await db
       .select({
         id: users.id,

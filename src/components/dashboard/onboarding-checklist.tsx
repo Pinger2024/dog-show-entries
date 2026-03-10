@@ -20,7 +20,11 @@ const DISMISSED_KEY = 'remi-onboarding-checklist-dismissed';
 export function OnboardingChecklist() {
   const { data: session } = useSession();
   const [dismissed, setDismissed] = useState(true); // Default hidden until loaded
-  const { data: status, isLoading } = trpc.onboarding.getStatus.useQuery();
+  const isExhibitor = session?.user?.role === 'exhibitor';
+  const { data: status, isLoading } = trpc.onboarding.getStatus.useQuery(
+    undefined,
+    { enabled: isExhibitor }
+  );
 
   useEffect(() => {
     setDismissed(localStorage.getItem(DISMISSED_KEY) === 'true');
