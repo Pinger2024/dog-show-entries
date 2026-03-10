@@ -266,6 +266,17 @@ export function DogProfileClient({ id }: { id: string }) {
   const userRole = session?.user?.role;
   const isOwner = !!userId && (dog.ownerUserIds ?? [dog.ownerId]).includes(userId);
   const canEdit = isOwner || userRole === 'admin';
+
+  // Debug: temporary logging to diagnose missing edit button
+  console.log('[DogProfile] canEdit debug:', {
+    userId,
+    userRole,
+    ownerId: dog.ownerId,
+    ownerUserIds: dog.ownerUserIds,
+    isOwner,
+    canEdit,
+    sessionStatus: session ? 'loaded' : 'not loaded',
+  });
   const titlePrefix = getTitlePrefix(titles);
   const primaryPhoto = photos?.find((p) => p.isPrimary) ?? photos?.[0];
   const galleryPhotos = photos?.filter((p) => p.id !== primaryPhoto?.id) ?? [];
