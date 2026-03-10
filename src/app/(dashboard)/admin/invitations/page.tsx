@@ -53,10 +53,16 @@ export default function InvitationsPage() {
   const { data: invitationList, isLoading } = trpc.invitations.list.useQuery();
 
   const sendInvitation = trpc.invitations.send.useMutation({
-    onSuccess: () => {
-      toast.success('Invitation sent!', {
-        description: `An email has been sent to ${email}.`,
-      });
+    onSuccess: (data) => {
+      if (data.status === 'accepted') {
+        toast.success('Role assigned!', {
+          description: `${email} already had an account — they've been made a ${role} and notified by email.`,
+        });
+      } else {
+        toast.success('Invitation sent!', {
+          description: `An email has been sent to ${email} with a link to accept.`,
+        });
+      }
       setEmail('');
       setMessage('');
       utils.invitations.list.invalidate();
@@ -113,8 +119,9 @@ export default function InvitationsPage() {
             Send Invitation
           </CardTitle>
           <CardDescription>
-            The recipient will receive an email with a link to accept the
-            invitation and create their account.
+            If the person already has a Remi account, they&apos;ll be made a
+            secretary immediately. Otherwise, they&apos;ll receive an invitation
+            to sign up.
           </CardDescription>
         </CardHeader>
         <CardContent>

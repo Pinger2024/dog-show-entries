@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { signOut } from 'next-auth/react';
-import { Menu, Dog, Ticket, LayoutDashboard, LogOut, Eye, ClipboardList, Settings, Sparkles } from 'lucide-react';
+import { Menu, Dog, Ticket, LayoutDashboard, LogOut, Eye, ClipboardList, Settings, Sparkles, Megaphone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Sheet,
@@ -84,6 +84,16 @@ export function MobileNav({ user, isSecretary, isSteward }: MobileNavProps) {
                 <Ticket className="size-5" />
                 My Entries
               </Link>
+              {!isSecretary && !isSteward && (
+                <Link
+                  href="/apply"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  <Megaphone className="size-5" />
+                  Run a Show
+                </Link>
+              )}
               {isSecretary && (
                 <Link
                   href="/secretary"

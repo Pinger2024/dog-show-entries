@@ -10,10 +10,50 @@ import {
 } from '../procedures';
 import { invitations, users, organisations, memberships } from '@/server/db/schema';
 import { generateToken, getBaseUrl } from '@/server/lib/utils';
+import type { Database } from '@/server/db';
 
 const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
   : null;
+
+/** Upgrade a user's role and create an org membership (if applicable). */
+async function assignRole(
+  db: Database,
+  userId: string,
+  role: string,
+  organisationId: string | null,
+) {
+  const ops: Promise<unknown>[] = [
+    db
+      .update(users)
+      .set({ role, onboardingCompletedAt: new Date() })
+      .where(eq(users.id, userId)),
+  ];
+
+  if (organisationId) {
+    // Only create membership if one doesn't already exist
+    ops.push(
+      db.query.memberships
+        .findFirst({
+          where: and(
+            eq(memberships.userId, userId),
+            eq(memberships.organisationId, organisationId),
+          ),
+        })
+        .then((existing) => {
+          if (!existing) {
+            return db.insert(memberships).values({
+              userId,
+              organisationId,
+              status: 'active',
+            });
+          }
+        }),
+    );
+  }
+
+  await Promise.all(ops);
+}
 
 export const invitationsRouter = createTRPCRouter({
   send: secretaryProcedure
@@ -29,7 +69,73 @@ export const invitationsRouter = createTRPCRouter({
       const token = generateToken();
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 14);
+      const roleName =
+        input.role.charAt(0).toUpperCase() + input.role.slice(1);
 
+      // Check if a user with this email already exists
+      const existingUser = await ctx.db.query.users.findFirst({
+        where: eq(users.email, input.email.toLowerCase()),
+      });
+
+      if (existingUser) {
+        // User exists — assign role directly, no acceptance needed
+        const [[invitation]] = await Promise.all([
+          ctx.db
+            .insert(invitations)
+            .values({
+              email: input.email,
+              role: input.role,
+              organisationId: input.organisationId ?? null,
+              token,
+              status: 'accepted',
+              invitedById: ctx.session.user.id,
+              acceptedById: existingUser.id,
+              acceptedAt: new Date(),
+              message: input.message ?? null,
+              expiresAt,
+            })
+            .returning(),
+          assignRole(
+            ctx.db,
+            existingUser.id,
+            input.role,
+            input.organisationId ?? null,
+          ),
+        ]);
+
+        // Send notification email (no action required from them)
+        if (resend) {
+          const dashboardUrl = `${getBaseUrl()}/dashboard`;
+
+          await resend.emails.send({
+            from: 'Remi <noreply@lettiva.com>',
+            to: [input.email],
+            replyTo: 'feedback@inbound.lettiva.com',
+            subject: `You've been made a ${roleName} on Remi`,
+            html: `
+              <div style="font-family: Georgia, serif; max-width: 560px; margin: 0 auto;">
+                <h1 style="font-size: 24px; color: #2D5F3F;">Remi</h1>
+                <p>Hi${existingUser.name ? ` ${existingUser.name}` : ''},</p>
+                <p><strong>${ctx.session.user.name}</strong> has upgraded your Remi account to <strong>${roleName}</strong>.</p>
+                ${input.message ? `<p style="padding: 12px 16px; background: #f9fafb; border-radius: 8px; border-left: 3px solid #2D5F3F;"><em>"${input.message}"</em></p>` : ''}
+                <p>You now have access to secretary features including show management, entry management, and catalogue generation. Your new role will be active the next time you sign in.</p>
+                <p style="margin: 24px 0;">
+                  <a href="${dashboardUrl}" style="display: inline-block; background: #2D5F3F; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600;">
+                    Go to Dashboard
+                  </a>
+                </p>
+                <p style="color: #6b7280; font-size: 14px;">
+                  If you have any questions, just reply to this email.
+                </p>
+              </div>
+            `,
+          });
+        }
+
+        return invitation!;
+      }
+
+      // User doesn't exist — send invitation with accept link
       const [invitation] = await ctx.db
         .insert(invitations)
         .values({
@@ -44,11 +150,8 @@ export const invitationsRouter = createTRPCRouter({
         })
         .returning();
 
-      // Send invitation email
       if (resend) {
         const acceptUrl = `${getBaseUrl()}/invite/${token}`;
-        const roleName =
-          input.role.charAt(0).toUpperCase() + input.role.slice(1);
 
         await resend.emails.send({
           from: 'Remi <noreply@lettiva.com>',
@@ -155,33 +258,22 @@ export const invitationsRouter = createTRPCRouter({
         });
       }
 
-      // Upgrade user role
-      await ctx.db
-        .update(users)
-        .set({
-          role: invitation.role,
-          onboardingCompletedAt: new Date(),
-        })
-        .where(eq(users.id, ctx.session.user.id));
-
-      // Create membership linking user to organisation (if invitation has one)
-      if (invitation.organisationId) {
-        await ctx.db.insert(memberships).values({
-          userId: ctx.session.user.id,
-          organisationId: invitation.organisationId,
-          status: 'active',
-        });
-      }
-
-      // Mark invitation as accepted
-      await ctx.db
-        .update(invitations)
-        .set({
-          status: 'accepted',
-          acceptedById: ctx.session.user.id,
-          acceptedAt: new Date(),
-        })
-        .where(eq(invitations.id, invitation.id));
+      await Promise.all([
+        assignRole(
+          ctx.db,
+          ctx.session.user.id,
+          invitation.role,
+          invitation.organisationId,
+        ),
+        ctx.db
+          .update(invitations)
+          .set({
+            status: 'accepted',
+            acceptedById: ctx.session.user.id,
+            acceptedAt: new Date(),
+          })
+          .where(eq(invitations.id, invitation.id)),
+      ]);
 
       return { role: invitation.role };
     }),

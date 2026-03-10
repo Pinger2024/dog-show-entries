@@ -10,6 +10,7 @@ export async function Header() {
     user?.role === 'steward' ||
     user?.role === 'secretary' ||
     user?.role === 'admin';
+  const isExhibitor = user?.role === 'exhibitor';
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/85 backdrop-blur-lg supports-[backdrop-filter]:bg-background/70">
@@ -52,6 +53,14 @@ export async function Header() {
               >
                 My Entries
               </Link>
+              {isExhibitor && (
+                <Link
+                  href="/apply"
+                  className="rounded-lg px-4 py-2.5 text-[0.9375rem] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  Run a Show
+                </Link>
+              )}
               {isSecretary && (
                 <Link
                   href="/secretary"

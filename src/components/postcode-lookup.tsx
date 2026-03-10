@@ -88,13 +88,12 @@ export function PostcodeLookup({ onSelect, compact }: PostcodeLookupProps) {
     let cancelled = false;
     async function load() {
       try {
-        const { importLibrary } = await import('@googlemaps/js-api-loader');
-        const { Loader } = await import('@googlemaps/js-api-loader');
-        const loader = new Loader({
+        const { setOptions, importLibrary } = await import('@googlemaps/js-api-loader');
+        setOptions({
           apiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY ?? '',
           version: 'weekly',
         });
-        const lib = await loader.importLibrary('places');
+        const lib = await importLibrary('places');
         if (cancelled) return;
         placesLibRef.current = lib;
         sessionTokenRef.current = new lib.AutocompleteSessionToken();

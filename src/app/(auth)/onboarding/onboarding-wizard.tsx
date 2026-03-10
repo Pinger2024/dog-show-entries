@@ -18,6 +18,9 @@ import {
   ArrowRight,
   SkipForward,
   PartyPopper,
+  Trophy,
+  Megaphone,
+  Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc/client';
@@ -25,6 +28,7 @@ import { cn } from '@/lib/utils';
 import { PostcodeLookup, formatAddress } from '@/components/postcode-lookup';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Calendar } from '@/components/ui/calendar';
 import {
   Form,
@@ -64,17 +68,44 @@ import {
 } from '@/components/ui/card';
 import Link from 'next/link';
 
-// ── Step indicator ──────────────────────────────────────────────
-const STEPS = [
-  { label: 'Your Details', number: 1 },
-  { label: 'Add a Dog', number: 2 },
-  { label: 'All Set', number: 3 },
-];
+// ── Types ───────────────────────────────────────────────────────
+type Intent = 'enter' | 'run' | 'both';
 
-function StepIndicator({ currentStep }: { currentStep: number }) {
+function getSteps(intent: Intent) {
+  switch (intent) {
+    case 'enter':
+      return [
+        { label: 'Your Details', number: 1 },
+        { label: 'Add a Dog', number: 2 },
+        { label: 'All Set', number: 3 },
+      ];
+    case 'run':
+      return [
+        { label: 'Your Details', number: 1 },
+        { label: 'Your Club', number: 2 },
+        { label: 'All Set', number: 3 },
+      ];
+    case 'both':
+      return [
+        { label: 'Your Details', number: 1 },
+        { label: 'Add a Dog', number: 2 },
+        { label: 'Your Club', number: 3 },
+        { label: 'All Set', number: 4 },
+      ];
+  }
+}
+
+// ── Step indicator ──────────────────────────────────────────────
+function StepIndicator({
+  currentStep,
+  steps,
+}: {
+  currentStep: number;
+  steps: { label: string; number: number }[];
+}) {
   return (
     <div className="flex items-center justify-center gap-2 sm:gap-0">
-      {STEPS.map((step, i) => (
+      {steps.map((step, i) => (
         <div key={step.number} className="flex items-center">
           <div className="flex flex-col items-center gap-1.5">
             <div
@@ -104,7 +135,7 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
               {step.label}
             </span>
           </div>
-          {i < STEPS.length - 1 && (
+          {i < steps.length - 1 && (
             <div
               className={cn(
                 'mx-2 h-0.5 w-8 sm:mx-4 sm:w-12 transition-colors',
@@ -154,6 +185,7 @@ interface OnboardingWizardProps {
 
 export function OnboardingWizard({ user }: OnboardingWizardProps) {
   const router = useRouter();
+  const [intent, setIntent] = useState<Intent | null>(null);
   const [step, setStep] = useState(1);
   const [dogsAdded, setDogsAdded] = useState(0);
 
@@ -168,10 +200,77 @@ export function OnboardingWizard({ user }: OnboardingWizardProps) {
 
   // Auto-advance if profile already completed (e.g., returning to onboarding)
   useEffect(() => {
-    if (status?.hasProfile && step === 1) {
+    if (status?.hasProfile && step === 1 && intent) {
       setStep(2);
     }
-  }, [status?.hasProfile, step]);
+  }, [status?.hasProfile, step, intent]);
+
+  // Determine which step component to show based on intent + step number
+  function getStepContent() {
+    if (!intent) return null;
+
+    const steps = getSteps(intent);
+    const lastStep = steps[steps.length - 1].number;
+
+    if (step === lastStep) {
+      return <SuccessStep dogsAdded={dogsAdded} userName={user.name} intent={intent} />;
+    }
+
+    if (step === 1) {
+      return (
+        <ProfileStep
+          user={user}
+          profile={status?.profile}
+          onComplete={() => setStep(2)}
+          intent={intent}
+        />
+      );
+    }
+
+    if (intent === 'enter') {
+      // Step 2 = Dog
+      return (
+        <DogStep
+          dogsAdded={dogsAdded}
+          onDogAdded={() => setDogsAdded((n) => n + 1)}
+          onSkip={() => setStep(3)}
+          onComplete={() => setStep(3)}
+        />
+      );
+    }
+
+    if (intent === 'run') {
+      // Step 2 = Club
+      return (
+        <ClubStep
+          userEmail={user.email}
+          onComplete={() => setStep(3)}
+        />
+      );
+    }
+
+    if (intent === 'both') {
+      if (step === 2) {
+        return (
+          <DogStep
+            dogsAdded={dogsAdded}
+            onDogAdded={() => setDogsAdded((n) => n + 1)}
+            onSkip={() => setStep(3)}
+            onComplete={() => setStep(3)}
+          />
+        );
+      }
+      // Step 3 = Club
+      return (
+        <ClubStep
+          userEmail={user.email}
+          onComplete={() => setStep(4)}
+        />
+      );
+    }
+
+    return null;
+  }
 
   return (
     <div className="flex min-h-screen flex-col items-center px-3 py-8 sm:px-4 sm:py-12">
@@ -186,30 +285,93 @@ export function OnboardingWizard({ user }: OnboardingWizardProps) {
           </Link>
         </div>
 
-        {/* Step indicator */}
-        <StepIndicator currentStep={step} />
+        {/* Intent selection (before steps) */}
+        {!intent ? (
+          <IntentStep onSelect={(i) => setIntent(i)} userName={user.name} />
+        ) : (
+          <>
+            {/* Step indicator */}
+            <StepIndicator currentStep={step} steps={getSteps(intent)} />
 
-        {/* Step content */}
-        {step === 1 && (
-          <ProfileStep
-            user={user}
-            profile={status?.profile}
-            onComplete={() => setStep(2)}
-          />
-        )}
-        {step === 2 && (
-          <DogStep
-            dogsAdded={dogsAdded}
-            onDogAdded={() => setDogsAdded((n) => n + 1)}
-            onSkip={() => setStep(3)}
-            onComplete={() => setStep(3)}
-          />
-        )}
-        {step === 3 && (
-          <SuccessStep dogsAdded={dogsAdded} userName={user.name} />
+            {/* Step content */}
+            {getStepContent()}
+          </>
         )}
       </div>
     </div>
+  );
+}
+
+// ── Intent Step ─────────────────────────────────────────────────
+function IntentStep({
+  onSelect,
+  userName,
+}: {
+  onSelect: (intent: Intent) => void;
+  userName?: string | null;
+}) {
+  const firstName = userName?.split(' ')[0];
+
+  return (
+    <Card>
+      <CardHeader className="text-center">
+        <CardTitle className="font-serif text-xl sm:text-2xl">
+          Welcome{firstName ? `, ${firstName}` : ''}!
+        </CardTitle>
+        <CardDescription className="text-sm sm:text-[0.9375rem]">
+          What brings you to Remi?
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <button
+          type="button"
+          onClick={() => onSelect('enter')}
+          className="flex w-full items-start gap-4 rounded-xl border-2 border-transparent bg-muted/50 p-4 text-left transition-all hover:border-primary hover:bg-primary/5"
+        >
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10">
+            <Trophy className="size-5 text-primary" />
+          </div>
+          <div>
+            <p className="font-semibold">Enter shows</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              I&apos;m an exhibitor — I want to enter my dogs in shows
+            </p>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onSelect('run')}
+          className="flex w-full items-start gap-4 rounded-xl border-2 border-transparent bg-muted/50 p-4 text-left transition-all hover:border-primary hover:bg-primary/5"
+        >
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10">
+            <Megaphone className="size-5 text-primary" />
+          </div>
+          <div>
+            <p className="font-semibold">Run shows</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              I&apos;m a show secretary — I want to manage shows for my club
+            </p>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onSelect('both')}
+          className="flex w-full items-start gap-4 rounded-xl border-2 border-transparent bg-muted/50 p-4 text-left transition-all hover:border-primary hover:bg-primary/5"
+        >
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10">
+            <Users className="size-5 text-primary" />
+          </div>
+          <div>
+            <p className="font-semibold">Both</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              I exhibit and run shows
+            </p>
+          </div>
+        </button>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -218,10 +380,12 @@ function ProfileStep({
   user,
   profile,
   onComplete,
+  intent,
 }: {
   user: OnboardingWizardProps['user'];
   profile?: { name: string; address: string | null; postcode: string | null; phone: string | null; kcAccountNo: string | null } | null;
   onComplete: () => void;
+  intent: Intent;
 }) {
   const saveProfile = trpc.onboarding.saveProfile.useMutation({
     onSuccess: () => {
@@ -250,8 +414,9 @@ function ProfileStep({
           Your Details
         </CardTitle>
         <CardDescription className="text-sm sm:text-[0.9375rem]">
-          We need a few details for show entries. This information appears on
-          your entry forms.
+          {intent === 'run'
+            ? 'We need a few details about you to get started.'
+            : 'We need a few details for show entries. This information appears on your entry forms.'}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -363,7 +528,7 @@ function ProfileStep({
   );
 }
 
-// ── Step 2: Add a Dog ───────────────────────────────────────────
+// ── Dog Step ────────────────────────────────────────────────────
 function DogStep({
   dogsAdded,
   onDogAdded,
@@ -918,13 +1083,238 @@ function DogStep({
   );
 }
 
-// ── Step 3: Success ─────────────────────────────────────────────
+// ── Club Registration Step ──────────────────────────────────────
+function ClubStep({
+  userEmail,
+  onComplete,
+}: {
+  userEmail?: string | null;
+  onComplete: () => void;
+}) {
+  const [clubType, setClubType] = useState<string>('');
+  const [organisationName, setOrganisationName] = useState('');
+  const [breedOrGroup, setBreedOrGroup] = useState('');
+  const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
+  const [kcRegNumber, setKcRegNumber] = useState('');
+  const [contactEmail, setContactEmail] = useState(userEmail ?? '');
+  const [contactPhone, setContactPhone] = useState('');
+  const [website, setWebsite] = useState('');
+  const [details, setDetails] = useState('');
+
+  const submitMutation = trpc.applications.submit.useMutation({
+    onSuccess: () => {
+      toast.success('Application submitted!', {
+        description: "We'll review it and get you set up shortly.",
+      });
+      onComplete();
+    },
+    onError: (err) => {
+      toast.error(err.message);
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!clubType || !organisationName || !contactEmail) return;
+
+    const groupValue = clubType === 'multi_breed'
+      ? (selectedGroups.length > 0 ? selectedGroups.join(', ') : undefined)
+      : (breedOrGroup || undefined);
+
+    submitMutation.mutate({
+      organisationName,
+      clubType: clubType as 'single_breed' | 'multi_breed',
+      breedOrGroup: groupValue,
+      kcRegNumber: kcRegNumber || undefined,
+      contactEmail,
+      contactPhone: contactPhone || undefined,
+      website: website || undefined,
+      details: details || undefined,
+    });
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="font-serif text-lg sm:text-xl">
+          Register Your Club
+        </CardTitle>
+        <CardDescription className="text-sm sm:text-[0.9375rem]">
+          Tell us about your club and we&apos;ll get you set up to manage shows
+          on Remi.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">
+              Organisation / Club Name *
+            </label>
+            <Input
+              value={organisationName}
+              onChange={(e) => setOrganisationName(e.target.value)}
+              placeholder="e.g. Clyde Valley GSD Club"
+              className="h-11 sm:h-12"
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Club Type *</label>
+            <Select value={clubType} onValueChange={setClubType}>
+              <SelectTrigger className="h-11 sm:h-12">
+                <SelectValue placeholder="Select club type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="single_breed">
+                  Single Breed Club
+                </SelectItem>
+                <SelectItem value="multi_breed">
+                  Multi Breed Club
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {clubType === 'multi_breed' ? (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Breed Groups</label>
+              <div className="grid grid-cols-2 gap-2">
+                {['Gundog', 'Hound', 'Pastoral', 'Terrier', 'Toy', 'Utility', 'Working'].map((group) => (
+                  <label
+                    key={group}
+                    className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer hover:bg-muted/50 transition-colors has-[:checked]:border-primary has-[:checked]:bg-primary/5"
+                  >
+                    <input
+                      type="checkbox"
+                      className="size-4 rounded border-muted-foreground/30 accent-primary"
+                      checked={selectedGroups.includes(group)}
+                      onChange={(e) => {
+                        setSelectedGroups(
+                          e.target.checked
+                            ? [...selectedGroups, group]
+                            : selectedGroups.filter((g) => g !== group)
+                        );
+                      }}
+                    />
+                    {group}
+                  </label>
+                ))}
+              </div>
+            </div>
+          ) : clubType === 'single_breed' ? (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Breed Group</label>
+              <Select value={breedOrGroup} onValueChange={setBreedOrGroup}>
+                <SelectTrigger className="h-11 sm:h-12">
+                  <SelectValue placeholder="Select a group..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Gundog">Gundog</SelectItem>
+                  <SelectItem value="Hound">Hound</SelectItem>
+                  <SelectItem value="Pastoral">Pastoral</SelectItem>
+                  <SelectItem value="Terrier">Terrier</SelectItem>
+                  <SelectItem value="Toy">Toy</SelectItem>
+                  <SelectItem value="Utility">Utility</SelectItem>
+                  <SelectItem value="Working">Working</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">
+              Contact Email *
+            </label>
+            <Input
+              type="email"
+              value={contactEmail}
+              onChange={(e) => setContactEmail(e.target.value)}
+              placeholder="secretary@myclub.co.uk"
+              className="h-11 sm:h-12"
+              required
+            />
+            <p className="text-xs text-muted-foreground">
+              The email you&apos;ll use for show correspondence.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Contact Phone</label>
+            <Input
+              type="tel"
+              value={contactPhone}
+              onChange={(e) => setContactPhone(e.target.value)}
+              placeholder="07xxx xxxxxx"
+              className="h-11 sm:h-12"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Club Website</label>
+            <Input
+              value={website}
+              onChange={(e) => setWebsite(e.target.value)}
+              placeholder="https://myclub.co.uk"
+              className="h-11 sm:h-12"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">
+              KC Registration Number
+            </label>
+            <Input
+              value={kcRegNumber}
+              onChange={(e) => setKcRegNumber(e.target.value)}
+              placeholder="e.g. 1234"
+              className="h-11 sm:h-12"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">
+              Tell us about your club
+            </label>
+            <Textarea
+              value={details}
+              onChange={(e) => setDetails(e.target.value)}
+              placeholder="What kind of shows do you run? How many per year?"
+              rows={3}
+            />
+          </div>
+
+          <Button
+            type="submit"
+            className="h-11 sm:h-12 w-full text-sm sm:text-[0.9375rem]"
+            disabled={
+              submitMutation.isPending ||
+              !organisationName ||
+              !clubType ||
+              !contactEmail
+            }
+          >
+            {submitMutation.isPending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : null}
+            Submit Application
+            <ArrowRight className="size-4" />
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Success Step ────────────────────────────────────────────────
 function SuccessStep({
   dogsAdded,
   userName,
+  intent,
 }: {
   dogsAdded: number;
   userName?: string | null;
+  intent: Intent;
 }) {
   const router = useRouter();
   const completeOnboarding = trpc.onboarding.complete.useMutation({
@@ -941,6 +1331,8 @@ function SuccessStep({
 
   const firstName = userName?.split(' ')[0] ?? 'there';
 
+  const showRunMessage = intent === 'run' || intent === 'both';
+
   return (
     <Card>
       <CardHeader className="text-center">
@@ -951,10 +1343,19 @@ function SuccessStep({
           You&apos;re all set, {firstName}!
         </CardTitle>
         <CardDescription className="text-sm sm:text-[0.9375rem]">
-          Your account is ready.{' '}
-          {dogsAdded > 0
-            ? `You've added ${dogsAdded} ${dogsAdded === 1 ? 'dog' : 'dogs'} — time to find a show!`
-            : 'You can add your dogs anytime from the dashboard.'}
+          {showRunMessage ? (
+            <>
+              Your account is ready and your club application has been submitted.
+              We&apos;ll review it and get back to you shortly — usually within a day.
+            </>
+          ) : dogsAdded > 0 ? (
+            <>
+              Your account is ready. You&apos;ve added {dogsAdded}{' '}
+              {dogsAdded === 1 ? 'dog' : 'dogs'} — time to find a show!
+            </>
+          ) : (
+            'Your account is ready. You can add your dogs anytime from the dashboard.'
+          )}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
@@ -965,7 +1366,7 @@ function SuccessStep({
           <CalendarDays className="size-4" />
           Browse Shows
         </Button>
-        {dogsAdded === 0 && (
+        {dogsAdded === 0 && intent !== 'run' && (
           <Button
             variant="outline"
             className="h-11 sm:h-12 w-full text-sm sm:text-[0.9375rem]"
