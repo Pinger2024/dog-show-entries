@@ -1168,7 +1168,7 @@ function SuccessStep({
       <CardContent className="flex flex-col gap-3">
         <Button
           className="h-11 sm:h-12 w-full text-sm sm:text-[0.9375rem]"
-          onClick={() => router.push(showRunMessage ? '/shows/new' : '/shows')}
+          onClick={() => { window.location.href = showRunMessage ? '/shows/new' : '/shows'; }}
         >
           <CalendarDays className="size-4" />
           {showRunMessage ? 'Create Your First Show' : 'Browse Shows'}
@@ -1177,7 +1177,7 @@ function SuccessStep({
           <Button
             variant="outline"
             className="h-11 sm:h-12 w-full text-sm sm:text-[0.9375rem]"
-            onClick={() => router.push('/dogs/new')}
+            onClick={() => { window.location.href = '/dogs/new'; }}
           >
             <Dog className="size-4" />
             Add a Dog
@@ -1186,7 +1186,7 @@ function SuccessStep({
         <Button
           variant="ghost"
           className="h-11 sm:h-12 w-full text-sm sm:text-[0.9375rem]"
-          onClick={() => router.push('/dashboard')}
+          onClick={() => { window.location.href = '/dashboard'; }}
         >
           Go to Dashboard
           <ArrowRight className="size-4" />

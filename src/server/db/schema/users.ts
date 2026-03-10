@@ -13,6 +13,7 @@ import { entries } from './entries';
 import { memberships } from './memberships';
 import { dogOwners } from './dog-owners';
 import { orders } from './orders';
+import { shows } from './shows';
 import { stewardAssignments } from './steward-assignments';
 import { invitations } from './invitations';
 
@@ -59,6 +60,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   dogOwnerships: many(dogOwners),
   orders: many(orders),
   stewardAssignments: many(stewardAssignments),
+  showsAsSecretary: many(shows, { relationName: 'showSecretary' }),
   invitationsSent: many(invitations, { relationName: 'invitationsSent' }),
   invitationsAccepted: many(invitations, { relationName: 'invitationsAccepted' }),
 }));

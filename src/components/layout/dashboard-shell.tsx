@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
+import { RoleSwitcher, RoleSwitcherCompact } from '@/components/layout/role-switcher';
 
 interface DashboardShellProps {
   user: {
@@ -100,18 +101,23 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
           </Link>
         </div>
 
-        {/* User info */}
-        <div className="flex items-center gap-3 border-b px-5 py-4">
-          <Avatar size="sm">
-            <AvatarImage src={user.image ?? undefined} />
-            <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
-              {getInitials(user.name, user.email)}
-            </AvatarFallback>
-          </Avatar>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[0.9375rem] font-medium">{user.name ?? 'User'}</p>
-            <p className="truncate text-sm text-muted-foreground">{user.email}</p>
+        {/* User info + role switcher */}
+        <div className="border-b px-5 py-4 space-y-3">
+          <div className="flex items-center gap-3">
+            <Avatar size="sm">
+              <AvatarImage src={user.image ?? undefined} />
+              <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                {getInitials(user.name, user.email)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[0.9375rem] font-medium">{user.name ?? 'User'}</p>
+              <p className="truncate text-sm text-muted-foreground">{user.email}</p>
+            </div>
           </div>
+          {user.role === 'secretary' && (
+            <RoleSwitcher activeView="exhibitor" />
+          )}
         </div>
 
         {/* Nav */}
@@ -183,20 +189,6 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
 
         {/* Sidebar footer */}
         <div className="border-t p-3">
-          {user.role === 'secretary' && (
-            <Link
-              href="/secretary"
-              className={cn(
-                'flex items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-medium transition-colors',
-                pathname.startsWith('/secretary')
-                  ? 'bg-sidebar-accent text-sidebar-primary'
-                  : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
-              )}
-            >
-              <ClipboardCheck className="size-5" />
-              Secretary View
-            </Link>
-          )}
           <Link
             href="/settings"
             className={cn(
@@ -249,14 +241,9 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
           <Link href="/" className="font-serif text-xl font-bold tracking-tight text-primary">
             Remi
           </Link>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             {user.role === 'secretary' && (
-              <Button variant="outline" size="sm" className="h-9 gap-1.5 px-3 text-xs font-medium" asChild>
-                <Link href="/secretary">
-                  <ClipboardCheck className="size-4" />
-                  Secretary
-                </Link>
-              </Button>
+              <RoleSwitcherCompact activeView="exhibitor" />
             )}
             <Button variant="ghost" size="sm" className="size-11" asChild>
               <Link href="/settings">

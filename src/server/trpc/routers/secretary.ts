@@ -166,6 +166,37 @@ export const secretaryRouter = createTRPCRouter({
     };
   }),
 
+  /** List active members of an organisation (for secretary picker, etc.) */
+  orgMembers: secretaryProcedure
+    .input(z.object({ organisationId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      // Verify caller is a member of this org
+      const callerMembership = await ctx.db.query.memberships.findFirst({
+        where: and(
+          eq(memberships.userId, ctx.session.user.id),
+          eq(memberships.organisationId, input.organisationId),
+          eq(memberships.status, 'active')
+        ),
+      });
+      if (!callerMembership) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not a member of this organisation' });
+      }
+
+      const members = await ctx.db.query.memberships.findMany({
+        where: and(
+          eq(memberships.organisationId, input.organisationId),
+          eq(memberships.status, 'active')
+        ),
+        with: {
+          user: {
+            columns: { id: true, name: true, email: true, phone: true, address: true, postcode: true },
+          },
+        },
+      });
+
+      return members.map((m) => m.user);
+    }),
+
   getShowStats: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
 import { Check, Circle, X, User, Dog, Ticket } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
 import { cn } from '@/lib/utils';
@@ -17,6 +18,7 @@ import {
 const DISMISSED_KEY = 'remi-onboarding-checklist-dismissed';
 
 export function OnboardingChecklist() {
+  const { data: session } = useSession();
   const [dismissed, setDismissed] = useState(true); // Default hidden until loaded
   const { data: status, isLoading } = trpc.onboarding.getStatus.useQuery();
 
@@ -24,6 +26,8 @@ export function OnboardingChecklist() {
     setDismissed(localStorage.getItem(DISMISSED_KEY) === 'true');
   }, []);
 
+  // Only relevant for exhibitors — secretaries have a different workflow
+  if (session?.user?.role !== 'exhibitor') return null;
   if (dismissed || isLoading || !status) return null;
 
   const items = [

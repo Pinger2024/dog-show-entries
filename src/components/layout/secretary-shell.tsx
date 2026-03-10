@@ -15,6 +15,7 @@ import {
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { RoleSwitcher, RoleSwitcherCompact } from '@/components/layout/role-switcher';
 
 interface SecretaryShellProps {
   user: {
@@ -91,31 +92,30 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
           <Link href="/" className="font-serif text-[1.375rem] font-bold tracking-tight text-primary">
             Remi
           </Link>
-          <span className="rounded-md bg-gold/15 px-2 py-0.5 text-xs font-semibold text-gold">
-            Secretary
-          </span>
         </div>
 
-        <div className="flex items-center gap-3 border-b px-5 py-4">
-          <Avatar size="sm">
-            <AvatarImage src={user.image ?? undefined} />
-            <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
-              {getInitials(user.name, user.email)}
-            </AvatarFallback>
-          </Avatar>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[0.9375rem] font-medium">{user.name ?? 'Secretary'}</p>
-            <p className="truncate text-sm text-muted-foreground">{user.email}</p>
+        <div className="border-b px-5 py-4 space-y-3">
+          <div className="flex items-center gap-3">
+            <Avatar size="sm">
+              <AvatarImage src={user.image ?? undefined} />
+              <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                {getInitials(user.name, user.email)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[0.9375rem] font-medium">{user.name ?? 'Secretary'}</p>
+              <p className="truncate text-sm text-muted-foreground">{user.email}</p>
+            </div>
           </div>
+          <RoleSwitcher activeView="secretary" />
         </div>
 
         <nav className="flex-1 space-y-1 p-3">
           {sidebarNavItems.map((item) => {
-            const isActive =
-              pathname === item.href ||
-              (item.href !== '/secretary' &&
-                pathname.startsWith(item.href) &&
-                item.href !== '/secretary/shows/new');
+            const hasExactMatch = sidebarNavItems.some((i) => i.href === pathname);
+            const isActive = hasExactMatch
+              ? pathname === item.href
+              : item.href !== '/secretary' && pathname.startsWith(item.href);
             return (
               <Link
                 key={item.href}
@@ -135,13 +135,6 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
         </nav>
 
         <div className="border-t p-3">
-          <Link
-            href="/dashboard"
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-          >
-            <LayoutDashboard className="size-5" />
-            Exhibitor View
-          </Link>
           <button
             onClick={() => signOut({ callbackUrl: '/' })}
             className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
@@ -194,23 +187,13 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
                 )}
               </>
             ) : (
-              <>
-                <Link href="/" className="font-serif text-xl font-bold tracking-tight text-primary">
-                  Remi
-                </Link>
-                <span className="rounded-md bg-gold/15 px-2 py-0.5 text-xs font-semibold text-gold">
-                  Secretary
-                </span>
-              </>
+              <Link href="/" className="font-serif text-xl font-bold tracking-tight text-primary">
+                Remi
+              </Link>
             )}
           </div>
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" size="sm" className="h-9 gap-1.5 px-2.5 text-xs" asChild>
-              <Link href="/dashboard">
-                <LayoutDashboard className="size-4" />
-                <span className="sr-only sm:not-sr-only">Exhibitor</span>
-              </Link>
-            </Button>
+          <div className="flex items-center gap-1.5">
+            <RoleSwitcherCompact activeView="secretary" />
             <Button
               variant="ghost"
               size="sm"

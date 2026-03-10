@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useSession } from 'next-auth/react';
 import { Loader2, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc/client';
@@ -30,6 +31,7 @@ export function ClubApplicationForm({
   onSuccess,
   tall,
 }: ClubApplicationFormProps) {
+  const { update: updateSession } = useSession();
   const [clubType, setClubType] = useState<string>('');
   const [organisationName, setOrganisationName] = useState('');
   const [breedOrGroup, setBreedOrGroup] = useState('');
@@ -41,7 +43,8 @@ export function ClubApplicationForm({
   const [details, setDetails] = useState('');
 
   const submitMutation = trpc.applications.submit.useMutation({
-    onSuccess: () => {
+    onSuccess: async () => {
+      await updateSession(); // Refresh session so client sees new secretary role
       toast.success("Club registered!", {
         description: "You're now set up as a show secretary.",
       });
