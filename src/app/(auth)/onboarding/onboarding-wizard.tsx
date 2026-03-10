@@ -1152,8 +1152,8 @@ function SuccessStep({
         <CardDescription className="text-sm sm:text-[0.9375rem]">
           {showRunMessage ? (
             <>
-              Your account is ready and your club application has been submitted.
-              We&apos;ll review it and get back to you shortly — usually within a day.
+              Your club is registered and your secretary account is active.
+              You can start creating shows right away!
             </>
           ) : dogsAdded > 0 ? (
             <>
@@ -1166,13 +1166,23 @@ function SuccessStep({
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <Button
-          className="h-11 sm:h-12 w-full text-sm sm:text-[0.9375rem]"
-          onClick={() => router.push('/shows')}
-        >
-          <CalendarDays className="size-4" />
-          Browse Shows
-        </Button>
+        {showRunMessage ? (
+          <Button
+            className="h-11 sm:h-12 w-full text-sm sm:text-[0.9375rem]"
+            onClick={() => router.push('/shows/new')}
+          >
+            <CalendarDays className="size-4" />
+            Create Your First Show
+          </Button>
+        ) : (
+          <Button
+            className="h-11 sm:h-12 w-full text-sm sm:text-[0.9375rem]"
+            onClick={() => router.push('/shows')}
+          >
+            <CalendarDays className="size-4" />
+            Browse Shows
+          </Button>
+        )}
         {dogsAdded === 0 && intent !== 'run' && (
           <Button
             variant="outline"

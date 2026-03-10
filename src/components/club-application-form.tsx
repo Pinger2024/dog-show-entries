@@ -42,8 +42,8 @@ export function ClubApplicationForm({
 
   const submitMutation = trpc.applications.submit.useMutation({
     onSuccess: () => {
-      toast.success("Application submitted!", {
-        description: "We'll review it and get you set up shortly.",
+      toast.success("Club registered!", {
+        description: "You're now set up as a show secretary.",
       });
       onSuccess?.();
     },
@@ -218,7 +218,7 @@ export function ClubApplicationForm({
         {submitMutation.isPending ? (
           <Loader2 className="size-4 animate-spin" />
         ) : null}
-        Submit Application
+        Register Club
         {tall && <ArrowRight className="size-4" />}
       </Button>
     </form>

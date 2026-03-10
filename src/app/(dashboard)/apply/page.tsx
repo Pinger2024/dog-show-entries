@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import {
   ClipboardCheck,
-  Clock,
   XCircle,
   CheckCircle2,
   ArrowRight,
@@ -47,7 +46,7 @@ export default function ApplyPage() {
           You already have {userRole} access
         </h2>
         <p className="mt-1.5 text-muted-foreground">
-          You don&apos;t need to apply — you already have elevated permissions.
+          You already have elevated permissions on Remi.
         </p>
         <Button className="mt-5" asChild>
           <Link href="/dashboard">Go to Dashboard</Link>
@@ -56,60 +55,16 @@ export default function ApplyPage() {
     );
   }
 
-  // Pending application
-  if (application?.status === 'pending') {
+  // Already registered a club — show success state
+  if (application?.status === 'approved') {
     return (
       <div className="mx-auto max-w-lg space-y-8 pb-16 md:pb-0">
         <div>
           <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">
-            Secretary Application
+            Club Registered
           </h1>
           <p className="mt-1.5 text-muted-foreground">
-            Track the status of your application.
-          </p>
-        </div>
-
-        <Card className="border-amber-200 bg-amber-50/50">
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-full bg-amber-100">
-                <Clock className="size-5 text-amber-700" />
-              </div>
-              <div>
-                <CardTitle className="text-base font-semibold">
-                  Application Under Review
-                </CardTitle>
-                <CardDescription className="text-amber-700">
-                  Submitted for {application.organisationName}
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              We&apos;re reviewing your application and will get back to you
-              shortly. You&apos;ll receive an email once a decision has been
-              made.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // Approved but not yet accepted invitation
-  if (
-    application?.status === 'approved' &&
-    application.invitation?.status === 'pending'
-  ) {
-    return (
-      <div className="mx-auto max-w-lg space-y-8 pb-16 md:pb-0">
-        <div>
-          <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">
-            Secretary Application
-          </h1>
-          <p className="mt-1.5 text-muted-foreground">
-            Your application has been approved!
+            You&apos;re all set to manage shows.
           </p>
         </div>
 
@@ -121,22 +76,18 @@ export default function ApplyPage() {
               </div>
               <div>
                 <CardTitle className="text-base font-semibold">
-                  Application Approved
+                  {application.organisationName}
                 </CardTitle>
                 <CardDescription className="text-emerald-700">
-                  {application.organisationName}
+                  Your club is registered and ready to go
                 </CardDescription>
               </div>
             </div>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Your application has been approved! Accept the invitation to
-              activate your secretary access and start creating shows.
-            </p>
+          <CardContent>
             <Button asChild>
-              <Link href={`/invite/${application.invitation.token}`}>
-                Accept Invitation
+              <Link href="/dashboard">
+                Go to Dashboard
                 <ArrowRight className="ml-1 size-4" />
               </Link>
             </Button>
@@ -146,18 +97,18 @@ export default function ApplyPage() {
     );
   }
 
-  // Rejected — allow re-apply
+  // Rejected — allow re-registration
   const isRejected = application?.status === 'rejected';
 
   return (
     <div className="mx-auto max-w-lg space-y-8 pb-16 md:pb-0">
       <div>
         <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">
-          Apply to Run Shows
+          Register Your Club
         </h1>
         <p className="mt-1.5 text-muted-foreground">
-          Tell us about your club and we&apos;ll get you set up to manage
-          shows on Remi.
+          Tell us about your club and you&apos;ll be ready to create shows
+          straight away.
         </p>
       </div>
 
@@ -170,7 +121,7 @@ export default function ApplyPage() {
               </div>
               <div>
                 <CardTitle className="text-base font-semibold">
-                  Previous Application Not Approved
+                  Previous Registration Not Approved
                 </CardTitle>
                 <CardDescription className="text-red-700">
                   {application.organisationName}
@@ -192,10 +143,10 @@ export default function ApplyPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 font-serif text-lg">
             <ClipboardCheck className="size-5 text-primary" />
-            {isRejected ? 'Re-apply' : 'Application Form'}
+            {isRejected ? 'Try Again' : 'Club Details'}
           </CardTitle>
           <CardDescription>
-            All fields marked with * are required.
+            Fill in your club details to get started. Fields marked with * are required.
           </CardDescription>
         </CardHeader>
         <CardContent>

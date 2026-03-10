@@ -10,6 +10,8 @@ import {
   clubTypeEnum,
   invitations,
   organisations,
+  users,
+  memberships,
 } from '@/server/db/schema';
 import { generateToken, getBaseUrl } from '@/server/lib/utils';
 
@@ -37,71 +39,81 @@ export const secretaryApplicationsRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // Only exhibitors can apply
+      // Only exhibitors can register as secretaries
       if (ctx.session.user.role !== 'exhibitor') {
         throw new TRPCError({
           code: 'BAD_REQUEST',
-          message: 'Only exhibitors can apply for secretary access',
+          message: 'You already have secretary or admin access',
         });
       }
 
-      // Check for existing pending application
-      const existing = await ctx.db.query.secretaryApplications.findFirst({
-        where: and(
-          eq(secretaryApplications.userId, ctx.session.user.id),
-          eq(secretaryApplications.status, 'pending')
-        ),
-      });
-
-      if (existing) {
-        throw new TRPCError({
-          code: 'CONFLICT',
-          message: 'You already have a pending application',
-        });
-      }
-
-      const [application] = await ctx.db
-        .insert(secretaryApplications)
+      // Create the organisation immediately
+      const [org] = await ctx.db
+        .insert(organisations)
         .values({
-          userId: ctx.session.user.id,
-          organisationName: input.organisationName,
-          clubType: input.clubType,
-          breedOrGroup: input.breedOrGroup ?? null,
+          name: input.organisationName,
+          type: input.clubType,
           kcRegNumber: input.kcRegNumber ?? null,
           contactEmail: input.contactEmail,
           contactPhone: input.contactPhone ?? null,
           website: input.website ?? null,
-          details: input.details ?? null,
         })
         .returning();
 
-      // Notify admin (fire-and-forget)
+      // Record the application as auto-approved + upgrade user + create membership
+      const [[application]] = await Promise.all([
+        ctx.db
+          .insert(secretaryApplications)
+          .values({
+            userId: ctx.session.user.id,
+            organisationName: input.organisationName,
+            clubType: input.clubType,
+            breedOrGroup: input.breedOrGroup ?? null,
+            kcRegNumber: input.kcRegNumber ?? null,
+            contactEmail: input.contactEmail,
+            contactPhone: input.contactPhone ?? null,
+            website: input.website ?? null,
+            details: input.details ?? null,
+            status: 'approved',
+            reviewedAt: new Date(),
+          })
+          .returning(),
+        ctx.db
+          .update(users)
+          .set({
+            role: 'secretary',
+            onboardingCompletedAt: new Date(),
+          })
+          .where(eq(users.id, ctx.session.user.id)),
+        ctx.db.insert(memberships).values({
+          userId: ctx.session.user.id,
+          organisationId: org!.id,
+          status: 'active',
+        }),
+      ]);
+
+      // Notify admin about the new secretary (fire-and-forget)
       if (resend) {
         const notifyEmail =
           process.env.FEEDBACK_NOTIFY_EMAIL ?? 'michael@prometheus-it.com';
-        const adminUrl = `${getBaseUrl()}/admin/applications`;
 
         resend.emails.send({
           from: 'Remi <noreply@lettiva.com>',
           to: [notifyEmail],
           replyTo: 'feedback@inbound.lettiva.com',
-          subject: `New Secretary Application: ${input.organisationName}`,
+          subject: `New Secretary Registered: ${input.organisationName}`,
           html: `
             <div style="font-family: Georgia, serif; max-width: 560px; margin: 0 auto;">
               <h1 style="font-size: 24px; color: #2D5F3F;">Remi</h1>
-              <p>A new secretary application has been submitted.</p>
+              <p>A new secretary has registered on Remi.</p>
               <div style="padding: 16px; background: #f9fafb; border-radius: 8px; border-left: 3px solid #2D5F3F; margin: 16px 0;">
-                <p style="margin: 0 0 8px;"><strong>Applicant:</strong> ${ctx.session.user.name ?? 'Unknown'} (${ctx.session.user.email})</p>
+                <p style="margin: 0 0 8px;"><strong>Secretary:</strong> ${ctx.session.user.name ?? 'Unknown'} (${ctx.session.user.email})</p>
                 <p style="margin: 0 0 8px;"><strong>Organisation:</strong> ${input.organisationName}</p>
                 <p style="margin: 0 0 8px;"><strong>Club Type:</strong> ${CLUB_TYPE_LABELS[input.clubType] ?? input.clubType}</p>
                 ${input.breedOrGroup ? `<p style="margin: 0 0 8px;"><strong>Breed/Group:</strong> ${input.breedOrGroup}</p>` : ''}
                 ${input.details ? `<p style="margin: 0;"><strong>Details:</strong> ${input.details}</p>` : ''}
               </div>
-              <p style="margin: 24px 0;">
-                <a href="${adminUrl}" style="display: inline-block; background: #2D5F3F; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600;">
-                  Review Application
-                </a>
-              </p>
+              <p style="color: #6b7280; font-size: 14px;">Their account has been automatically set up — no action required.</p>
             </div>
           `,
         }).catch((err) => {
