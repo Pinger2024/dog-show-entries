@@ -1,5 +1,6 @@
 import { Document, Page, Text, View, StyleSheet, Font, Image } from '@react-pdf/renderer';
 import path from 'path';
+import type { ScheduleData } from '@/server/db/schema/shows';
 
 const fontsDir = path.join(process.cwd(), 'public', 'fonts');
 Font.register({
@@ -33,6 +34,8 @@ export interface ScheduleShowInfo {
   firstEntryFee: number | null;
   subsequentEntryFee: number | null;
   nfcEntryFee: number | null;
+  acceptsPostalEntries: boolean;
+  scheduleData: ScheduleData | null;
   organisation: {
     name: string;
     contactEmail: string | null;
@@ -89,7 +92,6 @@ function formatShortDate(dateStr: string): string {
 }
 
 function formatTime(timeStr: string): string {
-  // Convert "14:00" to "2:00 PM" or keep as-is if already formatted
   if (timeStr.includes(':') && !timeStr.includes(' ')) {
     const [h, m] = timeStr.split(':').map(Number);
     const ampm = h >= 12 ? 'PM' : 'AM';
@@ -101,6 +103,29 @@ function formatTime(timeStr: string): string {
 
 function formatPence(pence: number): string {
   return `£${(pence / 100).toFixed(2)}`;
+}
+
+/** Calculate awards estimation date: 7 days before entry close */
+function getEstimationDate(closeDate: string | null): string | null {
+  if (!closeDate) return null;
+  const d = new Date(closeDate);
+  d.setDate(d.getDate() - 7);
+  return formatShortDate(d.toISOString());
+}
+
+/** Get the correct docking statement based on country and public admission */
+function getDockingStatement(sd: ScheduleData | null): string {
+  const country = sd?.country ?? 'england';
+  const publicFee = sd?.publicAdmission !== false;
+
+  if (publicFee && country === 'england') {
+    return 'A dog docked on or after 6 April 2007 may not be entered for exhibition at this show.';
+  }
+  if (publicFee && country === 'wales') {
+    return 'A dog docked on or after 28th March 2007 may not be entered for exhibition at this show.';
+  }
+  // England/Wales no fee, Scotland, NI
+  return 'Only undocked dogs and legally docked dogs may be entered for exhibition at this show.';
 }
 
 // ── A5 styles (420pt × 595pt) ──
@@ -314,6 +339,28 @@ const s = StyleSheet.create({
     color: '#333',
     lineHeight: 1.35,
   },
+  // ── Regulatory notice ──
+  noticeBlock: {
+    marginBottom: 5,
+    padding: 5,
+    borderWidth: 0.5,
+    borderColor: '#ccc',
+  },
+  noticeTitle: {
+    fontSize: 8,
+    fontWeight: 'bold',
+    marginBottom: 2,
+  },
+  noticeText: {
+    fontSize: 7,
+    lineHeight: 1.5,
+    color: '#333',
+  },
+  noticeTextBold: {
+    fontSize: 7,
+    fontWeight: 'bold',
+    lineHeight: 1.5,
+  },
   // ── Entry form ──
   formField: {
     flexDirection: 'row',
@@ -377,6 +424,13 @@ export function ShowSchedule({
   const showTypeLabel = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
   const showDate = formatDate(show.date);
   const classCount = classes.length;
+  const sd = show.scheduleData;
+
+  // Docking statement
+  const dockingStatement = getDockingStatement(sd);
+
+  // Awards estimation date
+  const estimationDate = getEstimationDate(show.entryCloseDate);
 
   // Deduplicate class definitions
   const seenDefs = new Set<string>();
@@ -413,9 +467,16 @@ export function ShowSchedule({
           Held under Royal Kennel Club Rules &amp; Show Regulations F(1)
         </Text>
 
+        {/* Group system notice */}
+        {sd?.judgedOnGroupSystem && (
+          <Text style={{ ...s.coverRegulatory, marginTop: 0 }}>
+            Judged on the Group System
+          </Text>
+        )}
+
         <View style={s.coverRule} />
 
-        {/* Key details in a compact label-value layout */}
+        {/* Key details */}
         <View style={s.coverDetailRow}>
           <Text style={s.coverDetailLabel}>Date</Text>
           <Text style={s.coverDetailValue}>{showDate}</Text>
@@ -455,6 +516,13 @@ export function ShowSchedule({
           </View>
         )}
 
+        {sd?.latestArrivalTime && (
+          <View style={s.coverDetailRow}>
+            <Text style={s.coverDetailLabel}>Dogs By</Text>
+            <Text style={s.coverDetailValue}>{sd.latestArrivalTime}</Text>
+          </View>
+        )}
+
         {show.kcLicenceNo && (
           <View style={s.coverDetailRow}>
             <Text style={s.coverDetailLabel}>KC Licence</Text>
@@ -463,6 +531,23 @@ export function ShowSchedule({
         )}
 
         <View style={s.coverRule} />
+
+        {/* Docking statement */}
+        <Text style={{ fontSize: 7, fontStyle: 'italic', color: '#555', textAlign: 'center', marginTop: 2, marginBottom: 4, paddingHorizontal: 15 }}>
+          {dockingStatement}
+        </Text>
+
+        {/* Wet weather */}
+        {sd?.wetWeatherAccommodation === false && (
+          <Text style={{ fontSize: 7.5, fontWeight: 'bold', color: '#333', textAlign: 'center', marginBottom: 4 }}>
+            NO WET WEATHER ACCOMMODATION IS PROVIDED
+          </Text>
+        )}
+        {sd?.wetWeatherAccommodation === true && (
+          <Text style={{ fontSize: 7, color: '#555', textAlign: 'center', marginBottom: 4 }}>
+            Wet weather accommodation is available
+          </Text>
+        )}
 
         {/* Secretary details */}
         {(show.secretaryName || show.secretaryEmail) && (
@@ -488,6 +573,14 @@ export function ShowSchedule({
           <View style={{ ...s.coverSection, marginTop: 6 }}>
             <Text style={s.coverSectionTitle}>On-Call Veterinary Surgeon</Text>
             <Text style={s.coverSectionText}>{show.onCallVet}</Text>
+          </View>
+        )}
+
+        {/* Show Manager */}
+        {sd?.showManager && (
+          <View style={{ ...s.coverSection, marginTop: 4 }}>
+            <Text style={s.coverSectionTitle}>Show Manager</Text>
+            <Text style={s.coverSectionText}>{sd.showManager}</Text>
           </View>
         )}
 
@@ -559,10 +652,63 @@ export function ShowSchedule({
               <Text style={s.feeValue}>{formatShortDate(show.postalCloseDate)}</Text>
             </View>
           )}
+          {estimationDate && (
+            <View style={s.feeRow}>
+              <Text style={s.feeLabel}>Date for estimating awards won</Text>
+              <Text style={s.feeValue}>{estimationDate}</Text>
+            </View>
+          )}
           <View style={s.feeRow}>
             <Text style={s.feeLabel}>Show date</Text>
             <Text style={s.feeValue}>{formatShortDate(show.date)}</Text>
           </View>
+        </View>
+
+        {/* Show timing */}
+        <View style={s.infoBlock}>
+          <Text style={s.infoLabel}>Show Timing</Text>
+          {show.showOpenTime && (
+            <View style={s.feeRow}>
+              <Text style={s.feeLabel}>Time of opening</Text>
+              <Text style={s.feeValue}>{formatTime(show.showOpenTime)}</Text>
+            </View>
+          )}
+          {sd?.latestArrivalTime && (
+            <View style={s.feeRow}>
+              <Text style={s.feeLabel}>Latest time dogs will be received</Text>
+              <Text style={s.feeValue}>{sd.latestArrivalTime}</Text>
+            </View>
+          )}
+          {show.startTime && (
+            <View style={s.feeRow}>
+              <Text style={s.feeLabel}>Judging commences</Text>
+              <Text style={s.feeValue}>{formatTime(show.startTime)}</Text>
+            </View>
+          )}
+          {sd?.isBenched ? (
+            <Text style={{ ...s.infoText, marginTop: 3, fontSize: 7.5 }}>
+              {sd.benchingRemovalTime
+                ? `Benched show. ${sd.benchingRemovalTime}`
+                : 'Benched show. Dogs may only be removed from benches with the permission of the Show Secretary.'}
+            </Text>
+          ) : (
+            <Text style={{ ...s.infoText, marginTop: 3, fontSize: 7.5 }}>
+              Unbenched show. Dogs may be removed after judging of their breed is complete.
+            </Text>
+          )}
+          <Text style={{ ...s.infoText, fontSize: 7.5 }}>
+            The show closes half an hour after all judging has been completed.
+          </Text>
+        </View>
+
+        {/* NFC statement */}
+        <View style={s.infoBlock}>
+          <Text style={s.infoLabel}>Not For Competition</Text>
+          <Text style={s.infoText}>
+            {sd?.acceptsNfc !== false
+              ? 'Not For Competition entries are accepted. NFC dogs must be registered with the Royal Kennel Club and aged 3 months or over.'
+              : 'Not For Competition entries are not accepted at this show.'}
+          </Text>
         </View>
 
         {/* Venue */}
@@ -602,16 +748,88 @@ export function ShowSchedule({
           </Text>
         </View>
 
-        {/* Additional info */}
-        {show.description && (
+        {/* Awards */}
+        {sd?.awardsDescription && (
           <View style={s.infoBlock}>
-            <Text style={s.infoLabel}>Additional Information</Text>
-            <Text style={s.infoText}>{show.description}</Text>
+            <Text style={s.infoLabel}>Awards</Text>
+            <Text style={s.infoText}>{sd.awardsDescription}</Text>
+          </View>
+        )}
+
+        {/* Prize money */}
+        {sd?.prizeMoney && (
+          <View style={s.infoBlock}>
+            <Text style={s.infoLabel}>Prize Money</Text>
+            <Text style={s.infoText}>{sd.prizeMoney}</Text>
+          </View>
+        )}
+
+        {/* Sponsorship */}
+        {sd?.sponsorships && sd.sponsorships.length > 0 && (
+          <View style={s.infoBlock}>
+            <Text style={s.infoLabel}>Sponsorship</Text>
+            {sd.sponsorships.map((sp, i) => (
+              <View key={i} style={s.feeRow}>
+                <Text style={{ ...s.feeLabel, fontWeight: 'bold' }}>{sp.sponsorName}</Text>
+                <Text style={s.feeLabel}>{sp.description}</Text>
+              </View>
+            ))}
           </View>
         )}
 
         <Text style={s.footer} render={footerRender} fixed />
       </Page>
+
+      {/* ── Officers, Guarantors & Officials ── */}
+      {(sd?.officers?.length || sd?.guarantors?.length) && (
+        <Page size="A5" style={s.page}>
+          <Text style={s.sectionTitle}>Officials</Text>
+
+          {/* Officers */}
+          {sd?.officers && sd.officers.length > 0 && (
+            <View style={s.infoBlock}>
+              <Text style={s.infoLabel}>Officers &amp; Committee</Text>
+              {sd.officers.map((o, i) => (
+                <View key={i} style={s.judgeRow}>
+                  <Text style={s.judgeName}>{o.position}</Text>
+                  <Text style={s.judgeBreeds}>{o.name}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Guarantors */}
+          {sd?.guarantors && sd.guarantors.length > 0 && (
+            <View style={s.infoBlock}>
+              <Text style={s.infoLabel}>Guarantors to the Royal Kennel Club</Text>
+              {sd.guarantors.map((g, i) => (
+                <View key={i} style={s.judgeRow}>
+                  <Text style={s.judgeName}>{g.name}</Text>
+                  {g.address && <Text style={s.judgeBreeds}>{g.address}</Text>}
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Show Manager */}
+          {sd?.showManager && (
+            <View style={s.infoBlock}>
+              <Text style={s.infoLabel}>Show Manager</Text>
+              <Text style={s.infoText}>{sd.showManager}</Text>
+            </View>
+          )}
+
+          {/* Vet */}
+          {show.onCallVet && (
+            <View style={s.infoBlock}>
+              <Text style={s.infoLabel}>On-Call Veterinary Surgeon</Text>
+              <Text style={s.infoText}>{show.onCallVet}</Text>
+            </View>
+          )}
+
+          <Text style={s.footer} render={footerRender} fixed />
+        </Page>
+      )}
 
       {/* ── Schedule of Classes ── */}
       <Page size="A5" style={s.page}>
@@ -677,136 +895,325 @@ export function ShowSchedule({
         </Page>
       )}
 
-      {/* ── Entry Form ── */}
+      {/* ── Regulations & Notices ── */}
       <Page size="A5" style={s.page}>
-        <Text style={s.sectionTitle}>Entry Form</Text>
+        <Text style={s.sectionTitle}>Regulations &amp; Notices</Text>
 
-        <Text style={{ fontSize: 7, color: '#666', marginBottom: 8, textAlign: 'center', fontStyle: 'italic' }}>
-          Enter online at remishowmanager.co.uk — or complete this form and post to the show secretary
-        </Text>
-
-        <Text style={{ fontSize: 8, fontWeight: 'bold', marginBottom: 8 }}>
-          {show.organisation?.name} — {show.name} — {formatShortDate(show.date)}
-        </Text>
-
-        {/* Owner details */}
-        <View style={s.formField}>
-          <Text style={s.formLabel}>Owner(s) Name</Text>
-          <View style={s.formLine} />
-        </View>
-        <View style={s.formField}>
-          <Text style={s.formLabel}>Address</Text>
-          <View style={s.formLine} />
-        </View>
-        <View style={s.formField}>
-          <Text style={s.formLabel} />
-          <View style={s.formLine} />
-        </View>
-        <View style={s.formField}>
-          <Text style={s.formLabel}>Postcode</Text>
-          <View style={{ ...s.formLine, maxWidth: 90 }} />
-          <Text style={{ ...s.formLabel, marginLeft: 12 }}>Tel</Text>
-          <View style={s.formLine} />
-        </View>
-        <View style={s.formField}>
-          <Text style={s.formLabel}>Email</Text>
-          <View style={s.formLine} />
-        </View>
-
-        <View style={{ borderBottomWidth: 0.5, borderBottomColor: '#ccc', marginVertical: 6 }} />
-
-        {/* Dog details */}
-        <View style={s.formField}>
-          <Text style={s.formLabel}>Registered Name</Text>
-          <View style={s.formLine} />
-        </View>
-        <View style={s.formField}>
-          <Text style={s.formLabel}>Breed</Text>
-          <View style={s.formLine} />
-        </View>
-        <View style={s.formField}>
-          <Text style={s.formLabel}>KC Reg. No.</Text>
-          <View style={{ ...s.formLine, maxWidth: 110 }} />
-          <Text style={{ ...s.formLabel, marginLeft: 12 }}>Sex</Text>
-          <View style={{ ...s.formLine, maxWidth: 60 }} />
-        </View>
-        <View style={s.formField}>
-          <Text style={s.formLabel}>Date of Birth</Text>
-          <View style={{ ...s.formLine, maxWidth: 90 }} />
-          <Text style={{ ...s.formLabel, marginLeft: 12 }}>Colour</Text>
-          <View style={s.formLine} />
-        </View>
-        <View style={s.formField}>
-          <Text style={s.formLabel}>Sire</Text>
-          <View style={s.formLine} />
-        </View>
-        <View style={s.formField}>
-          <Text style={s.formLabel}>Dam</Text>
-          <View style={s.formLine} />
-        </View>
-        <View style={s.formField}>
-          <Text style={s.formLabel}>Breeder</Text>
-          <View style={s.formLine} />
-        </View>
-
-        <View style={{ borderBottomWidth: 0.5, borderBottomColor: '#ccc', marginVertical: 6 }} />
-
-        {/* Classes */}
-        <Text style={{ ...s.formLabel, marginBottom: 4 }}>
-          Classes Entered (write class numbers)
-        </Text>
-        <View style={s.formClassGrid}>
-          {Array.from({ length: 10 }, (_, i) => (
-            <View key={i} style={s.formClassBox}>
-              <Text style={s.formClassBoxLabel}>{i + 1}</Text>
-            </View>
-          ))}
-        </View>
-
-        <View style={s.formField}>
-          <Text style={s.formLabel}>Handler (if not owner)</Text>
-          <View style={s.formLine} />
-        </View>
-
-        <View style={{ borderBottomWidth: 0.5, borderBottomColor: '#ccc', marginVertical: 6 }} />
-        <View style={s.formField}>
-          <Text style={s.formLabel}>Total Fee Enclosed</Text>
-          <Text style={{ fontSize: 8, fontWeight: 'bold' }}>£</Text>
-          <View style={{ ...s.formLine, maxWidth: 60 }} />
-        </View>
-
-        {/* Declaration */}
-        <View style={{ marginTop: 6, padding: 6, borderWidth: 0.5, borderColor: '#999' }}>
-          <Text style={{ fontSize: 6.5, lineHeight: 1.5 }}>
-            I/We agree to submit to and be bound by Royal Kennel Club Rules and Show Regulations F(1)
-            in their present form or as they may be amended from time to time. I/We also agree to
-            submit to the regulations of this show and not to bring to the show any dog which has
-            contracted or been knowingly exposed to any infectious or contagious disease during the
-            21 days prior to the show. I/We further agree that if I/we default in any payment to the
-            show society concerned, whether in connection with entry fees or otherwise, my/our dog(s)
-            may be excluded from any or all societies affiliated to the Royal Kennel Club, and I/we
-            shall not be entitled to register, transfer, or exhibit any dogs until the debt(s) is/are
-            settled. I/We further declare that I/we believe to the best of my/our knowledge that the
-            dog(s) entered is/are not a danger to the public.
+        {/* Judges assessment */}
+        <View style={s.noticeBlock} wrap={false}>
+          <Text style={s.noticeTitle}>Judges&apos; Assessment</Text>
+          <Text style={s.noticeText}>
+            In assessing dogs, judges must penalise any features or exaggerations which they consider would be detrimental to the soundness, health and well being of the dog.
           </Text>
         </View>
 
-        {/* Signature */}
-        <View style={{ flexDirection: 'row', marginTop: 10, justifyContent: 'space-between' }}>
-          <View style={{ width: '55%' }}>
-            <Text style={{ fontSize: 7, fontWeight: 'bold', marginBottom: 2 }}>
-              Signature of Owner
+        {/* Jurisdiction */}
+        <View style={s.noticeBlock} wrap={false}>
+          <Text style={s.noticeTitle}>Jurisdiction</Text>
+          <Text style={s.noticeText}>
+            The Officers and Committee members of the society holding the licence are deemed responsible for organising and conducting the show safely and in accordance with the Rules and Regulations of the Royal Kennel Club. In so doing they accept responsibility for the safety of all dogs within the precincts of the show.
+          </Text>
+        </View>
+
+        {/* Collar/welfare */}
+        <View style={s.noticeBlock} wrap={false}>
+          <Text style={s.noticeTitle}>Welfare</Text>
+          <Text style={s.noticeText}>
+            The use of pinch collars, electronic shock collars, or prong collars, is not permitted at any show licensed by the Royal Kennel Club.
+          </Text>
+        </View>
+
+        {/* Dogs in vehicles */}
+        <View style={s.noticeBlock} wrap={false}>
+          <Text style={s.noticeTextBold}>
+            WARNING: IF YOUR DOG IS FOUND TO BE AT RISK FORCIBLE ENTRY TO YOUR VEHICLE MAY BE NECESSARY WITHOUT LIABILITY FOR ANY DAMAGE CAUSED.
+          </Text>
+        </View>
+
+        {/* 10-minute BIS rule */}
+        <View style={s.noticeBlock} wrap={false}>
+          <Text style={s.noticeTitle}>Best in Show</Text>
+          <Text style={s.noticeText}>
+            Exhibits will not be admitted to the Group or Best in Show competition after a period of ten minutes has elapsed since the announcement.
+          </Text>
+        </View>
+
+        {/* Children */}
+        <View style={s.noticeBlock} wrap={false}>
+          <Text style={s.noticeTitle}>Children</Text>
+          <Text style={s.noticeText}>
+            Children under 11 must be accompanied by a parent or guardian at all times.
+          </Text>
+        </View>
+
+        {/* Fouling */}
+        <View style={s.noticeBlock} wrap={false}>
+          <Text style={s.noticeTitle}>Fouling</Text>
+          <Text style={s.noticeText}>
+            Exhibitors are responsible for cleaning up after their dogs at all times within the showground, car park, and surrounding areas. Failure to do so may result in disqualification.
+          </Text>
+        </View>
+
+        {/* GDPR */}
+        <View style={s.noticeBlock} wrap={false}>
+          <Text style={s.noticeTitle}>Data Protection</Text>
+          <Text style={s.noticeText}>
+            Your personal data will be processed by the show society in accordance with the General Data Protection Regulation and the Data Protection Act 2018. Entry details may be shared with the Royal Kennel Club for the purposes of registering results and maintaining the Stud Book. By entering this show, you consent to the processing of your data for these purposes.
+          </Text>
+        </View>
+
+        {/* Reserve CCs */}
+        {show.showType === 'championship' && (
+          <View style={s.noticeBlock} wrap={false}>
+            <Text style={s.noticeTitle}>Reserve Challenge Certificates</Text>
+            <Text style={s.noticeText}>
+              Reserve Challenge Certificates now explicitly count towards Champion qualification as per Royal Kennel Club regulations.
             </Text>
-            <View style={{ borderBottomWidth: 1, borderBottomColor: '#000', height: 18 }} />
           </View>
-          <View style={{ width: '30%' }}>
-            <Text style={{ fontSize: 7, fontWeight: 'bold', marginBottom: 2 }}>Date</Text>
-            <View style={{ borderBottomWidth: 1, borderBottomColor: '#000', height: 18 }} />
-          </View>
+        )}
+
+        <Text style={s.footer} render={footerRender} fixed />
+      </Page>
+
+      {/* ── Regulatory References ── */}
+      <Page size="A5" style={s.page}>
+        <Text style={s.sectionTitle}>Regulation F Notices</Text>
+
+        <Text style={{ ...s.infoText, marginBottom: 6 }}>
+          The following Royal Kennel Club Regulations apply to this show. Exhibitors are bound by these regulations upon entering.
+        </Text>
+
+        <View style={s.noticeBlock} wrap={false}>
+          <Text style={s.noticeTitle}>F(1)8.a — Eligibility</Text>
+          <Text style={s.noticeText}>
+            Puppies under four calendar months of age on the day of the show are not eligible for exhibition at any show.
+          </Text>
+        </View>
+
+        <View style={s.noticeBlock} wrap={false}>
+          <Text style={s.noticeTitle}>F(1)8.i — Partnership Entries</Text>
+          <Text style={s.noticeText}>
+            A dog entered at any show in partnership must be recorded at the Royal Kennel Club in the name of all the partners.
+          </Text>
+        </View>
+
+        <View style={s.noticeBlock} wrap={false}>
+          <Text style={s.noticeTitle}>F(1)8.l — Estimating Awards Won</Text>
+          <Text style={s.noticeText}>
+            In estimating the number of awards won, all wins up to and including the seventh day before the date of closing of postal entries shall be counted when singling up entries.
+            {estimationDate ? ` For this show, that date is ${estimationDate}.` : ''}
+          </Text>
+        </View>
+
+        <View style={s.noticeBlock} wrap={false}>
+          <Text style={s.noticeTitle}>F(1)8.m — Withdrawal &amp; Transfer</Text>
+          <Text style={s.noticeText}>
+            An entry in a class may be withdrawn or transferred to another eligible class. A transfer must be made on the day of the show and may only be to another class in which the dog is eligible.
+          </Text>
+        </View>
+
+        <View style={s.noticeBlock} wrap={false}>
+          <Text style={s.noticeTitle}>F(1)13 — Mating of Bitches</Text>
+          <Text style={s.noticeText}>
+            The mating of bitches within the precincts of a show is strictly forbidden.
+          </Text>
+        </View>
+
+        <View style={s.noticeBlock} wrap={false}>
+          <Text style={s.noticeTitle}>F(1)18 — Not For Competition</Text>
+          <Text style={s.noticeText}>
+            {sd?.acceptsNfc !== false
+              ? 'Not For Competition entries may be accepted. NFC exhibits must be registered at the Royal Kennel Club in the name of the owner and must be aged not less than three calendar months on the day of the show.'
+              : 'Not For Competition entries are not accepted at this show.'}
+          </Text>
+        </View>
+
+        <View style={s.noticeBlock} wrap={false}>
+          <Text style={s.noticeTitle}>F(1)26 &amp; 27 — Best in Show / Best Puppy in Show</Text>
+          <Text style={s.noticeText}>
+            Best in Show and Best Puppy in Show shall be judged in accordance with Royal Kennel Club Regulation F(1)26 and F(1)27. The judge of Best in Show must be approved by the Royal Kennel Club.
+          </Text>
+        </View>
+
+        <View style={s.noticeBlock} wrap={false}>
+          <Text style={s.noticeTitle}>F(B) — Preparation of Dogs for Exhibition</Text>
+          <Text style={s.noticeText}>
+            A dog must be exhibited in its natural state. No substance which alters the texture, colour, or body of the coat may be present in the dog's coat. No device or technique may be used to alter the natural set or carriage of the dog's ears or tail. The trimming, styling, and preparation of a dog's coat is permitted only if customary for that breed and within the limits of the breed standard.
+          </Text>
         </View>
 
         <Text style={s.footer} render={footerRender} fixed />
       </Page>
+
+      {/* ── Optional information page ── */}
+      {(sd?.directions || sd?.catering || sd?.futureShowDates || sd?.additionalNotes) && (
+        <Page size="A5" style={s.page}>
+          <Text style={s.sectionTitle}>Additional Information</Text>
+
+          {sd?.directions && (
+            <View style={s.infoBlock}>
+              <Text style={s.infoLabel}>Directions to Venue</Text>
+              <Text style={s.infoText}>{sd.directions}</Text>
+            </View>
+          )}
+
+          {sd?.catering && (
+            <View style={s.infoBlock}>
+              <Text style={s.infoLabel}>Catering</Text>
+              <Text style={s.infoText}>{sd.catering}</Text>
+            </View>
+          )}
+
+          {sd?.futureShowDates && (
+            <View style={s.infoBlock}>
+              <Text style={s.infoLabel}>Future Show Dates</Text>
+              <Text style={s.infoText}>{sd.futureShowDates}</Text>
+            </View>
+          )}
+
+          {sd?.additionalNotes && (
+            <View style={s.infoBlock}>
+              <Text style={s.infoLabel}>Notes</Text>
+              <Text style={s.infoText}>{sd.additionalNotes}</Text>
+            </View>
+          )}
+
+          <Text style={s.footer} render={footerRender} fixed />
+        </Page>
+      )}
+
+      {/* ── Entry Form (only for shows accepting postal entries) ── */}
+      {show.acceptsPostalEntries && (
+        <Page size="A5" style={s.page}>
+          <Text style={s.sectionTitle}>Entry Form</Text>
+
+          <Text style={{ fontSize: 7, color: '#666', marginBottom: 8, textAlign: 'center', fontStyle: 'italic' }}>
+            Enter online at remishowmanager.co.uk — or complete this form and post to the show secretary
+          </Text>
+
+          <Text style={{ fontSize: 8, fontWeight: 'bold', marginBottom: 8 }}>
+            {show.organisation?.name} — {show.name} — {formatShortDate(show.date)}
+          </Text>
+
+          {/* Owner details */}
+          <View style={s.formField}>
+            <Text style={s.formLabel}>Owner(s) Name</Text>
+            <View style={s.formLine} />
+          </View>
+          <View style={s.formField}>
+            <Text style={s.formLabel}>Address</Text>
+            <View style={s.formLine} />
+          </View>
+          <View style={s.formField}>
+            <Text style={s.formLabel} />
+            <View style={s.formLine} />
+          </View>
+          <View style={s.formField}>
+            <Text style={s.formLabel}>Postcode</Text>
+            <View style={{ ...s.formLine, maxWidth: 90 }} />
+            <Text style={{ ...s.formLabel, marginLeft: 12 }}>Tel</Text>
+            <View style={s.formLine} />
+          </View>
+          <View style={s.formField}>
+            <Text style={s.formLabel}>Email</Text>
+            <View style={s.formLine} />
+          </View>
+
+          <View style={{ borderBottomWidth: 0.5, borderBottomColor: '#ccc', marginVertical: 6 }} />
+
+          {/* Dog details */}
+          <View style={s.formField}>
+            <Text style={s.formLabel}>Registered Name</Text>
+            <View style={s.formLine} />
+          </View>
+          <View style={s.formField}>
+            <Text style={s.formLabel}>Breed</Text>
+            <View style={s.formLine} />
+          </View>
+          <View style={s.formField}>
+            <Text style={s.formLabel}>KC Reg. No.</Text>
+            <View style={{ ...s.formLine, maxWidth: 110 }} />
+            <Text style={{ ...s.formLabel, marginLeft: 12 }}>Sex</Text>
+            <View style={{ ...s.formLine, maxWidth: 60 }} />
+          </View>
+          <View style={s.formField}>
+            <Text style={s.formLabel}>Date of Birth</Text>
+            <View style={{ ...s.formLine, maxWidth: 90 }} />
+            <Text style={{ ...s.formLabel, marginLeft: 12 }}>Colour</Text>
+            <View style={s.formLine} />
+          </View>
+          <View style={s.formField}>
+            <Text style={s.formLabel}>Sire</Text>
+            <View style={s.formLine} />
+          </View>
+          <View style={s.formField}>
+            <Text style={s.formLabel}>Dam</Text>
+            <View style={s.formLine} />
+          </View>
+          <View style={s.formField}>
+            <Text style={s.formLabel}>Breeder</Text>
+            <View style={s.formLine} />
+          </View>
+
+          <View style={{ borderBottomWidth: 0.5, borderBottomColor: '#ccc', marginVertical: 6 }} />
+
+          {/* Classes */}
+          <Text style={{ ...s.formLabel, marginBottom: 4 }}>
+            Classes Entered (write class numbers)
+          </Text>
+          <View style={s.formClassGrid}>
+            {Array.from({ length: 10 }, (_, i) => (
+              <View key={i} style={s.formClassBox}>
+                <Text style={s.formClassBoxLabel}>{i + 1}</Text>
+              </View>
+            ))}
+          </View>
+
+          <View style={s.formField}>
+            <Text style={s.formLabel}>Handler (if not owner)</Text>
+            <View style={s.formLine} />
+          </View>
+
+          <View style={{ borderBottomWidth: 0.5, borderBottomColor: '#ccc', marginVertical: 6 }} />
+          <View style={s.formField}>
+            <Text style={s.formLabel}>Total Fee Enclosed</Text>
+            <Text style={{ fontSize: 8, fontWeight: 'bold' }}>£</Text>
+            <View style={{ ...s.formLine, maxWidth: 60 }} />
+          </View>
+
+          {/* Declaration */}
+          <View style={{ marginTop: 6, padding: 6, borderWidth: 0.5, borderColor: '#999' }}>
+            <Text style={{ fontSize: 6.5, lineHeight: 1.5 }}>
+              I/We agree to submit to and be bound by Royal Kennel Club Rules and Show Regulations F(1)
+              in their present form or as they may be amended from time to time. I/We also agree to
+              submit to the regulations of this show and not to bring to the show any dog which has
+              contracted or been knowingly exposed to any infectious or contagious disease during the
+              21 days prior to the show. I/We further agree that if I/we default in any payment to the
+              show society concerned, whether in connection with entry fees or otherwise, my/our dog(s)
+              may be excluded from any or all societies affiliated to the Royal Kennel Club, and I/we
+              shall not be entitled to register, transfer, or exhibit any dogs until the debt(s) is/are
+              settled. I/We further declare that I/we believe to the best of my/our knowledge that the
+              dog(s) entered is/are not a danger to the public.
+            </Text>
+          </View>
+
+          {/* Signature */}
+          <View style={{ flexDirection: 'row', marginTop: 10, justifyContent: 'space-between' }}>
+            <View style={{ width: '55%' }}>
+              <Text style={{ fontSize: 7, fontWeight: 'bold', marginBottom: 2 }}>
+                Signature of Owner
+              </Text>
+              <View style={{ borderBottomWidth: 1, borderBottomColor: '#000', height: 18 }} />
+            </View>
+            <View style={{ width: '30%' }}>
+              <Text style={{ fontSize: 7, fontWeight: 'bold', marginBottom: 2 }}>Date</Text>
+              <View style={{ borderBottomWidth: 1, borderBottomColor: '#000', height: 18 }} />
+            </View>
+          </View>
+
+          <Text style={s.footer} render={footerRender} fixed />
+        </Page>
+      )}
     </Document>
   );
 }

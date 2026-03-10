@@ -3,6 +3,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -10,6 +11,45 @@ import {
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { showTypeEnum, showScopeEnum, showStatusEnum, classSexArrangementEnum } from './enums';
+
+// ── Schedule data stored as JSONB on each show ──
+export interface ScheduleData {
+  // Location (determines docking statement wording)
+  country?: 'england' | 'wales' | 'scotland' | 'northern_ireland';
+  publicAdmission?: boolean;
+
+  // Facilities
+  wetWeatherAccommodation?: boolean;
+  isBenched?: boolean;
+  benchingRemovalTime?: string;
+
+  // NFC policy
+  acceptsNfc?: boolean;
+
+  // Group system
+  judgedOnGroupSystem?: boolean;
+
+  // Show timing
+  latestArrivalTime?: string;
+
+  // People
+  showManager?: string;
+  guarantors?: { name: string; address?: string }[];
+  officers?: { name: string; position: string }[];
+
+  // Awards & prizes
+  awardsDescription?: string;
+  prizeMoney?: string;
+
+  // Sponsorship
+  sponsorships?: { sponsorName: string; description: string }[];
+
+  // Optional text sections
+  directions?: string;
+  catering?: string;
+  futureShowDates?: string;
+  additionalNotes?: string;
+}
 import { organisations } from './organisations';
 import { users } from './users';
 import { venues } from './venues';
@@ -53,6 +93,7 @@ export const shows = pgTable(
     onCallVet: text('on_call_vet'),
     acceptsPostalEntries: boolean('accepts_postal_entries').notNull().default(false),
     classSexArrangement: classSexArrangementEnum('class_sex_arrangement'),
+    scheduleData: jsonb('schedule_data').$type<ScheduleData>(),
     firstEntryFee: integer('first_entry_fee'),
     subsequentEntryFee: integer('subsequent_entry_fee'),
     nfcEntryFee: integer('nfc_entry_fee'),

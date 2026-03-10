@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   BookOpen,
+  CalendarDays,
   FileText,
   FolderOpen,
   LayoutDashboard,
@@ -24,6 +25,7 @@ const sections = [
   { path: '/results', label: 'Results', icon: Trophy },
   { path: '/reports', label: 'Reports', icon: FileText },
   { path: '/people', label: 'People', icon: Users },
+  { path: '/schedule', label: 'Schedule', icon: CalendarDays },
   { path: '/documents', label: 'Documents', icon: FolderOpen },
 ];
 

@@ -2832,4 +2832,76 @@ export const secretaryRouter = createTRPCRouter({
         lastEntryAt: latestEntry[0]?.createdAt ?? null,
       };
     }),
+
+  // ── Schedule Data ──────────────────────────────────
+
+  getScheduleData: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      // Fetch show data and verify access in one flow — verifyShowAccess
+      // already fetches the show row, so we use it for auth then fetch
+      // scheduleData in a single additional query (2 queries total, not 3)
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+        columns: { id: true, organisationId: true, scheduleData: true },
+      });
+      if (!show) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
+      }
+      const membership = await ctx.db.query.memberships.findFirst({
+        where: and(
+          eq(memberships.userId, ctx.session.user.id),
+          eq(memberships.organisationId, show.organisationId),
+          eq(memberships.status, 'active')
+        ),
+      });
+      if (!membership) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'You do not have access to this show' });
+      }
+      return show.scheduleData ?? null;
+    }),
+
+  updateScheduleData: secretaryProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        scheduleData: z.object({
+          country: z.enum(['england', 'wales', 'scotland', 'northern_ireland']).optional(),
+          publicAdmission: z.boolean().optional(),
+          wetWeatherAccommodation: z.boolean().optional(),
+          isBenched: z.boolean().optional(),
+          benchingRemovalTime: z.string().optional(),
+          acceptsNfc: z.boolean().optional(),
+          judgedOnGroupSystem: z.boolean().optional(),
+          latestArrivalTime: z.string().optional(),
+          showManager: z.string().optional(),
+          guarantors: z.array(z.object({
+            name: z.string(),
+            address: z.string().optional(),
+          })).optional(),
+          officers: z.array(z.object({
+            name: z.string(),
+            position: z.string(),
+          })).optional(),
+          awardsDescription: z.string().optional(),
+          prizeMoney: z.string().optional(),
+          sponsorships: z.array(z.object({
+            sponsorName: z.string(),
+            description: z.string(),
+          })).optional(),
+          directions: z.string().optional(),
+          catering: z.string().optional(),
+          futureShowDates: z.string().optional(),
+          additionalNotes: z.string().optional(),
+        }),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await ctx.db
+        .update(shows)
+        .set({ scheduleData: input.scheduleData })
+        .where(eq(shows.id, input.showId));
+      return { success: true };
+    }),
 });

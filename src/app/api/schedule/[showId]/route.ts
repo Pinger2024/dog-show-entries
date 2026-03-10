@@ -48,21 +48,21 @@ export async function GET(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  // Fetch show classes
-  const showClasses = await db.query.showClasses.findMany({
-    where: eq(schema.showClasses.showId, showId),
-    with: {
-      classDefinition: true,
-      breed: true,
-    },
-    orderBy: [asc(schema.showClasses.sortOrder), asc(schema.showClasses.classNumber)],
-  });
-
-  // Fetch judge assignments
-  const judgeAssignments = await db.query.judgeAssignments.findMany({
-    where: eq(schema.judgeAssignments.showId, showId),
-    with: { judge: true, breed: true },
-  });
+  // Fetch show classes and judge assignments concurrently
+  const [showClasses, judgeAssignments] = await Promise.all([
+    db.query.showClasses.findMany({
+      where: eq(schema.showClasses.showId, showId),
+      with: {
+        classDefinition: true,
+        breed: true,
+      },
+      orderBy: [asc(schema.showClasses.sortOrder), asc(schema.showClasses.classNumber)],
+    }),
+    db.query.judgeAssignments.findMany({
+      where: eq(schema.judgeAssignments.showId, showId),
+      with: { judge: true, breed: true },
+    }),
+  ]);
 
   // Build classes data
   const classes: ScheduleClass[] = showClasses.map((sc) => ({
@@ -113,6 +113,8 @@ export async function GET(
     firstEntryFee: show.firstEntryFee,
     subsequentEntryFee: show.subsequentEntryFee,
     nfcEntryFee: show.nfcEntryFee,
+    acceptsPostalEntries: show.acceptsPostalEntries,
+    scheduleData: show.scheduleData ?? null,
     organisation: show.organisation
       ? {
           name: show.organisation.name,
