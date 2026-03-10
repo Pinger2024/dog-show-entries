@@ -90,6 +90,35 @@ export function ReportProblemWidget() {
     },
   });
 
+  const handleScreenshot = useCallback(async () => {
+    try {
+      setOpen(false);
+      await new Promise((r) => setTimeout(r, 300));
+
+      const canvas = await import('html2canvas').then((mod) =>
+        mod.default(document.body, {
+          useCORS: true,
+          scale: Math.min(window.devicePixelRatio, 2),
+          logging: false,
+        })
+      );
+
+      setOpen(true);
+
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const file = new File([blob], `screenshot-${Date.now()}.png`, {
+            type: 'image/png',
+          });
+          handleFileSelect(file);
+        }
+      }, 'image/png');
+    } catch {
+      setOpen(true);
+      toast.error('Screenshot failed. Try attaching an image instead.');
+    }
+  }, []);
+
   // Only show for logged-in users
   if (!session?.user) return null;
 
@@ -163,39 +192,6 @@ export function ReportProblemWidget() {
     }
     setAttachment(null);
   }
-
-  const handleScreenshot = useCallback(async () => {
-    try {
-      // Close dialog temporarily so it's not in the screenshot
-      setOpen(false);
-
-      // Small delay to let the dialog close
-      await new Promise((r) => setTimeout(r, 300));
-
-      const canvas = await import('html2canvas').then((mod) =>
-        mod.default(document.body, {
-          useCORS: true,
-          scale: Math.min(window.devicePixelRatio, 2),
-          logging: false,
-        })
-      );
-
-      // Re-open dialog
-      setOpen(true);
-
-      canvas.toBlob((blob) => {
-        if (blob) {
-          const file = new File([blob], `screenshot-${Date.now()}.png`, {
-            type: 'image/png',
-          });
-          handleFileSelect(file);
-        }
-      }, 'image/png');
-    } catch {
-      setOpen(true);
-      toast.error('Screenshot failed. Try attaching an image instead.');
-    }
-  }, []);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
