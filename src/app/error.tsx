@@ -77,9 +77,13 @@ export default function Error({
     }
 
     // React bug #310 "Rendered more hooks than during the previous render"
-    // is a known transient error in React's router. Auto-retry silently.
+    // is a known transient error in React's router. Auto-retry once silently.
     // https://github.com/facebook/react/issues/33580
-    if (error.message?.includes('#310') || error.message?.includes('more hooks')) {
+    if (
+      (error.message?.includes('#310') || error.message?.includes('Rendered more hooks than')) &&
+      !sessionStorage.getItem('remi-react-310-retry')
+    ) {
+      sessionStorage.setItem('remi-react-310-retry', '1');
       reset();
     }
   }, [error, reset]);

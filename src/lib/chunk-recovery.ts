@@ -12,6 +12,7 @@ export const RELOAD_GUARD_KEYS = {
   chunk: 'remi-chunk-reload',
   error: 'remi-error-reload',
   globalError: 'remi-global-error-reload',
+  react310: 'remi-react-310-retry',
 } as const;
 
 /**

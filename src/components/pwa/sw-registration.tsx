@@ -29,6 +29,7 @@ export function ServiceWorkerRegistration() {
       sessionStorage.removeItem(RELOAD_GUARD_KEYS.chunk);
       sessionStorage.removeItem(RELOAD_GUARD_KEYS.error);
       sessionStorage.removeItem(RELOAD_GUARD_KEYS.globalError);
+      sessionStorage.removeItem(RELOAD_GUARD_KEYS.react310);
     }, RELOAD_GUARD_CLEAR_DELAY_MS);
 
     // Recover from chunk loading failures caused by stale service worker cache
