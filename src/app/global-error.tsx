@@ -1,29 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-
-function isChunkError(error: Error): boolean {
-  const msg = error.message || '';
-  return (
-    msg.includes('ChunkLoadError') ||
-    msg.includes('Loading chunk') ||
-    msg.includes('Failed to fetch dynamically imported module') ||
-    msg.includes('Importing a module script failed') ||
-    msg.includes('error loading dynamically imported module')
-  );
-}
-
-async function clearCachesAndReload() {
-  if ('caches' in window) {
-    const names = await caches.keys();
-    await Promise.all(names.map((n) => caches.delete(n)));
-  }
-  if ('serviceWorker' in navigator) {
-    const registrations = await navigator.serviceWorker.getRegistrations();
-    await Promise.all(registrations.map((reg) => reg.unregister()));
-  }
-  window.location.reload();
-}
+import {
+  isChunkError,
+  clearCachesAndReload,
+  RELOAD_GUARD_KEYS,
+} from '@/lib/chunk-recovery';
 
 export default function GlobalError({
   error,
@@ -37,10 +19,9 @@ export default function GlobalError({
   // Auto-recover for chunk loading errors — clear caches and reload without
   // requiring user interaction. Guard against infinite reload loops.
   useEffect(() => {
-    if (isChunkError(error)) {
-      const key = 'remi-global-error-reload';
-      if (!sessionStorage.getItem(key)) {
-        sessionStorage.setItem(key, '1');
+    if (isChunkError(error.message || '')) {
+      if (!sessionStorage.getItem(RELOAD_GUARD_KEYS.globalError)) {
+        sessionStorage.setItem(RELOAD_GUARD_KEYS.globalError, '1');
         setAutoRecovering(true);
         clearCachesAndReload();
       }

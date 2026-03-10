@@ -54,6 +54,7 @@ export const users = pgTable(
 export const usersRelations = relations(users, ({ many }) => ({
   dogs: many(dogs),
   entries: many(entries, { relationName: 'exhibitorEntries' }),
+  handledEntries: many(entries, { relationName: 'handlerEntries' }),
   memberships: many(memberships),
   dogOwnerships: many(dogOwners),
   orders: many(orders),
