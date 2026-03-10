@@ -29,8 +29,8 @@ export async function ImpersonationBannerWrapper() {
         userRole={user.role}
       />
     );
-  } catch {
-    // Never crash the root layout — impersonation banner is non-critical
+  } catch (err) {
+    console.error('[ImpersonationBannerWrapper]', err);
     return null;
   }
 }

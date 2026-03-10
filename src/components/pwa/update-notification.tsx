@@ -7,44 +7,57 @@ import { Button } from '@/components/ui/button';
 export function UpdateNotification() {
   const [showUpdate, setShowUpdate] = useState(false);
   const waitingWorkerRef = useRef<ServiceWorker | null>(null);
+  const refreshingRef = useRef(false);
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
 
     // Reload when a new SW takes over (after SKIP_WAITING)
-    let refreshing = false;
     const onControllerChange = () => {
-      if (refreshing) return;
-      refreshing = true;
+      if (refreshingRef.current) return;
+      refreshingRef.current = true;
       window.location.reload();
     };
     navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
 
-    navigator.serviceWorker.ready.then((registration) => {
+    let registration: ServiceWorkerRegistration | null = null;
+    let trackedWorker: ServiceWorker | null = null;
+
+    const onStateChange = () => {
+      if (
+        trackedWorker?.state === 'installed' &&
+        navigator.serviceWorker.controller
+      ) {
+        waitingWorkerRef.current = trackedWorker;
+        setShowUpdate(true);
+      }
+    };
+
+    const onUpdateFound = () => {
+      const newWorker = registration?.installing;
+      if (!newWorker) return;
+      // Clean up previous worker listener if any
+      if (trackedWorker) trackedWorker.removeEventListener('statechange', onStateChange);
+      trackedWorker = newWorker;
+      newWorker.addEventListener('statechange', onStateChange);
+    };
+
+    navigator.serviceWorker.ready.then((reg) => {
+      registration = reg;
+
       // Check if there's already a waiting worker (e.g. from a previous visit)
-      if (registration.waiting) {
-        waitingWorkerRef.current = registration.waiting;
+      if (reg.waiting) {
+        waitingWorkerRef.current = reg.waiting;
         setShowUpdate(true);
       }
 
-      registration.addEventListener('updatefound', () => {
-        const newWorker = registration.installing;
-        if (!newWorker) return;
-
-        newWorker.addEventListener('statechange', () => {
-          if (
-            newWorker.state === 'installed' &&
-            navigator.serviceWorker.controller
-          ) {
-            waitingWorkerRef.current = newWorker;
-            setShowUpdate(true);
-          }
-        });
-      });
+      reg.addEventListener('updatefound', onUpdateFound);
     });
 
     return () => {
       navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+      if (registration) registration.removeEventListener('updatefound', onUpdateFound);
+      if (trackedWorker) trackedWorker.removeEventListener('statechange', onStateChange);
     };
   }, []);
 

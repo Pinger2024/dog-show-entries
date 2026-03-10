@@ -1,8 +1,10 @@
 /**
  * Shared chunk error recovery utilities used by:
  * - sw-registration.tsx (window error/rejection handler)
- * - error.tsx (segment error boundary)
- * - global-error.tsx (root error boundary)
+ *
+ * NOTE: error.tsx and global-error.tsx INLINE their own copies of
+ * these utilities.  Error boundaries must never import shared chunks
+ * that could be stale after a deploy.
  */
 
 /** sessionStorage keys used as one-shot guards to prevent infinite reload loops. */
@@ -32,13 +34,17 @@ export function isChunkError(msg: string): boolean {
 
 /** Clear all browser caches, unregister service workers, and hard-reload. */
 export async function clearCachesAndReload() {
-  if ('caches' in window) {
-    const names = await caches.keys();
-    await Promise.all(names.map((n) => caches.delete(n)));
-  }
-  if ('serviceWorker' in navigator) {
-    const registrations = await navigator.serviceWorker.getRegistrations();
-    await Promise.all(registrations.map((reg) => reg.unregister()));
+  try {
+    if ('caches' in window) {
+      const names = await caches.keys();
+      await Promise.all(names.map((n) => caches.delete(n)));
+    }
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((reg) => reg.unregister()));
+    }
+  } catch {
+    // Best-effort — proceed to reload even if cleanup fails
   }
   window.location.reload();
 }
