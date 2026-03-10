@@ -18,6 +18,8 @@ import {
   Lock,
   Sparkles,
   CreditCard,
+  Mail,
+  UserPlus,
 } from 'lucide-react';
 import Link from 'next/link';
 import { format, addDays } from 'date-fns';
@@ -44,6 +46,14 @@ import {
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import { PostcodeLookup, formatAddress } from '@/components/postcode-lookup';
@@ -227,6 +237,9 @@ export default function NewShowPage() {
   const utils = trpc.useUtils();
   const createVenueMutation = trpc.secretary.createVenue.useMutation();
   const createShowMutation = trpc.shows.create.useMutation();
+  const inviteMutation = trpc.invitations.send.useMutation();
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
 
   const organisations = dashboardData?.organisations ?? [];
 
@@ -239,7 +252,7 @@ export default function NewShowPage() {
   // Fetch org members for the secretary picker
   const { data: orgMembersData } = trpc.secretary.orgMembers.useQuery(
     { organisationId: currentOrgId },
-    { enabled: !!currentOrgId, staleTime: Infinity }
+    { enabled: !!currentOrgId }
   );
 
   // Always include current user as a fallback so the dropdown is never empty
@@ -670,90 +683,134 @@ export default function NewShowPage() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Show Secretary</FormLabel>
-                        <Select
-                          onValueChange={(value) => {
-                            if (value === '__other__') {
-                              field.onChange(undefined);
-                              form.setValue('secretaryName', '');
-                              form.setValue('secretaryEmail', '');
-                              form.setValue('secretaryPhone', '');
-                            } else {
+                        <div className="flex gap-2">
+                          <Select
+                            onValueChange={(value) => {
                               field.onChange(value);
                               const member = orgMembers?.find((m) => m.id === value);
-                              if (member) {
-                                form.setValue('secretaryName', member.name ?? '');
-                                form.setValue('secretaryEmail', member.email ?? '');
-                                form.setValue('secretaryPhone', member.phone ?? '');
-                              }
-                            }
-                          }}
-                          value={field.value ?? '__other__'}
-                        >
-                          <FormControl>
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Select a person" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {orgMembers?.map((member) => (
-                              <SelectItem key={member.id} value={member.id}>
-                                <div className="flex items-center gap-2">
-                                  <User className="size-3.5 text-muted-foreground" />
-                                  {member.name || member.email}
-                                  {member.id === session?.user?.id && (
-                                    <span className="text-xs text-muted-foreground">(you)</span>
-                                  )}
-                                </div>
-                              </SelectItem>
-                            ))}
-                            <SelectItem value="__other__">
-                              <div className="flex items-center gap-2">
-                                <Plus className="size-3.5 text-muted-foreground" />
-                                Someone else
-                              </div>
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
+                              if (member) applySecretaryMember(member);
+                            }}
+                            value={field.value ?? ''}
+                          >
+                            <FormControl>
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Select a person" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {orgMembers?.map((member) => (
+                                <SelectItem key={member.id} value={member.id}>
+                                  <div className="flex items-center gap-2">
+                                    <User className="size-3.5 text-muted-foreground" />
+                                    {member.name || member.email}
+                                    {member.id === session?.user?.id && (
+                                      <span className="text-xs text-muted-foreground">(you)</span>
+                                    )}
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="shrink-0"
+                            onClick={() => setInviteOpen(true)}
+                            title="Invite a new member"
+                          >
+                            <UserPlus className="size-4" />
+                          </Button>
+                        </div>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                  <div className="grid gap-4 sm:grid-cols-3">
-                    <FormField
-                      control={form.control}
-                      name="secretaryName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Name</FormLabel>
-                          <FormControl><Input placeholder="e.g. Amanda Smith" {...field} /></FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="secretaryEmail"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Email</FormLabel>
-                          <FormControl><Input type="email" placeholder="e.g. secretary@club.co.uk" {...field} /></FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="secretaryPhone"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Phone</FormLabel>
-                          <FormControl><Input type="tel" placeholder="e.g. 07700 900000" {...field} /></FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
+                  {form.watch('secretaryUserId') && (
+                    <div className="grid gap-4 sm:grid-cols-3">
+                      <div>
+                        <Label className="text-sm text-muted-foreground">Name</Label>
+                        <p className="mt-1 text-sm font-medium">{form.watch('secretaryName') || '—'}</p>
+                      </div>
+                      <div>
+                        <Label className="text-sm text-muted-foreground">Email</Label>
+                        <p className="mt-1 text-sm font-medium">{form.watch('secretaryEmail') || '—'}</p>
+                      </div>
+                      <div>
+                        <Label className="text-sm text-muted-foreground">Phone</Label>
+                        <p className="mt-1 text-sm font-medium">{form.watch('secretaryPhone') || '—'}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
+
+                {/* Invite member modal */}
+                <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Invite a Member</DialogTitle>
+                      <DialogDescription>
+                        Enter their email address. If they already have a Remi account, they'll be added to your club immediately. Otherwise, they'll receive an invitation to sign up.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="invite-email">Email address</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            id="invite-email"
+                            type="email"
+                            placeholder="e.g. colleague@email.com"
+                            value={inviteEmail}
+                            onChange={(e) => setInviteEmail(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                document.getElementById('invite-send-btn')?.click();
+                              }
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => { setInviteOpen(false); setInviteEmail(''); }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        id="invite-send-btn"
+                        type="button"
+                        disabled={!inviteEmail || inviteMutation.isPending}
+                        onClick={async () => {
+                          try {
+                            await inviteMutation.mutateAsync({
+                              email: inviteEmail,
+                              role: 'secretary',
+                              organisationId: currentOrgId || undefined,
+                            });
+                            toast.success('Invitation sent! They will appear in the dropdown once they accept.');
+                            setInviteOpen(false);
+                            setInviteEmail('');
+                            // Refresh org members list
+                            utils.secretary.orgMembers.invalidate();
+                          } catch (err) {
+                            toast.error('Failed to send invitation. Please try again.');
+                          }
+                        }}
+                      >
+                        {inviteMutation.isPending ? (
+                          <><Loader2 className="size-4 animate-spin" /> Sending...</>
+                        ) : (
+                          <><Mail className="size-4" /> Send Invite</>
+                        )}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </CardContent>
             </Card>
           )}
