@@ -51,6 +51,23 @@ export default function Error({
   useEffect(() => {
     console.error('Unhandled error:', error);
 
+    // Report to server so we can see client errors in Render logs
+    try {
+      fetch('/api/client-error', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          boundary: 'error.tsx',
+          message: error.message,
+          stack: error.stack?.slice(0, 2000),
+          digest: error.digest,
+          url: window.location.href,
+        }),
+      }).catch(() => {});
+    } catch {
+      // Best-effort reporting
+    }
+
     if (isChunkError(error.message || '')) {
       if (!sessionStorage.getItem(RELOAD_GUARD_KEY)) {
         sessionStorage.setItem(RELOAD_GUARD_KEY, '1');
@@ -83,6 +100,11 @@ export default function Error({
           Clear Cache &amp; Reload
         </Button>
       </div>
+      {error.message && (
+        <p className="mt-6 max-w-lg break-all rounded bg-muted px-3 py-2 font-mono text-[0.6875rem] text-muted-foreground">
+          {error.message}
+        </p>
+      )}
     </div>
   );
 }

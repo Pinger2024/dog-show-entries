@@ -48,6 +48,23 @@ export default function GlobalError({
   const [autoRecovering, setAutoRecovering] = useState(false);
 
   useEffect(() => {
+    // Report to server so we can see client errors in Render logs
+    try {
+      fetch('/api/client-error', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          boundary: 'global-error.tsx',
+          message: error.message,
+          stack: error.stack?.slice(0, 2000),
+          digest: error.digest,
+          url: window.location.href,
+        }),
+      }).catch(() => {});
+    } catch {
+      // Best-effort reporting
+    }
+
     if (isChunkError(error.message || '')) {
       if (!sessionStorage.getItem(RELOAD_GUARD_KEY)) {
         sessionStorage.setItem(RELOAD_GUARD_KEY, '1');
@@ -140,6 +157,21 @@ export default function GlobalError({
               Clear Cache &amp; Reload
             </button>
           </div>
+          {error.message && (
+            <p style={{
+              marginTop: '1.5rem',
+              maxWidth: '500px',
+              padding: '0.5rem 0.75rem',
+              background: '#f5f5f5',
+              borderRadius: '0.375rem',
+              fontFamily: 'monospace',
+              fontSize: '0.6875rem',
+              color: '#888',
+              wordBreak: 'break-all',
+            }}>
+              {error.message}
+            </p>
+          )}
         </div>
       </body>
     </html>
