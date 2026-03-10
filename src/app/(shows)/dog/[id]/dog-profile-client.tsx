@@ -338,9 +338,24 @@ export function DogProfileClient({ id }: { id: string }) {
             <DropdownMenuContent align="end" className="w-48">
               {(() => {
                 const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
-                const shareTitle = data
-                  ? `Check out ${dog.registeredName} on Remi`
-                  : 'Check out this dog on Remi';
+                const displayName = titlePrefix
+                  ? `${titlePrefix} ${dog.registeredName}`
+                  : dog.registeredName;
+                const breedName = dog.breed?.name ?? 'Dog';
+
+                // Build hashtags from breed name (e.g. "German Shepherd Dog" → "GermanShepherdDog")
+                const breedHashtag = breedName.replace(/\s+/g, '');
+                const hashtags = ['DogShow', breedHashtag, 'Remi'];
+
+                // Rich tweet text
+                const tweetText = `${displayName} — ${breedName}${stats.totalShows > 0 ? ` · ${stats.totalShows} show${stats.totalShows !== 1 ? 's' : ''} entered` : ''}`;
+
+                // Messaging text (WhatsApp, Telegram)
+                const messageText = `Have a look at ${displayName} (${breedName}) on Remi — ${stats.totalShows > 0 ? `${stats.totalShows} show${stats.totalShows !== 1 ? 's' : ''} on record!` : 'check out their profile!'}`;
+
+                // Email
+                const emailSubject = `${displayName} — ${breedName} profile on Remi`;
+
                 return (
                   <>
                     <DropdownMenuItem asChild>
@@ -350,25 +365,25 @@ export function DogProfileClient({ id }: { id: string }) {
                       </FacebookShareButton>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <WhatsappShareButton url={shareUrl} title={shareTitle} className="!flex w-full cursor-pointer items-center gap-2 !rounded-sm !px-2 !py-1.5 !text-sm">
+                      <WhatsappShareButton url={shareUrl} title={messageText} className="!flex w-full cursor-pointer items-center gap-2 !rounded-sm !px-2 !py-1.5 !text-sm">
                         <WhatsappIcon size={18} round />
                         WhatsApp
                       </WhatsappShareButton>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <TwitterShareButton url={shareUrl} title={shareTitle} className="!flex w-full cursor-pointer items-center gap-2 !rounded-sm !px-2 !py-1.5 !text-sm">
+                      <TwitterShareButton url={shareUrl} title={tweetText} hashtags={hashtags} className="!flex w-full cursor-pointer items-center gap-2 !rounded-sm !px-2 !py-1.5 !text-sm">
                         <XIcon size={18} round />
                         X (Twitter)
                       </TwitterShareButton>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <TelegramShareButton url={shareUrl} title={shareTitle} className="!flex w-full cursor-pointer items-center gap-2 !rounded-sm !px-2 !py-1.5 !text-sm">
+                      <TelegramShareButton url={shareUrl} title={messageText} className="!flex w-full cursor-pointer items-center gap-2 !rounded-sm !px-2 !py-1.5 !text-sm">
                         <TelegramIcon size={18} round />
                         Telegram
                       </TelegramShareButton>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <EmailShareButton url={shareUrl} subject={shareTitle} body={`Have a look at this dog profile on Remi:\n\n`} className="!flex w-full cursor-pointer items-center gap-2 !rounded-sm !px-2 !py-1.5 !text-sm">
+                      <EmailShareButton url={shareUrl} subject={emailSubject} body={`${messageText}\n\n`} className="!flex w-full cursor-pointer items-center gap-2 !rounded-sm !px-2 !py-1.5 !text-sm">
                         <EmailIcon size={18} round />
                         Email
                       </EmailShareButton>
