@@ -13,16 +13,14 @@ function isChunkError(error: Error): boolean {
   );
 }
 
-function clearCachesAndReload() {
+async function clearCachesAndReload() {
   if ('caches' in window) {
-    caches.keys().then((names) => {
-      names.forEach((name) => caches.delete(name));
-    });
+    const names = await caches.keys();
+    await Promise.all(names.map((n) => caches.delete(n)));
   }
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.getRegistrations().then((registrations) => {
-      registrations.forEach((reg) => reg.unregister());
-    });
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations.map((reg) => reg.unregister()));
   }
   window.location.reload();
 }

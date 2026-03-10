@@ -12,13 +12,18 @@ function isChunkError(msg: string): boolean {
   );
 }
 
-function handleChunkRecovery() {
+async function handleChunkRecovery() {
   const reloadedKey = 'remi-chunk-reload';
   if (!sessionStorage.getItem(reloadedKey)) {
     sessionStorage.setItem(reloadedKey, '1');
-    // Clear all caches before reloading so the fresh page gets fresh assets
+    // Clear all caches and unregister SW before reloading
     if ('caches' in window) {
-      caches.keys().then((names) => names.forEach((n) => caches.delete(n)));
+      const names = await caches.keys();
+      await Promise.all(names.map((n) => caches.delete(n)));
+    }
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((reg) => reg.unregister()));
     }
     window.location.reload();
   }
@@ -30,9 +35,11 @@ export function ServiceWorkerRegistration() {
       navigator.serviceWorker.register('/serwist/sw.js');
     }
 
-    // Clear the reload guard after a successful page load so future deploys
+    // Clear all reload guards after a successful page load so future deploys
     // can trigger recovery again.
     sessionStorage.removeItem('remi-chunk-reload');
+    sessionStorage.removeItem('remi-error-reload');
+    sessionStorage.removeItem('remi-global-error-reload');
 
     // Recover from chunk loading failures caused by stale service worker cache
     // after deploys. Detects failed dynamic imports and forces a hard reload.
