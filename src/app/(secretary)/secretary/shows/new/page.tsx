@@ -76,6 +76,14 @@ const classSexArrangements = [
   { value: 'combined_sex', label: 'Combined Dog & Bitch' },
 ] as const;
 
+const showTimes = Array.from({ length: 23 }, (_, i) => {
+  const hour = 7 + Math.floor(i / 2);
+  const min = i % 2 === 0 ? '00' : '30';
+  const value = `${String(hour).padStart(2, '0')}:${min}`;
+  const label = `${hour}:${min}`;
+  return { value, label };
+});
+
 const createShowSchema = z.object({
   // Step 1 - Basic Info
   name: z.string().min(1, 'Show name is required').max(255),
@@ -231,7 +239,7 @@ export default function NewShowPage() {
   // Fetch org members for the secretary picker
   const { data: orgMembers } = trpc.secretary.orgMembers.useQuery(
     { organisationId: currentOrgId },
-    { enabled: !!currentOrgId }
+    { enabled: !!currentOrgId, staleTime: Infinity }
   );
 
   // Populate secretary contact fields from a member record
