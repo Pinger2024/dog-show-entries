@@ -21,7 +21,7 @@ import { createPaymentIntent } from '@/server/services/stripe';
 const cartEntrySchema = z.object({
   entryType: z.enum(['standard', 'junior_handler']).default('standard'),
   dogId: z.string().uuid().optional(),
-  classIds: z.array(z.string().uuid()).min(1),
+  classIds: z.array(z.string().uuid()),
   isNfc: z.boolean().default(false),
   // Junior handler fields
   handlerName: z.string().optional(),
@@ -89,6 +89,16 @@ export const ordersRouter = createTRPCRouter({
         }
       }
 
+      // Non-NFC entries must have at least one class
+      for (const entryInput of input.entries) {
+        if (!entryInput.isNfc && entryInput.classIds.length === 0) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Each entry must have at least one class selected (unless entering NFC)',
+          });
+        }
+      }
+
       // Check for duplicate classes (same dog can enter multiple classes, but not the same class twice)
       for (const entryInput of input.entries) {
         if (entryInput.entryType === 'standard' && entryInput.dogId) {
@@ -126,22 +136,28 @@ export const ordersRouter = createTRPCRouter({
 
       // Collect all class IDs and validate
       const allClassIds = input.entries.flatMap((e) => e.classIds);
-      const selectedClasses = await ctx.db.query.showClasses.findMany({
-        where: and(
-          inArray(showClasses.id, allClassIds),
-          eq(showClasses.showId, input.showId)
-        ),
-      });
+      const classMap = new Map<string, { id: string; entryFee: number }>();
 
-      const classMap = new Map(selectedClasses.map((sc) => [sc.id, sc]));
+      if (allClassIds.length > 0) {
+        const selectedClasses = await ctx.db.query.showClasses.findMany({
+          where: and(
+            inArray(showClasses.id, allClassIds),
+            eq(showClasses.showId, input.showId)
+          ),
+        });
 
-      // Verify all requested classes exist
-      for (const classId of allClassIds) {
-        if (!classMap.has(classId)) {
-          throw new TRPCError({
-            code: 'BAD_REQUEST',
-            message: `Invalid class ID: ${classId}`,
-          });
+        for (const sc of selectedClasses) {
+          classMap.set(sc.id, sc);
+        }
+
+        // Verify all requested classes exist
+        for (const classId of allClassIds) {
+          if (!classMap.has(classId)) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `Invalid class ID: ${classId}`,
+            });
+          }
         }
       }
 
@@ -151,7 +167,7 @@ export const ordersRouter = createTRPCRouter({
         const classCount = entry.classIds.length;
 
         if (entry.isNfc && show.nfcEntryFee != null) {
-          totalAmount += show.nfcEntryFee * classCount;
+          totalAmount += classCount > 0 ? show.nfcEntryFee * classCount : show.nfcEntryFee;
         } else if (show.firstEntryFee != null) {
           const subsequentRate = show.subsequentEntryFee ?? show.firstEntryFee;
           totalAmount += show.firstEntryFee + subsequentRate * (classCount - 1);

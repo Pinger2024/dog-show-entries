@@ -254,16 +254,18 @@ export default function EnterShowPage() {
   const selectedTotal = useMemo(() => {
     if (!showClasses || !show) return 0;
     const count = selectedClassIds.length;
+    const nfcFeeAmount = show.nfcEntryFee;
+
+    // NFC entries may have zero classes — charge flat NFC fee
+    if (isNfc && nfcFeeAmount != null) {
+      return count > 0 ? nfcFeeAmount * count : nfcFeeAmount;
+    }
+
     if (count === 0) return 0;
 
     // Use show-level fee tiers if available, otherwise fall back to per-class fees
     const firstFee = show.firstEntryFee;
     const subFee = show.subsequentEntryFee;
-    const nfcFeeAmount = show.nfcEntryFee;
-
-    if (isNfc && nfcFeeAmount != null) {
-      return nfcFeeAmount * count;
-    }
 
     if (firstFee != null) {
       const subsequentRate = subFee ?? firstFee;
@@ -852,7 +854,7 @@ export default function EnterShowPage() {
                 <Button
                   className="h-11 flex-1 text-sm sm:flex-none"
                   onClick={handleConfirmClasses}
-                  disabled={selectedClassIds.length === 0}
+                  disabled={selectedClassIds.length === 0 && !isNfc}
                 >
                   {cart.editingExisting ? 'Update' : 'Add to Cart'}
                   <ChevronRight className="size-4" />
