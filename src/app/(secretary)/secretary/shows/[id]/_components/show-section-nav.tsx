@@ -34,8 +34,8 @@ export function ShowSectionNav({ showId }: { showId: string }) {
   const basePath = `/secretary/shows/${showId}`;
 
   return (
-    <nav>
-      <div className="flex flex-wrap gap-1">
+    <nav className="-mx-3 sm:mx-0">
+      <div className="flex gap-1 overflow-x-auto px-3 pb-2 sm:flex-wrap sm:overflow-x-visible sm:px-0 sm:pb-0 scrollbar-hide">
         {sections.map((section) => {
           const href = `${basePath}${section.path}`;
           const isActive = section.exact
@@ -48,7 +48,7 @@ export function ShowSectionNav({ showId }: { showId: string }) {
               key={section.path}
               href={href}
               className={cn(
-                'inline-flex items-center gap-1.5 rounded-full px-3 py-2 min-h-[2.75rem] text-sm font-medium whitespace-nowrap transition-colors',
+                'inline-flex items-center gap-1.5 rounded-full px-3 py-2 min-h-[2.75rem] text-sm font-medium whitespace-nowrap transition-colors shrink-0 sm:shrink',
                 isActive
                   ? 'bg-primary text-primary-foreground shadow-sm'
                   : 'text-muted-foreground hover:bg-muted hover:text-foreground'
