@@ -1,6 +1,5 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import {
@@ -10,12 +9,8 @@ import {
   CheckCircle2,
   ArrowRight,
   Loader2,
-  Send,
 } from 'lucide-react';
-import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Card,
   CardContent,
@@ -23,13 +18,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { ClubApplicationForm } from '@/components/club-application-form';
 import { trpc } from '@/lib/trpc/client';
 
 export default function ApplyPage() {
@@ -39,33 +28,6 @@ export default function ApplyPage() {
 
   const { data: application, isLoading } =
     trpc.applications.myApplication.useQuery();
-
-  const submitMutation = trpc.applications.submit.useMutation({
-    onSuccess: () => {
-      toast.success('Application submitted! We\'ll review it shortly.');
-      utils.applications.myApplication.invalidate();
-    },
-    onError: (err) => {
-      toast.error(err.message);
-    },
-  });
-
-  const [clubType, setClubType] = useState<string>('');
-  const [organisationName, setOrganisationName] = useState('');
-  const [breedOrGroup, setBreedOrGroup] = useState('');
-  const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
-  const [kcRegNumber, setKcRegNumber] = useState('');
-  const [contactEmail, setContactEmail] = useState('');
-  const [contactPhone, setContactPhone] = useState('');
-  const [website, setWebsite] = useState('');
-  const [details, setDetails] = useState('');
-
-  // Sync contact email from session when it loads
-  useEffect(() => {
-    if (session?.user?.email && !contactEmail) {
-      setContactEmail(session.user.email);
-    }
-  }, [session?.user?.email, contactEmail]);
 
   // Show loading spinner while session or application data is loading
   if (sessionStatus === 'loading' || isLoading) {
@@ -187,25 +149,6 @@ export default function ApplyPage() {
   // Rejected — allow re-apply
   const isRejected = application?.status === 'rejected';
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!clubType || !organisationName || !contactEmail) return;
-
-    const groupValue = clubType === 'multi_breed'
-      ? (selectedGroups.length > 0 ? selectedGroups.join(', ') : undefined)
-      : (breedOrGroup || undefined);
-    submitMutation.mutate({
-      organisationName,
-      clubType: clubType as 'single_breed' | 'multi_breed',
-      breedOrGroup: groupValue,
-      kcRegNumber: kcRegNumber || undefined,
-      contactEmail,
-      contactPhone: contactPhone || undefined,
-      website: website || undefined,
-      details: details || undefined,
-    });
-  };
-
   return (
     <div className="mx-auto max-w-lg space-y-8 pb-16 md:pb-0">
       <div>
@@ -256,175 +199,10 @@ export default function ApplyPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Organisation / Club Name *
-              </label>
-              <Input
-                value={organisationName}
-                onChange={(e) => setOrganisationName(e.target.value)}
-                placeholder="e.g. Clyde Valley GSD Club"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Club Type *</label>
-              <Select value={clubType} onValueChange={setClubType}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select club type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="single_breed">
-                    Single Breed Club
-                  </SelectItem>
-                  <SelectItem value="multi_breed">
-                    Multi Breed Club
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {clubType === 'multi_breed' ? (
-              <div className="space-y-2">
-                <label className="text-sm font-medium">
-                  Breed Groups
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {['Gundog', 'Hound', 'Pastoral', 'Terrier', 'Toy', 'Utility', 'Working'].map((group) => (
-                    <label
-                      key={group}
-                      className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer hover:bg-muted/50 transition-colors has-[:checked]:border-primary has-[:checked]:bg-primary/5"
-                    >
-                      <input
-                        type="checkbox"
-                        className="size-4 rounded border-muted-foreground/30 accent-primary"
-                        checked={selectedGroups.includes(group)}
-                        onChange={(e) => {
-                          setSelectedGroups(
-                            e.target.checked
-                              ? [...selectedGroups, group]
-                              : selectedGroups.filter((g) => g !== group)
-                          );
-                        }}
-                      />
-                      {group}
-                    </label>
-                  ))}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Select all KC breed groups your club covers.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <label className="text-sm font-medium">
-                  Breed Group
-                </label>
-                <Select
-                  value={breedOrGroup}
-                  onValueChange={setBreedOrGroup}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a group..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Gundog">Gundog</SelectItem>
-                    <SelectItem value="Hound">Hound</SelectItem>
-                    <SelectItem value="Pastoral">Pastoral</SelectItem>
-                    <SelectItem value="Terrier">Terrier</SelectItem>
-                    <SelectItem value="Toy">Toy</SelectItem>
-                    <SelectItem value="Utility">Utility</SelectItem>
-                    <SelectItem value="Working">Working</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Select the KC breed group your club covers.
-                </p>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                KC Registration Number
-              </label>
-              <Input
-                value={kcRegNumber}
-                onChange={(e) => setKcRegNumber(e.target.value)}
-                placeholder="e.g. 1234"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Contact Email *
-              </label>
-              <Input
-                type="email"
-                value={contactEmail}
-                onChange={(e) => setContactEmail(e.target.value)}
-                placeholder="secretary@myclub.co.uk"
-                required
-              />
-              <p className="text-xs text-muted-foreground">
-                The email address you&apos;ll use for show correspondence.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Contact Phone
-              </label>
-              <Input
-                type="tel"
-                value={contactPhone}
-                onChange={(e) => setContactPhone(e.target.value)}
-                placeholder="07xxx xxxxxx"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Club Website
-              </label>
-              <Input
-                value={website}
-                onChange={(e) => setWebsite(e.target.value)}
-                placeholder="https://myclub.co.uk"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Tell us about your club
-              </label>
-              <Textarea
-                value={details}
-                onChange={(e) => setDetails(e.target.value)}
-                placeholder="What kind of shows do you run? How many shows per year? Any specific features you're looking for?"
-                rows={4}
-              />
-            </div>
-
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={
-                submitMutation.isPending ||
-                !organisationName ||
-                !clubType ||
-                !contactEmail
-              }
-            >
-              {submitMutation.isPending ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Send className="size-4" />
-              )}
-              Submit Application
-            </Button>
-          </form>
+          <ClubApplicationForm
+            defaultContactEmail={session?.user?.email ?? ''}
+            onSuccess={() => utils.applications.myApplication.invalidate()}
+          />
         </CardContent>
       </Card>
     </div>

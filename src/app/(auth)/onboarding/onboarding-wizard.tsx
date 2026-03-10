@@ -26,9 +26,9 @@ import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc/client';
 import { cn } from '@/lib/utils';
 import { PostcodeLookup, formatAddress } from '@/components/postcode-lookup';
+import { ClubApplicationForm } from '@/components/club-application-form';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Calendar } from '@/components/ui/calendar';
 import {
   Form,
@@ -1091,48 +1091,6 @@ function ClubStep({
   userEmail?: string | null;
   onComplete: () => void;
 }) {
-  const [clubType, setClubType] = useState<string>('');
-  const [organisationName, setOrganisationName] = useState('');
-  const [breedOrGroup, setBreedOrGroup] = useState('');
-  const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
-  const [kcRegNumber, setKcRegNumber] = useState('');
-  const [contactEmail, setContactEmail] = useState(userEmail ?? '');
-  const [contactPhone, setContactPhone] = useState('');
-  const [website, setWebsite] = useState('');
-  const [details, setDetails] = useState('');
-
-  const submitMutation = trpc.applications.submit.useMutation({
-    onSuccess: () => {
-      toast.success('Application submitted!', {
-        description: "We'll review it and get you set up shortly.",
-      });
-      onComplete();
-    },
-    onError: (err) => {
-      toast.error(err.message);
-    },
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!clubType || !organisationName || !contactEmail) return;
-
-    const groupValue = clubType === 'multi_breed'
-      ? (selectedGroups.length > 0 ? selectedGroups.join(', ') : undefined)
-      : (breedOrGroup || undefined);
-
-    submitMutation.mutate({
-      organisationName,
-      clubType: clubType as 'single_breed' | 'multi_breed',
-      breedOrGroup: groupValue,
-      kcRegNumber: kcRegNumber || undefined,
-      contactEmail,
-      contactPhone: contactPhone || undefined,
-      website: website || undefined,
-      details: details || undefined,
-    });
-  };
-
   return (
     <Card>
       <CardHeader>
@@ -1145,162 +1103,11 @@ function ClubStep({
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">
-              Organisation / Club Name *
-            </label>
-            <Input
-              value={organisationName}
-              onChange={(e) => setOrganisationName(e.target.value)}
-              placeholder="e.g. Clyde Valley GSD Club"
-              className="h-11 sm:h-12"
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Club Type *</label>
-            <Select value={clubType} onValueChange={setClubType}>
-              <SelectTrigger className="h-11 sm:h-12">
-                <SelectValue placeholder="Select club type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="single_breed">
-                  Single Breed Club
-                </SelectItem>
-                <SelectItem value="multi_breed">
-                  Multi Breed Club
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {clubType === 'multi_breed' ? (
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Breed Groups</label>
-              <div className="grid grid-cols-2 gap-2">
-                {['Gundog', 'Hound', 'Pastoral', 'Terrier', 'Toy', 'Utility', 'Working'].map((group) => (
-                  <label
-                    key={group}
-                    className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer hover:bg-muted/50 transition-colors has-[:checked]:border-primary has-[:checked]:bg-primary/5"
-                  >
-                    <input
-                      type="checkbox"
-                      className="size-4 rounded border-muted-foreground/30 accent-primary"
-                      checked={selectedGroups.includes(group)}
-                      onChange={(e) => {
-                        setSelectedGroups(
-                          e.target.checked
-                            ? [...selectedGroups, group]
-                            : selectedGroups.filter((g) => g !== group)
-                        );
-                      }}
-                    />
-                    {group}
-                  </label>
-                ))}
-              </div>
-            </div>
-          ) : clubType === 'single_breed' ? (
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Breed Group</label>
-              <Select value={breedOrGroup} onValueChange={setBreedOrGroup}>
-                <SelectTrigger className="h-11 sm:h-12">
-                  <SelectValue placeholder="Select a group..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Gundog">Gundog</SelectItem>
-                  <SelectItem value="Hound">Hound</SelectItem>
-                  <SelectItem value="Pastoral">Pastoral</SelectItem>
-                  <SelectItem value="Terrier">Terrier</SelectItem>
-                  <SelectItem value="Toy">Toy</SelectItem>
-                  <SelectItem value="Utility">Utility</SelectItem>
-                  <SelectItem value="Working">Working</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          ) : null}
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">
-              Contact Email *
-            </label>
-            <Input
-              type="email"
-              value={contactEmail}
-              onChange={(e) => setContactEmail(e.target.value)}
-              placeholder="secretary@myclub.co.uk"
-              className="h-11 sm:h-12"
-              required
-            />
-            <p className="text-xs text-muted-foreground">
-              The email you&apos;ll use for show correspondence.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Contact Phone</label>
-            <Input
-              type="tel"
-              value={contactPhone}
-              onChange={(e) => setContactPhone(e.target.value)}
-              placeholder="07xxx xxxxxx"
-              className="h-11 sm:h-12"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Club Website</label>
-            <Input
-              value={website}
-              onChange={(e) => setWebsite(e.target.value)}
-              placeholder="https://myclub.co.uk"
-              className="h-11 sm:h-12"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">
-              KC Registration Number
-            </label>
-            <Input
-              value={kcRegNumber}
-              onChange={(e) => setKcRegNumber(e.target.value)}
-              placeholder="e.g. 1234"
-              className="h-11 sm:h-12"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">
-              Tell us about your club
-            </label>
-            <Textarea
-              value={details}
-              onChange={(e) => setDetails(e.target.value)}
-              placeholder="What kind of shows do you run? How many per year?"
-              rows={3}
-            />
-          </div>
-
-          <Button
-            type="submit"
-            className="h-11 sm:h-12 w-full text-sm sm:text-[0.9375rem]"
-            disabled={
-              submitMutation.isPending ||
-              !organisationName ||
-              !clubType ||
-              !contactEmail
-            }
-          >
-            {submitMutation.isPending ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : null}
-            Submit Application
-            <ArrowRight className="size-4" />
-          </Button>
-        </form>
+        <ClubApplicationForm
+          defaultContactEmail={userEmail ?? ''}
+          onSuccess={onComplete}
+          tall
+        />
       </CardContent>
     </Card>
   );
