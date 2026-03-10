@@ -15,7 +15,12 @@ declare const self: ServiceWorkerGlobalScope;
 
 const serwist = new Serwist({
   precacheEntries: self.__SW_MANIFEST,
-  skipWaiting: true,
+  // skipWaiting is intentionally OFF.  With skipWaiting the new SW
+  // activates immediately and evicts old cached chunks while the
+  // running page still references them → chunk loading errors on
+  // every deploy.  Instead, UpdateNotification prompts the user to
+  // reload, and sends a SKIP_WAITING message when they accept.
+  skipWaiting: false,
   clientsClaim: true,
   navigationPreload: true,
   runtimeCaching: defaultCache,
@@ -32,3 +37,10 @@ const serwist = new Serwist({
 });
 
 serwist.addEventListeners();
+
+// Allow the page to trigger skipWaiting on-demand (via UpdateNotification)
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
