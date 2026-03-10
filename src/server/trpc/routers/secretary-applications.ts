@@ -10,6 +10,7 @@ import {
   clubTypeEnum,
   invitations,
   organisations,
+  users,
 } from '@/server/db/schema';
 import { generateToken, getBaseUrl, assignRole } from '@/server/lib/utils';
 
@@ -93,33 +94,44 @@ export const secretaryApplicationsRouter = createTRPCRouter({
         assignRole(ctx.db, ctx.session.user.id, 'secretary', org!.id),
       ]);
 
-      // Notify admin about the new secretary (fire-and-forget)
+      // Notify all admins about the new secretary (fire-and-forget)
       if (resend) {
-        const notifyEmail =
-          process.env.FEEDBACK_NOTIFY_EMAIL ?? 'michael@prometheus-it.com';
+        ctx.db
+          .select({ email: users.email })
+          .from(users)
+          .where(eq(users.role, 'admin'))
+          .then((admins) => {
+            const adminEmails = admins
+              .map((a) => a.email)
+              .filter((e): e is string => !!e);
+            if (adminEmails.length === 0) return;
 
-        resend.emails.send({
-          from: 'Remi <noreply@lettiva.com>',
-          to: [notifyEmail],
-          replyTo: 'feedback@inbound.lettiva.com',
-          subject: `New Secretary Registered: ${input.organisationName}`,
-          html: `
-            <div style="font-family: Georgia, serif; max-width: 560px; margin: 0 auto;">
-              <h1 style="font-size: 24px; color: #2D5F3F;">Remi</h1>
-              <p>A new secretary has registered on Remi.</p>
-              <div style="padding: 16px; background: #f9fafb; border-radius: 8px; border-left: 3px solid #2D5F3F; margin: 16px 0;">
-                <p style="margin: 0 0 8px;"><strong>Secretary:</strong> ${ctx.session.user.name ?? 'Unknown'} (${ctx.session.user.email})</p>
-                <p style="margin: 0 0 8px;"><strong>Organisation:</strong> ${input.organisationName}</p>
-                <p style="margin: 0 0 8px;"><strong>Club Type:</strong> ${CLUB_TYPE_LABELS[input.clubType] ?? input.clubType}</p>
-                ${input.breedOrGroup ? `<p style="margin: 0 0 8px;"><strong>Breed/Group:</strong> ${input.breedOrGroup}</p>` : ''}
-                ${input.details ? `<p style="margin: 0;"><strong>Details:</strong> ${input.details}</p>` : ''}
-              </div>
-              <p style="color: #6b7280; font-size: 14px;">Their account has been automatically set up — no action required.</p>
-            </div>
-          `,
-        }).catch((err) => {
-          console.error('[secretary-applications] failed to send admin notification:', err);
-        });
+            resend.emails.send({
+              from: 'Remi <noreply@lettiva.com>',
+              to: adminEmails,
+              replyTo: 'feedback@inbound.lettiva.com',
+              subject: `New Secretary Registered: ${input.organisationName}`,
+              html: `
+                <div style="font-family: Georgia, serif; max-width: 560px; margin: 0 auto;">
+                  <h1 style="font-size: 24px; color: #2D5F3F;">Remi</h1>
+                  <p>A new secretary has registered on Remi.</p>
+                  <div style="padding: 16px; background: #f9fafb; border-radius: 8px; border-left: 3px solid #2D5F3F; margin: 16px 0;">
+                    <p style="margin: 0 0 8px;"><strong>Secretary:</strong> ${ctx.session.user.name ?? 'Unknown'} (${ctx.session.user.email})</p>
+                    <p style="margin: 0 0 8px;"><strong>Organisation:</strong> ${input.organisationName}</p>
+                    <p style="margin: 0 0 8px;"><strong>Club Type:</strong> ${CLUB_TYPE_LABELS[input.clubType] ?? input.clubType}</p>
+                    ${input.breedOrGroup ? `<p style="margin: 0 0 8px;"><strong>Breed/Group:</strong> ${input.breedOrGroup}</p>` : ''}
+                    ${input.details ? `<p style="margin: 0;"><strong>Details:</strong> ${input.details}</p>` : ''}
+                  </div>
+                  <p style="color: #6b7280; font-size: 14px;">Their account has been automatically set up — no action required.</p>
+                </div>
+              `,
+            }).catch((err) => {
+              console.error('[secretary-applications] failed to send admin notification:', err);
+            });
+          })
+          .catch((err) => {
+            console.error('[secretary-applications] failed to query admins for notification:', err);
+          });
       }
 
       return application!;
