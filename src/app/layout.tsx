@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { Suspense } from 'react';
 import { Inter, Libre_Baskerville } from 'next/font/google';
 import { Toaster } from '@/components/ui/sonner';
 import { Providers } from '@/components/providers';
@@ -71,7 +72,9 @@ export default function RootLayout({
         className={`${inter.variable} ${libreBaskerville.variable} antialiased`}
       >
         <Providers>
-          <ImpersonationBannerWrapper />
+          <Suspense fallback={null}>
+            <ImpersonationBannerWrapper />
+          </Suspense>
           {children}
           <Toaster richColors position="top-right" />
           <ReportProblemWidget />

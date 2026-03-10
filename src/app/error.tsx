@@ -75,7 +75,14 @@ export default function Error({
         clearCachesAndReload();
       }
     }
-  }, [error]);
+
+    // React bug #310 "Rendered more hooks than during the previous render"
+    // is a known transient error in React's router. Auto-retry silently.
+    // https://github.com/facebook/react/issues/33580
+    if (error.message?.includes('#310') || error.message?.includes('more hooks')) {
+      reset();
+    }
+  }, [error, reset]);
 
   if (autoRecovering) {
     return (
