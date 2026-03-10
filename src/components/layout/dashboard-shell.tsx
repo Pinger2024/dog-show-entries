@@ -115,7 +115,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
               <p className="truncate text-sm text-muted-foreground">{user.email}</p>
             </div>
           </div>
-          {user.role === 'secretary' && (
+          {(user.role === 'secretary' || user.role === 'admin') && (
             <RoleSwitcher activeView="exhibitor" />
           )}
         </div>
@@ -242,7 +242,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
             Remi
           </Link>
           <div className="flex items-center gap-1.5">
-            {user.role === 'secretary' && (
+            {(user.role === 'secretary' || user.role === 'admin') && (
               <RoleSwitcherCompact activeView="exhibitor" />
             )}
             <Button variant="ghost" size="sm" className="size-11" asChild>
