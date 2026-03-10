@@ -286,6 +286,9 @@ export default function LiveResultsPage({
                             {cls.sex}
                           </Badge>
                         )}
+                        <span className="text-[10px] text-muted-foreground">
+                          ({cls.dogsForward} forward)
+                        </span>
                       </div>
                       <div className="space-y-1.5">
                         {cls.results.map((result, i) => (

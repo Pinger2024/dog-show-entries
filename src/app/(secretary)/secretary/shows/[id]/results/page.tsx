@@ -233,6 +233,9 @@ export default function SecretaryResultsPage({
                           {cls.sex}
                         </Badge>
                       )}
+                      <span className="text-[10px] text-muted-foreground">
+                        {cls.entriesCount} entered · {cls.dogsForward} forward
+                      </span>
                     </div>
                     {cls.results.length === 0 ? (
                       <p className="text-xs text-muted-foreground italic">

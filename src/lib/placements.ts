@@ -28,6 +28,20 @@ export function getPlacementShortLabel(value: number): string {
   );
 }
 
+/**
+ * Returns available KC placements based on show scope.
+ * All-breed (general/group): 1st–HC (6 places)
+ * Breed (single_breed): 1st–Commended (all 7)
+ */
+export function getPlacementsForScope(
+  showScope: 'single_breed' | 'group' | 'general'
+) {
+  if (showScope === 'single_breed') {
+    return KC_PLACEMENTS; // all 7
+  }
+  return KC_PLACEMENTS.filter((p) => p.value <= 6); // 1st–HC, no Commended
+}
+
 export const placementColors: Record<number, string> = {
   1: 'bg-yellow-100 text-yellow-800 border-yellow-200',
   2: 'bg-gray-100 text-gray-700 border-gray-200',

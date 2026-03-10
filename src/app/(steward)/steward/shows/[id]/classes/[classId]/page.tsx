@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
-import { KC_PLACEMENTS, SPECIAL_AWARDS } from '@/lib/placements';
+import { SPECIAL_AWARDS, getPlacementsForScope } from '@/lib/placements';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -97,6 +97,12 @@ export default function StewardClassResultsPage({
 
   const { showClass, entries } = data;
 
+  // Scope-aware placements: all-breed = 1st–HC, breed = 1st–Commended
+  const availablePlacements = getPlacementsForScope(showClass.showScope);
+
+  // "Dogs forward" = present (not absent) — standard KC terminology
+  const dogsForward = entries.filter((e) => !e.absent).length;
+
   // Find prev/next class
   const sortedClasses = allClasses?.sort(
     (a, b) => a.sortOrder - b.sortOrder
@@ -158,9 +164,12 @@ export default function StewardClassResultsPage({
             </Badge>
           )}
           <span>{entries.length} {entries.length === 1 ? 'entry' : 'entries'}</span>
-          {entries.filter((e) => e.absent).length > 0 && (
+          <span className="font-medium text-foreground">
+            · {dogsForward} forward
+          </span>
+          {entries.length - dogsForward > 0 && (
             <span className="text-amber-600">
-              ({entries.filter((e) => e.absent).length} absent)
+              ({entries.length - dogsForward} absent)
             </span>
           )}
         </div>
@@ -248,7 +257,7 @@ export default function StewardClassResultsPage({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">—</SelectItem>
-                      {KC_PLACEMENTS.map((p) => (
+                      {availablePlacements.map((p) => (
                         <SelectItem key={p.value} value={String(p.value)}>
                           {p.label}
                         </SelectItem>

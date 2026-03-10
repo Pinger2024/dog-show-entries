@@ -160,6 +160,12 @@ export const stewardRouter = createTRPCRouter({
         showClass.showId
       );
 
+      // Fetch show scope for placement rules
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, showClass.showId),
+        columns: { showScope: true },
+      });
+
       const classEntries = await ctx.db.query.entryClasses.findMany({
         where: eq(entryClasses.showClassId, input.showClassId),
         with: {
@@ -187,6 +193,7 @@ export const stewardRouter = createTRPCRouter({
           classDefinition: showClass.classDefinition,
           breed: showClass.breed,
           sex: showClass.sex,
+          showScope: show?.showScope ?? 'general',
         },
         entries: confirmed
           .sort((a, b) => {
@@ -520,6 +527,7 @@ export const stewardRouter = createTRPCRouter({
                   status: true,
                   deletedAt: true,
                   dogId: true,
+                  absent: true,
                 },
                 with: {
                   dog: {
@@ -546,6 +554,8 @@ export const stewardRouter = createTRPCRouter({
             className: string;
             classNumber: number | null;
             sex: string | null;
+            entriesCount: number;
+            dogsForward: number;
             results: {
               placement: number | null;
               specialAward: string | null;
@@ -565,6 +575,14 @@ export const stewardRouter = createTRPCRouter({
         if (!breedGroups.has(breedName)) {
           breedGroups.set(breedName, { breedName, classes: [] });
         }
+
+        // Count confirmed entries and dogs forward (present, not absent)
+        const confirmedEntries = sc.entryClasses.filter(
+          (ec) => ec.entry.status === 'confirmed' && !ec.entry.deletedAt
+        );
+        const dogsForward = confirmedEntries.filter(
+          (ec) => !ec.entry.absent
+        ).length;
 
         const classResults = sc.entryClasses
           .filter(
@@ -591,6 +609,8 @@ export const stewardRouter = createTRPCRouter({
             className: sc.classDefinition.name,
             classNumber: sc.classNumber,
             sex: sc.sex,
+            entriesCount: confirmedEntries.length,
+            dogsForward,
             results: classResults,
           });
         }
