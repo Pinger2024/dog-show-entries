@@ -47,7 +47,7 @@ async function seed() {
       { name: 'English Setter', groupId: groupMap['Gundog'], kcBreedCode: 'ENS' },
       // Hound
       { name: 'Beagle', groupId: groupMap['Hound'], kcBreedCode: 'BEA' },
-      { name: 'Dachshund (Miniature Smooth-Haired)', groupId: groupMap['Hound'], kcBreedCode: 'DMS' },
+      { name: 'Dachshund (Miniature Smooth Haired)', groupId: groupMap['Hound'], kcBreedCode: 'DMS' },
       { name: 'Whippet', groupId: groupMap['Hound'], kcBreedCode: 'WHP' },
       { name: 'Greyhound', groupId: groupMap['Hound'], kcBreedCode: 'GRY' },
       // Pastoral
