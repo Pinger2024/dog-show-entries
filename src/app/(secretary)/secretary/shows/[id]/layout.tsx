@@ -15,6 +15,12 @@ import { formatCurrency } from '@/lib/date-utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+} from '@/components/ui/card';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -197,28 +203,26 @@ export default function ShowManagementLayout({
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
-        {[
-          { label: 'Entries', value: stats?.totalEntries ?? 0, icon: Ticket },
-          { label: 'Confirmed', value: stats?.confirmedEntries ?? 0, icon: Users },
-          { label: 'Revenue', value: formatCurrency(stats?.totalRevenue ?? 0), icon: PoundSterling },
-          {
-            label: 'Days Until',
-            value: daysUntil(show.startDate) > 0 ? daysUntil(show.startDate) : 'Past',
-            icon: Clock,
-          },
-        ].map((stat) => (
-          <div
-            key={stat.label}
-            className="rounded-xl border bg-card text-card-foreground p-3 sm:p-4 shadow-sm"
-          >
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs sm:text-sm font-medium text-muted-foreground">
+        {(() => {
+          const days = daysUntil(show.startDate);
+          return [
+            { label: 'Entries', value: stats?.totalEntries ?? 0, icon: Ticket },
+            { label: 'Confirmed', value: stats?.confirmedEntries ?? 0, icon: Users },
+            { label: 'Revenue', value: formatCurrency(stats?.totalRevenue ?? 0), icon: PoundSterling },
+            { label: 'Days Until', value: days > 0 ? days : 'Past', icon: Clock },
+          ];
+        })().map((stat) => (
+          <Card key={stat.label}>
+            <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-4">
+              <CardDescription className="text-xs sm:text-sm font-medium">
                 {stat.label}
-              </span>
+              </CardDescription>
               <stat.icon className="size-3.5 text-muted-foreground" />
-            </div>
-            <p className="text-xl sm:text-2xl font-bold">{stat.value}</p>
-          </div>
+            </CardHeader>
+            <CardContent className="px-3 pb-3 pt-0 sm:px-4 sm:pb-4">
+              <p className="text-xl sm:text-2xl font-bold">{stat.value}</p>
+            </CardContent>
+          </Card>
         ))}
       </div>
 

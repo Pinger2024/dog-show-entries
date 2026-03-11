@@ -10,6 +10,7 @@ import {
   Archive,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
+import { formatCurrency } from '@/lib/date-utils';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -42,9 +43,6 @@ function formatDate(dateStr: string) {
   });
 }
 
-function formatCurrency(pence: number) {
-  return `£${(pence / 100).toFixed(2)}`;
-}
 
 export default function SecretaryDashboardPage() {
   const { data, isLoading } = trpc.secretary.getDashboard.useQuery();
