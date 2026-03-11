@@ -764,19 +764,6 @@ export function ShowSchedule({
           </View>
         )}
 
-        {/* Sponsorship */}
-        {sd?.sponsorships && sd.sponsorships.length > 0 && (
-          <View style={s.infoBlock}>
-            <Text style={s.infoLabel}>Sponsorship</Text>
-            {sd.sponsorships.map((sp, i) => (
-              <View key={i} style={s.feeRow}>
-                <Text style={{ ...s.feeLabel, fontWeight: 'bold' }}>{sp.sponsorName}</Text>
-                <Text style={s.feeLabel}>{sp.description}</Text>
-              </View>
-            ))}
-          </View>
-        )}
-
         <Text style={s.footer} render={footerRender} fixed />
       </Page>
 

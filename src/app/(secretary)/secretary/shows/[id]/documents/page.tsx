@@ -168,8 +168,7 @@ export default function DocumentsPage({
               <a
                 key={doc.label}
                 href={doc.href}
-                target="_blank"
-                rel="noopener noreferrer"
+                download
                 className="flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted"
               >
                 <div className="mt-0.5 shrink-0 text-muted-foreground">
@@ -242,8 +241,7 @@ export default function DocumentsPage({
               <a
                 key={doc.label}
                 href={doc.href}
-                target="_blank"
-                rel="noopener noreferrer"
+                download
                 className="flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted"
               >
                 <div className="mt-0.5 shrink-0 text-muted-foreground">
@@ -338,11 +336,7 @@ export default function DocumentsPage({
               </p>
             </div>
             <Button asChild>
-              <a
-                href={prizeCardHref}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
+              <a href={prizeCardHref} download>
                 <Download className="size-4" />
                 Download
               </a>

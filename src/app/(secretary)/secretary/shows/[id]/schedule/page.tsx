@@ -1,7 +1,7 @@
 'use client';
 
 import { use, useState, useEffect } from 'react';
-import { Plus, Trash2, Loader2, Save, Eye, Download } from 'lucide-react';
+import { Plus, Trash2, Loader2, Save, Eye, Download, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Accordion,
   AccordionContent,
@@ -29,19 +30,11 @@ import {
 import { Badge } from '@/components/ui/badge';
 import type { ScheduleData } from '@/server/db/schema/shows';
 
-interface Officer {
+interface OfficerWithGuarantor {
   name: string;
   position: string;
-}
-
-interface Guarantor {
-  name: string;
+  isGuarantor: boolean;
   address?: string;
-}
-
-interface Sponsorship {
-  sponsorName: string;
-  description: string;
 }
 
 export default function ScheduleSettingsPage({
@@ -66,11 +59,9 @@ export default function ScheduleSettingsPage({
   const [judgedOnGroupSystem, setJudgedOnGroupSystem] = useState(false);
   const [latestArrivalTime, setLatestArrivalTime] = useState('');
   const [showManager, setShowManager] = useState('');
-  const [officers, setOfficers] = useState<Officer[]>([]);
-  const [guarantors, setGuarantors] = useState<Guarantor[]>([]);
+  const [officers, setOfficers] = useState<OfficerWithGuarantor[]>([]);
   const [awardsDescription, setAwardsDescription] = useState('');
   const [prizeMoney, setPrizeMoney] = useState('');
-  const [sponsorships, setSponsorships] = useState<Sponsorship[]>([]);
   const [directions, setDirections] = useState('');
   const [catering, setCatering] = useState('');
   const [futureShowDates, setFutureShowDates] = useState('');
@@ -89,11 +80,23 @@ export default function ScheduleSettingsPage({
       setJudgedOnGroupSystem(existing.judgedOnGroupSystem ?? false);
       setLatestArrivalTime(existing.latestArrivalTime ?? '');
       setShowManager(existing.showManager ?? '');
-      setOfficers(existing.officers ?? []);
-      setGuarantors(existing.guarantors ?? []);
+      // Merge officers with guarantor info
+      const existingOfficers = existing.officers ?? [];
+      const existingGuarantors = existing.guarantors ?? [];
+      const guarantorNames = new Set(existingGuarantors.map((g) => g.name));
+      const guarantorAddresses = new Map(
+        existingGuarantors.map((g) => [g.name, g.address ?? ''])
+      );
+      setOfficers(
+        existingOfficers.map((o) => ({
+          name: o.name,
+          position: o.position,
+          isGuarantor: guarantorNames.has(o.name),
+          address: guarantorAddresses.get(o.name) ?? '',
+        }))
+      );
       setAwardsDescription(existing.awardsDescription ?? '');
       setPrizeMoney(existing.prizeMoney ?? '');
-      setSponsorships(existing.sponsorships ?? []);
       setDirections(existing.directions ?? '');
       setCatering(existing.catering ?? '');
       setFutureShowDates(existing.futureShowDates ?? '');
@@ -113,11 +116,14 @@ export default function ScheduleSettingsPage({
       judgedOnGroupSystem,
       latestArrivalTime: latestArrivalTime || undefined,
       showManager: showManager || undefined,
-      officers: officers.filter((o) => o.name),
-      guarantors: guarantors.filter((g) => g.name),
+      officers: officers
+        .filter((o) => o.name)
+        .map((o) => ({ name: o.name, position: o.position })),
+      guarantors: officers
+        .filter((o) => o.name && o.isGuarantor)
+        .map((o) => ({ name: o.name, address: o.address || undefined })),
       awardsDescription: awardsDescription || undefined,
       prizeMoney: prizeMoney || undefined,
-      sponsorships: sponsorships.filter((s) => s.sponsorName),
       directions: directions || undefined,
       catering: catering || undefined,
       futureShowDates: futureShowDates || undefined,
@@ -133,22 +139,16 @@ export default function ScheduleSettingsPage({
     }
   }
 
-  // ── Generic list helpers ──
-  function listHelpers<T extends Record<string, unknown>>(
-    items: T[],
-    setItems: React.Dispatch<React.SetStateAction<T[]>>,
-    defaults: T
-  ) {
-    return {
-      add: () => setItems([...items, defaults]),
-      remove: (idx: number) => setItems(items.filter((_, i) => i !== idx)),
-      update: (idx: number, field: keyof T, value: string) =>
-        setItems(items.map((item, i) => (i === idx ? { ...item, [field]: value } : item))),
-    };
+  // ── Officer list helpers ──
+  function addOfficer() {
+    setOfficers([...officers, { name: '', position: '', isGuarantor: false, address: '' }]);
   }
-  const officerOps = listHelpers(officers, setOfficers, { name: '', position: '' });
-  const guarantorOps = listHelpers(guarantors, setGuarantors, { name: '', address: '' });
-  const sponsorOps = listHelpers(sponsorships, setSponsorships, { sponsorName: '', description: '' });
+  function removeOfficer(idx: number) {
+    setOfficers(officers.filter((_, i) => i !== idx));
+  }
+  function updateOfficer(idx: number, field: keyof OfficerWithGuarantor, value: string | boolean) {
+    setOfficers(officers.map((o, i) => (i === idx ? { ...o, [field]: value } : o)));
+  }
 
   if (isLoading) {
     return (
@@ -171,11 +171,7 @@ export default function ScheduleSettingsPage({
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" asChild>
-            <a
-              href={`/api/schedule/${showId}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+            <a href={`/api/schedule/${showId}`} download>
               <Eye className="size-4" />
               Preview PDF
             </a>
@@ -392,101 +388,80 @@ export default function ScheduleSettingsPage({
                 <div>
                   <Label>Officers & Committee</Label>
                   <p className="text-xs text-muted-foreground">
-                    Optional — President, Chairman, Treasurer, etc.
+                    Add officers then tick the ones who are guarantors to the KC
                   </p>
                 </div>
-                <Button variant="outline" size="sm" onClick={officerOps.add}>
+                <Button variant="outline" size="sm" onClick={addOfficer}>
                   <Plus className="size-3.5" />
                   Add
                 </Button>
               </div>
               {officers.map((officer, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-start gap-2"
-                >
-                  <Input
-                    placeholder="Name"
-                    value={officer.name}
-                    onChange={(e) => officerOps.update(idx, 'name', e.target.value)}
-                    className="flex-1"
-                  />
-                  <Input
-                    placeholder="Position (e.g. Chairman)"
-                    value={officer.position}
-                    onChange={(e) =>
-                      officerOps.update(idx, 'position', e.target.value)
-                    }
-                    className="flex-1"
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="shrink-0"
-                    onClick={() => officerOps.remove(idx)}
-                  >
-                    <Trash2 className="size-4 text-muted-foreground" />
-                  </Button>
+                <div key={idx} className="space-y-2 rounded-lg border p-3">
+                  <div className="flex items-start gap-2">
+                    <Input
+                      placeholder="Name"
+                      value={officer.name}
+                      onChange={(e) => updateOfficer(idx, 'name', e.target.value)}
+                      className="flex-1"
+                    />
+                    <Input
+                      placeholder="Position (e.g. Chairman)"
+                      value={officer.position}
+                      onChange={(e) => updateOfficer(idx, 'position', e.target.value)}
+                      className="flex-1"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="shrink-0"
+                      onClick={() => removeOfficer(idx)}
+                    >
+                      <Trash2 className="size-4 text-muted-foreground" />
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-2 pl-1">
+                    <Checkbox
+                      id={`guarantor-${idx}`}
+                      checked={officer.isGuarantor}
+                      onCheckedChange={(checked) =>
+                        updateOfficer(idx, 'isGuarantor', !!checked)
+                      }
+                    />
+                    <Label
+                      htmlFor={`guarantor-${idx}`}
+                      className="text-sm font-normal text-muted-foreground cursor-pointer"
+                    >
+                      Guarantor to the KC
+                    </Label>
+                  </div>
+                  {officer.isGuarantor && (
+                    <Input
+                      placeholder="Address (optional)"
+                      value={officer.address ?? ''}
+                      onChange={(e) => updateOfficer(idx, 'address', e.target.value)}
+                      className="ml-6"
+                    />
+                  )}
                 </div>
               ))}
-            </div>
-
-            {/* Guarantors */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>Guarantors to the KC</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Required — address is optional
-                  </p>
-                </div>
-                <Button variant="outline" size="sm" onClick={guarantorOps.add}>
-                  <Plus className="size-3.5" />
-                  Add
-                </Button>
-              </div>
-              {guarantors.map((guarantor, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-start gap-2"
-                >
-                  <Input
-                    placeholder="Name"
-                    value={guarantor.name}
-                    onChange={(e) =>
-                      guarantorOps.update(idx, 'name', e.target.value)
-                    }
-                    className="flex-1"
-                  />
-                  <Input
-                    placeholder="Address (optional)"
-                    value={guarantor.address ?? ''}
-                    onChange={(e) =>
-                      guarantorOps.update(idx, 'address', e.target.value)
-                    }
-                    className="flex-1"
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="shrink-0"
-                    onClick={() => guarantorOps.remove(idx)}
-                  >
-                    <Trash2 className="size-4 text-muted-foreground" />
-                  </Button>
-                </div>
-              ))}
+              {officers.filter((o) => o.isGuarantor).length > 0 && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Check className="size-3" />
+                  {officers.filter((o) => o.isGuarantor).length} guarantor{officers.filter((o) => o.isGuarantor).length !== 1 ? 's' : ''} selected
+                </p>
+              )}
             </div>
           </AccordionContent>
         </AccordionItem>
 
-        {/* ── Awards & Sponsorship ── */}
+        {/* ── Awards ── */}
         <AccordionItem value="awards" className="rounded-xl border bg-card">
           <AccordionTrigger className="px-5 py-4 hover:no-underline">
             <div className="flex items-center gap-2">
-              <span className="font-semibold">Awards & Sponsorship</span>
+              <span className="font-semibold">Awards</span>
               <Badge variant="outline" className="text-[10px]">
-                Awards Required
+                Required
               </Badge>
             </div>
           </AccordionTrigger>
@@ -518,53 +493,6 @@ export default function ScheduleSettingsPage({
                 onChange={(e) => setPrizeMoney(e.target.value)}
                 placeholder="e.g. No prize money offered"
               />
-            </div>
-
-            {/* Sponsorships */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>Sponsorship / Donations</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Sponsor names and what they are sponsoring
-                  </p>
-                </div>
-                <Button variant="outline" size="sm" onClick={sponsorOps.add}>
-                  <Plus className="size-3.5" />
-                  Add
-                </Button>
-              </div>
-              {sponsorships.map((sponsor, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-start gap-2"
-                >
-                  <Input
-                    placeholder="Sponsor name"
-                    value={sponsor.sponsorName}
-                    onChange={(e) =>
-                      sponsorOps.update(idx, 'sponsorName', e.target.value)
-                    }
-                    className="flex-1"
-                  />
-                  <Input
-                    placeholder="What they sponsor"
-                    value={sponsor.description}
-                    onChange={(e) =>
-                      sponsorOps.update(idx, 'description', e.target.value)
-                    }
-                    className="flex-1"
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="shrink-0"
-                    onClick={() => sponsorOps.remove(idx)}
-                  >
-                    <Trash2 className="size-4 text-muted-foreground" />
-                  </Button>
-                </div>
-              ))}
             </div>
           </AccordionContent>
         </AccordionItem>
@@ -625,11 +553,7 @@ export default function ScheduleSettingsPage({
       {/* Bottom save bar */}
       <div className="flex justify-end gap-2 pb-4">
         <Button variant="outline" asChild>
-          <a
-            href={`/api/schedule/${showId}`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+          <a href={`/api/schedule/${showId}`} download>
             <Download className="size-4" />
             Download Schedule PDF
           </a>

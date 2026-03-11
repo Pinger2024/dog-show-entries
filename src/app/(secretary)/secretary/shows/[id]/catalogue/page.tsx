@@ -94,8 +94,7 @@ export default function CataloguePage({
             <Button variant="outline" asChild>
               <a
                 href={`/api/catalogue/${showId}/standard`}
-                target="_blank"
-                rel="noopener noreferrer"
+                download
               >
                 <FileText className="size-4" />
                 Standard
@@ -104,8 +103,7 @@ export default function CataloguePage({
             <Button variant="outline" asChild>
               <a
                 href={`/api/catalogue/${showId}/by-class`}
-                target="_blank"
-                rel="noopener noreferrer"
+                download
               >
                 <List className="size-4" />
                 By Class
@@ -114,8 +112,7 @@ export default function CataloguePage({
             <Button variant="outline" asChild>
               <a
                 href={`/api/catalogue/${showId}/alphabetical`}
-                target="_blank"
-                rel="noopener noreferrer"
+                download
               >
                 <SortAsc className="size-4" />
                 A–Z
@@ -124,8 +121,7 @@ export default function CataloguePage({
             <Button variant="outline" asChild>
               <a
                 href={`/api/catalogue/${showId}/absentees`}
-                target="_blank"
-                rel="noopener noreferrer"
+                download
               >
                 <Download className="size-4" />
                 Absentees
@@ -134,8 +130,7 @@ export default function CataloguePage({
             <Button variant="outline" asChild>
               <a
                 href={`/api/judges-book/${showId}`}
-                target="_blank"
-                rel="noopener noreferrer"
+                download
               >
                 <ClipboardList className="size-4" />
                 Judge&apos;s Book
