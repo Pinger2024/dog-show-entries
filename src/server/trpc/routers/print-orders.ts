@@ -16,6 +16,8 @@ import {
   getPrintableProducts,
   getProductByType,
   calculateSellingPrice,
+  CANCELLABLE_STATUSES,
+  formatOrderRef,
   type ShowStats,
 } from '@/lib/print-products';
 import {
@@ -359,7 +361,7 @@ export const printOrdersRouter = createTRPCRouter({
 
       await verifyShowAccess(ctx.db, ctx.session.user.id, order.showId);
 
-      if (!['draft', 'awaiting_payment'].includes(order.status)) {
+      if (!(CANCELLABLE_STATUSES as readonly string[]).includes(order.status)) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
           message: 'Only draft or awaiting payment orders can be cancelled',

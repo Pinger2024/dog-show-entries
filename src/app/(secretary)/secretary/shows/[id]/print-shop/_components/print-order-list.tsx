@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { Package, Truck, Clock, Check, AlertCircle, XCircle, Loader2 } from 'lucide-react';
+import { Package, Truck } from 'lucide-react';
 import { formatCurrency } from '@/lib/date-utils';
+import { PRINT_ORDER_STATUS_CONFIG, formatOrderRef } from '@/lib/print-products';
 import { Badge } from '@/components/ui/badge';
 import {
   Card,
@@ -29,18 +30,6 @@ interface PrintOrder {
   orderedBy: { id: string; name: string | null } | null;
 }
 
-const statusConfig: Record<string, { label: string; icon: typeof Package; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
-  draft: { label: 'Draft', icon: Clock, variant: 'outline' },
-  awaiting_payment: { label: 'Awaiting Payment', icon: Clock, variant: 'outline' },
-  paid: { label: 'Paid', icon: Check, variant: 'secondary' },
-  submitted: { label: 'Submitted to Printer', icon: Package, variant: 'secondary' },
-  in_production: { label: 'Printing', icon: Loader2, variant: 'default' },
-  dispatched: { label: 'Dispatched', icon: Truck, variant: 'default' },
-  delivered: { label: 'Delivered', icon: Check, variant: 'default' },
-  cancelled: { label: 'Cancelled', icon: XCircle, variant: 'outline' },
-  failed: { label: 'Failed', icon: AlertCircle, variant: 'destructive' },
-};
-
 export function PrintOrderList({
   orders,
   showId,
@@ -65,8 +54,7 @@ export function PrintOrderList({
   return (
     <div className="space-y-3">
       {orders.map((order) => {
-        const config = statusConfig[order.status] ?? statusConfig.draft;
-        const StatusIcon = config.icon;
+        const config = PRINT_ORDER_STATUS_CONFIG[order.status] ?? PRINT_ORDER_STATUS_CONFIG.draft;
 
         return (
           <Link
@@ -78,10 +66,9 @@ export function PrintOrderList({
               <CardHeader className="pb-2 p-4">
                 <div className="flex items-center justify-between gap-2">
                   <CardTitle className="text-sm">
-                    Order #{order.id.slice(0, 8).toUpperCase()}
+                    Order #{formatOrderRef(order.id)}
                   </CardTitle>
                   <Badge variant={config.variant} className="shrink-0">
-                    <StatusIcon className={`mr-1 size-3 ${order.status === 'in_production' ? 'animate-spin' : ''}`} />
                     {config.label}
                   </Badge>
                 </div>

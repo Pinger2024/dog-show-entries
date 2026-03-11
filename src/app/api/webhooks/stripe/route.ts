@@ -4,6 +4,7 @@ import { getStripe } from '@/server/services/stripe';
 import { db } from '@/server/db';
 import { entries, orders, payments, organisations, plans, users, printOrders, printOrderItems } from '@/server/db/schema';
 import { sendEntryConfirmationEmail, sendSecretaryNotificationEmail } from '@/server/services/email';
+import { formatOrderRef } from '@/lib/print-products';
 import type Stripe from 'stripe';
 
 export async function POST(request: NextRequest) {
@@ -372,7 +373,7 @@ async function submitPrintOrderToTradeprint(printOrderId: string) {
     const lastName = nameParts.slice(1).join(' ') || 'Secretary';
 
     const result = await submitOrder({
-      orderReference: `REMI-${order.id.slice(0, 8).toUpperCase()}`,
+      orderReference: `REMI-${formatOrderRef(order.id)}`,
       billingAddress: {
         firstName,
         lastName,

@@ -735,24 +735,27 @@ export async function populateShowWithTestData(opts: PopulateOptions): Promise<P
     const numJudges = show.showScope === 'single_breed' ? 2 : Math.min(7, targetBreeds.length > 10 ? 5 : 3);
     const judgeNames = pickN(JUDGE_NAMES, numJudges);
 
-    // Create judges (or find existing)
-    const judgeIds: string[] = [];
-    for (const judgeName of judgeNames) {
-      const existing = await db.query.judges.findFirst({
-        where: eq(schema.judges.name, judgeName),
-      });
-      if (existing) {
-        judgeIds.push(existing.id);
-      } else {
-        const [judge] = await db.insert(schema.judges).values({
-          name: judgeName,
-          kcNumber: `J${randomInt(1000, 9999)}`,
-          contactEmail: `${judgeName.split(' ').pop()?.toLowerCase()}@judges.example.com`,
-        }).returning();
-        judgeIds.push(judge.id);
-        result.judgesCreated++;
-      }
+    // Create judges (or find existing) — batch lookup + batch insert
+    const existingJudges = judgeNames.length > 0
+      ? await db.query.judges.findMany({
+          where: inArray(schema.judges.name, judgeNames),
+        })
+      : [];
+    const existingByName = new Map(existingJudges.map(j => [j.name, j.id]));
+    const newJudgeValues = judgeNames
+      .filter(name => !existingByName.has(name))
+      .map(name => ({
+        name,
+        kcNumber: `J${randomInt(1000, 9999)}`,
+        contactEmail: `${name.split(' ').pop()?.toLowerCase()}@judges.example.com`,
+      }));
+
+    if (newJudgeValues.length > 0) {
+      const inserted = await db.insert(schema.judges).values(newJudgeValues).returning({ id: schema.judges.id, name: schema.judges.name });
+      for (const j of inserted) existingByName.set(j.name, j.id);
+      result.judgesCreated += inserted.length;
     }
+    const judgeIds = judgeNames.map(name => existingByName.get(name)!);
 
     // Create rings (batch)
     const insertedRings = await db.insert(schema.rings).values(

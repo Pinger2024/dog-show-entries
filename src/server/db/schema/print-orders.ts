@@ -29,7 +29,6 @@ export const printOrders = pgTable(
       .notNull()
       .references(() => shows.id, { onDelete: 'cascade' }),
     orderedByUserId: uuid('ordered_by_user_id')
-      .notNull()
       .references(() => users.id, { onDelete: 'set null' }),
     organisationId: uuid('organisation_id')
       .notNull()

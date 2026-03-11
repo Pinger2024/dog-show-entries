@@ -32,6 +32,11 @@ function roundUp10(n: number): number {
   return Math.ceil(n / 10) * 10;
 }
 
+/** Suggested quantity for documents distributed per-attendee (catalogues, schedules) */
+function suggestPerAttendeeCopies(stats: ShowStats): number {
+  return roundUp10(stats.confirmedEntries + stats.catalogueOrders + Math.ceil(stats.confirmedEntries * 0.1));
+}
+
 export const PRINT_PRODUCTS: PrintProduct[] = [
   {
     documentType: 'catalogue',
@@ -47,8 +52,7 @@ export const PRINT_PRODUCTS: PrintProduct[] = [
       'Lamination': 'None',
       'Custom Size': 'N/A',
     },
-    suggestQuantity: (stats) =>
-      roundUp10(stats.confirmedEntries + stats.catalogueOrders + Math.ceil(stats.confirmedEntries * 0.1)),
+    suggestQuantity: suggestPerAttendeeCopies,
   },
   {
     documentType: 'prize_cards',
@@ -77,8 +81,7 @@ export const PRINT_PRODUCTS: PrintProduct[] = [
       'Paper Type': '130gsm Art Paper Silk Finish',
       'Lamination': 'None',
     },
-    suggestQuantity: (stats) =>
-      roundUp10(stats.confirmedEntries + stats.catalogueOrders + Math.ceil(stats.confirmedEntries * 0.1)),
+    suggestQuantity: suggestPerAttendeeCopies,
   },
   {
     documentType: 'ring_board',
@@ -144,3 +147,24 @@ export function calculateSellingPrice(tradeCostExVatPence: number): number {
   const sellingPrice = costIncVat * getMarkupMultiplier();
   return Math.ceil(sellingPrice);
 }
+
+/** Statuses where an order can be cancelled */
+export const CANCELLABLE_STATUSES = ['draft', 'awaiting_payment'] as const;
+
+/** Format a print order ID for display */
+export function formatOrderRef(id: string): string {
+  return id.slice(0, 8).toUpperCase();
+}
+
+/** Print order status display config — shared across all UI surfaces */
+export const PRINT_ORDER_STATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
+  draft: { label: 'Draft', variant: 'outline' },
+  awaiting_payment: { label: 'Awaiting Payment', variant: 'outline' },
+  paid: { label: 'Paid', variant: 'secondary' },
+  submitted: { label: 'With Printer', variant: 'secondary' },
+  in_production: { label: 'Printing', variant: 'default' },
+  dispatched: { label: 'Dispatched', variant: 'default' },
+  delivered: { label: 'Delivered', variant: 'default' },
+  cancelled: { label: 'Cancelled', variant: 'outline' },
+  failed: { label: 'Failed', variant: 'destructive' },
+};

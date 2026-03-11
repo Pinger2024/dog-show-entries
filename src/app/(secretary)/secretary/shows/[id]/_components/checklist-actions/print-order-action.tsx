@@ -5,18 +5,9 @@ import { ExternalLink, Printer, Truck, Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { trpc } from '@/lib/trpc';
+import { PRINT_ORDER_STATUS_CONFIG } from '@/lib/print-products';
 import { useShowId } from '../../_lib/show-context';
 import type { ActionPanelProps } from '../checklist-action-registry';
-
-const statusLabels: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' }> = {
-  draft: { label: 'Draft', variant: 'outline' },
-  awaiting_payment: { label: 'Awaiting Payment', variant: 'outline' },
-  paid: { label: 'Paid', variant: 'secondary' },
-  submitted: { label: 'With Printer', variant: 'secondary' },
-  in_production: { label: 'Printing', variant: 'default' },
-  dispatched: { label: 'Dispatched', variant: 'default' },
-  delivered: { label: 'Delivered', variant: 'default' },
-};
 
 export function PrintOrderAction(_props: ActionPanelProps) {
   const showId = useShowId();
@@ -36,7 +27,7 @@ export function PrintOrderAction(_props: ActionPanelProps) {
   );
 
   if (activeOrder) {
-    const config = statusLabels[activeOrder.status] ?? statusLabels.draft;
+    const config = PRINT_ORDER_STATUS_CONFIG[activeOrder.status] ?? PRINT_ORDER_STATUS_CONFIG.draft;
     return (
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <Badge variant={config.variant} className="w-fit">

@@ -219,29 +219,35 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
 
   if (!show) throw new Error(`Show ${showId} not found`);
 
-  const showClasses = await db.query.showClasses.findMany({
-    where: eq(schema.showClasses.showId, showId),
-    with: { classDefinition: true, breed: true },
-    orderBy: [asc(schema.showClasses.sortOrder), asc(schema.showClasses.classNumber)],
-  });
+  const [showClasses, judgeAssignments, showSponsors, classSponsorships] = await Promise.all([
+    db.query.showClasses.findMany({
+      where: eq(schema.showClasses.showId, showId),
+      with: { classDefinition: true, breed: true },
+      orderBy: [asc(schema.showClasses.sortOrder), asc(schema.showClasses.classNumber)],
+    }),
+    db.query.judgeAssignments.findMany({
+      where: eq(schema.judgeAssignments.showId, showId),
+      with: { judge: true, breed: true },
+    }),
+    db.query.showSponsors.findMany({
+      where: eq(schema.showSponsors.showId, showId),
+      with: { sponsor: true },
+    }),
+    db.query.classSponsorships.findMany({
+      where: eq(schema.classSponsorships.showId, showId),
+      with: { sponsor: true, showClass: { with: { classDefinition: true } } },
+    }),
+  ]);
 
-  const judgeAssignments = await db.query.judgeAssignments.findMany({
-    where: eq(schema.judgeAssignments.showId, showId),
-    with: { judge: true, breed: true },
-  });
-
-  const seenJudges = new Set<string>();
-  const judges: ScheduleJudge[] = [];
+  // Build judge→breeds map in O(N) instead of O(N²)
+  const breedsByJudge = new Map<string, string[]>();
   for (const ja of judgeAssignments) {
-    if (ja.judge?.name && !seenJudges.has(ja.judge.name)) {
-      seenJudges.add(ja.judge.name);
-      const breeds = judgeAssignments
-        .filter((j) => j.judge?.name === ja.judge?.name)
-        .map((j) => j.breed?.name)
-        .filter(Boolean) as string[];
-      judges.push({ name: ja.judge.name, breeds });
-    }
+    if (!ja.judge?.name) continue;
+    const list = breedsByJudge.get(ja.judge.name) ?? [];
+    if (ja.breed?.name) list.push(ja.breed.name);
+    breedsByJudge.set(ja.judge.name, list);
   }
+  const judges: ScheduleJudge[] = [...breedsByJudge.entries()].map(([name, breeds]) => ({ name, breeds }));
 
   const classes: ScheduleClass[] = showClasses.map((sc) => ({
     classNumber: sc.classNumber,
@@ -250,17 +256,6 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     sex: sc.sex,
     breedName: sc.breed?.name ?? null,
   }));
-
-  // Fetch sponsors
-  const showSponsors = await db.query.showSponsors.findMany({
-    where: eq(schema.showSponsors.showId, showId),
-    with: { sponsor: true },
-  });
-
-  const classSponsorships = await db.query.classSponsorships.findMany({
-    where: eq(schema.classSponsorships.showId, showId),
-    with: { sponsor: true, showClass: { with: { classDefinition: true } } },
-  });
 
   const sponsors: ScheduleSponsor[] = showSponsors.map((ss) => ({
     name: ss.sponsor.name,
@@ -314,38 +309,35 @@ export async function generateRingBoardPdf(showId: string): Promise<Buffer> {
 
   if (!show) throw new Error(`Show ${showId} not found`);
 
-  const rings = await db.query.rings.findMany({
-    where: eq(schema.rings.showId, showId),
-    orderBy: [asc(schema.rings.ringNumber)],
-  });
-
-  const judgeAssignments = await db.query.judgeAssignments.findMany({
-    where: eq(schema.judgeAssignments.showId, showId),
-    with: { judge: true, breed: true, ring: true },
-  });
-
-  const showClasses = await db.query.showClasses.findMany({
-    where: eq(schema.showClasses.showId, showId),
-    with: { classDefinition: true, breed: true },
-    orderBy: [asc(schema.showClasses.sortOrder), asc(schema.showClasses.classNumber)],
-  });
-
-  // Count entries per class
-  const entryCountRows = await db
-    .select({
+  const [rings, judgeAssignments, showClasses, entryCountRows] = await Promise.all([
+    db.query.rings.findMany({
+      where: eq(schema.rings.showId, showId),
+      orderBy: [asc(schema.rings.ringNumber)],
+    }),
+    db.query.judgeAssignments.findMany({
+      where: eq(schema.judgeAssignments.showId, showId),
+      with: { judge: true, breed: true, ring: true },
+    }),
+    db.query.showClasses.findMany({
+      where: eq(schema.showClasses.showId, showId),
+      with: { classDefinition: true, breed: true },
+      orderBy: [asc(schema.showClasses.sortOrder), asc(schema.showClasses.classNumber)],
+    }),
+    db.select({
       showClassId: schema.entryClasses.showClassId,
       count: sql<number>`count(*)`,
     })
-    .from(schema.entryClasses)
-    .innerJoin(schema.entries, eq(schema.entryClasses.entryId, schema.entries.id))
-    .where(
-      and(
-        eq(schema.entries.showId, showId),
-        eq(schema.entries.status, 'confirmed'),
-        isNull(schema.entries.deletedAt)
+      .from(schema.entryClasses)
+      .innerJoin(schema.entries, eq(schema.entryClasses.entryId, schema.entries.id))
+      .where(
+        and(
+          eq(schema.entries.showId, showId),
+          eq(schema.entries.status, 'confirmed'),
+          isNull(schema.entries.deletedAt)
+        )
       )
-    )
-    .groupBy(schema.entryClasses.showClassId);
+      .groupBy(schema.entryClasses.showClassId),
+  ]);
 
   const entryCountMap = new Map<string, number>();
   for (const row of entryCountRows) {
