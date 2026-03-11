@@ -116,10 +116,16 @@ export async function getAvailableQuantities(
       .setProductionData(specs)
       .execute();
 
-    // Response is an array of quantity numbers
-    const quantities: number[] = Array.isArray(response)
-      ? response.map(Number).filter((n) => !isNaN(n) && n > 0)
-      : [];
+    // Response is an object with numeric keys: {0: 50, 1: 100, 2: 200, ...}
+    // or possibly an array — handle both formats
+    const rawValues = Array.isArray(response)
+      ? response
+      : typeof response === 'object' && response !== null
+        ? Object.values(response)
+        : [];
+    const quantities: number[] = rawValues
+      .map(Number)
+      .filter((n) => !isNaN(n) && n > 0);
 
     return quantities.sort((a, b) => a - b);
   } catch (err: unknown) {

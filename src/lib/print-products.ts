@@ -77,9 +77,11 @@ export const PRINT_PRODUCTS: PrintProduct[] = [
     tradeprintProductName: 'Folded Leaflets',
     tradeprintProductId: 'PRD-LBMTK4ZV',
     defaultSpecs: {
-      'Size': 'A5',
+      'Size': 'A5 Landscape',
       'Paper Type': '130gsm Art Paper Silk Finish',
-      'Lamination': 'None',
+      'Sides Printed': 'Double Sided',
+      'Folding': 'Folded to 4pp A6',
+      'Sets': '1',
     },
     suggestQuantity: suggestPerAttendeeCopies,
   },
