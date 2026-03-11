@@ -201,7 +201,7 @@ export async function sendEntryConfirmationEmail(orderId: string) {
       <!-- Exhibitor -->
       <div style="padding: 16px 24px; border-top: 1px solid #e5e5e5; font-size: 13px; color: #666;">
         <strong style="color: #444;">Exhibitor:</strong> ${exhibitor.name ?? exhibitor.email}
-        ${exhibitor.kcAccountNo ? `<br><strong style="color: #444;">KC Account:</strong> ${exhibitor.kcAccountNo}` : ''}
+        ${exhibitor.kcAccountNo ? `<br><strong style="color: #444;">RKC Account:</strong> ${exhibitor.kcAccountNo}` : ''}
       </div>
     </div>
 
@@ -335,7 +335,7 @@ export async function sendSecretaryNotificationEmail(orderId: string) {
         <p style="margin: 0 0 4px; font-size: 16px; font-weight: 600;">${show.name}</p>
         <p style="margin: 0 0 16px; font-size: 14px; color: #666;">
           Exhibitor: <strong>${exhibitor?.name ?? exhibitor?.email ?? 'Unknown'}</strong>
-          ${exhibitor?.kcAccountNo ? ` · KC: ${exhibitor.kcAccountNo}` : ''}
+          ${exhibitor?.kcAccountNo ? ` · RKC: ${exhibitor.kcAccountNo}` : ''}
         </p>
         <table style="width: 100%; border-collapse: collapse;">
           <thead>
@@ -358,7 +358,7 @@ export async function sendSecretaryNotificationEmail(orderId: string) {
           <p style="margin: 0; font-size: 14px; font-weight: 600;">Total: ${formatFee(order.totalAmount)}</p>
         </div>
         <div style="margin-top: 20px; text-align: center;">
-          ${btn(`${APP_URL}/secretary/shows/${show.id}/entries`, 'View All Entries', '#2563eb')}
+          ${btn(`${APP_URL}/secretary/shows/${show.slug ?? show.id}/entries`, 'View All Entries', '#2563eb')}
         </div>
       </div>
     </div>

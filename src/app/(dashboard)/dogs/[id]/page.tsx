@@ -177,7 +177,7 @@ function TitleProgressCard({ dogId }: { dogId: string }) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">KC Title Progress</CardTitle>
+          <CardTitle className="text-base">RKC Title Progress</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-center py-8">
@@ -213,7 +213,7 @@ function TitleProgressCard({ dogId }: { dogId: string }) {
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
               <Trophy className="size-4" />
-              KC Title Progress
+              RKC Title Progress
               {isPro && (
                 <Badge className="bg-gradient-to-r from-amber-500 to-yellow-500 text-white text-[10px] gap-0.5">
                   <Crown className="size-3" />
@@ -310,7 +310,7 @@ function TitleProgressCard({ dogId }: { dogId: string }) {
           <p className="text-sm text-muted-foreground">
             {data.existingTitles.length > 0
               ? 'All tracked titles have been achieved!'
-              : 'Enter championship shows to start tracking progress toward KC titles.'}
+              : 'Enter championship shows to start tracking progress toward RKC titles.'}
           </p>
         )}
 
@@ -1006,7 +1006,7 @@ export default function DogDetailPage({
           <CardContent className="space-y-3">
             <DetailRow label="Registered Name" value={dog.registeredName} />
             <DetailRow
-              label="KC Reg Number"
+              label="RKC Reg Number"
               value={dog.kcRegNumber ?? 'Not registered'}
             />
           </CardContent>
@@ -1120,7 +1120,7 @@ export default function DogDetailPage({
         </Card>
       )}
 
-      {/* KC Title Progress */}
+      {/* RKC Title Progress */}
       <TitleProgressCard dogId={id} />
 
       {/* Achievements (with self-report) */}

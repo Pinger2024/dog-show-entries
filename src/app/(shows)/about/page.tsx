@@ -20,7 +20,7 @@ import { AnimateIn } from '@/components/animate-in';
 export const metadata = {
   title: 'About Remi — Modern Dog Show Management',
   description:
-    'The trusted platform for entering KC-licensed dog shows. Online entries, secure payments, live results, and automatic catalogues — built for exhibitors and show secretaries.',
+    'The trusted platform for entering RKC-licensed dog shows. Online entries, secure payments, live results, and automatic catalogues — built for exhibitors and show secretaries.',
 };
 
 const FEATURES = [
@@ -49,7 +49,7 @@ const FEATURES = [
     icon: BookOpen,
     title: 'Automatic Catalogues',
     description:
-      'Professional print-ready catalogues generated in seconds — standard, by-class, alphabetical, and absentee formats. Complete with KC registration numbers, pedigree details, and proper breed group ordering.',
+      'Professional print-ready catalogues generated in seconds — standard, by-class, alphabetical, and absentee formats. Complete with RKC registration numbers, pedigree details, and proper breed group ordering.',
     colour: 'bg-amber-50 text-amber-600',
   },
   {
@@ -79,7 +79,7 @@ const EXHIBITOR_BENEFITS = [
 const SECRETARY_BENEFITS = [
   'Publish shows with custom classes, fees, and eligibility rules',
   'Accept online entries with automatic payment reconciliation',
-  'Assign catalogue numbers in canonical KC breed group order',
+  'Assign catalogue numbers in canonical RKC breed group order',
   'Generate four catalogue PDF formats at the click of a button',
   'Financial reports: income by class, VAT summary, refund tracking',
   'Manage stewards and ringside judging on show day',

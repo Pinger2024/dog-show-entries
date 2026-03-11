@@ -1,4 +1,4 @@
-/** The seven KC breed groups used for club registration. */
+/** The seven RKC breed groups used for club registration. */
 export const BREED_GROUPS = [
   'Gundog',
   'Hound',

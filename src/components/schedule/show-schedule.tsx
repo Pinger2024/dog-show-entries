@@ -769,7 +769,7 @@ export function ShowSchedule({
             {classCount} Class{classCount !== 1 ? 'es' : ''}
           </Text>
 
-          {/* KC jurisdiction */}
+          {/* RKC jurisdiction */}
           <Text style={s.coverRegulatory}>
             Held under Royal Kennel Club Rules &amp; Show Regulations F(1)
           </Text>
@@ -1449,7 +1449,7 @@ export function ShowSchedule({
         <View style={s.warningBox} wrap={false}>
           <Text style={s.warningTitle}>YOUR DOG&apos;S WELFARE</Text>
           <Text style={s.warningText}>
-            Your dog is vulnerable and at risk during hot weather and the Royal Kennel Club offers the following guidance to help you guide your dog(s) through the do&apos;s and don&apos;ts of travelling to and whilst at a KC licensed event.
+            Your dog is vulnerable and at risk during hot weather and the Royal Kennel Club offers the following guidance to help you guide your dog(s) through the do&apos;s and don&apos;ts of travelling to and whilst at a RKC licensed event.
           </Text>
           <Text style={{ ...s.warningText, marginTop: 3 }}>
             {'\u2022'} When travelling to a show please take a moment to consider whether the route to the show is on a busy motorway route, and leave earlier to avoid increased time in traffic.{'\n'}
@@ -1578,7 +1578,7 @@ export function ShowSchedule({
             <View style={s.formLine} />
           </View>
           <View style={s.formField}>
-            <Text style={s.formLabel}>KC Reg. No.</Text>
+            <Text style={s.formLabel}>RKC Reg. No.</Text>
             <View style={{ ...s.formLine, maxWidth: 110 }} />
             <Text style={{ ...s.formLabel, marginLeft: 12 }}>Sex</Text>
             <View style={{ ...s.formLine, maxWidth: 60 }} />

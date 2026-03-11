@@ -53,7 +53,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             'If you did not request this email, you can safely ignore it.',
             '',
             '— Remi (remishowmanager.co.uk)',
-            'The dog show entry management platform for UK KC-licensed shows.',
+            'The dog show entry management platform for UK RKC-licensed shows.',
           ].join('\n'),
           html: `<!DOCTYPE html>
 <html>
@@ -100,7 +100,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         &mdash; Dog show entries made simple.
       </p>
       <p style="margin: 6px 0 0;">
-        KC-licensed show management for exhibitors and secretaries across the UK.
+        RKC-licensed show management for exhibitors and secretaries across the UK.
       </p>
     </div>
   </div>

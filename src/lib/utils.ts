@@ -56,7 +56,7 @@ export function formatDogName(
 }
 
 /**
- * Formats a dog's name for KC catalogue output.
+ * Formats a dog's name for RKC catalogue output.
  * Title prefix in Title Case ("Ch.") + registered name in UPPER CASE.
  * e.g. "Ch. DONABERG DOYEN AT DONABERG"
  */

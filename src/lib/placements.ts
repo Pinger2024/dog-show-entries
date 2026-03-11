@@ -29,7 +29,7 @@ export function getPlacementShortLabel(value: number): string {
 }
 
 /**
- * Returns available KC placements based on show scope.
+ * Returns available RKC placements based on show scope.
  * All-breed (general/group): 1st–HC (6 places)
  * Breed (single_breed): 1st–Commended (all 7)
  */

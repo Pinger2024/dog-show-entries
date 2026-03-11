@@ -290,7 +290,7 @@ export function DogProfileClient({ id }: { id: string }) {
   if (dog.colour) details.push({ label: 'Colour', value: dog.colour });
   if (dog.kcRegNumber)
     details.push({
-      label: 'KC Reg',
+      label: 'RKC Reg',
       value: <span className="font-mono text-xs tracking-wider">{dog.kcRegNumber}</span>,
     });
 

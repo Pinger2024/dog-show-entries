@@ -614,7 +614,7 @@ export function ShowDetailClient() {
             <dl className="mt-5 space-y-2.5 text-sm">
               <InfoRow label="Type" value={showTypeLabels[show.showType] ?? show.showType} />
               <InfoRow label="Scope" value={show.showScope.replace(/_/g, ' ')} capitalize />
-              {show.kcLicenceNo && <InfoRow label="KC Licence" value={show.kcLicenceNo} />}
+              {show.kcLicenceNo && <InfoRow label="RKC Licence" value={show.kcLicenceNo} />}
               {show.entryCloseDate && (
                 <InfoRow
                   label="Entries Close"

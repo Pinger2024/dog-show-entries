@@ -122,7 +122,7 @@ async function seedClydeValley() {
       entryCloseDate: new Date('2026-05-03T23:59:00Z'),
       status: 'entries_open',
       description:
-        'The Clyde Valley German Shepherd Dog Club Open Show. Judging commences at 10:00am. All exhibitors welcome. Refreshments available. Open to all KC registered German Shepherd Dogs.',
+        'The Clyde Valley German Shepherd Dog Club Open Show. Judging commences at 10:00am. All exhibitors welcome. Refreshments available. Open to all RKC registered German Shepherd Dogs.',
     })
     .returning();
 

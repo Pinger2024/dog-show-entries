@@ -27,12 +27,12 @@ export const metadata: Metadata = {
     template: '%s | Remi',
   },
   description:
-    'Find upcoming KC-licensed shows, enter all your dogs in one place, and manage your entries from home or ringside. Trusted by exhibitors and show secretaries.',
+    'Find upcoming RKC-licensed shows, enter all your dogs in one place, and manage your entries from home or ringside. Trusted by exhibitors and show secretaries.',
   manifest: '/manifest.json',
   keywords: [
     'dog shows',
     'dog show entries',
-    'KC shows',
+    'RKC shows',
     'royal kennel club',
     'conformation',
     'show entries online',

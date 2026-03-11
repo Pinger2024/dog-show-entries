@@ -203,7 +203,7 @@ export default function EnterShowPage() {
       ? showClasses.filter((sc) => !sc.sex || sc.sex === selectedDogSex)
       : showClasses;
 
-    // KC rule: AVNSC classes are hidden when the show has breed-specific classes
+    // RKC rule: AVNSC classes are hidden when the show has breed-specific classes
     // for this breed. Check if any classes have the dog's breedId set.
     const hasBreedClasses = sexFiltered.some((sc) => sc.breedId != null);
     const isAvnsc = (name: string) =>
@@ -617,7 +617,7 @@ export default function EnterShowPage() {
                       </p>
                       {dog.kcRegNumber && (
                         <p className="text-xs text-muted-foreground">
-                          KC: {dog.kcRegNumber}
+                          RKC: {dog.kcRegNumber}
                         </p>
                       )}
                     </div>

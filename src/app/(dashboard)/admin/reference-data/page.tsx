@@ -274,7 +274,7 @@ function BreedGroupsTab() {
                 Breed Groups
               </CardTitle>
               <CardDescription>
-                KC breed groups that organise breeds (e.g. Gundog, Hound,
+                RKC breed groups that organise breeds (e.g. Gundog, Hound,
                 Pastoral).
               </CardDescription>
             </div>
@@ -609,7 +609,7 @@ function BreedsTab() {
                       <span>{breed.group?.name ?? 'No group'}</span>
                       {breed.kcBreedCode && (
                         <span className="font-mono">
-                          KC: {breed.kcBreedCode}
+                          RKC: {breed.kcBreedCode}
                         </span>
                       )}
                     </div>
@@ -691,7 +691,7 @@ function BreedsTab() {
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="breed-kc">KC Breed Code</Label>
+                <Label htmlFor="breed-kc">RKC Breed Code</Label>
                 <Input
                   id="breed-kc"
                   placeholder="e.g. 2105"

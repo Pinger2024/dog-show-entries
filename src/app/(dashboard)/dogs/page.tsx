@@ -145,7 +145,7 @@ export default function DogsPage() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/60" />
               <Input
-                placeholder="Search by name, breed, or KC number..."
+                placeholder="Search by name, breed, or RKC number..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="h-12 pl-10 text-[0.9375rem]"
@@ -195,7 +195,7 @@ export default function DogsPage() {
                       </div>
                       {dog.kcRegNumber && (
                         <p className="text-xs text-muted-foreground">
-                          KC Reg: {dog.kcRegNumber}
+                          RKC Reg: {dog.kcRegNumber}
                         </p>
                       )}
 

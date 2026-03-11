@@ -13,7 +13,7 @@ describe('KC_PLACEMENTS', () => {
     expect(KC_PLACEMENTS[6].value).toBe(7);
   });
 
-  it('has expected labels for standard KC placements', () => {
+  it('has expected labels for standard RKC placements', () => {
     expect(KC_PLACEMENTS[0].label).toBe('1st');
     expect(KC_PLACEMENTS[1].label).toBe('2nd');
     expect(KC_PLACEMENTS[2].label).toBe('3rd');

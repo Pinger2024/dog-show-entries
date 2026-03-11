@@ -23,7 +23,7 @@ interface FrontMatterProps {
   show: CatalogueShowInfo;
 }
 
-/** Cover page for the KC standard catalogue */
+/** Cover page for the RKC standard catalogue */
 export function CoverPage({ show }: FrontMatterProps) {
   const showTypeLabel = show.showType ? SHOW_TYPE_LABELS[show.showType] : undefined;
 
@@ -60,7 +60,7 @@ export function CoverPage({ show }: FrontMatterProps) {
 
       {show.kcLicenceNo && (
         <Text style={{ ...styles.coverDetail, marginTop: 12 }}>
-          KC Licence No: {show.kcLicenceNo}
+          RKC Licence No: {show.kcLicenceNo}
         </Text>
       )}
 

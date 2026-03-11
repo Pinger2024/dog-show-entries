@@ -26,7 +26,7 @@ const steps = [
     icon: Search,
     title: 'Find a Show',
     description:
-      'Browse championship, open, and companion shows by breed, location, or date. All KC-licensed.',
+      'Browse championship, open, and companion shows by breed, location, or date. All RKC-licensed.',
   },
   {
     icon: PenTool,
@@ -83,7 +83,7 @@ const secretaryFeatures = [
 
 const stats = [
   { label: 'Show Types Supported', value: '6', icon: CalendarDays },
-  { label: 'KC Recognised Breeds', value: '220+', icon: Dog },
+  { label: 'RKC Recognised Breeds', value: '220+', icon: Dog },
   { label: 'Live Result Updates', value: '10s', icon: Zap },
 ];
 
@@ -105,7 +105,7 @@ export default function HomePage() {
             <div className="mx-auto max-w-3xl text-center">
               <div className="mb-6 sm:mb-8 inline-flex animate-fade-in items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 sm:px-5 py-2 text-xs sm:text-[0.9375rem] font-medium text-primary">
                 <CheckCircle2 className="size-3.5 sm:size-4" />
-                KC-Licensed Shows — Now Open for Entry
+                RKC-Licensed Shows — Now Open for Entry
               </div>
               <h1 className="animate-fade-in-up font-serif text-3xl font-bold leading-[1.15] tracking-tight sm:text-4xl lg:text-5xl">
                 Enter Dog Shows{' '}
@@ -114,7 +114,7 @@ export default function HomePage() {
                 </span>
               </h1>
               <p className="gold-rule-center mx-auto mt-4 sm:mt-6 max-w-2xl animate-fade-in-up text-sm sm:text-lg leading-relaxed text-muted-foreground [animation-delay:100ms] lg:text-xl">
-                Find upcoming KC-licensed shows, enter all your dogs in one
+                Find upcoming RKC-licensed shows, enter all your dogs in one
                 place, and manage your entries from home or ringside. Trusted by
                 exhibitors and show secretaries across the country.
               </p>

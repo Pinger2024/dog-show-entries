@@ -1,7 +1,7 @@
 /**
- * KC dog lookup via direct HTML fetch + parsing.
+ * RKC dog lookup via direct HTML fetch + parsing.
  *
- * The KC Health Test Results Finder at royalkennelclub.com is server-rendered
+ * The RKC Health Test Results Finder at royalkennelclub.com is server-rendered
  * HTML with consistent CSS classes, so we can fetch and parse it directly —
  * no Firecrawl, no LLM, no browser automation needed.
  */
@@ -15,7 +15,7 @@ export type KcDogResult = {
   dam: string;
   breeder: string;
   colour?: string;
-  /** Dog ID from the KC website — used to fetch the full profile page */
+  /** Dog ID from the RKC website — used to fetch the full profile page */
   dogId?: string;
 };
 
@@ -31,14 +31,14 @@ export type KcDogProfile = {
 const KC_SEARCH_URL = 'https://www.royalkennelclub.com/search/health-test-results-finder/';
 
 /**
- * Search the KC Health Test Results Finder and return ALL matching dogs.
+ * Search the RKC Health Test Results Finder and return ALL matching dogs.
  *
  * Fetches the search results page with ?Filter= and parses every dog card
  * from the server-rendered HTML. Returns up to 12 results (one page).
  */
 export async function searchKcDogs(query: string): Promise<KcDogResult[]> {
   try {
-    console.log(`[kc-lookup] Searching KC for "${query}"...`);
+    console.log(`[kc-lookup] Searching RKC for "${query}"...`);
 
     const searchUrl = `${KC_SEARCH_URL}?Filter=${encodeURIComponent(query)}`;
     const response = await fetch(searchUrl, {
@@ -48,7 +48,7 @@ export async function searchKcDogs(query: string): Promise<KcDogResult[]> {
     });
 
     if (!response.ok) {
-      console.error(`[kc-lookup] KC returned HTTP ${response.status}`);
+      console.error(`[kc-lookup] RKC returned HTTP ${response.status}`);
       return [];
     }
 
@@ -96,7 +96,7 @@ export async function searchKcDogs(query: string): Promise<KcDogResult[]> {
 
     const filtered = results.filter((r) => {
       if (!r.dateOfBirth) return true; // keep if no DOB available
-      // KC dates are DD/MM/YYYY — parse accordingly
+      // RKC dates are DD/MM/YYYY — parse accordingly
       const parts = r.dateOfBirth.split('/');
       if (parts.length === 3) {
         const dob = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
@@ -110,7 +110,7 @@ export async function searchKcDogs(query: string): Promise<KcDogResult[]> {
     console.log(`[kc-lookup] Found ${results.length} dogs, ${filtered.length} within last 18 years`);
     return filtered;
   } catch (error) {
-    console.error('[kc-lookup] KC lookup failed:', error);
+    console.error('[kc-lookup] RKC lookup failed:', error);
     return [];
   }
 }
@@ -150,7 +150,7 @@ function extractBetween(html: string, startMarker: string, endMarker: string): s
 }
 
 /**
- * Extract a summary field value from the KC breed-summary markup.
+ * Extract a summary field value from the RKC breed-summary markup.
  * Looks for: <span class="m-breed-summary__key-label">fieldName</span>
  * Then finds the next: <dd class="m-breed-summary__value">value</dd>
  */
@@ -175,16 +175,16 @@ function extractSummaryField(html: string, fieldName: string): string | null {
 const KC_PROFILE_URL = 'https://www.royalkennelclub.com/search/dog-profile/';
 
 /**
- * The default timeout for profile page fetches. Keep this tight — if the KC
+ * The default timeout for profile page fetches. Keep this tight — if the RKC
  * site is having a slow day we don't want to block the user.
  */
 const PROFILE_TIMEOUT_MS = 4000;
 
 /**
- * Fetch the KC dog profile page and extract sire, dam, breeder, and other
+ * Fetch the RKC dog profile page and extract sire, dam, breeder, and other
  * pedigree details.
  *
- * Uses AbortController with a timeout so that if the KC site is slow on a
+ * Uses AbortController with a timeout so that if the RKC site is slow on a
  * given day, we gracefully return null instead of blocking the user.
  */
 export async function fetchKcDogProfile(
@@ -206,7 +206,7 @@ export async function fetchKcDogProfile(
     });
 
     if (!response.ok) {
-      console.error(`[kc-profile] KC returned HTTP ${response.status}`);
+      console.error(`[kc-profile] RKC returned HTTP ${response.status}`);
       return null;
     }
 
@@ -228,7 +228,7 @@ export async function fetchKcDogProfile(
 }
 
 /**
- * Parse the KC dog profile page HTML and extract pedigree fields.
+ * Parse the RKC dog profile page HTML and extract pedigree fields.
  *
  * The profile page has a pedigree tree section with sire/dam and a summary
  * section with breeder, colour, registration type, etc.
@@ -266,7 +266,7 @@ function parseKcDogProfile(html: string): KcDogProfile | null {
 }
 
 /**
- * Extract the immediate sire and dam from the KC pedigree tree.
+ * Extract the immediate sire and dam from the RKC pedigree tree.
  *
  * The pedigree tree is a nested <ul>/<li> structure:
  *   Root (m-pedigree-graph__dog--current)
@@ -332,7 +332,7 @@ function extractPedigreeParents(html: string): { sire: string | null; dam: strin
 }
 
 /**
- * Extract a field from the KC dog profile header/summary.
+ * Extract a field from the RKC dog profile header/summary.
  *
  * The profile page uses two different markup patterns:
  *   1. o-dog-header__details-item with <dt>/<dd> pairs

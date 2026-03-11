@@ -3,20 +3,20 @@
  *
  * This module provides:
  * - Registration number format validation
- * - A link to the KC Health Test Results Finder for manual verification
- * - Dog lookup via Firecrawl web scraping of the KC website
+ * - A link to the RKC Health Test Results Finder for manual verification
+ * - Dog lookup via Firecrawl web scraping of the RKC website
  */
 
 /**
  * Validate a Royal Kennel Club registration number format.
  *
- * KC registration numbers come in several formats:
+ * RKC registration numbers come in several formats:
  * - Standard pedigree: 2-4 letters followed by 5-6 digits (e.g., "AK03456789")
  * - Older format: letters/digits with slashes (e.g., "0123AB/2019")
  * - Activity register: "ATC" prefix
  *
  * This is a lenient check — we accept alphanumeric strings of 5-15 characters
- * with optional slashes, as the KC has used many formats over the decades.
+ * with optional slashes, as the RKC has used many formats over the decades.
  */
 export function isValidKcRegNumber(kcRegNumber: string): boolean {
   const cleaned = kcRegNumber.trim();
@@ -26,14 +26,14 @@ export function isValidKcRegNumber(kcRegNumber: string): boolean {
 }
 
 /**
- * Format a KC registration number for display.
+ * Format a RKC registration number for display.
  */
 export function formatKcRegNumber(kcRegNumber: string): string {
   return kcRegNumber.trim().toUpperCase();
 }
 
 /**
- * Get the KC Health Test Results Finder URL for manual dog lookup.
+ * Get the RKC Health Test Results Finder URL for manual dog lookup.
  * Users can search by registration number or registered name.
  */
 export function getKcLookupUrl(): string {
@@ -41,7 +41,7 @@ export function getKcLookupUrl(): string {
 }
 
 /**
- * Look up a dog on the KC Health Test Results Finder via Firecrawl web scraping.
+ * Look up a dog on the RKC Health Test Results Finder via Firecrawl web scraping.
  *
  * Accepts a registration number or registered name. Returns structured dog
  * details if found, or null if the lookup fails or no results are found.

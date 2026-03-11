@@ -136,7 +136,7 @@ export async function GET(
     orderBy: [asc(schema.entries.catalogueNumber)],
   });
 
-  // Use KC catalogue formatting for standard and by-breed formats
+  // Use RKC catalogue formatting for standard and by-breed formats
   const useKCFormat = format === 'standard' || (format === 'by-class' && show.showScope !== 'single_breed');
 
   const catalogueEntries: CatalogueEntry[] = entries.map((entry) => ({

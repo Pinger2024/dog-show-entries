@@ -112,7 +112,7 @@ export function ProfileForm() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="kc-account">KC account number</Label>
+              <Label htmlFor="kc-account">RKC account number</Label>
               <Input
                 id="kc-account"
                 value={kcAccountNo}

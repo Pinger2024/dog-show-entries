@@ -1,5 +1,5 @@
 /**
- * Default show checklist items based on KC regulations and best practices.
+ * Default show checklist items based on RKC regulations and best practices.
  * Items with `autoDetectKey` will auto-complete when the corresponding
  * Remi data is present. `relativeDueDays` is days before the show
  * (positive = before, negative = after show date).
@@ -32,7 +32,7 @@ export interface DefaultChecklistItem {
 export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
   // ── Pre-Planning (12+ months out) ─────────────────────
   {
-    title: 'Apply for KC show licence',
+    title: 'Apply for RKC show licence',
     description:
       'Submit licence application and fee to the Royal Kennel Club. Per regulation F4, this must be done at least 12 months before the show date.',
     phase: 'pre_planning',
@@ -50,7 +50,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
   },
   {
     title: 'Confirm venue',
-    description: 'Book and confirm the show venue. Ensure it meets KC requirements for space, access and facilities.',
+    description: 'Book and confirm the show venue. Ensure it meets RKC requirements for space, access and facilities.',
     phase: 'pre_planning',
     sortOrder: 2,
     relativeDueDays: 300,
@@ -71,7 +71,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
   {
     title: 'Receive judge acceptance letters',
     description:
-      'Stage 2 of three-part contract: judges return written acceptance. For championship CC judges, KC committee approval may also be required.',
+      'Stage 2 of three-part contract: judges return written acceptance. For championship CC judges, RKC committee approval may also be required.',
     phase: 'planning',
     sortOrder: 0,
     relativeDueDays: 270,
@@ -88,9 +88,9 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     perJudge: true,
   },
   {
-    title: 'Record KC licence number',
+    title: 'Record RKC licence number',
     description:
-      'Once your licence is approved, enter the KC licence number in the show details.',
+      'Once your licence is approved, enter the RKC licence number in the show details.',
     phase: 'planning',
     sortOrder: 2,
     relativeDueDays: 240,
@@ -180,7 +180,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     autoDetectKey: 'stewards_assigned',
   },
   {
-    title: 'Obtain challenge certificates from KC',
+    title: 'Obtain challenge certificates from RKC',
     description: 'Championship shows only — request and receive the physical CCs from the Royal Kennel Club.',
     phase: 'pre_show',
     sortOrder: 6,
@@ -199,7 +199,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
   {
     title: 'Close entries',
     description:
-      'KC regulations require entries to close at least 14 days before the show date.',
+      'RKC regulations require entries to close at least 14 days before the show date.',
     phase: 'final_prep',
     sortOrder: 0,
     relativeDueDays: 14,
@@ -253,8 +253,8 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     relativeDueDays: 0,
   },
   {
-    title: 'Bring KC licence',
-    description: 'Have the KC licence available (electronic or printed) at the show.',
+    title: 'Bring RKC licence',
+    description: 'Have the RKC licence available (electronic or printed) at the show.',
     phase: 'show_day',
     sortOrder: 1,
     relativeDueDays: 0,
@@ -262,14 +262,14 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
   {
     title: 'Bring incident book',
     description:
-      'The official KC incident book must be present. Record any incidents that occur during the show.',
+      'The official RKC incident book must be present. Record any incidents that occur during the show.',
     phase: 'show_day',
     sortOrder: 2,
     relativeDueDays: 0,
   },
   {
-    title: 'Bring KC regulations and breed standards',
-    description: 'Have the KC Year Book, regulations and relevant breed standards available for reference.',
+    title: 'Bring RKC regulations and breed standards',
+    description: 'Have the RKC Year Book, regulations and relevant breed standards available for reference.',
     phase: 'show_day',
     sortOrder: 3,
     relativeDueDays: 0,
@@ -305,15 +305,15 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
 
   // ── Post-Show ─────────────────────────────────────────
   {
-    title: 'Submit entry analysis form to KC',
+    title: 'Submit entry analysis form to RKC',
     description:
-      'Must be submitted to the KC Regional Support Advisor within 14 days of the show.',
+      'Must be submitted to the RKC Regional Support Advisor within 14 days of the show.',
     phase: 'post_show',
     sortOrder: 0,
     relativeDueDays: -14,
   },
   {
-    title: 'Submit marked catalogue to KC',
+    title: 'Submit marked catalogue to RKC',
     description:
       'Championship shows only — marked-up catalogue, absentee report and additional fee form due within 14 days.',
     phase: 'post_show',
@@ -332,7 +332,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
   {
     title: 'Archive show records',
     description:
-      'Retain marked catalogue indefinitely. Keep schedules and entry forms for at least 1 year per KC regulations.',
+      'Retain marked catalogue indefinitely. Keep schedules and entry forms for at least 1 year per RKC regulations.',
     phase: 'post_show',
     sortOrder: 3,
     relativeDueDays: -30,

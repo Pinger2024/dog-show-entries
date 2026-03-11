@@ -189,7 +189,7 @@ export function ClubApplicationForm({
       </div>
 
       <div className="space-y-2">
-        <label className="text-sm font-medium">KC Registration Number</label>
+        <label className="text-sm font-medium">RKC Registration Number</label>
         <Input
           value={kcRegNumber}
           onChange={(e) => setKcRegNumber(e.target.value)}

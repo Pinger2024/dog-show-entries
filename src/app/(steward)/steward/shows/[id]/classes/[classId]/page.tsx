@@ -100,7 +100,7 @@ export default function StewardClassResultsPage({
   // Scope-aware placements: all-breed = 1st–HC, breed = 1st–Commended
   const availablePlacements = getPlacementsForScope(showClass.showScope);
 
-  // "Dogs forward" = present (not absent) — standard KC terminology
+  // "Dogs forward" = present (not absent) — standard RKC terminology
   const dogsForward = entries.filter((e) => !e.absent).length;
 
   // Find prev/next class

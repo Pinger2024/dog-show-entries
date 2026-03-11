@@ -23,7 +23,7 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
   {
     id: 'championship_standard',
     name: 'Championship Standard',
-    description: 'Full KC championship class schedule with all standard classes, split by sex.',
+    description: 'Full RKC championship class schedule with all standard classes, split by sex.',
     classNames: [
       'Minor Puppy',
       'Puppy',
@@ -136,7 +136,7 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
   {
     id: 'junior_handling',
     name: 'Junior Handling',
-    description: 'KC Junior Handling classes by age group. Add alongside any other template.',
+    description: 'RKC Junior Handling classes by age group. Add alongside any other template.',
     classNames: [
       'Junior Handler (6-11)',
       'Junior Handler (12-16)',

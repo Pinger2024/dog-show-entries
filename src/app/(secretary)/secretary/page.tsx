@@ -243,7 +243,7 @@ function ShowList({
         return (
           <Link
             key={show.id}
-            href={`/secretary/shows/${show.id}`}
+            href={`/secretary/shows/${show.slug ?? show.id}`}
             className="flex items-center justify-between rounded-lg border p-3 transition-colors hover:bg-muted/50 sm:p-4"
           >
             <div className="min-w-0 flex-1">

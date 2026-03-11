@@ -45,7 +45,7 @@ interface Props {
   entries: CatalogueEntry[];
 }
 
-// ── KC layout grouping ──────────────────────────────────────
+// ── RKC layout grouping ──────────────────────────────────────
 
 interface ClassBucket {
   className: string;
@@ -65,7 +65,7 @@ interface GroupBucket {
 }
 
 /**
- * Group entries KC-style: Group > Breed > Sex > Class.
+ * Group entries RKC-style: Group > Breed > Sex > Class.
  * Each entry appears under every class it's entered in.
  */
 function groupEntriesKC(entries: CatalogueEntry[]) {
@@ -270,7 +270,7 @@ export function CatalogueStandard({ show, entries }: Props) {
                                       </Text>
                                     </View>
 
-                                    {/* KC reg + DOB + colour */}
+                                    {/* RKC reg + DOB + colour */}
                                     <Text style={styles.entryDetail}>
                                       {[
                                         entry.kcRegNumber,

@@ -463,7 +463,7 @@ export default function AdminDashboardPage() {
               return (
                 <Link
                   key={s.id}
-                  href={`/secretary/shows/${s.id}`}
+                  href={`/secretary/shows/${s.slug ?? s.id}`}
                   className="flex items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-amber-100/50 transition-colors group"
                 >
                   <Timer className="size-4 text-blue-500 shrink-0" />

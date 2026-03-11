@@ -184,7 +184,7 @@ export function CatalogueByBreed({ show, entries }: Props) {
                                     </Text>
                                   </View>
 
-                                  {/* KC reg + DOB + colour + sex */}
+                                  {/* RKC reg + DOB + colour + sex */}
                                   <Text style={styles.entryDetail}>
                                     {[
                                       entry.kcRegNumber,

@@ -10,7 +10,7 @@ const db = drizzle(client, { schema });
 async function seed() {
   console.log('🐾 Seeding Remi database...\n');
 
-  // ── Breed Groups (7 KC Groups) ────────────────────────────
+  // ── Breed Groups (7 RKC Groups) ────────────────────────────
   console.log('Creating breed groups...');
   const groups = await db
     .insert(schema.breedGroups)
@@ -86,7 +86,7 @@ async function seed() {
   const breedMap = Object.fromEntries(allBreeds.map((b) => [b.name, b.id]));
   console.log(`  ✓ ${allBreeds.length} breeds (${breeds.length} new)`);
 
-  // ── Class Definitions (12 standard KC classes) ────────────
+  // ── Class Definitions (12 standard RKC classes) ────────────
   console.log('Creating class definitions...');
   const classDefs = await db
     .insert(schema.classDefinitions)
@@ -97,7 +97,7 @@ async function seed() {
       { name: 'Junior', type: 'age' as const, sortOrder: 3, minAgeMonths: 6, maxAgeMonths: 18, description: 'For dogs of 6 and not exceeding 18 calendar months of age on the first day of the show.' },
       { name: 'Yearling', type: 'age' as const, sortOrder: 4, minAgeMonths: 12, maxAgeMonths: 24, description: 'For dogs of 12 and not exceeding 24 calendar months of age on the first day of the show.' },
       { name: 'Veteran', type: 'age' as const, sortOrder: 5, minAgeMonths: 84, description: 'For dogs of not less than 7 years of age on the first day of the show.' },
-      // Achievement-based (sortOrder: KC progression order)
+      // Achievement-based (sortOrder: RKC progression order)
       { name: 'Maiden', type: 'achievement' as const, sortOrder: 1, maxWins: 0, description: 'For dogs which have not won a CC/RCC or a first prize at an Open or Championship Show.' },
       { name: 'Novice', type: 'achievement' as const, sortOrder: 2, maxWins: 2, description: 'For dogs which have not won a CC or 3 or more first prizes at Open and Championship Shows.' },
       { name: 'Undergraduate', type: 'achievement' as const, sortOrder: 3, maxWins: 2, description: 'For dogs which have not won a CC or 3 or more first prizes at Championship Shows in Undergraduate, Graduate, Post Graduate, Mid Limit, Limit, or Open.' },

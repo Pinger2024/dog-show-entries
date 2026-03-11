@@ -194,7 +194,7 @@ export default function EntryDetailPage() {
               </div>
               {entry.dog.kcRegNumber && (
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">KC Registration</span>
+                  <span className="text-muted-foreground">RKC Registration</span>
                   <span>{entry.dog.kcRegNumber}</span>
                 </div>
               )}

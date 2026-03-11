@@ -21,7 +21,7 @@ export default function PrivacyPage() {
           <p className="mt-2">
             When you use Remi, we collect information you provide directly:
             your name, email address, and details about your dogs (registered
-            names, breed, KC registration numbers). We also collect show entry
+            names, breed, RKC registration numbers). We also collect show entry
             information when you enter shows through our platform.
           </p>
         </section>

@@ -29,7 +29,7 @@ const faqs = [
     icon: Dog,
     question: 'How do I add my dog?',
     answer:
-      'Once signed in, go to "My Dogs" in your dashboard and click "Add Dog". You\'ll need their KC registered name, breed, date of birth, and KC registration number.',
+      'Once signed in, go to "My Dogs" in your dashboard and click "Add Dog". You\'ll need their RKC registered name, breed, date of birth, and RKC registration number.',
   },
   {
     icon: Ticket,

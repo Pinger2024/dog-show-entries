@@ -1,18 +1,18 @@
 /**
- * KC Judge Lookup via Firecrawl (browser automation).
+ * RKC Judge Lookup via Firecrawl (browser automation).
  *
- * Unlike the KC dog search (server-rendered HTML → direct fetch), the KC
+ * Unlike the RKC dog search (server-rendered HTML → direct fetch), the RKC
  * "Find a Judge" page uses JavaScript/AJAX rendering. We use the Firecrawl
  * API to fill and submit the search form, then parse the resulting HTML.
  *
  * Firecrawl API: https://api.firecrawl.dev/v1/scrape
- * KC page: https://www.royalkennelclub.com/search/find-a-judge/
+ * RKC page: https://www.royalkennelclub.com/search/find-a-judge/
  */
 
 export type KcJudgeResult = {
   name: string;
   location: string | null;
-  /** KC's internal judge ID (UUID) — used for profile lookup */
+  /** RKC's internal judge ID (UUID) — used for profile lookup */
   kcJudgeId: string;
 };
 
@@ -26,9 +26,9 @@ const KC_JUDGE_URL = 'https://www.royalkennelclub.com/search/find-a-judge/';
 const KC_JUDGE_PROFILE_URL = 'https://www.royalkennelclub.com/search/find-a-judge/judge-profile/';
 
 /**
- * Search for KC judges by surname and optionally filter by breed.
+ * Search for RKC judges by surname and optionally filter by breed.
  *
- * Uses Firecrawl to automate the KC's JavaScript-rendered search form:
+ * Uses Firecrawl to automate the RKC's JavaScript-rendered search form:
  * 1. Check the "Dog showing" activity checkbox
  * 2. Fill in the surname
  * 3. Optionally set the breed filter
@@ -154,7 +154,7 @@ export async function fetchKcJudgeProfile(kcJudgeId: string): Promise<KcJudgePro
 // ── Parsing Helpers ───────────────────────────────────────────
 
 /**
- * Parse judge cards from KC search results HTML.
+ * Parse judge cards from RKC search results HTML.
  *
  * Each judge is an <article class="m-judge-card"> containing:
  * - .m-judge-card__link with judge name and profile URL (includes judgeId)

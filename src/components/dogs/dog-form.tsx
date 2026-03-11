@@ -107,7 +107,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
   const { data: breeds, isLoading: breedsLoading } =
     trpc.breeds.list.useQuery();
 
-  // If KC lookup returns before breeds have loaded, stash the breed name
+  // If RKC lookup returns before breeds have loaded, stash the breed name
   // and apply it once the breeds query resolves.
   const pendingBreedName = useRef<string | null>(null);
 
@@ -164,12 +164,12 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
     },
   });
 
-  // KC lookup — returns an array of results
+  // RKC lookup — returns an array of results
   const [kcResults, setKcResults] = useState<
     { registeredName: string; breed: string; sex: string; dateOfBirth: string; colour?: string; sire: string; dam: string; breeder: string; dogId?: string }[]
   >([]);
 
-  // Phase 2: Fetch enriched pedigree data from the KC dog profile page
+  // Phase 2: Fetch enriched pedigree data from the RKC dog profile page
   const kcProfileLookup = trpc.dogs.kcLookupProfile.useMutation({
     onSuccess: (profile) => {
       if (!profile) return;
@@ -191,7 +191,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
 
       const enriched = [profile.sire, profile.dam, profile.breeder].filter(Boolean);
       if (enriched.length > 0) {
-        toast.success('Pedigree details populated from KC', {
+        toast.success('Pedigree details populated from RKC', {
           description: `Sire, dam, and breeder info filled in from the Royal Kennel Club.`,
         });
       }
@@ -206,7 +206,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
     if (data.registeredName) form.setValue('registeredName', data.registeredName, sv);
     if (data.sex) form.setValue('sex', data.sex as 'dog' | 'bitch', sv);
     if (data.dateOfBirth) {
-      // Parse KC dates robustly — Safari doesn't handle "18 January 2024" via new Date()
+      // Parse RKC dates robustly — Safari doesn't handle "18 January 2024" via new Date()
       const dateStr = data.dateOfBirth.trim();
       const formats = ['dd MMMM yyyy', 'dd/MM/yyyy', 'dd MMM yyyy', 'yyyy-MM-dd'];
       let parsed: Date | null = null;
@@ -246,7 +246,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
     }
 
     setKcResults([]);
-    toast.success('Dog details found on KC website!', {
+    toast.success('Dog details found on RKC website!', {
       description: `${data.registeredName} — fields have been populated.`,
     });
 
@@ -268,7 +268,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
       }
     },
     onError: (error) => {
-      toast.error('KC Lookup failed', {
+      toast.error('RKC Lookup failed', {
         description: error.message,
       });
     },
@@ -319,7 +319,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
     }
   }, [mode, userProfile, form]);
 
-  // When breeds load after a KC lookup already stashed a breed name, apply it
+  // When breeds load after a RKC lookup already stashed a breed name, apply it
   useEffect(() => {
     if (breeds && pendingBreedName.current && !form.getValues('breedId')) {
       const breedNameLower = pendingBreedName.current.toLowerCase();
@@ -369,7 +369,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
             <CardTitle>Registration Details</CardTitle>
             <CardDescription>
               Enter the details as they appear on your Royal Kennel Club registration
-              certificate, or use the KC Lookup to auto-fill.
+              certificate, or use the RKC Lookup to auto-fill.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -378,7 +378,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
               name="kcRegNumber"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>KC Registration Number <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
+                  <FormLabel>RKC Registration Number <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
                   <FormControl>
                     <Input
                       placeholder="e.g. AQ04052601"
@@ -407,7 +407,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                     />
                   </FormControl>
                   <FormDescription>
-                    Enter the name exactly as it appears on your KC registration
+                    Enter the name exactly as it appears on your RKC registration
                     certificate.
                   </FormDescription>
                   <FormMessage />
@@ -415,7 +415,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
               )}
             />
 
-            {/* KC Lookup Button */}
+            {/* RKC Lookup Button */}
             <div className="rounded-lg border border-dashed border-primary/30 bg-primary/5 p-4">
               <div className="flex items-start gap-3">
                 <Search className="mt-0.5 size-5 shrink-0 text-primary" />
@@ -424,16 +424,16 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                     Auto-fill from Royal Kennel Club
                   </p>
                   <p className="mt-0.5 text-sm text-muted-foreground">
-                    Enter the KC registration number (e.g. BC28843204) or registered
+                    Enter the RKC registration number (e.g. BC28843204) or registered
                     name above, then click the button below. This will look up the
-                    dog on the KC website and auto-fill the breed, sex, date of
+                    dog on the RKC website and auto-fill the breed, sex, date of
                     birth, colour, sire, dam, and breeder.
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     A registration number gives an exact match. Searching by name can
                     return hundreds of results — use the full registered name (e.g.
                     &quot;Hundark Phantom&quot; not just &quot;Hundark&quot;) to narrow it
-                    down. You can find your registration number on your KC certificate or
+                    down. You can find your registration number on your RKC certificate or
                     at{' '}
                     <a
                       href="https://www.royalkennelclub.com/search/health-test-results-finder/"
@@ -455,7 +455,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                       setKcResults([]);
                       const query = form.getValues('kcRegNumber') || form.getValues('registeredName');
                       if (!query || query.trim().length < 2) {
-                        toast.error('Enter a KC registration number or registered name first');
+                        toast.error('Enter a RKC registration number or registered name first');
                         return;
                       }
                       kcLookup.mutate({ query: query.trim() });
@@ -464,12 +464,12 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                     {kcLookup.isPending ? (
                       <>
                         <Loader2 className="size-4 animate-spin" />
-                        Searching KC website...
+                        Searching RKC website...
                       </>
                     ) : (
                       <>
                         <Search className="size-4" />
-                        Lookup on KC Website
+                        Lookup on RKC Website
                       </>
                     )}
                   </Button>
@@ -706,7 +706,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
             {kcProfileLookup.isPending && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="size-3.5 animate-spin" />
-                Fetching pedigree details from KC...
+                Fetching pedigree details from RKC...
               </div>
             )}
           </CardHeader>
@@ -972,7 +972,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
             <CardHeader>
               <CardTitle>Titles</CardTitle>
               <CardDescription>
-                Championship and other KC titles awarded to this dog.
+                Championship and other RKC titles awarded to this dog.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

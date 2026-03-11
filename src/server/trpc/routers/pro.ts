@@ -142,7 +142,7 @@ export const proRouter = createTRPCRouter({
    * Championship progress for a dog — computes CC/RCC counts, unique judges,
    * and progress toward Classic and Alternative championship routes.
    *
-   * UK KC Championship Routes:
+   * UK RKC Championship Routes:
    * - Classic: 3 CCs under 3 different judges
    * - Alternative: 1 CC + 7 RCCs under 7 different judges
    *

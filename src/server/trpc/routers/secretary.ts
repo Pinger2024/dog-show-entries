@@ -1342,7 +1342,7 @@ export const secretaryRouter = createTRPCRouter({
       return { removed: true };
     }),
 
-  // ─── KC Judge Lookup ────────────────────────────────
+  // ─── RKC Judge Lookup ────────────────────────────────
 
   kcJudgeSearch: secretaryProcedure
     .input(
@@ -1356,7 +1356,7 @@ export const secretaryRouter = createTRPCRouter({
       if (results.length === 0) {
         throw new TRPCError({
           code: 'NOT_FOUND',
-          message: `No KC judges found matching "${input.surname}"${input.breed ? ` for ${input.breed}` : ''}. Check the spelling and try again.`,
+          message: `No RKC judges found matching "${input.surname}"${input.breed ? ` for ${input.breed}` : ''}. Check the spelling and try again.`,
         });
       }
       return results;
@@ -1369,7 +1369,7 @@ export const secretaryRouter = createTRPCRouter({
       if (!profile) {
         throw new TRPCError({
           code: 'NOT_FOUND',
-          message: 'Could not fetch judge profile from KC. Try again in a moment.',
+          message: 'Could not fetch judge profile from RKC. Try again in a moment.',
         });
       }
       return profile;

@@ -1,9 +1,9 @@
 /**
  * Shared catalogue formatting utilities.
- * KC-standard typography for all catalogue PDF formats.
+ * RKC-standard typography for all catalogue PDF formats.
  */
 
-/** Format date as DD.MM.YYYY (KC catalogue standard) */
+/** Format date as DD.MM.YYYY (RKC catalogue standard) */
 export function formatDobKC(dob: string | null | undefined): string {
   if (!dob) return '';
   const d = new Date(dob);
@@ -13,7 +13,7 @@ export function formatDobKC(dob: string | null | undefined): string {
   return `${day}.${month}.${year}`;
 }
 
-/** UPPER CASE a name (for dog names and owner names in KC catalogues) */
+/** UPPER CASE a name (for dog names and owner names in RKC catalogues) */
 export function uppercaseName(name: string | null | undefined): string {
   if (!name) return '';
   return name.toUpperCase();
@@ -27,7 +27,7 @@ export function titleCase(name: string | null | undefined): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-/** Format pedigree as "By [Sire] ex [Dam]" (KC standard) */
+/** Format pedigree as "By [Sire] ex [Dam]" (RKC standard) */
 export function formatPedigreeKC(
   sire: string | null | undefined,
   dam: string | null | undefined
@@ -39,7 +39,7 @@ export function formatPedigreeKC(
   return parts.join(' ');
 }
 
-/** Format owner names + address for KC catalogue (UPPER CASE name) */
+/** Format owner names + address for RKC catalogue (UPPER CASE name) */
 export function formatOwnerKC(
   owners: { name: string; address: string | null }[]
 ): string {

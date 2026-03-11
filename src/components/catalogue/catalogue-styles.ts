@@ -187,7 +187,7 @@ export const styles = StyleSheet.create({
     color: '#666',
   },
 
-  // ── KC standard: class heading within breed/sex ──
+  // ── RKC standard: class heading within breed/sex ──
   classHeadingInBreed: {
     fontSize: 9,
     fontWeight: 'bold',

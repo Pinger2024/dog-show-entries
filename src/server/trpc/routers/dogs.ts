@@ -62,7 +62,7 @@ function getClassRecommendation(
   return { eligible, suggested, reason };
 }
 
-/** Compute achievement class eligibility based on KC win rules */
+/** Compute achievement class eligibility based on RKC win rules */
 function getAchievementEligible(
   firsts: number,
   hasCC: boolean,
@@ -595,7 +595,7 @@ export const dogsRouter = createTRPCRouter({
       return { success: true };
     }),
 
-  // ── KC Lookup ──────────────────────────────────────────────
+  // ── RKC Lookup ──────────────────────────────────────────────
 
   kcLookup: protectedProcedure
     .input(z.object({ query: z.string().min(2).max(255) }))
@@ -612,13 +612,13 @@ export const dogsRouter = createTRPCRouter({
       if (results.length === 0) {
         throw new TRPCError({
           code: 'NOT_FOUND',
-          message: 'No dogs found. The name must be typed exactly as it appears on the KC registration certificate — including apostrophes and special characters.',
+          message: 'No dogs found. The name must be typed exactly as it appears on the RKC registration certificate — including apostrophes and special characters.',
         });
       }
       return results;
     }),
 
-  /** Fetch enriched pedigree data from the KC dog profile page. */
+  /** Fetch enriched pedigree data from the RKC dog profile page. */
   kcLookupProfile: protectedProcedure
     .input(z.object({ dogId: z.string().min(1).max(100) }))
     .mutation(async ({ input }) => {
@@ -773,7 +773,7 @@ export const dogsRouter = createTRPCRouter({
       };
     }),
 
-  // ── KC Title Progress ─────────────────────────────────────
+  // ── RKC Title Progress ─────────────────────────────────────
   getTitleProgress: protectedProcedure
     .input(z.object({ dogId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {

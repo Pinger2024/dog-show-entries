@@ -341,7 +341,7 @@ export default function ApplicationsPage() {
                             {app.kcRegNumber && (
                               <div>
                                 <span className="font-medium">
-                                  KC Reg:
+                                  RKC Reg:
                                 </span>{' '}
                                 {app.kcRegNumber}
                               </div>

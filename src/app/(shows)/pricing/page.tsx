@@ -75,7 +75,7 @@ const faqs = [
   {
     question: 'Do you support Championship shows?',
     answer:
-      'Yes. Remi supports all KC-licensed show types including Companion, Primary, Limited, Open, Premier Open, and Championship shows.',
+      'Yes. Remi supports all RKC-licensed show types including Companion, Primary, Limited, Open, Premier Open, and Championship shows.',
   },
   {
     question: 'What does "Exhibitor query handling" mean on the Managed plan?',
@@ -178,7 +178,7 @@ export default async function PricingPage() {
             </h2>
             <p className="mt-5 text-lg text-muted-foreground">
               Both plans include a complete set of tools purpose-built for
-              running KC-licensed dog shows.
+              running RKC-licensed dog shows.
             </p>
           </div>
           <div className="mx-auto mt-16 grid max-w-5xl gap-8 sm:grid-cols-2 lg:grid-cols-3">

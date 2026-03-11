@@ -70,7 +70,7 @@ export function CatalogueHeader({
       )}
       {kcLicenceNo && (
         <Text style={styles.headerDetail}>
-          KC Licence No: {kcLicenceNo}
+          RKC Licence No: {kcLicenceNo}
         </Text>
       )}
     </View>

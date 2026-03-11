@@ -39,7 +39,7 @@ export const metadata: Metadata = {
     'Explore every feature Remi offers for exhibitors and show secretaries. Online entries, smart class eligibility, automatic A5 catalogue generation, live results, judge\'s books, prize cards, ring plans, and more.',
   keywords: [
     'dog show entries online',
-    'KC dog show management',
+    'RKC dog show management',
     'dog show catalogue software',
     'show secretary software UK',
     'online dog show entry system',
@@ -69,21 +69,21 @@ const EXHIBITOR_FEATURES: Feature[] = [
     icon: Smartphone,
     title: 'Online Entries from Any Device',
     description:
-      'Browse upcoming KC-licensed shows and enter from your phone, tablet, or desktop. No more printing paper entry forms, writing cheques, or waiting for postal confirmation.',
+      'Browse upcoming RKC-licensed shows and enter from your phone, tablet, or desktop. No more printing paper entry forms, writing cheques, or waiting for postal confirmation.',
     colour: 'bg-blue-50 text-blue-600',
   },
   {
     icon: Dog,
     title: 'Dog Profiles with Full Pedigree Details',
     description:
-      'Store your dogs\' KC registration numbers, titles, parentage, breeder details, and ownership information once. Every future entry is pre-filled automatically.',
+      'Store your dogs\' RKC registration numbers, titles, parentage, breeder details, and ownership information once. Every future entry is pre-filled automatically.',
     colour: 'bg-amber-50 text-amber-600',
   },
   {
     icon: Sparkles,
     title: 'Smart Class Recommendations',
     description:
-      'Remi knows which classes your dog qualifies for based on age, sex, previous wins, and KC eligibility rules. No more guessing whether you belong in Limit or Open.',
+      'Remi knows which classes your dog qualifies for based on age, sex, previous wins, and RKC eligibility rules. No more guessing whether you belong in Limit or Open.',
     colour: 'bg-purple-50 text-purple-600',
   },
   {
@@ -135,7 +135,7 @@ const SECRETARY_FEATURES: Feature[] = [
     icon: ClipboardList,
     title: 'Class Management',
     description:
-      'Create standard KC classes or define custom ones. Set entry fees per class, configure eligibility criteria, and organise classes by sex with correct Dog-then-Bitch ordering.',
+      'Create standard RKC classes or define custom ones. Set entry fees per class, configure eligibility criteria, and organise classes by sex with correct Dog-then-Bitch ordering.',
     colour: 'bg-indigo-50 text-indigo-600',
   },
   {
@@ -149,7 +149,7 @@ const SECRETARY_FEATURES: Feature[] = [
     icon: BookOpen,
     title: 'Automatic Catalogue Generation',
     description:
-      'Generate professional print-ready A5 catalogues at the click of a button. Four formats available: standard by-breed, by-class, alphabetical, and absentee. Catalogue numbers assigned in canonical KC breed group order.',
+      'Generate professional print-ready A5 catalogues at the click of a button. Four formats available: standard by-breed, by-class, alphabetical, and absentee. Catalogue numbers assigned in canonical RKC breed group order.',
     colour: 'bg-amber-50 text-amber-600',
   },
   {
@@ -408,7 +408,7 @@ export default function FeaturesPage() {
                   },
                   {
                     old: 'Manually number the catalogue in a spreadsheet',
-                    new: 'Auto-assign catalogue numbers in KC breed group order',
+                    new: 'Auto-assign catalogue numbers in RKC breed group order',
                   },
                   {
                     old: 'Spend days laying out the catalogue in Word or InDesign',

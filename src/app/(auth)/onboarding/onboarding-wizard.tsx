@@ -562,7 +562,7 @@ function DogStep({
     },
   });
 
-  // KC lookup
+  // RKC lookup
   const [kcResults, setKcResults] = useState<
     {
       registeredName: string;
@@ -588,7 +588,7 @@ function DogStep({
       }
     },
     onError: (err) => {
-      toast.error('KC Lookup failed', { description: err.message });
+      toast.error('RKC Lookup failed', { description: err.message });
     },
   });
 
@@ -638,7 +638,7 @@ function DogStep({
     }
 
     setKcResults([]);
-    toast.success('Dog details found on KC website!', {
+    toast.success('Dog details found on RKC website!', {
       description: `${data.registeredName} — fields have been populated.`,
     });
   }
@@ -697,7 +697,7 @@ function DogStep({
           Add Your First Dog
         </CardTitle>
         <CardDescription className="text-sm sm:text-[0.9375rem]">
-          Enter your dog&apos;s details, or use the KC Lookup to auto-fill from
+          Enter your dog&apos;s details, or use the RKC Lookup to auto-fill from
           the Royal Kennel Club website.
         </CardDescription>
       </CardHeader>
@@ -707,14 +707,14 @@ function DogStep({
             onSubmit={form.handleSubmit((data) => createDog.mutate(data))}
             className="space-y-4"
           >
-            {/* KC Reg + Name + Lookup */}
+            {/* RKC Reg + Name + Lookup */}
             <FormField
               control={form.control}
               name="kcRegNumber"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>
-                    KC Registration Number{' '}
+                    RKC Registration Number{' '}
                     <span className="text-muted-foreground font-normal">
                       (optional)
                     </span>
@@ -743,7 +743,7 @@ function DogStep({
               )}
             />
 
-            {/* KC Lookup */}
+            {/* RKC Lookup */}
             <div className="rounded-lg border border-dashed border-primary/30 bg-primary/5 p-3 sm:p-4">
               <div className="flex items-start gap-2.5 sm:gap-3">
                 <Search className="mt-0.5 size-5 shrink-0 text-primary" />
@@ -752,7 +752,7 @@ function DogStep({
                     Auto-fill from Royal Kennel Club
                   </p>
                   <p className="mt-0.5 text-sm text-muted-foreground">
-                    Enter a KC number or registered name above, then click
+                    Enter a RKC number or registered name above, then click
                     lookup.
                   </p>
                   <Button
@@ -768,7 +768,7 @@ function DogStep({
                         form.getValues('registeredName');
                       if (!query || query.trim().length < 2) {
                         toast.error(
-                          'Enter a KC registration number or registered name first'
+                          'Enter a RKC registration number or registered name first'
                         );
                         return;
                       }
@@ -783,12 +783,12 @@ function DogStep({
                     ) : (
                       <>
                         <Search className="size-4" />
-                        Lookup on KC Website
+                        Lookup on RKC Website
                       </>
                     )}
                   </Button>
 
-                  {/* KC multiple results */}
+                  {/* RKC multiple results */}
                   {kcResults.length > 1 && (
                     <div className="mt-3 space-y-2">
                       <p className="text-sm font-medium">

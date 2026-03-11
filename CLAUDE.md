@@ -95,7 +95,7 @@ When building new features (not bug fixes), always follow this research-first ap
 
 1. **Research first** — Before writing any code, launch a research agent (Task tool with `subagent_type: "Explore"` or `"general-purpose"`) to investigate:
    - How best-in-class apps solve this problem (competitors, adjacent industries)
-   - What the KC/dog show world specifically needs (regulations, conventions, workflows)
+   - What the RKC/dog show world specifically needs (regulations, conventions, workflows)
    - UX patterns that would make the feature innovative rather than just functional
    - What data we already have in the schema that could make the feature richer
 
