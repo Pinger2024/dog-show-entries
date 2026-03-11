@@ -266,6 +266,7 @@ export function ShowDetailClient() {
   const idOrSlug = params.id as string;
 
   const [showStickyBar, setShowStickyBar] = useState(false);
+  const [descExpanded, setDescExpanded] = useState(false);
 
   const { data: show, isLoading } = trpc.shows.getById.useQuery({
     id: idOrSlug,
@@ -397,7 +398,7 @@ export function ShowDetailClient() {
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute -right-32 -top-32 h-80 w-80 rounded-full bg-primary/[0.06] blur-3xl" />
         </div>
-        <div className="relative mx-auto max-w-4xl px-3 pb-8 pt-6 sm:px-4 sm:pt-10 lg:px-6">
+        <div className="relative mx-auto max-w-4xl px-3 pb-4 pt-6 sm:px-4 sm:pb-8 sm:pt-10 lg:px-6">
           <Link
             href="/shows"
             className="inline-flex items-center gap-1 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -514,11 +515,10 @@ export function ShowDetailClient() {
                   </Link>
                 </Button>
               )}
-              <div className="flex gap-2">
+              <div className="flex gap-2 [&>*]:flex-1 sm:[&>*]:flex-initial">
                 {hasResults && (
                   <Button
                     variant={isOpen ? 'outline' : 'default'}
-                    className="flex-1 sm:flex-initial"
                     asChild
                   >
                     <Link href={`/shows/${showSlug}/results`}>
@@ -528,7 +528,7 @@ export function ShowDetailClient() {
                   </Button>
                 )}
                 {show.scheduleUrl && (
-                  <Button variant="outline" className="flex-1 sm:flex-initial" asChild>
+                  <Button variant="outline" asChild>
                     <a href={show.scheduleUrl} target="_blank" rel="noopener noreferrer">
                       <FileText className="size-4" />
                       Schedule
@@ -550,19 +550,27 @@ export function ShowDetailClient() {
           {/* Description — editorial treatment */}
           {show.description && (
             <div className="mt-5 border-l-2 border-gold/30 pl-4 sm:pl-5">
-              <p className="max-w-2xl leading-relaxed text-muted-foreground">
+              <p className={`max-w-2xl leading-relaxed text-muted-foreground ${!descExpanded ? 'line-clamp-3 sm:line-clamp-none' : ''}`}>
                 {show.description}
               </p>
+              {show.description.length > 120 && (
+                <button
+                  onClick={() => setDescExpanded(!descExpanded)}
+                  className="mt-1 text-xs font-medium text-primary hover:underline sm:hidden"
+                >
+                  {descExpanded ? 'Show less' : 'Read more'}
+                </button>
+              )}
             </div>
           )}
         </div>
       </div>
 
       {/* ─── Content ──────────────────────────── */}
-      <div className="mx-auto max-w-4xl px-3 py-8 sm:px-4 sm:py-12 lg:px-6">
+      <div className="mx-auto max-w-4xl px-3 py-4 sm:px-4 sm:py-12 lg:px-6">
         {/* Live entry stats + countdown */}
         {show.status !== 'draft' && show.status !== 'published' && (
-          <div className="mb-8">
+          <div className="mb-4 sm:mb-8">
             <LiveEntryStats showId={show.id} />
           </div>
         )}
@@ -793,7 +801,7 @@ export function ShowDetailClient() {
       {/* ─── Sticky mobile CTA bar ──────────────── */}
       {isOpen && showStickyBar && (
         <div
-          className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 p-3 backdrop-blur-lg sm:hidden"
+          className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 p-3 pr-16 backdrop-blur-lg sm:hidden sm:pr-3"
           style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
         >
           <Button size="lg" className="h-12 w-full text-base shadow-lg" asChild>

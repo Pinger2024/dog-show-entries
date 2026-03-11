@@ -49,7 +49,7 @@ function CountdownUnit({
 }) {
   return (
     <div className="flex flex-col items-center">
-      <span className={`font-serif text-2xl font-bold tabular-nums sm:text-3xl ${colorClass}`}>
+      <span className={`font-serif text-3xl font-bold tabular-nums ${colorClass}`}>
         {String(value).padStart(2, '0')}
       </span>
       <span className="text-xs uppercase tracking-wider text-muted-foreground">
@@ -87,13 +87,13 @@ export function LiveEntryStats({ showId }: { showId: string }) {
         : 'text-primary';
 
   return (
-    <div className="rounded-xl border border-primary/20 bg-gradient-to-r from-primary/[0.04] to-card p-4 sm:p-5">
+    <div className="rounded-xl border border-primary/30 bg-gradient-to-r from-primary/[0.07] to-card p-4 shadow-md sm:p-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         {/* Entry stats */}
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2">
             <Dog className="size-4 text-primary/60" />
-            <span className="font-serif text-xl font-bold text-foreground">
+            <span className="font-serif text-2xl font-bold text-foreground">
               {stats.totalDogs}
             </span>
             <span className="text-xs text-muted-foreground">
@@ -102,7 +102,7 @@ export function LiveEntryStats({ showId }: { showId: string }) {
           </div>
           <div className="flex items-center gap-2">
             <Users className="size-4 text-primary/60" />
-            <span className="font-serif text-xl font-bold text-foreground">
+            <span className="font-serif text-2xl font-bold text-foreground">
               {stats.totalExhibitors}
             </span>
             <span className="text-xs text-muted-foreground">
@@ -113,7 +113,7 @@ export function LiveEntryStats({ showId }: { showId: string }) {
 
         {/* Countdown or status */}
         {isOpen && countdown && (
-          <div className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Clock className="size-4 shrink-0 text-muted-foreground/60" />
               <span>Closes in</span>

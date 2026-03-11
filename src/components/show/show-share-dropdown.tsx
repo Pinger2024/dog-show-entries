@@ -51,7 +51,7 @@ export function ShowShareDropdown({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="lg" className={cn("h-11 w-full shadow-sm sm:w-auto", className)}>
+        <Button variant="outline" className={cn("h-9 shadow-sm", className)}>
           {copied ? (
             <>
               <Check className="size-4" />
