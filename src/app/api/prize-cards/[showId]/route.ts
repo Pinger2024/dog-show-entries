@@ -7,6 +7,7 @@ import { renderToBuffer } from '@react-pdf/renderer';
 import { PrizeCards } from '@/components/prize-cards/prize-cards';
 import type { PrizeCardShowInfo, PrizeCardClass, PrizeCardStyle } from '@/components/prize-cards/prize-cards';
 import React from 'react';
+import { sanitizeFilename } from '@/lib/slugify';
 
 export async function GET(
   request: NextRequest,
@@ -97,7 +98,7 @@ export async function GET(
       cardStyle,
     });
     const buffer = await renderToBuffer(pdfDocument);
-    const filename = `${show.name.replace(/[^a-zA-Z0-9]/g, '-')}-Prize-Cards.pdf`;
+    const filename = `${sanitizeFilename(show.name)}-Prize-Cards.pdf`;
 
     return new Response(buffer, {
       headers: {

@@ -27,6 +27,7 @@ import { showTypeLabels } from '@/lib/show-types';
 import { formatCurrency } from '@/lib/date-utils';
 import { LiveEntryStats } from '@/components/show/live-entry-stats';
 import { ShowShareDropdown } from '@/components/show/show-share-dropdown';
+import { sanitizeFilename } from '@/lib/slugify';
 
 /* ─── Show type badge colours ─────────────────── */
 
@@ -541,13 +542,14 @@ export function ShowDetailClient() {
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement('a');
                         a.href = url;
-                        a.download = `${show.name.replace(/[^a-zA-Z0-9]/g, '-')}-Schedule.pdf`;
+                        a.download = `${sanitizeFilename(show.name)}-Schedule.pdf`;
                         a.click();
-                        URL.revokeObjectURL(url);
+                        setTimeout(() => URL.revokeObjectURL(url), 1000);
                       } catch {
-                        // Fall back to static URL if available
                         if (show.scheduleUrl) {
                           window.open(show.scheduleUrl, '_blank');
+                        } else {
+                          alert('Unable to generate schedule. Please try again.');
                         }
                       } finally {
                         setGeneratingSchedule(false);
@@ -828,7 +830,7 @@ export function ShowDetailClient() {
       {/* ─── Sticky mobile CTA bar ──────────────── */}
       {isOpen && showStickyBar && (
         <div
-          className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 p-3 pr-16 backdrop-blur-lg sm:hidden sm:pr-3"
+          className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 p-3 pr-16 backdrop-blur-lg sm:hidden"
           style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
         >
           <Button size="lg" className="h-12 w-full text-base shadow-lg" asChild>

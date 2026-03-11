@@ -7,6 +7,7 @@ import { renderToBuffer } from '@react-pdf/renderer';
 import { RingBoard } from '@/components/ring-board/ring-board';
 import type { RingBoardShowInfo, RingBoardRing } from '@/components/ring-board/ring-board';
 import React from 'react';
+import { sanitizeFilename } from '@/lib/slugify';
 
 export async function GET(
   _request: NextRequest,
@@ -147,7 +148,7 @@ export async function GET(
   try {
     const pdfDocument = React.createElement(RingBoard, { show: showInfo, rings });
     const buffer = await renderToBuffer(pdfDocument);
-    const filename = `${show.name.replace(/[^a-zA-Z0-9]/g, '-')}-Ring-Plan.pdf`;
+    const filename = `${sanitizeFilename(show.name)}-Ring-Plan.pdf`;
 
     return new Response(buffer, {
       headers: {

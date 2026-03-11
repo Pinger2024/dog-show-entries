@@ -14,6 +14,11 @@ export function generateShowSlug(name: string, startDate: string): string {
   return `${base}-${year}`;
 }
 
+/** Sanitise a string for use as a filename (preserves case). */
+export function sanitizeFilename(name: string): string {
+  return name.replace(/[^a-zA-Z0-9]/g, '-');
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Test whether a string looks like a UUID v4 */

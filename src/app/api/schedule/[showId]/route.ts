@@ -12,6 +12,7 @@ import type {
   ScheduleSponsor,
 } from '@/components/schedule/show-schedule';
 import React from 'react';
+import { sanitizeFilename } from '@/lib/slugify';
 
 export async function GET(
   _request: NextRequest,
@@ -169,7 +170,7 @@ export async function GET(
       sponsors,
     });
     const buffer = await renderToBuffer(pdfDocument);
-    const filename = `${show.name.replace(/[^a-zA-Z0-9]/g, '-')}-Schedule.pdf`;
+    const filename = `${sanitizeFilename(show.name)}-Schedule.pdf`;
 
     return new Response(buffer, {
       headers: {

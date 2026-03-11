@@ -6,6 +6,7 @@ import * as schema from '@/server/db/schema';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { JudgesBook } from '@/components/judges-book/judges-book';
 import React from 'react';
+import { sanitizeFilename } from '@/lib/slugify';
 
 export type JudgesBookClass = {
   classNumber: number | null;
@@ -138,7 +139,7 @@ export async function GET(
   try {
     const pdfDocument = React.createElement(JudgesBook, { show: showInfo, classes });
     const buffer = await renderToBuffer(pdfDocument);
-    const filename = `${show.name.replace(/[^a-zA-Z0-9]/g, '-')}-Judges-Book.pdf`;
+    const filename = `${sanitizeFilename(show.name)}-Judges-Book.pdf`;
 
     return new Response(buffer, {
       headers: {

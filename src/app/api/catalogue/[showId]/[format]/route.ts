@@ -12,6 +12,7 @@ import { CatalogueByBreed } from '@/components/catalogue/catalogue-by-breed';
 import { CatalogueAlphabetical } from '@/components/catalogue/catalogue-alphabetical';
 import type { CatalogueEntry, CatalogueShowInfo } from '@/components/catalogue/catalogue-standard';
 import React from 'react';
+import { sanitizeFilename } from '@/lib/slugify';
 
 export async function GET(
   request: NextRequest,
@@ -218,7 +219,7 @@ export async function GET(
       alphabetical: 'Catalogue-Alphabetical',
       absentees: 'Absentees',
     };
-    const filename = `${show.name.replace(/[^a-zA-Z0-9]/g, '-')}-${formatLabels[format] ?? 'Catalogue'}.pdf`;
+    const filename = `${sanitizeFilename(show.name)}-${formatLabels[format] ?? 'Catalogue'}.pdf`;
 
     return new Response(buffer, {
       headers: {
