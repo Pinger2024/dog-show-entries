@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
+import { getCurrentUser } from '@/lib/auth-utils';
 import { db } from '@/server/db';
 import { and, eq, isNull, asc } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
@@ -33,9 +33,9 @@ export async function GET(
   { params }: { params: Promise<{ showId: string }> }
 ) {
   const { showId } = await params;
-  const session = await auth();
+  const user = await getCurrentUser();
 
-  if (!session?.user?.id) {
+  if (!user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -55,7 +55,7 @@ export async function GET(
   // Verify user belongs to this show's organisation
   const membership = await db.query.memberships.findFirst({
     where: and(
-      eq(schema.memberships.userId, session.user.id),
+      eq(schema.memberships.userId, user.id),
       eq(schema.memberships.organisationId, show.organisationId),
       eq(schema.memberships.status, 'active')
     ),
