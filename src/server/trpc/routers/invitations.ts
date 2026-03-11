@@ -95,7 +95,7 @@ export const invitationsRouter = createTRPCRouter({
         return invitation!;
       }
 
-      // User doesn't exist — send invitation with accept link
+      // User doesn't exist — send sign-up notification with accept link
       const [invitation] = await ctx.db
         .insert(invitations)
         .values({
@@ -117,21 +117,21 @@ export const invitationsRouter = createTRPCRouter({
           from: 'Remi <noreply@lettiva.com>',
           to: [input.email],
           replyTo: 'feedback@inbound.lettiva.com',
-          subject: `You've been invited to join Remi as a ${roleName}`,
+          subject: `You've been added as a ${roleName} on Remi`,
           html: `
             <div style="font-family: Georgia, serif; max-width: 560px; margin: 0 auto;">
               <h1 style="font-size: 24px; color: #2D5F3F;">Remi</h1>
               <p>Hi,</p>
-              <p><strong>${ctx.session.user.name}</strong> has invited you to join Remi as a <strong>${roleName}</strong>.</p>
+              <p><strong>${ctx.session.user.name}</strong> has added you as a <strong>${roleName}</strong> on Remi.</p>
               ${input.message ? `<p style="padding: 12px 16px; background: #f9fafb; border-radius: 8px; border-left: 3px solid #2D5F3F;"><em>"${input.message}"</em></p>` : ''}
-              <p>Remi is a dog show entry management platform used by exhibitors and show committees across the UK.</p>
+              <p>Remi is a dog show entry management platform used by exhibitors and show committees across the UK. Sign up to get started.</p>
               <p style="margin: 24px 0;">
                 <a href="${acceptUrl}" style="display: inline-block; background: #2D5F3F; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600;">
-                  Accept Invitation
+                  Get Started
                 </a>
               </p>
               <p style="color: #6b7280; font-size: 14px;">
-                This invitation expires in 14 days. If you didn't expect this email, you can safely ignore it.
+                This link expires in 14 days. If you didn't expect this email, you can safely ignore it.
               </p>
             </div>
           `,

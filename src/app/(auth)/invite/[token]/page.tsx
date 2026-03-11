@@ -49,7 +49,7 @@ export default function InviteAcceptPage() {
       router.push('/dashboard');
     },
     onError: (err) => {
-      toast.error('Failed to accept invitation', {
+      toast.error('Failed to complete setup', {
         description: err.message,
       });
     },
@@ -66,7 +66,7 @@ export default function InviteAcceptPage() {
           <CardContent className="flex flex-col items-center py-12">
             <Loader2 className="size-8 animate-spin text-primary" />
             <p className="mt-3 text-sm text-muted-foreground">
-              Loading invitation...
+              Loading...
             </p>
           </CardContent>
         </Card>
@@ -84,10 +84,10 @@ export default function InviteAcceptPage() {
               <AlertTriangle className="size-6 text-destructive" />
             </div>
             <CardTitle className="font-serif text-lg sm:text-xl">
-              Invitation Not Found
+              Link Not Found
             </CardTitle>
             <CardDescription>
-              This invitation link is invalid or has been removed.
+              This link is invalid or has been removed.
             </CardDescription>
           </CardHeader>
           <CardFooter className="justify-center">
@@ -110,10 +110,10 @@ export default function InviteAcceptPage() {
               <AlertTriangle className="size-6 text-amber-700" />
             </div>
             <CardTitle className="font-serif text-lg sm:text-xl">
-              Invitation Expired
+              Link Expired
             </CardTitle>
             <CardDescription>
-              This invitation has expired. Please ask{' '}
+              This link has expired. Please ask{' '}
               {invitation.inviterName} to send a new one.
             </CardDescription>
           </CardHeader>
@@ -137,10 +137,10 @@ export default function InviteAcceptPage() {
               <CheckCircle2 className="size-6 text-emerald-700" />
             </div>
             <CardTitle className="font-serif text-lg sm:text-xl">
-              Already Accepted
+              Already Set Up
             </CardTitle>
             <CardDescription>
-              This invitation has already been accepted.
+              This account has already been set up.
             </CardDescription>
           </CardHeader>
           <CardFooter className="justify-center">
@@ -163,10 +163,10 @@ export default function InviteAcceptPage() {
               <AlertTriangle className="size-6 text-gray-500" />
             </div>
             <CardTitle className="font-serif text-lg sm:text-xl">
-              Invitation Revoked
+              Link Revoked
             </CardTitle>
             <CardDescription>
-              This invitation has been cancelled by the sender.
+              This link has been cancelled by the sender.
             </CardDescription>
           </CardHeader>
           <CardFooter className="justify-center">
@@ -202,11 +202,11 @@ export default function InviteAcceptPage() {
               <UserPlus className="size-6 text-primary" />
             </div>
             <CardTitle className="font-serif text-lg sm:text-xl">
-              You&apos;re Invited
+              You&apos;ve Been Added
             </CardTitle>
             <CardDescription className="text-sm sm:text-[0.9375rem]">
-              <strong>{invitation.inviterName}</strong> has invited you to join
-              Remi as a <strong>{roleName}</strong>.
+              <strong>{invitation.inviterName}</strong> has added you to
+              Remi as a <strong>{roleName}</strong>. Sign up to get started.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -250,7 +250,7 @@ export default function InviteAcceptPage() {
                 ) : (
                   <CheckCircle2 className="size-4" />
                 )}
-                Accept Invitation
+                Get Started
               </Button>
             ) : (
               <Button
@@ -261,14 +261,14 @@ export default function InviteAcceptPage() {
                   href={`/login?callbackUrl=${encodeURIComponent(`/invite/${params.token}`)}`}
                 >
                   <LogIn className="size-4" />
-                  Sign In to Accept
+                  Sign In to Get Started
                 </Link>
               </Button>
             )}
           </CardContent>
           <CardFooter className="justify-center">
             <p className="text-xs text-muted-foreground">
-              Invitation from {invitation.inviterName}
+              Added by {invitation.inviterName}
             </p>
           </CardFooter>
         </Card>

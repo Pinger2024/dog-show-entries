@@ -76,9 +76,8 @@ const showTypes = [
 ] as const;
 
 const showScopes = [
-  { value: 'general', label: 'General' },
-  { value: 'single_breed', label: 'Breed' },
-  { value: 'group', label: 'Group' },
+  { value: 'general', label: 'General (All-Breed)' },
+  { value: 'single_breed', label: 'Single Breed' },
 ] as const;
 
 const classSexArrangements = [
@@ -104,8 +103,8 @@ const createShowSchema = z.object({
     'open',
     'premier_open',
     'championship',
-  ]),
-  showScope: z.enum(['single_breed', 'group', 'general']),
+  ], { required_error: 'Please select a show type' }),
+  showScope: z.enum(['single_breed', 'general'], { required_error: 'Please select a show scope' }),
   classSexArrangement: z.enum(['separate_sex', 'combined_sex']).optional(),
   secretaryUserId: z.string().uuid().optional(),
   secretaryEmail: z.string().email('Enter a valid email').optional().or(z.literal('')),
@@ -202,8 +201,8 @@ export default function NewShowPage() {
     resolver: zodResolver(createShowSchema) as never,
     defaultValues: {
       name: '',
-      showType: 'open',
-      showScope: 'general',
+      showType: '' as never,
+      showScope: '' as never,
       classSexArrangement: undefined,
       secretaryUserId: undefined,
       secretaryEmail: '',
@@ -223,9 +222,9 @@ export default function NewShowPage() {
       newVenueAddress: '',
       newVenuePostcode: '',
       newVenueIndoorOutdoor: '',
-      firstEntryFee: 0,
-      subsequentEntryFee: 0,
-      nfcEntryFee: 0,
+      firstEntryFee: '' as unknown as number,
+      subsequentEntryFee: '' as unknown as number,
+      nfcEntryFee: '' as unknown as number,
       selectedClassIds: [],
     },
   });
@@ -351,7 +350,7 @@ export default function NewShowPage() {
       toast.success(
         asDraft ? 'Show saved as draft' : 'Show created successfully'
       );
-      router.push(`/secretary/shows/${show.id}`);
+      router.push(`/secretary/shows/${show.slug ?? show.id}`);
     } catch (error) {
       console.error('Show creation failed:', error);
       const message =
@@ -503,7 +502,7 @@ export default function NewShowPage() {
                   name="name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Show Name</FormLabel>
+                      <FormLabel>Show Name <span className="text-destructive">*</span></FormLabel>
                       <FormControl>
                         <Input placeholder="e.g. Spring Championship 2026" {...field} />
                       </FormControl>
@@ -543,11 +542,11 @@ export default function NewShowPage() {
                     name="showType"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Show Type</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormLabel>Show Type <span className="text-destructive">*</span></FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value ?? ''}>
                           <FormControl>
                             <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Select type" />
+                              <SelectValue placeholder="Select show type" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
@@ -565,11 +564,11 @@ export default function NewShowPage() {
                     name="showScope"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Show Scope</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormLabel>Show Scope <span className="text-destructive">*</span></FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value ?? ''}>
                           <FormControl>
                             <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Select scope" />
+                              <SelectValue placeholder="Select show scope" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
@@ -609,7 +608,7 @@ export default function NewShowPage() {
 
                 {/* Date, days, and time together */}
                 <div className="grid gap-4 sm:grid-cols-3">
-                  <DatePickerField control={form.control} name="startDate" label="Show Date" placeholder="Pick a date" disablePast />
+                  <DatePickerField control={form.control} name="startDate" label="Show Date *" placeholder="Pick a date" disablePast />
                   <div className="space-y-2">
                     <Label>Number of Days</Label>
                     <Select value={String(showDays)} onValueChange={(v) => setShowDays(Number(v))}>
@@ -651,7 +650,7 @@ export default function NewShowPage() {
                 {/* Entry dates */}
                 <div className="grid gap-4 sm:grid-cols-2">
                   <DatePickerField control={form.control} name="entriesOpenDate" label="Entries Open" placeholder="Optional" />
-                  <DatePickerField control={form.control} name="entryCloseDate" label="Entries Close" placeholder="Optional" />
+                  <DatePickerField control={form.control} name="entryCloseDate" label="Entries Close" placeholder="Optional" disableAfter={watchedStartDate ? parseLocalDate(watchedStartDate) : undefined} />
                 </div>
 
                 {/* Postal entries toggle */}
@@ -672,7 +671,7 @@ export default function NewShowPage() {
                 />
 
                 {watchedAcceptsPostal && (
-                  <DatePickerField control={form.control} name="postalCloseDate" label="Postal Close Date" placeholder="Pick a date" />
+                  <DatePickerField control={form.control} name="postalCloseDate" label="Postal Close Date" placeholder="Pick a date" disableAfter={watchedStartDate ? parseLocalDate(watchedStartDate) : undefined} />
                 )}
 
                 {/* Secretary — person picker + contact details */}
@@ -717,7 +716,7 @@ export default function NewShowPage() {
                             size="icon"
                             className="shrink-0"
                             onClick={() => setInviteOpen(true)}
-                            title="Invite a new member"
+                            title="Add a new member"
                           >
                             <UserPlus className="size-4" />
                           </Button>
@@ -744,13 +743,13 @@ export default function NewShowPage() {
                   )}
                 </div>
 
-                {/* Invite member modal */}
+                {/* Add member modal */}
                 <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
                   <DialogContent className="sm:max-w-md">
                     <DialogHeader>
-                      <DialogTitle>Invite a Member</DialogTitle>
+                      <DialogTitle>Add a Member</DialogTitle>
                       <DialogDescription>
-                        Enter their email address. If they already have a Remi account, they'll be added to your club immediately. Otherwise, they'll receive an invitation to sign up.
+                        Enter their email address. If they already have a Remi account, they'll be added to your club immediately. Otherwise, they'll be notified and asked to sign up.
                       </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-2">
@@ -792,20 +791,20 @@ export default function NewShowPage() {
                               role: 'secretary',
                               organisationId: currentOrgId || undefined,
                             });
-                            toast.success('Invitation sent! They will appear in the dropdown once they accept.');
+                            toast.success('Member added! They\'ve been notified and will appear in the dropdown once they sign up.');
                             setInviteOpen(false);
                             setInviteEmail('');
                             // Refresh org members list
                             utils.secretary.orgMembers.invalidate();
                           } catch (err) {
-                            toast.error('Failed to send invitation. Please try again.');
+                            toast.error('Failed to add member. Please try again.');
                           }
                         }}
                       >
                         {inviteMutation.isPending ? (
                           <><Loader2 className="size-4 animate-spin" /> Sending...</>
                         ) : (
-                          <><Mail className="size-4" /> Send Invite</>
+                          <><Mail className="size-4" /> Add &amp; Notify</>
                         )}
                       </Button>
                     </DialogFooter>
@@ -987,6 +986,8 @@ export default function NewShowPage() {
                           step={0.01}
                           placeholder="e.g. 10.00"
                           {...field}
+                          value={field.value === 0 || field.value ? field.value : ''}
+                          onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
                         />
                       </FormControl>
                       <FormMessage />
@@ -1006,6 +1007,8 @@ export default function NewShowPage() {
                           step={0.01}
                           placeholder="e.g. 8.00"
                           {...field}
+                          value={field.value === 0 || field.value ? field.value : ''}
+                          onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
                         />
                       </FormControl>
                       <FormMessage />
@@ -1025,6 +1028,8 @@ export default function NewShowPage() {
                           step={0.01}
                           placeholder="e.g. 5.00"
                           {...field}
+                          value={field.value === 0 || field.value ? field.value : ''}
+                          onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
                         />
                       </FormControl>
                       <FormMessage />
@@ -1171,8 +1176,13 @@ export default function NewShowPage() {
                 <Button
                   type="button"
                   className="min-h-[2.75rem] sm:min-h-0"
-                  disabled={!canProceed()}
-                  onClick={() => setStep(step + 1)}
+                  onClick={async () => {
+                    if (step === 0) {
+                      const valid = await form.trigger(['name', 'showType', 'showScope', 'startDate']);
+                      if (!valid) return;
+                    }
+                    if (canProceed()) setStep(step + 1);
+                  }}
                 >
                   Next
                   <ArrowRight className="size-4" />
@@ -1192,12 +1202,15 @@ function DatePickerField({
   label,
   placeholder,
   disablePast,
+  disableAfter,
 }: {
   control: ReturnType<typeof useForm<CreateShowValues>>['control'];
   name: 'startDate' | 'entriesOpenDate' | 'entryCloseDate' | 'postalCloseDate';
   label: string;
   placeholder: string;
   disablePast?: boolean;
+  /** Disable dates after this date (inclusive — the date itself IS selectable) */
+  disableAfter?: Date;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -1236,11 +1249,11 @@ function DatePickerField({
                   );
                   setOpen(false);
                 }}
-                disabled={
-                  disablePast
-                    ? (date) => date < new Date()
-                    : undefined
-                }
+                disabled={(date) => {
+                  if (disablePast && date < new Date()) return true;
+                  if (disableAfter && date > disableAfter) return true;
+                  return false;
+                }}
               />
             </PopoverContent>
           </Popover>
