@@ -207,7 +207,7 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
         </header>
 
         <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-6xl px-3 py-4 pb-28 sm:py-6 sm:px-4 md:pb-8 lg:px-8">
+          <div className="mx-auto max-w-6xl px-3 py-4 pb-28 sm:py-6 sm:pb-28 sm:px-4 md:pb-8 lg:px-8">
             {children}
           </div>
         </main>
