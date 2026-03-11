@@ -404,6 +404,12 @@ export const showsRouter = createTRPCRouter({
         firstEntryFee: z.number().int().min(0).optional(),
         subsequentEntryFee: z.number().int().min(0).optional(),
         nfcEntryFee: z.number().int().min(0).optional(),
+        // All-breed show class data: breed selections + class template applied per breed
+        allBreedClassData: z.object({
+          breedIds: z.array(z.string().uuid()),
+          classDefinitionIds: z.array(z.string().uuid()),
+          splitBySex: z.boolean().default(false),
+        }).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -441,7 +447,7 @@ export const showsRouter = createTRPCRouter({
         });
       }
 
-      const { classDefinitionIds, entryFee, firstEntryFee, subsequentEntryFee, nfcEntryFee, ...showData } = input;
+      const { classDefinitionIds, entryFee, firstEntryFee, subsequentEntryFee, nfcEntryFee, allBreedClassData, ...showData } = input;
 
       // Generate a unique slug
       const baseSlug = generateShowSlug(showData.name, showData.startDate);
@@ -472,8 +478,8 @@ export const showsRouter = createTRPCRouter({
         })
         .returning();
 
-      // Create show classes from selected class definitions
-      if (classDefinitionIds && classDefinitionIds.length > 0) {
+      // Create show classes from selected class definitions (single-breed flow)
+      if (classDefinitionIds && classDefinitionIds.length > 0 && !allBreedClassData) {
         const isSeparateSex = showData.classSexArrangement === 'separate_sex';
 
         if (isSeparateSex) {
@@ -502,6 +508,60 @@ export const showsRouter = createTRPCRouter({
               sortOrder: idx,
             }))
           );
+        }
+      }
+
+      // Create show classes for all-breed shows (per-breed classes)
+      if (allBreedClassData && allBreedClassData.breedIds.length > 0 && allBreedClassData.classDefinitionIds.length > 0) {
+        const isSeparateSex = allBreedClassData.splitBySex || showData.classSexArrangement === 'separate_sex';
+        const fee = entryFee ?? 0;
+        const allValues: {
+          showId: string;
+          classDefinitionId: string;
+          breedId: string;
+          entryFee: number;
+          sortOrder: number;
+          sex?: 'dog' | 'bitch';
+          isBreedSpecific: boolean;
+        }[] = [];
+
+        let sortOrder = 0;
+
+        // Sort breeds alphabetically for consistent class numbering
+        // We'll batch-insert — sort order goes: breed1-classes, breed2-classes, etc.
+        for (const breedId of allBreedClassData.breedIds) {
+          if (isSeparateSex) {
+            for (const sex of ['dog', 'bitch'] as const) {
+              for (const classDefId of allBreedClassData.classDefinitionIds) {
+                allValues.push({
+                  showId: show!.id,
+                  classDefinitionId: classDefId,
+                  breedId,
+                  entryFee: fee,
+                  sortOrder: sortOrder++,
+                  sex,
+                  isBreedSpecific: true,
+                });
+              }
+            }
+          } else {
+            for (const classDefId of allBreedClassData.classDefinitionIds) {
+              allValues.push({
+                showId: show!.id,
+                classDefinitionId: classDefId,
+                breedId,
+                entryFee: fee,
+                sortOrder: sortOrder++,
+                isBreedSpecific: true,
+              });
+            }
+          }
+        }
+
+        // Insert in batches of 500 to avoid exceeding parameter limits
+        const BATCH_SIZE = 500;
+        for (let i = 0; i < allValues.length; i += BATCH_SIZE) {
+          await ctx.db.insert(showClasses).values(allValues.slice(i, i + BATCH_SIZE));
         }
       }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useForm } from 'react-hook-form';
@@ -26,6 +26,7 @@ import { format, addDays } from 'date-fns';
 import { trpc } from '@/lib/trpc';
 import { poundsToPence, formatCurrency } from '@/lib/date-utils';
 import { CLASS_TEMPLATES } from '@/lib/class-templates';
+import { AllBreedClassSetup, type AllBreedClassData } from '@/components/shows/all-breed-class-setup';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -196,6 +197,12 @@ export default function NewShowPage() {
   const [step, setStep] = useState(0);
   const [createVenue, setCreateVenue] = useState(false);
   const [selectedTemplates, setSelectedTemplates] = useState<string[]>([]);
+  const [allBreedData, setAllBreedData] = useState<AllBreedClassData>({
+    selectedBreedIds: [],
+    selectedTemplateId: null,
+    classDefinitionIds: [],
+    breedClassOverrides: {},
+  });
 
   const form = useForm<CreateShowValues>({
     resolver: zodResolver(createShowSchema) as never,
@@ -241,6 +248,17 @@ export default function NewShowPage() {
   const [inviteEmail, setInviteEmail] = useState('');
 
   const organisations = dashboardData?.organisations ?? [];
+
+  // When all-breed data changes with a template selection, auto-set sex arrangement
+  const handleAllBreedDataChange = useCallback((data: AllBreedClassData) => {
+    setAllBreedData(data);
+    if (data.selectedTemplateId) {
+      const template = CLASS_TEMPLATES.find((t) => t.id === data.selectedTemplateId);
+      if (template?.splitBySex && !form.getValues('classSexArrangement')) {
+        form.setValue('classSexArrangement', 'separate_sex');
+      }
+    }
+  }, [form]);
 
   // Auto-select the organisation if there's only one
   const currentOrgId = form.watch('organisationId');
@@ -327,7 +345,8 @@ export default function NewShowPage() {
           ? parseLocalDate(values.postalCloseDate).toISOString()
           : undefined,
         description: values.description || undefined,
-        classDefinitionIds: values.selectedClassIds.length > 0
+        // Single-breed: pass class definition IDs directly
+        classDefinitionIds: (values.showScope !== 'general' && values.selectedClassIds.length > 0)
           ? values.selectedClassIds
           : undefined,
         entryFee: Number(values.firstEntryFee) > 0
@@ -341,6 +360,14 @@ export default function NewShowPage() {
           : undefined,
         nfcEntryFee: Number(values.nfcEntryFee) > 0
           ? poundsToPence(Number(values.nfcEntryFee))
+          : undefined,
+        // All-breed: pass breed + class data
+        allBreedClassData: (values.showScope === 'general' && allBreedData.selectedBreedIds.length > 0 && allBreedData.classDefinitionIds.length > 0)
+          ? {
+              breedIds: allBreedData.selectedBreedIds,
+              classDefinitionIds: allBreedData.classDefinitionIds,
+              splitBySex: !!values.classSexArrangement && values.classSexArrangement === 'separate_sex',
+            }
           : undefined,
       });
 
@@ -1041,7 +1068,26 @@ export default function NewShowPage() {
           )}
 
           {/* Step 4: Classes */}
-          {step === 3 && (
+          {step === 3 && watchedShowScope === 'general' && (
+            <Card>
+              <CardHeader>
+                <CardTitle>All-Breed Classes</CardTitle>
+                <CardDescription>
+                  Select which breeds to include and choose a class template.
+                  The template will apply uniformly to all selected breeds.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <AllBreedClassSetup
+                  value={allBreedData}
+                  onChange={handleAllBreedDataChange}
+                  classDefinitions={classDefinitions ?? []}
+                />
+              </CardContent>
+            </Card>
+          )}
+
+          {step === 3 && watchedShowScope !== 'general' && (
             <Card>
               <CardHeader>
                 <CardTitle>Classes</CardTitle>
@@ -1131,7 +1177,7 @@ export default function NewShowPage() {
           )}
 
           {/* Step 5: Review */}
-          {step === 4 && <ReviewStep form={form} organisations={organisations} venues={venues ?? []} classDefinitions={classDefinitions ?? []} createVenue={createVenue} classSexArrangements={classSexArrangements} />}
+          {step === 4 && <ReviewStep form={form} organisations={organisations} venues={venues ?? []} classDefinitions={classDefinitions ?? []} createVenue={createVenue} classSexArrangements={classSexArrangements} allBreedData={allBreedData} />}
 
           {/* Navigation */}
           <div className="mt-6 flex items-center justify-between gap-2">
@@ -1318,6 +1364,7 @@ function ReviewStep({
   classDefinitions,
   createVenue,
   classSexArrangements,
+  allBreedData,
 }: {
   form: ReturnType<typeof useForm<CreateShowValues>>;
   organisations: { id: string; name: string }[];
@@ -1325,6 +1372,7 @@ function ReviewStep({
   classDefinitions: { id: string; name: string }[];
   createVenue: boolean;
   classSexArrangements: readonly { value: string; label: string }[];
+  allBreedData: AllBreedClassData;
 }) {
   const values = form.getValues();
   const org = organisations.find((o) => o.id === values.organisationId);
@@ -1332,9 +1380,13 @@ function ReviewStep({
   const selectedClasses = classDefinitions.filter((cd) =>
     values.selectedClassIds.includes(cd.id)
   );
+  const allBreedClasses = classDefinitions.filter((cd) =>
+    allBreedData.classDefinitionIds.includes(cd.id)
+  );
   const showType = showTypes.find((t) => t.value === values.showType);
   const showScope = showScopes.find((s) => s.value === values.showScope);
   const classSexArrangement = classSexArrangements.find((a) => a.value === values.classSexArrangement);
+  const isAllBreed = values.showScope === 'general';
 
   return (
     <Card>
@@ -1458,20 +1510,54 @@ function ReviewStep({
 
         <div>
           <h3 className="mb-2 text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-            Classes ({selectedClasses.length})
+            Classes
           </h3>
-          {selectedClasses.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {selectedClasses.map((cd) => (
-                <Badge key={cd.id} variant="secondary">
-                  {cd.name}
-                </Badge>
-              ))}
-            </div>
+          {isAllBreed ? (
+            allBreedData.selectedBreedIds.length > 0 && allBreedClasses.length > 0 ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-lg border p-2.5 text-center">
+                    <p className="text-lg font-bold">{allBreedData.selectedBreedIds.length}</p>
+                    <p className="text-xs text-muted-foreground">Breeds</p>
+                  </div>
+                  <div className="rounded-lg border p-2.5 text-center">
+                    <p className="text-lg font-bold">{allBreedClasses.length}</p>
+                    <p className="text-xs text-muted-foreground">Classes/breed</p>
+                  </div>
+                  <div className="rounded-lg border p-2.5 text-center">
+                    <p className="text-lg font-bold">
+                      {allBreedData.selectedBreedIds.length * allBreedClasses.length}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Total</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {allBreedClasses.map((cd) => (
+                    <Badge key={cd.id} variant="secondary">
+                      {cd.name}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No breeds or classes selected — you can add them after creating the show.
+              </p>
+            )
           ) : (
-            <p className="text-sm text-muted-foreground">
-              No classes selected — you can add them after creating the show.
-            </p>
+            selectedClasses.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {selectedClasses.map((cd) => (
+                  <Badge key={cd.id} variant="secondary">
+                    {cd.name}
+                  </Badge>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No classes selected — you can add them after creating the show.
+              </p>
+            )
           )}
         </div>
       </CardContent>
