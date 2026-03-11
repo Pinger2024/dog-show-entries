@@ -38,6 +38,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { statusConfig, daysUntil } from './_lib/show-utils';
+import { ShowIdProvider } from './_lib/show-context';
 import { ShowSectionNav } from './_components/show-section-nav';
 
 export default function ShowManagementLayout({
@@ -52,7 +53,11 @@ export default function ShowManagementLayout({
   const { data: show, isLoading: showLoading } = trpc.shows.getById.useQuery({
     id,
   });
-  const { data: stats } = trpc.secretary.getShowStats.useQuery({ showId: id });
+  const showId = show?.id;
+  const { data: stats } = trpc.secretary.getShowStats.useQuery(
+    { showId: showId! },
+    { enabled: !!showId }
+  );
 
   const updateMutation = trpc.shows.update.useMutation();
   const utils = trpc.useUtils();
@@ -134,7 +139,7 @@ export default function ShowManagementLayout({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" asChild className="-ml-2">
+            <Button variant="ghost" size="sm" asChild className="-ml-2 hidden sm:inline-flex">
               <Link href="/secretary">
                 <ArrowLeft className="size-4" />
               </Link>
@@ -142,7 +147,7 @@ export default function ShowManagementLayout({
             <h1 className="truncate text-lg font-bold tracking-tight sm:text-2xl">
               {show.name}
             </h1>
-            <Badge variant={showStatus.variant} className="shrink-0">
+            <Badge variant={showStatus.variant} className="shrink-0 hidden sm:inline-flex">
               {showStatus.label}
             </Badge>
           </div>
@@ -255,10 +260,10 @@ export default function ShowManagementLayout({
       </div>
 
       {/* Section navigation */}
-      <ShowSectionNav showId={id} />
+      <ShowSectionNav showId={show.id} />
 
       {/* Active section content */}
-      {children}
+      <ShowIdProvider showId={show.id}>{children}</ShowIdProvider>
     </div>
   );
 }

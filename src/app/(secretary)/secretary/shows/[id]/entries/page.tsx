@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import {
   ArrowRight,
   Download,
@@ -52,9 +52,10 @@ import {
 } from '@/components/ui/dialog';
 import { isGsdOnlyClass, isGsdBreed } from '@/lib/class-templates';
 import { EntryItem, entryStatusConfig, formatDate } from '../_lib/show-utils';
+import { useShowId } from '../_lib/show-context';
 
-export default function EntriesPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id: showId } = use(params);
+export default function EntriesPage() {
+  const showId = useShowId();
 
   const { data: showData } = trpc.shows.getById.useQuery({ id: showId });
   const { data: entriesData, isLoading: entriesLoading } = trpc.entries.getForShow.useQuery({ showId, limit: 100 });
@@ -664,7 +665,7 @@ function AddEntryDialog({
                       <p className="font-medium">{dog.registeredName}</p>
                       <p className="text-xs text-muted-foreground">
                         {dog.breed?.name} · {dog.sex === 'dog' ? 'Dog' : 'Bitch'}
-                        {dog.kcRegNumber ? ` · KC: ${dog.kcRegNumber}` : ''}
+                        {dog.kcRegNumber ? ` · RKC: ${dog.kcRegNumber}` : ''}
                       </p>
                       {dog.owners?.[0] && (
                         <p className="text-xs text-muted-foreground">
@@ -703,7 +704,7 @@ function AddEntryDialog({
                 <Input value={regName} onChange={(e) => setRegName(e.target.value)} />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-medium">KC Reg Number</label>
+                <label className="text-xs font-medium">RKC Reg Number</label>
                 <Input value={regKc} onChange={(e) => setRegKc(e.target.value)} />
               </div>
               <div className="space-y-1">

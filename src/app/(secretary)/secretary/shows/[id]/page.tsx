@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import {
   ArrowDown,
   ArrowUp,
@@ -62,13 +62,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { formatDate } from './_lib/show-utils';
+import { useShowId } from './_lib/show-context';
 
-export default function OverviewPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id: showId } = use(params);
+export default function OverviewPage() {
+  const showId = useShowId();
 
   const { data: show } = trpc.shows.getById.useQuery({ id: showId });
 
@@ -516,7 +513,7 @@ function EditShowDetailsDialog({
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="edit-kc">KC Licence Number</Label>
+              <Label htmlFor="edit-kc">RKC Licence Number</Label>
               <Input
                 id="edit-kc"
                 value={kcLicenceNo}
@@ -817,7 +814,7 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
     const groups: GroupEntry[] = [];
 
     if (multiBreed) {
-      // Group by breed, sorted by group sortOrder then breed name (KC catalogue order)
+      // Group by breed, sorted by group sortOrder then breed name (RKC catalogue order)
       const breedMap = new Map<string, { groupSort: number; classes: typeof classes }>();
       for (const sc of classes) {
         const breedName = sc.breed?.name ?? 'Other';

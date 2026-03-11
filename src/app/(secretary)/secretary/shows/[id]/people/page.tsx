@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Check,
   ChevronDown,
@@ -70,6 +70,7 @@ import {
   CommandList,
 } from '@/components/ui/command';
 import { contractStageConfig } from '../_lib/show-utils';
+import { useShowId } from '../_lib/show-context';
 
 // ── Judges Section ───────────────────────────────────────────────
 
@@ -86,7 +87,7 @@ function JudgesSection({ showId }: { showId: string }) {
   const [offerJudgeId, setOfferJudgeId] = useState('');
   const [offerEmail, setOfferEmail] = useState('');
   const [offerNotes, setOfferNotes] = useState('');
-  // KC judge search state
+  // RKC judge search state
   const [kcSearchSurname, setKcSearchSurname] = useState('');
   const [kcSearchBreed, setKcSearchBreed] = useState('');
   const [kcSelectedJudge, setKcSelectedJudge] = useState<{
@@ -249,7 +250,7 @@ function JudgesSection({ showId }: { showId: string }) {
                 Judges
               </CardTitle>
               <CardDescription>
-                Search the KC database or add judges manually.
+                Search the RKC database or add judges manually.
               </CardDescription>
             </div>
             {!adding && (
@@ -262,9 +263,9 @@ function JudgesSection({ showId }: { showId: string }) {
         </CardHeader>
         {adding && (
           <CardContent className="space-y-4">
-            {/* KC Judge Search */}
+            {/* RKC Judge Search */}
             <div className="rounded-lg border bg-blue-50/50 p-4 dark:bg-blue-950/20">
-              <p className="mb-3 text-sm font-medium">Search KC Judge Database</p>
+              <p className="mb-3 text-sm font-medium">Search RKC Judge Database</p>
               <div className="grid gap-3 sm:grid-cols-3">
                 <div>
                   <Label htmlFor="kc-surname" className="text-xs text-muted-foreground">Surname *</Label>
@@ -305,16 +306,16 @@ function JudgesSection({ showId }: { showId: string }) {
                     disabled={kcSearchSurname.trim().length < 2 || kcSearchMutation.isPending}
                   >
                     {kcSearchMutation.isPending && <Loader2 className="size-4 animate-spin" />}
-                    Search KC
+                    Search RKC
                   </Button>
                 </div>
               </div>
 
-              {/* KC Search Results */}
+              {/* RKC Search Results */}
               {kcSearchMutation.isPending && (
                 <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="size-4 animate-spin" />
-                  Searching KC database (this takes a few seconds)...
+                  Searching RKC database (this takes a few seconds)...
                 </div>
               )}
 
@@ -395,7 +396,7 @@ function JudgesSection({ showId }: { showId: string }) {
                   onChange={(e) => setJudgeName(e.target.value)}
                 />
                 <Input
-                  placeholder="KC Number"
+                  placeholder="RKC Number"
                   value={judgeKc}
                   onChange={(e) => setJudgeKc(e.target.value)}
                 />
@@ -551,7 +552,7 @@ function JudgesSection({ showId }: { showId: string }) {
         <CardHeader>
           <CardTitle>Current Assignments ({uniqueJudges.length})</CardTitle>
           <CardDescription>
-            Manage judge assignments and track the three-stage KC contract process.
+            Manage judge assignments and track the three-stage RKC contract process.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -807,7 +808,7 @@ function JudgesSection({ showId }: { showId: string }) {
           <DialogHeader>
             <DialogTitle>Send Judging Offer</DialogTitle>
             <DialogDescription>
-              Send a formal written offer to this judge. This is Stage 1 of the KC three-part contract process.
+              Send a formal written offer to this judge. This is Stage 1 of the RKC three-part contract process.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -1433,12 +1434,8 @@ function BreedAssignmentDialog({
 
 // ── People Page ──────────────────────────────────────────────────
 
-export default function PeoplePage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id: showId } = use(params);
+export default function PeoplePage() {
+  const showId = useShowId();
 
   return (
     <Tabs defaultValue="judges">

@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Trash2, Loader2, Save, Eye, Download, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/accordion';
 import { Badge } from '@/components/ui/badge';
 import type { ScheduleData } from '@/server/db/schema/shows';
+import { useShowId } from '../_lib/show-context';
 
 interface OfficerWithGuarantor {
   name: string;
@@ -37,12 +38,8 @@ interface OfficerWithGuarantor {
   address?: string;
 }
 
-export default function ScheduleSettingsPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id: showId } = use(params);
+export default function ScheduleSettingsPage() {
+  const showId = useShowId();
 
   const { data: existing, isLoading } =
     trpc.secretary.getScheduleData.useQuery({ showId });
@@ -165,7 +162,7 @@ export default function ScheduleSettingsPage({
         <div>
           <h2 className="text-lg font-bold tracking-tight">Schedule Settings</h2>
           <p className="text-sm text-muted-foreground">
-            Configure details for the KC-compliant show schedule PDF. Mandatory KC
+            Configure details for the RKC-compliant show schedule PDF. Mandatory RKC
             statements are auto-included.
           </p>
         </div>
@@ -195,7 +192,7 @@ export default function ScheduleSettingsPage({
       <Card className="border-primary/20 bg-primary/5">
         <CardContent className="py-4">
           <p className="text-sm font-medium text-primary">
-            Mandatory KC statements are automatically included
+            Mandatory RKC statements are automatically included
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             Judges assessment, jurisdiction, collar/welfare, dogs in vehicles warning,
@@ -312,7 +309,7 @@ export default function ScheduleSettingsPage({
               <div className="space-y-1.5">
                 <Label>Not For Competition entries</Label>
                 <p className="text-xs text-muted-foreground">
-                  NFC dogs must be KC registered and aged 3 months+
+                  NFC dogs must be RKC registered and aged 3 months+
                 </p>
                 <div className="flex items-center gap-2 pt-1">
                   <Switch
@@ -329,7 +326,7 @@ export default function ScheduleSettingsPage({
               <div className="space-y-1.5">
                 <Label>Group system judging</Label>
                 <p className="text-xs text-muted-foreground">
-                  Required if scheduling breeds from more than one KC group
+                  Required if scheduling breeds from more than one RKC group
                 </p>
                 <div className="flex items-center gap-2 pt-1">
                   <Switch
@@ -388,7 +385,7 @@ export default function ScheduleSettingsPage({
                 <div>
                   <Label>Officers & Committee</Label>
                   <p className="text-xs text-muted-foreground">
-                    Add officers then tick the ones who are guarantors to the KC
+                    Add officers then tick the ones who are guarantors to the RKC
                   </p>
                 </div>
                 <Button variant="outline" size="sm" onClick={addOfficer}>
@@ -432,7 +429,7 @@ export default function ScheduleSettingsPage({
                       htmlFor={`guarantor-${idx}`}
                       className="text-sm font-normal text-muted-foreground cursor-pointer"
                     >
-                      Guarantor to the KC
+                      Guarantor to the RKC
                     </Label>
                   </div>
                   {officer.isGuarantor && (

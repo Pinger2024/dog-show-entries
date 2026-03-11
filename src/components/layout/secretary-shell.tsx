@@ -13,6 +13,7 @@ import {
   ChevronLeft,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { isUuid } from '@/lib/slugify';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { RoleSwitcher, RoleSwitcherCompact } from '@/components/layout/role-switcher';
@@ -75,6 +76,7 @@ function getMobileTitle(pathname: string): string | null {
   const segments = pathname.split('/').filter(Boolean);
   if (segments.length <= 2) return null;
   const last = segments[segments.length - 1];
+  if (isUuid(last)) return null;
   return last.charAt(0).toUpperCase() + last.slice(1).replace(/-/g, ' ');
 }
 

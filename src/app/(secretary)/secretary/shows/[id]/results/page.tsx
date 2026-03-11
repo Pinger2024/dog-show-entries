@@ -1,6 +1,6 @@
 'use client';
 
-import { use } from 'react';
+import { useShowId } from '../_lib/show-context';
 import Link from 'next/link';
 import {
   Trophy,
@@ -34,12 +34,8 @@ const achievementLabels: Record<string, string> = {
   reserve_cc: 'Reserve CC',
 };
 
-export default function SecretaryResultsPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id: showId } = use(params);
+export default function SecretaryResultsPage() {
+  const showId = useShowId();
 
   const { data, isLoading, dataUpdatedAt } =
     trpc.steward.getLiveResults.useQuery(

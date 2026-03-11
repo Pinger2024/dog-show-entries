@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils';
 
 const sections = [
   { path: '', label: 'Overview', icon: LayoutDashboard, exact: true },
-  { path: '/requirements', label: 'Requirements', icon: ListChecks },
+  { path: '/checklist', label: 'Show Checklist', icon: ListChecks },
   { path: '/entries', label: 'Entries', icon: Ticket },
   { path: '/financial', label: 'Financial', icon: PoundSterling },
   { path: '/catalogue', label: 'Catalogue', icon: BookOpen },

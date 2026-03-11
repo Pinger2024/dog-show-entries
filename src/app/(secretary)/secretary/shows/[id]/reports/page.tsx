@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import {
   BookOpen,
   ClipboardList,
@@ -34,13 +34,10 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { entryStatusConfig, formatDate, downloadCsv } from '../_lib/show-utils';
+import { useShowId } from '../_lib/show-context';
 
-export default function ReportsPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id: showId } = use(params);
+export default function ReportsPage() {
+  const showId = useShowId();
 
   return (
     <Tabs defaultValue="entries" className="space-y-4">

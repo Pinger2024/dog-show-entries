@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState } from 'react';
+import { useState } from 'react';
 import {
   Award,
   BookOpen,
@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { useShowId } from '../_lib/show-context';
 
 const placementPreviews = [
   { label: '1st', colour: 'bg-red-100 text-red-800 border-red-300' },
@@ -86,12 +87,8 @@ function DocumentGrid({ documents }: { documents: DocumentLink[] }) {
   );
 }
 
-export default function DocumentsPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id: showId } = use(params);
+export default function DocumentsPage() {
+  const showId = useShowId();
 
   const { data: catalogueData } =
     trpc.secretary.getCatalogueData.useQuery({ showId });
@@ -112,7 +109,7 @@ export default function DocumentsPage({
           label: 'Standard Catalogue',
           href: `/api/catalogue/${showId}/standard`,
           icon: <FileText className="size-4" />,
-          description: 'KC-format catalogue grouped by breed and sex',
+          description: 'RKC-format catalogue grouped by breed and sex',
         },
         {
           label: 'Catalogue by Class',

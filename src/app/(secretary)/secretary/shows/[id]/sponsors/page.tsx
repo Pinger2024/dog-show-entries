@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState } from 'react';
+import { useState } from 'react';
 import {
   Handshake,
   Loader2,
@@ -49,6 +49,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { useShowId } from '../_lib/show-context';
 
 const SPONSOR_CATEGORIES: Record<string, string> = {
   pet_food: 'Pet Food',
@@ -667,12 +668,8 @@ function ShowSponsorAssignments({
 
 /* ─── Main Page ──────────────────────────────────────── */
 
-export default function SponsorsPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id: showId } = use(params);
+export default function SponsorsPage() {
+  const showId = useShowId();
 
   // Get show to retrieve organisationId
   const { data: show } = trpc.shows.getById.useQuery({ id: showId });
@@ -690,7 +687,7 @@ export default function SponsorsPage({
       <div className="mb-6">
         <h2 className="font-serif text-lg font-semibold">Sponsors</h2>
         <p className="text-sm text-muted-foreground">
-          Manage your sponsor directory and assign sponsors to this show. KC regulations require all sponsorships to be acknowledged in schedules and catalogues.
+          Manage your sponsor directory and assign sponsors to this show. RKC regulations require all sponsorships to be acknowledged in schedules and catalogues.
         </p>
       </div>
 

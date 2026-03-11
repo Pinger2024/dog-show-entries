@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState } from 'react';
+import { useState } from 'react';
 import {
   AlertTriangle,
   ChevronDown,
@@ -42,6 +42,7 @@ import {
 import { Progress } from '@/components/ui/progress';
 import { Textarea } from '@/components/ui/textarea';
 import { ListChecks } from 'lucide-react';
+import { useShowId } from '../_lib/show-context';
 
 type ChecklistPhase =
   | 'pre_planning'
@@ -67,12 +68,8 @@ const STATUS_COLORS: Record<ChecklistStatus, string> = {
   not_applicable: 'text-muted-foreground/50',
 };
 
-export default function RequirementsPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id: showId } = use(params);
+export default function ShowChecklistPage() {
+  const showId = useShowId();
 
   const utils = trpc.useUtils();
   const { data: items, isLoading: checklistLoading } = trpc.secretary.getChecklist.useQuery({
@@ -84,7 +81,7 @@ export default function RequirementsPage({
   const seedMutation = trpc.secretary.seedChecklist.useMutation({
     onSuccess: () => {
       utils.secretary.getChecklist.invalidate({ showId });
-      toast.success('Checklist created with KC requirements');
+      toast.success('Checklist created with RKC requirements');
     },
   });
   const updateItemMut = trpc.secretary.updateChecklistItem.useMutation({
@@ -121,7 +118,7 @@ export default function RequirementsPage({
     return (
       <div className="flex items-center gap-2 py-12 justify-center text-muted-foreground">
         <Loader2 className="size-4 animate-spin" />
-        Loading requirements...
+        Loading checklist...
       </div>
     );
   }
@@ -132,11 +129,11 @@ export default function RequirementsPage({
         <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
           <ListChecks className="size-12 text-muted-foreground" />
           <div>
-            <h3 className="text-lg font-semibold">Show Requirements Checklist</h3>
+            <h3 className="text-lg font-semibold">Show Checklist</h3>
             <p className="mt-1 text-sm text-muted-foreground max-w-md">
-              Set up your show requirements checklist based on KC regulations.
-              This includes everything from licence applications to post-show
-              reporting, with deadlines auto-calculated from your show date.
+              Track everything you need to do for this show — from RKC licence
+              applications through to post-show reporting. Deadlines are
+              auto-calculated from your show date.
             </p>
           </div>
           <Button
@@ -148,7 +145,7 @@ export default function RequirementsPage({
             ) : (
               <Sparkles className="size-4" />
             )}
-            Generate KC Checklist
+            Generate RKC Checklist
           </Button>
         </CardContent>
       </Card>

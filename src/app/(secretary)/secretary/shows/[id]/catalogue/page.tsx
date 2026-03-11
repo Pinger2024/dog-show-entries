@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useMemo } from 'react';
+import { useMemo } from 'react';
 import {
   BookOpen,
   ClipboardList,
@@ -33,13 +33,10 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { formatDate, type CatalogueEntryItem } from '../_lib/show-utils';
+import { useShowId } from '../_lib/show-context';
 
-export default function CataloguePage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id: showId } = use(params);
+export default function CataloguePage() {
+  const showId = useShowId();
 
   const utils = trpc.useUtils();
   const { data: catalogueData, isLoading } =

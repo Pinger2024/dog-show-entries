@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Download, Loader2, RotateCcw, BookOpen, ShoppingBag } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
@@ -33,13 +33,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { type EntryItem, entryStatusConfig, downloadCsv } from '../_lib/show-utils';
+import { useShowId } from '../_lib/show-context';
 
-export default function FinancialPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id: showId } = use(params);
+export default function FinancialPage() {
+  const showId = useShowId();
   const { data: show } = trpc.shows.getById.useQuery({ id: showId });
   const { data: stats } = trpc.secretary.getShowStats.useQuery({ showId });
   const { data: entriesData } = trpc.entries.getForShow.useQuery({ showId, limit: 100 });
