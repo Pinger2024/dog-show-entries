@@ -121,7 +121,7 @@ export default function LiveResultsPage({
       <div className="relative overflow-hidden border-b bg-gradient-to-b from-primary/[0.04] to-transparent">
         <div className="relative mx-auto max-w-4xl px-4 pb-6 pt-6 sm:px-6">
           <Link
-            href={`/shows/${showId}`}
+            href={`/shows/${showId}`} /* showId is the slug from URL */
             className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             <ArrowLeft className="size-4" />

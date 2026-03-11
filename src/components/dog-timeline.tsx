@@ -401,7 +401,7 @@ function ShowResultCard({ item }: { item: ShowResultItem }) {
         </div>
         <div className="min-w-0 flex-1">
           <Link
-            href={`/shows/${item.show.id}/results`}
+            href={`/shows/${item.show.slug ?? item.show.id}/results`}
             className="font-serif text-[0.9375rem] font-bold text-stone-800 hover:text-stone-600"
           >
             {item.show.name}

@@ -154,6 +154,7 @@ export const dogsRouter = createTRPCRouter({
       const showHistory = dogEntries
         .map((entry) => ({
           showId: entry.show.id,
+          showSlug: entry.show.slug,
           showName: entry.show.name,
           showDate: entry.show.startDate,
           showType: entry.show.showType,

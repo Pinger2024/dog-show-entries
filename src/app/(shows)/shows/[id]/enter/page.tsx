@@ -58,9 +58,9 @@ function formatFee(pence: number) {
 
 export default function EnterShowPage() {
   const params = useParams();
-  const showId = params.id as string;
+  const idOrSlug = params.id as string;
 
-  const cart = useEntryCart(showId);
+  const cart = useEntryCart(idOrSlug);
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
   const [isNfc, setIsNfc] = useState(false);
   const [healthDeclared, setHealthDeclared] = useState(false);
@@ -95,8 +95,10 @@ export default function EnterShowPage() {
   // Fetch data
   const utils = trpc.useUtils();
   const { data: show, isLoading: showLoading } = trpc.shows.getById.useQuery(
-    { id: showId }
+    { id: idOrSlug }
   );
+  // Resolved UUID for tRPC calls that require it
+  const showId = show?.id ?? '';
 
   const { data: dogs, isLoading: dogsLoading } = trpc.dogs.list.useQuery();
 
@@ -116,13 +118,13 @@ export default function EnterShowPage() {
   const { data: showClasses, isLoading: classesLoading } =
     trpc.shows.getClasses.useQuery(
       { showId, breedId: breedIdForClasses },
-      { enabled: cart.step === 'select_classes' }
+      { enabled: !!showId && cart.step === 'select_classes' }
     );
 
   // Check if show has JH classes (to conditionally show "Add Junior Handler" button)
   const { data: allShowClasses } = trpc.shows.getClasses.useQuery(
     { showId },
-    { enabled: cart.step === 'entry_type' || cart.step === 'cart_review' }
+    { enabled: !!showId && (cart.step === 'entry_type' || cart.step === 'cart_review') }
   );
   const hasJhClasses = allShowClasses?.some(
     (sc) => sc.classDefinition.type === 'junior_handler'
@@ -131,7 +133,7 @@ export default function EnterShowPage() {
   // Pre-fetch sundry items from select_classes onwards so they're ready at cart_review
   const { data: sundryItemsData } = trpc.shows.getSundryItems.useQuery(
     { showId },
-    { enabled: cart.step === 'select_classes' || cart.step === 'cart_review' }
+    { enabled: !!showId && (cart.step === 'select_classes' || cart.step === 'cart_review') }
   );
 
   // Sync cart sundry item prices/names with server data (handles secretary price changes)
@@ -170,7 +172,7 @@ export default function EnterShowPage() {
   // are filtered to classes actually in this show's schedule
   const { data: winSummary } = trpc.dogs.getWinSummary.useQuery(
     { dogId: cart.activeEntry?.dogId ?? '', showId },
-    { enabled: !!cart.activeEntry?.dogId && cart.step === 'select_classes' }
+    { enabled: !!showId && !!cart.activeEntry?.dogId && cart.step === 'select_classes' }
   );
 
   // Profile completeness check
@@ -449,7 +451,7 @@ export default function EnterShowPage() {
       {/* Header */}
       <div className="mb-6">
         <Link
-          href={`/shows/${showId}`}
+          href={`/shows/${idOrSlug}`}
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="size-4" />

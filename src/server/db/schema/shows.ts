@@ -61,12 +61,14 @@ import { judgeContracts } from './judge-contracts';
 import { stewardAssignments } from './steward-assignments';
 import { showChecklistItems } from './show-checklist';
 import { sundryItems } from './sundry-items';
+import { showSponsors } from './sponsors';
 
 export const shows = pgTable(
   'shows',
   {
     id: uuid('id').defaultRandom().primaryKey(),
     name: text('name').notNull(),
+    slug: text('slug').unique(),
     showType: showTypeEnum('show_type').notNull(),
     showScope: showScopeEnum('show_scope').notNull(),
     organisationId: uuid('organisation_id')
@@ -135,4 +137,5 @@ export const showsRelations = relations(shows, ({ one, many }) => ({
   stewardAssignments: many(stewardAssignments),
   checklistItems: many(showChecklistItems),
   sundryItems: many(sundryItems),
+  showSponsors: many(showSponsors),
 }));

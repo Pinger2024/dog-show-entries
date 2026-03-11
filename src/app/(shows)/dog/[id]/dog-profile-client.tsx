@@ -644,7 +644,7 @@ export function DogProfileClient({ id }: { id: string }) {
                   {/* Show header */}
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                     <Link
-                      href={`/shows/${show.showId}/results`}
+                      href={`/shows/${show.showSlug ?? show.showId}/results`}
                       className="group inline-flex items-baseline gap-1 font-serif text-base font-bold text-stone-800 hover:text-stone-600"
                     >
                       {show.showName}

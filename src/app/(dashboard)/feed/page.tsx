@@ -223,7 +223,7 @@ function FeedItem({ item }: { item: FeedItemData }) {
             </div>
             <div className="min-w-0 flex-1">
               <Link
-                href={`/shows/${item.show.id}/results`}
+                href={`/shows/${item.show.slug ?? item.show.id}/results`}
                 className="font-serif text-sm font-bold hover:underline"
               >
                 {item.show.name}

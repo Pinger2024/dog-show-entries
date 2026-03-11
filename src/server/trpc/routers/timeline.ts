@@ -77,6 +77,7 @@ export const timelineRouter = createTRPCRouter({
           createdAt: new Date(entry.show.startDate),
           show: {
             id: entry.show.id,
+            slug: entry.show.slug,
             name: entry.show.name,
             date: entry.show.startDate,
             showType: entry.show.showType,
@@ -321,6 +322,7 @@ export const timelineRouter = createTRPCRouter({
           },
           show: {
             id: entry.show.id,
+            slug: entry.show.slug,
             name: entry.show.name,
             date: entry.show.startDate,
             showType: entry.show.showType,

@@ -228,11 +228,11 @@ export default function EntryDetailPage() {
       {/* Actions */}
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-3">
         <Button variant="outline" asChild>
-          <Link href={`/shows/${entry.showId}`}>View Show</Link>
+          <Link href={`/shows/${entry.show.slug ?? entry.showId}`}>View Show</Link>
         </Button>
         {(entry.status === 'confirmed' || entry.status === 'pending') && entry.show.status === 'entries_open' && (
           <Button variant="outline" asChild>
-            <Link href={`/shows/${entry.showId}/entries/${entry.id}/edit`}>
+            <Link href={`/shows/${entry.show.slug ?? entry.showId}/entries/${entry.id}/edit`}>
               <Pencil className="size-4" />
               Edit Classes
             </Link>

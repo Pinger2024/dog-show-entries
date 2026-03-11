@@ -16,6 +16,18 @@ import {
   achievements,
   dogs,
 } from '@/server/db/schema';
+import { isUuid } from '@/lib/slugify';
+
+/** Resolve a show slug or UUID to a UUID */
+async function resolveShowId(db: Database, idOrSlug: string): Promise<string> {
+  if (isUuid(idOrSlug)) return idOrSlug;
+  const show = await db.query.shows.findFirst({
+    where: eq(shows.slug, idOrSlug),
+    columns: { id: true },
+  });
+  if (!show) throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
+  return show.id;
+}
 
 async function verifyStewardAssignment(
   db: Database,
@@ -488,10 +500,11 @@ export const stewardRouter = createTRPCRouter({
     }),
 
   getPublicShowAchievements: publicProcedure
-    .input(z.object({ showId: z.string().uuid() }))
+    .input(z.object({ showId: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
+      const showId = await resolveShowId(ctx.db, input.showId);
       return ctx.db.query.achievements.findMany({
-        where: eq(achievements.showId, input.showId),
+        where: eq(achievements.showId, showId),
         with: {
           dog: {
             with: { breed: true },
@@ -502,10 +515,11 @@ export const stewardRouter = createTRPCRouter({
 
   // ── Public: live results for a show ─────────────────────
   getLiveResults: publicProcedure
-    .input(z.object({ showId: z.string().uuid() }))
+    .input(z.object({ showId: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
+      const showId = await resolveShowId(ctx.db, input.showId);
       const show = await ctx.db.query.shows.findFirst({
-        where: eq(shows.id, input.showId),
+        where: eq(shows.id, showId),
         with: { organisation: true, venue: true },
       });
 
@@ -651,10 +665,11 @@ export const stewardRouter = createTRPCRouter({
 
   // ── Public: results summary (progress indicator) ────────
   getResultsSummary: publicProcedure
-    .input(z.object({ showId: z.string().uuid() }))
+    .input(z.object({ showId: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
+      const showId = await resolveShowId(ctx.db, input.showId);
       const classes = await ctx.db.query.showClasses.findMany({
-        where: eq(showClasses.showId, input.showId),
+        where: eq(showClasses.showId, showId),
         with: {
           entryClasses: {
             with: {

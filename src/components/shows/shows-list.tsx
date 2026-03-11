@@ -46,6 +46,7 @@ function useDebounce<T>(value: T, delayMs: number): T {
 
 type ShowListItem = {
   id: string;
+  slug: string | null;
   name: string;
   showType: string;
   status: string;
@@ -774,7 +775,7 @@ function ShowCard({ show, distance }: { show: ShowListItem; distance?: number })
   const isOpen = show.status === 'entries_open' && !isEntryCloseDatePast(show.entryCloseDate);
 
   return (
-    <Link href={`/shows/${show.id}`} className="group block">
+    <Link href={`/shows/${show.slug ?? show.id}`} className="group block">
       <div className="relative flex h-full flex-col overflow-hidden rounded-xl border border-border/60 bg-white shadow-sm transition-all duration-200 hover:border-border hover:shadow-md">
         {/* Colored top accent bar */}
         <div className={`h-1 w-full ${meta?.accent ?? 'bg-gray-300'}`} />

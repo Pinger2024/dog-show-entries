@@ -2,6 +2,7 @@ import { ImageResponse } from 'next/og';
 import { eq } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { shows, showClasses } from '@/server/db/schema';
+import { isUuid } from '@/lib/slugify';
 import { format } from 'date-fns';
 
 export const runtime = 'nodejs';
@@ -38,7 +39,7 @@ export default async function OGImage({
   ]);
 
   const show = await db?.query.shows.findFirst({
-    where: eq(shows.id, id),
+    where: isUuid(id) ? eq(shows.id, id) : eq(shows.slug, id),
     with: {
       venue: true,
       organisation: true,

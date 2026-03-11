@@ -230,7 +230,7 @@ export default function DashboardPage() {
               {upcomingData.items.map((show) => (
                 <Link
                   key={show.id}
-                  href={`/shows/${show.id}`}
+                  href={`/shows/${show.slug ?? show.id}`}
                   className="block rounded-lg border p-3 sm:p-4 transition-colors hover:bg-accent/30 active:bg-accent/40"
                 >
                   <div className="flex items-start justify-between gap-2 sm:gap-3">
