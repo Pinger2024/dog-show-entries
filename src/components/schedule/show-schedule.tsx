@@ -696,7 +696,7 @@ export function ShowSchedule({
           <Text style={s.infoLabel}>Not For Competition</Text>
           <Text style={s.infoText}>
             {sd?.acceptsNfc !== false
-              ? 'Not For Competition entries are accepted. NFC dogs must be registered with the Royal Kennel Club and aged 3 months or over.'
+              ? 'Not For Competition entries are accepted. NFC dogs must be registered with the Royal Kennel Club and aged 12 weeks or over.'
               : 'Not For Competition entries are not accepted at this show.'}
           </Text>
         </View>
@@ -914,8 +914,16 @@ export function ShowSchedule({
           <Text style={s.defDescription}>For dogs which have not won a Challenge Certificate/CACIB/CAC/Green Star or three or more First Prizes at Open and Championship Shows (Minor Puppy, Special Minor Puppy, Puppy and Special Puppy classes excepted, whether restricted or not).</Text>
         </View>
         <View style={s.defBlock} wrap={false}>
+          <Text style={s.defName}>YEARLING:</Text>
+          <Text style={s.defDescription}>For dogs of twelve and not exceeding twenty four calendar months of age on the first day of the Show.</Text>
+        </View>
+        <View style={s.defBlock} wrap={false}>
+          <Text style={s.defName}>GRADUATE:</Text>
+          <Text style={s.defDescription}>For dogs which have not won a Challenge Certificate/CACIB/CAC/Green Star or four or more First Prizes at Championship Shows in Graduate, Post Graduate, Minor Limit, Mid Limit, Limit and Open Classes, whether restricted or not, where Challenge Certificates were offered for the breed.</Text>
+        </View>
+        <View style={s.defBlock} wrap={false}>
           <Text style={s.defName}>POST GRADUATE:</Text>
-          <Text style={s.defDescription}>For dogs which have not won a CC/CACIB/CAC/Green Stars or five or more First prizes at Championship Shows in Post Graduate, Minor Limit, Mid Limit, Limit and Open classes whether restricted or not where Challenge Certificates were offered for the breed.</Text>
+          <Text style={s.defDescription}>For dogs which have not won a Challenge Certificate/CACIB/CAC/Green Star or five or more First Prizes at Championship Shows in Post Graduate, Minor Limit, Mid Limit, Limit and Open Classes, whether restricted or not, where Challenge Certificates were offered for the breed.</Text>
         </View>
         <View style={s.defBlock} wrap={false}>
           <Text style={s.defName}>LIMIT:</Text>
@@ -969,7 +977,7 @@ export function ShowSchedule({
           7. The Committee reserves to itself the right to refuse any entries.
         </Text>
         <Text style={{ ...s.noticeText, marginBottom: 2 }}>
-          8. No dog under 6 calendar months of age on the first day of the Show are not eligible for exhibition.
+          8. No dog under 6 calendar months of age on the first day of the Show is eligible for exhibition.
         </Text>
         <Text style={{ ...s.noticeText, marginBottom: 2 }}>
           9. The mating of bitches within the precincts of the Show is forbidden.
@@ -993,7 +1001,7 @@ export function ShowSchedule({
           15. All exhibitors must be familiar with Royal Kennel Club Regulation F (Annex B) Regulations for the Preparation of Dogs for Exhibition.
         </Text>
         <Text style={{ ...s.noticeText, marginBottom: 2 }}>
-          16. All dogs resident outside the UK must be issued with a Royal Kennel Club Authority to Compete number before entry to the show/event can be made. All singled must be resident within the UK. A singled entry for an overseas exhibit must be accompanied by a copy of the dog&apos;s official export pedigree.
+          16. All dogs resident outside the UK must be issued with a Royal Kennel Club Authority to Compete number before entry to the show/event can be made. All singles must be resident within the UK. A single entry for an overseas exhibit must be accompanied by a copy of the dog&apos;s official export pedigree.
         </Text>
 
         {/* Dogs in vehicles WARNING */}
@@ -1014,9 +1022,6 @@ export function ShowSchedule({
         </Text>
         <Text style={{ ...s.noticeText, marginBottom: 2 }}>
           20. An exhibitor or competitor should ensure that contact details for any handler are available and must be provided upon request in any investigation of a breach of this regulation by such handler.
-        </Text>
-        <Text style={{ ...s.noticeText, marginBottom: 2 }}>
-          20. Should any judge be prevented from fulfilling their engagement, the Committee reserves to themselves the right of appointing other judges to fulfil their duties. Exhibitors are at liberty to withdraw from competition, but no entry fees can be refunded.
         </Text>
 
         <Text style={s.footer} render={footerRender} fixed />
@@ -1111,6 +1116,9 @@ export function ShowSchedule({
         </Text>
         <Text style={{ ...s.noticeText, marginBottom: 4 }}>
           6. Any objection by an individual related to an infringement of these regulations must be made in writing to the Show Secretary or his/her office before the close of the Show and the individual must produce evidence of identity at the time of lodging the complaint.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 4 }}>
+          7. The chalking, powdering or spraying (with the exception of water) of exhibits within the precincts of the show is prohibited.
         </Text>
 
         <Text style={s.footer} render={footerRender} fixed />
