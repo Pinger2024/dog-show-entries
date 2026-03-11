@@ -10,7 +10,6 @@ import {
   FileText,
   Hash,
   List,
-  Loader2,
   Map,
   SortAsc,
 } from 'lucide-react';
@@ -34,12 +33,57 @@ import {
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 
+const placementPreviews = [
+  { label: '1st', colour: 'bg-red-100 text-red-800 border-red-300' },
+  { label: '2nd', colour: 'bg-blue-100 text-blue-800 border-blue-300' },
+  { label: '3rd', colour: 'bg-yellow-100 text-yellow-800 border-yellow-300' },
+  { label: 'Reserve', colour: 'bg-green-100 text-green-800 border-green-300' },
+  { label: 'VHC', colour: 'bg-orange-100 text-orange-800 border-orange-300' },
+];
+
 interface DocumentLink {
   label: string;
   href: string;
   icon: React.ReactNode;
   description: string;
   badge?: string;
+}
+
+function DocumentLinkCard({ doc }: { doc: DocumentLink }) {
+  return (
+    <a
+      href={doc.href}
+      download
+      className="flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted"
+    >
+      <div className="mt-0.5 shrink-0 text-muted-foreground">
+        {doc.icon}
+      </div>
+      <div className="min-w-0">
+        <p className="font-medium">
+          {doc.label}
+          {doc.badge && (
+            <Badge variant="secondary" className="ml-2 text-[10px]">
+              {doc.badge}
+            </Badge>
+          )}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {doc.description}
+        </p>
+      </div>
+    </a>
+  );
+}
+
+function DocumentGrid({ documents }: { documents: DocumentLink[] }) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {documents.map((doc) => (
+        <DocumentLinkCard key={doc.label} doc={doc} />
+      ))}
+    </div>
+  );
 }
 
 export default function DocumentsPage({
@@ -163,26 +207,7 @@ export default function DocumentsPage({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {preShowDocuments.map((doc) => (
-              <a
-                key={doc.label}
-                href={doc.href}
-                download
-                className="flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted"
-              >
-                <div className="mt-0.5 shrink-0 text-muted-foreground">
-                  {doc.icon}
-                </div>
-                <div className="min-w-0">
-                  <p className="font-medium">{doc.label}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {doc.description}
-                  </p>
-                </div>
-              </a>
-            ))}
-          </div>
+          <DocumentGrid documents={preShowDocuments} />
         </CardContent>
       </Card>
 
@@ -199,26 +224,7 @@ export default function DocumentsPage({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {catalogueDocuments.map((doc) => (
-                <a
-                  key={doc.label}
-                  href={doc.href}
-                  download
-                  className="flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted"
-                >
-                  <div className="mt-0.5 shrink-0 text-muted-foreground">
-                    {doc.icon}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-medium">{doc.label}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {doc.description}
-                    </p>
-                  </div>
-                </a>
-              ))}
-            </div>
+            <DocumentGrid documents={catalogueDocuments} />
           </CardContent>
         </Card>
       )}
@@ -235,33 +241,7 @@ export default function DocumentsPage({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {showDayDocuments.map((doc) => (
-              <a
-                key={doc.label}
-                href={doc.href}
-                download
-                className="flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted"
-              >
-                <div className="mt-0.5 shrink-0 text-muted-foreground">
-                  {doc.icon}
-                </div>
-                <div className="min-w-0">
-                  <p className="font-medium">
-                    {doc.label}
-                    {doc.badge && (
-                      <Badge variant="secondary" className="ml-2 text-[10px]">
-                        {doc.badge}
-                      </Badge>
-                    )}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {doc.description}
-                  </p>
-                </div>
-              </a>
-            ))}
-          </div>
+          <DocumentGrid documents={showDayDocuments} />
         </CardContent>
       </Card>
 
@@ -343,30 +323,14 @@ export default function DocumentsPage({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {[1, 2, 3, 4, 5].map((p) => {
-              const labels: Record<number, string> = {
-                1: '1st',
-                2: '2nd',
-                3: '3rd',
-                4: 'Reserve',
-                5: 'VHC',
-              };
-              const colours: Record<number, string> = {
-                1: 'bg-red-100 text-red-800 border-red-300',
-                2: 'bg-blue-100 text-blue-800 border-blue-300',
-                3: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-                4: 'bg-green-100 text-green-800 border-green-300',
-                5: 'bg-orange-100 text-orange-800 border-orange-300',
-              };
-              return (
-                <div
-                  key={p}
-                  className={`rounded-md border px-3 py-1.5 text-xs font-medium ${colours[p]}`}
-                >
-                  {labels[p]}
-                </div>
-              );
-            })}
+            {placementPreviews.map((p) => (
+              <div
+                key={p.label}
+                className={`rounded-md border px-3 py-1.5 text-xs font-medium ${p.colour}`}
+              >
+                {p.label}
+              </div>
+            ))}
             <p className="self-center text-xs text-muted-foreground">
               Colour scheme preview
             </p>

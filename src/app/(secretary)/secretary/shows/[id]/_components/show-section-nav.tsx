@@ -34,32 +34,30 @@ export function ShowSectionNav({ showId }: { showId: string }) {
   const basePath = `/secretary/shows/${showId}`;
 
   return (
-    <nav>
-      <div className="flex gap-1 overflow-x-auto pb-2 sm:flex-wrap sm:overflow-x-visible sm:pb-0 scrollbar-hide">
-        {sections.map((section) => {
-          const href = `${basePath}${section.path}`;
-          const isActive = section.exact
-            ? pathname === basePath || pathname === `${basePath}/`
-            : pathname.startsWith(href);
-          const Icon = section.icon;
+    <nav className="flex gap-1 overflow-x-auto pb-2 sm:flex-wrap sm:overflow-x-visible sm:pb-0 scrollbar-hide">
+      {sections.map((section) => {
+        const href = `${basePath}${section.path}`;
+        const isActive = section.exact
+          ? pathname === basePath || pathname === `${basePath}/`
+          : pathname.startsWith(href);
+        const Icon = section.icon;
 
-          return (
-            <Link
-              key={section.path}
-              href={href}
-              className={cn(
-                'inline-flex items-center gap-1.5 rounded-full px-3 py-2 min-h-[2.75rem] text-sm font-medium whitespace-nowrap transition-colors shrink-0 sm:shrink',
-                isActive
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-              )}
-            >
-              <Icon className="size-3.5" />
-              {section.label}
-            </Link>
-          );
-        })}
-      </div>
+        return (
+          <Link
+            key={section.path}
+            href={href}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-full px-3 py-2 min-h-[2.75rem] text-sm font-medium whitespace-nowrap transition-colors shrink-0 sm:shrink',
+              isActive
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            )}
+          >
+            <Icon className="size-3.5" />
+            {section.label}
+          </Link>
+        );
+      })}
     </nav>
   );
 }
