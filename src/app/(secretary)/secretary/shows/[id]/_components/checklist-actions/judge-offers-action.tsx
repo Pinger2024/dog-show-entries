@@ -1,10 +1,9 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { formatRelativeDate } from '@/lib/date-utils';
 import {
   Check,
-  ChevronDown,
-  ChevronUp,
   Filter,
   Loader2,
   Mail,
@@ -32,6 +31,12 @@ import type { ActionPanelProps } from '../checklist-action-registry';
 
 type StageFilter = 'all' | 'no_offer' | 'offer_sent' | 'offer_accepted' | 'confirmed' | 'declined';
 
+const PAGE_SIZE = 25;
+
+const STAGE_ORDER: Record<string, number> = {
+  no_offer: 0, offer_sent: 1, offer_accepted: 2, confirmed: 3, declined: 4,
+};
+
 const STAGE_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
   no_offer: { label: 'No Offer', color: 'text-muted-foreground', icon: '○' },
   offer_sent: { label: 'Offer Sent', color: 'text-amber-600', icon: '◔' },
@@ -45,7 +50,6 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
   const [filter, setFilter] = useState<StageFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(0);
-  const PAGE_SIZE = 25;
 
   // Add judge form state
   const [showAddForm, setShowAddForm] = useState(false);
@@ -116,19 +120,27 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
     onError: (err) => toast.error(err.message ?? 'Failed to create judge'),
   });
 
+  const reseedMutation = trpc.secretary.reseedChecklistJudges.useMutation({
+    onSuccess: () => {
+      // Invalidate AFTER reseed writes new per-judge checklist items
+      utils.secretary.getChecklist.invalidate({ showId });
+      utils.secretary.getChecklistJudgeSummary.invalidate({ showId });
+    },
+  });
+
   const assignMutation = trpc.secretary.assignJudge.useMutation({
     onSuccess: () => {
       toast.success('Judge added to show');
       resetAddForm();
-      // Refresh the pipeline and reseed checklist items
       utils.secretary.getChecklistJudgeSummary.invalidate({ showId });
-      utils.secretary.getChecklist.invalidate({ showId });
+      // Don't invalidate getChecklist here — wait for reseed to finish writing rows
       reseedMutation.mutate({ showId });
     },
-    onError: (err) => toast.error(err.message ?? 'Failed to assign judge'),
+    onError: (err) => {
+      toast.error(err.message ?? 'Failed to assign judge');
+      resetAddForm();
+    },
   });
-
-  const reseedMutation = trpc.secretary.reseedChecklistJudges.useMutation();
 
   function resetAddForm() {
     setShowAddForm(false);
@@ -170,15 +182,17 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
       );
     }
 
-    const stageOrder: Record<string, number> = {
-      no_offer: 0, offer_sent: 1, offer_accepted: 2, confirmed: 3, declined: 4,
-    };
     return judges.sort((a, b) => {
       const aStage = a.stage ?? 'no_offer';
       const bStage = b.stage ?? 'no_offer';
-      return (stageOrder[aStage] ?? 5) - (stageOrder[bStage] ?? 5);
+      return (STAGE_ORDER[aStage] ?? 5) - (STAGE_ORDER[bStage] ?? 5);
     });
   }, [data, filter, searchQuery]);
+
+  const pendingOfferIds = useMemo(
+    () => data?.judges.filter((j) => !j.stage && j.contactEmail).map((j) => j.judgeId) ?? [],
+    [data]
+  );
 
   const paginatedJudges = filteredJudges.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
   const totalPages = Math.ceil(filteredJudges.length / PAGE_SIZE);
@@ -196,9 +210,6 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
 
   const hasJudges = data && data.judges.length > 0;
   const summary = data?.summary;
-  const pendingOfferIds = data?.judges
-    .filter((j) => !j.stage && j.contactEmail)
-    .map((j) => j.judgeId) ?? [];
 
   return (
     <div className="space-y-4">
@@ -494,10 +505,10 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
                     <div className="text-xs text-muted-foreground truncate">
                       {j.breeds.length > 0 ? j.breeds.join(', ') : 'All breeds'}
                       {j.offerSentAt && stage === 'offer_sent' && (
-                        <> — sent {timeAgo(j.offerSentAt)}</>
+                        <> — sent {formatRelativeDate(new Date(j.offerSentAt))}</>
                       )}
                       {j.acceptedAt && (stage === 'offer_accepted' || stage === 'confirmed') && (
-                        <> — accepted {timeAgo(j.acceptedAt)}</>
+                        <> — accepted {formatRelativeDate(new Date(j.acceptedAt))}</>
                       )}
                     </div>
                   </div>
@@ -582,14 +593,4 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
       )}
     </div>
   );
-}
-
-function timeAgo(date: Date | string): string {
-  const d = new Date(date);
-  const days = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
-  if (days === 0) return 'today';
-  if (days === 1) return 'yesterday';
-  if (days < 7) return `${days} days ago`;
-  if (days < 30) return `${Math.floor(days / 7)} week${Math.floor(days / 7) > 1 ? 's' : ''} ago`;
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }

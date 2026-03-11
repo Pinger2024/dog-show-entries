@@ -237,6 +237,16 @@ export default function AdminDashboardPage() {
   const { data: session } = useSession();
   const { data, isLoading } = trpc.adminDashboard.getDashboard.useQuery();
 
+  // Hooks must be called before any early returns (React Rules of Hooks)
+  const entryChartData = useMemo(
+    () => data ? fillChartDays(data.charts.dailyEntries, 'count') : [],
+    [data]
+  );
+  const revenueChartData = useMemo(
+    () => data ? fillChartDays(data.charts.dailyRevenue, 'amount') : [],
+    [data]
+  );
+
   // Admin-only guard
   if (
     session?.user &&
@@ -256,15 +266,6 @@ export default function AdminDashboardPage() {
   const { stats, attention, activity, showPipeline, charts } = data;
   const firstName = session?.user?.name?.split(' ')[0] ?? 'there';
   const totalPending = stats.pendingFeedback + stats.pendingApplications;
-
-  const entryChartData = useMemo(
-    () => fillChartDays(charts.dailyEntries, 'count'),
-    [charts.dailyEntries]
-  );
-  const revenueChartData = useMemo(
-    () => fillChartDays(charts.dailyRevenue, 'amount'),
-    [charts.dailyRevenue]
-  );
 
   const hasAttention =
     attention.failedPayments.length > 0 ||
