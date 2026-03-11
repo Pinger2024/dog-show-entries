@@ -5,23 +5,26 @@
  * Uses tradeprint-node-sdk (CommonJS).
  */
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const SDK = require('tradeprint-node-sdk');
+// Lazy-loaded to avoid pulling the heavy SDK into memory on every server start.
+// Only loaded when a Print Shop function is actually called.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _sdk: any = null;
 
-let _initialized = false;
-
-function initSDK() {
-  if (_initialized) return;
-  const env = process.env.TRADEPRINT_ENVIRONMENT === 'production'
-    ? SDK.Environments.Production
-    : SDK.Environments.Sandbox;
-  SDK.setEnvironment(env);
-  SDK.setDebugging(false);
-  SDK.setCredentials(
-    process.env.TRADEPRINT_API_USERNAME,
-    process.env.TRADEPRINT_API_PASSWORD
-  );
-  _initialized = true;
+function getSDK() {
+  if (!_sdk) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    _sdk = require('tradeprint-node-sdk');
+    const env = process.env.TRADEPRINT_ENVIRONMENT === 'production'
+      ? _sdk.Environments.Production
+      : _sdk.Environments.Sandbox;
+    _sdk.setEnvironment(env);
+    _sdk.setDebugging(false);
+    _sdk.setCredentials(
+      process.env.TRADEPRINT_API_USERNAME,
+      process.env.TRADEPRINT_API_PASSWORD
+    );
+  }
+  return _sdk;
 }
 
 // ── Price cache (1 hour TTL) ──
@@ -48,7 +51,7 @@ export async function getTradePrices(
   specs: Record<string, string>,
   serviceLevel: string = 'standard'
 ): Promise<Map<number, number>> {
-  initSDK();
+  const SDK = getSDK();
 
   const cacheKey = priceCacheKey(productName, specs) + `:${serviceLevel}`;
   const cached = priceCache.get(cacheKey);
@@ -105,7 +108,7 @@ export async function getAvailableQuantities(
   specs: Record<string, string>,
   serviceLevel: string = 'Standard'
 ): Promise<number[]> {
-  initSDK();
+  const SDK = getSDK();
 
   try {
     const productService = new SDK.ProductService();
@@ -145,7 +148,7 @@ export async function getDeliveryEstimate(
   productionData: Record<string, string>,
   postcode: string
 ): Promise<{ date: string; formattedDate: string } | null> {
-  initSDK();
+  const SDK = getSDK();
 
   try {
     const productService = new SDK.ProductService();
@@ -174,7 +177,7 @@ export async function getDeliveryEstimate(
  * Validate an order before submission.
  */
 export async function validateOrder(orderData: TradeprintOrderInput): Promise<{ valid: boolean; errors?: string[] }> {
-  initSDK();
+  const SDK = getSDK();
 
   try {
     const orderService = new SDK.OrderService();
@@ -215,7 +218,7 @@ export async function validateOrder(orderData: TradeprintOrderInput): Promise<{ 
  * Submit an order to Tradeprint.
  */
 export async function submitOrder(orderData: TradeprintOrderInput): Promise<{ orderRef: string }> {
-  initSDK();
+  const SDK = getSDK();
 
   const orderService = new SDK.OrderService();
   const request = orderService
@@ -250,7 +253,7 @@ export async function submitOrder(orderData: TradeprintOrderInput): Promise<{ or
  * Get order status from Tradeprint.
  */
 export async function getOrderStatus(orderRef: string): Promise<TradeprintOrderStatus | null> {
-  initSDK();
+  const SDK = getSDK();
 
   try {
     const orderService = new SDK.OrderService();
