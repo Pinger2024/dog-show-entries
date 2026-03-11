@@ -32,6 +32,8 @@ export {
   sponsorCategoryEnum,
   sponsorTierEnum,
   adSizeEnum,
+  printOrderStatusEnum,
+  printServiceLevelEnum,
 } from './enums';
 
 // Tables
@@ -122,3 +124,9 @@ export {
   classSponsorships,
   classSponsorshipsRelations,
 } from './sponsors';
+export {
+  printOrders,
+  printOrdersRelations,
+  printOrderItems,
+  printOrderItemsRelations,
+} from './print-orders';

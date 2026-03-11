@@ -3,6 +3,7 @@ import { eq, sql } from 'drizzle-orm';
 import { createTRPCRouter } from '../init';
 import { adminProcedure } from '../procedures';
 import { users, entries } from '@/server/db/schema';
+import { populateShowWithTestData, clearShowTestData } from '@/server/services/test-data-generator';
 
 export const devRouter = createTRPCRouter({
   /**
@@ -56,5 +57,32 @@ export const devRouter = createTRPCRouter({
       }
 
       return updated;
+    }),
+
+  /**
+   * Populate a show with realistic test data.
+   * Creates dogs, entries, entry classes, judges, rings, and orders.
+   */
+  populateShowTestData: adminProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        targetEntries: z.number().int().min(10).max(500).optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      return populateShowWithTestData({
+        showId: input.showId,
+        targetEntries: input.targetEntries,
+      });
+    }),
+
+  /**
+   * Clear all test data from a show (entries, dogs, orders, judges, rings).
+   */
+  clearShowTestData: adminProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .mutation(async ({ input }) => {
+      return clearShowTestData(input.showId);
     }),
 });

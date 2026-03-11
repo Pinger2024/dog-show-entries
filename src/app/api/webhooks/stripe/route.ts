@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { getStripe } from '@/server/services/stripe';
 import { db } from '@/server/db';
-import { entries, orders, payments, organisations, plans, users } from '@/server/db/schema';
+import { entries, orders, payments, organisations, plans, users, printOrders, printOrderItems } from '@/server/db/schema';
 import { sendEntryConfirmationEmail, sendSecretaryNotificationEmail } from '@/server/services/email';
 import type Stripe from 'stripe';
 
@@ -36,7 +36,24 @@ export async function POST(request: NextRequest) {
   switch (event.type) {
     case 'payment_intent.succeeded': {
       const paymentIntent = event.data.object as Stripe.PaymentIntent;
-      const { entryId, orderId } = paymentIntent.metadata;
+      const { entryId, orderId, printOrderId } = paymentIntent.metadata;
+
+      // Print order payment
+      if (paymentIntent.metadata.type === 'print_order' && printOrderId) {
+        await db
+          .update(printOrders)
+          .set({
+            status: 'paid',
+            stripePaymentStatus: 'succeeded',
+          })
+          .where(eq(printOrders.id, printOrderId));
+
+        // Submit to Tradeprint (non-blocking)
+        submitPrintOrderToTradeprint(printOrderId).catch((err) =>
+          console.error('[webhook] Tradeprint submission failed:', err)
+        );
+        break;
+      }
 
       // Order-level payment: confirm all entries in the order
       if (orderId) {
@@ -47,13 +64,12 @@ export async function POST(request: NextRequest) {
           ),
         });
 
-        for (const entry of orderEntries) {
-          if (entry.status !== 'confirmed') {
-            await db
-              .update(entries)
-              .set({ status: 'confirmed' })
-              .where(eq(entries.id, entry.id));
-          }
+        const toConfirm = orderEntries.filter(e => e.status !== 'confirmed').map(e => e.id);
+        if (toConfirm.length > 0) {
+          await db
+            .update(entries)
+            .set({ status: 'confirmed' })
+            .where(inArray(entries.id, toConfirm));
         }
 
         await db
@@ -97,7 +113,19 @@ export async function POST(request: NextRequest) {
 
     case 'payment_intent.payment_failed': {
       const paymentIntent = event.data.object as Stripe.PaymentIntent;
-      const { orderId } = paymentIntent.metadata;
+      const { orderId, printOrderId } = paymentIntent.metadata;
+
+      // Print order payment failed
+      if (paymentIntent.metadata.type === 'print_order' && printOrderId) {
+        await db
+          .update(printOrders)
+          .set({
+            status: 'failed',
+            stripePaymentStatus: 'failed',
+          })
+          .where(eq(printOrders.id, printOrderId));
+        break;
+      }
 
       if (orderId) {
         await db
@@ -312,4 +340,84 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ received: true });
+}
+
+/**
+ * Submit a print order to Tradeprint after successful payment.
+ * Runs asynchronously so the webhook returns quickly.
+ */
+async function submitPrintOrderToTradeprint(printOrderId: string) {
+  const order = await db.query.printOrders.findFirst({
+    where: eq(printOrders.id, printOrderId),
+    with: { items: true, orderedBy: true, show: true },
+  });
+
+  if (!order || !order.items.length) {
+    console.error(`[tradeprint] Cannot submit: order ${printOrderId} not found or empty`);
+    return;
+  }
+
+  // Check all PDFs are generated
+  const missingPdfs = order.items.filter((i) => !i.pdfPublicUrl);
+  if (missingPdfs.length > 0) {
+    console.error(`[tradeprint] Missing PDFs for items: ${missingPdfs.map((i) => i.documentType).join(', ')}`);
+    return;
+  }
+
+  try {
+    const { submitOrder, capitaliseServiceLevel } = await import('@/server/services/tradeprint');
+
+    const nameParts = (order.deliveryName ?? 'Show Secretary').split(' ');
+    const firstName = nameParts[0] ?? 'Show';
+    const lastName = nameParts.slice(1).join(' ') || 'Secretary';
+
+    const result = await submitOrder({
+      orderReference: `REMI-${order.id.slice(0, 8).toUpperCase()}`,
+      billingAddress: {
+        firstName,
+        lastName,
+        streetName: order.deliveryAddress1 ?? '',
+        postalCode: order.deliveryPostcode ?? '',
+        city: order.deliveryTown ?? '',
+        country: 'GB',
+        email: order.orderedBy?.email ?? '',
+        phone: order.deliveryPhone ?? '',
+      },
+      items: order.items.map((item) => ({
+        fileUrl: item.pdfPublicUrl!,
+        serviceLevel: capitaliseServiceLevel(order.serviceLevel),
+        productId: item.tradeprintProductId ?? '',
+        quantity: item.quantity,
+        productionData: (item.printSpecs as Record<string, string>) ?? {},
+        deliveryAddress: {
+          firstName,
+          lastName,
+          add1: order.deliveryAddress1 ?? '',
+          add2: order.deliveryAddress2 ?? undefined,
+          town: order.deliveryTown ?? '',
+          postcode: order.deliveryPostcode ?? '',
+          country: 'GB',
+          contactPhone: order.deliveryPhone ?? '',
+        },
+        partnerContactDetails: {
+          name: `${firstName} ${lastName}`,
+          email: order.orderedBy?.email ?? '',
+          phone: order.deliveryPhone ?? '',
+        },
+      })),
+    });
+
+    await db
+      .update(printOrders)
+      .set({
+        status: 'submitted',
+        tradeprintOrderRef: result.orderRef,
+      })
+      .where(eq(printOrders.id, printOrderId));
+
+    console.log(`[tradeprint] Order ${printOrderId} submitted: ${result.orderRef}`);
+  } catch (err) {
+    console.error(`[tradeprint] Submission failed for ${printOrderId}:`, err);
+    // Order stays as 'paid' — can retry via refreshStatus
+  }
 }

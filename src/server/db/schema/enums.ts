@@ -249,3 +249,23 @@ export const adSizeEnum = pgEnum('ad_size', [
   'half_page',
   'quarter_page',
 ]);
+
+// ── Print Shop enums ──────────────────────────────────
+
+export const printOrderStatusEnum = pgEnum('print_order_status', [
+  'draft',
+  'awaiting_payment',
+  'paid',
+  'submitted',
+  'in_production',
+  'dispatched',
+  'delivered',
+  'cancelled',
+  'failed',
+]);
+
+export const printServiceLevelEnum = pgEnum('print_service_level', [
+  'saver',
+  'standard',
+  'express',
+]);

@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   ListChecks,
   PoundSterling,
+  Printer,
   Ticket,
   Trophy,
   Users,
@@ -30,6 +31,7 @@ const sections = [
   { path: '/sponsors', label: 'Sponsors', icon: Handshake },
   { path: '/schedule', label: 'Schedule', icon: CalendarDays },
   { path: '/documents', label: 'Documents', icon: FolderOpen },
+  { path: '/print-shop', label: 'Print Shop', icon: Printer },
 ];
 
 export function ShowSectionNav({ showId }: { showId: string }) {

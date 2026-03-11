@@ -26,6 +26,7 @@ import { JudgeEntryNumbersAction } from './checklist-actions/judge-entry-numbers
 import { JudgeThankYouAction } from './checklist-actions/judge-thankyou-action';
 import { ShowStatusAction } from './checklist-actions/show-status-action';
 import { QuickLinkAction } from './checklist-actions/quick-link-action';
+import { PrintOrderAction } from './checklist-actions/print-order-action';
 
 export const ACTION_REGISTRY: Record<string, ActionRegistryEntry> = {
   // Judge pipeline — the centrepiece
@@ -50,5 +51,5 @@ export const ACTION_REGISTRY: Record<string, ActionRegistryEntry> = {
   stewards_assign: { component: QuickLinkAction, mode: 'augment' },
   judges_assign_breeds: { component: QuickLinkAction, mode: 'augment' },
   rings_finalise: { component: QuickLinkAction, mode: 'augment' },
-  catalogue_generate: { component: QuickLinkAction, mode: 'augment' },
+  catalogue_generate: { component: PrintOrderAction, mode: 'augment' },
 };
