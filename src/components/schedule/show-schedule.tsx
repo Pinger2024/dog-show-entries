@@ -86,6 +86,21 @@ export interface ScheduleJudge {
   breeds: string[];
 }
 
+export interface ScheduleSponsor {
+  name: string;
+  tier: string;
+  customTitle: string | null;
+  logoUrl: string | null;
+  website: string | null;
+  specialPrizes: string | null;
+  classSponsorships: Array<{
+    className: string;
+    trophyName: string | null;
+    trophyDonor: string | null;
+    prizeDescription: string | null;
+  }>;
+}
+
 // ── Colour Palette ─────────────────────────────────────────────────────────────
 
 const C = {
@@ -696,10 +711,12 @@ export function ShowSchedule({
   show,
   classes,
   judges,
+  sponsors = [],
 }: {
   show: ScheduleShowInfo;
   classes: ScheduleClass[];
   judges: ScheduleJudge[];
+  sponsors?: ScheduleSponsor[];
 }) {
   const showTypeLabel = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
   const showDate = formatDate(show.date);
@@ -1061,6 +1078,94 @@ export function ShowSchedule({
           {show.onCallVet && (
             <InfoCard title="On-Call Veterinary Surgeon">
               <Text style={s.infoText}>{show.onCallVet}</Text>
+            </InfoCard>
+          )}
+
+          <Text style={s.footer} render={footerRender} fixed />
+        </Page>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════════════
+          SPONSORS & ACKNOWLEDGEMENTS
+          ════════════════════════════════════════════════════════════════════ */}
+      {sponsors.length > 0 && (
+        <Page size="A5" style={s.page}>
+          <SectionBand title="Sponsors &amp; Acknowledgements" />
+
+          <View style={{ marginBottom: 8 }}>
+            <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 8, color: C.textMedium, textAlign: 'center' }}>
+              The committee gratefully acknowledges the support of the following sponsors.
+            </Text>
+          </View>
+
+          {sponsors.filter((sp) => sp.tier === 'title' || sp.tier === 'show').length > 0 && (
+            <InfoCard title="Show Sponsors">
+              {sponsors
+                .filter((sp) => sp.tier === 'title' || sp.tier === 'show')
+                .map((sp, i) => (
+                  <View key={i} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontFamily: 'Inter', fontWeight: 'bold', fontSize: 9, color: C.textDark }}>
+                        {sp.name}
+                      </Text>
+                      {sp.customTitle && (
+                        <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textMedium }}>
+                          {sp.customTitle}
+                        </Text>
+                      )}
+                      {sp.website && (
+                        <Text style={{ fontFamily: 'Inter', fontSize: 6.5, color: C.textLight }}>
+                          {sp.website}
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                ))}
+            </InfoCard>
+          )}
+
+          {sponsors.filter((sp) => sp.classSponsorships.length > 0).length > 0 && (
+            <InfoCard title="Class Sponsors &amp; Trophies">
+              {sponsors
+                .filter((sp) => sp.classSponsorships.length > 0)
+                .flatMap((sp) =>
+                  sp.classSponsorships.map((cs, j) => (
+                    <View key={`${sp.name}-${j}`} style={{ marginBottom: 4 }}>
+                      <Text style={{ fontFamily: 'Inter', fontSize: 8, color: C.textDark }}>
+                        <Text style={{ fontWeight: 'bold' }}>{cs.className}</Text>
+                        {' — sponsored by '}
+                        {sp.name}
+                      </Text>
+                      {cs.trophyName && (
+                        <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 7.5, color: C.accent, marginLeft: 8 }}>
+                          {cs.trophyName}
+                          {cs.trophyDonor ? ` (donated by ${cs.trophyDonor})` : ''}
+                        </Text>
+                      )}
+                      {cs.prizeDescription && (
+                        <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textLight, marginLeft: 8 }}>
+                          {cs.prizeDescription}
+                        </Text>
+                      )}
+                    </View>
+                  ))
+                )}
+            </InfoCard>
+          )}
+
+          {sponsors.filter((sp) => sp.specialPrizes).length > 0 && (
+            <InfoCard title="Special Prizes">
+              {sponsors
+                .filter((sp) => sp.specialPrizes)
+                .map((sp, i) => (
+                  <View key={i} style={{ marginBottom: 3 }}>
+                    <Text style={{ fontFamily: 'Inter', fontSize: 8, color: C.textDark }}>
+                      <Text style={{ fontWeight: 'bold' }}>{sp.name}</Text>
+                      {' — '}
+                      {sp.specialPrizes}
+                    </Text>
+                  </View>
+                ))}
             </InfoCard>
           )}
 

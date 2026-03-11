@@ -9,6 +9,7 @@ import type {
   ScheduleShowInfo,
   ScheduleClass,
   ScheduleJudge,
+  ScheduleSponsor,
 } from '@/components/schedule/show-schedule';
 import React from 'react';
 
@@ -48,8 +49,8 @@ export async function GET(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  // Fetch show classes and judge assignments concurrently
-  const [showClasses, judgeAssignments] = await Promise.all([
+  // Fetch show classes, judge assignments, and sponsors concurrently
+  const [showClasses, judgeAssignments, showSponsorData] = await Promise.all([
     db.query.showClasses.findMany({
       where: eq(schema.showClasses.showId, showId),
       with: {
@@ -61,6 +62,16 @@ export async function GET(
     db.query.judgeAssignments.findMany({
       where: eq(schema.judgeAssignments.showId, showId),
       with: { judge: true, breed: true },
+    }),
+    db.query.showSponsors.findMany({
+      where: eq(schema.showSponsors.showId, showId),
+      with: {
+        sponsor: true,
+        classSponsorships: {
+          with: { showClass: { with: { classDefinition: true } } },
+        },
+      },
+      orderBy: [asc(schema.showSponsors.displayOrder)],
     }),
   ]);
 
@@ -91,6 +102,22 @@ export async function GET(
       name,
       breeds: Array.from(breeds).sort(),
     }));
+
+  // Build sponsors data
+  const sponsors: ScheduleSponsor[] = showSponsorData.map((ss) => ({
+    name: ss.sponsor.name,
+    tier: ss.tier,
+    customTitle: ss.customTitle,
+    logoUrl: ss.sponsor.logoUrl,
+    website: ss.sponsor.website,
+    specialPrizes: ss.specialPrizes,
+    classSponsorships: ss.classSponsorships.map((cs) => ({
+      className: cs.showClass?.classDefinition?.name ?? 'Unknown Class',
+      trophyName: cs.trophyName,
+      trophyDonor: cs.trophyDonor,
+      prizeDescription: cs.prizeDescription,
+    })),
+  }));
 
   const showInfo: ScheduleShowInfo = {
     name: show.name,
@@ -138,6 +165,7 @@ export async function GET(
       show: showInfo,
       classes,
       judges,
+      sponsors,
     });
     const buffer = await renderToBuffer(pdfDocument);
     const filename = `${show.name.replace(/[^a-zA-Z0-9]/g, '-')}-Schedule.pdf`;

@@ -1,8 +1,11 @@
 import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 import { db } from '@/server/db';
 import { eq } from 'drizzle-orm';
 import { shows } from '@/server/db/schema';
 import { ShowDetailClient } from './show-detail';
+import { buildShowJsonLd } from '@/lib/show-json-ld';
+import { isUuid } from '@/lib/slugify';
 
 const SHOW_TYPE_LABELS: Record<string, string> = {
   companion: 'Companion Show',
@@ -13,6 +16,28 @@ const SHOW_TYPE_LABELS: Record<string, string> = {
   championship: 'Championship Show',
 };
 
+/** Resolve a show by UUID or slug */
+async function resolveShow(idOrSlug: string) {
+  if (!db) return null;
+  return db.query.shows.findFirst({
+    where: isUuid(idOrSlug) ? eq(shows.id, idOrSlug) : eq(shows.slug, idOrSlug),
+    with: {
+      organisation: true,
+      venue: true,
+      judgeAssignments: {
+        with: { judge: true },
+      },
+      showSponsors: {
+        with: {
+          sponsor: {
+            columns: { name: true, website: true, logoUrl: true },
+          },
+        },
+      },
+    },
+  });
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -20,13 +45,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
 
-  const show = await db?.query.shows.findFirst({
-    where: eq(shows.id, id),
-    with: {
-      venue: true,
-      organisation: true,
-    },
-  });
+  const show = await resolveShow(id);
 
   if (!show) {
     return { title: 'Show Not Found' };
@@ -53,22 +72,64 @@ export async function generateMetadata({
     .filter(Boolean)
     .join(' · ');
 
+  const canonical = `https://remishowmanager.co.uk/shows/${show.slug ?? show.id}`;
+
   return {
     title,
     description,
+    alternates: { canonical },
     openGraph: {
       title,
       description,
       type: 'website',
+      siteName: 'Remi Show Manager',
+      url: canonical,
     },
     twitter: {
-      card: 'summary',
+      card: 'summary_large_image',
       title,
       description,
     },
   };
 }
 
-export default function ShowDetailPage() {
-  return <ShowDetailClient />;
+export default async function ShowDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+
+  // Redirect UUID URLs to clean slug URLs (301)
+  if (isUuid(id)) {
+    const show = await db?.query.shows.findFirst({
+      where: eq(shows.id, id),
+      columns: { slug: true },
+    });
+    if (show?.slug) {
+      redirect(`/shows/${show.slug}`);
+    }
+  }
+
+  const show = await resolveShow(id);
+
+  const showUrl = `https://remishowmanager.co.uk/shows/${show?.slug ?? id}`;
+
+  // JSON-LD is safe here: content is from our own database and
+  // JSON.stringify escapes all special characters, preventing XSS.
+  const jsonLd = show
+    ? JSON.stringify(buildShowJsonLd(show, showUrl, show.showSponsors))
+    : null;
+
+  return (
+    <>
+      {jsonLd && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: jsonLd }}
+        />
+      )}
+      <ShowDetailClient />
+    </>
+  );
 }
