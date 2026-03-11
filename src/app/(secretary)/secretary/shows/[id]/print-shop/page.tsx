@@ -206,7 +206,7 @@ export default function PrintShopPage() {
 
   // Show existing orders if any and not starting new order
   const hasOrders = orders && orders.length > 0;
-  const allSelected = !!allSelected;
+  const allSelected = !!products?.length && selectedItems.length === products.length;
 
   if (productsLoading) {
     return (
