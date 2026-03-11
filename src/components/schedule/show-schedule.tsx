@@ -446,7 +446,7 @@ const s = StyleSheet.create({
     color: C.textMedium,
   },
 
-  // ── Class table ──
+  // ── Class table (all-breed) ──
   classTableHeader: {
     flexDirection: 'row',
     backgroundColor: C.primary,
@@ -473,11 +473,10 @@ const s = StyleSheet.create({
   classRowAlt: {
     backgroundColor: C.tableRowAlt,
   },
-  colNo: { width: '8%' },
-  colClass: { width: '30%' },
-  colSex: { width: '12%' },
-  colBreed: { width: '22%' },
-  colDesc: { width: '28%' },
+  colNo: { width: '10%' },
+  colClass: { width: '40%' },
+  colSex: { width: '18%' },
+  colBreed: { width: '32%' },
   cellBold: {
     fontFamily: 'Inter',
     fontSize: 8,
@@ -493,6 +492,60 @@ const s = StyleSheet.create({
     fontFamily: 'Inter',
     fontSize: 7.5,
     color: C.textLight,
+  },
+
+  // ── Class table (single breed — Dogs | Bitches two-column) ──
+  twoColContainer: {
+    flexDirection: 'row',
+  },
+  twoColHalf: {
+    width: '50%',
+  },
+  twoColHeader: {
+    backgroundColor: C.primary,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderTopLeftRadius: 4,
+    borderTopRightRadius: 4,
+  },
+  twoColHeaderText: {
+    fontFamily: 'Inter',
+    fontSize: 8,
+    fontWeight: 'bold',
+    color: C.textOnPrimary,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    textAlign: 'center',
+  },
+  twoColRow: {
+    flexDirection: 'row',
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderBottomWidth: 0.5,
+    borderBottomColor: C.cardBorder,
+  },
+  twoColRowAlt: {
+    backgroundColor: C.tableRowAlt,
+  },
+  twoColNum: {
+    fontFamily: 'Inter',
+    fontSize: 8.5,
+    fontWeight: 'bold',
+    color: C.primary,
+    width: 22,
+  },
+  twoColName: {
+    fontFamily: 'Inter',
+    fontSize: 8.5,
+    color: C.textDark,
+  },
+  twoColMixedHeader: {
+    backgroundColor: C.primary,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderTopLeftRadius: 4,
+    borderTopRightRadius: 4,
+    marginTop: 10,
   },
 
   // ── Definitions ──
@@ -654,6 +707,12 @@ export function ShowSchedule({
   const sd = show.scheduleData;
   const dockingStatement = getDockingStatement(sd);
   const estimationDate = getEstimationDate(show.entryCloseDate);
+
+  // Split classes by sex for single breed two-column layout
+  const isSingleBreed = show.showScope === 'single_breed';
+  const dogClasses = classes.filter((c) => c.sex === 'dog');
+  const bitchClasses = classes.filter((c) => c.sex === 'bitch');
+  const mixedClasses = classes.filter((c) => c.sex !== 'dog' && c.sex !== 'bitch');
 
   const footerRender = ({ pageNumber, totalPages }: { pageNumber: number; totalPages: number }) =>
     `${show.name}  ·  Schedule  ·  Page ${pageNumber} of ${totalPages}`;
@@ -1013,50 +1072,104 @@ export function ShowSchedule({
           SCHEDULE OF CLASSES
           ════════════════════════════════════════════════════════════════════ */}
       <Page size="A5" style={s.page}>
-        <SectionBand title="Schedule of Classes" />
+        <SectionBand title={isSingleBreed ? 'Classification' : 'Schedule of Classes'} />
 
-        {/* Table header */}
-        <View style={s.classTableHeader}>
-          <View style={s.colNo}>
-            <Text style={s.classTableHeaderText}>No.</Text>
+        {/* Judge name(s) above the table for single breed shows */}
+        {isSingleBreed && judges.length > 0 && (
+          <View style={{ marginBottom: 10 }}>
+            {judges.map((judge, i) => (
+              <Text key={i} style={{ fontFamily: 'Inter', fontSize: 9, fontWeight: 'bold', textAlign: 'center', color: C.textDark, marginBottom: 2 }}>
+                JUDGE: {judge.name}
+              </Text>
+            ))}
           </View>
-          <View style={s.colClass}>
-            <Text style={s.classTableHeaderText}>Class</Text>
-          </View>
-          <View style={s.colSex}>
-            <Text style={s.classTableHeaderText}>Sex</Text>
-          </View>
-          <View style={s.colBreed}>
-            <Text style={s.classTableHeaderText}>Breed</Text>
-          </View>
-          <View style={s.colDesc}>
-            <Text style={s.classTableHeaderText}>Description</Text>
-          </View>
-        </View>
+        )}
 
-        {/* Table rows */}
-        {classes.map((cls, i) => {
-          const sexLabel = cls.sex === 'dog' ? 'Dogs' : cls.sex === 'bitch' ? 'Bitches' : 'Mixed';
-          return (
-            <View key={i} style={[s.classRow, i % 2 !== 0 && s.classRowAlt]} wrap={false}>
-              <View style={s.colNo}>
-                <Text style={s.cellBold}>{cls.classNumber ?? ''}</Text>
+        {isSingleBreed ? (
+          /* ── Single breed: Dogs | Bitches two-column layout ── */
+          <>
+            <View style={s.twoColContainer}>
+              {/* Dogs column */}
+              <View style={[s.twoColHalf, { paddingRight: 4 }]}>
+                <View style={s.twoColHeader}>
+                  <Text style={s.twoColHeaderText}>Dog</Text>
+                </View>
+                {dogClasses.map((cls, i) => (
+                  <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
+                    <Text style={s.twoColNum}>{cls.classNumber ?? ''}</Text>
+                    <Text style={s.twoColName}>{cls.className}</Text>
+                  </View>
+                ))}
               </View>
-              <View style={s.colClass}>
-                <Text style={s.cellBold}>{cls.className}</Text>
-              </View>
-              <View style={s.colSex}>
-                <Text style={s.cellMuted}>{sexLabel}</Text>
-              </View>
-              <View style={s.colBreed}>
-                <Text style={s.cell}>{cls.breedName ?? ''}</Text>
-              </View>
-              <View style={s.colDesc}>
-                <Text style={s.cellMuted}>{cls.classDescription ?? ''}</Text>
+
+              {/* Bitches column */}
+              <View style={[s.twoColHalf, { paddingLeft: 4 }]}>
+                <View style={s.twoColHeader}>
+                  <Text style={s.twoColHeaderText}>Bitch</Text>
+                </View>
+                {bitchClasses.map((cls, i) => (
+                  <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
+                    <Text style={s.twoColNum}>{cls.classNumber ?? ''}</Text>
+                    <Text style={s.twoColName}>{cls.className}</Text>
+                  </View>
+                ))}
               </View>
             </View>
-          );
-        })}
+
+            {/* Mixed classes below (e.g. Junior Handler) */}
+            {mixedClasses.length > 0 && (
+              <View>
+                <View style={s.twoColMixedHeader}>
+                  <Text style={s.twoColHeaderText}>Mixed</Text>
+                </View>
+                {mixedClasses.map((cls, i) => (
+                  <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
+                    <Text style={s.twoColNum}>{cls.classNumber ?? ''}</Text>
+                    <Text style={s.twoColName}>{cls.className}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </>
+        ) : (
+          /* ── All-breed: table with No, Class, Sex, Breed (no description) ── */
+          <>
+            <View style={s.classTableHeader}>
+              <View style={s.colNo}>
+                <Text style={s.classTableHeaderText}>No.</Text>
+              </View>
+              <View style={s.colClass}>
+                <Text style={s.classTableHeaderText}>Class</Text>
+              </View>
+              <View style={s.colSex}>
+                <Text style={s.classTableHeaderText}>Sex</Text>
+              </View>
+              <View style={s.colBreed}>
+                <Text style={s.classTableHeaderText}>Breed</Text>
+              </View>
+            </View>
+
+            {classes.map((cls, i) => {
+              const sexLabel = cls.sex === 'dog' ? 'Dogs' : cls.sex === 'bitch' ? 'Bitches' : 'Mixed';
+              return (
+                <View key={i} style={[s.classRow, i % 2 !== 0 && s.classRowAlt]} wrap={false}>
+                  <View style={s.colNo}>
+                    <Text style={s.cellBold}>{cls.classNumber ?? ''}</Text>
+                  </View>
+                  <View style={s.colClass}>
+                    <Text style={s.cellBold}>{cls.className}</Text>
+                  </View>
+                  <View style={s.colSex}>
+                    <Text style={s.cellMuted}>{sexLabel}</Text>
+                  </View>
+                  <View style={s.colBreed}>
+                    <Text style={s.cell}>{cls.breedName ?? ''}</Text>
+                  </View>
+                </View>
+              );
+            })}
+          </>
+        )}
 
         <Text style={s.footer} render={footerRender} fixed />
       </Page>
