@@ -48,6 +48,17 @@ Amanda sends feedback, bug reports, and feature requests by replying to Remi ema
 - **UI:** shadcn/ui components, Tailwind CSS, Lucide icons
 - **Procedures:** `publicProcedure`, `protectedProcedure` (logged in), `secretaryProcedure` (secretary/admin)
 
+## Mobile First (IMPORTANT)
+
+**Everything we build is mobile first.** Amanda and most secretaries use their phones. Every component, layout, and form must look great on a ~375px screen before we think about desktop.
+
+Rules:
+- Design for mobile viewport first, then enhance for larger screens with `sm:` / `md:` / `lg:` breakpoints
+- Inputs, buttons, and form rows should **stack vertically on mobile** (`grid-cols-1`, then `sm:grid-cols-2` etc.)
+- Never put 3+ items in a horizontal row on mobile — use `flex-col sm:flex-row` or `grid-cols-1 sm:grid-cols-3`
+- Touch targets must be at least 44px (`min-h-[2.75rem]`)
+- Test inline action panels (checklist command center) at narrow widths — they render inside cards that are already indented
+
 ## Project Structure
 
 ```

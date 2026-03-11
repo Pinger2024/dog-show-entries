@@ -224,12 +224,12 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
           {/* RKC Search */}
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Search RKC Database</Label>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2">
               <Input
                 placeholder="Surname"
                 value={kcSearchSurname}
                 onChange={(e) => setKcSearchSurname(e.target.value)}
-                className="h-8 text-xs flex-1"
+                className="h-9 text-sm"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && kcSearchSurname.trim().length >= 2) {
                     kcSearchMutation.mutate({
@@ -243,12 +243,12 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
                 placeholder="Breed (optional)"
                 value={kcSearchBreed}
                 onChange={(e) => setKcSearchBreed(e.target.value)}
-                className="h-8 text-xs flex-1"
+                className="h-9 text-sm"
               />
               <Button
                 size="sm"
                 variant="secondary"
-                className="h-8 text-xs shrink-0"
+                className="h-9"
                 onClick={() =>
                   kcSearchMutation.mutate({
                     surname: kcSearchSurname.trim(),
@@ -257,8 +257,8 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
                 }
                 disabled={kcSearchSurname.trim().length < 2 || kcSearchMutation.isPending}
               >
-                {kcSearchMutation.isPending ? <Loader2 className="size-3 animate-spin" /> : <Search className="size-3" />}
-                Search
+                {kcSearchMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Search className="size-3.5" />}
+                Search RKC
               </Button>
             </div>
           </div>
@@ -327,41 +327,43 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
             <Label className="text-xs text-muted-foreground">
               {kcSelectedJudge ? 'Confirm Details' : 'Or Enter Manually'}
             </Label>
-            <div className="grid gap-2 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-2">
               <Input
                 placeholder="Name *"
                 value={judgeName}
                 onChange={(e) => setJudgeName(e.target.value)}
-                className="h-8 text-xs"
+                className="h-9 text-sm"
               />
-              <Input
-                placeholder="RKC Number"
-                value={judgeKc}
-                onChange={(e) => setJudgeKc(e.target.value)}
-                className="h-8 text-xs"
-              />
-              <Input
-                type="email"
-                inputMode="email"
-                autoComplete="email"
-                placeholder="Email"
-                value={judgeEmail}
-                onChange={(e) => setJudgeEmail(e.target.value)}
-                className="h-8 text-xs"
-              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <Input
+                  placeholder="RKC Number"
+                  value={judgeKc}
+                  onChange={(e) => setJudgeKc(e.target.value)}
+                  className="h-9 text-sm"
+                />
+                <Input
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  placeholder="Email"
+                  value={judgeEmail}
+                  onChange={(e) => setJudgeEmail(e.target.value)}
+                  className="h-9 text-sm"
+                />
+              </div>
             </div>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <Button
-              size="sm"
+              className="min-h-[2.75rem] sm:min-h-0"
               onClick={handleAddJudge}
               disabled={!judgeName.trim() || isAddingJudge}
             >
-              {isAddingJudge ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
+              {isAddingJudge ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
               Add to Show
             </Button>
-            <Button size="sm" variant="ghost" onClick={resetAddForm}>
+            <Button variant="outline" className="min-h-[2.75rem] sm:min-h-0" onClick={resetAddForm}>
               Cancel
             </Button>
           </div>
