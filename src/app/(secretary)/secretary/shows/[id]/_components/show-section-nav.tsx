@@ -7,6 +7,7 @@ import {
   CalendarDays,
   FileText,
   FolderOpen,
+  Handshake,
   LayoutDashboard,
   ListChecks,
   PoundSterling,
@@ -25,6 +26,7 @@ const sections = [
   { path: '/results', label: 'Results', icon: Trophy },
   { path: '/reports', label: 'Reports', icon: FileText },
   { path: '/people', label: 'People', icon: Users },
+  { path: '/sponsors', label: 'Sponsors', icon: Handshake },
   { path: '/schedule', label: 'Schedule', icon: CalendarDays },
   { path: '/documents', label: 'Documents', icon: FolderOpen },
 ];

@@ -29,6 +29,9 @@ import {
   showChecklistItems,
   sundryItems,
   orderSundryItems,
+  sponsors,
+  showSponsors,
+  classSponsorships,
 } from '@/server/db/schema';
 import {
   DEFAULT_CHECKLIST_ITEMS,
@@ -2903,5 +2906,190 @@ export const secretaryRouter = createTRPCRouter({
         .set({ scheduleData: input.scheduleData })
         .where(eq(shows.id, input.showId));
       return { success: true };
+    }),
+
+  // ── Sponsor management ──────────────────────────────────
+
+  listSponsors: secretaryProcedure
+    .input(z.object({ organisationId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.db.query.sponsors.findMany({
+        where: and(
+          eq(sponsors.organisationId, input.organisationId),
+          isNull(sponsors.deletedAt)
+        ),
+        orderBy: [asc(sponsors.name)],
+      });
+    }),
+
+  createSponsor: secretaryProcedure
+    .input(
+      z.object({
+        organisationId: z.string().uuid(),
+        name: z.string().min(1).max(255),
+        contactName: z.string().max(255).optional(),
+        contactEmail: z.string().email().optional(),
+        website: z.string().url().optional(),
+        logoStorageKey: z.string().optional(),
+        logoUrl: z.string().url().optional(),
+        category: z.enum([
+          'pet_food', 'insurance', 'automotive', 'grooming', 'health_testing',
+          'pet_products', 'local_business', 'breed_club', 'individual', 'other',
+        ]).optional(),
+        notes: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const [created] = await ctx.db
+        .insert(sponsors)
+        .values(input)
+        .returning();
+      return created!;
+    }),
+
+  updateSponsor: secretaryProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        name: z.string().min(1).max(255).optional(),
+        contactName: z.string().max(255).nullable().optional(),
+        contactEmail: z.string().email().nullable().optional(),
+        website: z.string().url().nullable().optional(),
+        logoStorageKey: z.string().nullable().optional(),
+        logoUrl: z.string().url().nullable().optional(),
+        category: z.enum([
+          'pet_food', 'insurance', 'automotive', 'grooming', 'health_testing',
+          'pet_products', 'local_business', 'breed_club', 'individual', 'other',
+        ]).nullable().optional(),
+        notes: z.string().nullable().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { id, ...data } = input;
+      const [updated] = await ctx.db
+        .update(sponsors)
+        .set(data)
+        .where(eq(sponsors.id, id))
+        .returning();
+      if (!updated) throw new TRPCError({ code: 'NOT_FOUND', message: 'Sponsor not found' });
+      return updated;
+    }),
+
+  deleteSponsor: secretaryProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const [deleted] = await ctx.db
+        .update(sponsors)
+        .set({ deletedAt: new Date() })
+        .where(eq(sponsors.id, input.id))
+        .returning();
+      if (!deleted) throw new TRPCError({ code: 'NOT_FOUND', message: 'Sponsor not found' });
+      return deleted;
+    }),
+
+  listShowSponsors: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      return ctx.db.query.showSponsors.findMany({
+        where: eq(showSponsors.showId, input.showId),
+        with: {
+          sponsor: true,
+          classSponsorships: {
+            with: { showClass: { with: { classDefinition: true, breed: true } } },
+          },
+        },
+        orderBy: [asc(showSponsors.displayOrder)],
+      });
+    }),
+
+  assignShowSponsor: secretaryProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        sponsorId: z.string().uuid(),
+        tier: z.enum(['title', 'show', 'class', 'prize', 'advertiser']),
+        displayOrder: z.number().int().min(0).default(0),
+        customTitle: z.string().max(255).optional(),
+        adImageStorageKey: z.string().optional(),
+        adImageUrl: z.string().url().optional(),
+        adSize: z.enum(['full_page', 'half_page', 'quarter_page']).optional(),
+        specialPrizes: z.string().optional(),
+        prizeMoney: z.number().int().min(0).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      const [created] = await ctx.db
+        .insert(showSponsors)
+        .values(input)
+        .returning();
+      return created!;
+    }),
+
+  updateShowSponsor: secretaryProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        tier: z.enum(['title', 'show', 'class', 'prize', 'advertiser']).optional(),
+        displayOrder: z.number().int().min(0).optional(),
+        customTitle: z.string().max(255).nullable().optional(),
+        adImageStorageKey: z.string().nullable().optional(),
+        adImageUrl: z.string().url().nullable().optional(),
+        adSize: z.enum(['full_page', 'half_page', 'quarter_page']).nullable().optional(),
+        specialPrizes: z.string().nullable().optional(),
+        prizeMoney: z.number().int().min(0).nullable().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { id, ...data } = input;
+      const [updated] = await ctx.db
+        .update(showSponsors)
+        .set(data)
+        .where(eq(showSponsors.id, id))
+        .returning();
+      if (!updated) throw new TRPCError({ code: 'NOT_FOUND', message: 'Show sponsor not found' });
+      return updated;
+    }),
+
+  removeShowSponsor: secretaryProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const [removed] = await ctx.db
+        .delete(showSponsors)
+        .where(eq(showSponsors.id, input.id))
+        .returning();
+      if (!removed) throw new TRPCError({ code: 'NOT_FOUND', message: 'Show sponsor not found' });
+      return removed;
+    }),
+
+  assignClassSponsorship: secretaryProcedure
+    .input(
+      z.object({
+        showClassId: z.string().uuid(),
+        showSponsorId: z.string().uuid(),
+        trophyName: z.string().max(255).optional(),
+        trophyDonor: z.string().max(255).optional(),
+        prizeMoney: z.number().int().min(0).optional(),
+        prizeDescription: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const [created] = await ctx.db
+        .insert(classSponsorships)
+        .values(input)
+        .returning();
+      return created!;
+    }),
+
+  removeClassSponsorship: secretaryProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const [removed] = await ctx.db
+        .delete(classSponsorships)
+        .where(eq(classSponsorships.id, input.id))
+        .returning();
+      if (!removed) throw new TRPCError({ code: 'NOT_FOUND', message: 'Class sponsorship not found' });
+      return removed;
     }),
 });

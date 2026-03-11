@@ -29,6 +29,9 @@ export {
   secretaryApplicationStatusEnum,
   classSexArrangementEnum,
   timelinePostTypeEnum,
+  sponsorCategoryEnum,
+  sponsorTierEnum,
+  adSizeEnum,
 } from './enums';
 
 // Tables
@@ -111,3 +114,11 @@ export {
   dogTimelinePostsRelations,
 } from './dog-timeline-posts';
 export { dogFollows, dogFollowsRelations } from './dog-follows';
+export {
+  sponsors,
+  sponsorsRelations,
+  showSponsors,
+  showSponsorsRelations,
+  classSponsorships,
+  classSponsorshipsRelations,
+} from './sponsors';

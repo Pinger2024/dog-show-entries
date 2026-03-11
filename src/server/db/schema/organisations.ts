@@ -4,6 +4,7 @@ import { subscriptionStatusEnum } from './enums';
 import { shows } from './shows';
 import { memberships } from './memberships';
 import { plans } from './plans';
+import { sponsors } from './sponsors';
 
 export const organisations = pgTable('organisations', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -42,5 +43,6 @@ export const organisationsRelations = relations(
       fields: [organisations.planId],
       references: [plans.id],
     }),
+    sponsors: many(sponsors),
   })
 );

@@ -220,3 +220,32 @@ export const timelinePostTypeEnum = pgEnum('timeline_post_type', [
   'milestone',
   'video',
 ]);
+
+// ── Sponsorship enums ──────────────────────────────────
+
+export const sponsorCategoryEnum = pgEnum('sponsor_category', [
+  'pet_food',
+  'insurance',
+  'automotive',
+  'grooming',
+  'health_testing',
+  'pet_products',
+  'local_business',
+  'breed_club',
+  'individual',
+  'other',
+]);
+
+export const sponsorTierEnum = pgEnum('sponsor_tier', [
+  'title',
+  'show',
+  'class',
+  'prize',
+  'advertiser',
+]);
+
+export const adSizeEnum = pgEnum('ad_size', [
+  'full_page',
+  'half_page',
+  'quarter_page',
+]);

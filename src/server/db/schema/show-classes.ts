@@ -13,6 +13,7 @@ import { shows } from './shows';
 import { breeds } from './breeds';
 import { classDefinitions } from './class-definitions';
 import { entryClasses } from './entry-classes';
+import { classSponsorships } from './sponsors';
 
 export const showClasses = pgTable(
   'show_classes',
@@ -60,4 +61,5 @@ export const showClassesRelations = relations(showClasses, ({ one, many }) => ({
     references: [classDefinitions.id],
   }),
   entryClasses: many(entryClasses),
+  classSponsorships: many(classSponsorships),
 }));
