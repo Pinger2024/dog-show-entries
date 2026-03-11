@@ -18,11 +18,6 @@ export async function GET(
   { params }: { params: Promise<{ showId: string }> }
 ) {
   const { showId } = await params;
-  const user = await getCurrentUser();
-
-  if (!user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
 
   if (!db) {
     return NextResponse.json({ error: 'Database not available' }, { status: 500 });
@@ -37,16 +32,22 @@ export async function GET(
     return NextResponse.json({ error: 'Show not found' }, { status: 404 });
   }
 
-  const membership = await db.query.memberships.findFirst({
-    where: and(
-      eq(schema.memberships.userId, user.id),
-      eq(schema.memberships.organisationId, show.organisationId),
-      eq(schema.memberships.status, 'active')
-    ),
-  });
-
-  if (!membership) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  // Draft shows require org membership; published shows are public
+  if (show.status === 'draft') {
+    const user = await getCurrentUser();
+    if (!user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const membership = await db.query.memberships.findFirst({
+      where: and(
+        eq(schema.memberships.userId, user.id),
+        eq(schema.memberships.organisationId, show.organisationId),
+        eq(schema.memberships.status, 'active')
+      ),
+    });
+    if (!membership) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
   }
 
   // Fetch show classes, judge assignments, and sponsors concurrently

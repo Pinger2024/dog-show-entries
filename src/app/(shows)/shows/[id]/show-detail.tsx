@@ -267,6 +267,7 @@ export function ShowDetailClient() {
 
   const [showStickyBar, setShowStickyBar] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
+  const [generatingSchedule, setGeneratingSchedule] = useState(false);
 
   const { data: show, isLoading } = trpc.shows.getById.useQuery({
     id: idOrSlug,
@@ -527,12 +528,38 @@ export function ShowDetailClient() {
                     </Link>
                   </Button>
                 )}
-                {show.scheduleUrl && (
-                  <Button variant="outline" asChild>
-                    <a href={show.scheduleUrl} target="_blank" rel="noopener noreferrer">
+                {(show.showClasses?.length ?? 0) > 0 && (
+                  <Button
+                    variant="outline"
+                    disabled={generatingSchedule}
+                    onClick={async () => {
+                      setGeneratingSchedule(true);
+                      try {
+                        const res = await fetch(`/api/schedule/${show.id}`);
+                        if (!res.ok) throw new Error('Failed to generate schedule');
+                        const blob = await res.blob();
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `${show.name.replace(/[^a-zA-Z0-9]/g, '-')}-Schedule.pdf`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      } catch {
+                        // Fall back to static URL if available
+                        if (show.scheduleUrl) {
+                          window.open(show.scheduleUrl, '_blank');
+                        }
+                      } finally {
+                        setGeneratingSchedule(false);
+                      }
+                    }}
+                  >
+                    {generatingSchedule ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
                       <FileText className="size-4" />
-                      Schedule
-                    </a>
+                    )}
+                    {generatingSchedule ? 'Generating...' : 'Schedule'}
                   </Button>
                 )}
                 <ShowShareDropdown
