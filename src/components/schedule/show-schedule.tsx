@@ -432,16 +432,6 @@ export function ShowSchedule({
   // Awards estimation date
   const estimationDate = getEstimationDate(show.entryCloseDate);
 
-  // Deduplicate class definitions
-  const seenDefs = new Set<string>();
-  const classDefinitions: { name: string; description: string }[] = [];
-  for (const cls of classes) {
-    if (cls.classDescription && !seenDefs.has(cls.className)) {
-      seenDefs.add(cls.className);
-      classDefinitions.push({ name: cls.className, description: cls.classDescription });
-    }
-  }
-
   const footerRender = ({ pageNumber, totalPages }: { pageNumber: number; totalPages: number }) =>
     `${show.name} — Schedule — Page ${pageNumber} of ${totalPages}`;
 
@@ -867,167 +857,261 @@ export function ShowSchedule({
       </Page>
 
       {/* ── Definitions of Classes ── */}
-      {classDefinitions.length > 0 && (
-        <Page size="A5" style={s.page}>
-          <Text style={s.sectionTitle}>Definitions of Classes</Text>
-
-          {classDefinitions.map((def) => (
-            <View key={def.name} style={s.defBlock} wrap={false}>
-              <Text style={s.defName}>{def.name}</Text>
-              <Text style={s.defDescription}>{def.description}</Text>
-            </View>
-          ))}
-
-          <Text style={s.footer} render={footerRender} fixed />
-        </Page>
-      )}
-
-      {/* ── Regulations & Notices ── */}
       <Page size="A5" style={s.page}>
-        <Text style={s.sectionTitle}>Regulations &amp; Notices</Text>
+        <Text style={s.sectionTitle}>Definitions of Classes</Text>
 
-        {/* Judges assessment */}
-        <View style={s.noticeBlock} wrap={false}>
-          <Text style={s.noticeTitle}>Judges&apos; Assessment</Text>
-          <Text style={s.noticeText}>
-            In assessing dogs, judges must penalise any features or exaggerations which they consider would be detrimental to the soundness, health and well being of the dog.
-          </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 4 }}>
+          In the following definitions, a Challenge Certificate includes any Show award that counts towards the title of Champion under the Rules of any governing body recognised by The Royal Kennel Club.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 4 }}>
+          Wins at Championship Shows in breed classes where Challenge Certificates are not on offer shall be counted as wins at Open Shows.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 4 }}>
+          In the case of a dog owned in partnership and entered in Members&apos; classes or competing for Members&apos; Specials each partner must at the time of entry be a member of the Society.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 4 }}>
+          In estimating the number of awards won, all wins up to and including the seventh day before the first closing date shall be counted when entering for any class{estimationDate ? ` i.e. ${estimationDate}.` : '.'}
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 4 }}>
+          Wins in Variety classes do not count for entry in Breed classes but when entering in Variety classes, wins in both Breed and Variety classes must be counted. First prizes awarded in any classes defined as Special do not count towards eligibility.
+        </Text>
+
+        {/* Withdrawal and Transfer */}
+        <Text style={{ ...s.noticeText, marginBottom: 2 }}>
+          If an exhibitor reports before the judging of a class or classes that a dog has been entered which is ineligible, the exhibitor may choose one of the following options:-
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 2 }}>
+          (1) <Text style={s.noticeTextBold}>Withdrawal</Text> - The dog may be withdrawn from competition subject to the conditions of Regulation F.(1).19.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 2 }}>
+          (2) <Text style={s.noticeTextBold}>Transfer a)</Text> If a dog is ineligible for a class or classes as regards its breed, colour, sex, weight or height the Show Secretary shall transfer it to the equivalent class or classes for the correct breed, colour, sex, weight or height or, in the event of there being no equivalent class, Minor Puppy and Puppy excepted, to the Open class for the correct breed, colour, sex, weight or height.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 2 }}>
+          <Text style={s.noticeTextBold}>b)</Text> For an exhibit entered incorrectly in a Minor Puppy class, Puppy class or Junior Class, which is over age but under twelve calendar months of age, eighteen calendar months of age or twenty-four calendar months of age respectively, the Show Secretary shall transfer the exhibit to the Puppy Class, Junior Class or Yearling Class respectively for the correct breed, colour, sex, weight or height and in the event of there being no Puppy, Junior or Yearling Class to the Open class for the correct breed, colour, sex, weight or height.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 2 }}>
+          <Text style={s.noticeTextBold}>c)</Text> For any reason other than the above, the Show Secretary shall transfer it to the Open class for the correct breed, colour, sex, weight or height.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 6 }}>
+          <Text style={s.noticeTextBold}>d)</Text> If an exhibit arrives late and misses a class, even if it is the only class in which the dog is entered, the dog may not be transferred to any other class.
+        </Text>
+
+        {/* Class definitions */}
+        <View style={s.defBlock} wrap={false}>
+          <Text style={s.defName}>MINOR PUPPY:</Text>
+          <Text style={s.defDescription}>For dogs of 6 and not exceeding 9 calendar months of age on the first day of the show.</Text>
+        </View>
+        <View style={s.defBlock} wrap={false}>
+          <Text style={s.defName}>PUPPY:</Text>
+          <Text style={s.defDescription}>For dogs of 6 and not exceeding 12 calendar months of age on the first day of the show.</Text>
+        </View>
+        <View style={s.defBlock} wrap={false}>
+          <Text style={s.defName}>JUNIOR:</Text>
+          <Text style={s.defDescription}>For dogs of 6 and not exceeding 18 calendar months of age on the first day of the show.</Text>
+        </View>
+        <View style={s.defBlock} wrap={false}>
+          <Text style={s.defName}>NOVICE:</Text>
+          <Text style={s.defDescription}>For dogs which have not won a Challenge Certificate/CACIB/CAC/Green Star or three or more First Prizes at Open and Championship Shows (Minor Puppy, Special Minor Puppy, Puppy and Special Puppy classes excepted, whether restricted or not).</Text>
+        </View>
+        <View style={s.defBlock} wrap={false}>
+          <Text style={s.defName}>POST GRADUATE:</Text>
+          <Text style={s.defDescription}>For dogs which have not won a CC/CACIB/CAC/Green Stars or five or more First prizes at Championship Shows in Post Graduate, Minor Limit, Mid Limit, Limit and Open classes whether restricted or not where Challenge Certificates were offered for the breed.</Text>
+        </View>
+        <View style={s.defBlock} wrap={false}>
+          <Text style={s.defName}>LIMIT:</Text>
+          <Text style={s.defDescription}>For dogs which have not become Show Champions under Royal Kennel Club Regulations or under the rules of any governing body recognised by the Royal Kennel Club or won 3 or more CC/CACIB/CAC/Green Stars or won 7 or more First prizes in all at Championship Shows in Limit and Open classes, confined to the breed, whether restricted or not at shows where Challenge Certificates were offered for the breed.</Text>
+        </View>
+        <View style={s.defBlock} wrap={false}>
+          <Text style={s.defName}>OPEN:</Text>
+          <Text style={s.defDescription}>For all dogs of the breeds for which the class is provided and eligible for entry at the Show.</Text>
+        </View>
+        <View style={s.defBlock} wrap={false}>
+          <Text style={s.defName}>VETERAN:</Text>
+          <Text style={s.defDescription}>For dogs of not less than 7 years of age on the first day of the Show.</Text>
+        </View>
+        <View style={s.defBlock} wrap={false}>
+          <Text style={s.defName}>NOT FOR COMPETITION:</Text>
+          <Text style={s.defDescription}>Dogs may be entered for Not for Competition, such entries must be recorded on the entry form enclosed for the purpose.</Text>
         </View>
 
-        {/* Jurisdiction */}
-        <View style={s.noticeBlock} wrap={false}>
-          <Text style={s.noticeTitle}>Jurisdiction</Text>
-          <Text style={s.noticeText}>
-            The Officers and Committee members of the society holding the licence are deemed responsible for organising and conducting the show safely and in accordance with the Rules and Regulations of the Royal Kennel Club. In so doing they accept responsibility for the safety of all dogs within the precincts of the show.
-          </Text>
-        </View>
+        <Text style={s.footer} render={footerRender} fixed />
+      </Page>
 
-        {/* Collar/welfare */}
-        <View style={s.noticeBlock} wrap={false}>
-          <Text style={s.noticeTitle}>Welfare</Text>
-          <Text style={s.noticeText}>
-            The use of pinch collars, electronic shock collars, or prong collars, is not permitted at any show licensed by the Royal Kennel Club.
-          </Text>
-        </View>
+      {/* ── Rules and Regulations ── */}
+      <Page size="A5" style={s.page}>
+        <Text style={s.sectionTitle}>Rules and Regulations</Text>
 
-        {/* Dogs in vehicles */}
-        <View style={s.noticeBlock} wrap={false}>
+        {show.showOpenTime && (
+          <Text style={{ ...s.noticeText, marginBottom: 2 }}>1. The show will open at {formatTime(show.showOpenTime)}.</Text>
+        )}
+        <Text style={{ ...s.noticeText, marginBottom: 2 }}>
+          {sd?.isBenched
+            ? `2. Dogs will be benched${sd.benchingRemovalTime ? `. ${sd.benchingRemovalTime}` : ' and may be removed after Best in Show judging has been completed'}.`
+            : '2. Dogs will not be benched at any time but it is the exhibitor\u2019s responsibility to ensure that exhibits are available for judging.'}
+        </Text>
+        {show.startTime && (
+          <Text style={{ ...s.noticeText, marginBottom: 2 }}>3. Judging will commence {formatTime(show.startTime)}.</Text>
+        )}
+        <Text style={{ ...s.noticeText, marginBottom: 2 }}>
+          4. Exhibits may be removed from the Show after their judging has been completed. The Show will close half an hour after all judging has been completed.
+        </Text>
+        {(show.firstEntryFee != null || show.subsequentEntryFee != null || show.nfcEntryFee != null) && (
+          <Text style={{ ...s.noticeText, marginBottom: 2 }}>
+            5. ENTRY FEES: {show.firstEntryFee != null ? `${formatPence(show.firstEntryFee)} first entry` : ''}
+            {show.subsequentEntryFee != null ? `, subsequent entries same dog ${formatPence(show.subsequentEntryFee)}` : ''}
+            {show.nfcEntryFee != null ? `. NFC ${formatPence(show.nfcEntryFee)}` : ''}.
+          </Text>
+        )}
+        <Text style={{ ...s.noticeText, marginBottom: 2 }}>
+          6. ONLINE ENTRY can be found at remishowmanager.co.uk
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 2 }}>
+          7. The Committee reserves to itself the right to refuse any entries.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 2 }}>
+          8. No dog under 6 calendar months of age on the first day of the Show are not eligible for exhibition.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 2 }}>
+          9. The mating of bitches within the precincts of the Show is forbidden.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 2 }}>
+          10. <Text style={s.noticeTextBold}>Best Puppy in Show:</Text> Where a Best Puppy in Show competition is scheduled the Best Puppy in Show is a puppy which has competed and is unbeaten by any other puppy exhibited at the show. A puppy is a dog of six and not exceeding twelve calendar months of age on the first day of the show.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 2 }}>
+          11. A Baby Puppy is a dog of four and less than six calendar months of age on the first day of the show. Baby Puppy classes may be scheduled at any breed Club show, Best Baby Puppy in Breed may be declared at each breed from the dogs entered in the Baby Puppy class. There must be no progression to further competitions.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 2 }}>
+          12. In Best in Show the exhibits may be selected from the exhibits declared Best of Sex. If a Reserve Best in Show is to be selected, the eligible dogs are those declared Best of Sex, Opposite Best of Sex of the exhibit declared Best in Show.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 2 }}>
+          13. Exhibits will not be admitted to Best in Show competition after a period of ten minutes has elapsed since the announcement that exhibits are required for judging, unless they have been unavoidably delayed by previous judging not being completed on time, and then only with the special permission of the Show Management.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 2 }}>
+          14. Exhibitors must not pick up dogs by their tails and leads. When lifting dogs not handle in a rough manner.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 2 }}>
+          15. All exhibitors must be familiar with Royal Kennel Club Regulation F (Annex B) Regulations for the Preparation of Dogs for Exhibition.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 2 }}>
+          16. All dogs resident outside the UK must be issued with a Royal Kennel Club Authority to Compete number before entry to the show/event can be made. All singled must be resident within the UK. A singled entry for an overseas exhibit must be accompanied by a copy of the dog&apos;s official export pedigree.
+        </Text>
+
+        {/* Dogs in vehicles WARNING */}
+        <View style={{ ...s.noticeBlock, marginTop: 4 }} wrap={false}>
           <Text style={s.noticeTextBold}>
             WARNING: IF YOUR DOG IS FOUND TO BE AT RISK FORCIBLE ENTRY TO YOUR VEHICLE MAY BE NECESSARY WITHOUT LIABILITY FOR ANY DAMAGE CAUSED.
           </Text>
         </View>
 
-        {/* 10-minute BIS rule */}
-        <View style={s.noticeBlock} wrap={false}>
-          <Text style={s.noticeTitle}>Best in Show</Text>
-          <Text style={s.noticeText}>
-            Exhibits will not be admitted to the Group or Best in Show competition after a period of ten minutes has elapsed since the announcement.
-          </Text>
-        </View>
-
-        {/* Children */}
-        <View style={s.noticeBlock} wrap={false}>
-          <Text style={s.noticeTitle}>Children</Text>
-          <Text style={s.noticeText}>
-            Children under 11 must be accompanied by a parent or guardian at all times.
-          </Text>
-        </View>
-
-        {/* Fouling */}
-        <View style={s.noticeBlock} wrap={false}>
-          <Text style={s.noticeTitle}>Fouling</Text>
-          <Text style={s.noticeText}>
-            Exhibitors are responsible for cleaning up after their dogs at all times within the showground, car park, and surrounding areas. Failure to do so may result in disqualification.
-          </Text>
-        </View>
-
-        {/* GDPR */}
-        <View style={s.noticeBlock} wrap={false}>
-          <Text style={s.noticeTitle}>Data Protection</Text>
-          <Text style={s.noticeText}>
-            Your personal data will be processed by the show society in accordance with the General Data Protection Regulation and the Data Protection Act 2018. Entry details may be shared with the Royal Kennel Club for the purposes of registering results and maintaining the Stud Book. By entering this show, you consent to the processing of your data for these purposes.
-          </Text>
-        </View>
-
-        {/* Reserve CCs */}
-        {show.showType === 'championship' && (
-          <View style={s.noticeBlock} wrap={false}>
-            <Text style={s.noticeTitle}>Reserve Challenge Certificates</Text>
-            <Text style={s.noticeText}>
-              Reserve Challenge Certificates now explicitly count towards Champion qualification as per Royal Kennel Club regulations.
-            </Text>
-          </View>
-        )}
+        <Text style={{ ...s.noticeText, marginBottom: 2 }}>
+          17. Anyone whose dog is entered at a Royal Kennel Club licensed event should take all reasonable steps to ensure the needs of their dog(s) are met and should not put a dog&apos;s health and welfare at risk by any action, default, omission or otherwise. Breach of Royal Kennel Club Regulations in this respect may be referred to the Board for disciplinary action under the Royal Kennel Club Rules and Regulations. The use of pinch collars, electronic shock collars, or prong collars, is not permitted at any show licensed by the Royal Kennel Club. This shall apply at the venue or within the precincts of the show.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 2 }}>
+          18. <Text style={s.noticeTextBold}>Not for Competition:</Text> Not for Competition entries are accepted. Details of each dog so entered must be recorded on the entry form and must be Royal Kennel Club registered.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 2 }}>
+          19. No modifications will be made to the schedule except by permission of the Board of the Royal Kennel Club, which will be followed by advertisement in the Canine press wherever possible.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 2 }}>
+          20. An exhibitor or competitor should ensure that contact details for any handler are available and must be provided upon request in any investigation of a breach of this regulation by such handler.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 2 }}>
+          20. Should any judge be prevented from fulfilling their engagement, the Committee reserves to themselves the right of appointing other judges to fulfil their duties. Exhibitors are at liberty to withdraw from competition, but no entry fees can be refunded.
+        </Text>
 
         <Text style={s.footer} render={footerRender} fixed />
       </Page>
 
-      {/* ── Regulatory References ── */}
+      {/* ── Additional Rules and Regulations ── */}
       <Page size="A5" style={s.page}>
-        <Text style={s.sectionTitle}>Regulation F Notices</Text>
+        <Text style={s.sectionTitle}>Additional Rules and Regulations</Text>
 
-        <Text style={{ ...s.infoText, marginBottom: 6 }}>
-          The following Royal Kennel Club Regulations apply to this show. Exhibitors are bound by these regulations upon entering.
+        <Text style={{ ...s.noticeText, marginBottom: 3 }}>
+          i. Should any judge be prevented from fulfilling their engagement, the Committee reserves to themselves the right of appointing other judges to fulfil their duties. Exhibitors are at liberty to withdraw from competition but no entry fees can be refunded.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 3 }}>
+          ii. Any owner, competitor or other person in charge of a dog is required to remove as soon as possible any fouling caused by their dog(s) at any Royal Kennel Club licensed venue and within the environs of that event including car and caravan parks and approaches. Adequate receptacles for the disposal of such fouling will be provided.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 3 }}>
+          iii. The Committee will do its utmost to ensure the safety of the dogs brought for exhibition but it must be clearly understood by exhibitors and all other persons at the Show that the Committee will not be responsible for the loss or damage to any dogs or property, or personal injury whether arising from accident or any other cause whatsoever.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 3 }}>
+          iv. An announcement prior to the date of closing of entries in Our Dogs of any alteration of addition made by the Committee to the schedule or in these Regulation shall be sufficient notice thereof.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 3 }}>
+          v. All children must be kept under control and parents will be held responsible for any damage caused and charges incurred.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 3 }}>
+          vi. Please do not obstruct gangways with cages, pens, grooming tables, trolleys and dogs. Storage space will be made available for trolleys/cages.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 3 }}>
+          vii. The Committee are empowered to exclude any dog which is not in the opinion of the Show Secretary, Show Manager, or Judge in a fit state for exhibition owing to disease, savage disposition, or any other cause. If such an exclusion takes place before or after judging the entrance fee will be forfeited.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 3 }}>
+          viii. No animal other than an exhibit duly entered at the show will be allowed within the precincts of the show during its continuance.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 3 }}>
+          ix. The owner, exhibitor, handler or other person in charge of a dog at a Royal Kennel Club licensed event must at all times ensure that the dog is kept under proper control whilst at the licensed venue, including its environs, car and caravan parks and approaches. This regulation applies before (at any time during the set up period at the venue), during the event and afterwards (at any time during the breakdown of the event).
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 3 }}>
+          x. A dog may be disqualified by the Board from any award, whether an objection has been lodged or not, if proved amongst other things to have been a) registered or recorded as having been bred by the scheduled judge, this shall not apply to a judge appointed in an emergency; b) exhibited without payment of the appropriate entry fees.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 3 }}>
+          xi. Every exhibitor shall ensure that whilst the dog is being exhibited, its handler shall display the correct ring number.
         </Text>
 
-        <View style={s.noticeBlock} wrap={false}>
-          <Text style={s.noticeTitle}>F(1)8.a — Eligibility</Text>
-          <Text style={s.noticeText}>
-            Puppies under four calendar months of age on the day of the show are not eligible for exhibition at any show.
+        {/* Dogs in hot weather */}
+        <View style={{ ...s.noticeBlock, marginTop: 4 }} wrap={false}>
+          <Text style={s.noticeTextBold}>
+            YOUR DOG&apos;S WELFARE
+          </Text>
+          <Text style={{ ...s.noticeText, marginTop: 2 }}>
+            Your dog is vulnerable and at risk during hot weather and the Royal Kennel Club offers the following guidance to help you guide your dog(s) through the do&apos;s and don&apos;ts of travelling to and whilst at a KC licensed event.
+          </Text>
+          <Text style={{ ...s.noticeText, marginTop: 2 }}>
+            {'\u2022'} When travelling to a show please take a moment to consider whether the route to the show is on a busy motorway route, and leave earlier to avoid increased time in traffic.{'\n'}
+            {'\u2022'} If your vehicle is not air-conditioned seriously consider whether travelling to the show is a good idea at all.{'\n'}
+            {'\u2022'} The vehicle should be as fully ventilated as possible, and plenty of stops should be taken, with water available to drink.{'\n'}
+            {'\u2022'} Ensure your dog is not sitting in full sunlight. There should be plenty of free flowing air around the dog.{'\n'}
+            {'\u2022'} When at the Show, never leave your dog in the vehicle.{'\n'}
+            {'\u2022'} Keep the dog in the shade — take your own shade for example and always have plenty of water available to drink so your dogs stay well hydrated.{'\n'}
+            {'\u2022'} Avoid your dog taking part in unnecessary exercise or from standing in exposed sunlight for extended lengths of time.{'\n'}
+            {'\u2022'} Remember, if you feel hot your dog is very likely to feel much hotter and dehydrated, and this could lead to dire results. Please look after your dog&apos;s welfare.
           </Text>
         </View>
 
-        <View style={s.noticeBlock} wrap={false}>
-          <Text style={s.noticeTitle}>F(1)8.i — Partnership Entries</Text>
-          <Text style={s.noticeText}>
-            A dog entered at any show in partnership must be recorded at the Royal Kennel Club in the name of all the partners.
-          </Text>
-        </View>
+        <Text style={s.footer} render={footerRender} fixed />
+      </Page>
 
-        <View style={s.noticeBlock} wrap={false}>
-          <Text style={s.noticeTitle}>F(1)8.l — Estimating Awards Won</Text>
-          <Text style={s.noticeText}>
-            In estimating the number of awards won, all wins up to and including the seventh day before the date of closing of postal entries shall be counted when singling up entries.
-            {estimationDate ? ` For this show, that date is ${estimationDate}.` : ''}
-          </Text>
-        </View>
+      {/* ── Regulations for Preparation of Dogs F(B) ── */}
+      <Page size="A5" style={s.page}>
+        <Text style={s.sectionTitle}>Regulations for the Preparation of Dogs for Exhibition F (B)</Text>
 
-        <View style={s.noticeBlock} wrap={false}>
-          <Text style={s.noticeTitle}>F(1)8.m — Withdrawal &amp; Transfer</Text>
-          <Text style={s.noticeText}>
-            An entry in a class may be withdrawn or transferred to another eligible class. A transfer must be made on the day of the show and may only be to another class in which the dog is eligible.
-          </Text>
-        </View>
-
-        <View style={s.noticeBlock} wrap={false}>
-          <Text style={s.noticeTitle}>F(1)13 — Mating of Bitches</Text>
-          <Text style={s.noticeText}>
-            The mating of bitches within the precincts of a show is strictly forbidden.
-          </Text>
-        </View>
-
-        <View style={s.noticeBlock} wrap={false}>
-          <Text style={s.noticeTitle}>F(1)18 — Not For Competition</Text>
-          <Text style={s.noticeText}>
-            {sd?.acceptsNfc !== false
-              ? 'Not For Competition entries may be accepted. NFC exhibits must be registered at the Royal Kennel Club in the name of the owner and must be aged not less than three calendar months on the day of the show.'
-              : 'Not For Competition entries are not accepted at this show.'}
-          </Text>
-        </View>
-
-        <View style={s.noticeBlock} wrap={false}>
-          <Text style={s.noticeTitle}>F(1)26 &amp; 27 — Best in Show / Best Puppy in Show</Text>
-          <Text style={s.noticeText}>
-            Best in Show and Best Puppy in Show shall be judged in accordance with Royal Kennel Club Regulation F(1)26 and F(1)27. The judge of Best in Show must be approved by the Royal Kennel Club.
-          </Text>
-        </View>
-
-        <View style={s.noticeBlock} wrap={false}>
-          <Text style={s.noticeTitle}>F(B) — Preparation of Dogs for Exhibition</Text>
-          <Text style={s.noticeText}>
-            A dog must be exhibited in its natural state. No substance which alters the texture, colour, or body of the coat may be present in the dog's coat. No device or technique may be used to alter the natural set or carriage of the dog's ears or tail. The trimming, styling, and preparation of a dog's coat is permitted only if customary for that breed and within the limits of the breed standard.
-          </Text>
-        </View>
+        <Text style={{ ...s.noticeText, marginBottom: 4 }}>
+          1. These Regulations must be observed when a dog is prepared for exhibition for any Royal Kennel Club Licensed event.{'\n'}
+          Objections may be referred to the Board for disciplinary action under these Show Regulations and/or for disciplinary action under Royal Kennel Club Rule A11.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 2, marginLeft: 10 }}>
+          a) A dog found to have been in breach of these Regulations will automatically be disqualified from exhibition at the show and from any award thereat.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 4, marginLeft: 10 }}>
+          b) Unless the exhibitor provides a satisfactory explanation for the dog being exhibited in breach of these Regulations then he/she may be subject to further penalties of either a fine or as listed under Rule A11.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 4 }}>
+          2. (a) No substance which alters the natural colour, texture or body of the coat may be present in the DOG&apos;s coat for any purpose at any time during the show. No substance which alters the natural colour of any external part of the dog may be present on the dog for any purpose at any time during the show. (b) Any other substance (other than water) which may be used in preparation of the dog for exhibition must not be allowed to remain in the coat or on any other part of the dog at the time of exhibition.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 4 }}>
+          3. No act or operation which alters the natural conformation of a dog or any part thereof may be performed except:- (a) Operations certified to the satisfaction of the Board. (b) The removal of dew-claws of any breed. (c) Operations to prevent breeding provided that such operations are notified to the Royal Kennel Club before neutered dogs are shown. Nor must anything be done calculated in the opinion of the General Committee to deceive.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 4 }}>
+          4. The Board without previous notice may order an examination of any dog or dogs at any Show. Any examination thus ordered will be made by a person having executive authority who shall have a written directive from the Royal Kennel Club in their possession. Samples may be taken for further examination and analysis.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 4 }}>
+          5. An individual has the right to lodge an objection to a dog if he/she is the owner or handler of a dog competing in the same breed or class. An objection may however, be lodged by an official of the Show or by anyone so deputed by the Royal Kennel Club. It will be the responsibility of the individual who lodges the objection or the official (as appropriate) to substantiate the grounds for the objection. The Royal Kennel Club will substantiate the grounds for an objection made on its behalf.
+        </Text>
+        <Text style={{ ...s.noticeText, marginBottom: 4 }}>
+          6. Any objection by an individual related to an infringement of these regulations must be made in writing to the Show Secretary or his/her office before the close of the Show and the individual must produce evidence of identity at the time of lodging the complaint.
+        </Text>
 
         <Text style={s.footer} render={footerRender} fixed />
       </Page>
