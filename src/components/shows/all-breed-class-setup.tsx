@@ -121,14 +121,15 @@ export function AllBreedClassSetup({
     [value.selectedBreedIds]
   );
 
-  // Auto-select all breeds on first load
+  // Auto-select all breeds on first load (only fires once via ref guard)
   const hasInitialised = useRef(false);
   useEffect(() => {
     if (!hasInitialised.current && allBreedIds.length > 0 && value.selectedBreedIds.length === 0) {
       hasInitialised.current = true;
       onChange({ ...value, selectedBreedIds: allBreedIds });
     }
-  }, [allBreedIds, value, onChange]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs only when allBreedIds loads
+  }, [allBreedIds]);
 
   const toggleBreed = useCallback(
     (breedId: string) => {

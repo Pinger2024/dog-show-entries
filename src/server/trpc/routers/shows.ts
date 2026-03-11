@@ -513,7 +513,7 @@ export const showsRouter = createTRPCRouter({
 
       // Create show classes for all-breed shows (per-breed classes)
       if (allBreedClassData && allBreedClassData.breedIds.length > 0 && allBreedClassData.classDefinitionIds.length > 0) {
-        const isSeparateSex = allBreedClassData.splitBySex || showData.classSexArrangement === 'separate_sex';
+        const isSeparateSex = allBreedClassData.splitBySex;
         const fee = entryFee ?? 0;
         const allValues: {
           showId: string;
@@ -560,9 +560,11 @@ export const showsRouter = createTRPCRouter({
 
         // Insert in batches of 500 to avoid exceeding parameter limits
         const BATCH_SIZE = 500;
+        const batches = [];
         for (let i = 0; i < allValues.length; i += BATCH_SIZE) {
-          await ctx.db.insert(showClasses).values(allValues.slice(i, i + BATCH_SIZE));
+          batches.push(ctx.db.insert(showClasses).values(allValues.slice(i, i + BATCH_SIZE)));
         }
+        await Promise.all(batches);
       }
 
       return show!;
