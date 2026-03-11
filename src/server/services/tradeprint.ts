@@ -67,19 +67,22 @@ export async function getTradePrices(
     .execute();
 
   // SDK returns { url, productsAvailable, message } — need to fetch CSV from the S3 URL
-  let csvText: string;
+  let csvUrl: string | null = null;
   if (typeof response === 'string') {
-    csvText = response;
+    // Unexpected: raw CSV string — parse directly (small products only)
+    const prices = parsePriceCsv(response, specs, serviceLevel);
+    priceCache.set(cacheKey, { prices, fetchedAt: Date.now() });
+    return prices;
   } else if (response?.url) {
-    const csvFetch = await fetch(response.url);
-    if (!csvFetch.ok) throw new Error(`Failed to fetch price CSV: ${csvFetch.status}`);
-    csvText = await csvFetch.text();
+    csvUrl = response.url;
   } else {
     console.error('[tradeprint] Unexpected price list response:', JSON.stringify(response).slice(0, 500));
     return new Map();
   }
 
-  const prices = parsePriceCsv(csvText, specs, serviceLevel);
+  // Stream-parse the CSV to avoid loading the entire file into memory.
+  // Large products (e.g. Perfect Bound Booklets) can be 100MB+ / 185K rows.
+  const prices = await streamParsePriceCsv(csvUrl, specs, serviceLevel);
 
   priceCache.set(cacheKey, { prices, fetchedAt: Date.now() });
   return prices;
@@ -327,15 +330,7 @@ export function capitaliseServiceLevel(level: string): string {
 }
 
 /**
- * Parse Tradeprint CSV price list.
- *
- * Actual CSV format (one row per spec+quantity combination):
- *   "ProductName","ProductID","Quantity","Tax","Paper Type","Size","Sides Printed",
- *   "Lamination","Sets","PriceExpress","Production Days Express","PriceStandard",
- *   "Production Days Standard","PriceSaver","Production Days Saver", ...
- *
- * Prices are TOTAL price in pence for the given quantity.
- * We match rows by spec columns and return Map<quantity, unitPriceInPence>.
+ * Parse a small CSV string in-memory (for direct string responses only).
  */
 function parsePriceCsv(csv: string, specs: Record<string, string>, serviceLevel: string = 'standard'): Map<number, number> {
   const prices = new Map<number, number>();
@@ -343,47 +338,117 @@ function parsePriceCsv(csv: string, specs: Record<string, string>, serviceLevel:
   if (lines.length < 2) return prices;
 
   const headers = parseCSVLine(lines[0]);
+  const colIndex = buildColumnIndex(headers);
 
-  // Build column index map
+  const priceIdx = colIndex.get(`Price${capitaliseServiceLevel(serviceLevel)}`);
+  const qtyIdx = colIndex.get('Quantity');
+  if (priceIdx === undefined || qtyIdx === undefined) return prices;
+
+  const specEntries = Object.entries(specs);
+
+  for (let r = 1; r < lines.length; r++) {
+    extractMatchingPrice(lines[r], colIndex, specEntries, priceIdx, qtyIdx, prices);
+  }
+
+  return prices;
+}
+
+/**
+ * Stream-parse a CSV from a URL, processing one line at a time.
+ * Avoids loading massive files (100MB+) into memory.
+ */
+async function streamParsePriceCsv(
+  url: string,
+  specs: Record<string, string>,
+  serviceLevel: string = 'standard'
+): Promise<Map<number, number>> {
+  const prices = new Map<number, number>();
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`Failed to fetch price CSV: ${resp.status}`);
+  if (!resp.body) throw new Error('No response body for price CSV');
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let headersParsed = false;
+  let colIndex = new Map<string, number>();
+  let priceIdx: number | undefined;
+  let qtyIdx: number | undefined;
+  let specEntries: [string, string][] = [];
+
+  const priceColName = `Price${capitaliseServiceLevel(serviceLevel)}`;
+  const specPairs = Object.entries(specs);
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    // Keep the last incomplete line in the buffer
+    buffer = lines.pop() ?? '';
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      if (!headersParsed) {
+        const headers = parseCSVLine(trimmed);
+        colIndex = buildColumnIndex(headers);
+        priceIdx = colIndex.get(priceColName);
+        qtyIdx = colIndex.get('Quantity');
+        specEntries = specPairs;
+        headersParsed = true;
+        if (priceIdx === undefined || qtyIdx === undefined) {
+          // Can't find required columns — abort early
+          reader.cancel();
+          return prices;
+        }
+        continue;
+      }
+
+      extractMatchingPrice(trimmed, colIndex, specEntries, priceIdx!, qtyIdx!, prices);
+    }
+  }
+
+  // Process any remaining data in buffer
+  if (buffer.trim() && headersParsed && priceIdx !== undefined && qtyIdx !== undefined) {
+    extractMatchingPrice(buffer.trim(), colIndex, specEntries, priceIdx, qtyIdx, prices);
+  }
+
+  return prices;
+}
+
+/** Build a header name → column index map */
+function buildColumnIndex(headers: string[]): Map<string, number> {
   const colIndex = new Map<string, number>();
   for (let i = 0; i < headers.length; i++) {
     colIndex.set(headers[i].trim(), i);
   }
+  return colIndex;
+}
 
-  // Find the price column for the requested service level
-  const priceColName = `Price${capitaliseServiceLevel(serviceLevel)}`;
-  const priceIdx = colIndex.get(priceColName);
-  const qtyIdx = colIndex.get('Quantity');
-  if (priceIdx === undefined || qtyIdx === undefined) return prices;
+/** Parse a single CSV row and add matching price to the map */
+function extractMatchingPrice(
+  line: string,
+  colIndex: Map<string, number>,
+  specEntries: [string, string][],
+  priceIdx: number,
+  qtyIdx: number,
+  prices: Map<number, number>
+): void {
+  const cols = parseCSVLine(line);
 
-  // Spec columns we need to match against
-  const specEntries = Object.entries(specs);
-
-  for (let r = 1; r < lines.length; r++) {
-    const cols = parseCSVLine(lines[r]);
-
-    // Check all spec values match
-    let matches = true;
-    for (const [specName, specValue] of specEntries) {
-      const idx = colIndex.get(specName);
-      if (idx !== undefined && cols[idx]?.trim() !== specValue) {
-        matches = false;
-        break;
-      }
-    }
-
-    if (matches) {
-      const qty = parseInt(cols[qtyIdx]?.trim(), 10);
-      const totalPrice = parseFloat(cols[priceIdx]?.trim());
-      if (!isNaN(qty) && qty > 0 && !isNaN(totalPrice) && totalPrice > 0) {
-        // Total price is in pence — convert to unit price in pence
-        const unitPrice = Math.round(totalPrice / qty);
-        prices.set(qty, unitPrice);
-      }
-    }
+  for (const [specName, specValue] of specEntries) {
+    const idx = colIndex.get(specName);
+    if (idx !== undefined && cols[idx]?.trim() !== specValue) return;
   }
 
-  return prices;
+  const qty = parseInt(cols[qtyIdx]?.trim(), 10);
+  const totalPrice = parseFloat(cols[priceIdx]?.trim());
+  if (!isNaN(qty) && qty > 0 && !isNaN(totalPrice) && totalPrice > 0) {
+    prices.set(qty, Math.round(totalPrice / qty));
+  }
 }
 
 /** Simple CSV line parser that handles quoted fields */
