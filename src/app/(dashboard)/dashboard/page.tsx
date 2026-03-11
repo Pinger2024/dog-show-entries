@@ -91,7 +91,7 @@ export default function DashboardPage() {
         {stats.map((stat) => (
           <Link key={stat.label} href={stat.href}>
             <Card className="transition-all hover:border-primary/20 hover:shadow-md hover:shadow-primary/5 active:bg-accent/30">
-              <CardHeader className="flex-row items-center justify-between pb-2 p-3 sm:p-4 lg:p-6">
+              <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-4 lg:p-6">
                 <CardDescription className="text-xs sm:text-[0.9375rem] font-medium">
                   {stat.label}
                 </CardDescription>

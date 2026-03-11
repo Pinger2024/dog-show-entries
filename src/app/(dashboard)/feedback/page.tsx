@@ -146,7 +146,7 @@ export default function FeedbackPage() {
                   isActive && 'border-primary ring-1 ring-primary/20'
                 )}
               >
-                <CardHeader className="flex-row items-center justify-between pb-2">
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardDescription className="text-[0.9375rem] font-medium">
                     {stat.label}
                   </CardDescription>

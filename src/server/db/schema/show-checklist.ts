@@ -49,6 +49,8 @@ export const showChecklistItems = pgTable(
     notes: text('notes'),
     // For auto-detection: a key that maps to a check function
     autoDetectKey: text('auto_detect_key'),
+    // Maps to an inline action component in the checklist command center
+    actionKey: text('action_key'),
     autoDetected: boolean('auto_detected').notNull().default(false),
     // Whether this is a championship-only item
     championshipOnly: boolean('championship_only').notNull().default(false),

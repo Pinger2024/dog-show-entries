@@ -27,6 +27,8 @@ export interface DefaultChecklistItem {
   hasExpiry?: boolean;
   /** Per-judge: create one instance of this item per assigned judge */
   perJudge?: boolean;
+  /** Maps to an inline action component in the checklist command center */
+  actionKey?: string;
 }
 
 export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
@@ -38,6 +40,8 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     phase: 'pre_planning',
     sortOrder: 0,
     relativeDueDays: 365,
+    actionKey: 'rkc_licence_apply',
+    requiresDocument: true,
   },
   {
     title: 'Send judge offer letters',
@@ -47,6 +51,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     sortOrder: 1,
     relativeDueDays: 365,
     autoDetectKey: 'judge_offers_sent',
+    actionKey: 'judge_offers',
   },
   {
     title: 'Confirm venue',
@@ -55,6 +60,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     sortOrder: 2,
     relativeDueDays: 300,
     autoDetectKey: 'venue_set',
+    actionKey: 'venue_confirm',
   },
   {
     title: 'Obtain public liability insurance',
@@ -65,6 +71,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     relativeDueDays: 180,
     requiresDocument: true,
     hasExpiry: true,
+    actionKey: 'insurance',
   },
 
   // ── Planning (6–12 months out) ────────────────────────
@@ -77,6 +84,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     relativeDueDays: 270,
     requiresDocument: true,
     perJudge: true,
+    actionKey: 'judge_acceptance',
   },
   {
     title: 'Send judge confirmation letters',
@@ -86,6 +94,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     sortOrder: 1,
     relativeDueDays: 240,
     perJudge: true,
+    actionKey: 'judge_confirmation',
   },
   {
     title: 'Record RKC licence number',
@@ -95,6 +104,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     sortOrder: 2,
     relativeDueDays: 240,
     autoDetectKey: 'kc_licence_recorded',
+    actionKey: 'rkc_licence_record',
   },
   {
     title: 'Complete venue risk assessment',
@@ -104,6 +114,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     sortOrder: 3,
     relativeDueDays: 120,
     requiresDocument: true,
+    actionKey: 'venue_risk',
   },
   {
     title: 'Order rosettes, trophies and special awards',
@@ -112,6 +123,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     phase: 'planning',
     sortOrder: 4,
     relativeDueDays: 120,
+    actionKey: 'rosettes',
   },
   {
     title: 'Source sponsors and donations',
@@ -119,6 +131,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     phase: 'planning',
     sortOrder: 5,
     relativeDueDays: 90,
+    actionKey: 'sponsors',
   },
   {
     title: 'Arrange awards board',
@@ -126,6 +139,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     phase: 'planning',
     sortOrder: 6,
     relativeDueDays: 90,
+    actionKey: 'awards_board',
   },
 
   // ── Pre-Show (2–8 weeks out) ──────────────────────────
@@ -137,6 +151,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     sortOrder: 0,
     relativeDueDays: 56,
     autoDetectKey: 'classes_created',
+    actionKey: 'classes_setup',
   },
   {
     title: 'Publish schedule',
@@ -146,6 +161,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     sortOrder: 1,
     relativeDueDays: 42,
     autoDetectKey: 'show_published',
+    actionKey: 'show_publish',
   },
   {
     title: 'Open entries',
@@ -155,6 +171,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     sortOrder: 2,
     relativeDueDays: 42,
     autoDetectKey: 'entries_opened',
+    actionKey: 'entries_open',
   },
   {
     title: 'Arrange veterinary cover',
@@ -162,6 +179,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     phase: 'pre_show',
     sortOrder: 3,
     relativeDueDays: 28,
+    actionKey: 'vet_cover',
   },
   {
     title: 'Book judges hotel and travel',
@@ -170,6 +188,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     sortOrder: 4,
     relativeDueDays: 28,
     perJudge: true,
+    actionKey: 'judge_hotel',
   },
   {
     title: 'Assign stewards',
@@ -178,6 +197,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     sortOrder: 5,
     relativeDueDays: 21,
     autoDetectKey: 'stewards_assigned',
+    actionKey: 'stewards_assign',
   },
   {
     title: 'Obtain challenge certificates from RKC',
@@ -186,6 +206,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     sortOrder: 6,
     relativeDueDays: 21,
     championshipOnly: true,
+    actionKey: 'obtain_ccs',
   },
   {
     title: 'Arrange refreshments for judges and stewards',
@@ -193,6 +214,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     phase: 'pre_show',
     sortOrder: 7,
     relativeDueDays: 14,
+    actionKey: 'refreshments',
   },
 
   // ── Final Prep (0–2 weeks out) ────────────────────────
@@ -204,6 +226,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     sortOrder: 0,
     relativeDueDays: 14,
     autoDetectKey: 'entries_closed',
+    actionKey: 'entries_close',
   },
   {
     title: 'Assign judges to breeds and rings',
@@ -212,6 +235,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     sortOrder: 1,
     relativeDueDays: 10,
     autoDetectKey: 'judges_assigned',
+    actionKey: 'judges_assign_breeds',
   },
   {
     title: 'Finalise ring plan',
@@ -220,6 +244,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     sortOrder: 2,
     relativeDueDays: 7,
     autoDetectKey: 'rings_created',
+    actionKey: 'rings_finalise',
   },
   {
     title: 'Generate and print catalogue',
@@ -227,6 +252,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     phase: 'final_prep',
     sortOrder: 3,
     relativeDueDays: 7,
+    actionKey: 'catalogue_generate',
   },
   {
     title: 'Prepare exhibitor entry passes',
@@ -234,6 +260,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     phase: 'final_prep',
     sortOrder: 4,
     relativeDueDays: 7,
+    actionKey: 'entry_passes',
   },
   {
     title: 'Advise judges of entry numbers',
@@ -242,6 +269,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     sortOrder: 5,
     relativeDueDays: 7,
     perJudge: true,
+    actionKey: 'judge_entry_numbers',
   },
 
   // ── Show Day ──────────────────────────────────────────
@@ -251,6 +279,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     phase: 'show_day',
     sortOrder: 0,
     relativeDueDays: 0,
+    actionKey: 'show_day_insurance',
   },
   {
     title: 'Bring RKC licence',
@@ -258,6 +287,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     phase: 'show_day',
     sortOrder: 1,
     relativeDueDays: 0,
+    actionKey: 'show_day_licence',
   },
   {
     title: 'Bring incident book',
@@ -266,6 +296,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     phase: 'show_day',
     sortOrder: 2,
     relativeDueDays: 0,
+    actionKey: 'show_day_incident_book',
   },
   {
     title: 'Bring RKC regulations and breed standards',
@@ -273,6 +304,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     phase: 'show_day',
     sortOrder: 3,
     relativeDueDays: 0,
+    actionKey: 'show_day_regulations',
   },
   {
     title: 'Bring first aid kit',
@@ -280,6 +312,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     phase: 'show_day',
     sortOrder: 4,
     relativeDueDays: 0,
+    actionKey: 'show_day_first_aid',
   },
   {
     title: 'Bring ring equipment and numbers',
@@ -287,6 +320,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     phase: 'show_day',
     sortOrder: 5,
     relativeDueDays: 0,
+    actionKey: 'show_day_ring_equipment',
   },
   {
     title: 'Bring cash float',
@@ -294,6 +328,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     phase: 'show_day',
     sortOrder: 6,
     relativeDueDays: 0,
+    actionKey: 'show_day_cash_float',
   },
   {
     title: 'Bring risk and fire safety assessments',
@@ -301,6 +336,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     phase: 'show_day',
     sortOrder: 7,
     relativeDueDays: 0,
+    actionKey: 'show_day_risk_assessment',
   },
 
   // ── Post-Show ─────────────────────────────────────────
@@ -311,6 +347,8 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     phase: 'post_show',
     sortOrder: 0,
     relativeDueDays: -14,
+    actionKey: 'rkc_analysis',
+    requiresDocument: true,
   },
   {
     title: 'Submit marked catalogue to RKC',
@@ -320,6 +358,8 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     sortOrder: 1,
     relativeDueDays: -14,
     championshipOnly: true,
+    actionKey: 'rkc_marked_catalogue',
+    requiresDocument: true,
   },
   {
     title: 'Send judge thank-you letters',
@@ -328,6 +368,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     sortOrder: 2,
     relativeDueDays: -7,
     perJudge: true,
+    actionKey: 'judge_thankyou',
   },
   {
     title: 'Archive show records',
@@ -336,6 +377,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     phase: 'post_show',
     sortOrder: 3,
     relativeDueDays: -30,
+    actionKey: 'archive',
   },
 ];
 

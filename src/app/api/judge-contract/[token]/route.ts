@@ -192,14 +192,15 @@ export async function GET(
         </div>
         <div class="body">
           <p>You are about to decline the invitation to judge at <strong>${show.name}</strong> on <strong>${showDate}</strong>.</p>
-          <p>Are you sure you wish to decline?</p>
-          <div class="buttons">
-            <form method="POST" action="/api/judge-contract/${token}">
-              <input type="hidden" name="action" value="decline">
+          <p>If you have a reason you'd like to share, please enter it below (optional):</p>
+          <form method="POST" action="/api/judge-contract/${token}">
+            <input type="hidden" name="action" value="decline">
+            <textarea name="reason" rows="3" placeholder="Reason for declining (optional)" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical; margin-bottom: 16px;"></textarea>
+            <div class="buttons">
               <button type="submit" class="btn btn-danger">Yes, Decline</button>
-            </form>
-            <a href="/api/judge-contract/${token}" class="btn btn-outline">Go Back</a>
-          </div>
+              <a href="/api/judge-contract/${token}" class="btn btn-outline">Go Back</a>
+            </div>
+          </form>
         </div>
       `),
       { headers: { 'Content-Type': 'text/html' } }
@@ -386,10 +387,33 @@ export async function POST(
   }
 
   if (action === 'decline') {
+    const reason = (formData.get('reason') as string)?.trim() || null;
+
     await db
       .update(judgeContracts)
-      .set({ stage: 'declined', declinedAt: new Date() })
+      .set({
+        stage: 'declined',
+        declinedAt: new Date(),
+        ...(reason ? { expenseNotes: `Decline reason: ${reason}` } : {}),
+      })
       .where(eq(judgeContracts.id, contract.id));
+
+    // Auto-update checklist: mark per-judge items as not_applicable
+    const declineNote = `Declined on ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}${reason ? ` — ${reason}` : ''}`;
+    await db
+      .update(showChecklistItems)
+      .set({
+        status: 'not_applicable',
+        notes: declineNote,
+        autoDetected: true,
+      })
+      .where(
+        and(
+          eq(showChecklistItems.showId, contract.showId),
+          eq(showChecklistItems.entityType, 'judge'),
+          eq(showChecklistItems.entityId, contract.judgeId)
+        )
+      );
 
     // Notify secretary
     try {
@@ -421,8 +445,9 @@ export async function POST(
         <p style="font-size: 15px; color: #333; line-height: 1.6;">
           <strong>${contract.judgeName}</strong> has declined the invitation to judge at <strong>${show.name}</strong>.
         </p>
+        ${reason ? `<p style="font-size: 14px; color: #555; line-height: 1.6; padding: 12px; background: #fef2f2; border-radius: 8px; border-left: 3px solid #dc2626;"><strong>Reason:</strong> ${reason}</p>` : ''}
         <p style="font-size: 15px; color: #333; line-height: 1.6;">
-          You may need to find a replacement judge and send a new offer.
+          You may need to find a replacement judge and send a new offer. All checklist items for this judge have been marked as not applicable.
         </p>
         <div style="text-align: center; margin: 24px 0;">
           <a href="${process.env.RENDER_EXTERNAL_URL ?? 'https://remishowmanager.co.uk'}/secretary/shows/${show.slug ?? show.id}/people"

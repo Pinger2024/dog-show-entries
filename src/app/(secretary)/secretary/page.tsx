@@ -95,7 +95,7 @@ export default function SecretaryDashboardPage() {
       {/* Stats — scoped to active shows */}
       <div className="grid grid-cols-3 gap-2 sm:gap-4">
         <Card>
-          <CardHeader className="flex-row items-center justify-between pb-2">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardDescription className="text-sm font-medium">
               Active Shows
             </CardDescription>
@@ -106,7 +106,7 @@ export default function SecretaryDashboardPage() {
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex-row items-center justify-between pb-2">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardDescription className="text-sm font-medium">
               Total Entries
             </CardDescription>
@@ -117,7 +117,7 @@ export default function SecretaryDashboardPage() {
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex-row items-center justify-between pb-2">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardDescription className="text-sm font-medium">
               Active Revenue
             </CardDescription>

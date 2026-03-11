@@ -38,6 +38,7 @@ import {
   calculateDueDate,
 } from '@/lib/default-checklist';
 import { getStripe } from '@/server/services/stripe';
+import { penceToPoundsString } from '@/lib/date-utils';
 import { Resend } from 'resend';
 import { searchKcJudges, fetchKcJudgeProfile } from '@/server/services/kc-judges';
 
@@ -1779,6 +1780,7 @@ export const secretaryRouter = createTRPCRouter({
         status: 'not_started';
         dueDate: string | null;
         autoDetectKey: string | null;
+        actionKey: string | null;
         championshipOnly: boolean;
         relativeDueDays: number | null;
         requiresDocument: boolean;
@@ -1809,6 +1811,7 @@ export const secretaryRouter = createTRPCRouter({
               status: 'not_started',
               dueDate,
               autoDetectKey: item.autoDetectKey ?? null,
+              actionKey: item.actionKey ?? null,
               championshipOnly: item.championshipOnly ?? false,
               relativeDueDays: item.relativeDueDays ?? null,
               requiresDocument: item.requiresDocument ?? false,
@@ -1830,6 +1833,7 @@ export const secretaryRouter = createTRPCRouter({
             status: 'not_started',
             dueDate,
             autoDetectKey: item.autoDetectKey ?? null,
+            actionKey: item.actionKey ?? null,
             championshipOnly: item.championshipOnly ?? false,
             relativeDueDays: item.relativeDueDays ?? null,
             requiresDocument: item.requiresDocument ?? false,
@@ -2497,7 +2501,7 @@ export const secretaryRouter = createTRPCRouter({
             eq(showChecklistItems.showId, contract.showId),
             eq(showChecklistItems.entityType, 'judge'),
             eq(showChecklistItems.entityId, contract.judgeId),
-            ilike(showChecklistItems.title, '%confirmation%')
+            eq(showChecklistItems.actionKey, 'judge_confirmation')
           )
         );
 
@@ -2566,6 +2570,726 @@ export const secretaryRouter = createTRPCRouter({
       }
 
       return { confirmed: true };
+    }),
+
+  // ── Checklist Command Center Procedures ───────────────────
+
+  /** Aggregated judge pipeline view for the checklist command center */
+  getChecklistJudgeSummary: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      // Get all judge assignments with breeds
+      const assignments = await ctx.db.query.judgeAssignments.findMany({
+        where: eq(judgeAssignments.showId, input.showId),
+        with: { judge: true, breed: true, ring: true },
+      });
+
+      // Get all contracts for this show
+      const contracts = await ctx.db.query.judgeContracts.findMany({
+        where: eq(judgeContracts.showId, input.showId),
+        orderBy: desc(judgeContracts.createdAt),
+      });
+
+      // Build latest contract per judge
+      const latestContracts = new Map<string, typeof contracts[number]>();
+      for (const c of contracts) {
+        if (!latestContracts.has(c.judgeId)) {
+          latestContracts.set(c.judgeId, c);
+        }
+      }
+
+      // Deduplicate judges
+      const judgeMap = new Map<string, {
+        judgeId: string;
+        name: string;
+        kcNumber: string | null;
+        contactEmail: string | null;
+        breeds: string[];
+        rings: string[];
+      }>();
+
+      for (const a of assignments) {
+        const existing = judgeMap.get(a.judgeId);
+        if (existing) {
+          if (a.breed && !existing.breeds.includes(a.breed.name)) {
+            existing.breeds.push(a.breed.name);
+          }
+          if (a.ring && !existing.rings.includes(`Ring ${a.ring.number}`)) {
+            existing.rings.push(`Ring ${a.ring.number}`);
+          }
+        } else {
+          judgeMap.set(a.judgeId, {
+            judgeId: a.judgeId,
+            name: a.judge.name,
+            kcNumber: a.judge.kcNumber,
+            contactEmail: a.judge.contactEmail,
+            breeds: a.breed ? [a.breed.name] : [],
+            rings: a.ring ? [`Ring ${a.ring.number}`] : [],
+          });
+        }
+      }
+
+      // Combine into pipeline view
+      const judges = Array.from(judgeMap.values()).map((j) => {
+        const contract = latestContracts.get(j.judgeId);
+        return {
+          ...j,
+          contractId: contract?.id ?? null,
+          stage: contract?.stage ?? null,
+          offerSentAt: contract?.offerSentAt ?? null,
+          acceptedAt: contract?.acceptedAt ?? null,
+          confirmedAt: contract?.confirmedAt ?? null,
+          declinedAt: contract?.declinedAt ?? null,
+          hotelCost: contract?.hotelCost ?? null,
+          travelCost: contract?.travelCost ?? null,
+          otherExpenses: contract?.otherExpenses ?? null,
+          expenseNotes: contract?.expenseNotes ?? null,
+          judgeEmail: contract?.judgeEmail ?? j.contactEmail,
+        };
+      });
+
+      // Summary counts
+      const summary = {
+        total: judges.length,
+        noOffer: judges.filter((j) => !j.stage).length,
+        offerSent: judges.filter((j) => j.stage === 'offer_sent').length,
+        accepted: judges.filter((j) => j.stage === 'offer_accepted').length,
+        confirmed: judges.filter((j) => j.stage === 'confirmed').length,
+        declined: judges.filter((j) => j.stage === 'declined').length,
+      };
+
+      return { judges, summary };
+    }),
+
+  /** Re-sync per-judge checklist items after judges are added/removed */
+  reseedChecklistJudges: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+      });
+      if (!show) throw new TRPCError({ code: 'NOT_FOUND' });
+
+      // Get current assigned judges
+      const assignments = await ctx.db.query.judgeAssignments.findMany({
+        where: eq(judgeAssignments.showId, input.showId),
+        with: { judge: true },
+      });
+      const currentJudges = new Map<string, string>();
+      for (const a of assignments) {
+        if (a.judge && !currentJudges.has(a.judge.id)) {
+          currentJudges.set(a.judge.id, a.judge.name);
+        }
+      }
+
+      // Get existing per-judge checklist items
+      const existingItems = await ctx.db.query.showChecklistItems.findMany({
+        where: and(
+          eq(showChecklistItems.showId, input.showId),
+          eq(showChecklistItems.entityType, 'judge')
+        ),
+      });
+
+      // Find judge IDs already in checklist
+      const existingJudgeIds = new Set(
+        existingItems.map((i) => i.entityId).filter(Boolean)
+      );
+
+      // Per-judge default items
+      const perJudgeDefaults = DEFAULT_CHECKLIST_ITEMS.filter((d) => d.perJudge);
+
+      // Insert items for new judges
+      const newItems: typeof existingItems = [];
+      let inserted = 0;
+      for (const [judgeId, judgeName] of currentJudges) {
+        if (existingJudgeIds.has(judgeId)) continue;
+
+        for (const def of perJudgeDefaults) {
+          if (def.championshipOnly && show.showType !== 'championship') continue;
+          const dueDate = def.relativeDueDays !== undefined
+            ? calculateDueDate(show.startDate, def.relativeDueDays)
+            : null;
+
+          await ctx.db.insert(showChecklistItems).values({
+            showId: input.showId,
+            title: `${def.title} — ${judgeName}`,
+            description: def.description ?? null,
+            phase: def.phase,
+            sortOrder: def.sortOrder * 100,
+            dueDate,
+            autoDetectKey: def.autoDetectKey ?? null,
+            actionKey: def.actionKey ?? null,
+            championshipOnly: def.championshipOnly ?? false,
+            relativeDueDays: def.relativeDueDays ?? null,
+            requiresDocument: def.requiresDocument ?? false,
+            hasExpiry: def.hasExpiry ?? false,
+            entityType: 'judge',
+            entityId: judgeId,
+            entityName: judgeName,
+          });
+          inserted++;
+        }
+      }
+
+      // Mark removed judges as not_applicable
+      let marked = 0;
+      const removedJudgeIds = [...existingJudgeIds].filter(
+        (id) => id && !currentJudges.has(id)
+      );
+      if (removedJudgeIds.length > 0) {
+        await ctx.db
+          .update(showChecklistItems)
+          .set({
+            status: 'not_applicable',
+            notes: 'Judge removed from show',
+            autoDetected: true,
+          })
+          .where(
+            and(
+              eq(showChecklistItems.showId, input.showId),
+              eq(showChecklistItems.entityType, 'judge'),
+              inArray(showChecklistItems.entityId, removedJudgeIds as string[])
+            )
+          );
+        marked = removedJudgeIds.length;
+      }
+
+      // Auto-sync contract status for existing items
+      const contracts = await ctx.db.query.judgeContracts.findMany({
+        where: eq(judgeContracts.showId, input.showId),
+        orderBy: desc(judgeContracts.createdAt),
+      });
+      const latestContracts = new Map<string, typeof contracts[number]>();
+      for (const c of contracts) {
+        if (!latestContracts.has(c.judgeId)) latestContracts.set(c.judgeId, c);
+      }
+
+      // Batch: collect item IDs per update type to avoid N+1 updates
+      const completeIds: string[] = [];
+      const declinedIds: string[] = [];
+      let declineNote = '';
+
+      for (const item of existingItems) {
+        if (!item.entityId || item.status === 'complete' || item.status === 'not_applicable') continue;
+        const contract = latestContracts.get(item.entityId);
+        if (!contract) continue;
+
+        if (item.actionKey === 'judge_acceptance' && (contract.stage === 'offer_accepted' || contract.stage === 'confirmed')) {
+          completeIds.push(item.id);
+        }
+        if (item.actionKey === 'judge_confirmation' && contract.stage === 'confirmed') {
+          completeIds.push(item.id);
+        }
+        if (contract.stage === 'declined') {
+          declinedIds.push(item.id);
+          declineNote = `Declined on ${new Date(contract.declinedAt!).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+        }
+      }
+
+      if (completeIds.length > 0) {
+        await ctx.db.update(showChecklistItems).set({
+          status: 'complete', completedAt: new Date(), autoDetected: true,
+        }).where(inArray(showChecklistItems.id, completeIds));
+      }
+      if (declinedIds.length > 0) {
+        await ctx.db.update(showChecklistItems).set({
+          status: 'not_applicable', autoDetected: true, notes: declineNote,
+        }).where(inArray(showChecklistItems.id, declinedIds));
+      }
+
+      return { inserted, marked, total: currentJudges.size };
+    }),
+
+  /** Send offers to all judges without active contracts */
+  sendBulkJudgeOffers: secretaryProcedure
+    .input(z.object({
+      showId: z.string().uuid(),
+      judgeIds: z.array(z.string().uuid()),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+        with: { venue: true, organisation: true },
+      });
+      if (!show) throw new TRPCError({ code: 'NOT_FOUND' });
+
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>';
+      const baseUrl = process.env.RENDER_EXTERNAL_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
+      const orgName = show.organisation?.name ?? 'the Show Society';
+
+      const showDate = new Date(show.startDate).toLocaleDateString('en-GB', {
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+      });
+      const venue = show.venue
+        ? `${show.venue.name}${show.venue.postcode ? `, ${show.venue.postcode}` : ''}`
+        : 'Venue TBC';
+
+      // Pre-fetch all data to avoid N+1 queries in the loop
+      const allJudges = await ctx.db.query.judges.findMany({
+        where: inArray(judges.id, input.judgeIds),
+      });
+      const judgeMap = new Map(allJudges.map((j) => [j.id, j]));
+
+      const allContracts = await ctx.db.query.judgeContracts.findMany({
+        where: and(
+          eq(judgeContracts.showId, input.showId),
+          inArray(judgeContracts.judgeId, input.judgeIds)
+        ),
+        orderBy: desc(judgeContracts.createdAt),
+      });
+      const latestContractByJudge = new Map<string, typeof allContracts[number]>();
+      for (const c of allContracts) {
+        if (!latestContractByJudge.has(c.judgeId)) latestContractByJudge.set(c.judgeId, c);
+      }
+
+      const allAssignments = await ctx.db.query.judgeAssignments.findMany({
+        where: and(
+          eq(judgeAssignments.showId, input.showId),
+          inArray(judgeAssignments.judgeId, input.judgeIds)
+        ),
+        with: { breed: true },
+      });
+      const assignmentsByJudge = new Map<string, typeof allAssignments>();
+      for (const a of allAssignments) {
+        const list = assignmentsByJudge.get(a.judgeId) ?? [];
+        list.push(a);
+        assignmentsByJudge.set(a.judgeId, list);
+      }
+
+      let sent = 0;
+      let skipped = 0;
+      const errors: string[] = [];
+
+      // Process in batches of 5 to respect Resend rate limits
+      for (let i = 0; i < input.judgeIds.length; i++) {
+        const judgeId = input.judgeIds[i]!;
+
+        const judge = judgeMap.get(judgeId);
+        if (!judge || !judge.contactEmail) {
+          skipped++;
+          continue;
+        }
+
+        // Skip if already has an active contract
+        const existingContract = latestContractByJudge.get(judgeId);
+        if (existingContract && existingContract.stage !== 'declined') {
+          skipped++;
+          continue;
+        }
+
+        const assignments = assignmentsByJudge.get(judgeId) ?? [];
+        const breedsText = assignments.filter((a) => a.breed).map((a) => a.breed!.name).join(', ') || 'All breeds';
+
+        const tokenExpiresAt = new Date();
+        tokenExpiresAt.setDate(tokenExpiresAt.getDate() + 30);
+
+        try {
+          const [contract] = await ctx.db.insert(judgeContracts).values({
+            showId: input.showId,
+            judgeId,
+            judgeName: judge.name,
+            judgeEmail: judge.contactEmail,
+            stage: 'offer_sent',
+            offerSentAt: new Date(),
+            tokenExpiresAt,
+          }).returning();
+
+          const acceptUrl = `${baseUrl}/api/judge-contract/${contract!.offerToken}`;
+
+          await resend.emails.send({
+            from: emailFrom,
+            to: judge.contactEmail,
+            replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+            subject: `Judging Offer — ${show.name}`,
+            html: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background-color:#f5f3ef;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<div style="max-width:600px;margin:0 auto;padding:24px 16px;">
+  <div style="text-align:center;padding:24px 0;"><h1 style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:28px;color:#2D5F3F;">Remi</h1></div>
+  <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="background:#2D5F3F;padding:24px;text-align:center;">
+      <h2 style="margin:0;color:#fff;font-size:22px;font-weight:700;">Judging Appointment Offer</h2>
+      <p style="margin:8px 0 0;color:#b8d4c4;font-size:14px;">from ${orgName}</p>
+    </div>
+    <div style="padding:24px;">
+      <p style="font-size:15px;color:#1a1a1a;line-height:1.6;">Dear ${judge.name},</p>
+      <p style="font-size:15px;color:#333;line-height:1.6;">On behalf of ${orgName}, I have much pleasure in inviting you to judge at our forthcoming show.</p>
+      <table style="width:100%;margin:20px 0;border-collapse:collapse;">
+        <tr><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;font-weight:600;color:#444;width:120px;">Show</td><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;">${show.name}</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;font-weight:600;color:#444;">Date</td><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;">${showDate}</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;font-weight:600;color:#444;">Venue</td><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;">${venue}</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;font-weight:600;color:#444;">Breeds</td><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;">${breedsText}</td></tr>
+      </table>
+      <p style="font-size:15px;color:#333;line-height:1.6;">Please confirm by clicking below.</p>
+      <div style="text-align:center;margin:28px 0;">
+        <a href="${acceptUrl}?action=accept" style="display:inline-block;background:#2D5F3F;color:#fff;padding:14px 32px;border-radius:8px;font-size:16px;font-weight:600;text-decoration:none;">Accept Appointment</a>
+        <br><a href="${acceptUrl}?action=decline" style="display:inline-block;color:#888;padding:8px 16px;font-size:13px;text-decoration:underline;margin-top:8px;">Decline</a>
+      </div>
+      <p style="font-size:13px;color:#999;text-align:center;">This link expires on ${tokenExpiresAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.</p>
+    </div>
+  </div>
+</div></body></html>`,
+          });
+          sent++;
+        } catch (error) {
+          console.error(`[bulk-offer] Failed for ${judge.name}:`, error);
+          errors.push(judge.name);
+        }
+
+        // Rate limit: pause every 5 emails
+        if ((i + 1) % 5 === 0 && i < input.judgeIds.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 1100));
+        }
+      }
+
+      return { sent, skipped, errors };
+    }),
+
+  /** Send confirmation letters to all accepted judges in bulk */
+  bulkSendJudgeConfirmations: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      // Find all accepted (not yet confirmed) contracts
+      const acceptedContracts = await ctx.db.query.judgeContracts.findMany({
+        where: and(
+          eq(judgeContracts.showId, input.showId),
+          eq(judgeContracts.stage, 'offer_accepted')
+        ),
+        with: {
+          show: { with: { venue: true, organisation: true } },
+          judge: true,
+        },
+      });
+
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>';
+
+      // Pre-fetch all assignments to avoid N+1 queries
+      const judgeIds = acceptedContracts.map((c) => c.judgeId);
+      const allAssignments = judgeIds.length > 0
+        ? await ctx.db.query.judgeAssignments.findMany({
+            where: and(
+              eq(judgeAssignments.showId, input.showId),
+              inArray(judgeAssignments.judgeId, judgeIds)
+            ),
+            with: { breed: true, ring: true },
+          })
+        : [];
+      const assignmentsByJudge = new Map<string, typeof allAssignments>();
+      for (const a of allAssignments) {
+        const list = assignmentsByJudge.get(a.judgeId) ?? [];
+        list.push(a);
+        assignmentsByJudge.set(a.judgeId, list);
+      }
+
+      let sent = 0;
+      const errors: string[] = [];
+
+      for (let i = 0; i < acceptedContracts.length; i++) {
+        const contract = acceptedContracts[i]!;
+        try {
+          const assignments = assignmentsByJudge.get(contract.judgeId) ?? [];
+
+          const breedsText = assignments.filter((a) => a.breed).map((a) => a.breed!.name).join(', ') || 'All breeds';
+          const ringsText = assignments.filter((a) => a.ring).map((a) => `Ring ${a.ring!.number}`).join(', ') || 'TBC';
+          const show = contract.show;
+          const orgName = show.organisation?.name ?? 'the Show Society';
+          const showDate = new Date(show.startDate).toLocaleDateString('en-GB', {
+            weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+          });
+          const venue = show.venue
+            ? `${show.venue.name}${show.venue.address ? `, ${show.venue.address}` : ''}${show.venue.postcode ? `, ${show.venue.postcode}` : ''}`
+            : 'Venue TBC';
+
+          // Update contract
+          await ctx.db.update(judgeContracts).set({
+            stage: 'confirmed', confirmedAt: new Date(),
+          }).where(eq(judgeContracts.id, contract.id));
+
+          // Auto-complete checklist items
+          await ctx.db.update(showChecklistItems).set({
+            status: 'complete', completedAt: new Date(), autoDetected: true,
+          }).where(
+            and(
+              eq(showChecklistItems.showId, contract.showId),
+              eq(showChecklistItems.entityType, 'judge'),
+              eq(showChecklistItems.entityId, contract.judgeId),
+              eq(showChecklistItems.actionKey, 'judge_confirmation')
+            )
+          );
+
+          await resend.emails.send({
+            from: emailFrom,
+            to: contract.judgeEmail,
+            replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+            subject: `Appointment Confirmed — ${show.name}`,
+            html: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background-color:#f5f3ef;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<div style="max-width:600px;margin:0 auto;padding:24px 16px;">
+  <div style="text-align:center;padding:24px 0;"><h1 style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:28px;color:#2D5F3F;">Remi</h1></div>
+  <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="background:#2D5F3F;padding:24px;text-align:center;">
+      <div style="font-size:32px;margin-bottom:8px;">&#10003;</div>
+      <h2 style="margin:0;color:#fff;font-size:22px;font-weight:700;">Appointment Confirmed</h2>
+    </div>
+    <div style="padding:24px;">
+      <p style="font-size:15px;color:#1a1a1a;line-height:1.6;">Dear ${contract.judgeName},</p>
+      <p style="font-size:15px;color:#333;line-height:1.6;">Thank you for accepting our invitation. This confirms your appointment to judge at our show.</p>
+      <table style="width:100%;margin:20px 0;border-collapse:collapse;">
+        <tr><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;font-weight:600;color:#444;width:120px;">Show</td><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;">${show.name}</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;font-weight:600;color:#444;">Date</td><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;">${showDate}</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;font-weight:600;color:#444;">Venue</td><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;">${venue}</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;font-weight:600;color:#444;">Breeds</td><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;">${breedsText}</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;font-weight:600;color:#444;">Ring(s)</td><td style="padding:10px 12px;border-bottom:1px solid #e5e5e5;">${ringsText}</td></tr>
+      </table>
+      <p style="font-size:15px;color:#333;line-height:1.6;">Further details regarding entry numbers will be sent closer to the show date. We look forward to welcoming you.</p>
+      <p style="font-size:15px;color:#333;line-height:1.6;margin-top:24px;">Yours sincerely,<br><strong>${orgName}</strong></p>
+    </div>
+  </div>
+</div></body></html>`,
+          });
+          sent++;
+        } catch (error) {
+          console.error(`[bulk-confirm] Failed for ${contract.judgeName}:`, error);
+          errors.push(contract.judgeName);
+        }
+
+        // Rate limit
+        if ((i + 1) % 5 === 0 && i < acceptedContracts.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 1100));
+        }
+      }
+
+      return { sent, errors, total: acceptedContracts.length };
+    }),
+
+  /** Email entry counts to a judge and auto-complete the checklist item */
+  sendJudgeEntryNumbers: secretaryProcedure
+    .input(z.object({
+      showId: z.string().uuid(),
+      judgeId: z.string().uuid(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+        with: { venue: true, organisation: true },
+      });
+      if (!show) throw new TRPCError({ code: 'NOT_FOUND' });
+
+      const judge = await ctx.db.query.judges.findFirst({
+        where: eq(judges.id, input.judgeId),
+      });
+      if (!judge || !judge.contactEmail) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Judge has no contact email' });
+      }
+
+      // Get judge's breed assignments
+      const assignments = await ctx.db.query.judgeAssignments.findMany({
+        where: and(
+          eq(judgeAssignments.showId, input.showId),
+          eq(judgeAssignments.judgeId, input.judgeId)
+        ),
+        with: { breed: true, ring: true },
+      });
+
+      // Get entry counts per class for the judge's assigned breeds
+      const breedIds = assignments.filter((a) => a.breedId).map((a) => a.breedId!);
+      let classEntries: { className: string; breedName: string | null; entryCount: number }[] = [];
+
+      if (breedIds.length > 0) {
+        const classes = await ctx.db.query.showClasses.findMany({
+          where: and(
+            eq(showClasses.showId, input.showId),
+            inArray(showClasses.breedId, breedIds)
+          ),
+          with: { breed: true, classDefinition: true },
+        });
+
+        // Single GROUP BY query for all class entry counts (instead of N+1)
+        const classIds = classes.map((c) => c.id);
+        const entryCounts = classIds.length > 0
+          ? await ctx.db
+              .select({
+                showClassId: entryClasses.showClassId,
+                count: sql<number>`count(*)`,
+              })
+              .from(entryClasses)
+              .innerJoin(entries, eq(entryClasses.entryId, entries.id))
+              .where(
+                and(
+                  inArray(entryClasses.showClassId, classIds),
+                  eq(entries.status, 'confirmed')
+                )
+              )
+              .groupBy(entryClasses.showClassId)
+          : [];
+        const countMap = new Map(entryCounts.map((r) => [r.showClassId, Number(r.count)]));
+
+        for (const cls of classes) {
+          classEntries.push({
+            className: cls.classDefinition?.name ?? `Class ${cls.id.slice(0, 8)}`,
+            breedName: cls.breed?.name ?? null,
+            entryCount: countMap.get(cls.id) ?? 0,
+          });
+        }
+      }
+
+      const orgName = show.organisation?.name ?? 'the Show Society';
+      const showDate = new Date(show.startDate).toLocaleDateString('en-GB', {
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+      });
+
+      const breedsText = assignments.filter((a) => a.breed).map((a) => a.breed!.name).join(', ') || 'All breeds';
+      const totalEntries = classEntries.reduce((sum, c) => sum + c.entryCount, 0);
+
+      const classRows = classEntries.length > 0
+        ? classEntries.map((c) =>
+            `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e5e5;font-size:14px;">${c.breedName ? `${c.breedName} — ` : ''}${c.className}</td><td style="padding:8px 12px;border-bottom:1px solid #e5e5e5;text-align:center;font-weight:600;">${c.entryCount}</td></tr>`
+          ).join('')
+        : '<tr><td colspan="2" style="padding:12px;text-align:center;color:#999;">No class data available yet</td></tr>';
+
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>';
+
+      await resend.emails.send({
+        from: emailFrom,
+        to: judge.contactEmail,
+        replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+        subject: `Entry Numbers — ${show.name}`,
+        html: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background-color:#f5f3ef;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<div style="max-width:600px;margin:0 auto;padding:24px 16px;">
+  <div style="text-align:center;padding:24px 0;"><h1 style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:28px;color:#2D5F3F;">Remi</h1></div>
+  <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="background:#2D5F3F;padding:24px;text-align:center;">
+      <h2 style="margin:0;color:#fff;font-size:22px;font-weight:700;">Entry Numbers</h2>
+      <p style="margin:8px 0 0;color:#b8d4c4;font-size:14px;">${show.name} — ${showDate}</p>
+    </div>
+    <div style="padding:24px;">
+      <p style="font-size:15px;color:#1a1a1a;line-height:1.6;">Dear ${judge.name},</p>
+      <p style="font-size:15px;color:#333;line-height:1.6;">Please find below the entry numbers for your judging appointment. You will be judging <strong>${breedsText}</strong> with a total of <strong>${totalEntries}</strong> entries.</p>
+      <table style="width:100%;margin:20px 0;border-collapse:collapse;">
+        <tr><th style="padding:10px 12px;border-bottom:2px solid #2D5F3F;text-align:left;font-size:14px;color:#444;">Class</th><th style="padding:10px 12px;border-bottom:2px solid #2D5F3F;text-align:center;font-size:14px;color:#444;">Entries</th></tr>
+        ${classRows}
+        <tr><td style="padding:10px 12px;font-weight:700;">Total</td><td style="padding:10px 12px;text-align:center;font-weight:700;">${totalEntries}</td></tr>
+      </table>
+      <p style="font-size:15px;color:#333;line-height:1.6;">We look forward to welcoming you on the day.</p>
+      <p style="font-size:15px;color:#333;line-height:1.6;margin-top:24px;">Yours sincerely,<br><strong>${orgName}</strong></p>
+    </div>
+  </div>
+</div></body></html>`,
+      });
+
+      // Auto-complete checklist item
+      await ctx.db.update(showChecklistItems).set({
+        status: 'complete', completedAt: new Date(), autoDetected: true,
+      }).where(
+        and(
+          eq(showChecklistItems.showId, input.showId),
+          eq(showChecklistItems.entityType, 'judge'),
+          eq(showChecklistItems.entityId, input.judgeId),
+          eq(showChecklistItems.actionKey, 'judge_entry_numbers')
+        )
+      );
+
+      return { sent: true, totalEntries };
+    }),
+
+  /** Send a thank-you letter to a judge */
+  sendJudgeThankYou: secretaryProcedure
+    .input(z.object({
+      showId: z.string().uuid(),
+      judgeId: z.string().uuid(),
+      message: z.string().max(2000).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+        with: { organisation: true },
+      });
+      if (!show) throw new TRPCError({ code: 'NOT_FOUND' });
+
+      const judge = await ctx.db.query.judges.findFirst({
+        where: eq(judges.id, input.judgeId),
+      });
+      if (!judge || !judge.contactEmail) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Judge has no contact email' });
+      }
+
+      // Get contract for expense info
+      const contract = await ctx.db.query.judgeContracts.findFirst({
+        where: and(
+          eq(judgeContracts.showId, input.showId),
+          eq(judgeContracts.judgeId, input.judgeId)
+        ),
+        orderBy: desc(judgeContracts.createdAt),
+      });
+
+      const orgName = show.organisation?.name ?? 'the Show Society';
+      const customMessage = input.message || 'Thank you for your time and expertise. Your contribution to the show was greatly appreciated by exhibitors and the committee alike.';
+
+      const totalExpenses = (contract?.hotelCost ?? 0) + (contract?.travelCost ?? 0) + (contract?.otherExpenses ?? 0);
+      const expenseSection = totalExpenses > 0 ? `
+        <p style="font-size:14px;color:#555;line-height:1.6;padding:12px;background:#f9f8f6;border-radius:8px;margin-top:16px;">
+          <strong>Expenses Summary:</strong><br>
+          ${contract?.hotelCost ? `Hotel: £${penceToPoundsString(contract.hotelCost)}<br>` : ''}
+          ${contract?.travelCost ? `Travel: £${penceToPoundsString(contract.travelCost)}<br>` : ''}
+          ${contract?.otherExpenses ? `Other: £${penceToPoundsString(contract.otherExpenses)}<br>` : ''}
+          <strong>Total: £${penceToPoundsString(totalExpenses)}</strong>
+        </p>` : '';
+
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>';
+
+      await resend.emails.send({
+        from: emailFrom,
+        to: judge.contactEmail,
+        replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+        subject: `Thank You — ${show.name}`,
+        html: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background-color:#f5f3ef;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<div style="max-width:600px;margin:0 auto;padding:24px 16px;">
+  <div style="text-align:center;padding:24px 0;"><h1 style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:28px;color:#2D5F3F;">Remi</h1></div>
+  <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="background:#2D5F3F;padding:24px;text-align:center;">
+      <h2 style="margin:0;color:#fff;font-size:22px;font-weight:700;">Thank You</h2>
+      <p style="margin:8px 0 0;color:#b8d4c4;font-size:14px;">${show.name}</p>
+    </div>
+    <div style="padding:24px;">
+      <p style="font-size:15px;color:#1a1a1a;line-height:1.6;">Dear ${judge.name},</p>
+      <p style="font-size:15px;color:#333;line-height:1.6;">${customMessage}</p>
+      ${expenseSection}
+      <p style="font-size:15px;color:#333;line-height:1.6;margin-top:24px;">With kind regards,<br><strong>${orgName}</strong></p>
+    </div>
+  </div>
+</div></body></html>`,
+      });
+
+      // Auto-complete checklist item
+      await ctx.db.update(showChecklistItems).set({
+        status: 'complete', completedAt: new Date(), autoDetected: true,
+      }).where(
+        and(
+          eq(showChecklistItems.showId, input.showId),
+          eq(showChecklistItems.entityType, 'judge'),
+          eq(showChecklistItems.entityId, input.judgeId),
+          eq(showChecklistItems.actionKey, 'judge_thankyou')
+        )
+      );
+
+      return { sent: true };
     }),
 
   // ── Sundry Items CRUD ────────────────────────────────────

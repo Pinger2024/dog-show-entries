@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState } from 'react';
+import { use, useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -16,12 +16,6 @@ import { trpc } from '@/lib/trpc';
 import { formatCurrency } from '@/lib/date-utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-} from '@/components/ui/card';
 import {
   Select,
   SelectContent,
@@ -64,9 +58,24 @@ export default function ShowManagementLayout({
 
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
 
+  // DEBUG: show viewport and container widths
+  const [vw, setVw] = useState(0);
+  const [bodyW, setBodyW] = useState(0);
+  const [scrollW, setScrollW] = useState(0);
+  useEffect(() => {
+    const update = () => {
+      setVw(window.innerWidth);
+      setBodyW(document.body.clientWidth);
+      setScrollW(document.body.scrollWidth);
+    };
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+
   if (showLoading) {
     return (
-      <div className="space-y-6 pb-16 md:pb-0">
+      <div className="space-y-4 sm:space-y-6 pb-16 md:pb-0">
         <div className="h-8 w-48 animate-pulse rounded bg-muted" />
         <div className="h-64 animate-pulse rounded-xl bg-muted" />
       </div>
@@ -75,7 +84,7 @@ export default function ShowManagementLayout({
 
   if (!show) {
     return (
-      <div className="space-y-6 pb-16 md:pb-0">
+      <div className="space-y-4 sm:space-y-6 pb-16 md:pb-0">
         <p className="text-muted-foreground">Show not found.</p>
         <Button variant="outline" asChild>
           <Link href="/secretary">
@@ -134,7 +143,13 @@ export default function ShowManagementLayout({
   }
 
   return (
-    <div className="space-y-6 pb-16 md:pb-0">
+    <div className="space-y-4 sm:space-y-6 pb-16 md:pb-0">
+      {/* DEBUG: viewport width indicator */}
+      {vw > 0 && (
+        <div style={{ background: scrollW > vw ? 'red' : 'lime', color: '#000', padding: '8px', fontSize: '12px', fontWeight: 'bold', borderRadius: '8px', wordBreak: 'break-all' as const }}>
+          viewport: {vw}px | body.client: {bodyW}px | body.scroll: {scrollW}px | OVERFLOW: {scrollW > vw ? 'YES!' : 'no'}
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div className="min-w-0">
@@ -203,61 +218,31 @@ export default function ShowManagementLayout({
         </DialogContent>
       </Dialog>
 
-      {/* Quick stats */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
-        <Card>
-          <CardHeader className="flex-row items-center justify-between pb-2">
-            <CardDescription className="text-sm font-medium">
-              Entries
-            </CardDescription>
-            <Ticket className="size-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{stats?.totalEntries ?? 0}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex-row items-center justify-between pb-2">
-            <CardDescription className="text-sm font-medium">
-              Confirmed
-            </CardDescription>
-            <Users className="size-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">
-              {stats?.confirmedEntries ?? 0}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex-row items-center justify-between pb-2">
-            <CardDescription className="text-sm font-medium">
-              Revenue
-            </CardDescription>
-            <PoundSterling className="size-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">
-              {formatCurrency(stats?.totalRevenue ?? 0)}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex-row items-center justify-between pb-2">
-            <CardDescription className="text-sm font-medium">
-              Days Until Show
-            </CardDescription>
-            <Clock className="size-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">
-              {daysUntil(show.startDate) > 0
-                ? daysUntil(show.startDate)
-                : 'Past'}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Quick stats — DEBUG: HTML table (cannot be overridden by CSS) */}
+      <table style={{ width: '100%', borderCollapse: 'separate' as const, borderSpacing: '6px', border: '3px solid purple' }}>
+        <tbody>
+          <tr>
+            <td style={{ width: '50%', background: '#fee', border: '1px solid #ccc', borderRadius: '12px', padding: '12px', verticalAlign: 'top' }}>
+              <div style={{ fontSize: '12px', color: '#888' }}>Entries</div>
+              <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{stats?.totalEntries ?? 0}</div>
+            </td>
+            <td style={{ width: '50%', background: '#efe', border: '1px solid #ccc', borderRadius: '12px', padding: '12px', verticalAlign: 'top' }}>
+              <div style={{ fontSize: '12px', color: '#888' }}>Confirmed</div>
+              <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{stats?.confirmedEntries ?? 0}</div>
+            </td>
+          </tr>
+          <tr>
+            <td style={{ width: '50%', background: '#eef', border: '1px solid #ccc', borderRadius: '12px', padding: '12px', verticalAlign: 'top' }}>
+              <div style={{ fontSize: '12px', color: '#888' }}>Revenue</div>
+              <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{formatCurrency(stats?.totalRevenue ?? 0)}</div>
+            </td>
+            <td style={{ width: '50%', background: '#ffe', border: '1px solid #ccc', borderRadius: '12px', padding: '12px', verticalAlign: 'top' }}>
+              <div style={{ fontSize: '12px', color: '#888' }}>Days Until</div>
+              <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{daysUntil(show.startDate) > 0 ? daysUntil(show.startDate) : 'Past'}</div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
 
       {/* Section navigation */}
       <ShowSectionNav showId={show.id} />

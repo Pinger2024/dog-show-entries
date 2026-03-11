@@ -81,7 +81,7 @@ export default function OverviewPage() {
 
       {/* Show details */}
       <Card>
-        <CardHeader className="flex-row items-center justify-between">
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Show Details</CardTitle>
           <EditShowDetailsDialog show={show} showId={showId} />
         </CardHeader>
@@ -2217,7 +2217,7 @@ function ReadinessCard({ showId }: { showId: string }) {
 
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between pb-2">
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardDescription className="text-sm font-medium">Show Readiness</CardDescription>
         <ListChecks className="size-4 text-muted-foreground" />
       </CardHeader>

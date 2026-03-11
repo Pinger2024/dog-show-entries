@@ -288,7 +288,7 @@ export default function AdminDashboardPage() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {/* Users */}
         <Card className="transition-all hover:shadow-md hover:shadow-primary/5">
-          <CardHeader className="flex-row items-center justify-between pb-2 p-3 sm:p-4">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-4">
             <CardDescription className="text-xs sm:text-sm font-medium">
               Users
             </CardDescription>
@@ -310,7 +310,7 @@ export default function AdminDashboardPage() {
 
         {/* Active Shows */}
         <Card className="transition-all hover:shadow-md hover:shadow-primary/5">
-          <CardHeader className="flex-row items-center justify-between pb-2 p-3 sm:p-4">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-4">
             <CardDescription className="text-xs sm:text-sm font-medium">
               Active Shows
             </CardDescription>
@@ -330,7 +330,7 @@ export default function AdminDashboardPage() {
 
         {/* Entries This Month */}
         <Card className="transition-all hover:shadow-md hover:shadow-primary/5">
-          <CardHeader className="flex-row items-center justify-between pb-2 p-3 sm:p-4">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-4">
             <CardDescription className="text-xs sm:text-sm font-medium">
               Entries
             </CardDescription>
@@ -348,7 +348,7 @@ export default function AdminDashboardPage() {
 
         {/* Revenue This Month */}
         <Card className="transition-all hover:shadow-md hover:shadow-primary/5">
-          <CardHeader className="flex-row items-center justify-between pb-2 p-3 sm:p-4">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-4">
             <CardDescription className="text-xs sm:text-sm font-medium">
               Revenue
             </CardDescription>
@@ -373,7 +373,7 @@ export default function AdminDashboardPage() {
               : 'hover:shadow-primary/5'
           )}
         >
-          <CardHeader className="flex-row items-center justify-between pb-2 p-3 sm:p-4">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-4">
             <CardDescription className="text-xs sm:text-sm font-medium">
               Pending
             </CardDescription>
