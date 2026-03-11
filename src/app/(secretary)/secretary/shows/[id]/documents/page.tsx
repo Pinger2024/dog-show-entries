@@ -204,8 +204,7 @@ export default function DocumentsPage({
                 <a
                   key={doc.label}
                   href={doc.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  download
                   className="flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted"
                 >
                   <div className="mt-0.5 shrink-0 text-muted-foreground">
