@@ -14,8 +14,22 @@ import {
   organisations,
   sundryItems,
   memberships,
+  entries,
+  showSponsors,
 } from '@/server/db/schema';
 import { verifyShowAccess } from '../verify-show-access';
+import { isUuid, generateShowSlug } from '@/lib/slugify';
+import type { Database } from '@/server/db';
+
+/** Resolve a show slug to its UUID (passthrough if already UUID) */
+async function resolveShowId(db: Database, idOrSlug: string): Promise<string> {
+  const show = await db.query.shows.findFirst({
+    where: eq(shows.slug, idOrSlug),
+    columns: { id: true },
+  });
+  if (!show) throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
+  return show.id;
+}
 
 export const showsRouter = createTRPCRouter({
   list: publicProcedure
@@ -137,10 +151,12 @@ export const showsRouter = createTRPCRouter({
     }),
 
   getById: publicProcedure
-    .input(z.object({ id: z.string().uuid() }))
+    .input(z.object({ id: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
       const show = await ctx.db.query.shows.findFirst({
-        where: eq(shows.id, input.id),
+        where: isUuid(input.id)
+          ? eq(shows.id, input.id)
+          : eq(shows.slug, input.id),
         with: {
           organisation: true,
           venue: true,
@@ -185,12 +201,13 @@ export const showsRouter = createTRPCRouter({
   getClasses: publicProcedure
     .input(
       z.object({
-        showId: z.string().uuid(),
+        showId: z.string().min(1),
         breedId: z.string().uuid().optional(),
       })
     )
     .query(async ({ ctx, input }) => {
-      const conditions = [eq(showClasses.showId, input.showId)];
+      const showId = isUuid(input.showId) ? input.showId : await resolveShowId(ctx.db, input.showId);
+      const conditions = [eq(showClasses.showId, showId)];
 
       if (input.breedId) {
         conditions.push(
@@ -426,10 +443,19 @@ export const showsRouter = createTRPCRouter({
 
       const { classDefinitionIds, entryFee, firstEntryFee, subsequentEntryFee, nfcEntryFee, ...showData } = input;
 
+      // Generate a unique slug
+      const baseSlug = generateShowSlug(showData.name, showData.startDate);
+      let slug = baseSlug;
+      let suffix = 2;
+      while (await ctx.db.query.shows.findFirst({ where: eq(shows.slug, slug), columns: { id: true } })) {
+        slug = `${baseSlug}-${suffix++}`;
+      }
+
       const [show] = await ctx.db
         .insert(shows)
         .values({
           ...showData,
+          slug,
           entriesOpenDate: showData.entriesOpenDate
             ? new Date(showData.entriesOpenDate)
             : null,
@@ -560,14 +586,83 @@ export const showsRouter = createTRPCRouter({
     }),
 
   getSundryItems: publicProcedure
-    .input(z.object({ showId: z.string().uuid() }))
+    .input(z.object({ showId: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
+      const showId = isUuid(input.showId) ? input.showId : await resolveShowId(ctx.db, input.showId);
       return ctx.db.query.sundryItems.findMany({
         where: and(
-          eq(sundryItems.showId, input.showId),
+          eq(sundryItems.showId, showId),
           eq(sundryItems.enabled, true)
         ),
         orderBy: [asc(sundryItems.sortOrder), asc(sundryItems.createdAt)],
+      });
+    }),
+
+  getPublicStats: publicProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const show = await ctx.db.query.shows.findFirst({
+        where: and(
+          eq(shows.id, input.showId),
+          inArray(shows.status, ['entries_open', 'entries_closed', 'in_progress', 'completed'])
+        ),
+        columns: {
+          id: true,
+          status: true,
+          startDate: true,
+          entryCloseDate: true,
+        },
+      });
+
+      if (!show) return null;
+
+      const stats = await ctx.db
+        .select({
+          totalDogs: sql<number>`count(distinct ${entries.dogId})`,
+          totalExhibitors: sql<number>`count(distinct ${entries.exhibitorId})`,
+        })
+        .from(entries)
+        .where(
+          and(
+            eq(entries.showId, input.showId),
+            eq(entries.status, 'confirmed'),
+            isNull(entries.deletedAt)
+          )
+        );
+
+      return {
+        totalDogs: Number(stats[0]?.totalDogs ?? 0),
+        totalExhibitors: Number(stats[0]?.totalExhibitors ?? 0),
+        entryCloseDate: show.entryCloseDate?.toISOString() ?? null,
+        startDate: show.startDate,
+        status: show.status,
+      };
+    }),
+
+  getShowSponsors: publicProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.db.query.showSponsors.findMany({
+        where: eq(showSponsors.showId, input.showId),
+        with: {
+          sponsor: {
+            columns: {
+              id: true,
+              name: true,
+              logoUrl: true,
+              website: true,
+              category: true,
+            },
+          },
+          classSponsorships: {
+            with: {
+              showClass: {
+                with: { classDefinition: true, breed: true },
+              },
+            },
+          },
+        },
+        orderBy: [asc(showSponsors.displayOrder)],
       });
     }),
 });
