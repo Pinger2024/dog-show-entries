@@ -24,6 +24,8 @@ export interface TRPCContext {
     name: string;
     role: string;
   } | null;
+  /** True when the real (non-impersonated) caller is an admin — survives session swap in middleware */
+  callerIsAdmin: boolean;
 }
 
 export async function createTRPCContext(opts: {
@@ -86,6 +88,7 @@ export async function createTRPCContext(opts: {
     db,
     session,
     impersonating,
+    callerIsAdmin: session?.user.role === 'admin',
   };
 }
 

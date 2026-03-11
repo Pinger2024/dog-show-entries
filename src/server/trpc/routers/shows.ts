@@ -619,7 +619,7 @@ export const showsRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const { id, entriesOpenDate, entryCloseDate, postalCloseDate, ...rest } = input;
 
-      await verifyShowAccess(ctx.db, ctx.session.user.id, id);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, id, { callerIsAdmin: ctx.callerIsAdmin });
 
       const updateData: Record<string, unknown> = { ...rest };
       if (entriesOpenDate !== undefined) {

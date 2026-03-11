@@ -298,7 +298,7 @@ export const entriesRouter = createTRPCRouter({
       })
     )
     .query(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       const conditions = [
         eq(entries.showId, input.showId),

@@ -34,7 +34,7 @@ export const printOrdersRouter = createTRPCRouter({
   getAvailableProducts: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       // Get show stats for quantity suggestions
       const stats = await getShowStatsForPrinting(ctx.db, input.showId);
@@ -88,7 +88,7 @@ export const printOrdersRouter = createTRPCRouter({
       })
     )
     .query(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       // Fetch prices and delivery estimate in parallel
       const firstProduct = getProductByType(input.items[0].documentType);
@@ -185,7 +185,7 @@ export const printOrdersRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const show = await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      const show = await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       const subtotal = input.items.reduce((sum, item) => sum + item.lineTotal, 0);
       const tradeCostTotal = input.items.reduce(
@@ -246,7 +246,7 @@ export const printOrdersRouter = createTRPCRouter({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Order not found' });
       }
 
-      await verifyShowAccess(ctx.db, ctx.session.user.id, order.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, order.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       if (order.status !== 'draft') {
         throw new TRPCError({
@@ -327,7 +327,7 @@ export const printOrdersRouter = createTRPCRouter({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Order not found' });
       }
 
-      await verifyShowAccess(ctx.db, ctx.session.user.id, order.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, order.showId, { callerIsAdmin: ctx.callerIsAdmin });
       return order;
     }),
 
@@ -335,7 +335,7 @@ export const printOrdersRouter = createTRPCRouter({
   listByShow: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       return ctx.db.query.printOrders.findMany({
         where: eq(printOrders.showId, input.showId),
@@ -359,7 +359,7 @@ export const printOrdersRouter = createTRPCRouter({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Order not found' });
       }
 
-      await verifyShowAccess(ctx.db, ctx.session.user.id, order.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, order.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       if (!(CANCELLABLE_STATUSES as readonly string[]).includes(order.status)) {
         throw new TRPCError({
@@ -388,7 +388,7 @@ export const printOrdersRouter = createTRPCRouter({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Order not found' });
       }
 
-      await verifyShowAccess(ctx.db, ctx.session.user.id, order.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, order.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       if (!order.tradeprintOrderRef) {
         return { status: order.status, message: 'Order not yet submitted to Tradeprint' };

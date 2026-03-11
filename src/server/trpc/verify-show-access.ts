@@ -5,12 +5,14 @@ import type { Database } from '@/server/db';
 
 /**
  * Verify that a user is a member of the organisation that owns the given show.
+ * Admins bypass the membership check and can access any show.
  * Throws FORBIDDEN if they don't have access. Returns the show record.
  */
 export async function verifyShowAccess(
   db: Database,
   userId: string,
-  showId: string
+  showId: string,
+  opts?: { callerIsAdmin?: boolean }
 ) {
   const show = await db.query.shows.findFirst({
     where: eq(shows.id, showId),
@@ -20,6 +22,9 @@ export async function verifyShowAccess(
   if (!show) {
     throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
   }
+
+  // Admins can access any show without org membership
+  if (opts?.callerIsAdmin) return show;
 
   const membership = await db.query.memberships.findFirst({
     where: and(

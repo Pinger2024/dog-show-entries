@@ -197,7 +197,7 @@ export const secretaryRouter = createTRPCRouter({
   getShowStats: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       const entryCounts = await ctx.db
         .select({
@@ -265,7 +265,7 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       const [updated] = await ctx.db
         .update(shows)
@@ -308,7 +308,7 @@ export const secretaryRouter = createTRPCRouter({
   assignCatalogueNumbers: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       // Fetch all confirmed entries with breed + class info for ordering
       const confirmedEntries = await ctx.db.query.entries.findMany({
@@ -381,7 +381,7 @@ export const secretaryRouter = createTRPCRouter({
   getCatalogueData: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
@@ -421,7 +421,7 @@ export const secretaryRouter = createTRPCRouter({
   getAbsenteeList: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       return ctx.db.query.entries.findMany({
         where: and(
@@ -442,7 +442,7 @@ export const secretaryRouter = createTRPCRouter({
   getEntryReport: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       return ctx.db.query.entries.findMany({
         where: and(
@@ -471,7 +471,7 @@ export const secretaryRouter = createTRPCRouter({
   getPaymentReport: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       const showEntries = await ctx.db.query.entries.findMany({
         where: and(
@@ -528,7 +528,7 @@ export const secretaryRouter = createTRPCRouter({
   getCatalogueOrders: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       // Find catalogue sundry items for this show
       const catalogueItems = await ctx.db
@@ -596,7 +596,7 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       // Verify entry belongs to this show
       const entry = await ctx.db.query.entries.findFirst({
@@ -648,7 +648,7 @@ export const secretaryRouter = createTRPCRouter({
   getAuditLog: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       // Get all entries for this show, then their audit logs
       const showEntries = await ctx.db.query.entries.findMany({
@@ -710,7 +710,7 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       // Get max sort order for this show
       const [maxSort] = await ctx.db
@@ -746,7 +746,7 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       // Start from max existing sortOrder so we don't collide with existing classes
       const [maxSort] = await ctx.db
@@ -821,7 +821,7 @@ export const secretaryRouter = createTRPCRouter({
         columns: { showId: true },
       });
       if (!sc) throw new TRPCError({ code: 'NOT_FOUND', message: 'Class not found' });
-      await verifyShowAccess(ctx.db, ctx.session.user.id, sc.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, sc.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       const updates: Record<string, unknown> = {};
       if (input.entryFee !== undefined) updates.entryFee = input.entryFee;
@@ -856,7 +856,7 @@ export const secretaryRouter = createTRPCRouter({
         columns: { showId: true },
       });
       if (!sc) throw new TRPCError({ code: 'NOT_FOUND', message: 'Class not found' });
-      await verifyShowAccess(ctx.db, ctx.session.user.id, sc.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, sc.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       const [deleted] = await ctx.db
         .delete(showClasses)
@@ -874,7 +874,7 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       for (let i = 0; i < input.classIds.length; i++) {
         await ctx.db
@@ -905,7 +905,7 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       for (const { classId, classNumber } of input.assignments) {
         await ctx.db
@@ -919,7 +919,7 @@ export const secretaryRouter = createTRPCRouter({
   autoAssignClassNumbers: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       // Fetch all classes with breed group info for ordering
       const classes = await ctx.db.query.showClasses.findMany({
@@ -966,7 +966,7 @@ export const secretaryRouter = createTRPCRouter({
   getShowStewards: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       return ctx.db.query.stewardAssignments.findMany({
         where: eq(stewardAssignments.showId, input.showId),
@@ -991,7 +991,7 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       // Find user by email
       const user = await ctx.db.query.users.findFirst({
@@ -1050,7 +1050,7 @@ export const secretaryRouter = createTRPCRouter({
       if (!assignment) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Steward assignment not found' });
       }
-      await verifyShowAccess(ctx.db, ctx.session.user.id, assignment.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, assignment.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       await ctx.db
         .delete(stewardAssignments)
@@ -1094,7 +1094,7 @@ export const secretaryRouter = createTRPCRouter({
       if (!assignment) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Steward assignment not found' });
       }
-      await verifyShowAccess(ctx.db, ctx.session.user.id, assignment.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, assignment.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       // Replace all breed assignments for this steward
       await ctx.db
@@ -1117,7 +1117,7 @@ export const secretaryRouter = createTRPCRouter({
   deleteShow: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
@@ -1178,7 +1178,7 @@ export const secretaryRouter = createTRPCRouter({
   getShowRings: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       return ctx.db.query.rings.findMany({
         where: eq(rings.showId, input.showId),
@@ -1196,7 +1196,7 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       const [ring] = await ctx.db
         .insert(rings)
@@ -1226,7 +1226,7 @@ export const secretaryRouter = createTRPCRouter({
         columns: { showId: true },
       });
       if (!ring) throw new TRPCError({ code: 'NOT_FOUND', message: 'Ring not found' });
-      await verifyShowAccess(ctx.db, ctx.session.user.id, ring.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, ring.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       const { ringId, ...data } = input;
       const updateData: Record<string, unknown> = {};
@@ -1254,7 +1254,7 @@ export const secretaryRouter = createTRPCRouter({
         columns: { showId: true },
       });
       if (!ring) throw new TRPCError({ code: 'NOT_FOUND', message: 'Ring not found' });
-      await verifyShowAccess(ctx.db, ctx.session.user.id, ring.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, ring.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       await ctx.db.delete(rings).where(eq(rings.id, input.ringId));
       return { removed: true };
@@ -1292,7 +1292,7 @@ export const secretaryRouter = createTRPCRouter({
   getShowJudges: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       return ctx.db.query.judgeAssignments.findMany({
         where: eq(judgeAssignments.showId, input.showId),
@@ -1314,7 +1314,7 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       const [assignment] = await ctx.db
         .insert(judgeAssignments)
@@ -1337,7 +1337,7 @@ export const secretaryRouter = createTRPCRouter({
         columns: { showId: true },
       });
       if (!ja) throw new TRPCError({ code: 'NOT_FOUND', message: 'Judge assignment not found' });
-      await verifyShowAccess(ctx.db, ctx.session.user.id, ja.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, ja.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       await ctx.db.delete(judgeAssignments).where(eq(judgeAssignments.id, input.assignmentId));
       return { removed: true };
@@ -1396,7 +1396,7 @@ export const secretaryRouter = createTRPCRouter({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Entry not found' });
       }
 
-      await verifyShowAccess(ctx.db, ctx.session.user.id, entry.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, entry.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       // Find the original succeeded payment with a Stripe payment ID
       const originalPayment = await ctx.db.query.payments.findFirst({
@@ -1564,7 +1564,7 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       // Validate the show accepts entries (allow entries_open OR entries_closed for postal)
       const show = await ctx.db.query.shows.findFirst({
@@ -1718,7 +1718,7 @@ export const secretaryRouter = createTRPCRouter({
   getChecklist: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       const items = await ctx.db.query.showChecklistItems.findMany({
         where: eq(showChecklistItems.showId, input.showId),
@@ -1734,7 +1734,7 @@ export const secretaryRouter = createTRPCRouter({
   seedChecklist: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       // Check if already seeded
       const [existing] = await ctx.db
@@ -1875,7 +1875,7 @@ export const secretaryRouter = createTRPCRouter({
         });
       }
 
-      await verifyShowAccess(ctx.db, ctx.session.user.id, item.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, item.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       const updates: Record<string, unknown> = {};
       if (input.status !== undefined) {
@@ -1924,7 +1924,7 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       // Get max sort order for this phase
       const [maxSort] = await ctx.db
@@ -1969,7 +1969,7 @@ export const secretaryRouter = createTRPCRouter({
         });
       }
 
-      await verifyShowAccess(ctx.db, ctx.session.user.id, item.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, item.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       await ctx.db
         .delete(showChecklistItems)
@@ -1982,7 +1982,7 @@ export const secretaryRouter = createTRPCRouter({
   getChecklistAutoDetect: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
@@ -2047,7 +2047,7 @@ export const secretaryRouter = createTRPCRouter({
   getJudgeContracts: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       return ctx.db.query.judgeContracts.findMany({
         where: eq(judgeContracts.showId, input.showId),
@@ -2074,7 +2074,7 @@ export const secretaryRouter = createTRPCRouter({
         where: eq(judgeContracts.id, input.contractId),
       });
       if (!contract) throw new TRPCError({ code: 'NOT_FOUND' });
-      await verifyShowAccess(ctx.db, ctx.session.user.id, contract.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, contract.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       const [updated] = await ctx.db
         .update(judgeContracts)
@@ -2099,7 +2099,7 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       // Fetch judge info
       const judge = await ctx.db.query.judges.findFirst({
@@ -2314,7 +2314,7 @@ export const secretaryRouter = createTRPCRouter({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Contract not found' });
       }
 
-      await verifyShowAccess(ctx.db, ctx.session.user.id, contract.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, contract.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       if (contract.stage !== 'offer_sent') {
         throw new TRPCError({
@@ -2444,7 +2444,7 @@ export const secretaryRouter = createTRPCRouter({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Contract not found' });
       }
 
-      await verifyShowAccess(ctx.db, ctx.session.user.id, contract.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, contract.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       if (contract.stage !== 'offer_accepted') {
         throw new TRPCError({
@@ -2578,7 +2578,7 @@ export const secretaryRouter = createTRPCRouter({
   getChecklistJudgeSummary: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       // Get all judge assignments with breeds
       const assignments = await ctx.db.query.judgeAssignments.findMany({
@@ -2667,7 +2667,7 @@ export const secretaryRouter = createTRPCRouter({
   reseedChecklistJudges: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
@@ -2811,7 +2811,7 @@ export const secretaryRouter = createTRPCRouter({
       judgeIds: z.array(z.string().uuid()),
     }))
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
@@ -2955,7 +2955,7 @@ export const secretaryRouter = createTRPCRouter({
   bulkSendJudgeConfirmations: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       // Find all accepted (not yet confirmed) contracts
       const acceptedContracts = await ctx.db.query.judgeContracts.findMany({
@@ -3078,7 +3078,7 @@ export const secretaryRouter = createTRPCRouter({
       judgeId: z.string().uuid(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
@@ -3213,7 +3213,7 @@ export const secretaryRouter = createTRPCRouter({
       message: z.string().max(2000).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
@@ -3297,7 +3297,7 @@ export const secretaryRouter = createTRPCRouter({
   getSundryItems: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       return ctx.db.query.sundryItems.findMany({
         where: eq(sundryItems.showId, input.showId),
@@ -3316,7 +3316,7 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       // Get next sort order
       const existing = await ctx.db.query.sundryItems.findMany({
@@ -3354,7 +3354,7 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       const { id, showId, ...updates } = input;
       const [updated] = await ctx.db
@@ -3373,7 +3373,7 @@ export const secretaryRouter = createTRPCRouter({
   deleteSundryItem: secretaryProcedure
     .input(z.object({ id: z.string().uuid(), showId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       // Check if any orders reference this item
       const references = await ctx.db
@@ -3407,7 +3407,7 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       await Promise.all(
         input.itemIds.map((id, index) =>
@@ -3436,7 +3436,7 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       // Get next sort order
       const existing = await ctx.db.query.sundryItems.findMany({
@@ -3466,7 +3466,7 @@ export const secretaryRouter = createTRPCRouter({
   getSundryItemReport: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       const report = await ctx.db
         .select({
@@ -3624,7 +3624,7 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
       await ctx.db
         .update(shows)
         .set({ scheduleData: input.scheduleData })
@@ -3714,7 +3714,7 @@ export const secretaryRouter = createTRPCRouter({
   listShowSponsors: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
       return ctx.db.query.showSponsors.findMany({
         where: eq(showSponsors.showId, input.showId),
         with: {
@@ -3743,7 +3743,7 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
       const [created] = await ctx.db
         .insert(showSponsors)
         .values(input)

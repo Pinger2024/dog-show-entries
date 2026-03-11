@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Loader2, Printer, Package, Truck, CreditCard, Check, ShoppingCart, ChevronLeft, AlertCircle } from 'lucide-react';
+import { Loader2, Printer, Package, Truck, CreditCard, Check, ShoppingCart, ChevronLeft, AlertCircle, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { useShowId } from '../_lib/show-context';
@@ -56,6 +56,10 @@ export default function PrintShopPage() {
   const [orderId, setOrderId] = useState<string | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [showNewOrder, setShowNewOrder] = useState(false);
+
+  const { data: profile } = trpc.users.getProfile.useQuery(undefined, {
+    enabled: step === 'delivery',
+  });
 
   const { data: products, isLoading: productsLoading } = trpc.printOrders.getAvailableProducts.useQuery(
     { showId },
@@ -135,6 +139,17 @@ export default function PrintShopPage() {
     setStep('delivery');
   }, [selectedItems]);
 
+  const handleFillFromProfile = useCallback(() => {
+    if (!profile) return;
+    setDelivery((d) => ({
+      ...d,
+      name: profile.name ?? d.name,
+      address1: profile.address ?? d.address1,
+      postcode: profile.postcode ?? d.postcode,
+      phone: profile.phone ?? d.phone,
+    }));
+  }, [profile]);
+
   const handleProceedToReview = useCallback(() => {
     if (!delivery.name || !delivery.address1 || !delivery.town || !delivery.postcode) {
       toast.error('Please fill in all required delivery fields');
@@ -191,6 +206,7 @@ export default function PrintShopPage() {
 
   // Show existing orders if any and not starting new order
   const hasOrders = orders && orders.length > 0;
+  const allSelected = !!allSelected;
 
   if (productsLoading) {
     return (
@@ -254,11 +270,11 @@ export default function PrintShopPage() {
           <CardContent className="px-4 pb-4">
             <Button
               onClick={handleSelectAll}
-              variant={selectedItems.length === (products?.length ?? 0) ? 'secondary' : 'default'}
+              variant={allSelected ? 'secondary' : 'default'}
               className="w-full sm:w-auto"
             >
               <ShoppingCart className="size-4" />
-              {selectedItems.length === (products?.length ?? 0) ? 'All Selected' : 'Select All Documents'}
+              {allSelected ? 'All Selected' : 'Select All Documents'}
             </Button>
           </CardContent>
         </Card>
@@ -383,6 +399,17 @@ export default function PrintShopPage() {
 
         <Card>
           <CardContent className="p-4 space-y-4">
+            {profile?.address && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={handleFillFromProfile}
+              >
+                <MapPin className="size-4" />
+                Use {profile.name ? `${profile.name.split(' ')[0]}'s` : 'my'} address
+              </Button>
+            )}
             <div>
               <Label htmlFor="delivery-name">Recipient Name *</Label>
               <Input
