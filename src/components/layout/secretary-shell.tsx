@@ -148,7 +148,7 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
       </aside>
 
       {/* Main content */}
-      <div className="flex flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col">
         <header className="hidden h-[4.5rem] items-center border-b px-6 md:flex">
           <nav className="flex items-center gap-1.5 text-[0.9375rem] text-muted-foreground">
             <Link href="/" className="hover:text-foreground">
