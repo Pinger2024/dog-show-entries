@@ -130,3 +130,4 @@ export {
   printOrderItems,
   printOrderItemsRelations,
 } from './print-orders';
+export { printPriceCache } from './print-price-cache';

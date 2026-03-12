@@ -26,6 +26,10 @@ import {
   getDeliveryEstimate,
   getOrderStatus,
 } from '@/server/services/tradeprint';
+import {
+  getCachedTradePrice,
+  isCachePopulated,
+} from '@/server/services/print-price-refresh';
 import { createPaymentIntent } from '@/server/services/stripe';
 import { generateAndUploadForPrint } from '@/server/services/pdf-generation';
 
@@ -104,12 +108,22 @@ export const printOrdersRouter = createTRPCRouter({
               });
             }
 
-            const tradeCost = await getTradePrice(
+            // Try local cache first (instant), fall back to live API (slow)
+            let tradeCost = await getCachedTradePrice(
               product.tradeprintProductName,
               product.defaultSpecs,
               item.quantity,
               input.serviceLevel
             );
+
+            if (tradeCost === null) {
+              tradeCost = await getTradePrice(
+                product.tradeprintProductName,
+                product.defaultSpecs,
+                item.quantity,
+                input.serviceLevel
+              );
+            }
 
             if (tradeCost === null) {
               throw new TRPCError({
@@ -424,6 +438,17 @@ export const printOrdersRouter = createTRPCRouter({
         .where(eq(printOrders.id, order.id));
 
       return { status: newStatus, tradeprintStatus: tpStatus.status };
+    }),
+
+  /** Admin: refresh the local print price cache from Tradeprint */
+  refreshPriceCache: secretaryProcedure
+    .mutation(async ({ ctx }) => {
+      if (!ctx.callerIsAdmin) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin only' });
+      }
+
+      const { refreshAllPrintPrices } = await import('@/server/services/print-price-refresh');
+      return refreshAllPrintPrices();
     }),
 });
 
