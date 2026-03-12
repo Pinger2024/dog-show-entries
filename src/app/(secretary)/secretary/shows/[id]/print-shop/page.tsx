@@ -1,7 +1,11 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { Loader2, Printer, Package, Truck, CreditCard, Check, ShoppingCart, ChevronLeft, AlertCircle, MapPin } from 'lucide-react';
+import { useState, useCallback, useMemo } from 'react';
+import {
+  Loader2, Printer, Package, Truck, CreditCard, Check,
+  ChevronLeft, ChevronDown, AlertCircle, MapPin, Sparkles, Star,
+  Settings2,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { useShowId } from '../_lib/show-context';
@@ -9,34 +13,34 @@ import { formatCurrency } from '@/lib/date-utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
+  Card, CardContent, CardDescription, CardHeader, CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
 import { StripeProvider } from '@/components/providers/stripe-provider';
 import { PrintPaymentForm } from './_components/print-payment-form';
 import { PrintOrderList } from './_components/print-order-list';
 
-type Step = 'catalog' | 'select' | 'delivery' | 'review' | 'payment' | 'confirmation';
+type Step = 'catalog' | 'delivery' | 'review' | 'payment' | 'confirmation';
 
 interface SelectedItem {
   documentType: string;
   documentFormat?: string;
   label: string;
   quantity: number;
+  presetId: string;
+  customSpecs?: Record<string, string>;
 }
+
+// ── Tier visuals ──
+const TIER_STYLES = {
+  standard: { icon: Star, colour: 'text-blue-600', bg: 'bg-blue-50 border-blue-200', ring: 'ring-blue-200' },
+  premium: { icon: Sparkles, colour: 'text-amber-600', bg: 'bg-amber-50 border-amber-200', ring: 'ring-amber-200' },
+  budget: { icon: Package, colour: 'text-slate-500', bg: 'bg-slate-50 border-slate-200', ring: 'ring-slate-200' },
+} as const;
 
 export default function PrintShopPage() {
   const showId = useShowId();
@@ -44,13 +48,9 @@ export default function PrintShopPage() {
   // All hooks before any returns
   const [step, setStep] = useState<Step>('catalog');
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
+  const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
   const [delivery, setDelivery] = useState({
-    name: '',
-    address1: '',
-    address2: '',
-    town: '',
-    postcode: '',
-    phone: '',
+    name: '', address1: '', address2: '', town: '', postcode: '', phone: '',
   });
   const [serviceLevel, setServiceLevel] = useState<'saver' | 'standard' | 'express'>('standard');
   const [orderId, setOrderId] = useState<string | null>(null);
@@ -61,24 +61,33 @@ export default function PrintShopPage() {
     enabled: step === 'delivery',
   });
 
-  const { data: products, isLoading: productsLoading } = trpc.printOrders.getAvailableProducts.useQuery(
-    { showId },
+  const { data: productData, isLoading: productsLoading } = trpc.printOrders.getAvailableProducts.useQuery(
+    { showId, serviceLevel },
     { staleTime: 60_000 }
   );
+
+  const products = productData?.products;
 
   const { data: orders } = trpc.printOrders.listByShow.useQuery(
     { showId },
     { staleTime: 30_000 }
   );
 
+  const quoteItems = useMemo(
+    () => selectedItems.map((i) => ({
+      documentType: i.documentType,
+      documentFormat: i.documentFormat,
+      quantity: i.quantity,
+      presetId: i.presetId,
+      customSpecs: i.customSpecs,
+    })),
+    [selectedItems]
+  );
+
   const { data: quote, isLoading: quoteLoading } = trpc.printOrders.getQuote.useQuery(
     {
       showId,
-      items: selectedItems.map((i) => ({
-        documentType: i.documentType,
-        documentFormat: i.documentFormat,
-        quantity: i.quantity,
-      })),
+      items: quoteItems,
       serviceLevel,
       postcode: delivery.postcode || 'G1 1AA',
     },
@@ -91,53 +100,44 @@ export default function PrintShopPage() {
   const initiatePayment = trpc.printOrders.initiatePayment.useMutation();
   const utils = trpc.useUtils();
 
-  const handleToggleItem = useCallback((documentType: string, label: string, suggestedQty: number, checked: boolean) => {
+  // ── Handlers ──
+
+  const handleOrderEverything = useCallback(() => {
+    if (!products) return;
+    setSelectedItems(
+      products.map((p) => ({
+        documentType: p.documentType,
+        label: p.label,
+        quantity: p.suggestedQuantity,
+        presetId: 'standard',
+        documentFormat: p.documentType === 'catalogue' ? 'standard' : undefined,
+      }))
+    );
+    setStep('delivery');
+  }, [products]);
+
+  const handleToggleItem = useCallback((product: NonNullable<typeof products>[number], checked: boolean) => {
     if (checked) {
       setSelectedItems((prev) => [
         ...prev,
         {
-          documentType,
-          label,
-          quantity: suggestedQty,
-          documentFormat: documentType === 'catalogue' ? 'standard' : undefined,
+          documentType: product.documentType,
+          label: product.label,
+          quantity: product.suggestedQuantity,
+          presetId: 'standard',
+          documentFormat: product.documentType === 'catalogue' ? 'standard' : undefined,
         },
       ]);
     } else {
-      setSelectedItems((prev) => prev.filter((i) => i.documentType !== documentType));
+      setSelectedItems((prev) => prev.filter((i) => i.documentType !== product.documentType));
     }
   }, []);
 
-  const handleQuantityChange = useCallback((documentType: string, quantity: number) => {
+  const handleUpdateItem = useCallback((documentType: string, updates: Partial<SelectedItem>) => {
     setSelectedItems((prev) =>
-      prev.map((i) => (i.documentType === documentType ? { ...i, quantity } : i))
+      prev.map((i) => (i.documentType === documentType ? { ...i, ...updates } : i))
     );
   }, []);
-
-  const handleFormatChange = useCallback((documentType: string, format: string) => {
-    setSelectedItems((prev) =>
-      prev.map((i) => (i.documentType === documentType ? { ...i, documentFormat: format } : i))
-    );
-  }, []);
-
-  const handleSelectAll = useCallback(() => {
-    if (!products) return;
-    setSelectedItems(
-      products.map((p) => ({
-        documentType: p!.documentType,
-        label: p!.label,
-        quantity: p!.suggestedQuantity,
-        documentFormat: p!.documentType === 'catalogue' ? 'standard' : undefined,
-      }))
-    );
-  }, [products]);
-
-  const handleProceedToDelivery = useCallback(() => {
-    if (selectedItems.length === 0) {
-      toast.error('Select at least one document to print');
-      return;
-    }
-    setStep('delivery');
-  }, [selectedItems]);
 
   const handleFillFromProfile = useCallback(() => {
     if (!profile) return;
@@ -194,8 +194,7 @@ export default function PrintShopPage() {
       setClientSecret(cs);
       setStep('payment');
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to create order';
-      toast.error(msg);
+      toast.error(err instanceof Error ? err.message : 'Failed to create order');
     }
   }, [quote, createOrder, initiatePayment, showId, serviceLevel, delivery]);
 
@@ -204,10 +203,36 @@ export default function PrintShopPage() {
     utils.printOrders.listByShow.invalidate({ showId });
   }, [utils, showId]);
 
-  // Show existing orders if any and not starting new order
-  const hasOrders = orders && orders.length > 0;
-  const allSelected = !!products?.length && selectedItems.length === products.length;
+  const resetOrder = useCallback(() => {
+    setStep('catalog');
+    setShowNewOrder(false);
+    setSelectedItems([]);
+    setOrderId(null);
+    setClientSecret(null);
+    setExpandedProduct(null);
+  }, []);
 
+  // ── Derived state ──
+  const hasOrders = orders && orders.length > 0;
+
+  // ── Computed total from cached prices for the sticky bar ──
+  const estimatedTotal = useMemo(() => {
+    if (!products || selectedItems.length === 0) return null;
+    let total = 0;
+    for (const item of selectedItems) {
+      const product = products.find((p) => p.documentType === item.documentType);
+      if (!product) continue;
+      const preset = product.presets.find((p) => p.id === item.presetId);
+      if (preset?.unitSellingPrice) {
+        total += preset.unitSellingPrice * item.quantity;
+      } else if (product.unitSellingPrice) {
+        total += product.unitSellingPrice * item.quantity;
+      }
+    }
+    return total > 0 ? total : null;
+  }, [products, selectedItems]);
+
+  // ── Loading ──
   if (productsLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -216,7 +241,9 @@ export default function PrintShopPage() {
     );
   }
 
-  // If there are existing orders and user hasn't clicked "New Order"
+  // ══════════════════════════════════════════════════════
+  // EXISTING ORDERS VIEW
+  // ══════════════════════════════════════════════════════
   if (hasOrders && !showNewOrder && step === 'catalog') {
     return (
       <div className="space-y-4">
@@ -237,15 +264,18 @@ export default function PrintShopPage() {
     );
   }
 
-  // Step: Catalog / Product selection
-  if (step === 'catalog' || step === 'select') {
+  // ══════════════════════════════════════════════════════
+  // STEP 1: PRODUCT CATALOG
+  // ══════════════════════════════════════════════════════
+  if (step === 'catalog') {
     return (
       <div className="space-y-4">
+        {/* Header */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="font-serif text-lg font-semibold">Print Shop</h2>
             <p className="text-sm text-muted-foreground">
-              Select documents to print professionally
+              Professional printing delivered to your door
             </p>
           </div>
           {hasOrders && (
@@ -256,71 +286,111 @@ export default function PrintShopPage() {
           )}
         </div>
 
-        {/* Show Day Bundle card */}
-        <Card className="border-primary/20 bg-primary/5">
-          <CardHeader className="pb-2 p-4">
-            <div className="flex items-center gap-2">
-              <Package className="size-5 text-primary" />
-              <CardTitle className="text-base">Show Day Bundle</CardTitle>
+        {/* ── HERO: Order Everything ── */}
+        <Card className="overflow-hidden border-primary/30 bg-gradient-to-br from-primary/5 via-primary/3 to-transparent">
+          <CardContent className="p-5">
+            <div className="flex items-start gap-4">
+              <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                <Package className="size-6 text-primary" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="font-serif text-base font-semibold">Show Day Bundle</h3>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  Everything you need for show day — catalogues, prize cards, schedules, ring boards, and ring numbers.
+                  We&apos;ll suggest the right quantities based on your entries.
+                </p>
+                {products && products.length > 0 && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {products.map((p) => `${p.suggestedQuantity}× ${p.label}`).join(' · ')}
+                  </p>
+                )}
+                <Button
+                  onClick={handleOrderEverything}
+                  className="mt-3 w-full sm:w-auto"
+                  size="lg"
+                >
+                  <Package className="size-4" />
+                  Order Everything
+                  {estimatedTotal === null && products && (
+                    <span className="ml-1 text-primary-foreground/70">
+                      — prices on next step
+                    </span>
+                  )}
+                </Button>
+              </div>
             </div>
-            <CardDescription>
-              Everything you need — select all documents with one tap
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="px-4 pb-4">
-            <Button
-              onClick={handleSelectAll}
-              variant={allSelected ? 'secondary' : 'default'}
-              className="w-full sm:w-auto"
-            >
-              <ShoppingCart className="size-4" />
-              {allSelected ? 'All Selected' : 'Select All Documents'}
-            </Button>
           </CardContent>
         </Card>
 
-        {/* Individual product cards */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {/* ── OR: Pick individual items ── */}
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t" />
+          </div>
+          <div className="relative flex justify-center">
+            <span className="bg-background px-3 text-xs uppercase tracking-wider text-muted-foreground">
+              or pick individual items
+            </span>
+          </div>
+        </div>
+
+        {/* ── Product cards ── */}
+        <div className="space-y-3">
           {products?.map((product) => {
-            if (!product) return null;
             const isSelected = selectedItems.some((i) => i.documentType === product.documentType);
             const selectedItem = selectedItems.find((i) => i.documentType === product.documentType);
+            const isExpanded = expandedProduct === product.documentType;
+            const activePreset = product.presets.find((p) => p.id === (selectedItem?.presetId ?? 'standard'));
 
             return (
               <Card
                 key={product.documentType}
-                className={isSelected ? 'border-primary ring-1 ring-primary/20' : ''}
+                className={`transition-all ${isSelected ? 'border-primary/40 shadow-sm' : ''}`}
               >
-                <CardHeader className="pb-2 p-4">
+                {/* Product header — always visible */}
+                <CardHeader className="p-4 pb-2">
                   <div className="flex items-start gap-3">
-                    <Checkbox
-                      checked={isSelected}
-                      onCheckedChange={(checked) =>
-                        handleToggleItem(
-                          product.documentType,
-                          product.label,
-                          product.suggestedQuantity,
-                          checked === true
-                        )
-                      }
-                      className="mt-0.5"
-                    />
+                    <button
+                      onClick={() => handleToggleItem(product, !isSelected)}
+                      className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded border-2 transition-colors ${
+                        isSelected
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-muted-foreground/30 hover:border-primary/50'
+                      }`}
+                    >
+                      {isSelected && <Check className="size-3" />}
+                    </button>
                     <div className="min-w-0 flex-1">
-                      <CardTitle className="text-sm">{product.label}</CardTitle>
+                      <div className="flex items-center gap-2">
+                        <CardTitle className="text-sm">{product.label}</CardTitle>
+                        {isSelected && activePreset && (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                            {activePreset.label}
+                          </Badge>
+                        )}
+                      </div>
                       <CardDescription className="text-xs">
                         {product.description}
+                        {product.unitSellingPrice && !isSelected && (
+                          <span className="ml-1 text-foreground/70">
+                            — from {formatCurrency(product.unitSellingPrice)} each
+                          </span>
+                        )}
                       </CardDescription>
                     </div>
                   </div>
                 </CardHeader>
+
+                {/* Expanded options — only when selected */}
                 {isSelected && (
-                  <CardContent className="px-4 pb-4 pt-0 space-y-3">
+                  <CardContent className="px-4 pb-4 pt-1 space-y-3">
+                    {/* Quantity + Format row */}
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div>
-                        <Label className="text-xs">Quantity</Label>
+                        <Label className="text-xs text-muted-foreground">Quantity</Label>
                         <Select
                           value={String(selectedItem?.quantity ?? product.suggestedQuantity)}
-                          onValueChange={(v) => handleQuantityChange(product.documentType, parseInt(v))}
+                          onValueChange={(v) => handleUpdateItem(product.documentType, { quantity: parseInt(v) })}
                         >
                           <SelectTrigger className="h-9">
                             <SelectValue />
@@ -328,8 +398,7 @@ export default function PrintShopPage() {
                           <SelectContent>
                             {product.availableQuantities.map((qty) => (
                               <SelectItem key={qty} value={String(qty)}>
-                                {qty} copies
-                                {qty === product.suggestedQuantity && ' (suggested)'}
+                                {qty} copies{qty === product.suggestedQuantity ? ' (suggested)' : ''}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -337,10 +406,10 @@ export default function PrintShopPage() {
                       </div>
                       {product.documentType === 'catalogue' && (
                         <div>
-                          <Label className="text-xs">Format</Label>
+                          <Label className="text-xs text-muted-foreground">Format</Label>
                           <Select
                             value={selectedItem?.documentFormat ?? 'standard'}
-                            onValueChange={(v) => handleFormatChange(product.documentType, v)}
+                            onValueChange={(v) => handleUpdateItem(product.documentType, { documentFormat: v })}
                           >
                             <SelectTrigger className="h-9">
                               <SelectValue />
@@ -354,6 +423,70 @@ export default function PrintShopPage() {
                         </div>
                       )}
                     </div>
+
+                    {/* Presets — only show if product has multiple */}
+                    {product.presets.length > 1 && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Quality</Label>
+                        <div className="mt-1 grid grid-cols-2 gap-2">
+                          {product.presets.filter((p) => p.available).map((preset) => {
+                            const isActive = (selectedItem?.presetId ?? 'standard') === preset.id;
+                            const tierStyle = TIER_STYLES[preset.tier];
+                            const TierIcon = tierStyle.icon;
+
+                            return (
+                              <button
+                                key={preset.id}
+                                onClick={() => handleUpdateItem(product.documentType, {
+                                  presetId: preset.id,
+                                  customSpecs: undefined,
+                                })}
+                                className={`rounded-lg border p-3 text-left transition-all ${
+                                  isActive
+                                    ? `${tierStyle.bg} ring-1 ${tierStyle.ring}`
+                                    : 'hover:bg-muted/50'
+                                }`}
+                              >
+                                <div className="flex items-center gap-1.5">
+                                  <TierIcon className={`size-3.5 ${tierStyle.colour}`} />
+                                  <span className="text-sm font-medium">{preset.label}</span>
+                                </div>
+                                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                  {preset.description}
+                                </p>
+                                {preset.unitSellingPrice && (
+                                  <p className={`mt-1 text-xs font-medium ${tierStyle.colour}`}>
+                                    {formatCurrency(preset.unitSellingPrice)} each
+                                  </p>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Advanced customisation toggle */}
+                    {product.configurableSpecs.length > 0 && (
+                      <button
+                        onClick={() => setExpandedProduct(isExpanded ? null : product.documentType)}
+                        className="flex w-full items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <Settings2 className="size-3" />
+                        <span>Customise specs</span>
+                        <ChevronDown className={`size-3 ml-auto transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                      </button>
+                    )}
+
+                    {/* Advanced spec selectors */}
+                    {isExpanded && (
+                      <SpecConfigurator
+                        product={product}
+                        selectedItem={selectedItem!}
+                        onUpdate={(updates) => handleUpdateItem(product.documentType, updates)}
+                        serviceLevel={serviceLevel}
+                      />
+                    )}
                   </CardContent>
                 )}
               </Card>
@@ -361,18 +494,24 @@ export default function PrintShopPage() {
           })}
         </div>
 
+        {/* Sticky action bar */}
         {selectedItems.length > 0 && (
           <div className="sticky bottom-16 z-10 rounded-lg border bg-background p-4 shadow-lg md:bottom-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
+              <div className="min-w-0">
                 <p className="font-medium">
-                  {selectedItems.length} document{selectedItems.length !== 1 && 's'} selected
+                  {selectedItems.length} item{selectedItems.length !== 1 && 's'} selected
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="truncate text-xs text-muted-foreground">
                   {selectedItems.map((i) => `${i.quantity}× ${i.label}`).join(', ')}
                 </p>
+                {estimatedTotal && (
+                  <p className="text-xs font-medium text-primary">
+                    Est. {formatCurrency(estimatedTotal)}
+                  </p>
+                )}
               </div>
-              <Button onClick={handleProceedToDelivery} className="w-full sm:w-auto">
+              <Button onClick={() => setStep('delivery')} className="w-full shrink-0 sm:w-auto">
                 Continue to Delivery
               </Button>
             </div>
@@ -382,14 +521,16 @@ export default function PrintShopPage() {
     );
   }
 
-  // Step: Delivery
+  // ══════════════════════════════════════════════════════
+  // STEP 2: DELIVERY
+  // ══════════════════════════════════════════════════════
   if (step === 'delivery') {
     return (
       <div className="space-y-4">
         <div>
           <Button variant="ghost" size="sm" onClick={() => setStep('catalog')} className="-ml-2">
             <ChevronLeft className="size-4" />
-            Back to Selection
+            Back
           </Button>
           <h2 className="mt-2 font-serif text-lg font-semibold">Delivery Details</h2>
           <p className="text-sm text-muted-foreground">
@@ -479,14 +620,16 @@ export default function PrintShopPage() {
     );
   }
 
-  // Step: Review
+  // ══════════════════════════════════════════════════════
+  // STEP 3: REVIEW
+  // ══════════════════════════════════════════════════════
   if (step === 'review') {
     return (
       <div className="space-y-4">
         <div>
           <Button variant="ghost" size="sm" onClick={() => setStep('delivery')} className="-ml-2">
             <ChevronLeft className="size-4" />
-            Back to Delivery
+            Back
           </Button>
           <h2 className="mt-2 font-serif text-lg font-semibold">Review Your Order</h2>
         </div>
@@ -536,7 +679,14 @@ export default function PrintShopPage() {
                 {quote.items.map((item) => (
                   <div key={item.documentType} className="flex items-center justify-between text-sm">
                     <div>
-                      <p className="font-medium">{item.label}</p>
+                      <p className="font-medium">
+                        {item.label}
+                        {item.presetId && item.presetId !== 'standard' && (
+                          <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0">
+                            {item.presetId}
+                          </Badge>
+                        )}
+                      </p>
                       <p className="text-xs text-muted-foreground">
                         {item.quantity} × {formatCurrency(item.unitSellingPrice)}
                       </p>
@@ -575,9 +725,7 @@ export default function PrintShopPage() {
             <p className="font-medium">{delivery.name}</p>
             <p className="text-muted-foreground">{delivery.address1}</p>
             {delivery.address2 && <p className="text-muted-foreground">{delivery.address2}</p>}
-            <p className="text-muted-foreground">
-              {delivery.town}, {delivery.postcode}
-            </p>
+            <p className="text-muted-foreground">{delivery.town}, {delivery.postcode}</p>
           </CardContent>
         </Card>
 
@@ -608,7 +756,9 @@ export default function PrintShopPage() {
     );
   }
 
-  // Step: Payment
+  // ══════════════════════════════════════════════════════
+  // STEP 4: PAYMENT
+  // ══════════════════════════════════════════════════════
   if (step === 'payment' && clientSecret) {
     return (
       <div className="space-y-4">
@@ -618,7 +768,6 @@ export default function PrintShopPage() {
             Complete your payment to place the print order
           </p>
         </div>
-
         <Card>
           <CardContent className="p-4">
             <StripeProvider clientSecret={clientSecret}>
@@ -634,19 +783,21 @@ export default function PrintShopPage() {
     );
   }
 
-  // Step: Confirmation
+  // ══════════════════════════════════════════════════════
+  // STEP 5: CONFIRMATION
+  // ══════════════════════════════════════════════════════
   if (step === 'confirmation') {
     return (
       <div className="space-y-4">
         <Card className="border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950">
           <CardContent className="flex flex-col items-center p-6 text-center">
-            <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-900">
-              <Check className="size-6 text-green-600 dark:text-green-400" />
+            <div className="mb-4 flex size-14 items-center justify-center rounded-full bg-green-100 dark:bg-green-900">
+              <Check className="size-7 text-green-600 dark:text-green-400" />
             </div>
             <h2 className="font-serif text-lg font-semibold">Order Placed!</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Your print order has been submitted. We&apos;ll generate the PDFs,
-              send them to the printer, and notify you when they&apos;re dispatched.
+            <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+              Your documents are being generated and sent to the printer.
+              We&apos;ll notify you when they&apos;re dispatched.
             </p>
             {quote?.deliveryEstimate && (
               <Badge variant="outline" className="mt-3">
@@ -654,6 +805,22 @@ export default function PrintShopPage() {
                 Estimated delivery: {quote.deliveryEstimate}
               </Badge>
             )}
+
+            {/* What happens next */}
+            <div className="mt-5 w-full max-w-xs space-y-2 text-left">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">What happens next</p>
+              {[
+                { icon: '📄', text: 'PDFs generated from your show data' },
+                { icon: '🖨️', text: 'Sent to professional printer' },
+                { icon: '📦', text: 'Printed, packed and dispatched' },
+                { icon: '🚚', text: 'Delivered to your address' },
+              ].map(({ icon, text }) => (
+                <div key={text} className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span>{icon}</span>
+                  <span>{text}</span>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
 
@@ -665,17 +832,7 @@ export default function PrintShopPage() {
               </a>
             </Button>
           )}
-          <Button
-            onClick={() => {
-              setStep('catalog');
-              setShowNewOrder(false);
-              setSelectedItems([]);
-              setOrderId(null);
-              setClientSecret(null);
-            }}
-            variant="outline"
-            className="sm:w-auto"
-          >
+          <Button onClick={resetOrder} variant="outline" className="sm:w-auto">
             Back to Print Shop
           </Button>
         </div>
@@ -684,4 +841,89 @@ export default function PrintShopPage() {
   }
 
   return null;
+}
+
+// ══════════════════════════════════════════════════════
+// SPEC CONFIGURATOR (advanced options)
+// ══════════════════════════════════════════════════════
+
+function SpecConfigurator({
+  product,
+  selectedItem,
+  onUpdate,
+  serviceLevel,
+}: {
+  product: { tradeprintProductName: string; configurableSpecs: Array<{ key: string; label: string; description?: string }> };
+  selectedItem: SelectedItem;
+  onUpdate: (updates: Partial<SelectedItem>) => void;
+  serviceLevel: string;
+}) {
+  const currentSpecs = selectedItem.customSpecs ?? undefined;
+
+  const { data: specOptions, isLoading } = trpc.printOrders.getSpecOptions.useQuery(
+    {
+      productName: product.tradeprintProductName,
+      serviceLevel: serviceLevel as 'saver' | 'standard' | 'express',
+      currentSpecs,
+    },
+    { staleTime: 300_000 }
+  );
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
+        <Loader2 className="size-3 animate-spin" />
+        Loading options...
+      </div>
+    );
+  }
+
+  if (!specOptions || Object.keys(specOptions).length === 0) return null;
+
+  return (
+    <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
+      <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+        Advanced Options
+      </p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {product.configurableSpecs.map((spec) => {
+          const options = specOptions[spec.key];
+          if (!options || options.length <= 1) return null;
+
+          const currentValue = currentSpecs?.[spec.key] ?? '';
+
+          return (
+            <div key={spec.key}>
+              <Label className="text-xs text-muted-foreground">
+                {spec.label}
+                {spec.description && (
+                  <span className="ml-1 text-[10px] text-muted-foreground/70">
+                    — {spec.description}
+                  </span>
+                )}
+              </Label>
+              <Select
+                value={currentValue}
+                onValueChange={(v) => {
+                  const newSpecs = { ...(currentSpecs ?? {}), [spec.key]: v };
+                  onUpdate({ customSpecs: newSpecs, presetId: 'custom' });
+                }}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="Choose..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {options.map((val) => (
+                    <SelectItem key={val} value={val} className="text-xs">
+                      {val}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }

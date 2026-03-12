@@ -246,3 +246,35 @@ export async function isCachePopulated(): Promise<boolean> {
     .from(printPriceCache);
   return Number(row?.count ?? 0) > 0;
 }
+
+/**
+ * Get distinct values for a specific spec key, optionally filtered by other specs.
+ * Powers the configurator dropdowns — shows only compatible options.
+ */
+export async function getDistinctSpecValues(
+  productName: string,
+  specKey: string,
+  serviceLevel: string = 'standard',
+  filterSpecs?: Record<string, string>
+): Promise<string[]> {
+  const conditions = [
+    eq(printPriceCache.tradeprintProductName, productName),
+    eq(printPriceCache.serviceLevel, serviceLevel.toLowerCase()),
+  ];
+
+  if (filterSpecs && Object.keys(filterSpecs).length > 0) {
+    conditions.push(sql`${printPriceCache.specs} @> ${JSON.stringify(filterSpecs)}::jsonb`);
+  }
+
+  const rows = await db
+    .selectDistinct({
+      value: sql<string>`${printPriceCache.specs}->>${specKey}`,
+    })
+    .from(printPriceCache)
+    .where(and(...conditions))
+    .orderBy(sql`${printPriceCache.specs}->>${specKey}`);
+
+  return rows
+    .map((r) => r.value)
+    .filter((v): v is string => v !== null && v !== '');
+}

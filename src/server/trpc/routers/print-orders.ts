@@ -15,6 +15,7 @@ import {
 import {
   getPrintableProducts,
   getProductByType,
+  getPresetSpecs,
   calculateSellingPrice,
   CANCELLABLE_STATUSES,
   formatOrderRef,
@@ -28,34 +29,75 @@ import {
 } from '@/server/services/tradeprint';
 import {
   getCachedTradePrice,
+  getCachedQuantities,
+  getDistinctSpecValues,
   refreshAllPrintPrices,
 } from '@/server/services/print-price-refresh';
 import { createPaymentIntent } from '@/server/services/stripe';
 import { generateAndUploadForPrint } from '@/server/services/pdf-generation';
 
 export const printOrdersRouter = createTRPCRouter({
-  /** Get available products with quantity suggestions for a show */
+  /** Get available products with pricing, presets, and quantity suggestions */
   getAvailableProducts: secretaryProcedure
-    .input(z.object({ showId: z.string().uuid() }))
+    .input(z.object({
+      showId: z.string().uuid(),
+      serviceLevel: z.enum(['saver', 'standard', 'express']).default('standard'),
+    }))
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
-      // Get show stats for quantity suggestions
       const stats = await getShowStatsForPrinting(ctx.db, input.showId);
       const products = getPrintableProducts();
 
       const available = await Promise.all(
         products.map(async (product) => {
           try {
-            const quantities = await getAvailableQuantities(
-              product.tradeprintProductId,
-              product.defaultSpecs
+            // Get quantities from cache (instant) with fallback to live API
+            let quantities = await getCachedQuantities(
+              product.tradeprintProductName,
+              product.defaultSpecs,
+              input.serviceLevel
             );
+
+            if (quantities.length === 0) {
+              quantities = await getAvailableQuantities(
+                product.tradeprintProductId,
+                product.defaultSpecs
+              );
+            }
+
             if (quantities.length === 0) return null;
 
             const suggestedQty = product.suggestQuantity(stats);
-            // Find closest available quantity >= suggested
             const bestQty = quantities.find((q) => q >= suggestedQty) ?? quantities[quantities.length - 1];
+
+            // Get price for the suggested quantity with default specs (instant from cache)
+            const defaultPrice = await getCachedTradePrice(
+              product.tradeprintProductName,
+              product.defaultSpecs,
+              bestQty,
+              input.serviceLevel
+            );
+
+            // Get preset prices in parallel
+            const presetPricing = await Promise.all(
+              product.presets.map(async (preset) => {
+                const tradeCost = await getCachedTradePrice(
+                  product.tradeprintProductName,
+                  preset.specs,
+                  bestQty,
+                  input.serviceLevel
+                );
+                return {
+                  id: preset.id,
+                  label: preset.label,
+                  description: preset.description,
+                  tier: preset.tier,
+                  unitSellingPrice: tradeCost !== null ? calculateSellingPrice(tradeCost) : null,
+                  available: tradeCost !== null,
+                };
+              })
+            );
 
             return {
               documentType: product.documentType,
@@ -64,18 +106,53 @@ export const printOrdersRouter = createTRPCRouter({
               suggestedQuantity: bestQty,
               availableQuantities: quantities,
               tradeprintProductId: product.tradeprintProductId,
+              unitSellingPrice: defaultPrice !== null ? calculateSellingPrice(defaultPrice) : null,
+              presets: presetPricing,
+              configurableSpecs: product.configurableSpecs,
             };
           } catch {
-            // Product not available from Tradeprint — hide it
             return null;
           }
         })
       );
 
-      return available.filter(Boolean);
+      return { products: available.filter(Boolean), stats };
     }),
 
-  /** Get a quote for selected items */
+  /** Get distinct spec values from the price cache for a product */
+  getSpecOptions: secretaryProcedure
+    .input(z.object({
+      productName: z.string(),
+      serviceLevel: z.enum(['saver', 'standard', 'express']).default('standard'),
+      currentSpecs: z.record(z.string()).optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const product = getPrintableProducts().find(
+        (p) => p.tradeprintProductName === input.productName
+      );
+      if (!product) return {};
+
+      const result: Record<string, string[]> = {};
+
+      // Get available values for each configurable spec, filtered by other current specs
+      for (const spec of product.configurableSpecs) {
+        const filterSpecs = { ...(input.currentSpecs ?? product.defaultSpecs) };
+        // Remove this spec from the filter so we can see all options for it
+        delete filterSpecs[spec.key];
+
+        const values = await getDistinctSpecValues(
+          input.productName,
+          spec.key,
+          input.serviceLevel,
+          Object.keys(filterSpecs).length > 0 ? filterSpecs : undefined
+        );
+        result[spec.key] = values;
+      }
+
+      return result;
+    }),
+
+  /** Get a quote for selected items (supports custom specs via presets or manual selection) */
   getQuote: secretaryProcedure
     .input(
       z.object({
@@ -85,6 +162,8 @@ export const printOrdersRouter = createTRPCRouter({
             documentType: z.string(),
             documentFormat: z.string().optional(),
             quantity: z.number().int().positive(),
+            presetId: z.string().optional(),
+            customSpecs: z.record(z.string()).optional(),
           })
         ),
         serviceLevel: z.enum(['saver', 'standard', 'express']).default('standard'),
@@ -94,7 +173,6 @@ export const printOrdersRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
-      // Fetch prices and delivery estimate in parallel
       const firstProduct = getProductByType(input.items[0].documentType);
 
       const [quotedItems, deliveryEst] = await Promise.all([
@@ -108,10 +186,14 @@ export const printOrdersRouter = createTRPCRouter({
               });
             }
 
+            // Resolve specs: custom > preset > default
+            const specs = item.customSpecs
+              ?? (item.presetId ? getPresetSpecs(product, item.presetId) : product.defaultSpecs);
+
             // Try local cache first (instant), fall back to live API (slow)
             let tradeCost = await getCachedTradePrice(
               product.tradeprintProductName,
-              product.defaultSpecs,
+              specs,
               item.quantity,
               input.serviceLevel
             );
@@ -119,7 +201,7 @@ export const printOrdersRouter = createTRPCRouter({
             if (tradeCost === null) {
               tradeCost = await getTradePrice(
                 product.tradeprintProductName,
-                product.defaultSpecs,
+                specs,
                 item.quantity,
                 input.serviceLevel
               );
@@ -144,7 +226,8 @@ export const printOrdersRouter = createTRPCRouter({
               unitSellingPrice: sellingPrice,
               lineTotal,
               tradeprintProductId: product.tradeprintProductId,
-              printSpecs: product.defaultSpecs,
+              printSpecs: specs,
+              presetId: item.presetId,
             };
           })
         ),

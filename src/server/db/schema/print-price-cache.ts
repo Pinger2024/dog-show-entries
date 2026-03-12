@@ -30,5 +30,6 @@ export const printPriceCache = pgTable(
   (table) => [
     index('print_price_cache_product_idx').on(table.tradeprintProductName, table.serviceLevel),
     index('print_price_cache_lookup_idx').on(table.tradeprintProductName, table.serviceLevel, table.quantity),
+    index('print_price_cache_specs_gin_idx').using('gin', table.specs),
   ]
 );
