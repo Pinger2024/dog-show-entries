@@ -4,7 +4,7 @@ import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   Loader2, Printer, Package, Truck, CreditCard, Check,
   ChevronLeft, ChevronDown, AlertCircle, MapPin, Sparkles, Star,
-  Settings2,
+  Settings2, Eye,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
@@ -43,6 +43,26 @@ const TIER_STYLES = {
   premium: { icon: Sparkles, colour: 'text-amber-600', bg: 'bg-amber-50 border-amber-200', ring: 'ring-amber-200' },
   budget: { icon: Package, colour: 'text-slate-500', bg: 'bg-slate-50 border-slate-200', ring: 'ring-slate-200' },
 } as const;
+
+/** Build the PDF preview URL for a document type */
+function getPreviewUrl(showId: string, documentType: string, documentFormat?: string): string | null {
+  switch (documentType) {
+    case 'catalogue':
+      return `/api/catalogue/${showId}/${documentFormat ?? 'standard'}`;
+    case 'schedule':
+      return `/api/schedule/${showId}`;
+    case 'prize_cards':
+      return `/api/prize-cards/${showId}`;
+    case 'ring_board':
+      return `/api/ring-board/${showId}`;
+    case 'ring_numbers':
+      // Ring numbers use the same Flyers product as prize cards but are single-sided
+      // They don't have a separate PDF route yet
+      return null;
+    default:
+      return null;
+  }
+}
 
 export default function PrintShopPage() {
   const showId = useShowId();
@@ -375,6 +395,22 @@ export default function PrintShopPage() {
                             {activePreset.label}
                           </Badge>
                         )}
+                        {(() => {
+                          const previewUrl = getPreviewUrl(showId, product.documentType, selectedItem?.documentFormat);
+                          return previewUrl ? (
+                            <a
+                              href={previewUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="ml-auto flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                              title={`Preview ${product.label} PDF`}
+                            >
+                              <Eye className="size-3.5" />
+                              <span className="hidden sm:inline">Preview</span>
+                            </a>
+                          ) : null;
+                        })()}
                       </div>
                       <CardDescription className="text-xs">
                         {product.description}
