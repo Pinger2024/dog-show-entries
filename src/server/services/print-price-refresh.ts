@@ -189,9 +189,10 @@ function processDataRow(
 
 /**
  * Get a cached trade price for specific specs + quantity.
- * Returns unit price in pence (ex-VAT), or null if not cached.
+ * Returns the TOTAL price in pence (ex-VAT) for the given quantity, or null if not cached.
+ * Callers should compute unit price by dividing after markup to avoid premature rounding.
  */
-export async function getCachedTradePrice(
+export async function getCachedTotalPrice(
   productName: string,
   specs: Record<string, string>,
   quantity: number,
@@ -211,7 +212,7 @@ export async function getCachedTradePrice(
     .limit(1);
 
   if (rows.length === 0) return null;
-  return Math.round(rows[0].totalPricePence / quantity);
+  return rows[0].totalPricePence;
 }
 
 /**
@@ -271,10 +272,10 @@ export async function getDistinctSpecValues(
       value: sql<string>`${printPriceCache.specs}->>${specKey}`,
     })
     .from(printPriceCache)
-    .where(and(...conditions))
-    .orderBy(sql`${printPriceCache.specs}->>${specKey}`);
+    .where(and(...conditions));
 
   return rows
     .map((r) => r.value)
-    .filter((v): v is string => v !== null && v !== '');
+    .filter((v): v is string => v !== null && v !== '')
+    .sort();
 }

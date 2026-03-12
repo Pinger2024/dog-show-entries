@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   Loader2, Printer, Package, Truck, CreditCard, Check,
   ChevronLeft, ChevronDown, AlertCircle, MapPin, Sparkles, Star,
@@ -34,6 +34,7 @@ interface SelectedItem {
   quantity: number;
   presetId: string;
   customSpecs?: Record<string, string>;
+  customUnitPrice?: number | null;
 }
 
 // ── Tier visuals ──
@@ -223,11 +224,16 @@ export default function PrintShopPage() {
     for (const item of selectedItems) {
       const product = products.find((p) => p.documentType === item.documentType);
       if (!product) continue;
-      const preset = product.presets.find((p) => p.id === item.presetId);
-      if (preset?.unitSellingPrice) {
-        total += preset.unitSellingPrice * item.quantity;
-      } else if (product.unitSellingPrice) {
-        total += product.unitSellingPrice * item.quantity;
+      // Custom price (from configurator) > preset price > default price
+      if (item.customUnitPrice != null && item.customUnitPrice > 0) {
+        total += item.customUnitPrice * item.quantity;
+      } else {
+        const preset = product.presets.find((p) => p.id === item.presetId);
+        if (preset?.unitSellingPrice) {
+          total += preset.unitSellingPrice * item.quantity;
+        } else if (product.unitSellingPrice) {
+          total += product.unitSellingPrice * item.quantity;
+        }
       }
     }
     return total > 0 ? total : null;
@@ -372,7 +378,7 @@ export default function PrintShopPage() {
                       </div>
                       <CardDescription className="text-xs">
                         {product.description}
-                        {product.unitSellingPrice && !isSelected && (
+                        {product.unitSellingPrice != null && product.unitSellingPrice > 0 && !isSelected && (
                           <span className="ml-1 text-foreground/70">
                             — from {formatCurrency(product.unitSellingPrice)} each
                           </span>
@@ -455,7 +461,7 @@ export default function PrintShopPage() {
                                 <p className="mt-0.5 text-[11px] text-muted-foreground">
                                   {preset.description}
                                 </p>
-                                {preset.unitSellingPrice && (
+                                {preset.unitSellingPrice != null && preset.unitSellingPrice > 0 && (
                                   <p className={`mt-1 text-xs font-medium ${tierStyle.colour}`}>
                                     {formatCurrency(preset.unitSellingPrice)} each
                                   </p>
@@ -470,7 +476,16 @@ export default function PrintShopPage() {
                     {/* Advanced customisation toggle */}
                     {product.configurableSpecs.length > 0 && (
                       <button
-                        onClick={() => setExpandedProduct(isExpanded ? null : product.documentType)}
+                        onClick={() => {
+                          if (!isExpanded && !selectedItem?.customSpecs) {
+                            // Seed custom specs from active preset so user starts from a valid combination
+                            const preset = product.presets.find((p) => p.id === (selectedItem?.presetId ?? 'standard'));
+                            if (preset?.specs) {
+                              handleUpdateItem(product.documentType, { customSpecs: preset.specs });
+                            }
+                          }
+                          setExpandedProduct(isExpanded ? null : product.documentType);
+                        }}
                         className="flex w-full items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
                       >
                         <Settings2 className="size-3" />
@@ -871,15 +886,33 @@ function SpecConfigurator({
   serviceLevel: string;
 }) {
   const currentSpecs = selectedItem.customSpecs;
+  const sl = serviceLevel as 'saver' | 'standard' | 'express';
+  const lastReportedPrice = useRef<number | null | undefined>(undefined);
 
-  const { data: specOptions, isLoading } = trpc.printOrders.getSpecOptions.useQuery(
+  // Single query for both spec options AND price (avoids tRPC batch bug)
+  const { data, isLoading, isFetching, isError } = trpc.printOrders.getSpecOptions.useQuery(
     {
       productName: product.tradeprintProductName,
-      serviceLevel: serviceLevel as 'saver' | 'standard' | 'express',
-      currentSpecs,
+      serviceLevel: sl,
+      currentSpecs: currentSpecs ?? undefined,
+      quantity: currentSpecs ? selectedItem.quantity : undefined,
     },
-    { staleTime: 300_000 }
+    { staleTime: 60_000, retry: 1, placeholderData: (prev) => prev }
   );
+
+  const specOptions = data?.options;
+  const customPrice = data?.price;
+
+  // Report custom price back to parent — only when it actually changes
+  const unitPrice = customPrice?.unitSellingPrice ?? null;
+  useEffect(() => {
+    if (isFetching || !currentSpecs) return;
+    if (lastReportedPrice.current === unitPrice) return;
+    lastReportedPrice.current = unitPrice;
+    onUpdate({ customUnitPrice: unitPrice });
+  }, [unitPrice, isFetching, currentSpecs]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (isError) return null;
 
   if (isLoading) {
     return (
@@ -894,9 +927,29 @@ function SpecConfigurator({
 
   return (
     <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
-      <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-        Advanced Options
-      </p>
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+          Advanced Options
+        </p>
+        {currentSpecs && (
+          <p className="text-xs font-medium">
+            {isFetching ? (
+              <span className="text-muted-foreground">
+                <Loader2 className="mr-1 inline size-3 animate-spin" />
+                Checking price...
+              </span>
+            ) : isError ? (
+              <span className="text-amber-600">
+                Price unavailable
+              </span>
+            ) : customPrice ? (
+              <span className="text-primary">{formatCurrency(customPrice.unitSellingPrice)} each</span>
+            ) : (
+              <span className="text-amber-600">This combination isn&apos;t available</span>
+            )}
+          </p>
+        )}
+      </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {product.configurableSpecs.map((spec) => {
           const options = specOptions[spec.key];
@@ -918,7 +971,7 @@ function SpecConfigurator({
                 value={currentValue}
                 onValueChange={(v) => {
                   const newSpecs = { ...(currentSpecs ?? {}), [spec.key]: v };
-                  onUpdate({ customSpecs: newSpecs, presetId: 'custom' });
+                  onUpdate({ customSpecs: newSpecs, presetId: 'custom', customUnitPrice: undefined });
                 }}
               >
                 <SelectTrigger className="h-8 text-xs">

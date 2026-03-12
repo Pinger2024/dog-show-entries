@@ -28,7 +28,7 @@ import {
   getOrderStatus,
 } from '@/server/services/tradeprint';
 import {
-  getCachedTradePrice,
+  getCachedTotalPrice,
   getCachedQuantities,
   getDistinctSpecValues,
   refreshAllPrintPrices,
@@ -71,8 +71,8 @@ export const printOrdersRouter = createTRPCRouter({
             const suggestedQty = product.suggestQuantity(stats);
             const bestQty = quantities.find((q) => q >= suggestedQty) ?? quantities[quantities.length - 1];
 
-            // Get price for the suggested quantity with default specs (instant from cache)
-            const defaultPrice = await getCachedTradePrice(
+            // Get total price for the suggested quantity with default specs (instant from cache)
+            const defaultTotalCost = await getCachedTotalPrice(
               product.tradeprintProductName,
               product.defaultSpecs,
               bestQty,
@@ -82,7 +82,7 @@ export const printOrdersRouter = createTRPCRouter({
             // Get preset prices in parallel
             const presetPricing = await Promise.all(
               product.presets.map(async (preset) => {
-                const tradeCost = await getCachedTradePrice(
+                const totalCost = await getCachedTotalPrice(
                   product.tradeprintProductName,
                   preset.specs,
                   bestQty,
@@ -93,8 +93,11 @@ export const printOrdersRouter = createTRPCRouter({
                   label: preset.label,
                   description: preset.description,
                   tier: preset.tier,
-                  unitSellingPrice: tradeCost !== null ? calculateSellingPrice(tradeCost) : null,
-                  available: tradeCost !== null,
+                  specs: preset.specs,
+                  unitSellingPrice: totalCost !== null
+                    ? Math.ceil(calculateSellingPrice(totalCost) / bestQty)
+                    : null,
+                  available: totalCost !== null,
                 };
               })
             );
@@ -107,7 +110,9 @@ export const printOrdersRouter = createTRPCRouter({
               suggestedQuantity: bestQty,
               availableQuantities: quantities,
               tradeprintProductId: product.tradeprintProductId,
-              unitSellingPrice: defaultPrice !== null ? calculateSellingPrice(defaultPrice) : null,
+              unitSellingPrice: defaultTotalCost !== null
+                ? Math.ceil(calculateSellingPrice(defaultTotalCost) / bestQty)
+                : null,
               presets: presetPricing,
               configurableSpecs: product.configurableSpecs,
             };
@@ -120,24 +125,32 @@ export const printOrdersRouter = createTRPCRouter({
       return { products: available.filter(Boolean), stats };
     }),
 
-  /** Get distinct spec values from the price cache for a product */
+  /** Get spec options AND price for a product (combined to avoid tRPC batch bug) */
   getSpecOptions: secretaryProcedure
     .input(z.object({
       productName: z.string(),
       serviceLevel: z.enum(['saver', 'standard', 'express']).default('standard'),
-      currentSpecs: z.record(z.string()).optional(),
+      currentSpecs: z.record(z.string(), z.string()).optional(),
+      quantity: z.number().optional(),
     }))
-    .query(async ({ ctx, input }) => {
+    .query(async ({ input }) => {
       const product = getPrintableProducts().find(
         (p) => p.tradeprintProductName === input.productName
       );
-      if (!product) return {};
+      if (!product) return { options: {} as Record<string, string[]>, price: null };
 
-      // Get available values for each configurable spec, filtered by other current specs
+      // Build filter using only configurable spec keys (not static ones like Print Process)
+      const allSpecs = input.currentSpecs ?? product.defaultSpecs;
+      const configurableKeys = new Set(product.configurableSpecs.map((s) => s.key));
+
       const entries = await Promise.all(
         product.configurableSpecs.map(async (spec) => {
-          const filterSpecs = { ...(input.currentSpecs ?? product.defaultSpecs) };
-          delete filterSpecs[spec.key];
+          const filterSpecs: Record<string, string> = {};
+          for (const key of configurableKeys) {
+            if (key !== spec.key && allSpecs[key]) {
+              filterSpecs[key] = allSpecs[key];
+            }
+          }
 
           const values = await getDistinctSpecValues(
             input.productName,
@@ -149,7 +162,24 @@ export const printOrdersRouter = createTRPCRouter({
         })
       );
 
-      return Object.fromEntries(entries);
+      // Compute price if specs + quantity are provided
+      let price: { unitSellingPrice: number; totalSellingPrice: number } | null = null;
+      if (input.currentSpecs && input.quantity) {
+        const totalCost = await getCachedTotalPrice(
+          input.productName,
+          input.currentSpecs,
+          input.quantity,
+          input.serviceLevel
+        );
+        if (totalCost !== null) {
+          price = {
+            unitSellingPrice: Math.ceil(calculateSellingPrice(totalCost) / input.quantity),
+            totalSellingPrice: calculateSellingPrice(totalCost),
+          };
+        }
+      }
+
+      return { options: Object.fromEntries(entries) as Record<string, string[]>, price };
     }),
 
   /** Get a quote for selected items (supports custom specs via presets or manual selection) */
@@ -163,7 +193,7 @@ export const printOrdersRouter = createTRPCRouter({
             documentFormat: z.string().optional(),
             quantity: z.number().int().positive(),
             presetId: z.string().optional(),
-            customSpecs: z.record(z.string()).optional(),
+            customSpecs: z.record(z.string(), z.string()).optional(),
           })
         ),
         serviceLevel: z.enum(['saver', 'standard', 'express']).default('standard'),
@@ -191,40 +221,46 @@ export const printOrdersRouter = createTRPCRouter({
               ?? (item.presetId ? getPresetSpecs(product, item.presetId) : product.defaultSpecs);
 
             // Try local cache first (instant), fall back to live API (slow)
-            let tradeCost = await getCachedTradePrice(
+            // Both return TOTAL price for the quantity (not unit price)
+            let totalTradeCost = await getCachedTotalPrice(
               product.tradeprintProductName,
               specs,
               item.quantity,
               input.serviceLevel
             );
 
-            if (tradeCost === null) {
-              tradeCost = await getTradePrice(
+            if (totalTradeCost === null) {
+              // Live API returns unit price — convert to total
+              const unitCost = await getTradePrice(
                 product.tradeprintProductName,
                 specs,
                 item.quantity,
                 input.serviceLevel
               );
+              if (unitCost !== null) {
+                totalTradeCost = unitCost * item.quantity;
+              }
             }
 
-            if (tradeCost === null) {
+            if (totalTradeCost === null) {
               throw new TRPCError({
                 code: 'BAD_REQUEST',
                 message: `Quantity ${item.quantity} not available for ${product.label}. Try a different quantity.`,
               });
             }
 
-            const sellingPrice = calculateSellingPrice(tradeCost);
-            const lineTotal = sellingPrice * item.quantity;
+            const totalSellingPrice = calculateSellingPrice(totalTradeCost);
+            const unitSellingPrice = Math.ceil(totalSellingPrice / item.quantity);
+            const unitTradeCost = Math.ceil(totalTradeCost / item.quantity);
 
             return {
               documentType: item.documentType,
               documentFormat: item.documentFormat,
               label: product.label,
               quantity: item.quantity,
-              unitTradeCost: tradeCost,
-              unitSellingPrice: sellingPrice,
-              lineTotal,
+              unitTradeCost,
+              unitSellingPrice,
+              lineTotal: totalSellingPrice,
               tradeprintProductId: product.tradeprintProductId,
               printSpecs: specs,
               presetId: item.presetId,
@@ -268,7 +304,7 @@ export const printOrdersRouter = createTRPCRouter({
             unitSellingPrice: z.number().int(),
             lineTotal: z.number().int(),
             tradeprintProductId: z.string(),
-            printSpecs: z.record(z.string()).optional(),
+            printSpecs: z.record(z.string(), z.string()).optional(),
           })
         ),
         serviceLevel: z.enum(['saver', 'standard', 'express']).default('standard'),
