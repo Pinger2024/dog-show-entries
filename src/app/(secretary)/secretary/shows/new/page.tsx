@@ -20,6 +20,13 @@ import {
   CreditCard,
   Mail,
   UserPlus,
+  MapPin,
+  Banknote,
+  LayoutGrid,
+  ClipboardCheck,
+  Trophy,
+  Pencil,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { format, addDays } from 'date-fns';
@@ -237,7 +244,6 @@ export default function NewShowPage() {
   });
 
   const { data: dashboardData } = trpc.secretary.getDashboard.useQuery();
-  const { data: venues } = trpc.secretary.listVenues.useQuery();
   const { data: classDefinitions } = trpc.secretary.listClassDefinitions.useQuery();
 
   const utils = trpc.useUtils();
@@ -246,6 +252,7 @@ export default function NewShowPage() {
   const inviteMutation = trpc.invitations.send.useMutation();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
+  const [pendingInviteEmail, setPendingInviteEmail] = useState<string | null>(null);
 
   const organisations = dashboardData?.organisations ?? [];
 
@@ -265,6 +272,17 @@ export default function NewShowPage() {
   if (organisations.length === 1 && !currentOrgId) {
     form.setValue('organisationId', organisations[0].id);
   }
+
+  // Fetch venues for this org
+  const { data: venues } = trpc.secretary.listVenues.useQuery(
+    { organisationId: currentOrgId },
+    { enabled: !!currentOrgId }
+  );
+
+  // Default to "New Venue" if no existing venues for this org
+  useEffect(() => {
+    if (venues && venues.length === 0) setCreateVenue(true);
+  }, [venues]);
 
   // Fetch org members for the secretary picker
   const { data: orgMembersData } = trpc.secretary.orgMembers.useQuery(
@@ -317,6 +335,7 @@ export default function NewShowPage() {
           address: values.newVenueAddress || undefined,
           postcode: values.newVenuePostcode || undefined,
           indoorOutdoor: values.newVenueIndoorOutdoor || undefined,
+          organisationId: values.organisationId,
         });
         venueId = venue.id;
       }
@@ -393,6 +412,7 @@ export default function NewShowPage() {
   const watchedStartDate = form.watch('startDate');
   const watchedEndDate = form.watch('endDate');
   const watchedAcceptsPostal = form.watch('acceptsPostalEntries');
+  const watchedEntriesOpen = form.watch('entriesOpenDate');
 
   // Auto-compute endDate from startDate + showDays
   const [showDays, setShowDays] = useState(1);
@@ -470,45 +490,55 @@ export default function NewShowPage() {
     <div className="space-y-6 pb-16 md:pb-0">
       {/* Header */}
       <div>
-        <h1 className="text-lg font-bold tracking-tight sm:text-xl lg:text-2xl">Create New Show</h1>
-        <p className="mt-1 text-sm text-muted-foreground sm:text-base">
-          Set up a new show in {STEPS.length} steps.
+        <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">Create New Show</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Step {step + 1} of {STEPS.length} — <span className="font-medium text-foreground">{STEPS[step]}</span>
         </p>
       </div>
 
-      {/* Step indicator */}
-      <nav className="pb-1 -mb-1">
-        <div className="flex flex-wrap items-center gap-1">
-        {STEPS.map((label, i) => (
-          <button
-            key={label}
-            type="button"
-            onClick={() => i < step && setStep(i)}
-            disabled={i > step}
-            className={cn(
-              'flex items-center gap-1.5 rounded-lg px-2.5 py-2.5 text-xs font-medium whitespace-nowrap transition-colors sm:gap-2 sm:px-3 sm:py-2 sm:text-sm',
-              i === step
-                ? 'bg-primary text-primary-foreground'
-                : i < step
-                  ? 'bg-muted text-foreground hover:bg-muted/80 cursor-pointer'
-                  : 'text-muted-foreground'
-            )}
-          >
-            <span
-              className={cn(
-                'flex size-5 items-center justify-center rounded-full text-xs',
-                i === step
-                  ? 'bg-primary-foreground text-primary'
-                  : i < step
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted-foreground/20'
-              )}
-            >
-              {i < step ? <Check className="size-3" /> : i + 1}
-            </span>
-            <span className="hidden sm:inline">{label}</span>
-          </button>
-        ))}
+      {/* Step indicator — connected dots */}
+      <nav>
+        <div className="flex items-center">
+          {STEPS.map((label, i) => {
+            const isCompleted = i < step;
+            const isCurrent = i === step;
+            const isFuture = i > step;
+            return (
+              <div key={label} className="flex flex-1 items-center last:flex-none">
+                <button
+                  type="button"
+                  onClick={() => { if (isCompleted) { setStep(i); window.scrollTo({ top: 0, behavior: 'smooth' }); } }}
+                  disabled={isFuture}
+                  className="group flex flex-col items-center gap-1.5"
+                >
+                  <div className={cn(
+                    'flex size-8 items-center justify-center rounded-full border-2 transition-all duration-300 sm:size-9',
+                    isCurrent && 'border-primary bg-primary text-primary-foreground shadow-md ring-4 ring-primary/10',
+                    isCompleted && 'border-primary bg-primary text-primary-foreground cursor-pointer hover:ring-4 hover:ring-primary/10',
+                    isFuture && 'border-border bg-background text-muted-foreground/40'
+                  )}>
+                    {isCompleted ? <Check className="size-3.5" /> : (
+                      <span className="text-xs font-bold">{i + 1}</span>
+                    )}
+                  </div>
+                  <span className={cn(
+                    'hidden text-[10px] font-medium sm:block',
+                    isCurrent && 'text-primary',
+                    isCompleted && 'text-foreground',
+                    isFuture && 'text-muted-foreground/40'
+                  )}>
+                    {label}
+                  </span>
+                </button>
+                {i < STEPS.length - 1 && (
+                  <div className={cn(
+                    'mx-1 h-0.5 flex-1 rounded-full transition-colors duration-500 sm:mx-2',
+                    isCompleted ? 'bg-primary' : 'bg-border'
+                  )} />
+                )}
+              </div>
+            );
+          })}
         </div>
       </nav>
 
@@ -518,12 +548,17 @@ export default function NewShowPage() {
           {step === 0 && (
             <Card>
               <CardHeader>
-                <CardTitle>Basic Information</CardTitle>
+                <CardTitle className="flex items-center gap-2.5 font-serif text-lg">
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
+                    <Trophy className="size-4 text-primary" />
+                  </div>
+                  Show Details
+                </CardTitle>
                 <CardDescription>
                   Set the name, type, and dates for your show.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-6">
                 <FormField
                   control={form.control}
                   name="name"
@@ -562,6 +597,13 @@ export default function NewShowPage() {
                     )}
                   />
                 )}
+
+                {/* ── Classification ── */}
+                <div className="flex items-center gap-3">
+                  <div className="h-px flex-1 bg-border" />
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Classification</span>
+                  <div className="h-px flex-1 bg-border" />
+                </div>
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <FormField
@@ -633,7 +675,13 @@ export default function NewShowPage() {
                   )}
                 />
 
-                {/* Date, days, and time together */}
+                {/* ── Schedule ── */}
+                <div className="flex items-center gap-3">
+                  <div className="h-px flex-1 bg-border" />
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Schedule</span>
+                  <div className="h-px flex-1 bg-border" />
+                </div>
+
                 <div className="grid gap-4 sm:grid-cols-3">
                   <DatePickerField control={form.control} name="startDate" label="Show Date *" placeholder="Pick a date" disablePast />
                   <div className="space-y-2">
@@ -677,7 +725,7 @@ export default function NewShowPage() {
                 {/* Entry dates */}
                 <div className="grid gap-4 sm:grid-cols-2">
                   <DatePickerField control={form.control} name="entriesOpenDate" label="Entries Open" placeholder="Optional" />
-                  <DatePickerField control={form.control} name="entryCloseDate" label="Entries Close" placeholder="Optional" disableAfter={watchedStartDate ? parseLocalDate(watchedStartDate) : undefined} />
+                  <DatePickerField control={form.control} name="entryCloseDate" label="Entries Close" placeholder="Optional" disableBefore={watchedEntriesOpen ? parseLocalDate(watchedEntriesOpen) : undefined} disableAfter={watchedStartDate ? parseLocalDate(watchedStartDate) : undefined} />
                 </div>
 
                 {/* Postal entries toggle */}
@@ -698,11 +746,17 @@ export default function NewShowPage() {
                 />
 
                 {watchedAcceptsPostal && (
-                  <DatePickerField control={form.control} name="postalCloseDate" label="Postal Close Date" placeholder="Pick a date" disableAfter={watchedStartDate ? parseLocalDate(watchedStartDate) : undefined} />
+                  <DatePickerField control={form.control} name="postalCloseDate" label="Postal Close Date" placeholder="Pick a date" disableBefore={watchedEntriesOpen ? parseLocalDate(watchedEntriesOpen) : undefined} disableAfter={watchedStartDate ? parseLocalDate(watchedStartDate) : undefined} />
                 )}
 
-                {/* Secretary — person picker + contact details */}
-                <div className="space-y-4 rounded-lg border p-4">
+                {/* ── Secretary ── */}
+                <div className="flex items-center gap-3">
+                  <div className="h-px flex-1 bg-border" />
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Secretary</span>
+                  <div className="h-px flex-1 bg-border" />
+                </div>
+
+                <div className="space-y-4 rounded-lg border bg-muted/20 p-4">
                   <FormField
                     control={form.control}
                     name="secretaryUserId"
@@ -713,6 +767,7 @@ export default function NewShowPage() {
                           <Select
                             onValueChange={(value) => {
                               field.onChange(value);
+                              setPendingInviteEmail(null);
                               const member = orgMembers?.find((m) => m.id === value);
                               if (member) applySecretaryMember(member);
                             }}
@@ -737,6 +792,24 @@ export default function NewShowPage() {
                               ))}
                             </SelectContent>
                           </Select>
+                          {field.value && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              className="shrink-0 text-muted-foreground hover:text-destructive"
+                              onClick={() => {
+                                field.onChange('');
+                                setPendingInviteEmail(null);
+                                form.setValue('secretaryName', '');
+                                form.setValue('secretaryEmail', '');
+                                form.setValue('secretaryPhone', '');
+                              }}
+                              title="Clear secretary"
+                            >
+                              <X className="size-4" />
+                            </Button>
+                          )}
                           <Button
                             type="button"
                             variant="outline"
@@ -752,19 +825,42 @@ export default function NewShowPage() {
                       </FormItem>
                     )}
                   />
+                  {pendingInviteEmail && !form.watch('secretaryUserId') && (
+                    <div className="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30">
+                      <div className="flex items-center gap-2">
+                        <Mail className="size-4 text-amber-600" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium">Invite sent to <span className="font-semibold">{pendingInviteEmail}</span></p>
+                          <p className="text-xs text-muted-foreground">They&apos;ll be set as secretary once they sign up</p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="size-7 shrink-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => {
+                            setPendingInviteEmail(null);
+                            form.setValue('secretaryEmail', '');
+                          }}
+                        >
+                          <X className="size-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                   {form.watch('secretaryUserId') && (
-                    <div className="grid gap-4 sm:grid-cols-3">
-                      <div>
-                        <Label className="text-sm text-muted-foreground">Name</Label>
-                        <p className="mt-1 text-sm font-medium">{form.watch('secretaryName') || '—'}</p>
+                    <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
+                      <div className="rounded-md bg-background p-2.5">
+                        <Label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Name</Label>
+                        <p className="mt-0.5 text-sm font-medium">{form.watch('secretaryName') || '—'}</p>
                       </div>
-                      <div>
-                        <Label className="text-sm text-muted-foreground">Email</Label>
-                        <p className="mt-1 text-sm font-medium">{form.watch('secretaryEmail') || '—'}</p>
+                      <div className="rounded-md bg-background p-2.5">
+                        <Label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Email</Label>
+                        <p className="mt-0.5 text-sm font-medium truncate">{form.watch('secretaryEmail') || '—'}</p>
                       </div>
-                      <div>
-                        <Label className="text-sm text-muted-foreground">Phone</Label>
-                        <p className="mt-1 text-sm font-medium">{form.watch('secretaryPhone') || '—'}</p>
+                      <div className="rounded-md bg-background p-2.5">
+                        <Label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Phone</Label>
+                        <p className="mt-0.5 text-sm font-medium">{form.watch('secretaryPhone') || '—'}</p>
                       </div>
                     </div>
                   )}
@@ -813,16 +909,34 @@ export default function NewShowPage() {
                         disabled={!inviteEmail || inviteMutation.isPending}
                         onClick={async () => {
                           try {
-                            await inviteMutation.mutateAsync({
+                            const result = await inviteMutation.mutateAsync({
                               email: inviteEmail,
                               role: 'secretary',
                               organisationId: currentOrgId || undefined,
                             });
-                            toast.success('Member added! They\'ve been notified and will appear in the dropdown once they sign up.');
                             setInviteOpen(false);
                             setInviteEmail('');
                             // Refresh org members list
-                            utils.secretary.orgMembers.invalidate();
+                            await utils.secretary.orgMembers.invalidate();
+
+                            if (result.acceptedById) {
+                              // Existing user — auto-select them as secretary
+                              setPendingInviteEmail(null);
+                              form.setValue('secretaryUserId', result.acceptedById);
+                              const refreshed = utils.secretary.orgMembers.getData({ organisationId: currentOrgId });
+                              const member = refreshed?.find((m) => m.id === result.acceptedById);
+                              if (member) applySecretaryMember(member);
+                              toast.success('Member added and selected as secretary.');
+                            } else {
+                              // New user — store their email as pending secretary
+                              const email = inviteEmail;
+                              setPendingInviteEmail(email);
+                              form.setValue('secretaryUserId', '');
+                              form.setValue('secretaryEmail', email);
+                              form.setValue('secretaryName', '');
+                              form.setValue('secretaryPhone', '');
+                              toast.success('Invite sent! They\'ve been set as secretary.');
+                            }
                           } catch (err) {
                             toast.error('Failed to add member. Please try again.');
                           }
@@ -845,9 +959,14 @@ export default function NewShowPage() {
           {step === 1 && (
             <Card>
               <CardHeader>
-                <CardTitle>Venue</CardTitle>
+                <CardTitle className="flex items-center gap-2.5 font-serif text-lg">
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
+                    <MapPin className="size-4 text-primary" />
+                  </div>
+                  Venue
+                </CardTitle>
                 <CardDescription>
-                  Select an existing venue or create a new one.
+                  Where will the show take place? Select an existing venue or add a new one.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -994,75 +1113,97 @@ export default function NewShowPage() {
           {step === 2 && (
             <Card>
               <CardHeader>
-                <CardTitle>Entry Fees</CardTitle>
+                <CardTitle className="flex items-center gap-2.5 font-serif text-lg">
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
+                    <Banknote className="size-4 text-primary" />
+                  </div>
+                  Entry Fees
+                </CardTitle>
                 <CardDescription>
-                  Set the entry fees in pounds.
+                  Set the fees exhibitors will pay per entry. Leave blank for free entry.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="firstEntryFee"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>First Entry Fee (£)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          placeholder="e.g. 10.00"
-                          {...field}
-                          value={field.value === 0 || field.value ? field.value : ''}
-                          onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="subsequentEntryFee"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Subsequent Entry Fee (£)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          placeholder="e.g. 8.00"
-                          {...field}
-                          value={field.value === 0 || field.value ? field.value : ''}
-                          onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="nfcEntryFee"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>NFC Entry Fee (£)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          placeholder="e.g. 5.00"
-                          {...field}
-                          value={field.value === 0 || field.value ? field.value : ''}
-                          onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+              <CardContent>
+                <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+                  <FormField
+                    control={form.control}
+                    name="firstEntryFee"
+                    render={({ field }) => (
+                      <FormItem className="rounded-lg border bg-muted/20 p-4">
+                        <FormLabel className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">First Entry</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">£</span>
+                            <Input
+                              type="number"
+                              min={0}
+                              step={0.01}
+                              placeholder="0.00"
+                              className="pl-7 text-lg font-semibold h-12"
+                              {...field}
+                              value={field.value === 0 || field.value ? field.value : ''}
+                              onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
+                            />
+                          </div>
+                        </FormControl>
+                        <p className="text-[10px] text-muted-foreground">The fee for the first dog entered</p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="subsequentEntryFee"
+                    render={({ field }) => (
+                      <FormItem className="rounded-lg border bg-muted/20 p-4">
+                        <FormLabel className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Subsequent</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">£</span>
+                            <Input
+                              type="number"
+                              min={0}
+                              step={0.01}
+                              placeholder="0.00"
+                              className="pl-7 text-lg font-semibold h-12"
+                              {...field}
+                              value={field.value === 0 || field.value ? field.value : ''}
+                              onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
+                            />
+                          </div>
+                        </FormControl>
+                        <p className="text-[10px] text-muted-foreground">Each additional entry after the first</p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="nfcEntryFee"
+                    render={({ field }) => (
+                      <FormItem className="rounded-lg border bg-muted/20 p-4">
+                        <FormLabel className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Not for Competition</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">£</span>
+                            <Input
+                              type="number"
+                              min={0}
+                              step={0.01}
+                              placeholder="0.00"
+                              className="pl-7 text-lg font-semibold h-12"
+                              {...field}
+                              value={field.value === 0 || field.value ? field.value : ''}
+                              onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
+                            />
+                          </div>
+                        </FormControl>
+                        <p className="text-[10px] text-muted-foreground">NFC entries (exhibition only)</p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
               </CardContent>
             </Card>
           )}
@@ -1071,7 +1212,12 @@ export default function NewShowPage() {
           {step === 3 && watchedShowScope === 'general' && (
             <Card>
               <CardHeader>
-                <CardTitle>All-Breed Classes</CardTitle>
+                <CardTitle className="flex items-center gap-2.5 font-serif text-lg">
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
+                    <LayoutGrid className="size-4 text-primary" />
+                  </div>
+                  All-Breed Classes
+                </CardTitle>
                 <CardDescription>
                   Select which breeds to include and choose a class template.
                   The template will apply uniformly to all selected breeds.
@@ -1090,11 +1236,21 @@ export default function NewShowPage() {
           {step === 3 && watchedShowScope !== 'general' && (
             <Card>
               <CardHeader>
-                <CardTitle>Classes</CardTitle>
+                <CardTitle className="flex items-center gap-2.5 font-serif text-lg">
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
+                    <LayoutGrid className="size-4 text-primary" />
+                  </div>
+                  Classes
+                </CardTitle>
                 <CardDescription>
-                  Choose a class template to get started quickly. You can add or
-                  remove individual classes after creating the show.
+                  Select one or more class templates — for example, Open Standard + Junior Handling.
+                  You can customise individual classes after creating the show.
                 </CardDescription>
+                {selectedTemplates.length > 0 && (
+                  <Badge variant="secondary" className="mt-1 w-fit">
+                    {selectedTemplates.length} template{selectedTemplates.length > 1 ? 's' : ''} selected
+                  </Badge>
+                )}
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -1135,6 +1291,7 @@ export default function NewShowPage() {
                     <p className="text-sm font-medium">
                       Classes included ({form.watch('selectedClassIds').length})
                     </p>
+                    <p className="text-xs text-muted-foreground">Tap a class to remove it</p>
                     <div className="flex flex-wrap gap-1.5">
                       {matchedTemplateClasses.map((cd) => {
                         const isSelected = form.watch('selectedClassIds').includes(cd.id);
@@ -1152,13 +1309,14 @@ export default function NewShowPage() {
                               );
                             }}
                             className={cn(
-                              'rounded-full px-3 py-1 text-xs font-medium border transition-colors',
+                              'rounded-full px-3 py-1 text-xs font-medium border transition-colors inline-flex items-center gap-1',
                               isSelected
                                 ? 'bg-primary text-primary-foreground border-primary'
                                 : 'bg-muted/50 text-muted-foreground border-transparent'
                             )}
                           >
                             {cd.name}
+                            {isSelected && <X className="size-3" />}
                           </button>
                         );
                       })}
@@ -1177,15 +1335,17 @@ export default function NewShowPage() {
           )}
 
           {/* Step 5: Review */}
-          {step === 4 && <ReviewStep form={form} organisations={organisations} venues={venues ?? []} classDefinitions={classDefinitions ?? []} createVenue={createVenue} classSexArrangements={classSexArrangements} allBreedData={allBreedData} />}
+          {step === 4 && <ReviewStep form={form} organisations={organisations} venues={venues ?? []} classDefinitions={classDefinitions ?? []} createVenue={createVenue} classSexArrangements={classSexArrangements} allBreedData={allBreedData} onEditStep={setStep} />}
 
           {/* Navigation */}
-          <div className="mt-6 flex items-center justify-between gap-2">
+          <div className="mt-8 flex items-center justify-between gap-2 border-t pt-6">
             <Button
               type="button"
-              variant="outline"
-              className="min-h-[2.75rem] sm:min-h-0"
-              onClick={() => (step === 0 ? router.back() : setStep(step - 1))}
+              variant="ghost"
+              className="min-h-[2.75rem] text-muted-foreground hover:text-foreground sm:min-h-0"
+              onClick={() => {
+                if (step === 0) { router.back(); } else { setStep(step - 1); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+              }}
             >
               <ArrowLeft className="size-4" />
               {step === 0 ? 'Cancel' : 'Back'}
@@ -1208,29 +1368,33 @@ export default function NewShowPage() {
                   </Button>
                   <Button
                     type="button"
-                    className="min-h-[2.75rem] text-xs sm:min-h-0 sm:text-sm"
+                    className="min-h-[2.75rem] text-xs font-semibold shadow-md sm:min-h-0 sm:text-sm"
                     disabled={isSubmitting}
                     onClick={() => onSubmit(form.getValues(), false)}
                   >
                     {isSubmitting && (
                       <Loader2 className="size-4 animate-spin" />
                     )}
+                    <Sparkles className="size-4" />
                     Create Show
                   </Button>
                 </>
               ) : (
                 <Button
                   type="button"
-                  className="min-h-[2.75rem] sm:min-h-0"
+                  className="min-h-[2.75rem] px-6 font-semibold shadow-md sm:min-h-0"
                   onClick={async () => {
                     if (step === 0) {
                       const valid = await form.trigger(['name', 'showType', 'showScope', 'startDate']);
                       if (!valid) return;
                     }
-                    if (canProceed()) setStep(step + 1);
+                    if (canProceed()) {
+                      setStep(step + 1);
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
                   }}
                 >
-                  Next
+                  Continue
                   <ArrowRight className="size-4" />
                 </Button>
               )}
@@ -1249,6 +1413,7 @@ function DatePickerField({
   placeholder,
   disablePast,
   disableAfter,
+  disableBefore,
 }: {
   control: ReturnType<typeof useForm<CreateShowValues>>['control'];
   name: 'startDate' | 'entriesOpenDate' | 'entryCloseDate' | 'postalCloseDate';
@@ -1257,6 +1422,8 @@ function DatePickerField({
   disablePast?: boolean;
   /** Disable dates after this date (inclusive — the date itself IS selectable) */
   disableAfter?: Date;
+  /** Disable dates before this date (inclusive — the date itself IS selectable) */
+  disableBefore?: Date;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -1298,6 +1465,7 @@ function DatePickerField({
                 disabled={(date) => {
                   if (disablePast && date < new Date()) return true;
                   if (disableAfter && date > disableAfter) return true;
+                  if (disableBefore && date < disableBefore) return true;
                   return false;
                 }}
               />
@@ -1365,6 +1533,7 @@ function ReviewStep({
   createVenue,
   classSexArrangements,
   allBreedData,
+  onEditStep,
 }: {
   form: ReturnType<typeof useForm<CreateShowValues>>;
   organisations: { id: string; name: string }[];
@@ -1373,6 +1542,7 @@ function ReviewStep({
   createVenue: boolean;
   classSexArrangements: readonly { value: string; label: string }[];
   allBreedData: AllBreedClassData;
+  onEditStep: (step: number) => void;
 }) {
   const values = form.getValues();
   const org = organisations.find((o) => o.id === values.organisationId);
@@ -1391,144 +1561,140 @@ function ReviewStep({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Review & Create</CardTitle>
+        <CardTitle className="flex items-center gap-2.5 font-serif text-lg">
+          <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
+            <ClipboardCheck className="size-4 text-primary" />
+          </div>
+          Review & Create
+        </CardTitle>
         <CardDescription>
-          Review your show details before creating.
+          Check everything looks right before creating your show.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
-        <div>
-          <h3 className="mb-2 text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-            Basic Info
-          </h3>
-          <dl className="grid gap-2 sm:grid-cols-2">
+      <CardContent className="space-y-1">
+        {/* Show Details */}
+        <div className="rounded-lg border bg-muted/20 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+              Show Details
+            </h3>
+            <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:text-primary" onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); onEditStep(0); }}>
+              <Pencil className="size-3" /> Edit
+            </Button>
+          </div>
+          <div className="space-y-1">
+            <p className="font-serif text-lg font-semibold">{values.name}</p>
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {showType && <Badge variant="secondary">{showType.label}</Badge>}
+              {showScope && <Badge variant="secondary">{showScope.label}</Badge>}
+              {classSexArrangement && <Badge variant="outline">{classSexArrangement.label}</Badge>}
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3 grid-cols-1 sm:grid-cols-2">
             <div>
-              <dt className="text-sm text-muted-foreground">Name</dt>
-              <dd className="font-medium">{values.name}</dd>
+              <dt className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Club</dt>
+              <dd className="mt-0.5 text-sm font-medium">{org?.name ?? 'Not set'}</dd>
             </div>
             <div>
-              <dt className="text-sm text-muted-foreground">Type</dt>
-              <dd className="font-medium">{showType?.label}</dd>
+              <dt className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Dates</dt>
+              <dd className="mt-0.5 text-sm font-medium">
+                {values.startDate ? formatDateDisplay(values.startDate) : 'Not set'}
+                {values.startDate !== values.endDate && values.endDate && ` — ${formatDateDisplay(values.endDate)}`}
+              </dd>
             </div>
-            <div>
-              <dt className="text-sm text-muted-foreground">Scope</dt>
-              <dd className="font-medium">{showScope?.label}</dd>
-            </div>
-            {classSexArrangement && (
+            {values.showOpenTime && (
               <div>
-                <dt className="text-sm text-muted-foreground">Class Structure</dt>
-                <dd className="font-medium">{classSexArrangement.label}</dd>
-              </div>
-            )}
-            {values.secretaryEmail && (
-              <div>
-                <dt className="text-sm text-muted-foreground">Secretary Email</dt>
-                <dd className="font-medium">{values.secretaryEmail}</dd>
+                <dt className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Opens At</dt>
+                <dd className="mt-0.5 text-sm font-medium">{values.showOpenTime}</dd>
               </div>
             )}
             {values.secretaryName && (
               <div>
-                <dt className="text-sm text-muted-foreground">Secretary Name</dt>
-                <dd className="font-medium">{values.secretaryName}</dd>
+                <dt className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Secretary</dt>
+                <dd className="mt-0.5 text-sm font-medium">{values.secretaryName}</dd>
               </div>
             )}
-            {values.secretaryPhone && (
-              <div>
-                <dt className="text-sm text-muted-foreground">Secretary Phone</dt>
-                <dd className="font-medium">{values.secretaryPhone}</dd>
-              </div>
-            )}
-            {values.showOpenTime && (
-              <div>
-                <dt className="text-sm text-muted-foreground">Show Opens At</dt>
-                <dd className="font-medium">{values.showOpenTime}</dd>
-              </div>
-            )}
-            <div>
-              <dt className="text-sm text-muted-foreground">Club</dt>
-              <dd className="font-medium">{org?.name ?? 'Not set'}</dd>
-            </div>
-            <div>
-              <dt className="text-sm text-muted-foreground">Start Date</dt>
-              <dd className="font-medium">
-                {values.startDate ? formatDateDisplay(values.startDate) : 'Not set'}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-sm text-muted-foreground">End Date</dt>
-              <dd className="font-medium">
-                {values.endDate ? formatDateDisplay(values.endDate) : 'Not set'}
-              </dd>
-            </div>
-          </dl>
+          </div>
         </div>
 
-        <div>
-          <h3 className="mb-2 text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-            Venue
-          </h3>
+        {/* Venue */}
+        <div className="rounded-lg border bg-muted/20 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+              Venue
+            </h3>
+            <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:text-primary" onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); onEditStep(1); }}>
+              <Pencil className="size-3" /> Edit
+            </Button>
+          </div>
           {createVenue && values.newVenueName ? (
-            <p className="font-medium">
-              {values.newVenueName} (new)
-              {values.newVenuePostcode && ` — ${values.newVenuePostcode}`}
-            </p>
+            <div>
+              <p className="text-sm font-medium">{values.newVenueName} <Badge variant="outline" className="text-[10px]">New</Badge></p>
+              {values.newVenuePostcode && <p className="text-xs text-muted-foreground mt-0.5">{values.newVenuePostcode}</p>}
+            </div>
           ) : venue ? (
-            <p className="font-medium">
+            <p className="text-sm font-medium">
               {venue.name}
-              {venue.postcode && ` — ${venue.postcode}`}
+              {venue.postcode && <span className="text-muted-foreground"> — {venue.postcode}</span>}
             </p>
           ) : (
-            <p className="text-sm text-muted-foreground">No venue selected</p>
+            <p className="text-sm text-muted-foreground italic">No venue selected — you can add one later</p>
           )}
         </div>
 
-        <div>
-          <h3 className="mb-2 text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-            Entry Fees
-          </h3>
-          <dl className="grid gap-2 sm:grid-cols-3">
-            <div>
-              <dt className="text-sm text-muted-foreground">First Entry</dt>
-              <dd className="font-medium">
-                £{Number(values.firstEntryFee).toFixed(2)}
-              </dd>
+        {/* Entry Fees */}
+        <div className="rounded-lg border bg-muted/20 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+              Entry Fees
+            </h3>
+            <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:text-primary" onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); onEditStep(2); }}>
+              <Pencil className="size-3" /> Edit
+            </Button>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="text-center">
+              <p className="text-lg font-bold">£{Number(values.firstEntryFee).toFixed(2)}</p>
+              <p className="text-[10px] text-muted-foreground">First</p>
             </div>
-            <div>
-              <dt className="text-sm text-muted-foreground">Subsequent</dt>
-              <dd className="font-medium">
-                £{Number(values.subsequentEntryFee).toFixed(2)}
-              </dd>
+            <div className="text-center">
+              <p className="text-lg font-bold">£{Number(values.subsequentEntryFee).toFixed(2)}</p>
+              <p className="text-[10px] text-muted-foreground">Subsequent</p>
             </div>
-            <div>
-              <dt className="text-sm text-muted-foreground">NFC</dt>
-              <dd className="font-medium">
-                £{Number(values.nfcEntryFee).toFixed(2)}
-              </dd>
+            <div className="text-center">
+              <p className="text-lg font-bold">£{Number(values.nfcEntryFee).toFixed(2)}</p>
+              <p className="text-[10px] text-muted-foreground">NFC</p>
             </div>
-          </dl>
+          </div>
         </div>
 
-        <div>
-          <h3 className="mb-2 text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-            Classes
-          </h3>
+        {/* Classes */}
+        <div className="rounded-lg border bg-muted/20 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+              Classes
+            </h3>
+            <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:text-primary" onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); onEditStep(3); }}>
+              <Pencil className="size-3" /> Edit
+            </Button>
+          </div>
           {isAllBreed ? (
             allBreedData.selectedBreedIds.length > 0 && allBreedClasses.length > 0 ? (
               <div className="space-y-3">
                 <div className="grid grid-cols-3 gap-3">
-                  <div className="rounded-lg border p-2.5 text-center">
+                  <div className="rounded-md bg-background p-2.5 text-center">
                     <p className="text-lg font-bold">{allBreedData.selectedBreedIds.length}</p>
-                    <p className="text-xs text-muted-foreground">Breeds</p>
+                    <p className="text-[10px] text-muted-foreground">Breeds</p>
                   </div>
-                  <div className="rounded-lg border p-2.5 text-center">
+                  <div className="rounded-md bg-background p-2.5 text-center">
                     <p className="text-lg font-bold">{allBreedClasses.length}</p>
-                    <p className="text-xs text-muted-foreground">Classes/breed</p>
+                    <p className="text-[10px] text-muted-foreground">Classes/breed</p>
                   </div>
-                  <div className="rounded-lg border p-2.5 text-center">
+                  <div className="rounded-md bg-background p-2.5 text-center">
                     <p className="text-lg font-bold">
                       {allBreedData.selectedBreedIds.length * allBreedClasses.length}
                     </p>
-                    <p className="text-xs text-muted-foreground">Total</p>
+                    <p className="text-[10px] text-muted-foreground">Total</p>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
@@ -1540,7 +1706,7 @@ function ReviewStep({
                 </div>
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground italic">
                 No breeds or classes selected — you can add them after creating the show.
               </p>
             )
@@ -1554,7 +1720,7 @@ function ReviewStep({
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground italic">
                 No classes selected — you can add them after creating the show.
               </p>
             )

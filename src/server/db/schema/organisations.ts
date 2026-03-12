@@ -5,6 +5,7 @@ import { shows } from './shows';
 import { memberships } from './memberships';
 import { plans } from './plans';
 import { sponsors } from './sponsors';
+import { venues } from './venues';
 
 export const organisations = pgTable('organisations', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -44,5 +45,6 @@ export const organisationsRelations = relations(
       references: [plans.id],
     }),
     sponsors: many(sponsors),
+    venues: many(venues),
   })
 );

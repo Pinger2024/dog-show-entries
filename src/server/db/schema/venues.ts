@@ -8,6 +8,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { shows } from './shows';
+import { organisations } from './organisations';
 
 export const venues = pgTable('venues', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -18,6 +19,7 @@ export const venues = pgTable('venues', {
   lng: numeric('lng', { precision: 10, scale: 7 }),
   indoorOutdoor: text('indoor_outdoor'),
   capacity: integer('capacity'),
+  organisationId: uuid('organisation_id').references(() => organisations.id),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),
@@ -27,6 +29,10 @@ export const venues = pgTable('venues', {
     .$onUpdate(() => new Date()),
 });
 
-export const venuesRelations = relations(venues, ({ many }) => ({
+export const venuesRelations = relations(venues, ({ one, many }) => ({
   shows: many(shows),
+  organisation: one(organisations, {
+    fields: [venues.organisationId],
+    references: [organisations.id],
+  }),
 }));
