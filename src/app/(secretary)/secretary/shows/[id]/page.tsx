@@ -29,7 +29,9 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
-import { formatCurrency, penceToPoundsString, poundsToPence } from '@/lib/date-utils';
+import { formatCurrency, formatDateRange, penceToPoundsString, poundsToPence } from '@/lib/date-utils';
+import { showTypeLabels } from '@/lib/show-types';
+import { cn } from '@/lib/utils';
 import { CLASS_TEMPLATES } from '@/lib/class-templates';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -79,9 +81,7 @@ export default function OverviewPage() {
   if (!show) return null;
 
   // Derived display values
-  const dateDisplay = show.startDate !== show.endDate
-    ? `${formatDate(show.startDate)} — ${formatDate(show.endDate)}`
-    : formatDate(show.startDate);
+  const dateDisplay = formatDateRange(show.startDate, show.endDate);
   const venueDisplay = show.venue?.name ?? 'No venue set';
   const uniqueJudges = show.judgeAssignments?.length
     ? Array.from(
@@ -142,8 +142,8 @@ export default function OverviewPage() {
 
           {/* Type / Scope / Structure badges — dense horizontal row */}
           <div className="mt-3 flex flex-wrap gap-1.5">
-            <Badge variant="secondary" className="text-[11px] font-medium capitalize">
-              {show.showType.replace('_', ' ')}
+            <Badge variant="secondary" className="text-[11px] font-medium">
+              {showTypeLabels[show.showType] ?? show.showType}
             </Badge>
             <Badge variant="outline" className="text-[11px] font-medium capitalize">
               {show.showScope.replace('_', ' ')}
@@ -345,36 +345,34 @@ function EditShowDetailsDialog({
     });
   }
 
-  // Sync state when show data changes (e.g. after save)
+  // Sync form state from server data when dialog opens
   useEffect(() => {
-    if (!open) {
-      setName(show.name);
-      setShowType(show.showType);
-      setShowScope(show.showScope);
-      setStartDate(show.startDate);
-      setEndDate(show.endDate);
-      setEntryCloseDate(
-        show.entryCloseDate
-          ? new Date(show.entryCloseDate).toISOString().slice(0, 16)
-          : ''
-      );
-      setPostalCloseDate(
-        show.postalCloseDate
-          ? new Date(show.postalCloseDate).toISOString().slice(0, 16)
-          : ''
-      );
-      setKcLicenceNo(show.kcLicenceNo ?? '');
-      setDescription(show.description ?? '');
-      setClassSexArrangement(show.classSexArrangement ?? '');
-      setSecretaryEmail(show.secretaryEmail ?? '');
-      setSecretaryName(show.secretaryName ?? '');
-      setSecretaryAddress(show.secretaryAddress ?? '');
-      setSecretaryPhone(show.secretaryPhone ?? '');
-      setShowOpenTime(show.showOpenTime ?? '');
-      setOnCallVet(show.onCallVet ?? '');
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, show.name, show.showType, show.startDate]);
+    if (!open) return;
+    setName(show.name);
+    setShowType(show.showType);
+    setShowScope(show.showScope);
+    setStartDate(show.startDate);
+    setEndDate(show.endDate);
+    setEntryCloseDate(
+      show.entryCloseDate
+        ? new Date(show.entryCloseDate).toISOString().slice(0, 16)
+        : ''
+    );
+    setPostalCloseDate(
+      show.postalCloseDate
+        ? new Date(show.postalCloseDate).toISOString().slice(0, 16)
+        : ''
+    );
+    setKcLicenceNo(show.kcLicenceNo ?? '');
+    setDescription(show.description ?? '');
+    setClassSexArrangement(show.classSexArrangement ?? '');
+    setSecretaryEmail(show.secretaryEmail ?? '');
+    setSecretaryName(show.secretaryName ?? '');
+    setSecretaryAddress(show.secretaryAddress ?? '');
+    setSecretaryPhone(show.secretaryPhone ?? '');
+    setShowOpenTime(show.showOpenTime ?? '');
+    setOnCallVet(show.onCallVet ?? '');
+  }, [open]); // reads current `show` via closure when dialog opens
 
   return (
     <>
@@ -603,7 +601,6 @@ interface ClassManagerProps {
 
 function ClassManager({ showId, classes }: ClassManagerProps) {
   const [editingFees, setEditingFees] = useState<Record<string, string>>({});
-  const [editingNumbers, setEditingNumbers] = useState<Record<string, string>>({});
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   // Optimistic ordering: maps classId → sortOrder for instant visual feedback during drag
   const [optimisticOrder, setOptimisticOrder] = useState<Record<string, number> | null>(null);
@@ -663,82 +660,7 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
     reorderMutation.mutate({ showId, classIds: allIds });
   }
 
-  function startEditNumber(classId: string, current: number | null | undefined) {
-    setEditingNumbers((prev) => ({
-      ...prev,
-      [classId]: current?.toString() ?? '',
-    }));
-  }
-
-  function saveNumber(classId: string) {
-    const val = editingNumbers[classId];
-    if (val === undefined) return;
-    const num = val === '' ? null : parseInt(val);
-    if (num !== null && (isNaN(num) || num < 1)) {
-      toast.error('Enter a valid class number (1 or higher)');
-      return;
-    }
-    updateMutation.mutate({ showClassId: classId, classNumber: num });
-    setEditingNumbers((prev) => {
-      const next = { ...prev };
-      delete next[classId];
-      return next;
-    });
-  }
-
-  function cancelEditNumber(classId: string) {
-    setEditingNumbers((prev) => {
-      const next = { ...prev };
-      delete next[classId];
-      return next;
-    });
-  }
-
-  if (classes.length === 0) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Classes</CardTitle>
-          <CardDescription>No classes added yet. Use the template below to get started.</CardDescription>
-        </CardHeader>
-      </Card>
-    );
-  }
-
-  function startEditFee(classId: string, currentFeePence: number) {
-    setEditingFees((prev) => ({
-      ...prev,
-      [classId]: penceToPoundsString(currentFeePence),
-    }));
-  }
-
-  function saveFee(classId: string) {
-    const val = editingFees[classId];
-    if (val === undefined) return;
-    const pounds = parseFloat(val);
-    if (isNaN(pounds) || pounds < 0) {
-      toast.error('Enter a valid fee in pounds (e.g. 5.00)');
-      return;
-    }
-    const pence = poundsToPence(pounds);
-    updateMutation.mutate({ showClassId: classId, entryFee: pence });
-    setEditingFees((prev) => {
-      const next = { ...prev };
-      delete next[classId];
-      return next;
-    });
-  }
-
-  function cancelEditFee(classId: string) {
-    setEditingFees((prev) => {
-      const next = { ...prev };
-      delete next[classId];
-      return next;
-    });
-  }
-
-  // Detect multi-breed show and compute grouped class sections.
-  // When optimisticOrder is set, use it to override sortOrder for instant visual feedback.
+  // Hooks must come before early returns (Rules of Hooks)
   const effectiveClasses = useMemo(() => {
     if (!optimisticOrder) return classes;
     return classes.map((c) => ({
@@ -822,6 +744,49 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
     return { isMultiBreed: multiBreed, grouped: groups };
   }, [effectiveClasses]);
 
+  if (classes.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Classes</CardTitle>
+          <CardDescription>No classes added yet. Use the template below to get started.</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
+  function startEditFee(classId: string, currentFeePence: number) {
+    setEditingFees((prev) => ({
+      ...prev,
+      [classId]: penceToPoundsString(currentFeePence),
+    }));
+  }
+
+  function saveFee(classId: string) {
+    const val = editingFees[classId];
+    if (val === undefined) return;
+    const pounds = parseFloat(val);
+    if (isNaN(pounds) || pounds < 0) {
+      toast.error('Enter a valid fee in pounds (e.g. 5.00)');
+      return;
+    }
+    const pence = poundsToPence(pounds);
+    updateMutation.mutate({ showClassId: classId, entryFee: pence });
+    setEditingFees((prev) => {
+      const next = { ...prev };
+      delete next[classId];
+      return next;
+    });
+  }
+
+  function cancelEditFee(classId: string) {
+    setEditingFees((prev) => {
+      const next = { ...prev };
+      delete next[classId];
+      return next;
+    });
+  }
+
   // Section-level drag: reorder entire groups
   function handleSectionDragEnd(result: DropResult) {
     if (!result.destination || result.source.index === result.destination.index) return;
@@ -872,11 +837,14 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
       <CardContent>
         {/* Section-level drag and drop */}
         <DragDropContext onDragEnd={(result) => {
+          if (reorderMutation.isPending) return; // ignore drag while saving
           if (result.type === 'SECTION') {
             handleSectionDragEnd(result);
           } else {
-            // Class-level drag — find which group
-            const gi = parseInt(result.source.droppableId.replace('group-', ''));
+            // Class-level drag — find group by stable key
+            const groupKey = result.source.droppableId;
+            const gi = grouped.findIndex((g) => g.key === groupKey);
+            if (gi === -1) return;
             handleDragEnd(result, gi);
           }
         }}>
@@ -895,7 +863,7 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
                         <div
                           ref={sectionDragProvided.innerRef}
                           {...sectionDragProvided.draggableProps}
-                          className={`rounded-lg border ${sectionSnapshot.isDragging ? 'shadow-lg ring-2 ring-primary/20' : ''}`}
+                          className={cn('rounded-lg border', sectionSnapshot.isDragging && 'shadow-lg ring-2 ring-primary/20')}
                         >
                           {/* Section header — collapsible + draggable */}
                           <button
@@ -924,12 +892,12 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
                             <span className="shrink-0 text-xs text-muted-foreground">
                               {group.classes.length} {classRange && `· ${classRange}`}
                             </span>
-                            <ChevronDown className={`size-4 shrink-0 text-muted-foreground transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`} />
+                            <ChevronDown className={cn('size-4 shrink-0 text-muted-foreground transition-transform duration-200', isCollapsed && '-rotate-90')} />
                           </button>
 
                           {/* Class items — collapsible */}
                           {!isCollapsed && (
-                            <Droppable droppableId={`group-${gi}`} type="CLASS">
+                            <Droppable droppableId={group.key} type="CLASS">
                               {(provided) => (
                                 <div
                                   ref={provided.innerRef}
@@ -942,7 +910,7 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
                                         <div
                                           ref={dragProvided.innerRef}
                                           {...dragProvided.draggableProps}
-                                          className={`flex items-center gap-2 rounded-lg border bg-background p-2.5 ${snapshot.isDragging ? 'shadow-lg ring-2 ring-primary/20' : ''}`}
+                                          className={cn('flex items-center gap-2 rounded-lg border bg-background p-2.5', snapshot.isDragging && 'shadow-lg ring-2 ring-primary/20')}
                                         >
                                           <div
                                             {...dragProvided.dragHandleProps}

@@ -874,17 +874,21 @@ export const secretaryRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
-      for (let i = 0; i < input.classIds.length; i++) {
-        await ctx.db
-          .update(showClasses)
-          .set({ sortOrder: i, classNumber: i + 1 })
-          .where(
-            and(
-              eq(showClasses.id, input.classIds[i]),
-              eq(showClasses.showId, input.showId)
-            )
-          );
-      }
+      await ctx.db.transaction(async (tx) => {
+        await Promise.all(
+          input.classIds.map((id, i) =>
+            tx
+              .update(showClasses)
+              .set({ sortOrder: i, classNumber: i + 1 })
+              .where(
+                and(
+                  eq(showClasses.id, id),
+                  eq(showClasses.showId, input.showId)
+                )
+              )
+          )
+        );
+      });
       return { updated: input.classIds.length };
     }),
 
