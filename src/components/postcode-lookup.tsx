@@ -163,6 +163,7 @@ export function PostcodeLookup({ onSelect, compact }: PostcodeLookupProps) {
     setSuggestions([]);
 
     try {
+      setError(null);
       const place = new lib.Place({ id: suggestion.placeId });
       await place.fetchFields({
         fields: ['formattedAddress', 'addressComponents'],
@@ -182,10 +183,11 @@ export function PostcodeLookup({ onSelect, compact }: PostcodeLookupProps) {
       // If place details fail, use the suggestion text as a fallback
       // Try to extract a UK postcode from the suggestion text
       const postcodeMatch = suggestion.fullText.match(/\b([A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2})\b/i);
+      const normalizedPostcode = postcodeMatch?.[1]?.toUpperCase().replace(/\s+/, ' ').trim() ?? '';
       onSelect({
         address: suggestion.mainText,
         town: suggestion.secondaryText.replace(/, UK$/, ''),
-        postcode: postcodeMatch?.[1]?.toUpperCase() ?? '',
+        postcode: normalizedPostcode,
         fullAddress: suggestion.fullText,
       });
       setQuery('');

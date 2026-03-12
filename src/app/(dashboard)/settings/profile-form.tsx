@@ -86,15 +86,15 @@ export function ProfileForm() {
               className="h-11"
             />
           </div>
+          <PostcodeLookup
+            compact
+            onSelect={(result) => {
+              setAddress(formatAddress(result));
+              setPostcode(result.postcode);
+            }}
+          />
           <div className="space-y-2">
             <Label htmlFor="address">Address</Label>
-            <PostcodeLookup
-              compact
-              onSelect={(result) => {
-                setAddress(formatAddress(result));
-                setPostcode(result.postcode);
-              }}
-            />
             <Input
               id="address"
               value={address}
@@ -102,6 +102,9 @@ export function ProfileForm() {
               placeholder="Your address"
               className="h-11"
             />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="postcode">Postcode</Label>
             <Input
               id="postcode"
               value={postcode}
