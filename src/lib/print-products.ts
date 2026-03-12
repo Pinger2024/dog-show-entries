@@ -317,13 +317,20 @@ export function getMarkupMultiplier(): number {
   return 1 + pct / 100;
 }
 
-/** Calculate selling price from trade cost (ex-VAT pence) */
+/** Calculate selling price from trade cost (ex-VAT pence) — total for the batch */
 export function calculateSellingPrice(tradeCostExVatPence: number): number {
   // True cost = trade price + 20% VAT (we can't reclaim it)
   const costIncVat = tradeCostExVatPence * 1.2;
   // Selling price = cost × markup
   const sellingPrice = costIncVat * getMarkupMultiplier();
   return Math.ceil(sellingPrice);
+}
+
+/** Calculate per-unit selling price — single ceil after division to avoid double rounding */
+export function calculateUnitSellingPrice(totalTradeCostExVatPence: number, quantity: number): number {
+  const costIncVat = totalTradeCostExVatPence * 1.2;
+  const unitSellingPrice = (costIncVat * getMarkupMultiplier()) / quantity;
+  return Math.ceil(unitSellingPrice);
 }
 
 // ── Order helpers ──

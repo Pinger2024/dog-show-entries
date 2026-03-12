@@ -17,6 +17,7 @@ import {
   getProductByType,
   getPresetSpecs,
   calculateSellingPrice,
+  calculateUnitSellingPrice,
   CANCELLABLE_STATUSES,
   formatOrderRef,
   type ShowStats,
@@ -95,7 +96,7 @@ export const printOrdersRouter = createTRPCRouter({
                   tier: preset.tier,
                   specs: preset.specs,
                   unitSellingPrice: totalCost !== null
-                    ? Math.ceil(calculateSellingPrice(totalCost) / bestQty)
+                    ? calculateUnitSellingPrice(totalCost, bestQty)
                     : null,
                   available: totalCost !== null,
                 };
@@ -111,7 +112,7 @@ export const printOrdersRouter = createTRPCRouter({
               availableQuantities: quantities,
               tradeprintProductId: product.tradeprintProductId,
               unitSellingPrice: defaultTotalCost !== null
-                ? Math.ceil(calculateSellingPrice(defaultTotalCost) / bestQty)
+                ? calculateUnitSellingPrice(defaultTotalCost, bestQty)
                 : null,
               presets: presetPricing,
               configurableSpecs: product.configurableSpecs,
@@ -143,41 +144,37 @@ export const printOrdersRouter = createTRPCRouter({
       const allSpecs = input.currentSpecs ?? product.defaultSpecs;
       const configurableKeys = new Set(product.configurableSpecs.map((s) => s.key));
 
-      const entries = await Promise.all(
-        product.configurableSpecs.map(async (spec) => {
-          const filterSpecs: Record<string, string> = {};
-          for (const key of configurableKeys) {
-            if (key !== spec.key && allSpecs[key]) {
-              filterSpecs[key] = allSpecs[key];
+      // Run spec options and price lookup concurrently
+      const [entries, totalCost] = await Promise.all([
+        Promise.all(
+          product.configurableSpecs.map(async (spec) => {
+            const filterSpecs: Record<string, string> = {};
+            for (const key of configurableKeys) {
+              if (key !== spec.key && allSpecs[key]) {
+                filterSpecs[key] = allSpecs[key];
+              }
             }
-          }
 
-          const values = await getDistinctSpecValues(
-            input.productName,
-            spec.key,
-            input.serviceLevel,
-            Object.keys(filterSpecs).length > 0 ? filterSpecs : undefined
-          );
-          return [spec.key, values] as const;
-        })
-      );
+            const values = await getDistinctSpecValues(
+              input.productName,
+              spec.key,
+              input.serviceLevel,
+              Object.keys(filterSpecs).length > 0 ? filterSpecs : undefined
+            );
+            return [spec.key, values] as const;
+          })
+        ),
+        input.currentSpecs && input.quantity
+          ? getCachedTotalPrice(input.productName, input.currentSpecs, input.quantity, input.serviceLevel)
+          : Promise.resolve(null),
+      ]);
 
-      // Compute price if specs + quantity are provided
-      let price: { unitSellingPrice: number; totalSellingPrice: number } | null = null;
-      if (input.currentSpecs && input.quantity) {
-        const totalCost = await getCachedTotalPrice(
-          input.productName,
-          input.currentSpecs,
-          input.quantity,
-          input.serviceLevel
-        );
-        if (totalCost !== null) {
-          price = {
-            unitSellingPrice: Math.ceil(calculateSellingPrice(totalCost) / input.quantity),
+      const price = totalCost !== null && input.quantity
+        ? {
+            unitSellingPrice: calculateUnitSellingPrice(totalCost, input.quantity),
             totalSellingPrice: calculateSellingPrice(totalCost),
-          };
-        }
-      }
+          }
+        : null;
 
       return { options: Object.fromEntries(entries) as Record<string, string[]>, price };
     }),
@@ -250,7 +247,7 @@ export const printOrdersRouter = createTRPCRouter({
             }
 
             const totalSellingPrice = calculateSellingPrice(totalTradeCost);
-            const unitSellingPrice = Math.ceil(totalSellingPrice / item.quantity);
+            const unitSellingPrice = calculateUnitSellingPrice(totalTradeCost, item.quantity);
             const unitTradeCost = Math.ceil(totalTradeCost / item.quantity);
 
             return {

@@ -904,15 +904,14 @@ function SpecConfigurator({
   const customPrice = data?.price;
 
   // Report custom price back to parent — only when it actually changes
-  const unitPrice = customPrice?.unitSellingPrice ?? null;
+  // On error, clear the price so the parent doesn't keep a stale value
+  const unitPrice = isError ? null : (customPrice?.unitSellingPrice ?? null);
   useEffect(() => {
     if (isFetching || !currentSpecs) return;
     if (lastReportedPrice.current === unitPrice) return;
     lastReportedPrice.current = unitPrice;
     onUpdate({ customUnitPrice: unitPrice });
   }, [unitPrice, isFetching, currentSpecs]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (isError) return null;
 
   if (isLoading) {
     return (
