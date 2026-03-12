@@ -388,7 +388,6 @@ export const showsRouter = createTRPCRouter({
         entryCloseDate: z.string().datetime().optional(),
         postalCloseDate: z.string().datetime().optional(),
         kcLicenceNo: z.string().optional(),
-        scheduleUrl: z.string().url().optional(),
         description: z.string().optional(),
         secretaryUserId: z.string().uuid().optional(),
         secretaryEmail: z.string().email().optional(),
@@ -604,7 +603,6 @@ export const showsRouter = createTRPCRouter({
           ])
           .optional(),
         kcLicenceNo: z.string().nullable().optional(),
-        scheduleUrl: z.string().url().nullable().optional(),
         description: z.string().nullable().optional(),
         secretaryUserId: z.string().uuid().nullable().optional(),
         secretaryEmail: z.string().email().nullable().optional(),

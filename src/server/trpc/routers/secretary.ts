@@ -877,7 +877,7 @@ export const secretaryRouter = createTRPCRouter({
       for (let i = 0; i < input.classIds.length; i++) {
         await ctx.db
           .update(showClasses)
-          .set({ sortOrder: i })
+          .set({ sortOrder: i, classNumber: i + 1 })
           .where(
             and(
               eq(showClasses.id, input.classIds[i]),

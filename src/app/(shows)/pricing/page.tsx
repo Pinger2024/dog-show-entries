@@ -35,7 +35,7 @@ const steps = [
     number: 2,
     title: 'Set Up Your Show',
     description:
-      'Create your show, add your classes, and upload your schedule. We handle the rest, from entries to payments.',
+      'Create your show and add your classes. We generate the schedule automatically and handle entries to payments.',
   },
   {
     icon: Globe,

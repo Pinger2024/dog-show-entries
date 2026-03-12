@@ -198,7 +198,7 @@ const SECRETARY_FEATURES: Feature[] = [
     icon: Printer,
     title: 'Show Schedule PDF',
     description:
-      'Generate a polished show schedule PDF with entry form, class definitions, fees, and all the information exhibitors need. Upload it or share the link directly.',
+      'Automatically generates a polished show schedule PDF with entry form, class definitions, fees, and all the information exhibitors need.',
     colour: 'bg-orange-50 text-orange-600',
   },
 ];

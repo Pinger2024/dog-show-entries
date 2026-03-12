@@ -1,20 +1,26 @@
 'use client';
 
-import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
-  ArrowDown,
-  ArrowUp,
+  DragDropContext,
+  Droppable,
+  Draggable,
+  type DropResult,
+} from '@hello-pangea/dnd';
+import {
   CalendarDays,
+  ChevronDown,
   Edit3,
-  FileText,
+  Gavel,
+  GripVertical,
   Hash,
   Loader2,
   ListChecks,
   AlertTriangle,
+  Mail,
   MapPin,
   Plus,
   Trash2,
-  Upload,
   X,
   Users,
   PoundSterling,
@@ -66,10 +72,27 @@ import { useShowId } from './_lib/show-context';
 
 export default function OverviewPage() {
   const showId = useShowId();
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
 
   const { data: show } = trpc.shows.getById.useQuery({ id: showId });
 
   if (!show) return null;
+
+  // Derived display values
+  const dateDisplay = show.startDate !== show.endDate
+    ? `${formatDate(show.startDate)} — ${formatDate(show.endDate)}`
+    : formatDate(show.startDate);
+  const venueDisplay = show.venue?.name ?? 'No venue set';
+  const uniqueJudges = show.judgeAssignments?.length
+    ? Array.from(
+        new Map(show.judgeAssignments.map((a) => [a.judge.id, a.judge.name])).values()
+      )
+    : [];
+
+  // Count how many secondary details exist
+  const hasSecretaryInfo = !!(show.secretaryName || show.secretaryEmail);
+  const hasScheduleInfo = !!(show.showOpenTime || show.entryCloseDate || show.postalCloseDate);
+  const hasSecondaryDetails = hasSecretaryInfo || hasScheduleInfo || uniqueJudges.length > 0 || !!show.description;
 
   return (
     <div className="space-y-6">
@@ -79,127 +102,140 @@ export default function OverviewPage() {
       {/* Entry Stats */}
       <EntryStatsBar showId={showId} />
 
-      {/* Show details */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Show Details</CardTitle>
-          <EditShowDetailsDialog show={show} showId={showId} />
-        </CardHeader>
-        <CardContent>
-          <dl className="grid gap-4 sm:grid-cols-2">
-            <div className="flex items-start gap-3">
-              <CalendarDays className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-              <div>
-                <dt className="text-sm text-muted-foreground">Dates</dt>
-                <dd className="font-medium">
-                  {formatDate(show.startDate)}
-                  {show.startDate !== show.endDate &&
-                    ` — ${formatDate(show.endDate)}`}
-                </dd>
+      {/* Show Details — compact "boarding pass" style */}
+      <Card className="overflow-hidden">
+        {/* Hero strip — key info at a glance */}
+        <div className="border-b bg-primary/[0.03] px-4 py-4 sm:px-6">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1 space-y-2.5">
+              {/* Date — the most important thing */}
+              <div className="flex items-center gap-2.5">
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                  <CalendarDays className="size-4 text-primary" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Date</p>
+                  <p className="truncate font-serif text-sm font-semibold tracking-tight">{dateDisplay}</p>
+                </div>
+              </div>
+
+              {/* Venue */}
+              <div className="flex items-center gap-2.5">
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                  <MapPin className="size-4 text-primary" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Venue</p>
+                  <p className="truncate text-sm font-medium">
+                    {venueDisplay}
+                    {show.venue?.postcode && (
+                      <span className="ml-1 text-xs text-muted-foreground">({show.venue.postcode})</span>
+                    )}
+                  </p>
+                </div>
               </div>
             </div>
-            <div className="flex items-start gap-3">
-              <MapPin className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-              <div>
-                <dt className="text-sm text-muted-foreground">Venue</dt>
-                <dd className="font-medium">
-                  {show.venue?.name ?? 'No venue set'}
-                  {show.venue?.postcode && (
-                    <span className="text-muted-foreground">
-                      {' '}
-                      — {show.venue.postcode}
-                    </span>
-                  )}
-                </dd>
-              </div>
-            </div>
-            <div>
-              <dt className="text-sm text-muted-foreground">Show Type</dt>
-              <dd className="font-medium capitalize">
-                {show.showType.replace('_', ' ')}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-sm text-muted-foreground">Show Scope</dt>
-              <dd className="font-medium capitalize">
-                {show.showScope.replace('_', ' ')}
-              </dd>
-            </div>
+
+            {/* Edit button */}
+            <EditShowDetailsDialog show={show} showId={showId} />
+          </div>
+
+          {/* Type / Scope / Structure badges — dense horizontal row */}
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            <Badge variant="secondary" className="text-[11px] font-medium capitalize">
+              {show.showType.replace('_', ' ')}
+            </Badge>
+            <Badge variant="outline" className="text-[11px] font-medium capitalize">
+              {show.showScope.replace('_', ' ')}
+            </Badge>
             {show.classSexArrangement && (
-              <div>
-                <dt className="text-sm text-muted-foreground">Class Structure</dt>
-                <dd className="font-medium">
-                  {show.classSexArrangement === 'separate_sex' ? 'Separate Dog & Bitch' : 'Combined Dog & Bitch'}
-                </dd>
-              </div>
-            )}
-            {show.secretaryEmail && (
-              <div>
-                <dt className="text-sm text-muted-foreground">Secretary Email</dt>
-                <dd className="font-medium">{show.secretaryEmail}</dd>
-              </div>
-            )}
-            {show.secretaryName && (
-              <div>
-                <dt className="text-sm text-muted-foreground">Secretary Name</dt>
-                <dd className="font-medium">{show.secretaryName}</dd>
-              </div>
+              <Badge variant="outline" className="text-[11px] font-medium">
+                {show.classSexArrangement === 'separate_sex' ? 'Separate Dog & Bitch' : 'Combined'}
+              </Badge>
             )}
             {show.showOpenTime && (
-              <div>
-                <dt className="text-sm text-muted-foreground">Show Opens</dt>
-                <dd className="font-medium">{show.showOpenTime}</dd>
-              </div>
+              <Badge variant="outline" className="text-[11px] font-medium">
+                <Clock className="mr-0.5 size-3" />
+                Opens {show.showOpenTime}
+              </Badge>
             )}
-            {show.judgeAssignments && show.judgeAssignments.length > 0 && (
-              <div>
-                <dt className="text-sm text-muted-foreground">
-                  {show.judgeAssignments.length === 1 ? 'Judge' : 'Judges'}
-                </dt>
-                <dd className="font-medium">
-                  {(() => {
-                    const uniqueJudges = Array.from(
-                      new Map(
-                        show.judgeAssignments.map((a) => [a.judge.id, a.judge.name])
-                      ).values()
-                    );
-                    return uniqueJudges.join(', ');
-                  })()}
-                </dd>
-              </div>
-            )}
-            <div>
-              <dt className="text-sm text-muted-foreground">
-                Entry Close Date
-              </dt>
-              <dd className="font-medium">
-                {formatDate(show.entryCloseDate)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-sm text-muted-foreground">
-                Postal Close Date
-              </dt>
-              <dd className="font-medium">
-                {formatDate(show.postalCloseDate)}
-              </dd>
-            </div>
-            {show.description && (
-              <div className="sm:col-span-2">
-                <dt className="text-sm text-muted-foreground">
-                  Description
-                </dt>
-                <dd className="mt-1 whitespace-pre-wrap text-sm">
-                  {show.description}
-                </dd>
-              </div>
-            )}
-          </dl>
-        </CardContent>
-      </Card>
+          </div>
+        </div>
 
-      {/* Schedule upload */}
-      <ScheduleUpload showId={showId} currentUrl={show.scheduleUrl} />
+        {/* Quick-reference row — close dates side by side */}
+        {(show.entryCloseDate || show.postalCloseDate) && (
+          <div className="grid grid-cols-2 divide-x border-b text-center">
+            <div className="px-3 py-2.5">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Entries Close</p>
+              <p className="mt-0.5 text-xs font-semibold">{formatDate(show.entryCloseDate)}</p>
+            </div>
+            <div className="px-3 py-2.5">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Postal Close</p>
+              <p className="mt-0.5 text-xs font-semibold">{formatDate(show.postalCloseDate)}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Expandable secondary details */}
+        {hasSecondaryDetails && (
+          <div>
+            <button
+              type="button"
+              onClick={() => setDetailsExpanded((v) => !v)}
+              className="flex w-full items-center justify-between px-4 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground sm:px-6"
+            >
+              <span>{detailsExpanded ? 'Hide details' : 'More details'}</span>
+              <ChevronDown
+                className={`size-3.5 transition-transform duration-200 ${detailsExpanded ? 'rotate-180' : ''}`}
+              />
+            </button>
+
+            {detailsExpanded && (
+              <div className="animate-in slide-in-from-top-1 fade-in border-t px-4 pb-4 pt-3 sm:px-6">
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                  {/* Secretary info */}
+                  {show.secretaryName && (
+                    <div className="min-w-0">
+                      <dt className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                        <Users className="size-3" /> Secretary
+                      </dt>
+                      <dd className="mt-0.5 truncate font-medium">{show.secretaryName}</dd>
+                    </div>
+                  )}
+                  {show.secretaryEmail && (
+                    <div className="min-w-0">
+                      <dt className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                        <Mail className="size-3" /> Email
+                      </dt>
+                      <dd className="mt-0.5 truncate text-xs">{show.secretaryEmail}</dd>
+                    </div>
+                  )}
+
+                  {/* Judges */}
+                  {uniqueJudges.length > 0 && (
+                    <div className="col-span-2 min-w-0">
+                      <dt className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                        <Gavel className="size-3" /> {uniqueJudges.length === 1 ? 'Judge' : 'Judges'}
+                      </dt>
+                      <dd className="mt-0.5 font-medium">{uniqueJudges.join(', ')}</dd>
+                    </div>
+                  )}
+
+                  {/* Description */}
+                  {show.description && (
+                    <div className="col-span-2 min-w-0">
+                      <dt className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Description</dt>
+                      <dd className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">
+                        {show.description}
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
 
       {/* Class management */}
       <ClassManager showId={showId} classes={show.showClasses ?? []} />
@@ -550,125 +586,6 @@ function EditShowDetailsDialog({
   );
 }
 
-// ── Schedule Upload ──────────────────────────────────────────
-
-function ScheduleUpload({
-  showId,
-  currentUrl,
-}: {
-  showId: string;
-  currentUrl: string | null | undefined;
-}) {
-  const [uploading, setUploading] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const utils = trpc.useUtils();
-
-  const updateUrl = trpc.secretary.updateScheduleUrl.useMutation({
-    onSuccess: () => {
-      toast.success('Schedule uploaded');
-      utils.shows.getById.invalidate({ id: showId });
-    },
-    onError: () => toast.error('Failed to save schedule URL'),
-  });
-
-  const handleUpload = useCallback(
-    async (file: File) => {
-      setUploading(true);
-      try {
-        const formData = new FormData();
-        formData.append('file', file);
-
-        const res = await fetch('/api/upload', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!res.ok) {
-          const text = await res.text();
-          let message = 'Upload failed';
-          try {
-            const err = JSON.parse(text);
-            message = err.error ?? message;
-          } catch {
-            message = text || message;
-          }
-          throw new Error(message);
-        }
-
-        const { publicUrl } = await res.json();
-        await updateUrl.mutateAsync({ showId, scheduleUrl: publicUrl });
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Upload failed');
-      } finally {
-        setUploading(false);
-        if (fileRef.current) fileRef.current.value = '';
-      }
-    },
-    [showId, updateUrl]
-  );
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FileText className="size-5" />
-          Show Schedule
-        </CardTitle>
-        <CardDescription>
-          Upload a schedule (PDF or image) for exhibitors to download
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {currentUrl && (
-          <div className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2">
-            <FileText className="size-4 text-primary" />
-            <a
-              href={currentUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-1 truncate text-sm text-primary hover:underline"
-            >
-              Current schedule
-            </a>
-            <Badge variant="secondary" className="text-[10px]">
-              Uploaded
-            </Badge>
-          </div>
-        )}
-        <div className="flex items-center gap-3">
-          <input
-            ref={fileRef}
-            type="file"
-            accept="application/pdf,image/jpeg,image/png,image/webp"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleUpload(file);
-            }}
-          />
-          <Button
-            variant="outline"
-            onClick={() => fileRef.current?.click()}
-            disabled={uploading}
-          >
-            {uploading ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Upload className="size-4" />
-            )}
-            {uploading
-              ? 'Uploading...'
-              : currentUrl
-                ? 'Replace Schedule'
-                : 'Upload Schedule PDF'}
-          </Button>
-          <p className="text-xs text-muted-foreground">PDF, max 10MB</p>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 // ── Class Manager ─────────────────────────────────────────────
 
 interface ClassManagerProps {
@@ -687,6 +604,9 @@ interface ClassManagerProps {
 function ClassManager({ showId, classes }: ClassManagerProps) {
   const [editingFees, setEditingFees] = useState<Record<string, string>>({});
   const [editingNumbers, setEditingNumbers] = useState<Record<string, string>>({});
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  // Optimistic ordering: maps classId → sortOrder for instant visual feedback during drag
+  const [optimisticOrder, setOptimisticOrder] = useState<Record<string, number> | null>(null);
   const utils = trpc.useUtils();
 
   const updateMutation = trpc.secretary.updateShowClass.useMutation({
@@ -714,20 +634,33 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
   });
 
   const reorderMutation = trpc.secretary.reorderClasses.useMutation({
-    onSuccess: () => {
+    onSettled: () => {
+      setOptimisticOrder(null);
       utils.shows.getById.invalidate({ id: showId });
     },
     onError: () => toast.error('Failed to reorder classes'),
   });
 
-  function swapClass(classId: string, direction: 'up' | 'down') {
-    const sorted = [...classes].sort((a, b) => a.sortOrder - b.sortOrder);
-    const idx = sorted.findIndex((c) => c.id === classId);
-    if (idx < 0) return;
-    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= sorted.length) return;
-    [sorted[idx], sorted[swapIdx]] = [sorted[swapIdx], sorted[idx]];
-    reorderMutation.mutate({ showId, classIds: sorted.map((c) => c.id) });
+  function handleDragEnd(result: DropResult, groupIndex: number) {
+    if (!result.destination || result.source.index === result.destination.index) return;
+
+    // Build the full display order from all groups, applying the drag move within the target group
+    const allIds: string[] = [];
+    for (let gi = 0; gi < grouped.length; gi++) {
+      const groupClassIds = grouped[gi].classes.map((c) => c.id);
+      if (gi === groupIndex) {
+        const [moved] = groupClassIds.splice(result.source.index, 1);
+        groupClassIds.splice(result.destination.index, 0, moved);
+      }
+      allIds.push(...groupClassIds);
+    }
+
+    // Optimistic: apply new order instantly so UI doesn't snap back
+    const newOrder: Record<string, number> = {};
+    allIds.forEach((id, i) => { newOrder[id] = i; });
+    setOptimisticOrder(newOrder);
+
+    reorderMutation.mutate({ showId, classIds: allIds });
   }
 
   function startEditNumber(classId: string, current: number | null | undefined) {
@@ -805,18 +738,26 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
   }
 
   // Detect multi-breed show and compute grouped class sections.
-  // Memoized to avoid re-computing on every keystroke in fee/number editors.
+  // When optimisticOrder is set, use it to override sortOrder for instant visual feedback.
+  const effectiveClasses = useMemo(() => {
+    if (!optimisticOrder) return classes;
+    return classes.map((c) => ({
+      ...c,
+      sortOrder: optimisticOrder[c.id] ?? c.sortOrder,
+      classNumber: optimisticOrder[c.id] != null ? optimisticOrder[c.id] + 1 : c.classNumber,
+    }));
+  }, [classes, optimisticOrder]);
+
   const { isMultiBreed, grouped } = useMemo(() => {
-    const distinctBreeds = new Set(classes.filter((c) => c.breed).map((c) => c.breed!.name));
+    const distinctBreeds = new Set(effectiveClasses.filter((c) => c.breed).map((c) => c.breed!.name));
     const multiBreed = distinctBreeds.size >= 3;
 
-    type GroupEntry = { key: string; label: string; classes: typeof classes };
+    type GroupEntry = { key: string; label: string; classes: typeof effectiveClasses };
     const groups: GroupEntry[] = [];
 
     if (multiBreed) {
-      // Group by breed, sorted by group sortOrder then breed name (RKC catalogue order)
-      const breedMap = new Map<string, { groupSort: number; classes: typeof classes }>();
-      for (const sc of classes) {
+      const breedMap = new Map<string, { groupSort: number; classes: typeof effectiveClasses }>();
+      for (const sc of effectiveClasses) {
         const breedName = sc.breed?.name ?? 'Other';
         const entry = breedMap.get(breedName) ?? {
           groupSort: sc.breed?.group?.sortOrder ?? 999,
@@ -833,7 +774,6 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
 
       const sexRank = (s: string | null) => s === 'dog' ? 0 : s === 'bitch' ? 1 : 2;
       for (const [breedName, { classes: breedClasses }] of sortedBreeds) {
-        // Sort within breed: dog before bitch, then by sortOrder
         const sorted = [...breedClasses].sort((a, b) => {
           const ra = sexRank(a.sex), rb = sexRank(b.sex);
           if (ra !== rb) return ra - rb;
@@ -842,12 +782,11 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
         groups.push({ key: `breed-${breedName}`, label: breedName, classes: sorted });
       }
     } else {
-      // Single-breed show: group by sex then type
       const sexOrder = ['dog', 'bitch', null] as const;
       const typeOrder = ['age', 'achievement', 'special', 'junior_handler', 'other'];
 
       for (const sex of sexOrder) {
-        const sexClasses = classes.filter((sc) =>
+        const sexClasses = effectiveClasses.filter((sc) =>
           sex === null ? !sc.sex : sc.sex === sex
         );
         if (sexClasses.length === 0) continue;
@@ -872,8 +811,40 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
       }
     }
 
+    // Sort groups by the minimum sortOrder of their classes so that
+    // section-level reordering (which updates sortOrder) is respected.
+    groups.sort((a, b) => {
+      const minA = Math.min(...a.classes.map((c) => c.sortOrder));
+      const minB = Math.min(...b.classes.map((c) => c.sortOrder));
+      return minA - minB;
+    });
+
     return { isMultiBreed: multiBreed, grouped: groups };
-  }, [classes]);
+  }, [effectiveClasses]);
+
+  // Section-level drag: reorder entire groups
+  function handleSectionDragEnd(result: DropResult) {
+    if (!result.destination || result.source.index === result.destination.index) return;
+
+    // Build new order by moving the entire group
+    const newGrouped = [...grouped];
+    const [movedGroup] = newGrouped.splice(result.source.index, 1);
+    newGrouped.splice(result.destination.index, 0, movedGroup);
+
+    // Flatten all class IDs in the new group order
+    const allIds = newGrouped.flatMap((g) => g.classes.map((c) => c.id));
+
+    // Optimistic: apply new order instantly so UI doesn't snap back
+    const newOrder: Record<string, number> = {};
+    allIds.forEach((id, i) => { newOrder[id] = i; });
+    setOptimisticOrder(newOrder);
+
+    reorderMutation.mutate({ showId, classIds: allIds });
+  }
+
+  function toggleGroup(key: string) {
+    setCollapsedGroups((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
 
   return (
     <Card>
@@ -881,7 +852,7 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
         <div className="flex items-center justify-between gap-3">
           <div>
             <CardTitle>Classes ({classes.length})</CardTitle>
-            <CardDescription>Click a fee or class number to edit. Remove classes that don&apos;t apply to this show.</CardDescription>
+            <CardDescription>Drag to reorder classes or whole sections.</CardDescription>
           </div>
           <Button
             variant="outline"
@@ -898,252 +869,152 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {grouped.map((group) => (
-          <div key={group.key}>
-            <h4 className={isMultiBreed
-              ? "mb-2 mt-4 border-b pb-1 text-sm font-bold first:mt-0"
-              : "mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-            }>
-              {group.label}
-            </h4>
-            {/* Mobile card view */}
-            <div className="space-y-2 sm:hidden">
-              {group.classes.map((sc) => (
-                <div key={sc.id} className="flex items-center justify-between rounded-lg border p-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-muted-foreground">
-                        #{sc.classNumber ?? '—'}
-                      </span>
-                      <span className="text-sm font-medium truncate">
-                        {sc.classDefinition?.name ?? 'Unknown'}
-                      </span>
-                    </div>
-                    <div className="mt-1 flex items-center gap-2">
-                      {sc.sex ? (
-                        <Badge variant="outline" className="text-[10px]">
-                          {sc.sex === 'dog' ? 'Dog' : 'Bitch'}
-                        </Badge>
-                      ) : (
-                        <span className="text-[10px] text-muted-foreground">Any sex</span>
-                      )}
-                      {!isMultiBreed && sc.breed && (
-                        <span className="text-[10px] text-muted-foreground truncate">{sc.breed.name}</span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <div className="flex flex-col">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="size-7"
-                        onClick={() => swapClass(sc.id, 'up')}
-                        disabled={reorderMutation.isPending}
-                      >
-                        <ArrowUp className="size-3" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="size-7"
-                        onClick={() => swapClass(sc.id, 'down')}
-                        disabled={reorderMutation.isPending}
-                      >
-                        <ArrowDown className="size-3" />
-                      </Button>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => startEditFee(sc.id, sc.entryFee)}
-                      className="rounded px-2 py-1 text-sm font-semibold transition-colors hover:bg-muted"
-                    >
-                      {formatCurrency(sc.entryFee)}
-                    </button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="size-9 text-destructive hover:text-destructive"
-                      onClick={() => {
-                        if (confirm('Remove this class from the show?')) {
-                          deleteMutation.mutate({ showClassId: sc.id });
-                        }
-                      }}
-                      disabled={deleteMutation.isPending}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-            {/* Desktop table */}
-            <div className="hidden sm:block">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[50px]">Order</TableHead>
-                    <TableHead className="w-[70px]">#</TableHead>
-                    <TableHead>Class</TableHead>
-                    <TableHead className="w-[100px]">Sex</TableHead>
-                    <TableHead className="w-[120px]">Fee</TableHead>
-                    <TableHead className="w-[60px]" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {group.classes.map((sc) => {
-                    const isEditing = editingFees[sc.id] !== undefined;
-                    const isEditingNum = editingNumbers[sc.id] !== undefined;
-                    return (
-                      <TableRow key={sc.id}>
-                        <TableCell className="p-1">
-                          <div className="flex items-center gap-0.5">
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="size-6"
-                              onClick={() => swapClass(sc.id, 'up')}
-                              disabled={reorderMutation.isPending}
-                            >
-                              <ArrowUp className="size-3" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="size-6"
-                              onClick={() => swapClass(sc.id, 'down')}
-                              disabled={reorderMutation.isPending}
-                            >
-                              <ArrowDown className="size-3" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {isEditingNum ? (
-                            <div className="flex items-center gap-1">
-                              <Input
-                                type="number"
-                                min={1}
-                                value={editingNumbers[sc.id]}
-                                onChange={(e) =>
-                                  setEditingNumbers((prev) => ({
-                                    ...prev,
-                                    [sc.id]: e.target.value,
-                                  }))
-                                }
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') saveNumber(sc.id);
-                                  if (e.key === 'Escape') cancelEditNumber(sc.id);
-                                }}
-                                className="h-7 w-14 text-xs"
-                                autoFocus
-                              />
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => startEditNumber(sc.id, sc.classNumber)}
-                              className="rounded px-1.5 py-0.5 text-sm font-bold text-muted-foreground transition-colors hover:bg-muted"
-                              title="Click to edit class number"
-                            >
-                              {sc.classNumber ?? '—'}
-                            </button>
-                          )}
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          {sc.classDefinition?.name ?? 'Unknown'}
-                          {!isMultiBreed && sc.breed && (
-                            <span className="ml-1 text-muted-foreground">
-                              ({sc.breed.name})
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {sc.sex ? (
-                            <Badge variant="outline" className="text-xs">
-                              {sc.sex === 'dog' ? 'Dog' : 'Bitch'}
-                            </Badge>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">Any</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {isEditing ? (
-                            <div className="flex items-center gap-1">
-                              <Input
-                                type="number"
-                                min={0}
-                                value={editingFees[sc.id]}
-                                onChange={(e) =>
-                                  setEditingFees((prev) => ({
-                                    ...prev,
-                                    [sc.id]: e.target.value,
-                                  }))
-                                }
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') saveFee(sc.id);
-                                  if (e.key === 'Escape') cancelEditFee(sc.id);
-                                }}
-                                className="h-7 w-20 text-xs"
-                                autoFocus
-                              />
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="size-7"
-                                onClick={() => saveFee(sc.id)}
-                                disabled={updateMutation.isPending}
-                              >
-                                {updateMutation.isPending ? (
-                                  <Loader2 className="size-3 animate-spin" />
-                                ) : (
-                                  <span className="text-xs">OK</span>
-                                )}
-                              </Button>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="size-7"
-                                onClick={() => cancelEditFee(sc.id)}
-                              >
-                                <X className="size-3" />
-                              </Button>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => startEditFee(sc.id, sc.entryFee)}
-                              className="rounded px-1.5 py-0.5 text-sm font-semibold transition-colors hover:bg-muted"
-                              title="Click to edit fee"
-                            >
-                              {formatCurrency(sc.entryFee)}
-                            </button>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="size-7 text-destructive hover:text-destructive"
-                            onClick={() => {
-                              if (confirm('Remove this class from the show?')) {
-                                deleteMutation.mutate({ showClassId: sc.id });
-                              }
-                            }}
-                            disabled={deleteMutation.isPending}
+      <CardContent>
+        {/* Section-level drag and drop */}
+        <DragDropContext onDragEnd={(result) => {
+          if (result.type === 'SECTION') {
+            handleSectionDragEnd(result);
+          } else {
+            // Class-level drag — find which group
+            const gi = parseInt(result.source.droppableId.replace('group-', ''));
+            handleDragEnd(result, gi);
+          }
+        }}>
+          <Droppable droppableId="sections" type="SECTION">
+            {(sectionProvided) => (
+              <div ref={sectionProvided.innerRef} {...sectionProvided.droppableProps} className="space-y-3">
+                {grouped.map((group, gi) => {
+                  const isCollapsed = collapsedGroups[group.key] ?? false;
+                  const classRange = group.classes[0]?.classNumber && group.classes[group.classes.length - 1]?.classNumber
+                    ? `#${group.classes[0].classNumber}–${group.classes[group.classes.length - 1].classNumber}`
+                    : '';
+
+                  return (
+                    <Draggable key={group.key} draggableId={`section-${group.key}`} index={gi}>
+                      {(sectionDragProvided, sectionSnapshot) => (
+                        <div
+                          ref={sectionDragProvided.innerRef}
+                          {...sectionDragProvided.draggableProps}
+                          className={`rounded-lg border ${sectionSnapshot.isDragging ? 'shadow-lg ring-2 ring-primary/20' : ''}`}
+                        >
+                          {/* Section header — collapsible + draggable */}
+                          <button
+                            type="button"
+                            onClick={() => toggleGroup(group.key)}
+                            className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
                           >
-                            <Trash2 className="size-3.5" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-        ))}
+                            {/* Section drag handle */}
+                            <div
+                              {...sectionDragProvided.dragHandleProps}
+                              className="flex size-8 shrink-0 items-center justify-center rounded text-muted-foreground/30 active:bg-muted active:text-foreground"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <GripVertical className="size-4" />
+                            </div>
+
+                            <div className="min-w-0 flex-1">
+                              <span className={isMultiBreed
+                                ? "text-sm font-bold"
+                                : "text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+                              }>
+                                {group.label}
+                              </span>
+                            </div>
+
+                            <span className="shrink-0 text-xs text-muted-foreground">
+                              {group.classes.length} {classRange && `· ${classRange}`}
+                            </span>
+                            <ChevronDown className={`size-4 shrink-0 text-muted-foreground transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`} />
+                          </button>
+
+                          {/* Class items — collapsible */}
+                          {!isCollapsed && (
+                            <Droppable droppableId={`group-${gi}`} type="CLASS">
+                              {(provided) => (
+                                <div
+                                  ref={provided.innerRef}
+                                  {...provided.droppableProps}
+                                  className="space-y-1.5 px-3 pb-3"
+                                >
+                                  {group.classes.map((sc, index) => (
+                                    <Draggable key={sc.id} draggableId={sc.id} index={index}>
+                                      {(dragProvided, snapshot) => (
+                                        <div
+                                          ref={dragProvided.innerRef}
+                                          {...dragProvided.draggableProps}
+                                          className={`flex items-center gap-2 rounded-lg border bg-background p-2.5 ${snapshot.isDragging ? 'shadow-lg ring-2 ring-primary/20' : ''}`}
+                                        >
+                                          <div
+                                            {...dragProvided.dragHandleProps}
+                                            className="flex size-10 shrink-0 items-center justify-center rounded-md text-muted-foreground/30 active:bg-muted active:text-foreground"
+                                          >
+                                            <GripVertical className="size-5" />
+                                          </div>
+
+                                          <div className="min-w-0 flex-1">
+                                            <div className="flex items-center gap-2">
+                                              <span className="text-xs font-bold text-muted-foreground">
+                                                #{sc.classNumber ?? '—'}
+                                              </span>
+                                              <span className="truncate text-sm font-medium">
+                                                {sc.classDefinition?.name ?? 'Unknown'}
+                                              </span>
+                                            </div>
+                                            <div className="mt-0.5 flex items-center gap-2">
+                                              {sc.sex ? (
+                                                <Badge variant="outline" className="text-[10px]">
+                                                  {sc.sex === 'dog' ? 'Dog' : 'Bitch'}
+                                                </Badge>
+                                              ) : (
+                                                <span className="text-[10px] text-muted-foreground">Any sex</span>
+                                              )}
+                                              {!isMultiBreed && sc.breed && (
+                                                <span className="truncate text-[10px] text-muted-foreground">{sc.breed.name}</span>
+                                              )}
+                                            </div>
+                                          </div>
+
+                                          <div className="flex shrink-0 items-center gap-1">
+                                            <button
+                                              type="button"
+                                              onClick={() => startEditFee(sc.id, sc.entryFee)}
+                                              className="rounded px-2 py-1 text-sm font-semibold transition-colors hover:bg-muted"
+                                            >
+                                              {formatCurrency(sc.entryFee)}
+                                            </button>
+                                            <Button
+                                              size="icon"
+                                              variant="ghost"
+                                              className="size-9 text-destructive hover:text-destructive"
+                                              onClick={() => {
+                                                if (confirm('Remove this class from the show?')) {
+                                                  deleteMutation.mutate({ showClassId: sc.id });
+                                                }
+                                              }}
+                                              disabled={deleteMutation.isPending}
+                                            >
+                                              <Trash2 className="size-4" />
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </Draggable>
+                                  ))}
+                                  {provided.placeholder}
+                                </div>
+                              )}
+                            </Droppable>
+                          )}
+                        </div>
+                      )}
+                    </Draggable>
+                  );
+                })}
+                {sectionProvided.placeholder}
+              </div>
+            )}
+          </Droppable>
+        </DragDropContext>
       </CardContent>
     </Card>
   );

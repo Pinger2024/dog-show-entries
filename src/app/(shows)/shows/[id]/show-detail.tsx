@@ -546,11 +546,7 @@ export function ShowDetailClient() {
                         a.click();
                         setTimeout(() => URL.revokeObjectURL(url), 1000);
                       } catch {
-                        if (show.scheduleUrl) {
-                          window.open(show.scheduleUrl, '_blank');
-                        } else {
-                          alert('Unable to generate schedule. Please try again.');
-                        }
+                        alert('Unable to generate schedule. Please try again.');
                       } finally {
                         setGeneratingSchedule(false);
                       }

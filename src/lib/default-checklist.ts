@@ -156,7 +156,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
   {
     title: 'Publish schedule',
     description:
-      'Make the show live on Remi so exhibitors can view classes and judges. Upload a PDF schedule if required.',
+      'Make the show live on Remi so exhibitors can view classes and judges. The schedule PDF is generated automatically.',
     phase: 'pre_show',
     sortOrder: 1,
     relativeDueDays: 42,
