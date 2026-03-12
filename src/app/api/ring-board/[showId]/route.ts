@@ -1,25 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/auth-utils';
-import { auth } from '@/lib/auth';
 import { db } from '@/server/db';
-import { and, eq, asc, isNull } from 'drizzle-orm';
+import { eq, asc } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { RingBoard } from '@/components/ring-board/ring-board';
 import type { RingBoardShowInfo, RingBoardRing } from '@/components/ring-board/ring-board';
 import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
+import { authenticatePdfRequest, makePdfResponse } from '@/lib/pdf-utils';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ showId: string }> }
 ) {
   const { showId } = await params;
-  const user = await getCurrentUser();
-
-  if (!user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
 
   if (!db) {
     return NextResponse.json({ error: 'Database not available' }, { status: 500 });
@@ -34,50 +28,33 @@ export async function GET(
     return NextResponse.json({ error: 'Show not found' }, { status: 404 });
   }
 
-  // Admins bypass membership check (needed for impersonation)
-  const session = await auth();
-  const isAdmin = session?.user?.role === 'admin';
+  const authResult = await authenticatePdfRequest(show.organisationId);
+  if (authResult instanceof NextResponse) return authResult;
 
-  if (!isAdmin) {
-    const membership = await db.query.memberships.findFirst({
-      where: and(
-        eq(schema.memberships.userId, user.id),
-        eq(schema.memberships.organisationId, show.organisationId),
-        eq(schema.memberships.status, 'active')
-      ),
-    });
-
-    if (!membership) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-  }
-
-  // Fetch rings for this show
-  const showRings = await db.query.rings.findMany({
-    where: eq(schema.rings.showId, showId),
-    orderBy: [asc(schema.rings.number)],
-  });
-
-  // Fetch judge assignments with breed and judge details
-  const judgeAssignments = await db.query.judgeAssignments.findMany({
-    where: eq(schema.judgeAssignments.showId, showId),
-    with: { judge: true, breed: true, ring: true },
-  });
-
-  // Fetch show classes with entry counts
-  const showClasses = await db.query.showClasses.findMany({
-    where: eq(schema.showClasses.showId, showId),
-    with: {
-      classDefinition: true,
-      breed: true,
-      entryClasses: {
-        with: {
-          entry: true,
+  // Run independent DB queries in parallel
+  const [showRings, judgeAssignments, showClasses] = await Promise.all([
+    db.query.rings.findMany({
+      where: eq(schema.rings.showId, showId),
+      orderBy: [asc(schema.rings.number)],
+    }),
+    db.query.judgeAssignments.findMany({
+      where: eq(schema.judgeAssignments.showId, showId),
+      with: { judge: true, breed: true, ring: true },
+    }),
+    db.query.showClasses.findMany({
+      where: eq(schema.showClasses.showId, showId),
+      with: {
+        classDefinition: true,
+        breed: true,
+        entryClasses: {
+          with: {
+            entry: true,
+          },
         },
       },
-    },
-    orderBy: [asc(schema.showClasses.sortOrder), asc(schema.showClasses.classNumber)],
-  });
+      orderBy: [asc(schema.showClasses.sortOrder), asc(schema.showClasses.classNumber)],
+    }),
+  ]);
 
   // Build breed→ring and breed→judge maps
   const ringByBreed = new Map<string | null, number>();
@@ -156,15 +133,8 @@ export async function GET(
     const pdfDocument = React.createElement(RingBoard, { show: showInfo, rings });
     const buffer = await renderToBuffer(pdfDocument);
     const filename = `${sanitizeFilename(show.name)}-Ring-Plan.pdf`;
-
-    const disposition = request.nextUrl.searchParams.has('preview') ? 'inline' : 'attachment';
-    return new Response(buffer, {
-      headers: {
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': `${disposition}; filename="${filename}"`,
-        'Cache-Control': 'no-cache',
-      },
-    });
+    const isPreview = request.nextUrl.searchParams.has('preview');
+    return makePdfResponse(buffer, filename, isPreview);
   } catch (err) {
     console.error('Ring board PDF generation failed:', err);
     const message = err instanceof Error ? err.message : String(err);

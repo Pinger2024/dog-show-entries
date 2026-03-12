@@ -73,6 +73,7 @@ export default function PrintShopPage() {
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<{ url: string; label: string } | null>(null);
+  const [previewLoaded, setPreviewLoaded] = useState(false);
   const [delivery, setDelivery] = useState({
     name: '', address1: '', address2: '', town: '', postcode: '', phone: '',
   });
@@ -403,6 +404,7 @@ export default function PrintShopPage() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
+                                setPreviewLoaded(false);
                                 setPreviewUrl({ url, label: product.label });
                               }}
                               className="ml-auto flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
@@ -581,21 +583,19 @@ export default function PrintShopPage() {
             <div className="relative flex-1 overflow-hidden px-6 pb-6">
               {previewUrl && (
                 <>
-                  <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-muted/50 transition-opacity" id="preview-loading">
-                    <div className="flex items-center gap-2 rounded-md bg-background px-4 py-2 shadow-sm">
-                      <Loader2 className="size-4 animate-spin" />
-                      <span className="text-sm text-muted-foreground">Loading preview...</span>
+                  {!previewLoaded && (
+                    <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-muted/50">
+                      <div className="flex items-center gap-2 rounded-md bg-background px-4 py-2 shadow-sm">
+                        <Loader2 className="size-4 animate-spin" />
+                        <span className="text-sm text-muted-foreground">Loading preview...</span>
+                      </div>
                     </div>
-                  </div>
+                  )}
                   <iframe
                     src={previewUrl.url}
                     className="h-full w-full rounded-md border"
                     title={`${previewUrl.label} preview`}
-                    onLoad={(e) => {
-                      // Hide loading overlay when iframe finishes loading
-                      const loader = (e.target as HTMLIFrameElement).parentElement?.querySelector('#preview-loading');
-                      if (loader) (loader as HTMLElement).style.opacity = '0';
-                    }}
+                    onLoad={() => setPreviewLoaded(true)}
                   />
                 </>
               )}

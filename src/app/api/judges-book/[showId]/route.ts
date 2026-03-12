@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/auth-utils';
-import { auth } from '@/lib/auth';
 import { db } from '@/server/db';
-import { and, eq, isNull, asc } from 'drizzle-orm';
+import { eq, asc } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { JudgesBook } from '@/components/judges-book/judges-book';
 import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
+import { authenticatePdfRequest, makePdfResponse } from '@/lib/pdf-utils';
 
 export type JudgesBookClass = {
   classNumber: number | null;
@@ -31,15 +30,10 @@ export type JudgesBookShowInfo = {
 };
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ showId: string }> }
 ) {
   const { showId } = await params;
-  const user = await getCurrentUser();
-
-  if (!user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
 
   if (!db) {
     return NextResponse.json({ error: 'Database not available' }, { status: 500 });
@@ -54,47 +48,31 @@ export async function GET(
     return NextResponse.json({ error: 'Show not found' }, { status: 404 });
   }
 
-  // Verify user belongs to this show's organisation
-  // Admins bypass membership check (needed for impersonation)
-  const session = await auth();
-  const isAdmin = session?.user?.role === 'admin';
+  const authResult = await authenticatePdfRequest(show.organisationId);
+  if (authResult instanceof NextResponse) return authResult;
 
-  if (!isAdmin) {
-    const membership = await db.query.memberships.findFirst({
-      where: and(
-        eq(schema.memberships.userId, user.id),
-        eq(schema.memberships.organisationId, show.organisationId),
-        eq(schema.memberships.status, 'active')
-      ),
-    });
-
-    if (!membership) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-  }
-
-  // Fetch show classes ordered by sort order
-  const showClasses = await db.query.showClasses.findMany({
-    where: eq(schema.showClasses.showId, showId),
-    with: {
-      classDefinition: true,
-      breed: true,
-      entryClasses: {
-        with: {
-          entry: {
-            with: { dog: true },
+  // Run independent DB queries in parallel
+  const [showClasses, judgeAssignments] = await Promise.all([
+    db.query.showClasses.findMany({
+      where: eq(schema.showClasses.showId, showId),
+      with: {
+        classDefinition: true,
+        breed: true,
+        entryClasses: {
+          with: {
+            entry: {
+              with: { dog: true },
+            },
           },
         },
       },
-    },
-    orderBy: [asc(schema.showClasses.sortOrder), asc(schema.showClasses.classNumber)],
-  });
-
-  // Fetch judge assignments
-  const judgeAssignments = await db.query.judgeAssignments.findMany({
-    where: eq(schema.judgeAssignments.showId, showId),
-    with: { judge: true, breed: true, ring: true },
-  });
+      orderBy: [asc(schema.showClasses.sortOrder), asc(schema.showClasses.classNumber)],
+    }),
+    db.query.judgeAssignments.findMany({
+      where: eq(schema.judgeAssignments.showId, showId),
+      with: { judge: true, breed: true, ring: true },
+    }),
+  ]);
 
   // Build breed→judge and breed→ring lookups
   const judgeByBreed = new Map<string | null, string>();
@@ -147,14 +125,8 @@ export async function GET(
     const pdfDocument = React.createElement(JudgesBook, { show: showInfo, classes });
     const buffer = await renderToBuffer(pdfDocument);
     const filename = `${sanitizeFilename(show.name)}-Judges-Book.pdf`;
-
-    return new Response(buffer, {
-      headers: {
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-        'Cache-Control': 'no-cache',
-      },
-    });
+    const isPreview = request.nextUrl.searchParams.has('preview');
+    return makePdfResponse(buffer, filename, isPreview);
   } catch (err) {
     console.error('Judge\'s book PDF generation failed:', err);
     const message = err instanceof Error ? err.message : String(err);

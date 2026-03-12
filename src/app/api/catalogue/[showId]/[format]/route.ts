@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/auth-utils';
-import { auth } from '@/lib/auth';
 import { db } from '@/server/db';
 import { and, eq, isNull, asc } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
@@ -14,17 +12,13 @@ import { CatalogueAlphabetical } from '@/components/catalogue/catalogue-alphabet
 import type { CatalogueEntry, CatalogueShowInfo } from '@/components/catalogue/catalogue-standard';
 import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
+import { authenticatePdfRequest, validateRasterLogoUrl, makePdfResponse } from '@/lib/pdf-utils';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ showId: string; format: string }> }
 ) {
   const { showId, format } = await params;
-  const user = await getCurrentUser();
-
-  if (!user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
 
   if (!db) {
     return NextResponse.json({ error: 'Database not available' }, { status: 500 });
@@ -43,33 +37,46 @@ export async function GET(
     return NextResponse.json({ error: 'Show not found' }, { status: 404 });
   }
 
-  // Verify user belongs to this show's organisation
-  // Admins bypass membership check (needed for impersonation)
-  const session = await auth();
-  const isAdmin = session?.user?.role === 'admin';
+  const authResult = await authenticatePdfRequest(show.organisationId);
+  if (authResult instanceof NextResponse) return authResult;
 
-  if (!isAdmin) {
-    const membership = await db.query.memberships.findFirst({
+  // Run independent DB queries and logo validation in parallel
+  const [judgeAssignmentRows, showClassRows, entries, safeLogoUrl] = await Promise.all([
+    db.query.judgeAssignments.findMany({
+      where: eq(schema.judgeAssignments.showId, showId),
+      with: { judge: true, breed: true },
+    }),
+    db.query.showClasses.findMany({
+      where: eq(schema.showClasses.showId, showId),
+      with: { classDefinition: true },
+      orderBy: [asc(schema.showClasses.sortOrder), asc(schema.showClasses.classNumber)],
+    }),
+    db.query.entries.findMany({
       where: and(
-        eq(schema.memberships.userId, user.id),
-        eq(schema.memberships.organisationId, show.organisationId),
-        eq(schema.memberships.status, 'active')
+        eq(schema.entries.showId, showId),
+        format === 'absentees'
+          ? eq(schema.entries.status, 'withdrawn')
+          : eq(schema.entries.status, 'confirmed'),
+        isNull(schema.entries.deletedAt)
       ),
-    });
-
-    if (!membership) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-  }
-
-  // Query judge assignments for this show (breed → judge name lookup)
-  const judgeAssignmentRows = await db.query.judgeAssignments.findMany({
-    where: eq(schema.judgeAssignments.showId, showId),
-    with: {
-      judge: true,
-      breed: true,
-    },
-  });
+      with: {
+        dog: {
+          with: {
+            breed: { with: { group: true } },
+            owners: { orderBy: [asc(schema.dogOwners.sortOrder)] },
+            titles: true,
+          },
+        },
+        exhibitor: true,
+        handler: true,
+        entryClasses: {
+          with: { showClass: { with: { classDefinition: true } } },
+        },
+      },
+      orderBy: [asc(schema.entries.catalogueNumber)],
+    }),
+    validateRasterLogoUrl(show.organisation?.logoUrl),
+  ]);
 
   const judgesByBreedName: Record<string, string> = {};
   for (const ja of judgeAssignmentRows) {
@@ -77,13 +84,6 @@ export async function GET(
       judgesByBreedName[ja.breed.name] = ja.judge.name;
     }
   }
-
-  // Query show classes with class definitions for front matter
-  const showClassRows = await db.query.showClasses.findMany({
-    where: eq(schema.showClasses.showId, showId),
-    with: { classDefinition: true },
-    orderBy: [asc(schema.showClasses.sortOrder), asc(schema.showClasses.classNumber)],
-  });
 
   // Deduplicate class definitions for front matter
   const seenDefIds = new Set<string>();
@@ -97,51 +97,6 @@ export async function GET(
       });
     }
   }
-
-  // Build show class lookup for catalogue (classNumber → name, sex, etc.)
-  const showClassLookup: Record<string, {
-    classNumber: number | null;
-    className: string | undefined;
-    sex: string | null;
-    sortOrder: number;
-    breedId: string | null;
-  }> = {};
-  for (const sc of showClassRows) {
-    showClassLookup[sc.id] = {
-      classNumber: sc.classNumber,
-      className: sc.classDefinition?.name,
-      sex: sc.sex,
-      sortOrder: sc.sortOrder,
-      breedId: sc.breedId,
-    };
-  }
-
-  const entries = await db.query.entries.findMany({
-    where: and(
-      eq(schema.entries.showId, showId),
-      format === 'absentees'
-        ? eq(schema.entries.status, 'withdrawn')
-        : eq(schema.entries.status, 'confirmed'),
-      isNull(schema.entries.deletedAt)
-    ),
-    with: {
-      dog: {
-        with: {
-          breed: { with: { group: true } },
-          owners: { orderBy: [asc(schema.dogOwners.sortOrder)] },
-          titles: true,
-        },
-      },
-      exhibitor: true,
-      handler: true,
-      entryClasses: {
-        with: {
-          showClass: { with: { classDefinition: true } },
-        },
-      },
-    },
-    orderBy: [asc(schema.entries.catalogueNumber)],
-  });
 
   // Use RKC catalogue formatting for standard and by-breed formats
   const useKCFormat = format === 'standard' || (format === 'by-class' && show.showScope !== 'single_breed');
@@ -178,20 +133,6 @@ export async function GET(
     entryType: entry.entryType,
   }));
 
-  // Pre-validate logo URL — @react-pdf/renderer only supports raster images (PNG/JPEG), not SVG
-  let safeLogoUrl: string | undefined;
-  const rawLogoUrl = show.organisation?.logoUrl;
-  if (rawLogoUrl) {
-    try {
-      const logoRes = await fetch(rawLogoUrl, { signal: AbortSignal.timeout(5000) });
-      const ct = logoRes.headers.get('content-type') ?? '';
-      const isRaster = logoRes.ok && ct.startsWith('image/') && !ct.includes('svg');
-      if (isRaster) safeLogoUrl = rawLogoUrl;
-    } catch {
-      console.warn('Logo fetch failed, omitting from catalogue:', rawLogoUrl);
-    }
-  }
-
   const showInfo: CatalogueShowInfo = {
     name: show.name,
     showType: show.showType,
@@ -200,7 +141,7 @@ export async function GET(
     venueAddress: show.venue?.address ?? undefined,
     organisation: show.organisation?.name,
     kcLicenceNo: show.kcLicenceNo,
-    logoUrl: safeLogoUrl,
+    logoUrl: safeLogoUrl ?? undefined,
     secretaryEmail: show.secretaryEmail ?? undefined,
     judgesByBreedName,
     classDefinitions,
@@ -241,15 +182,8 @@ export async function GET(
       absentees: 'Absentees',
     };
     const filename = `${sanitizeFilename(show.name)}-${formatLabels[format] ?? 'Catalogue'}.pdf`;
-
-    const disposition = request.nextUrl.searchParams.has('preview') ? 'inline' : 'attachment';
-    return new Response(buffer, {
-      headers: {
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': `${disposition}; filename="${filename}"`,
-        'Cache-Control': 'no-cache',
-      },
-    });
+    const isPreview = request.nextUrl.searchParams.has('preview');
+    return makePdfResponse(buffer, filename, isPreview);
   } catch (err) {
     console.error('PDF generation failed:', err);
     const message = err instanceof Error ? err.message : String(err);

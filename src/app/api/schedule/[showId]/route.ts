@@ -13,6 +13,7 @@ import type {
 } from '@/components/schedule/show-schedule';
 import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
+import { makePdfResponse } from '@/lib/pdf-utils';
 
 export async function GET(
   request: NextRequest,
@@ -171,15 +172,8 @@ export async function GET(
     });
     const buffer = await renderToBuffer(pdfDocument);
     const filename = `${sanitizeFilename(show.name)}-Schedule.pdf`;
-
-    const disposition = request.nextUrl.searchParams.has('preview') ? 'inline' : 'attachment';
-    return new Response(buffer, {
-      headers: {
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': `${disposition}; filename="${filename}"`,
-        'Cache-Control': 'no-cache',
-      },
-    });
+    const isPreview = request.nextUrl.searchParams.has('preview');
+    return makePdfResponse(buffer, filename, isPreview);
   } catch (err) {
     console.error('Schedule PDF generation failed:', err);
     const message = err instanceof Error ? err.message : String(err);

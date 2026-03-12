@@ -177,9 +177,6 @@ export function CatalogueStandard({ show, entries }: Props) {
     }
   }
 
-  // Track "already rendered full" per catalogue number across all pages
-  const renderedFull = new Set<string>();
-
   // Flatten all breeds into a list of page-sized chunks to avoid @react-pdf/renderer
   // coordinate overflow bug (single <Page wrap> with many nodes causes layout.top to
   // exceed pdfkit's number limits). Each breed gets its own <Page>.
@@ -198,6 +195,25 @@ export function CatalogueStandard({ show, entries }: Props) {
         judge: show.judgesByBreedName?.[breedName],
         breedBucket,
       });
+    }
+  }
+
+  // Pre-compute which (catNo, classKey) pairs are first appearances so we avoid
+  // mutating state during JSX render. Walk the same iteration order as the render.
+  const firstAppearanceContext = new Map<string, string>();
+  for (const { breedName, breedBucket } of breedPages) {
+    for (const sex of ['dog', 'bitch', 'unknown']) {
+      const classBuckets = breedBucket.sexes[sex];
+      if (!classBuckets?.length) continue;
+      for (const bucket of classBuckets) {
+        const classKey = `${bucket.classNumber ?? ''}-${bucket.className}`;
+        for (const entry of sortByCatNo(bucket.entries)) {
+          const catNo = entry.catalogueNumber;
+          if (catNo && !firstAppearanceContext.has(catNo)) {
+            firstAppearanceContext.set(catNo, `${breedName}-${sex}-${classKey}`);
+          }
+        }
+      }
     }
   }
 
@@ -235,11 +251,9 @@ export function CatalogueStandard({ show, entries }: Props) {
 
                     {sortByCatNo(bucket.entries).map((entry) => {
                       const catNo = entry.catalogueNumber ?? '';
-                      const isFirstAppearance = !renderedFull.has(catNo);
-
-                      if (isFirstAppearance && catNo) {
-                        renderedFull.add(catNo);
-                      }
+                      const classKey = `${bucket.classNumber ?? ''}-${bucket.className}`;
+                      const contextKey = `${breedName}-${sex}-${classKey}`;
+                      const isFirstAppearance = !catNo || firstAppearanceContext.get(catNo) === contextKey;
 
                       if (!isFirstAppearance) {
                         // Abbreviated entry — [see class X]
