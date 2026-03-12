@@ -20,6 +20,7 @@ export function ProfileForm() {
 
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
+  const [postcode, setPostcode] = useState('');
   const [phone, setPhone] = useState('');
   const [kcAccountNo, setKcAccountNo] = useState('');
   const [saved, setSaved] = useState(false);
@@ -28,6 +29,7 @@ export function ProfileForm() {
     if (profile) {
       setName(profile.name ?? '');
       setAddress(profile.address ?? '');
+      setPostcode(profile.postcode ?? '');
       setPhone(profile.phone ?? '');
       setKcAccountNo(profile.kcAccountNo ?? '');
     }
@@ -40,6 +42,7 @@ export function ProfileForm() {
     await updateProfile.mutateAsync({
       name: name || undefined,
       address: address || null,
+      postcode: postcode || null,
       phone: phone || null,
       kcAccountNo: kcAccountNo || null,
     });
@@ -88,7 +91,8 @@ export function ProfileForm() {
             <PostcodeLookup
               compact
               onSelect={(result) => {
-                setAddress(formatAddress(result) + ', ' + result.postcode);
+                setAddress(formatAddress(result));
+                setPostcode(result.postcode);
               }}
             />
             <Input
@@ -96,6 +100,13 @@ export function ProfileForm() {
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               placeholder="Your address"
+              className="h-11"
+            />
+            <Input
+              id="postcode"
+              value={postcode}
+              onChange={(e) => setPostcode(e.target.value)}
+              placeholder="Postcode"
               className="h-11"
             />
           </div>

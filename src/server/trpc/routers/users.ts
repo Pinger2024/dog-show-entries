@@ -27,6 +27,7 @@ export const usersRouter = createTRPCRouter({
       z.object({
         name: z.string().min(1).max(255).optional(),
         address: z.string().nullable().optional(),
+        postcode: z.string().nullable().optional(),
         phone: z.string().nullable().optional(),
         kcAccountNo: z.string().nullable().optional(),
       })

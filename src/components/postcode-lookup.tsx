@@ -78,6 +78,7 @@ export function PostcodeLookup({ onSelect, compact }: PostcodeLookupProps) {
   const [loading, setLoading] = useState(false);
   const [selecting, setSelecting] = useState(false);
   const [focused, setFocused] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const placesLibRef = useRef<google.maps.PlacesLibrary | null>(null);
   const sessionTokenRef = useRef<google.maps.places.AutocompleteSessionToken | null>(null);
@@ -134,18 +135,21 @@ export function PostcodeLookup({ onSelect, compact }: PostcodeLookupProps) {
     } catch (err) {
       console.error('[PostcodeLookup] Autocomplete error:', err);
       setSuggestions([]);
+      setError('Address search unavailable. Please type your address manually.');
     }
   }, []);
 
   function handleInputChange(value: string) {
     setQuery(value);
+    setError(null);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (value.length < 3) {
       setSuggestions([]);
+      setLoading(false);
       return;
     }
-    setLoading(true);
     debounceRef.current = setTimeout(async () => {
+      setLoading(true);
       await fetchSuggestions(value);
       setLoading(false);
     }, 300);
@@ -176,13 +180,18 @@ export function PostcodeLookup({ onSelect, compact }: PostcodeLookupProps) {
       sessionTokenRef.current = new lib.AutocompleteSessionToken();
     } catch {
       // If place details fail, use the suggestion text as a fallback
+      // Try to extract a UK postcode from the suggestion text
+      const postcodeMatch = suggestion.fullText.match(/\b([A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2})\b/i);
       onSelect({
         address: suggestion.mainText,
         town: suggestion.secondaryText.replace(/, UK$/, ''),
-        postcode: '',
+        postcode: postcodeMatch?.[1]?.toUpperCase() ?? '',
         fullAddress: suggestion.fullText,
       });
       setQuery('');
+      if (!postcodeMatch) {
+        setError('Address found but postcode could not be determined. Please enter it manually.');
+      }
     } finally {
       setSelecting(false);
     }
@@ -214,7 +223,7 @@ export function PostcodeLookup({ onSelect, compact }: PostcodeLookupProps) {
       </div>
 
       {focused && suggestions.length > 0 && (
-        <div className="absolute z-50 w-full max-h-48 overflow-y-auto rounded-md border bg-background shadow-md">
+        <div className="absolute left-0 right-0 z-50 max-h-48 overflow-y-auto overscroll-contain rounded-md border bg-background shadow-md">
           {suggestions.map((s) => (
             <button
               key={s.placeId}
@@ -233,6 +242,10 @@ export function PostcodeLookup({ onSelect, compact }: PostcodeLookupProps) {
             </button>
           ))}
         </div>
+      )}
+
+      {error && (
+        <p className="text-xs text-amber-600 dark:text-amber-400">{error}</p>
       )}
     </div>
   );
