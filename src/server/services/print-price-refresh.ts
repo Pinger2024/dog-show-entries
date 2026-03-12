@@ -13,7 +13,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { printPriceCache } from '@/server/db/schema';
 import { getPrintableProducts } from '@/lib/print-products';
-import { capitaliseServiceLevel } from './tradeprint';
+import { capitaliseServiceLevel, getSDK } from './tradeprint';
 
 const SERVICE_LEVELS = ['Saver', 'Standard', 'Express'] as const;
 
@@ -70,10 +70,7 @@ export async function refreshAllPrintPrices(): Promise<{
 async function fetchAndParseAllPrices(
   productName: string
 ): Promise<Array<typeof printPriceCache.$inferInsert>> {
-  // Lazy-load the SDK (same pattern as tradeprint.ts)
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const SDK = require('tradeprint-node-sdk');
-
+  const SDK = getSDK();
   const productService = new SDK.ProductService();
   const response = await productService
     .priceListSingleProductRequest(productName)

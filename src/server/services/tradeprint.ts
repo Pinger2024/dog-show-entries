@@ -10,7 +10,7 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _sdk: any = null;
 
-function getSDK() {
+export function getSDK() {
   if (!_sdk) {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     _sdk = require('tradeprint-node-sdk');
