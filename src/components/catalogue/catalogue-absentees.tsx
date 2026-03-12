@@ -57,7 +57,7 @@ export function CatalogueAbsentees({ show, entries }: Props) {
         ) : (
           <View>
             {/* Table header */}
-            <View style={styles.absenteeHeaderRow}>
+            <View style={styles.absenteeHeaderRow} minPresenceAhead={40}>
               <HeaderCell width={colWidths.catNo}>Cat.</HeaderCell>
               <HeaderCell width={colWidths.dog}>Dog</HeaderCell>
               <HeaderCell width={colWidths.breed}>Breed</HeaderCell>

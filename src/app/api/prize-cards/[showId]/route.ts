@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth-utils';
+import { auth } from '@/lib/auth';
 import { db } from '@/server/db';
 import { and, eq, asc } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
@@ -34,16 +35,22 @@ export async function GET(
   }
 
   // Verify user belongs to this show's organisation
-  const membership = await db.query.memberships.findFirst({
-    where: and(
-      eq(schema.memberships.userId, user.id),
-      eq(schema.memberships.organisationId, show.organisationId),
-      eq(schema.memberships.status, 'active')
-    ),
-  });
+  // Admins bypass membership check (needed for impersonation)
+  const session = await auth();
+  const isAdmin = session?.user?.role === 'admin';
 
-  if (!membership) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (!isAdmin) {
+    const membership = await db.query.memberships.findFirst({
+      where: and(
+        eq(schema.memberships.userId, user.id),
+        eq(schema.memberships.organisationId, show.organisationId),
+        eq(schema.memberships.status, 'active')
+      ),
+    });
+
+    if (!membership) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
   }
 
   // Parse query params
@@ -81,12 +88,26 @@ export async function GET(
     judgeName: judgeByBreed.get(sc.breedId) ?? judgeByBreed.get(null) ?? null,
   }));
 
+  // Pre-validate logo URL — @react-pdf/renderer only supports raster images (PNG/JPEG), not SVG
+  let safeLogoUrl: string | null = null;
+  const rawLogoUrl = show.organisation?.logoUrl;
+  if (rawLogoUrl) {
+    try {
+      const logoRes = await fetch(rawLogoUrl, { signal: AbortSignal.timeout(5000) });
+      const ct = logoRes.headers.get('content-type') ?? '';
+      const isRaster = logoRes.ok && ct.startsWith('image/') && !ct.includes('svg');
+      if (isRaster) safeLogoUrl = rawLogoUrl;
+    } catch {
+      console.warn('Logo fetch failed, omitting from prize cards:', rawLogoUrl);
+    }
+  }
+
   const showInfo: PrizeCardShowInfo = {
     name: show.name,
     showType: show.showType,
     date: show.startDate,
     organisation: show.organisation?.name ?? null,
-    logoUrl: show.organisation?.logoUrl ?? null,
+    logoUrl: safeLogoUrl,
   };
 
   try {
@@ -100,17 +121,19 @@ export async function GET(
     const buffer = await renderToBuffer(pdfDocument);
     const filename = `${sanitizeFilename(show.name)}-Prize-Cards.pdf`;
 
+    const disposition = request.nextUrl.searchParams.has('preview') ? 'inline' : 'attachment';
     return new Response(buffer, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Content-Disposition': `${disposition}; filename="${filename}"`,
         'Cache-Control': 'no-cache',
       },
     });
   } catch (err) {
     console.error('Prize card PDF generation failed:', err);
+    const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { error: 'PDF generation failed' },
+      { error: 'PDF generation failed', detail: message },
       { status: 500 }
     );
   }

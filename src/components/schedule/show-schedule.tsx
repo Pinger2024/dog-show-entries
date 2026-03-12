@@ -686,7 +686,7 @@ function SectionBand({ title }: { title: string }) {
 
 function InfoCard({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
-    <View style={s.infoCard}>
+    <View style={s.infoCard} wrap={false}>
       {title && <Text style={s.infoCardTitle}>{title}</Text>}
       {children}
     </View>

@@ -15,7 +15,7 @@ import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ showId: string }> }
 ) {
   const { showId } = await params;
@@ -172,17 +172,19 @@ export async function GET(
     const buffer = await renderToBuffer(pdfDocument);
     const filename = `${sanitizeFilename(show.name)}-Schedule.pdf`;
 
+    const disposition = request.nextUrl.searchParams.has('preview') ? 'inline' : 'attachment';
     return new Response(buffer, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Content-Disposition': `${disposition}; filename="${filename}"`,
         'Cache-Control': 'no-cache',
       },
     });
   } catch (err) {
     console.error('Schedule PDF generation failed:', err);
+    const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { error: 'PDF generation failed' },
+      { error: 'PDF generation failed', detail: message },
       { status: 500 }
     );
   }

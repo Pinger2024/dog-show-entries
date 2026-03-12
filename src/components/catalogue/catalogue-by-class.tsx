@@ -58,90 +58,92 @@ export function CatalogueByClass({ show, entries }: Props) {
 
   return (
     <Document>
-      <Page size="A5" style={styles.page} wrap>
-        <CatalogueHeader
-          showName={show.name}
-          showType={show.showType}
-          organisationName={show.organisation}
-          date={show.date}
-          venue={show.venue}
-          venueAddress={show.venueAddress}
-          kcLicenceNo={show.kcLicenceNo ?? undefined}
-          logoUrl={show.logoUrl}
-          subtitle="Catalogue — By Class"
-        />
+      {/* One <Page> per class — avoids @react-pdf coordinate overflow on large shows */}
+      {classKeys.map((classKey, idx) => {
+        const { className, sex, classNumber, entries: classEntries } = grouped[classKey];
+        const sorted = [...classEntries].sort(
+          (a, b) => (a.catalogueNumber ?? '').localeCompare(b.catalogueNumber ?? '', undefined, { numeric: true })
+        );
 
-        {classKeys.map((classKey) => {
-          const { className, sex, classNumber, entries: classEntries } = grouped[classKey];
-          const sorted = [...classEntries].sort(
-            (a, b) => (a.catalogueNumber ?? '').localeCompare(b.catalogueNumber ?? '', undefined, { numeric: true })
-          );
+        return (
+          <Page key={classKey} size="A5" style={styles.page} wrap>
+            {/* Header on first page only */}
+            {idx === 0 && (
+              <CatalogueHeader
+                showName={show.name}
+                showType={show.showType}
+                organisationName={show.organisation}
+                date={show.date}
+                venue={show.venue}
+                venueAddress={show.venueAddress}
+                kcLicenceNo={show.kcLicenceNo ?? undefined}
+                logoUrl={show.logoUrl}
+                subtitle="Catalogue — By Class"
+              />
+            )}
 
-          return (
-            <View key={classKey}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', ...styles.groupHeading }}>
-                <Text>{classNumber ? `Class ${classNumber}: ${className}` : className}</Text>
-                {sex && (
-                  <Text style={{ fontSize: 9, fontStyle: 'italic', color: '#fff' }}>
-                    ({sex === 'dog' ? 'Dogs' : sex === 'bitch' ? 'Bitches' : 'Open'})
-                  </Text>
-                )}
-              </View>
-              <Text style={styles.classEntryCount}>
-                {sorted.length} {sorted.length === 1 ? 'entry' : 'entries'}
-              </Text>
-
-              {sorted.map((entry) => {
-                const pedigree = formatPedigreeKC(entry.sire, entry.dam);
-                return (
-                  <View
-                    key={`${className}-${entry.catalogueNumber}`}
-                    style={styles.entryRowWrap}
-                    wrap={false}
-                  >
-                    {/* Catalogue number + dog name (UPPER CASE) */}
-                    <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                      <Text style={styles.catalogueNumber}>
-                        {entry.catalogueNumber ?? '—'}
-                      </Text>
-                      <Text style={styles.dogName}>
-                        {uppercaseName(entry.dogName) || 'Unnamed'}
-                      </Text>
-                    </View>
-                    <Text style={styles.entryDetail}>
-                      {[
-                        entry.breed,
-                        entry.dateOfBirth ? `D.O.B: ${formatDobKC(entry.dateOfBirth)}` : null,
-                        entry.sex === 'dog' ? 'Dog' : entry.sex === 'bitch' ? 'Bitch' : null,
-                      ].filter(Boolean).join('  —  ')}
-                    </Text>
-                    {/* Pedigree: By [sire] ex [dam] */}
-                    {pedigree && (
-                      <Text style={styles.entryDetail}>{pedigree}</Text>
-                    )}
-                    {entry.owners.length > 0 && (
-                      <Text style={styles.entryDetail}>
-                        <Text style={styles.entryDetailLabel}>
-                          Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
-                        </Text>
-                        {entry.owners.map((o) => uppercaseName(o.name)).join(' & ')}
-                      </Text>
-                    )}
-                  </View>
-                );
-              })}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', ...styles.groupHeading }}>
+              <Text>{classNumber ? `Class ${classNumber}: ${className}` : className}</Text>
+              {sex && (
+                <Text style={{ fontSize: 9, fontStyle: 'italic', color: '#fff' }}>
+                  ({sex === 'dog' ? 'Dogs' : sex === 'bitch' ? 'Bitches' : 'Open'})
+                </Text>
+              )}
             </View>
-          );
-        })}
+            <Text style={styles.classEntryCount}>
+              {sorted.length} {sorted.length === 1 ? 'entry' : 'entries'}
+            </Text>
 
-        <Text
-          style={styles.footer}
-          render={({ pageNumber, totalPages }) =>
-            `Page ${pageNumber} of ${totalPages}  ·  Generated by Remi`
-          }
-          fixed
-        />
-      </Page>
+            {sorted.map((entry) => {
+              const pedigree = formatPedigreeKC(entry.sire, entry.dam);
+              return (
+                <View
+                  key={`${className}-${entry.catalogueNumber}`}
+                  style={styles.entryRowWrap}
+                  wrap={false}
+                >
+                  {/* Catalogue number + dog name (UPPER CASE) */}
+                  <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                    <Text style={styles.catalogueNumber}>
+                      {entry.catalogueNumber ?? '—'}
+                    </Text>
+                    <Text style={styles.dogName}>
+                      {uppercaseName(entry.dogName) || 'Unnamed'}
+                    </Text>
+                  </View>
+                  <Text style={styles.entryDetail}>
+                    {[
+                      entry.breed,
+                      entry.dateOfBirth ? `D.O.B: ${formatDobKC(entry.dateOfBirth)}` : null,
+                      entry.sex === 'dog' ? 'Dog' : entry.sex === 'bitch' ? 'Bitch' : null,
+                    ].filter(Boolean).join('  —  ')}
+                  </Text>
+                  {/* Pedigree: By [sire] ex [dam] */}
+                  {pedigree && (
+                    <Text style={styles.entryDetail}>{pedigree}</Text>
+                  )}
+                  {entry.owners.length > 0 && (
+                    <Text style={styles.entryDetail}>
+                      <Text style={styles.entryDetailLabel}>
+                        Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
+                      </Text>
+                      {entry.owners.map((o) => uppercaseName(o.name)).join(' & ')}
+                    </Text>
+                  )}
+                </View>
+              );
+            })}
+
+            <Text
+              style={styles.footer}
+              render={({ pageNumber, totalPages }) =>
+                `Page ${pageNumber} of ${totalPages}  ·  Generated by Remi`
+              }
+              fixed
+            />
+          </Page>
+        );
+      })}
     </Document>
   );
 }

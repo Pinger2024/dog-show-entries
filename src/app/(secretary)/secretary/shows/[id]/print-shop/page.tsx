@@ -20,6 +20,9 @@ import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
 import { StripeProvider } from '@/components/providers/stripe-provider';
 import { PostcodeLookup } from '@/components/postcode-lookup';
 import { PrintPaymentForm } from './_components/print-payment-form';
@@ -44,20 +47,18 @@ const TIER_STYLES = {
   budget: { icon: Package, colour: 'text-slate-500', bg: 'bg-slate-50 border-slate-200', ring: 'ring-slate-200' },
 } as const;
 
-/** Build the PDF preview URL for a document type */
+/** Build the PDF preview URL for a document type (?preview renders inline in browser) */
 function getPreviewUrl(showId: string, documentType: string, documentFormat?: string): string | null {
   switch (documentType) {
     case 'catalogue':
-      return `/api/catalogue/${showId}/${documentFormat ?? 'standard'}`;
+      return `/api/catalogue/${showId}/${documentFormat ?? 'standard'}?preview`;
     case 'schedule':
-      return `/api/schedule/${showId}`;
+      return `/api/schedule/${showId}?preview`;
     case 'prize_cards':
-      return `/api/prize-cards/${showId}`;
+      return `/api/prize-cards/${showId}?preview`;
     case 'ring_board':
-      return `/api/ring-board/${showId}`;
+      return `/api/ring-board/${showId}?preview`;
     case 'ring_numbers':
-      // Ring numbers use the same Flyers product as prize cards but are single-sided
-      // They don't have a separate PDF route yet
       return null;
     default:
       return null;
@@ -71,6 +72,7 @@ export default function PrintShopPage() {
   const [step, setStep] = useState<Step>('catalog');
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<{ url: string; label: string } | null>(null);
   const [delivery, setDelivery] = useState({
     name: '', address1: '', address2: '', town: '', postcode: '', phone: '',
   });
@@ -396,19 +398,19 @@ export default function PrintShopPage() {
                           </Badge>
                         )}
                         {(() => {
-                          const previewUrl = getPreviewUrl(showId, product.documentType, selectedItem?.documentFormat);
-                          return previewUrl ? (
-                            <a
-                              href={previewUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
+                          const url = getPreviewUrl(showId, product.documentType, selectedItem?.documentFormat);
+                          return url ? (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPreviewUrl({ url, label: product.label });
+                              }}
                               className="ml-auto flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                               title={`Preview ${product.label} PDF`}
                             >
                               <Eye className="size-3.5" />
                               <span className="hidden sm:inline">Preview</span>
-                            </a>
+                            </button>
                           ) : null;
                         })()}
                       </div>
@@ -569,6 +571,37 @@ export default function PrintShopPage() {
             </div>
           </div>
         )}
+
+        {/* PDF Preview dialog */}
+        <Dialog open={!!previewUrl} onOpenChange={(open) => !open && setPreviewUrl(null)}>
+          <DialogContent className="flex h-[85vh] max-w-3xl flex-col p-0">
+            <DialogHeader className="px-6 pt-6 pb-2">
+              <DialogTitle>{previewUrl?.label} Preview</DialogTitle>
+            </DialogHeader>
+            <div className="relative flex-1 overflow-hidden px-6 pb-6">
+              {previewUrl && (
+                <>
+                  <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-muted/50 transition-opacity" id="preview-loading">
+                    <div className="flex items-center gap-2 rounded-md bg-background px-4 py-2 shadow-sm">
+                      <Loader2 className="size-4 animate-spin" />
+                      <span className="text-sm text-muted-foreground">Loading preview...</span>
+                    </div>
+                  </div>
+                  <iframe
+                    src={previewUrl.url}
+                    className="h-full w-full rounded-md border"
+                    title={`${previewUrl.label} preview`}
+                    onLoad={(e) => {
+                      // Hide loading overlay when iframe finishes loading
+                      const loader = (e.target as HTMLIFrameElement).parentElement?.querySelector('#preview-loading');
+                      if (loader) (loader as HTMLElement).style.opacity = '0';
+                    }}
+                  />
+                </>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }

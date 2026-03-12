@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth-utils';
+import { auth } from '@/lib/auth';
 import { db } from '@/server/db';
 import { and, eq, asc, isNull } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
@@ -10,7 +11,7 @@ import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ showId: string }> }
 ) {
   const { showId } = await params;
@@ -33,16 +34,22 @@ export async function GET(
     return NextResponse.json({ error: 'Show not found' }, { status: 404 });
   }
 
-  const membership = await db.query.memberships.findFirst({
-    where: and(
-      eq(schema.memberships.userId, user.id),
-      eq(schema.memberships.organisationId, show.organisationId),
-      eq(schema.memberships.status, 'active')
-    ),
-  });
+  // Admins bypass membership check (needed for impersonation)
+  const session = await auth();
+  const isAdmin = session?.user?.role === 'admin';
 
-  if (!membership) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (!isAdmin) {
+    const membership = await db.query.memberships.findFirst({
+      where: and(
+        eq(schema.memberships.userId, user.id),
+        eq(schema.memberships.organisationId, show.organisationId),
+        eq(schema.memberships.status, 'active')
+      ),
+    });
+
+    if (!membership) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
   }
 
   // Fetch rings for this show
@@ -150,17 +157,19 @@ export async function GET(
     const buffer = await renderToBuffer(pdfDocument);
     const filename = `${sanitizeFilename(show.name)}-Ring-Plan.pdf`;
 
+    const disposition = request.nextUrl.searchParams.has('preview') ? 'inline' : 'attachment';
     return new Response(buffer, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Content-Disposition': `${disposition}; filename="${filename}"`,
         'Cache-Control': 'no-cache',
       },
     });
   } catch (err) {
     console.error('Ring board PDF generation failed:', err);
+    const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { error: 'PDF generation failed' },
+      { error: 'PDF generation failed', detail: message },
       { status: 500 }
     );
   }

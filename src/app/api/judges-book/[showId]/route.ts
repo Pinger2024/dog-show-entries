@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth-utils';
+import { auth } from '@/lib/auth';
 import { db } from '@/server/db';
 import { and, eq, isNull, asc } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
@@ -54,16 +55,22 @@ export async function GET(
   }
 
   // Verify user belongs to this show's organisation
-  const membership = await db.query.memberships.findFirst({
-    where: and(
-      eq(schema.memberships.userId, user.id),
-      eq(schema.memberships.organisationId, show.organisationId),
-      eq(schema.memberships.status, 'active')
-    ),
-  });
+  // Admins bypass membership check (needed for impersonation)
+  const session = await auth();
+  const isAdmin = session?.user?.role === 'admin';
 
-  if (!membership) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (!isAdmin) {
+    const membership = await db.query.memberships.findFirst({
+      where: and(
+        eq(schema.memberships.userId, user.id),
+        eq(schema.memberships.organisationId, show.organisationId),
+        eq(schema.memberships.status, 'active')
+      ),
+    });
+
+    if (!membership) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
   }
 
   // Fetch show classes ordered by sort order
@@ -150,8 +157,9 @@ export async function GET(
     });
   } catch (err) {
     console.error('Judge\'s book PDF generation failed:', err);
+    const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { error: 'PDF generation failed' },
+      { error: 'PDF generation failed', detail: message },
       { status: 500 }
     );
   }

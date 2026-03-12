@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth-utils';
+import { auth } from '@/lib/auth';
 import { db } from '@/server/db';
 import { and, eq, isNull, asc } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
@@ -43,16 +44,22 @@ export async function GET(
   }
 
   // Verify user belongs to this show's organisation
-  const membership = await db.query.memberships.findFirst({
-    where: and(
-      eq(schema.memberships.userId, user.id),
-      eq(schema.memberships.organisationId, show.organisationId),
-      eq(schema.memberships.status, 'active')
-    ),
-  });
+  // Admins bypass membership check (needed for impersonation)
+  const session = await auth();
+  const isAdmin = session?.user?.role === 'admin';
 
-  if (!membership) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (!isAdmin) {
+    const membership = await db.query.memberships.findFirst({
+      where: and(
+        eq(schema.memberships.userId, user.id),
+        eq(schema.memberships.organisationId, show.organisationId),
+        eq(schema.memberships.status, 'active')
+      ),
+    });
+
+    if (!membership) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
   }
 
   // Query judge assignments for this show (breed → judge name lookup)
@@ -171,6 +178,20 @@ export async function GET(
     entryType: entry.entryType,
   }));
 
+  // Pre-validate logo URL — @react-pdf/renderer only supports raster images (PNG/JPEG), not SVG
+  let safeLogoUrl: string | undefined;
+  const rawLogoUrl = show.organisation?.logoUrl;
+  if (rawLogoUrl) {
+    try {
+      const logoRes = await fetch(rawLogoUrl, { signal: AbortSignal.timeout(5000) });
+      const ct = logoRes.headers.get('content-type') ?? '';
+      const isRaster = logoRes.ok && ct.startsWith('image/') && !ct.includes('svg');
+      if (isRaster) safeLogoUrl = rawLogoUrl;
+    } catch {
+      console.warn('Logo fetch failed, omitting from catalogue:', rawLogoUrl);
+    }
+  }
+
   const showInfo: CatalogueShowInfo = {
     name: show.name,
     showType: show.showType,
@@ -179,7 +200,7 @@ export async function GET(
     venueAddress: show.venue?.address ?? undefined,
     organisation: show.organisation?.name,
     kcLicenceNo: show.kcLicenceNo,
-    logoUrl: show.organisation?.logoUrl ?? undefined,
+    logoUrl: safeLogoUrl,
     secretaryEmail: show.secretaryEmail ?? undefined,
     judgesByBreedName,
     classDefinitions,
@@ -221,17 +242,19 @@ export async function GET(
     };
     const filename = `${sanitizeFilename(show.name)}-${formatLabels[format] ?? 'Catalogue'}.pdf`;
 
+    const disposition = request.nextUrl.searchParams.has('preview') ? 'inline' : 'attachment';
     return new Response(buffer, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Content-Disposition': `${disposition}; filename="${filename}"`,
         'Cache-Control': 'no-cache',
       },
     });
   } catch (err) {
     console.error('PDF generation failed:', err);
+    const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { error: 'PDF generation failed. Try ?output=json for raw data.' },
+      { error: 'PDF generation failed', detail: message },
       { status: 500 }
     );
   }
