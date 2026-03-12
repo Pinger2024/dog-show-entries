@@ -10,6 +10,8 @@ import {
 import {
   CalendarDays,
   ChevronDown,
+  ChevronsDownUp,
+  ChevronsUpDown,
   Edit3,
   Gavel,
   GripVertical,
@@ -817,21 +819,47 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
         <div className="flex items-center justify-between gap-3">
           <div>
             <CardTitle>Classes ({classes.length})</CardTitle>
-            <CardDescription>Drag to reorder classes or whole sections.</CardDescription>
+            <CardDescription>Tap a section header to collapse it. Drag to reorder.</CardDescription>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => autoAssignMutation.mutate({ showId })}
-            disabled={autoAssignMutation.isPending}
-          >
-            {autoAssignMutation.isPending ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Hash className="size-4" />
-            )}
-            Auto-number
-          </Button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 gap-1 px-2 text-xs text-muted-foreground"
+              onClick={() => {
+                const allCollapsed = grouped.every((g) => collapsedGroups[g.key]);
+                const next: Record<string, boolean> = {};
+                for (const g of grouped) next[g.key] = !allCollapsed;
+                setCollapsedGroups(next);
+              }}
+            >
+              {grouped.every((g) => collapsedGroups[g.key]) ? (
+                <>
+                  <ChevronsUpDown className="size-3.5" />
+                  Expand
+                </>
+              ) : (
+                <>
+                  <ChevronsDownUp className="size-3.5" />
+                  Collapse
+                </>
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8"
+              onClick={() => autoAssignMutation.mutate({ showId })}
+              disabled={autoAssignMutation.isPending}
+            >
+              {autoAssignMutation.isPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Hash className="size-4" />
+              )}
+              Auto-number
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
@@ -850,7 +878,7 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
         }}>
           <Droppable droppableId="sections" type="SECTION">
             {(sectionProvided) => (
-              <div ref={sectionProvided.innerRef} {...sectionProvided.droppableProps} className="space-y-3">
+              <div ref={sectionProvided.innerRef} {...sectionProvided.droppableProps} className="space-y-2">
                 {grouped.map((group, gi) => {
                   const isCollapsed = collapsedGroups[group.key] ?? false;
                   const classRange = group.classes[0]?.classNumber && group.classes[group.classes.length - 1]?.classNumber
@@ -869,30 +897,40 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
                           <button
                             type="button"
                             onClick={() => toggleGroup(group.key)}
-                            className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
+                            className={cn(
+                              'flex w-full items-center gap-1.5 px-2 py-2 text-left transition-colors',
+                              isCollapsed
+                                ? 'rounded-lg bg-muted/60 hover:bg-muted'
+                                : 'rounded-t-lg border-b bg-muted/30 hover:bg-muted/50'
+                            )}
                           >
                             {/* Section drag handle */}
                             <div
                               {...sectionDragProvided.dragHandleProps}
-                              className="flex size-8 shrink-0 items-center justify-center rounded text-muted-foreground/30 active:bg-muted active:text-foreground"
+                              className="flex size-8 shrink-0 items-center justify-center rounded text-muted-foreground/40 active:bg-background active:text-foreground"
                               onClick={(e) => e.stopPropagation()}
                             >
                               <GripVertical className="size-4" />
                             </div>
 
+                            <ChevronDown className={cn(
+                              'size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200',
+                              isCollapsed && '-rotate-90'
+                            )} />
+
                             <div className="min-w-0 flex-1">
-                              <span className={isMultiBreed
-                                ? "text-sm font-bold"
-                                : "text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-                              }>
+                              <span className={cn(
+                                'text-xs font-semibold uppercase tracking-wider',
+                                isCollapsed ? 'text-muted-foreground' : 'text-foreground/80'
+                              )}>
                                 {group.label}
                               </span>
                             </div>
 
-                            <span className="shrink-0 text-xs text-muted-foreground">
-                              {group.classes.length} {classRange && `· ${classRange}`}
-                            </span>
-                            <ChevronDown className={cn('size-4 shrink-0 text-muted-foreground transition-transform duration-200', isCollapsed && '-rotate-90')} />
+                            <Badge variant="secondary" className="shrink-0 gap-1 text-[10px] font-medium tabular-nums">
+                              {group.classes.length} {group.classes.length === 1 ? 'class' : 'classes'}
+                              {classRange && <span className="text-muted-foreground">{classRange}</span>}
+                            </Badge>
                           </button>
 
                           {/* Class items — collapsible */}
@@ -902,7 +940,7 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
                                 <div
                                   ref={provided.innerRef}
                                   {...provided.droppableProps}
-                                  className="space-y-1.5 px-3 pb-3"
+                                  className="space-y-1 px-2 py-2"
                                 >
                                   {group.classes.map((sc, index) => (
                                     <Draggable key={sc.id} draggableId={sc.id} index={index}>
@@ -910,13 +948,13 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
                                         <div
                                           ref={dragProvided.innerRef}
                                           {...dragProvided.draggableProps}
-                                          className={cn('flex items-center gap-2 rounded-lg border bg-background p-2.5', snapshot.isDragging && 'shadow-lg ring-2 ring-primary/20')}
+                                          className={cn('flex items-center gap-1.5 rounded-md border bg-background px-2 py-1.5', snapshot.isDragging && 'shadow-lg ring-2 ring-primary/20')}
                                         >
                                           <div
                                             {...dragProvided.dragHandleProps}
-                                            className="flex size-10 shrink-0 items-center justify-center rounded-md text-muted-foreground/30 active:bg-muted active:text-foreground"
+                                            className="flex size-8 shrink-0 items-center justify-center rounded text-muted-foreground/30 active:bg-muted active:text-foreground"
                                           >
-                                            <GripVertical className="size-5" />
+                                            <GripVertical className="size-4" />
                                           </div>
 
                                           <div className="min-w-0 flex-1">
