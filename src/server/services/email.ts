@@ -20,6 +20,25 @@ function btn(href: string, label: string, bg = '#2D5F3F') {
   return `<a href="${href}" style="display: inline-block; padding: 12px 28px; background: ${bg}; color: #ffffff; text-decoration: none; border-radius: 8px; font-size: 14px; font-weight: 600;">${label}</a>`;
 }
 
+function formatLongDate(date: string | Date): string {
+  return new Date(date).toLocaleDateString('en-GB', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  });
+}
+
+function formatDeliveryAddress(order: {
+  deliveryAddress1: string | null;
+  deliveryAddress2?: string | null;
+  deliveryTown: string | null;
+  deliveryPostcode: string | null;
+}): string {
+  return [order.deliveryAddress1, order.deliveryAddress2, order.deliveryTown, order.deliveryPostcode]
+    .filter(Boolean)
+    .join(', ');
+}
+
 /**
  * Send a confirmation email after a successful payment.
  * Fetches full order data including show, entries, dogs, and classes.
@@ -405,9 +424,7 @@ export async function sendPrintOrderConfirmationEmail(printOrderId: string) {
 
   const orderRef = formatOrderRef(order.id);
   const show = order.show;
-  const deliveryAddr = [order.deliveryAddress1, order.deliveryAddress2, order.deliveryTown, order.deliveryPostcode]
-    .filter(Boolean)
-    .join(', ');
+  const deliveryAddr = formatDeliveryAddress(order);
 
   const itemRows = order.items.map((item) => `
     <tr>
@@ -423,11 +440,7 @@ export async function sendPrintOrderConfirmationEmail(printOrderId: string) {
     </tr>`).join('');
 
   const estDelivery = order.estimatedDeliveryDate
-    ? new Date(order.estimatedDeliveryDate).toLocaleDateString('en-GB', {
-        weekday: 'long',
-        day: 'numeric',
-        month: 'long',
-      })
+    ? formatLongDate(order.estimatedDeliveryDate)
     : null;
 
   const html = `
@@ -550,12 +563,10 @@ export async function sendPrintOrderDispatchEmail(printOrderId: string) {
       : '';
 
   const estDelivery = order.estimatedDeliveryDate
-    ? new Date(order.estimatedDeliveryDate).toLocaleDateString('en-GB', {
-        weekday: 'long',
-        day: 'numeric',
-        month: 'long',
-      })
+    ? formatLongDate(order.estimatedDeliveryDate)
     : null;
+
+  const deliveryAddr = formatDeliveryAddress(order);
 
   const html = `
 <!DOCTYPE html>
@@ -591,8 +602,8 @@ export async function sendPrintOrderDispatchEmail(printOrderId: string) {
       <div style="padding: 16px 24px; border-bottom: 1px solid #e5e5e5;">
         <p style="margin: 0 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #888;">Delivering to</p>
         <p style="margin: 0; font-size: 14px; color: #444;">
-          ${order.deliveryName ?? ''}<br>
-          ${[order.deliveryAddress1, order.deliveryTown, order.deliveryPostcode].filter(Boolean).join(', ')}
+          ${order.deliveryName ? `<strong>${order.deliveryName}</strong><br>` : ''}
+          ${deliveryAddr}
         </p>
       </div>
 

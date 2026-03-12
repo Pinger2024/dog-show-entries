@@ -19,6 +19,7 @@ import {
   calculateSellingPrice,
   calculateUnitSellingPrice,
   CANCELLABLE_STATUSES,
+  PENDING_STATUSES,
   formatOrderRef,
   type ShowStats,
 } from '@/lib/print-products';
@@ -37,6 +38,49 @@ import {
 } from '@/server/services/print-price-refresh';
 import { createPaymentIntent } from '@/server/services/stripe';
 import { generateAndUploadForPrint } from '@/server/services/pdf-generation';
+
+// ── Tradeprint status mapping ──
+
+type PrintOrderStatus = 'submitted' | 'in_production' | 'dispatched' | 'delivered';
+
+const TRADEPRINT_STATUS_MAP: Record<string, PrintOrderStatus> = {
+  received: 'submitted',
+  'in production': 'in_production',
+  printing: 'in_production',
+  dispatched: 'dispatched',
+  delivered: 'delivered',
+};
+
+/** Apply a Tradeprint status update to a local order, sending dispatch email on transition */
+async function applyTradeprintStatus(
+  database: typeof import('@/server/db').db,
+  order: { id: string; status: string; trackingNumber: string | null; trackingUrl: string | null; estimatedDeliveryDate: string | Date | null },
+  tpStatus: { status: string; trackingNumber?: string | null; trackingUrl?: string | null; estimatedDeliveryDate?: string | Date | null },
+): Promise<{ newStatus: string; changed: boolean }> {
+  const newStatus = TRADEPRINT_STATUS_MAP[tpStatus.status] ?? order.status;
+  const changed = newStatus !== order.status;
+
+  if (changed) {
+    await database
+      .update(printOrders)
+      .set({
+        status: newStatus,
+        tradeprintStatus: tpStatus.status,
+        trackingNumber: tpStatus.trackingNumber ?? order.trackingNumber,
+        trackingUrl: tpStatus.trackingUrl ?? order.trackingUrl,
+        estimatedDeliveryDate: tpStatus.estimatedDeliveryDate ?? order.estimatedDeliveryDate,
+      })
+      .where(eq(printOrders.id, order.id));
+
+    if (newStatus === 'dispatched') {
+      sendPrintOrderDispatchEmail(order.id).catch((err) =>
+        console.error('[print-orders] Dispatch email failed:', err)
+      );
+    }
+  }
+
+  return { newStatus, changed };
+}
 
 export const printOrdersRouter = createTRPCRouter({
   /** Get available products with pricing, presets, and quantity suggestions */
@@ -531,36 +575,7 @@ export const printOrdersRouter = createTRPCRouter({
         return { status: order.status, message: 'Could not retrieve status from Tradeprint' };
       }
 
-      // Map Tradeprint status to our enum
-      type PrintOrderStatus = 'submitted' | 'in_production' | 'dispatched' | 'delivered';
-      const statusMap: Record<string, PrintOrderStatus> = {
-        received: 'submitted',
-        'in production': 'in_production',
-        printing: 'in_production',
-        dispatched: 'dispatched',
-        delivered: 'delivered',
-      };
-
-      const newStatus = statusMap[tpStatus.status] ?? order.status;
-      const previousStatus = order.status;
-
-      await ctx.db
-        .update(printOrders)
-        .set({
-          status: newStatus,
-          tradeprintStatus: tpStatus.status,
-          trackingNumber: tpStatus.trackingNumber ?? order.trackingNumber,
-          trackingUrl: tpStatus.trackingUrl ?? order.trackingUrl,
-          estimatedDeliveryDate: tpStatus.estimatedDeliveryDate ?? order.estimatedDeliveryDate,
-        })
-        .where(eq(printOrders.id, order.id));
-
-      // Send dispatch email on transition to 'dispatched'
-      if (newStatus === 'dispatched' && previousStatus !== 'dispatched') {
-        sendPrintOrderDispatchEmail(order.id).catch((err) =>
-          console.error('[print-orders] Dispatch email failed:', err)
-        );
-      }
+      const { newStatus } = await applyTradeprintStatus(ctx.db, order, tpStatus);
 
       return { status: newStatus, tradeprintStatus: tpStatus.status };
     }),
@@ -575,7 +590,7 @@ export const printOrdersRouter = createTRPCRouter({
       const pendingOrders = await ctx.db.query.printOrders.findMany({
         where: and(
           eq(printOrders.showId, input.showId),
-          inArray(printOrders.status, ['submitted', 'in_production'])
+          inArray(printOrders.status, [...PENDING_STATUSES])
         ),
       });
 
@@ -591,40 +606,11 @@ export const printOrdersRouter = createTRPCRouter({
 
           const tpStatus = await getOrderStatus(order.tradeprintOrderRef);
           if (!tpStatus) {
+            console.warn(`[print-orders] Could not fetch status for order ${order.id} (ref: ${order.tradeprintOrderRef})`);
             return { orderId: order.id, status: order.status, changed: false };
           }
 
-          type PrintOrderStatus = 'submitted' | 'in_production' | 'dispatched' | 'delivered';
-          const statusMap: Record<string, PrintOrderStatus> = {
-            received: 'submitted',
-            'in production': 'in_production',
-            printing: 'in_production',
-            dispatched: 'dispatched',
-            delivered: 'delivered',
-          };
-
-          const newStatus = statusMap[tpStatus.status] ?? order.status;
-          const changed = newStatus !== order.status;
-
-          if (changed) {
-            await ctx.db
-              .update(printOrders)
-              .set({
-                status: newStatus,
-                tradeprintStatus: tpStatus.status,
-                trackingNumber: tpStatus.trackingNumber ?? order.trackingNumber,
-                trackingUrl: tpStatus.trackingUrl ?? order.trackingUrl,
-                estimatedDeliveryDate: tpStatus.estimatedDeliveryDate ?? order.estimatedDeliveryDate,
-              })
-              .where(eq(printOrders.id, order.id));
-
-            // Send dispatch email on transition
-            if (newStatus === 'dispatched' && order.status !== 'dispatched') {
-              sendPrintOrderDispatchEmail(order.id).catch((err) =>
-                console.error('[print-orders] Dispatch email failed:', err)
-              );
-            }
-          }
+          const { newStatus, changed } = await applyTradeprintStatus(ctx.db, order, tpStatus);
 
           return { orderId: order.id, status: newStatus, changed };
         })

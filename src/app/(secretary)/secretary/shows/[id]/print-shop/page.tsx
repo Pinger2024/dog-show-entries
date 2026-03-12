@@ -7,6 +7,7 @@ import {
   Settings2, Eye, RefreshCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { PENDING_STATUSES } from '@/lib/print-products';
 import { trpc } from '@/lib/trpc';
 import { useShowId } from '../_lib/show-context';
 import { formatCurrency } from '@/lib/date-utils';
@@ -286,7 +287,7 @@ export default function PrintShopPage() {
             </p>
           </div>
           <div className="flex gap-2">
-            {orders.some((o) => ['submitted', 'in_production'].includes(o.status)) && (
+            {orders.some((o) => (PENDING_STATUSES as readonly string[]).includes(o.status)) && (
               <Button
                 variant="outline"
                 size="sm"

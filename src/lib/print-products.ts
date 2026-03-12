@@ -338,6 +338,9 @@ export function calculateUnitSellingPrice(totalTradeCostExVatPence: number, quan
 /** Statuses where an order can be cancelled */
 export const CANCELLABLE_STATUSES = ['draft', 'awaiting_payment'] as const;
 
+/** Statuses where an order is in-flight and can be polled for updates */
+export const PENDING_STATUSES = ['submitted', 'in_production'] as const;
+
 /** Format a print order ID for display */
 export function formatOrderRef(id: string): string {
   return id.slice(0, 8).toUpperCase();
