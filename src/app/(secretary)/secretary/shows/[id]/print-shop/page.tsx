@@ -21,6 +21,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { StripeProvider } from '@/components/providers/stripe-provider';
+import { PostcodeLookup } from '@/components/postcode-lookup';
 import { PrintPaymentForm } from './_components/print-payment-form';
 import { PrintOrderList } from './_components/print-order-list';
 
@@ -479,10 +480,10 @@ export default function PrintShopPage() {
                     )}
 
                     {/* Advanced spec selectors */}
-                    {isExpanded && (
+                    {isExpanded && selectedItem && (
                       <SpecConfigurator
                         product={product}
-                        selectedItem={selectedItem!}
+                        selectedItem={selectedItem}
                         onUpdate={(updates) => handleUpdateItem(product.documentType, updates)}
                         serviceLevel={serviceLevel}
                       />
@@ -551,6 +552,17 @@ export default function PrintShopPage() {
                 Use {profile.name ? `${profile.name.split(' ')[0]}'s` : 'my'} address
               </Button>
             )}
+            <PostcodeLookup
+              compact
+              onSelect={(result) => {
+                setDelivery((d) => ({
+                  ...d,
+                  address1: result.address,
+                  town: result.town,
+                  postcode: result.postcode,
+                }));
+              }}
+            />
             <div>
               <Label htmlFor="delivery-name">Recipient Name *</Label>
               <Input
@@ -858,7 +870,7 @@ function SpecConfigurator({
   onUpdate: (updates: Partial<SelectedItem>) => void;
   serviceLevel: string;
 }) {
-  const currentSpecs = selectedItem.customSpecs ?? undefined;
+  const currentSpecs = selectedItem.customSpecs;
 
   const { data: specOptions, isLoading } = trpc.printOrders.getSpecOptions.useQuery(
     {

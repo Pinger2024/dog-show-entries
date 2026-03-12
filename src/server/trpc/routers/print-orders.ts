@@ -101,6 +101,7 @@ export const printOrdersRouter = createTRPCRouter({
 
             return {
               documentType: product.documentType,
+              tradeprintProductName: product.tradeprintProductName,
               label: product.label,
               description: product.description,
               suggestedQuantity: bestQty,
@@ -132,24 +133,23 @@ export const printOrdersRouter = createTRPCRouter({
       );
       if (!product) return {};
 
-      const result: Record<string, string[]> = {};
-
       // Get available values for each configurable spec, filtered by other current specs
-      for (const spec of product.configurableSpecs) {
-        const filterSpecs = { ...(input.currentSpecs ?? product.defaultSpecs) };
-        // Remove this spec from the filter so we can see all options for it
-        delete filterSpecs[spec.key];
+      const entries = await Promise.all(
+        product.configurableSpecs.map(async (spec) => {
+          const filterSpecs = { ...(input.currentSpecs ?? product.defaultSpecs) };
+          delete filterSpecs[spec.key];
 
-        const values = await getDistinctSpecValues(
-          input.productName,
-          spec.key,
-          input.serviceLevel,
-          Object.keys(filterSpecs).length > 0 ? filterSpecs : undefined
-        );
-        result[spec.key] = values;
-      }
+          const values = await getDistinctSpecValues(
+            input.productName,
+            spec.key,
+            input.serviceLevel,
+            Object.keys(filterSpecs).length > 0 ? filterSpecs : undefined
+          );
+          return [spec.key, values] as const;
+        })
+      );
 
-      return result;
+      return Object.fromEntries(entries);
     }),
 
   /** Get a quote for selected items (supports custom specs via presets or manual selection) */
@@ -458,7 +458,7 @@ export const printOrdersRouter = createTRPCRouter({
 
       await verifyShowAccess(ctx.db, ctx.session.user.id, order.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
-      if (!(CANCELLABLE_STATUSES as readonly string[]).includes(order.status)) {
+      if (!CANCELLABLE_STATUSES.includes(order.status as typeof CANCELLABLE_STATUSES[number])) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
           message: 'Only draft or awaiting payment orders can be cancelled',
