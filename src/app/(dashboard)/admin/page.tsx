@@ -30,6 +30,7 @@ import {
   AlertCircle,
   Dog,
   Building2,
+  Printer,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
 import { formatCurrency } from '@/lib/date-utils';
@@ -40,6 +41,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -94,6 +96,7 @@ const ACTIVITY_CONFIG = {
   signup: { icon: UserPlus, bg: 'bg-blue-100', color: 'text-blue-600' },
   payment: { icon: PoundSterling, bg: 'bg-emerald-100', color: 'text-emerald-600' },
   feedback: { icon: MessageSquare, bg: 'bg-amber-100', color: 'text-amber-600' },
+  print_order: { icon: Printer, bg: 'bg-purple-100', color: 'text-purple-600' },
 } as const;
 
 const PIPELINE_STAGES = [
@@ -105,6 +108,26 @@ const PIPELINE_STAGES = [
   { key: 'completed', label: 'Done', bar: 'bg-gray-400' },
   { key: 'cancelled', label: 'Cancelled', bar: 'bg-red-400' },
 ];
+
+const PRINT_PIPELINE_STAGES = [
+  { key: 'awaiting_payment', label: 'Awaiting Pay', bar: 'bg-amber-400' },
+  { key: 'paid', label: 'Paid', bar: 'bg-blue-400' },
+  { key: 'submitted', label: 'Submitted', bar: 'bg-sky-400' },
+  { key: 'in_production', label: 'Printing', bar: 'bg-purple-400' },
+  { key: 'dispatched', label: 'Dispatched', bar: 'bg-emerald-400' },
+  { key: 'delivered', label: 'Delivered', bar: 'bg-emerald-600' },
+  { key: 'failed', label: 'Failed', bar: 'bg-red-400' },
+];
+
+const PRINT_STATUS_BADGE: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+  awaiting_payment: { label: 'Awaiting Payment', variant: 'outline' },
+  paid: { label: 'Paid', variant: 'secondary' },
+  submitted: { label: 'Submitted', variant: 'secondary' },
+  in_production: { label: 'Printing', variant: 'default' },
+  dispatched: { label: 'Dispatched', variant: 'default' },
+  delivered: { label: 'Delivered', variant: 'default' },
+  failed: { label: 'Failed', variant: 'destructive' },
+};
 
 // ── Reusable sub-components ──────────────────────────────────────
 
@@ -244,6 +267,10 @@ export default function AdminDashboardPage() {
   );
   const revenueChartData = useMemo(
     () => data ? fillChartDays(data.charts.dailyRevenue, 'amount') : [],
+    [data]
+  );
+  const printRevenueChartData = useMemo(
+    () => data ? fillChartDays(data.charts.dailyPrintRevenue, 'amount') : [],
     [data]
   );
 
@@ -414,6 +441,12 @@ export default function AdminDashboardPage() {
           <Building2 className="size-3.5" />
           {stats.totalOrganisations} organisations
         </span>
+        {stats.printRevenueTotal > 0 && (
+          <span className="flex items-center gap-1.5">
+            <Printer className="size-3.5" />
+            {formatCurrency(stats.printRevenueTotal)} print revenue ({stats.printOrderCount} orders)
+          </span>
+        )}
       </div>
 
       {/* ── Attention Required ─────────────────────────────────── */}
@@ -511,7 +544,7 @@ export default function AdminDashboardPage() {
             }
           />
           <MetricChart
-            title="Revenue"
+            title="Entry Revenue"
             description="Last 30 days"
             data={revenueChartData}
             color="#10b981"
@@ -520,6 +553,18 @@ export default function AdminDashboardPage() {
             yWidth={45}
             tooltipFormatter={formatCurrency}
           />
+          {printRevenueChartData.some((d) => d.value > 0) && (
+            <MetricChart
+              title="Print Revenue"
+              description="Last 30 days"
+              data={printRevenueChartData}
+              color="#8b5cf6"
+              gradientId="printRevenueGradient"
+              yFormatter={(v) => (v === 0 ? '£0' : `£${Math.round(v / 100)}`)}
+              yWidth={45}
+              tooltipFormatter={formatCurrency}
+            />
+          )}
         </div>
 
         {/* Activity feed column */}
@@ -616,6 +661,109 @@ export default function AdminDashboardPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* ── Print Shop ──────────────────────────────────────── */}
+      {stats.totalPrintOrders > 0 && (
+        <>
+          {/* Print KPI + pipeline */}
+          <Card>
+            <CardHeader className="p-4 pb-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+                    <Printer className="size-4" />
+                    Print Shop
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    {stats.totalPrintOrders} total orders
+                  </CardDescription>
+                </div>
+                <div className="text-right">
+                  <p className="text-lg sm:text-xl font-bold">
+                    {formatCurrency(stats.printRevenueThisMonth)}
+                  </p>
+                  <DeltaBadge delta={stats.printRevenueDelta} />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-4 pt-2">
+              <div className="grid grid-cols-4 gap-2 sm:grid-cols-7 sm:gap-3">
+                {PRINT_PIPELINE_STAGES.map((stage) => {
+                  const count = data.printPipeline[stage.key] ?? 0;
+                  return (
+                    <div
+                      key={stage.key}
+                      className="rounded-lg border text-center p-3 sm:p-4"
+                    >
+                      <div
+                        className={cn(
+                          'mx-auto mb-2 h-1.5 w-8 rounded-full',
+                          stage.bar
+                        )}
+                      />
+                      <p className="text-xl sm:text-2xl font-bold">{count}</p>
+                      <p className="text-[11px] sm:text-xs text-muted-foreground mt-0.5">
+                        {stage.label}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Recent print orders */}
+          {data.recentPrintOrders.length > 0 && (
+            <Card>
+              <CardHeader className="p-4 pb-2">
+                <CardTitle className="text-base font-semibold">
+                  Recent Print Orders
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Latest printing orders across all shows
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-4 pt-2">
+                <div className="divide-y">
+                  {data.recentPrintOrders.map((po) => {
+                    const badge = PRINT_STATUS_BADGE[po.status];
+                    return (
+                      <Link
+                        key={po.id}
+                        href={`/secretary/shows/${po.showSlug ?? po.showId}/print-shop`}
+                        className="flex items-center gap-3 py-3 first:pt-1 hover:bg-muted/50 -mx-2 px-2 rounded-md transition-colors group"
+                      >
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-purple-100 mt-0.5">
+                          <Printer className="size-4 text-purple-600" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium leading-tight truncate">
+                            {po.showName}
+                          </p>
+                          <p className="text-xs text-muted-foreground truncate mt-0.5">
+                            {po.userName ?? 'Unknown'} &middot; {formatCurrency(po.totalAmount)}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {badge && (
+                            <Badge variant={badge.variant} className="text-[10px] px-1.5 py-0">
+                              {badge.label}
+                            </Badge>
+                          )}
+                          <span className="text-[11px] text-muted-foreground">
+                            {timeAgo(po.createdAt!)}
+                          </span>
+                          <ChevronRight className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </>
+      )}
     </div>
   );
 }

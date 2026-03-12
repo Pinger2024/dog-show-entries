@@ -6,6 +6,7 @@ import {
   lt,
   desc,
   isNull,
+  inArray,
   isNotNull,
   notInArray,
 } from 'drizzle-orm';
@@ -22,6 +23,7 @@ import {
   secretaryApplications,
   dogs,
   organisations,
+  printOrders,
 } from '@/server/db/schema';
 
 /** Compute a percentage-change delta for KPI cards. */
@@ -37,6 +39,9 @@ function getDelta(
     positive: pct >= 0,
   };
 }
+
+/** Print order statuses where payment has been received */
+const PRINT_PAID_STATUSES = ['paid', 'submitted', 'in_production', 'dispatched', 'delivered'] as const;
 
 export const adminDashboardRouter = createTRPCRouter({
   getDashboard: adminProcedure.query(async ({ ctx }) => {
@@ -83,6 +88,15 @@ export const adminDashboardRouter = createTRPCRouter({
       // ── Charts (2 queries) ───────────────────────────────────
       dailyEntriesRows,
       dailyRevenueRows,
+
+      // ── Print Shop stats (5 queries) ───────────────────────
+      [printRevenueThisMonthRow],
+      [printRevenueLastMonthRow],
+      [printRevenueTotalRow],
+      [printOrderCountRow],
+      printOrderPipelineRows,
+      dailyPrintRevenueRows,
+      recentPrintOrdersList,
     ] = await Promise.all([
       // KPI counts
       ctx.db
@@ -336,11 +350,93 @@ export const adminDashboardRouter = createTRPCRouter({
         )
         .groupBy(sql`to_char(${payments.createdAt}, 'YYYY-MM-DD')`)
         .orderBy(sql`to_char(${payments.createdAt}, 'YYYY-MM-DD')`),
+
+      // ── Print revenue: this month ──────────────────────────
+      ctx.db
+        .select({
+          v: sql<number>`coalesce(sum(${printOrders.totalAmount}), 0)::int`,
+        })
+        .from(printOrders)
+        .where(
+          and(
+            inArray(printOrders.status, [...PRINT_PAID_STATUSES]),
+            gte(printOrders.createdAt, thisMonthStart)
+          )
+        ),
+      // ── Print revenue: last month ──────────────────────────
+      ctx.db
+        .select({
+          v: sql<number>`coalesce(sum(${printOrders.totalAmount}), 0)::int`,
+        })
+        .from(printOrders)
+        .where(
+          and(
+            inArray(printOrders.status, [...PRINT_PAID_STATUSES]),
+            gte(printOrders.createdAt, lastMonthStart),
+            lt(printOrders.createdAt, thisMonthStart)
+          )
+        ),
+      // ── Print revenue: total ───────────────────────────────
+      ctx.db
+        .select({
+          v: sql<number>`coalesce(sum(${printOrders.totalAmount}), 0)::int`,
+        })
+        .from(printOrders)
+        .where(inArray(printOrders.status, [...PRINT_PAID_STATUSES])),
+      // ── Print order count ──────────────────────────────────
+      ctx.db
+        .select({ v: sql<number>`count(*)::int` })
+        .from(printOrders)
+        .where(inArray(printOrders.status, [...PRINT_PAID_STATUSES])),
+      // ── Print order pipeline ───────────────────────────────
+      ctx.db
+        .select({
+          status: printOrders.status,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(printOrders)
+        .groupBy(printOrders.status),
+      // ── Daily print revenue (30-day chart) ─────────────────
+      ctx.db
+        .select({
+          date: sql<string>`to_char(${printOrders.createdAt}, 'YYYY-MM-DD')`,
+          amount: sql<number>`coalesce(sum(${printOrders.totalAmount}), 0)::int`,
+        })
+        .from(printOrders)
+        .where(
+          and(
+            inArray(printOrders.status, [...PRINT_PAID_STATUSES]),
+            gte(printOrders.createdAt, thirtyDaysAgo)
+          )
+        )
+        .groupBy(sql`to_char(${printOrders.createdAt}, 'YYYY-MM-DD')`)
+        .orderBy(sql`to_char(${printOrders.createdAt}, 'YYYY-MM-DD')`),
+      // ── Recent print orders ────────────────────────────────
+      ctx.db
+        .select({
+          id: printOrders.id,
+          createdAt: printOrders.createdAt,
+          totalAmount: printOrders.totalAmount,
+          markupAmount: printOrders.markupAmount,
+          status: printOrders.status,
+          showName: shows.name,
+          showSlug: shows.slug,
+          showId: shows.id,
+          userName: users.name,
+        })
+        .from(printOrders)
+        .innerJoin(shows, eq(shows.id, printOrders.showId))
+        .leftJoin(users, eq(users.id, printOrders.orderedByUserId))
+        .where(
+          notInArray(printOrders.status, ['draft', 'cancelled'])
+        )
+        .orderBy(desc(printOrders.createdAt))
+        .limit(8),
     ]);
 
     // ── Build unified activity feed ────────────────────────────
     type ActivityItem = {
-      type: 'entry' | 'signup' | 'payment' | 'feedback';
+      type: 'entry' | 'signup' | 'payment' | 'feedback' | 'print_order';
       timestamp: Date;
       title: string;
       subtitle: string;
@@ -371,6 +467,12 @@ export const adminDashboardRouter = createTRPCRouter({
         title: f.subject ?? 'Feedback received',
         subtitle: `from ${f.fromName ?? 'Unknown'}`,
       })),
+      ...recentPrintOrdersList.map((po) => ({
+        type: 'print_order' as const,
+        timestamp: po.createdAt!,
+        title: `${formatCurrency(po.totalAmount)} print order`,
+        subtitle: `${po.showName} — ${po.userName ?? 'Unknown'}`,
+      })),
     ]
       .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
       .slice(0, 15);
@@ -381,6 +483,14 @@ export const adminDashboardRouter = createTRPCRouter({
     for (const row of showPipelineRows) {
       pipeline[row.status] = row.count;
       totalShows += row.count;
+    }
+
+    // ── Build print order pipeline ───────────────────────────
+    const printPipeline: Record<string, number> = {};
+    let totalPrintOrders = 0;
+    for (const row of printOrderPipelineRows) {
+      printPipeline[row.status] = row.count;
+      totalPrintOrders += row.count;
     }
 
     return {
@@ -404,6 +514,14 @@ export const adminDashboardRouter = createTRPCRouter({
         pendingApplications: pendingAppsRow.v,
         totalDogs: totalDogsRow.v,
         totalOrganisations: totalOrgsRow.v,
+        printRevenueThisMonth: printRevenueThisMonthRow.v,
+        printRevenueDelta: getDelta(
+          printRevenueThisMonthRow.v,
+          printRevenueLastMonthRow.v
+        ),
+        printRevenueTotal: printRevenueTotalRow.v,
+        printOrderCount: printOrderCountRow.v,
+        totalPrintOrders,
       },
       attention: {
         failedPayments: failedPaymentsList,
@@ -413,9 +531,12 @@ export const adminDashboardRouter = createTRPCRouter({
       },
       activity,
       showPipeline: pipeline,
+      printPipeline,
+      recentPrintOrders: recentPrintOrdersList,
       charts: {
         dailyEntries: dailyEntriesRows,
         dailyRevenue: dailyRevenueRows,
+        dailyPrintRevenue: dailyPrintRevenueRows,
       },
     };
   }),
