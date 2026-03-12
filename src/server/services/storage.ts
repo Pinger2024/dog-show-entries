@@ -29,6 +29,7 @@ const ALLOWED_MIME_TYPES: Record<string, { maxSizeBytes: number }> = {
   'image/jpeg': { maxSizeBytes: 5 * 1024 * 1024 }, // 5 MB
   'image/png': { maxSizeBytes: 5 * 1024 * 1024 },
   'image/webp': { maxSizeBytes: 5 * 1024 * 1024 },
+  'image/svg+xml': { maxSizeBytes: 2 * 1024 * 1024 }, // 2 MB
 };
 
 export function validateUpload(mimeType: string, sizeBytes: number) {

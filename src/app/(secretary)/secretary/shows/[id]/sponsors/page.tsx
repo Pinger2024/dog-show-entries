@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
-import { uploadImageViaPresign } from '@/lib/upload';
+import { uploadImage } from '@/lib/upload';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -157,7 +157,7 @@ function SponsorDirectory({
     if (!file) return;
     setUploading(true);
     try {
-      const publicUrl = await uploadImageViaPresign(file);
+      const publicUrl = await uploadImage(file);
       setLogoUrl(publicUrl);
       toast.success('Logo uploaded');
     } catch (err) {

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { trpc } from '@/lib/trpc';
-import { uploadImageViaPresign } from '@/lib/upload';
+import { uploadImage } from '@/lib/upload';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -97,7 +97,7 @@ export default function SettingsPage() {
   const handleUpload = useCallback(async (file: File) => {
     setUploading(true);
     try {
-      const publicUrl = await uploadImageViaPresign(file);
+      const publicUrl = await uploadImage(file);
       setLogoUrl(publicUrl);
       toast.success('Logo uploaded');
     } catch (err) {
