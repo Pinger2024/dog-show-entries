@@ -7,8 +7,10 @@ export async function uploadImage(file: File): Promise<string> {
   if (!file.type.startsWith('image/')) {
     throw new Error('Please upload an image file (PNG, JPG, SVG, or WebP)');
   }
-  if (file.size > 5 * 1024 * 1024) {
-    throw new Error('Image must be under 5MB');
+  const maxBytes = file.type === 'image/svg+xml' ? 2 * 1024 * 1024 : 5 * 1024 * 1024;
+  if (file.size > maxBytes) {
+    const maxMB = maxBytes / 1024 / 1024;
+    throw new Error(`Image must be under ${maxMB}MB`);
   }
 
   const formData = new FormData();
