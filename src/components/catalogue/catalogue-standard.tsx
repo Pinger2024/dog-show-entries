@@ -150,32 +150,8 @@ function classHeadingLabel(bucket: ClassBucket, sex: string) {
 export function CatalogueStandard({ show, entries }: Props) {
   const grouped = groupEntriesKC(entries);
 
-  // Track first appearance of each catalogue number → class label for "[see class X]"
-  const firstSeenClass = new Map<string, string>();
-
   // Sort groups by sortOrder
   const sortedGroups = [...grouped.entries()].sort(([, a], [, b]) => a.sortOrder - b.sortOrder);
-
-  // Pre-compute first seen class for each entry
-  for (const [, { breeds }] of sortedGroups) {
-    for (const [, breedBucket] of [...breeds.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-      for (const sex of ['dog', 'bitch', 'unknown']) {
-        const classBuckets = breedBucket.sexes[sex];
-        if (!classBuckets) continue;
-        for (const bucket of classBuckets) {
-          for (const entry of sortByCatNo(bucket.entries)) {
-            const catNo = entry.catalogueNumber;
-            if (catNo && !firstSeenClass.has(catNo)) {
-              const label = bucket.classNumber != null
-                ? `class ${bucket.classNumber}`
-                : bucket.className;
-              firstSeenClass.set(catNo, label);
-            }
-          }
-        }
-      }
-    }
-  }
 
   // Flatten all breeds into a list of page-sized chunks to avoid @react-pdf/renderer
   // coordinate overflow bug (single <Page wrap> with many nodes causes layout.top to
@@ -198,19 +174,24 @@ export function CatalogueStandard({ show, entries }: Props) {
     }
   }
 
-  // Pre-compute which (catNo, classKey) pairs are first appearances so we avoid
-  // mutating state during JSX render. Walk the same iteration order as the render.
-  const firstAppearanceContext = new Map<string, string>();
-  for (const { breedName, breedBucket } of breedPages) {
+  // Sort entries within each bucket once, and pre-compute first-appearance data
+  // in a single pass (same iteration order as render) to avoid:
+  // - calling sortByCatNo 3x per bucket
+  // - mutating state during JSX render
+  const firstSeenClass = new Map<string, string>();
+  const firstAppearanceBucket = new Map<string, ClassBucket>();
+  for (const { breedBucket } of breedPages) {
     for (const sex of ['dog', 'bitch', 'unknown']) {
       const classBuckets = breedBucket.sexes[sex];
       if (!classBuckets?.length) continue;
       for (const bucket of classBuckets) {
-        const classKey = `${bucket.classNumber ?? ''}-${bucket.className}`;
-        for (const entry of sortByCatNo(bucket.entries)) {
+        bucket.entries = sortByCatNo(bucket.entries);
+        for (const entry of bucket.entries) {
           const catNo = entry.catalogueNumber;
-          if (catNo && !firstAppearanceContext.has(catNo)) {
-            firstAppearanceContext.set(catNo, `${breedName}-${sex}-${classKey}`);
+          if (!catNo) continue;
+          if (!firstSeenClass.has(catNo)) {
+            firstSeenClass.set(catNo, bucket.classNumber != null ? `class ${bucket.classNumber}` : bucket.className);
+            firstAppearanceBucket.set(catNo, bucket);
           }
         }
       }
@@ -249,11 +230,9 @@ export function CatalogueStandard({ show, entries }: Props) {
                       {classHeadingLabel(bucket, sex)}
                     </Text>
 
-                    {sortByCatNo(bucket.entries).map((entry) => {
+                    {bucket.entries.map((entry) => {
                       const catNo = entry.catalogueNumber ?? '';
-                      const classKey = `${bucket.classNumber ?? ''}-${bucket.className}`;
-                      const contextKey = `${breedName}-${sex}-${classKey}`;
-                      const isFirstAppearance = !catNo || firstAppearanceContext.get(catNo) === contextKey;
+                      const isFirstAppearance = !catNo || firstAppearanceBucket.get(catNo) === bucket;
 
                       if (!isFirstAppearance) {
                         // Abbreviated entry — [see class X]

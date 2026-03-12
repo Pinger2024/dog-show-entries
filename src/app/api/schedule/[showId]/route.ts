@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/auth-utils';
 import { db } from '@/server/db';
-import { and, eq, asc } from 'drizzle-orm';
+import { eq, asc } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { ShowSchedule } from '@/components/schedule/show-schedule';
@@ -13,7 +12,7 @@ import type {
 } from '@/components/schedule/show-schedule';
 import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
-import { makePdfResponse } from '@/lib/pdf-utils';
+import { authenticatePdfRequest, makePdfResponse } from '@/lib/pdf-utils';
 
 export async function GET(
   request: NextRequest,
@@ -34,22 +33,10 @@ export async function GET(
     return NextResponse.json({ error: 'Show not found' }, { status: 404 });
   }
 
-  // Draft shows require org membership; published shows are public
+  // Draft shows require org membership (with admin bypass); published shows are public
   if (show.status === 'draft') {
-    const user = await getCurrentUser();
-    if (!user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    const membership = await db.query.memberships.findFirst({
-      where: and(
-        eq(schema.memberships.userId, user.id),
-        eq(schema.memberships.organisationId, show.organisationId),
-        eq(schema.memberships.status, 'active')
-      ),
-    });
-    if (!membership) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
+    const authResult = await authenticatePdfRequest(show.organisationId);
+    if (authResult instanceof NextResponse) return authResult;
   }
 
   // Fetch show classes, judge assignments, and sponsors concurrently
