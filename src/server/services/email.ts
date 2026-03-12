@@ -1,7 +1,8 @@
 import { Resend } from 'resend';
 import { db } from '@/server/db';
 import { and, eq } from 'drizzle-orm';
-import { orders, memberships, users } from '@/server/db/schema';
+import { orders, memberships, users, printOrders } from '@/server/db/schema';
+import { formatOrderRef } from '@/lib/print-products';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -381,5 +382,242 @@ export async function sendSecretaryNotificationEmail(orderId: string) {
     return result;
   } catch (error) {
     console.error(`[email] Failed to send secretary notification:`, error);
+  }
+}
+
+/**
+ * Send a confirmation email to the secretary when a print order is submitted to Tradeprint.
+ */
+export async function sendPrintOrderConfirmationEmail(printOrderId: string) {
+  const order = await db.query.printOrders.findFirst({
+    where: eq(printOrders.id, printOrderId),
+    with: {
+      items: true,
+      orderedBy: true,
+      show: { with: { organisation: true } },
+    },
+  });
+
+  if (!order || !order.orderedBy?.email) {
+    console.error(`[email] Cannot send print order confirmation: order ${printOrderId} not found or no email`);
+    return;
+  }
+
+  const orderRef = formatOrderRef(order.id);
+  const show = order.show;
+  const deliveryAddr = [order.deliveryAddress1, order.deliveryAddress2, order.deliveryTown, order.deliveryPostcode]
+    .filter(Boolean)
+    .join(', ');
+
+  const itemRows = order.items.map((item) => `
+    <tr>
+      <td style="padding: 8px 16px; border-bottom: 1px solid #e5e5e5; font-size: 14px;">
+        ${item.documentLabel}
+      </td>
+      <td style="padding: 8px 16px; border-bottom: 1px solid #e5e5e5; font-size: 14px; text-align: center;">
+        ${item.quantity}
+      </td>
+      <td style="padding: 8px 16px; border-bottom: 1px solid #e5e5e5; font-size: 14px; text-align: right;">
+        ${formatFee(item.lineTotal)}
+      </td>
+    </tr>`).join('');
+
+  const estDelivery = order.estimatedDeliveryDate
+    ? new Date(order.estimatedDeliveryDate).toLocaleDateString('en-GB', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+      })
+    : null;
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; background-color: #f5f3ef; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
+    <div style="text-align: center; padding: 24px 0;">
+      <h1 style="margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 28px; color: #2D5F3F; letter-spacing: -0.5px;">Remi</h1>
+    </div>
+    <div style="background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: #2D5F3F; padding: 24px 24px 20px; text-align: center;">
+        <div style="display: inline-block; width: 40px; height: 40px; line-height: 40px; border-radius: 50%; background: rgba(255,255,255,0.2); font-size: 20px; color: #fff; margin-bottom: 8px;">&#9998;</div>
+        <h2 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 700;">Print Order Confirmed</h2>
+        <p style="margin: 8px 0 0; color: #b8d4c4; font-size: 14px;">
+          Order ${orderRef} &middot; ${formatFee(order.totalAmount)}
+        </p>
+      </div>
+
+      <div style="padding: 20px 24px; border-bottom: 1px solid #e5e5e5;">
+        <h3 style="margin: 0 0 4px; font-size: 18px; color: #1a1a1a;">${show.name}</h3>
+        <p style="margin: 0; font-size: 14px; color: #666;">
+          Your print order has been submitted to the printer and is being processed.
+        </p>
+      </div>
+
+      <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr>
+            <th style="padding: 8px 16px; text-align: left; font-size: 11px; text-transform: uppercase; color: #888; border-bottom: 2px solid #e5e5e5;">Item</th>
+            <th style="padding: 8px 16px; text-align: center; font-size: 11px; text-transform: uppercase; color: #888; border-bottom: 2px solid #e5e5e5;">Qty</th>
+            <th style="padding: 8px 16px; text-align: right; font-size: 11px; text-transform: uppercase; color: #888; border-bottom: 2px solid #e5e5e5;">Price</th>
+          </tr>
+        </thead>
+        <tbody>${itemRows}</tbody>
+      </table>
+
+      <div style="padding: 16px 24px; background: #f9f8f6;">
+        <table style="width: 100%;">
+          <tr>
+            <td style="font-weight: 700; font-size: 16px; color: #1a1a1a;">Total</td>
+            <td style="text-align: right; font-weight: 700; font-size: 16px; color: #2D5F3F;">${formatFee(order.totalAmount)}</td>
+          </tr>
+        </table>
+      </div>
+
+      <div style="padding: 16px 24px; border-top: 1px solid #e5e5e5;">
+        <p style="margin: 0 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #888;">Delivery</p>
+        <p style="margin: 0; font-size: 14px; color: #444;">
+          ${order.deliveryName ? `<strong>${order.deliveryName}</strong><br>` : ''}
+          ${deliveryAddr}
+        </p>
+        ${estDelivery ? `<p style="margin: 8px 0 0; font-size: 14px; color: #2D5F3F; font-weight: 600;">Estimated delivery: ${estDelivery}</p>` : ''}
+      </div>
+
+      <div style="padding: 20px 24px; text-align: center; border-top: 1px solid #e5e5e5;">
+        ${btn(`${APP_URL}/secretary/shows/${show.slug ?? show.id}/print-shop/${order.id}`, 'Track Your Order')}
+        <p style="margin: 12px 0 0; font-size: 12px; color: #999;">
+          We'll email you again when your order is dispatched with tracking details.
+        </p>
+      </div>
+    </div>
+    <p style="text-align: center; margin-top: 16px; font-size: 12px; color: #999;">
+      Sent by <a href="${APP_URL}" style="color: #2D5F3F; text-decoration: none; font-weight: 600;">Remi</a> on behalf of ${show.organisation?.name ?? 'your organisation'}.
+    </p>
+  </div>
+</body>
+</html>`;
+
+  try {
+    const result = await resend.emails.send({
+      from: FROM,
+      to: order.orderedBy.email,
+      replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+      subject: `Print Order Confirmed — ${show.name} (${orderRef})`,
+      html,
+    });
+    console.log(`[email] Print order confirmation sent for ${orderRef} to ${order.orderedBy.email}`, result);
+    return result;
+  } catch (error) {
+    console.error(`[email] Failed to send print order confirmation for ${orderRef}:`, error);
+  }
+}
+
+/**
+ * Send a dispatch notification when a print order ships, including tracking details.
+ */
+export async function sendPrintOrderDispatchEmail(printOrderId: string) {
+  const order = await db.query.printOrders.findFirst({
+    where: eq(printOrders.id, printOrderId),
+    with: {
+      items: true,
+      orderedBy: true,
+      show: { with: { organisation: true } },
+    },
+  });
+
+  if (!order || !order.orderedBy?.email) {
+    console.error(`[email] Cannot send dispatch notification: order ${printOrderId} not found or no email`);
+    return;
+  }
+
+  const orderRef = formatOrderRef(order.id);
+  const show = order.show;
+
+  const itemList = order.items
+    .map((item) => `<li style="padding: 4px 0; font-size: 14px; color: #444;">${item.documentLabel} &times; ${item.quantity}</li>`)
+    .join('');
+
+  const trackingSection = order.trackingUrl
+    ? `<div style="padding: 16px 24px; text-align: center;">
+        ${btn(order.trackingUrl, 'Track Delivery', '#2563eb')}
+        ${order.trackingNumber ? `<p style="margin: 8px 0 0; font-size: 13px; color: #666;">Tracking: ${order.trackingNumber}</p>` : ''}
+       </div>`
+    : order.trackingNumber
+      ? `<div style="padding: 16px 24px;">
+          <p style="margin: 0; font-size: 14px; color: #444;">Tracking number: <strong>${order.trackingNumber}</strong></p>
+         </div>`
+      : '';
+
+  const estDelivery = order.estimatedDeliveryDate
+    ? new Date(order.estimatedDeliveryDate).toLocaleDateString('en-GB', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+      })
+    : null;
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; background-color: #f5f3ef; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
+    <div style="text-align: center; padding: 24px 0;">
+      <h1 style="margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 28px; color: #2D5F3F; letter-spacing: -0.5px;">Remi</h1>
+    </div>
+    <div style="background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: #2563eb; padding: 24px 24px 20px; text-align: center;">
+        <div style="display: inline-block; width: 40px; height: 40px; line-height: 40px; border-radius: 50%; background: rgba(255,255,255,0.2); font-size: 20px; color: #fff; margin-bottom: 8px;">&#128230;</div>
+        <h2 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 700;">Your Print Order Has Shipped!</h2>
+        <p style="margin: 8px 0 0; color: #bfdbfe; font-size: 14px;">Order ${orderRef}</p>
+      </div>
+
+      <div style="padding: 20px 24px; border-bottom: 1px solid #e5e5e5;">
+        <h3 style="margin: 0 0 4px; font-size: 18px; color: #1a1a1a;">${show.name}</h3>
+        <p style="margin: 0; font-size: 14px; color: #666;">
+          Great news — your printing is on its way!
+          ${estDelivery ? ` Expected delivery: <strong>${estDelivery}</strong>.` : ''}
+        </p>
+      </div>
+
+      <div style="padding: 16px 24px; border-bottom: 1px solid #e5e5e5;">
+        <p style="margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #888;">What's in the box</p>
+        <ul style="margin: 0; padding-left: 20px;">${itemList}</ul>
+      </div>
+
+      ${trackingSection}
+
+      <div style="padding: 16px 24px; border-bottom: 1px solid #e5e5e5;">
+        <p style="margin: 0 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #888;">Delivering to</p>
+        <p style="margin: 0; font-size: 14px; color: #444;">
+          ${order.deliveryName ?? ''}<br>
+          ${[order.deliveryAddress1, order.deliveryTown, order.deliveryPostcode].filter(Boolean).join(', ')}
+        </p>
+      </div>
+
+      <div style="padding: 20px 24px; text-align: center; border-top: 1px solid #e5e5e5;">
+        ${btn(`${APP_URL}/secretary/shows/${show.slug ?? show.id}/print-shop/${order.id}`, 'View Order Details')}
+      </div>
+    </div>
+    <p style="text-align: center; margin-top: 16px; font-size: 12px; color: #999;">
+      Sent by <a href="${APP_URL}" style="color: #2D5F3F; text-decoration: none; font-weight: 600;">Remi</a> on behalf of ${show.organisation?.name ?? 'your organisation'}.
+    </p>
+  </div>
+</body>
+</html>`;
+
+  try {
+    const result = await resend.emails.send({
+      from: FROM,
+      to: order.orderedBy.email,
+      replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+      subject: `Your Print Order Has Shipped! — ${show.name} (${orderRef})`,
+      html,
+    });
+    console.log(`[email] Dispatch notification sent for ${orderRef} to ${order.orderedBy.email}`, result);
+    return result;
+  } catch (error) {
+    console.error(`[email] Failed to send dispatch notification for ${orderRef}:`, error);
   }
 }

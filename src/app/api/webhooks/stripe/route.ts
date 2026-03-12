@@ -3,7 +3,7 @@ import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { getStripe } from '@/server/services/stripe';
 import { db } from '@/server/db';
 import { entries, orders, payments, organisations, plans, users, printOrders, printOrderItems } from '@/server/db/schema';
-import { sendEntryConfirmationEmail, sendSecretaryNotificationEmail } from '@/server/services/email';
+import { sendEntryConfirmationEmail, sendSecretaryNotificationEmail, sendPrintOrderConfirmationEmail } from '@/server/services/email';
 import { formatOrderRef } from '@/lib/print-products';
 import type Stripe from 'stripe';
 
@@ -417,6 +417,11 @@ async function submitPrintOrderToTradeprint(printOrderId: string) {
       .where(eq(printOrders.id, printOrderId));
 
     console.log(`[tradeprint] Order ${printOrderId} submitted: ${result.orderRef}`);
+
+    // Send confirmation email (non-blocking)
+    sendPrintOrderConfirmationEmail(printOrderId).catch((err) =>
+      console.error('[webhook] Print order confirmation email failed:', err)
+    );
   } catch (err) {
     console.error(`[tradeprint] Submission failed for ${printOrderId}:`, err);
     // Order stays as 'paid' — can retry via refreshStatus

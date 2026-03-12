@@ -4,7 +4,7 @@ import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   Loader2, Printer, Package, Truck, CreditCard, Check,
   ChevronLeft, ChevronDown, AlertCircle, MapPin, Sparkles, Star,
-  Settings2, Eye,
+  Settings2, Eye, RefreshCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
@@ -123,6 +123,7 @@ export default function PrintShopPage() {
 
   const createOrder = trpc.printOrders.createDraftOrder.useMutation();
   const initiatePayment = trpc.printOrders.initiatePayment.useMutation();
+  const refreshAllOrders = trpc.printOrders.refreshAllPendingOrders.useMutation();
   const utils = trpc.useUtils();
 
   // ── Handlers ──
@@ -284,10 +285,31 @@ export default function PrintShopPage() {
               Professional printing for your show documents
             </p>
           </div>
-          <Button onClick={() => setShowNewOrder(true)}>
-            <Printer className="size-4" />
-            New Order
-          </Button>
+          <div className="flex gap-2">
+            {orders.some((o) => ['submitted', 'in_production'].includes(o.status)) && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={refreshAllOrders.isPending}
+                onClick={async () => {
+                  const result = await refreshAllOrders.mutateAsync({ showId });
+                  utils.printOrders.listByShow.invalidate({ showId });
+                  if (result.updated > 0) {
+                    toast.success(`Updated ${result.updated} order${result.updated > 1 ? 's' : ''}`);
+                  } else {
+                    toast.info('All orders are up to date');
+                  }
+                }}
+              >
+                <RefreshCw className={`size-4 ${refreshAllOrders.isPending ? 'animate-spin' : ''}`} />
+                Refresh Status
+              </Button>
+            )}
+            <Button onClick={() => setShowNewOrder(true)}>
+              <Printer className="size-4" />
+              New Order
+            </Button>
+          </div>
         </div>
         <PrintOrderList orders={orders} showId={showId} />
       </div>

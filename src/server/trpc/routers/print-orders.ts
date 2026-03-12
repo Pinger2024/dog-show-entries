@@ -28,6 +28,7 @@ import {
   getDeliveryEstimate,
   getOrderStatus,
 } from '@/server/services/tradeprint';
+import { sendPrintOrderDispatchEmail } from '@/server/services/email';
 import {
   getCachedTotalPrice,
   getCachedQuantities,
@@ -541,6 +542,7 @@ export const printOrdersRouter = createTRPCRouter({
       };
 
       const newStatus = statusMap[tpStatus.status] ?? order.status;
+      const previousStatus = order.status;
 
       await ctx.db
         .update(printOrders)
@@ -553,7 +555,85 @@ export const printOrdersRouter = createTRPCRouter({
         })
         .where(eq(printOrders.id, order.id));
 
+      // Send dispatch email on transition to 'dispatched'
+      if (newStatus === 'dispatched' && previousStatus !== 'dispatched') {
+        sendPrintOrderDispatchEmail(order.id).catch((err) =>
+          console.error('[print-orders] Dispatch email failed:', err)
+        );
+      }
+
       return { status: newStatus, tradeprintStatus: tpStatus.status };
+    }),
+
+  /** Refresh status for all pending print orders for a show */
+  refreshAllPendingOrders: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      // Find all orders that are in-flight (submitted or in production)
+      const pendingOrders = await ctx.db.query.printOrders.findMany({
+        where: and(
+          eq(printOrders.showId, input.showId),
+          inArray(printOrders.status, ['submitted', 'in_production'])
+        ),
+      });
+
+      if (pendingOrders.length === 0) {
+        return { updated: 0, results: [] };
+      }
+
+      const results = await Promise.all(
+        pendingOrders.map(async (order) => {
+          if (!order.tradeprintOrderRef) {
+            return { orderId: order.id, status: order.status, changed: false };
+          }
+
+          const tpStatus = await getOrderStatus(order.tradeprintOrderRef);
+          if (!tpStatus) {
+            return { orderId: order.id, status: order.status, changed: false };
+          }
+
+          type PrintOrderStatus = 'submitted' | 'in_production' | 'dispatched' | 'delivered';
+          const statusMap: Record<string, PrintOrderStatus> = {
+            received: 'submitted',
+            'in production': 'in_production',
+            printing: 'in_production',
+            dispatched: 'dispatched',
+            delivered: 'delivered',
+          };
+
+          const newStatus = statusMap[tpStatus.status] ?? order.status;
+          const changed = newStatus !== order.status;
+
+          if (changed) {
+            await ctx.db
+              .update(printOrders)
+              .set({
+                status: newStatus,
+                tradeprintStatus: tpStatus.status,
+                trackingNumber: tpStatus.trackingNumber ?? order.trackingNumber,
+                trackingUrl: tpStatus.trackingUrl ?? order.trackingUrl,
+                estimatedDeliveryDate: tpStatus.estimatedDeliveryDate ?? order.estimatedDeliveryDate,
+              })
+              .where(eq(printOrders.id, order.id));
+
+            // Send dispatch email on transition
+            if (newStatus === 'dispatched' && order.status !== 'dispatched') {
+              sendPrintOrderDispatchEmail(order.id).catch((err) =>
+                console.error('[print-orders] Dispatch email failed:', err)
+              );
+            }
+          }
+
+          return { orderId: order.id, status: newStatus, changed };
+        })
+      );
+
+      return {
+        updated: results.filter((r) => r.changed).length,
+        results,
+      };
     }),
 
   /** Admin: refresh the local print price cache from Tradeprint */
