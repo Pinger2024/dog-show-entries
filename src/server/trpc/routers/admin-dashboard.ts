@@ -43,6 +43,9 @@ function getDelta(
 /** Print order statuses where payment has been received */
 const PRINT_PAID_STATUSES = ['paid', 'submitted', 'in_production', 'dispatched', 'delivered'] as const;
 
+/** Print order statuses excluded from admin reporting views */
+const PRINT_EXCLUDED_STATUSES = ['draft', 'cancelled'] as const;
+
 export const adminDashboardRouter = createTRPCRouter({
   getDashboard: adminProcedure.query(async ({ ctx }) => {
     const now = new Date();
@@ -359,7 +362,7 @@ export const adminDashboardRouter = createTRPCRouter({
         .from(printOrders)
         .where(
           and(
-            inArray(printOrders.status, [...PRINT_PAID_STATUSES]),
+            inArray(printOrders.status, PRINT_PAID_STATUSES),
             gte(printOrders.createdAt, thisMonthStart)
           )
         ),
@@ -371,7 +374,7 @@ export const adminDashboardRouter = createTRPCRouter({
         .from(printOrders)
         .where(
           and(
-            inArray(printOrders.status, [...PRINT_PAID_STATUSES]),
+            inArray(printOrders.status, PRINT_PAID_STATUSES),
             gte(printOrders.createdAt, lastMonthStart),
             lt(printOrders.createdAt, thisMonthStart)
           )
@@ -382,12 +385,12 @@ export const adminDashboardRouter = createTRPCRouter({
           v: sql<number>`coalesce(sum(${printOrders.totalAmount}), 0)::int`,
         })
         .from(printOrders)
-        .where(inArray(printOrders.status, [...PRINT_PAID_STATUSES])),
+        .where(inArray(printOrders.status, PRINT_PAID_STATUSES)),
       // ── Print order count ──────────────────────────────────
       ctx.db
         .select({ v: sql<number>`count(*)::int` })
         .from(printOrders)
-        .where(inArray(printOrders.status, [...PRINT_PAID_STATUSES])),
+        .where(inArray(printOrders.status, PRINT_PAID_STATUSES)),
       // ── Print order pipeline ───────────────────────────────
       ctx.db
         .select({
@@ -405,7 +408,7 @@ export const adminDashboardRouter = createTRPCRouter({
         .from(printOrders)
         .where(
           and(
-            inArray(printOrders.status, [...PRINT_PAID_STATUSES]),
+            inArray(printOrders.status, PRINT_PAID_STATUSES),
             gte(printOrders.createdAt, thirtyDaysAgo)
           )
         )
@@ -417,7 +420,6 @@ export const adminDashboardRouter = createTRPCRouter({
           id: printOrders.id,
           createdAt: printOrders.createdAt,
           totalAmount: printOrders.totalAmount,
-          markupAmount: printOrders.markupAmount,
           status: printOrders.status,
           showName: shows.name,
           showSlug: shows.slug,
@@ -428,7 +430,7 @@ export const adminDashboardRouter = createTRPCRouter({
         .innerJoin(shows, eq(shows.id, printOrders.showId))
         .leftJoin(users, eq(users.id, printOrders.orderedByUserId))
         .where(
-          notInArray(printOrders.status, ['draft', 'cancelled'])
+          notInArray(printOrders.status, [...PRINT_EXCLUDED_STATUSES])
         )
         .orderBy(desc(printOrders.createdAt))
         .limit(8),

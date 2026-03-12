@@ -42,6 +42,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { PRINT_ORDER_STATUS_CONFIG } from '@/lib/print-products';
 import { cn } from '@/lib/utils';
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -110,24 +111,14 @@ const PIPELINE_STAGES = [
 ];
 
 const PRINT_PIPELINE_STAGES = [
-  { key: 'awaiting_payment', label: 'Awaiting Pay', bar: 'bg-amber-400' },
-  { key: 'paid', label: 'Paid', bar: 'bg-blue-400' },
-  { key: 'submitted', label: 'Submitted', bar: 'bg-sky-400' },
-  { key: 'in_production', label: 'Printing', bar: 'bg-purple-400' },
-  { key: 'dispatched', label: 'Dispatched', bar: 'bg-emerald-400' },
-  { key: 'delivered', label: 'Delivered', bar: 'bg-emerald-600' },
-  { key: 'failed', label: 'Failed', bar: 'bg-red-400' },
-];
-
-const PRINT_STATUS_BADGE: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-  awaiting_payment: { label: 'Awaiting Payment', variant: 'outline' },
-  paid: { label: 'Paid', variant: 'secondary' },
-  submitted: { label: 'Submitted', variant: 'secondary' },
-  in_production: { label: 'Printing', variant: 'default' },
-  dispatched: { label: 'Dispatched', variant: 'default' },
-  delivered: { label: 'Delivered', variant: 'default' },
-  failed: { label: 'Failed', variant: 'destructive' },
-};
+  { key: 'awaiting_payment', bar: 'bg-amber-400' },
+  { key: 'paid', bar: 'bg-blue-400' },
+  { key: 'submitted', bar: 'bg-sky-400' },
+  { key: 'in_production', bar: 'bg-purple-400' },
+  { key: 'dispatched', bar: 'bg-emerald-400' },
+  { key: 'delivered', bar: 'bg-emerald-600' },
+  { key: 'failed', bar: 'bg-red-400' },
+].map((s) => ({ ...s, label: PRINT_ORDER_STATUS_CONFIG[s.key]?.label ?? s.key }));
 
 // ── Reusable sub-components ──────────────────────────────────────
 
@@ -226,6 +217,39 @@ function MetricChart({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function PipelineGrid({
+  stages,
+  pipeline,
+}: {
+  stages: { key: string; label: string; bar: string }[];
+  pipeline: Record<string, number>;
+}) {
+  return (
+    <div className="grid grid-cols-4 gap-2 sm:grid-cols-7 sm:gap-3">
+      {stages.map((stage) => {
+        const count = pipeline[stage.key] ?? 0;
+        return (
+          <div
+            key={stage.key}
+            className="rounded-lg border text-center p-3 sm:p-4"
+          >
+            <div
+              className={cn(
+                'mx-auto mb-2 h-1.5 w-8 rounded-full',
+                stage.bar
+              )}
+            />
+            <p className="text-xl sm:text-2xl font-bold">{count}</p>
+            <p className="text-[11px] sm:text-xs text-muted-foreground mt-0.5">
+              {stage.label}
+            </p>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -637,28 +661,7 @@ export default function AdminDashboardPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="p-4 pt-2">
-          <div className="grid grid-cols-4 gap-2 sm:grid-cols-7 sm:gap-3">
-            {PIPELINE_STAGES.map((stage) => {
-              const count = showPipeline[stage.key] ?? 0;
-              return (
-                <div
-                  key={stage.key}
-                  className="rounded-lg border text-center p-3 sm:p-4"
-                >
-                  <div
-                    className={cn(
-                      'mx-auto mb-2 h-1.5 w-8 rounded-full',
-                      stage.bar
-                    )}
-                  />
-                  <p className="text-xl sm:text-2xl font-bold">{count}</p>
-                  <p className="text-[11px] sm:text-xs text-muted-foreground mt-0.5">
-                    {stage.label}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
+          <PipelineGrid stages={PIPELINE_STAGES} pipeline={showPipeline} />
         </CardContent>
       </Card>
 
@@ -687,28 +690,7 @@ export default function AdminDashboardPage() {
               </div>
             </CardHeader>
             <CardContent className="p-4 pt-2">
-              <div className="grid grid-cols-4 gap-2 sm:grid-cols-7 sm:gap-3">
-                {PRINT_PIPELINE_STAGES.map((stage) => {
-                  const count = data.printPipeline[stage.key] ?? 0;
-                  return (
-                    <div
-                      key={stage.key}
-                      className="rounded-lg border text-center p-3 sm:p-4"
-                    >
-                      <div
-                        className={cn(
-                          'mx-auto mb-2 h-1.5 w-8 rounded-full',
-                          stage.bar
-                        )}
-                      />
-                      <p className="text-xl sm:text-2xl font-bold">{count}</p>
-                      <p className="text-[11px] sm:text-xs text-muted-foreground mt-0.5">
-                        {stage.label}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
+              <PipelineGrid stages={PRINT_PIPELINE_STAGES} pipeline={data.printPipeline} />
             </CardContent>
           </Card>
 
@@ -726,7 +708,7 @@ export default function AdminDashboardPage() {
               <CardContent className="p-4 pt-2">
                 <div className="divide-y">
                   {data.recentPrintOrders.map((po) => {
-                    const badge = PRINT_STATUS_BADGE[po.status];
+                    const badge = PRINT_ORDER_STATUS_CONFIG[po.status];
                     return (
                       <Link
                         key={po.id}
