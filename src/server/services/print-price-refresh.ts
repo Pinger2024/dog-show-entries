@@ -13,7 +13,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { printPriceCache } from '@/server/db/schema';
 import { getPrintableProducts } from '@/lib/print-products';
-import { capitaliseServiceLevel, getSDK } from './tradeprint';
+import { getSDK, parseCSVLine } from './tradeprint';
 
 const SERVICE_LEVELS = ['Saver', 'Standard', 'Express'] as const;
 
@@ -40,16 +40,16 @@ export async function refreshAllPrintPrices(): Promise<{
         continue;
       }
 
-      // Delete old rows for this product
-      await db
-        .delete(printPriceCache)
-        .where(eq(printPriceCache.tradeprintProductName, product.tradeprintProductName));
+      // Atomic swap: delete old + insert new in a single transaction
+      await db.transaction(async (tx) => {
+        await tx
+          .delete(printPriceCache)
+          .where(eq(printPriceCache.tradeprintProductName, product.tradeprintProductName));
 
-      // Insert in batches of 1000
-      for (let i = 0; i < rows.length; i += 1000) {
-        const batch = rows.slice(i, i + 1000);
-        await db.insert(printPriceCache).values(batch);
-      }
+        for (let i = 0; i < rows.length; i += 1000) {
+          await tx.insert(printPriceCache).values(rows.slice(i, i + 1000));
+        }
+      });
 
       totalRows += rows.length;
       console.log(`[print-price-refresh] Cached ${rows.length} prices for ${product.tradeprintProductName}`);
@@ -91,14 +91,14 @@ async function fetchAndParseAllPrices(
   const decoder = new TextDecoder();
   let buffer = '';
   let headersParsed = false;
-  let headers: string[] = [];
   const rows: Array<typeof printPriceCache.$inferInsert> = [];
   const now = new Date();
 
-  // Indices for key columns
+  // Column indices (populated after header row)
   let qtyIdx = -1;
-  const priceIndices: Record<string, number> = {}; // 'Saver' → colIdx, etc.
-  const specColumnNames: string[] = []; // columns that are spec values (not qty/price/meta)
+  const priceIndices: Record<string, number> = {};
+  const specColumnNames: string[] = [];
+  const specColumnIndices: number[] = [];
   const META_COLUMNS = new Set([
     'ProductName', 'ProductID', 'Quantity', 'Tax',
     'PriceSaver', 'PriceStandard', 'PriceExpress',
@@ -120,81 +120,71 @@ async function fetchAndParseAllPrices(
       const cols = parseCSVLine(trimmed);
 
       if (!headersParsed) {
-        headers = cols.map((c) => c.trim());
+        const headers = cols.map((c) => c.trim());
         qtyIdx = headers.indexOf('Quantity');
         for (const level of SERVICE_LEVELS) {
           const idx = headers.indexOf(`Price${level}`);
           if (idx >= 0) priceIndices[level] = idx;
         }
-        // Everything that isn't a meta column is a spec
         for (let i = 0; i < headers.length; i++) {
-          if (!META_COLUMNS.has(headers[i])) specColumnNames.push(headers[i]);
+          if (!META_COLUMNS.has(headers[i])) {
+            specColumnNames.push(headers[i]);
+            specColumnIndices.push(i);
+          }
         }
         headersParsed = true;
         continue;
       }
 
-      if (qtyIdx < 0) continue;
-
-      const qty = parseInt(cols[qtyIdx]?.trim(), 10);
-      if (isNaN(qty) || qty <= 0) continue;
-
-      // Build specs object from non-meta columns
-      const specs: Record<string, string> = {};
-      for (const specName of specColumnNames) {
-        const idx = headers.indexOf(specName);
-        if (idx >= 0 && cols[idx]) specs[specName] = cols[idx].trim();
-      }
-
-      // One row per service level
-      for (const level of SERVICE_LEVELS) {
-        const priceIdx = priceIndices[level];
-        if (priceIdx === undefined) continue;
-
-        const totalPrice = parseFloat(cols[priceIdx]?.trim());
-        if (isNaN(totalPrice) || totalPrice <= 0) continue;
-
-        rows.push({
-          tradeprintProductName: productName,
-          serviceLevel: level.toLowerCase(),
-          quantity: qty,
-          totalPricePence: Math.round(totalPrice),
-          specs,
-          fetchedAt: now,
-        });
-      }
+      processDataRow(cols, qtyIdx, specColumnNames, specColumnIndices, priceIndices, productName, now, rows);
     }
   }
 
   // Process remaining buffer
   if (buffer.trim() && headersParsed) {
-    const cols = parseCSVLine(buffer.trim());
-    const qty = parseInt(cols[qtyIdx]?.trim(), 10);
-    if (!isNaN(qty) && qty > 0) {
-      const specs: Record<string, string> = {};
-      for (const specName of specColumnNames) {
-        const idx = headers.indexOf(specName);
-        if (idx >= 0 && cols[idx]) specs[specName] = cols[idx].trim();
-      }
-      for (const level of SERVICE_LEVELS) {
-        const priceIdx = priceIndices[level];
-        if (priceIdx === undefined) continue;
-        const totalPrice = parseFloat(cols[priceIdx]?.trim());
-        if (!isNaN(totalPrice) && totalPrice > 0) {
-          rows.push({
-            tradeprintProductName: productName,
-            serviceLevel: level.toLowerCase(),
-            quantity: qty,
-            totalPricePence: Math.round(totalPrice),
-            specs,
-            fetchedAt: now,
-          });
-        }
-      }
-    }
+    processDataRow(parseCSVLine(buffer.trim()), qtyIdx, specColumnNames, specColumnIndices, priceIndices, productName, now, rows);
   }
 
   return rows;
+}
+
+/** Extract price rows from a single CSV data line */
+function processDataRow(
+  cols: string[],
+  qtyIdx: number,
+  specColumnNames: string[],
+  specColumnIndices: number[],
+  priceIndices: Record<string, number>,
+  productName: string,
+  now: Date,
+  rows: Array<typeof printPriceCache.$inferInsert>
+) {
+  if (qtyIdx < 0) return;
+  const qty = parseInt(cols[qtyIdx]?.trim(), 10);
+  if (isNaN(qty) || qty <= 0) return;
+
+  const specs: Record<string, string> = {};
+  for (let i = 0; i < specColumnNames.length; i++) {
+    const val = cols[specColumnIndices[i]];
+    if (val) specs[specColumnNames[i]] = val.trim();
+  }
+
+  for (const level of SERVICE_LEVELS) {
+    const priceIdx = priceIndices[level];
+    if (priceIdx === undefined) continue;
+
+    const totalPrice = parseFloat(cols[priceIdx]?.trim());
+    if (isNaN(totalPrice) || totalPrice <= 0) continue;
+
+    rows.push({
+      tradeprintProductName: productName,
+      serviceLevel: level.toLowerCase(),
+      quantity: qty,
+      totalPricePence: Math.round(totalPrice),
+      specs,
+      fetchedAt: now,
+    });
+  }
 }
 
 /**
@@ -207,7 +197,6 @@ export async function getCachedTradePrice(
   quantity: number,
   serviceLevel: string = 'standard'
 ): Promise<number | null> {
-  // Use JSONB containment operator @> to match specs
   const rows = await db
     .select({ totalPricePence: printPriceCache.totalPricePence })
     .from(printPriceCache)
@@ -256,30 +245,4 @@ export async function isCachePopulated(): Promise<boolean> {
     .select({ count: sql<number>`count(*)` })
     .from(printPriceCache);
   return Number(row?.count ?? 0) > 0;
-}
-
-/** Simple CSV line parser that handles quoted fields */
-function parseCSVLine(line: string): string[] {
-  const result: string[] = [];
-  let current = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (ch === ',' && !inQuotes) {
-      result.push(current);
-      current = '';
-    } else {
-      current += ch;
-    }
-  }
-  result.push(current);
-  return result;
 }

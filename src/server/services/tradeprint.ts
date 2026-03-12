@@ -452,7 +452,7 @@ function extractMatchingPrice(
 }
 
 /** Simple CSV line parser that handles quoted fields */
-function parseCSVLine(line: string): string[] {
+export function parseCSVLine(line: string): string[] {
   const result: string[] = [];
   let current = '';
   let inQuotes = false;

@@ -28,7 +28,7 @@ import {
 } from '@/server/services/tradeprint';
 import {
   getCachedTradePrice,
-  isCachePopulated,
+  refreshAllPrintPrices,
 } from '@/server/services/print-price-refresh';
 import { createPaymentIntent } from '@/server/services/stripe';
 import { generateAndUploadForPrint } from '@/server/services/pdf-generation';
@@ -447,7 +447,6 @@ export const printOrdersRouter = createTRPCRouter({
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin only' });
       }
 
-      const { refreshAllPrintPrices } = await import('@/server/services/print-price-refresh');
       return refreshAllPrintPrices();
     }),
 });
