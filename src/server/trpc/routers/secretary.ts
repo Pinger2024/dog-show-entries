@@ -228,11 +228,14 @@ export const secretaryRouter = createTRPCRouter({
       };
     }),
 
-  listVenues: secretaryProcedure.query(async ({ ctx }) => {
-    return ctx.db.query.venues.findMany({
-      orderBy: (venues, { asc }) => [asc(venues.name)],
-    });
-  }),
+  listVenues: secretaryProcedure
+    .input(z.object({ organisationId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.db.query.venues.findMany({
+        where: eq(venues.organisationId, input.organisationId),
+        orderBy: (venues, { asc }) => [asc(venues.name)],
+      });
+    }),
 
   createVenue: secretaryProcedure
     .input(
@@ -241,6 +244,7 @@ export const secretaryRouter = createTRPCRouter({
         address: z.string().optional(),
         postcode: z.string().optional(),
         indoorOutdoor: z.string().optional(),
+        organisationId: z.string().uuid(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -256,24 +260,6 @@ export const secretaryRouter = createTRPCRouter({
       orderBy: (cd, { asc }) => [asc(cd.type), asc(cd.sortOrder), asc(cd.name)],
     });
   }),
-
-  updateScheduleUrl: secretaryProcedure
-    .input(
-      z.object({
-        showId: z.string().uuid(),
-        scheduleUrl: z.string().url(),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
-
-      const [updated] = await ctx.db
-        .update(shows)
-        .set({ scheduleUrl: input.scheduleUrl })
-        .where(eq(shows.id, input.showId))
-        .returning();
-      return updated!;
-    }),
 
   updateOrganisationLogo: secretaryProcedure
     .input(
@@ -298,6 +284,43 @@ export const secretaryRouter = createTRPCRouter({
       const [updated] = await ctx.db
         .update(organisations)
         .set({ logoUrl: input.logoUrl })
+        .where(eq(organisations.id, input.organisationId))
+        .returning();
+      return updated!;
+    }),
+
+  updateOrganisation: secretaryProcedure
+    .input(
+      z.object({
+        organisationId: z.string().uuid(),
+        name: z.string().min(1).max(200),
+        contactEmail: z.string().email().nullish(),
+        contactPhone: z.string().max(30).nullish(),
+        website: z.string().url().nullish(),
+        logoUrl: z.string().url().nullish(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const membership = await ctx.db.query.memberships.findFirst({
+        where: and(
+          eq(memberships.userId, ctx.session.user.id),
+          eq(memberships.organisationId, input.organisationId),
+          eq(memberships.status, 'active')
+        ),
+      });
+      if (!membership) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'You do not have access to this organisation' });
+      }
+
+      const [updated] = await ctx.db
+        .update(organisations)
+        .set({
+          name: input.name,
+          contactEmail: input.contactEmail ?? null,
+          contactPhone: input.contactPhone ?? null,
+          website: input.website ?? null,
+          logoUrl: input.logoUrl ?? null,
+        })
         .where(eq(organisations.id, input.organisationId))
         .returning();
       return updated!;

@@ -66,7 +66,7 @@ export default function ShowManagementLayout({
     id,
   });
   const { data: stats } = trpc.secretary.getShowStats.useQuery(
-    { showId: id },
+    { showId: show?.id ?? '' },
     { enabled: !!show }
   );
 
@@ -122,7 +122,7 @@ export default function ShowManagementLayout({
   async function applyStatusChange(newStatus: string) {
     try {
       await updateMutation.mutateAsync({
-        id,
+        id: show!.id,
         status: newStatus as
           | 'draft'
           | 'published'
@@ -312,9 +312,9 @@ export default function ShowManagementLayout({
                   disabled={populateMutation.isPending}
                   onClick={async () => {
                     try {
-                      const result = await populateMutation.mutateAsync({ showId: id });
+                      const result = await populateMutation.mutateAsync({ showId: show.id });
                       await utils.shows.getById.invalidate({ id });
-                      await utils.secretary.getShowStats.invalidate({ showId: id });
+                      await utils.secretary.getShowStats.invalidate({ showId: show.id });
                       setShowTestDataDialog(false);
                       const parts = [
                         `${result.entriesCreated} entries`,
@@ -350,9 +350,9 @@ export default function ShowManagementLayout({
                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   onClick={async () => {
                     try {
-                      const result = await clearMutation.mutateAsync({ showId: id });
+                      const result = await clearMutation.mutateAsync({ showId: show!.id });
                       await utils.shows.getById.invalidate({ id });
-                      await utils.secretary.getShowStats.invalidate({ showId: id });
+                      await utils.secretary.getShowStats.invalidate({ showId: show!.id });
                       toast.success(`Cleared ${result.entriesDeleted} entries and ${result.dogsDeleted} dogs`);
                     } catch {
                       toast.error('Failed to clear test data');

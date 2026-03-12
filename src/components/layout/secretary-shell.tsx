@@ -8,6 +8,7 @@ import {
   CalendarDays,
   PlusCircle,
   CreditCard,
+  Settings,
   LogOut,
   ChevronRight,
   ChevronLeft,
@@ -32,13 +33,14 @@ const sidebarNavItems = [
   { href: '/secretary/shows', label: 'My Shows', icon: CalendarDays },
   { href: '/secretary/shows/new', label: 'Create Show', icon: PlusCircle },
   { href: '/secretary/billing', label: 'Billing', icon: CreditCard },
+  { href: '/secretary/settings', label: 'Settings', icon: Settings },
 ];
 
 const mobileNavItems = [
   { href: '/secretary', label: 'Home', icon: LayoutDashboard },
   { href: '/secretary/shows', label: 'Shows', icon: CalendarDays },
   { href: '/secretary/shows/new', label: 'New', icon: PlusCircle },
-  { href: '/secretary/billing', label: 'Billing', icon: CreditCard },
+  { href: '/secretary/settings', label: 'Settings', icon: Settings },
 ];
 
 function getInitials(name?: string | null, email?: string | null) {
@@ -63,7 +65,7 @@ function getBreadcrumbs(pathname: string) {
   }));
 }
 
-const rootPaths = new Set(['/secretary', '/secretary/shows', '/secretary/shows/new', '/secretary/billing']);
+const rootPaths = new Set(['/secretary', '/secretary/shows', '/secretary/shows/new', '/secretary/billing', '/secretary/settings']);
 
 function getParentPath(pathname: string): string | null {
   if (rootPaths.has(pathname)) return null;
