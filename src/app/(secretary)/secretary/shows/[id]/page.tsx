@@ -604,6 +604,7 @@ interface ClassManagerProps {
 function ClassManager({ showId, classes }: ClassManagerProps) {
   const [editingFees, setEditingFees] = useState<Record<string, string>>({});
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [hasInitializedCollapse, setHasInitializedCollapse] = useState(false);
   // Optimistic ordering: maps classId → sortOrder for instant visual feedback during drag
   const [optimisticOrder, setOptimisticOrder] = useState<Record<string, number> | null>(null);
   const utils = trpc.useUtils();
@@ -745,6 +746,15 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
 
     return { isMultiBreed: multiBreed, grouped: groups };
   }, [effectiveClasses]);
+
+  // Collapse all sections except the first one on initial load
+  useEffect(() => {
+    if (hasInitializedCollapse || grouped.length <= 1) return;
+    const initial: Record<string, boolean> = {};
+    grouped.forEach((g, i) => { initial[g.key] = i > 0; });
+    setCollapsedGroups(initial);
+    setHasInitializedCollapse(true);
+  }, [grouped, hasInitializedCollapse]);
 
   if (classes.length === 0) {
     return (
