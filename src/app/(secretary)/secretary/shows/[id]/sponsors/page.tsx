@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
+import { uploadImageViaPresign } from '@/lib/upload';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -156,26 +157,11 @@ function SponsorDirectory({
     if (!file) return;
     setUploading(true);
     try {
-      const res = await fetch('/api/upload/presign', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fileName: file.name,
-          contentType: file.type,
-          sizeBytes: file.size,
-        }),
-      });
-      if (!res.ok) throw new Error('Failed to get upload URL');
-      const { presignedUrl, publicUrl } = await res.json();
-      await fetch(presignedUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': file.type },
-        body: file,
-      });
+      const publicUrl = await uploadImageViaPresign(file);
       setLogoUrl(publicUrl);
       toast.success('Logo uploaded');
-    } catch {
-      toast.error('Failed to upload logo');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to upload logo');
     } finally {
       setUploading(false);
     }

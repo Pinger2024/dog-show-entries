@@ -4,6 +4,7 @@ import { and, eq, sql, isNull, inArray, asc, desc, ilike } from 'drizzle-orm';
 import { secretaryProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { verifyShowAccess } from '../verify-show-access';
+import { verifyOrgAccess } from '../verify-org-access';
 import {
   shows,
   entries,
@@ -170,6 +171,17 @@ export const secretaryRouter = createTRPCRouter({
     };
   }),
 
+  getOrganisation: secretaryProcedure.query(async ({ ctx }) => {
+    const membership = await ctx.db.query.memberships.findFirst({
+      where: and(
+        eq(memberships.userId, ctx.session.user.id),
+        eq(memberships.status, 'active')
+      ),
+      with: { organisation: true },
+    });
+    return membership?.organisation ?? null;
+  }),
+
   /** List active members of an organisation (for secretary picker, etc.) */
   orgMembers: secretaryProcedure
     .input(z.object({ organisationId: z.string().uuid() }))
@@ -261,34 +273,6 @@ export const secretaryRouter = createTRPCRouter({
     });
   }),
 
-  updateOrganisationLogo: secretaryProcedure
-    .input(
-      z.object({
-        organisationId: z.string().uuid(),
-        logoUrl: z.string().url(),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      // Verify user is a member of this organisation
-      const membership = await ctx.db.query.memberships.findFirst({
-        where: and(
-          eq(memberships.userId, ctx.session.user.id),
-          eq(memberships.organisationId, input.organisationId),
-          eq(memberships.status, 'active')
-        ),
-      });
-      if (!membership) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'You do not have access to this organisation' });
-      }
-
-      const [updated] = await ctx.db
-        .update(organisations)
-        .set({ logoUrl: input.logoUrl })
-        .where(eq(organisations.id, input.organisationId))
-        .returning();
-      return updated!;
-    }),
-
   updateOrganisation: secretaryProcedure
     .input(
       z.object({
@@ -301,16 +285,7 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const membership = await ctx.db.query.memberships.findFirst({
-        where: and(
-          eq(memberships.userId, ctx.session.user.id),
-          eq(memberships.organisationId, input.organisationId),
-          eq(memberships.status, 'active')
-        ),
-      });
-      if (!membership) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'You do not have access to this organisation' });
-      }
+      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
 
       const [updated] = await ctx.db
         .update(organisations)

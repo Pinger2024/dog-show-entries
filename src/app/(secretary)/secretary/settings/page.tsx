@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { trpc } from '@/lib/trpc';
+import { uploadImageViaPresign } from '@/lib/upload';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,14 +28,44 @@ import {
   Check,
 } from 'lucide-react';
 
+const SUBSCRIPTION_LABELS: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+  active: { label: 'Active subscription', variant: 'default' },
+  trial: { label: 'Trial', variant: 'outline' },
+  past_due: { label: 'Past Due', variant: 'destructive' },
+  cancelled: { label: 'Cancelled', variant: 'secondary' },
+  none: { label: 'No Plan', variant: 'secondary' },
+};
+
+type OrgData = {
+  name: string;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  website: string | null;
+  logoUrl: string | null;
+};
+
+function resetFormFromOrg(
+  org: OrgData,
+  setters: {
+    setName: (v: string) => void;
+    setContactEmail: (v: string) => void;
+    setContactPhone: (v: string) => void;
+    setWebsite: (v: string) => void;
+    setLogoUrl: (v: string) => void;
+  }
+) {
+  setters.setName(org.name);
+  setters.setContactEmail(org.contactEmail ?? '');
+  setters.setContactPhone(org.contactPhone ?? '');
+  setters.setWebsite(org.website ?? '');
+  setters.setLogoUrl(org.logoUrl ?? '');
+}
+
 export default function SettingsPage() {
-  const { data: dashboard, isLoading } = trpc.secretary.getDashboard.useQuery();
+  const { data: org, isLoading } = trpc.secretary.getOrganisation.useQuery();
   const updateMutation = trpc.secretary.updateOrganisation.useMutation();
   const utils = trpc.useUtils();
 
-  const org = dashboard?.organisations?.[0];
-
-  // Form state — initialised from org when it loads
   const [name, setName] = useState('');
   const [contactEmail, setContactEmail] = useState('');
   const [contactPhone, setContactPhone] = useState('');
@@ -45,16 +76,14 @@ export default function SettingsPage() {
   const [initialised, setInitialised] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const setters = { setName, setContactEmail, setContactPhone, setWebsite, setLogoUrl };
 
-  // Sync form state when org data arrives
-  if (org && !initialised) {
-    setName(org.name);
-    setContactEmail(org.contactEmail ?? '');
-    setContactPhone(org.contactPhone ?? '');
-    setWebsite(org.website ?? '');
-    setLogoUrl(org.logoUrl ?? '');
-    setInitialised(true);
-  }
+  useEffect(() => {
+    if (org && !initialised) {
+      resetFormFromOrg(org, setters);
+      setInitialised(true);
+    }
+  }, [org, initialised]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isDirty =
     initialised &&
@@ -65,37 +94,14 @@ export default function SettingsPage() {
       website !== (org.website ?? '') ||
       logoUrl !== (org.logoUrl ?? ''));
 
-  const uploadFile = useCallback(async (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      toast.error('Please upload an image file (PNG, JPG, SVG, or WebP)');
-      return;
-    }
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error('Image must be under 2MB');
-      return;
-    }
+  const handleUpload = useCallback(async (file: File) => {
     setUploading(true);
     try {
-      const res = await fetch('/api/upload/presign', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fileName: file.name,
-          contentType: file.type,
-          sizeBytes: file.size,
-        }),
-      });
-      if (!res.ok) throw new Error('Failed to get upload URL');
-      const { presignedUrl, publicUrl } = await res.json();
-      await fetch(presignedUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': file.type },
-        body: file,
-      });
+      const publicUrl = await uploadImageViaPresign(file);
       setLogoUrl(publicUrl);
       toast.success('Logo uploaded');
-    } catch {
-      toast.error('Failed to upload logo');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to upload logo');
     } finally {
       setUploading(false);
     }
@@ -103,8 +109,7 @@ export default function SettingsPage() {
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (file) uploadFile(file);
-    // Reset so the same file can be re-selected
+    if (file) handleUpload(file);
     e.target.value = '';
   }
 
@@ -112,13 +117,13 @@ export default function SettingsPage() {
     e.preventDefault();
     setDragOver(false);
     const file = e.dataTransfer.files?.[0];
-    if (file) uploadFile(file);
+    if (file) handleUpload(file);
   }
 
   async function handleSave() {
     if (!org || !name.trim()) return;
     try {
-      await updateMutation.mutateAsync({
+      const result = await updateMutation.mutateAsync({
         organisationId: org.id,
         name: name.trim(),
         contactEmail: contactEmail.trim() || null,
@@ -126,7 +131,8 @@ export default function SettingsPage() {
         website: website.trim() || null,
         logoUrl: logoUrl || null,
       });
-      await utils.secretary.getDashboard.invalidate();
+      resetFormFromOrg(result, setters);
+      await utils.secretary.getOrganisation.invalidate();
       toast.success('Organisation details saved');
     } catch {
       toast.error('Failed to save changes');
@@ -160,6 +166,8 @@ export default function SettingsPage() {
     );
   }
 
+  const subStatus = SUBSCRIPTION_LABELS[org.subscriptionStatus] ?? SUBSCRIPTION_LABELS.none;
+
   return (
     <div className="space-y-4 sm:space-y-6 pb-16 md:pb-0">
       {/* Header */}
@@ -172,14 +180,9 @@ export default function SettingsPage() {
             Manage your organisation&apos;s profile and branding
           </p>
         </div>
-        {org.subscriptionStatus && (
-          <Badge
-            variant={org.subscriptionStatus === 'active' ? 'default' : 'secondary'}
-            className="self-start sm:self-auto"
-          >
-            {org.subscriptionStatus === 'active' ? 'Active subscription' : org.subscriptionStatus}
-          </Badge>
-        )}
+        <Badge variant={subStatus.variant} className="self-start sm:self-auto">
+          {subStatus.label}
+        </Badge>
       </div>
 
       {/* Logo upload card */}
@@ -347,15 +350,15 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Save bar — sticky on mobile */}
+      {/* Save bar — fixed on mobile to avoid -mx negative margin overflow */}
       <div
         className={`
-          sticky bottom-16 z-40 -mx-2 px-2 pb-2 pt-3 sm:-mx-0 sm:px-0 sm:pb-0 md:static md:bottom-auto
+          fixed bottom-16 left-0 right-0 z-40 px-2 pb-2 pt-3 md:relative md:bottom-auto md:left-auto md:right-auto md:px-0 md:pb-0 md:pt-0
           transition-all duration-200
           ${isDirty ? 'opacity-100' : 'pointer-events-none opacity-0'}
         `}
       >
-        <div className="flex items-center justify-between rounded-xl border bg-background/95 px-4 py-3 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:rounded-lg sm:shadow-md">
+        <div className="mx-auto max-w-6xl flex items-center justify-between rounded-xl border bg-background/95 px-4 py-3 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:rounded-lg sm:shadow-md md:mx-0">
           <p className="text-sm text-muted-foreground">
             <span className="hidden sm:inline">You have </span>unsaved changes
           </p>
@@ -363,14 +366,7 @@ export default function SettingsPage() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => {
-                if (!org) return;
-                setName(org.name);
-                setContactEmail(org.contactEmail ?? '');
-                setContactPhone(org.contactPhone ?? '');
-                setWebsite(org.website ?? '');
-                setLogoUrl(org.logoUrl ?? '');
-              }}
+              onClick={() => org && resetFormFromOrg(org, setters)}
               disabled={updateMutation.isPending}
             >
               Discard
