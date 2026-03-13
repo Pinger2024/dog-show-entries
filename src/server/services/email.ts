@@ -4,19 +4,19 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { orders, memberships, users, printOrders, breeds } from '@/server/db/schema';
 import { formatOrderRef } from '@/lib/print-products';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+export const resend = new Resend(process.env.RESEND_API_KEY);
 
-const FROM =
+export const FROM =
   process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>';
 
-const APP_URL =
+export const APP_URL =
   process.env.NEXTAUTH_URL ?? 'https://remishowmanager.co.uk';
 
 function formatFee(pence: number) {
   return `£${(pence / 100).toFixed(2)}`;
 }
 
-function btn(href: string, label: string, bg = '#2D5F3F') {
+export function btn(href: string, label: string, bg = '#2D5F3F') {
   return `<a href="${href}" style="display: inline-block; padding: 12px 28px; background: ${bg}; color: #ffffff; text-decoration: none; border-radius: 8px; font-size: 14px; font-weight: 600;">${label}</a>`;
 }
 

@@ -829,16 +829,19 @@ export const stewardRouter = createTRPCRouter({
       const sharedToken = crypto.randomUUID();
 
       // Update all assignment rows with the shared token
-      for (const assignment of assignments) {
-        await ctx.db
-          .update(judgeAssignments)
-          .set({
-            approvalToken: sharedToken,
-            approvalStatus: 'pending',
-            approvalSentAt: new Date(),
-          })
-          .where(eq(judgeAssignments.id, assignment.id));
-      }
+      await ctx.db
+        .update(judgeAssignments)
+        .set({
+          approvalToken: sharedToken,
+          approvalStatus: 'pending',
+          approvalSentAt: new Date(),
+        })
+        .where(
+          and(
+            eq(judgeAssignments.showId, input.showId),
+            eq(judgeAssignments.judgeId, input.judgeId)
+          )
+        );
 
       // Send approval email
       await sendJudgeApprovalRequestEmail({

@@ -3910,7 +3910,7 @@ export const secretaryRouter = createTRPCRouter({
       if (input.sendNotifications) {
         const { sendExhibitorResultsEmails, sendFollowerResultsNotifications, createResultsMilestonePosts } = await import('@/server/services/results-notifications');
         // Fire and forget — don't block the mutation
-        Promise.all([
+        void Promise.all([
           sendExhibitorResultsEmails(input.showId).catch((e) => console.error('[results-publish] exhibitor emails failed:', e)),
           sendFollowerResultsNotifications(input.showId).catch((e) => console.error('[results-publish] follower notifications failed:', e)),
           createResultsMilestonePosts(input.showId).catch((e) => console.error('[results-publish] milestone posts failed:', e)),
@@ -4050,18 +4050,21 @@ export const secretaryRouter = createTRPCRouter({
       const crypto = await import('crypto');
       const sharedToken = crypto.randomUUID();
 
-      for (const assignment of assignments) {
-        await ctx.db
-          .update(judgeAssignments)
-          .set({
-            approvalToken: sharedToken,
-            approvalStatus: 'pending',
-            approvalSentAt: new Date(),
-            approvedAt: null,
-            approvalNote: null,
-          })
-          .where(eq(judgeAssignments.id, assignment.id));
-      }
+      await ctx.db
+        .update(judgeAssignments)
+        .set({
+          approvalToken: sharedToken,
+          approvalStatus: 'pending',
+          approvalSentAt: new Date(),
+          approvedAt: null,
+          approvalNote: null,
+        })
+        .where(
+          and(
+            eq(judgeAssignments.showId, input.showId),
+            eq(judgeAssignments.judgeId, input.judgeId)
+          )
+        );
 
       const { sendJudgeApprovalRequestEmail } = await import('@/server/services/email');
       await sendJudgeApprovalRequestEmail({

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { eq, and, asc } from 'drizzle-orm';
+import { eq, and, asc, inArray } from 'drizzle-orm';
 import { db } from '@/server/db';
 import {
   judgeAssignments,
@@ -11,7 +11,8 @@ import {
   achievements,
   breeds,
 } from '@/server/db/schema';
-import { Resend } from 'resend';
+import { getPlacementLabel, achievementLabels } from '@/lib/placements';
+import { resend, FROM } from '@/server/services/email';
 
 function esc(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -111,20 +112,6 @@ function renderPage(title: string, body: string) {
 </html>`;
 }
 
-const placementLabels: Record<number, string> = {
-  1: '1st', 2: '2nd', 3: '3rd', 4: 'VHC', 5: 'HC', 6: 'Commended', 7: 'Reserve',
-};
-
-const achievementLabels: Record<string, string> = {
-  best_in_show: 'Best in Show', reserve_best_in_show: 'Reserve Best in Show',
-  best_puppy_in_show: 'Best Puppy in Show', best_of_breed: 'Best of Breed',
-  best_puppy_in_breed: 'Best Puppy in Breed', best_veteran_in_breed: 'Best Veteran in Breed',
-  dog_cc: 'Dog CC', reserve_dog_cc: 'Reserve Dog CC',
-  bitch_cc: 'Bitch CC', reserve_bitch_cc: 'Reserve Bitch CC',
-  best_puppy_dog: 'Best Puppy Dog', best_puppy_bitch: 'Best Puppy Bitch',
-  best_long_coat_dog: 'Best Long Coat Dog', best_long_coat_bitch: 'Best Long Coat Bitch',
-  best_long_coat_in_show: 'Best Long Coat in Show', cc: 'CC', reserve_cc: 'Reserve CC',
-};
 
 export async function GET(
   request: NextRequest,
@@ -205,9 +192,13 @@ export async function GET(
   const breedNames = allAssignments.filter((a) => a.breed).map((a) => a.breed!.name);
   const breedsText = breedNames.length > 0 ? breedNames.join(', ') : 'All breeds';
 
-  // Get results for the judge's assigned breeds
-  const classes = await db.query.showClasses.findMany({
-    where: eq(showClasses.showId, show.id),
+  // Get results for the judge's assigned breeds (filter in DB when possible)
+  const classWhere = breedIds.length > 0
+    ? and(eq(showClasses.showId, show.id), inArray(showClasses.breedId, breedIds))
+    : eq(showClasses.showId, show.id);
+
+  const filteredClasses = await db.query.showClasses.findMany({
+    where: classWhere,
     with: {
       classDefinition: true,
       breed: true,
@@ -225,11 +216,6 @@ export async function GET(
     },
     orderBy: [asc(showClasses.sortOrder)],
   });
-
-  // Filter to judge's breeds (or all if no breed filter)
-  const filteredClasses = breedIds.length > 0
-    ? classes.filter((c) => c.breedId && breedIds.includes(c.breedId))
-    : classes;
 
   // Get achievements for the judge's breeds
   const showAchievements = await db.query.achievements.findMany({
@@ -261,7 +247,7 @@ export async function GET(
       .sort((a, b) => (a.result!.placement ?? 99) - (b.result!.placement ?? 99))
       .map((ec) => {
         const r = ec.result!;
-        const pLabel = r.placement ? placementLabels[r.placement] ?? `${r.placement}th` : '—';
+        const pLabel = r.placement ? getPlacementLabel(r.placement) : '—';
         const pClass = r.placement === 1 ? 'p1' : r.placement === 2 ? 'p2' : r.placement === 3 ? 'p3' : '';
         return `<tr>
           <td>${ec.entry.catalogueNumber ?? '—'}</td>
@@ -283,22 +269,24 @@ export async function GET(
     breedGroupMap.get(breedName)!.entryCount += confirmed.length;
   }
 
+  // Build dogId → breedName map for O(1) achievement lookups
+  const dogBreedMap = new Map<string, string>();
+  for (const sc of filteredClasses) {
+    for (const ec of sc.entryClasses) {
+      if (ec.entry.dogId) dogBreedMap.set(ec.entry.dogId, sc.breed?.name ?? 'Any Breed');
+    }
+  }
+
   // Add breed-level achievements
   for (const a of showAchievements) {
-    // Find which breed this dog belongs to (from entries)
-    for (const sc of filteredClasses) {
-      const dogEntry = sc.entryClasses.find((ec) => ec.entry.dogId === a.dogId);
-      if (dogEntry) {
-        const breedName = sc.breed?.name ?? 'Any Breed';
-        const group = breedGroupMap.get(breedName);
-        if (group) {
-          const label = achievementLabels[a.type] ?? a.type;
-          group.achievementsHtml.push(
-            `<span class="award-badge">${label}: ${a.dog?.registeredName ?? 'Unknown'}</span>`
-          );
-        }
-        break;
-      }
+    const breedName = dogBreedMap.get(a.dogId);
+    if (!breedName) continue;
+    const group = breedGroupMap.get(breedName);
+    if (group) {
+      const label = achievementLabels[a.type] ?? a.type;
+      group.achievementsHtml.push(
+        `<span class="award-badge">${label}: ${a.dog?.registeredName ?? 'Unknown'}</span>`
+      );
     }
   }
 
@@ -440,8 +428,7 @@ export async function POST(
 
     // Notify secretary
     try {
-      const resend = new Resend(process.env.RESEND_API_KEY);
-      const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>';
+      const emailFrom = FROM;
       const adminEmail = process.env.FEEDBACK_NOTIFY_EMAIL ?? 'michael@prometheus-it.com';
       const secretaryEmail = show.secretaryEmail;
       const toAddresses = [adminEmail, ...(secretaryEmail && secretaryEmail !== adminEmail ? [secretaryEmail] : [])];
@@ -539,8 +526,7 @@ export async function POST(
 
     // Notify secretary
     try {
-      const resend = new Resend(process.env.RESEND_API_KEY);
-      const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>';
+      const emailFrom = FROM;
       const adminEmail = process.env.FEEDBACK_NOTIFY_EMAIL ?? 'michael@prometheus-it.com';
       const secretaryEmail = show.secretaryEmail;
       const toAddresses = [adminEmail, ...(secretaryEmail && secretaryEmail !== adminEmail ? [secretaryEmail] : [])];

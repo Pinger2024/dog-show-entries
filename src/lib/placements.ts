@@ -42,6 +42,26 @@ export function getPlacementsForScope(
   return KC_PLACEMENTS.filter((p) => p.value <= 6); // 1st–HC, no Commended
 }
 
+export const achievementLabels: Record<string, string> = {
+  best_in_show: 'Best in Show',
+  reserve_best_in_show: 'Reserve Best in Show',
+  best_puppy_in_show: 'Best Puppy in Show',
+  best_of_breed: 'Best of Breed',
+  best_puppy_in_breed: 'Best Puppy in Breed',
+  best_veteran_in_breed: 'Best Veteran in Breed',
+  dog_cc: 'Dog CC',
+  reserve_dog_cc: 'Reserve Dog CC',
+  bitch_cc: 'Bitch CC',
+  reserve_bitch_cc: 'Reserve Bitch CC',
+  best_puppy_dog: 'Best Puppy Dog',
+  best_puppy_bitch: 'Best Puppy Bitch',
+  best_long_coat_dog: 'Best Long Coat Dog',
+  best_long_coat_bitch: 'Best Long Coat Bitch',
+  best_long_coat_in_show: 'Best Long Coat in Show',
+  cc: 'CC',
+  reserve_cc: 'Reserve CC',
+};
+
 export const placementColors: Record<number, string> = {
   1: 'bg-yellow-100 text-yellow-800 border-yellow-200',
   2: 'bg-gray-100 text-gray-700 border-gray-200',

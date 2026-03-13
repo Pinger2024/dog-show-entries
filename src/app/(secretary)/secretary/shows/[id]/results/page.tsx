@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
-import { getPlacementLabel, placementColors } from '@/lib/placements';
+import { getPlacementLabel, placementColors, achievementLabels } from '@/lib/placements';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -33,26 +33,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-
-const achievementLabels: Record<string, string> = {
-  best_in_show: 'Best in Show',
-  reserve_best_in_show: 'Reserve Best in Show',
-  best_puppy_in_show: 'Best Puppy in Show',
-  best_of_breed: 'Best of Breed',
-  best_puppy_in_breed: 'Best Puppy in Breed',
-  best_veteran_in_breed: 'Best Veteran in Breed',
-  dog_cc: 'Dog CC',
-  reserve_dog_cc: 'Reserve Dog CC',
-  bitch_cc: 'Bitch CC',
-  reserve_bitch_cc: 'Reserve Bitch CC',
-  best_puppy_dog: 'Best Puppy Dog',
-  best_puppy_bitch: 'Best Puppy Bitch',
-  best_long_coat_dog: 'Best Long Coat Dog',
-  best_long_coat_bitch: 'Best Long Coat Bitch',
-  best_long_coat_in_show: 'Best Long Coat in Show',
-  cc: 'CC',
-  reserve_cc: 'Reserve CC',
-};
 
 export default function SecretaryResultsPage() {
   const showId = useShowId();

@@ -1,6 +1,5 @@
-import { Resend } from 'resend';
 import { db } from '@/server/db';
-import { and, eq, inArray, isNull, isNotNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import {
   shows,
   entries,
@@ -8,59 +7,17 @@ import {
   showClasses,
   results,
   achievements,
-  dogs,
-  users,
   dogFollows,
   dogTimelinePosts,
   dogOwners,
 } from '@/server/db/schema';
-
-const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM = process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>';
-const APP_URL = process.env.NEXTAUTH_URL ?? 'https://remishowmanager.co.uk';
-
-function formatFee(pence: number) {
-  return `£${(pence / 100).toFixed(2)}`;
-}
-
-function btn(href: string, label: string, bg = '#2D5F3F') {
-  return `<a href="${href}" style="display: inline-block; padding: 12px 28px; background: ${bg}; color: #ffffff; text-decoration: none; border-radius: 8px; font-size: 14px; font-weight: 600;">${label}</a>`;
-}
-
-const placementLabel: Record<number, string> = {
-  1: '1st',
-  2: '2nd',
-  3: '3rd',
-  4: 'VHC',
-  5: 'HC',
-  6: 'Commended',
-  7: 'Reserve',
-};
+import { getPlacementLabel, achievementLabels } from '@/lib/placements';
+import { resend, FROM, APP_URL, btn } from './email';
 
 const placementColor: Record<number, string> = {
   1: '#d97706',
   2: '#6b7280',
   3: '#92400e',
-};
-
-const achievementLabels: Record<string, string> = {
-  best_in_show: 'Best in Show',
-  reserve_best_in_show: 'Reserve Best in Show',
-  best_puppy_in_show: 'Best Puppy in Show',
-  best_of_breed: 'Best of Breed',
-  best_puppy_in_breed: 'Best Puppy in Breed',
-  best_veteran_in_breed: 'Best Veteran in Breed',
-  dog_cc: 'Dog CC',
-  reserve_dog_cc: 'Reserve Dog CC',
-  bitch_cc: 'Bitch CC',
-  reserve_bitch_cc: 'Reserve Bitch CC',
-  best_puppy_dog: 'Best Puppy Dog',
-  best_puppy_bitch: 'Best Puppy Bitch',
-  best_long_coat_dog: 'Best Long Coat Dog',
-  best_long_coat_bitch: 'Best Long Coat Bitch',
-  best_long_coat_in_show: 'Best Long Coat in Show',
-  cc: 'CC',
-  reserve_cc: 'Reserve CC',
 };
 
 /**
@@ -142,7 +99,7 @@ export async function sendExhibitorResultsEmails(showId: string) {
           const className = ec.showClass?.classDefinition?.name ?? 'Class';
           const sex = ec.showClass?.sex;
           const sexLabel = sex === 'dog' ? ' Dog' : sex === 'bitch' ? ' Bitch' : '';
-          const pLabel = r.placement ? placementLabel[r.placement] ?? `${r.placement}th` : 'Entered';
+          const pLabel = r.placement ? getPlacementLabel(r.placement) : 'Entered';
           const pColor = r.placement ? (placementColor[r.placement] ?? '#374151') : '#9ca3af';
 
           return `<tr>
@@ -277,7 +234,7 @@ export async function sendFollowerResultsNotifications(showId: string) {
           });
         }
         dogResults.get(entry.dogId)!.placements.push(
-          `${placementLabel[ec.result.placement] ?? ec.result.placement}`
+          getPlacementLabel(ec.result.placement)
         );
       }
     }
@@ -478,7 +435,7 @@ export async function createResultsMilestonePosts(showId: string) {
         const className = ec.showClass?.classDefinition?.name ?? 'class';
         const sex = ec.showClass?.sex;
         const sexLabel = sex === 'dog' ? ' Dog' : sex === 'bitch' ? ' Bitch' : '';
-        const pLabel = placementLabel[ec.result.placement] ?? `${ec.result.placement}th`;
+        const pLabel = getPlacementLabel(ec.result.placement);
         const caption = `Placed ${pLabel} in ${className}${sexLabel} at ${show.name}`;
 
         if (!dogMilestones.has(entry.dogId)) {
@@ -520,21 +477,20 @@ export async function createResultsMilestonePosts(showId: string) {
   });
   const existingDogIds = new Set(existingPosts.map((p) => p.dogId));
 
-  let created = 0;
-  for (const [, milestone] of dogMilestones) {
-    if (existingDogIds.has(milestone.dogId)) continue;
-    if (!milestone.ownerId) continue;
-
-    await db.insert(dogTimelinePosts).values({
-      dogId: milestone.dogId,
-      authorId: milestone.ownerId,
-      type: 'milestone',
-      caption: milestone.caption,
+  const toInsert = Array.from(dogMilestones.values())
+    .filter((m) => !existingDogIds.has(m.dogId) && m.ownerId)
+    .map((m) => ({
+      dogId: m.dogId,
+      authorId: m.ownerId!,
+      type: 'milestone' as const,
+      caption: m.caption,
       sourceShowId: showId,
       createdAt: new Date(show.startDate), // Chronologically correct
-    });
-    created++;
+    }));
+
+  if (toInsert.length > 0) {
+    await db.insert(dogTimelinePosts).values(toInsert);
   }
 
-  console.log(`[results-milestones] Created ${created} milestone posts for show ${show.name}`);
+  console.log(`[results-milestones] Created ${toInsert.length} milestone posts for show ${show.name}`);
 }
