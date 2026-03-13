@@ -86,6 +86,8 @@ export default function LiveResultsPage({
   const { show, breedGroups } = data;
   const isLive = show.status === 'in_progress';
   const isCompleted = show.status === 'completed';
+  const isPublished = !!show.resultsPublishedAt;
+  const isUnpublished = 'unpublished' in data && data.unpublished;
 
   // Group achievements by type for display
   const showLevelTypes = ['best_in_show', 'reserve_best_in_show', 'best_puppy_in_show', 'best_long_coat_in_show'];
@@ -130,7 +132,12 @@ export default function LiveResultsPage({
 
           <div className="mt-4">
             <div className="flex flex-wrap items-center gap-2">
-              {isLive && (
+              {isPublished && (
+                <Badge className="bg-green-600 text-xs">
+                  Published Results
+                </Badge>
+              )}
+              {isLive && !isPublished && (
                 <Badge className="bg-green-600 text-xs">
                   <span className="relative mr-1.5 flex size-2">
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
@@ -139,7 +146,7 @@ export default function LiveResultsPage({
                   Live Results
                 </Badge>
               )}
-              {isCompleted && (
+              {isCompleted && !isPublished && (
                 <Badge variant="secondary" className="text-xs">
                   <Trophy className="mr-1 size-3" />
                   Final Results
@@ -188,7 +195,16 @@ export default function LiveResultsPage({
 
       {/* Results content */}
       <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
-        {breedGroups.length === 0 ? (
+        {isUnpublished ? (
+          <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+            <Trophy className="size-12 text-muted-foreground/30" />
+            <p className="text-muted-foreground">
+              {isLive
+                ? 'Results are being recorded and will be published after judging is complete.'
+                : 'Results are being finalised and will be published shortly.'}
+            </p>
+          </div>
+        ) : breedGroups.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
             <Trophy className="size-12 text-muted-foreground/30" />
             <p className="text-muted-foreground">

@@ -3868,4 +3868,215 @@ export const secretaryRouter = createTRPCRouter({
       if (!removed) throw new TRPCError({ code: 'NOT_FOUND', message: 'Class sponsorship not found' });
       return removed;
     }),
+
+  // ── Results Publication Pipeline ───────────────────────
+
+  publishResults: secretaryProcedure
+    .input(z.object({
+      showId: z.string().uuid(),
+      sendNotifications: z.boolean().default(true),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+        columns: { status: true, resultsPublishedAt: true },
+      });
+
+      if (!show) throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
+
+      if (!['in_progress', 'completed'].includes(show.status)) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Results can only be published for shows that are in progress or completed.',
+        });
+      }
+
+      if (show.resultsPublishedAt) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Results are already published.',
+        });
+      }
+
+      const now = new Date();
+      await ctx.db
+        .update(shows)
+        .set({ resultsPublishedAt: now, resultsLockedAt: now })
+        .where(eq(shows.id, input.showId));
+
+      // Fire downstream notifications async (Phase 4)
+      if (input.sendNotifications) {
+        const { sendExhibitorResultsEmails, sendFollowerResultsNotifications, createResultsMilestonePosts } = await import('@/server/services/results-notifications');
+        // Fire and forget — don't block the mutation
+        Promise.all([
+          sendExhibitorResultsEmails(input.showId).catch((e) => console.error('[results-publish] exhibitor emails failed:', e)),
+          sendFollowerResultsNotifications(input.showId).catch((e) => console.error('[results-publish] follower notifications failed:', e)),
+          createResultsMilestonePosts(input.showId).catch((e) => console.error('[results-publish] milestone posts failed:', e)),
+        ]);
+      }
+
+      return { published: true, publishedAt: now };
+    }),
+
+  unpublishResults: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+        columns: { resultsPublishedAt: true },
+      });
+
+      if (!show?.resultsPublishedAt) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Results are not currently published.',
+        });
+      }
+
+      await ctx.db
+        .update(shows)
+        .set({ resultsPublishedAt: null, resultsLockedAt: null })
+        .where(eq(shows.id, input.showId));
+
+      return { unpublished: true };
+    }),
+
+  getResultsPublicationStatus: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+        columns: { resultsPublishedAt: true, resultsLockedAt: true, status: true },
+      });
+
+      if (!show) throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
+
+      // Get judge approval summary
+      const assignments = await ctx.db.query.judgeAssignments.findMany({
+        where: eq(judgeAssignments.showId, input.showId),
+        with: { judge: true, breed: true },
+      });
+
+      // Deduplicate by judge
+      const judgeStatusMap = new Map<string, {
+        judgeId: string;
+        judgeName: string;
+        contactEmail: string | null;
+        breeds: string[];
+        status: string | null;
+        sentAt: Date | null;
+        approvedAt: Date | null;
+        note: string | null;
+      }>();
+
+      for (const a of assignments) {
+        if (!judgeStatusMap.has(a.judgeId)) {
+          judgeStatusMap.set(a.judgeId, {
+            judgeId: a.judgeId,
+            judgeName: a.judge.name,
+            contactEmail: a.judge.contactEmail,
+            breeds: [],
+            status: a.approvalStatus,
+            sentAt: a.approvalSentAt,
+            approvedAt: a.approvedAt,
+            note: a.approvalNote,
+          });
+        }
+        if (a.breed) {
+          judgeStatusMap.get(a.judgeId)!.breeds.push(a.breed.name);
+        }
+      }
+
+      const judgeStatuses = Array.from(judgeStatusMap.values());
+      const total = judgeStatuses.length;
+      const approved = judgeStatuses.filter((j) => j.status === 'approved').length;
+      const pending = judgeStatuses.filter((j) => j.status === 'pending').length;
+      const declined = judgeStatuses.filter((j) => j.status === 'declined').length;
+      const notSent = judgeStatuses.filter((j) => !j.status).length;
+
+      return {
+        published: !!show.resultsPublishedAt,
+        publishedAt: show.resultsPublishedAt,
+        locked: !!show.resultsLockedAt,
+        showStatus: show.status,
+        approvals: { total, approved, pending, declined, notSent },
+        judges: judgeStatuses,
+      };
+    }),
+
+  resendJudgeApprovalRequest: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid(), judgeId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      const judge = await ctx.db.query.judges.findFirst({
+        where: eq(judges.id, input.judgeId),
+      });
+
+      if (!judge?.contactEmail) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'This judge does not have an email address on file.',
+        });
+      }
+
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+        with: { organisation: true },
+      });
+
+      if (!show) throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
+
+      const assignments = await ctx.db.query.judgeAssignments.findMany({
+        where: and(
+          eq(judgeAssignments.showId, input.showId),
+          eq(judgeAssignments.judgeId, input.judgeId)
+        ),
+      });
+
+      if (assignments.length === 0) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'No assignments found for this judge.',
+        });
+      }
+
+      const crypto = await import('crypto');
+      const sharedToken = crypto.randomUUID();
+
+      for (const assignment of assignments) {
+        await ctx.db
+          .update(judgeAssignments)
+          .set({
+            approvalToken: sharedToken,
+            approvalStatus: 'pending',
+            approvalSentAt: new Date(),
+            approvedAt: null,
+            approvalNote: null,
+          })
+          .where(eq(judgeAssignments.id, assignment.id));
+      }
+
+      const { sendJudgeApprovalRequestEmail } = await import('@/server/services/email');
+      await sendJudgeApprovalRequestEmail({
+        judge: { name: judge.name, email: judge.contactEmail },
+        show: {
+          name: show.name,
+          startDate: show.startDate,
+          slug: show.slug,
+          id: show.id,
+          organisation: show.organisation,
+        },
+        approvalToken: sharedToken,
+        breeds: assignments.filter((a) => a.breedId).map((a) => a.breedId!),
+      });
+
+      return { sent: true };
+    }),
 });

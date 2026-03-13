@@ -1,7 +1,7 @@
 import { Resend } from 'resend';
 import { db } from '@/server/db';
-import { and, eq } from 'drizzle-orm';
-import { orders, memberships, users, printOrders } from '@/server/db/schema';
+import { and, eq, inArray } from 'drizzle-orm';
+import { orders, memberships, users, printOrders, breeds } from '@/server/db/schema';
 import { formatOrderRef } from '@/lib/print-products';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -630,5 +630,101 @@ export async function sendPrintOrderDispatchEmail(printOrderId: string) {
     return result;
   } catch (error) {
     console.error(`[email] Failed to send dispatch notification for ${orderRef}:`, error);
+  }
+}
+
+/**
+ * Send a results approval request email to a judge.
+ */
+export async function sendJudgeApprovalRequestEmail(params: {
+  judge: { name: string; email: string };
+  show: {
+    name: string;
+    startDate: string;
+    slug: string | null;
+    id: string;
+    organisation: { name: string } | null;
+  };
+  approvalToken: string;
+  breeds: string[];
+}) {
+  const { judge, show, approvalToken } = params;
+  const orgName = show.organisation?.name ?? 'the Show Society';
+
+  const showDate = new Date(show.startDate).toLocaleDateString('en-GB', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+
+  // Fetch breed names if we have IDs
+  let breedNames: string[] = [];
+  if (params.breeds.length > 0) {
+    const breedRows = await db.query.breeds.findMany({
+      where: inArray(breeds.id, params.breeds),
+      columns: { id: true, name: true },
+    });
+    const breedMap = new Map(breedRows.map((b) => [b.id, b.name]));
+    breedNames = params.breeds.map((id) => breedMap.get(id) ?? 'Unknown').filter(Boolean);
+  }
+
+  const breedsText = breedNames.length > 0 ? breedNames.join(', ') : 'All breeds';
+  const approvalUrl = `${APP_URL}/api/results-approval/${approvalToken}`;
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; background-color: #f5f3ef; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
+    <div style="text-align: center; padding: 24px 0;">
+      <h1 style="margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 28px; color: #2D5F3F; letter-spacing: -0.5px;">Remi</h1>
+    </div>
+    <div style="background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: #2D5F3F; padding: 24px 24px 20px; text-align: center;">
+        <h2 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 700;">Results Approval Required</h2>
+        <p style="margin: 8px 0 0; color: #b8d4c4; font-size: 14px;">from ${orgName}</p>
+      </div>
+      <div style="padding: 24px;">
+        <p style="font-size: 15px; color: #333; line-height: 1.6;">Dear ${judge.name},</p>
+        <p style="font-size: 15px; color: #333; line-height: 1.6;">
+          The results from your judging at <strong>${show.name}</strong> on <strong>${showDate}</strong> have been recorded digitally and are ready for your review and approval.
+        </p>
+        <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444; width: 100px;">Show</td><td style="padding: 8px 12px; border-bottom: 1px solid #e5e5e5;">${show.name}</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Date</td><td style="padding: 8px 12px; border-bottom: 1px solid #e5e5e5;">${showDate}</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Breeds</td><td style="padding: 8px 12px; border-bottom: 1px solid #e5e5e5;">${breedsText}</td></tr>
+        </table>
+        <p style="font-size: 15px; color: #333; line-height: 1.6;">
+          Please click the button below to review the results and confirm they are correct.
+        </p>
+        <div style="text-align: center; margin: 28px 0;">
+          ${btn(approvalUrl, 'Review & Approve Results')}
+        </div>
+        <p style="font-size: 13px; color: #666; text-align: center;">
+          No login required — simply click the button to review.
+        </p>
+      </div>
+    </div>
+    <p style="text-align: center; margin-top: 16px; font-size: 12px; color: #999;">
+      Sent by <a href="${APP_URL}" style="color: #2D5F3F; text-decoration: none; font-weight: 600;">Remi</a> on behalf of ${orgName}.
+    </p>
+  </div>
+</body>
+</html>`;
+
+  try {
+    const result = await resend.emails.send({
+      from: FROM,
+      to: judge.email,
+      replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+      subject: `Results Approval — ${show.name}`,
+      html,
+    });
+    console.log(`[email] Judge approval request sent to ${judge.email}`, result);
+    return result;
+  } catch (error) {
+    console.error(`[email] Failed to send judge approval request to ${judge.email}:`, error);
   }
 }

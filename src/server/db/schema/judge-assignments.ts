@@ -1,4 +1,4 @@
-import { index, pgTable, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { shows } from './shows';
 import { judges } from './judges';
@@ -17,6 +17,12 @@ export const judgeAssignments = pgTable(
       .references(() => judges.id),
     breedId: uuid('breed_id').references(() => breeds.id),
     ringId: uuid('ring_id').references(() => rings.id),
+    // Results approval fields
+    approvalToken: uuid('approval_token'),
+    approvalStatus: text('approval_status'), // null | 'pending' | 'approved' | 'declined'
+    approvalSentAt: timestamp('approval_sent_at', { withTimezone: true }),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    approvalNote: text('approval_note'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -28,6 +34,7 @@ export const judgeAssignments = pgTable(
   (table) => [
     index('judge_assignments_show_id_idx').on(table.showId),
     index('judge_assignments_judge_id_idx').on(table.judgeId),
+    index('judge_assignments_approval_token_idx').on(table.approvalToken),
   ]
 );
 

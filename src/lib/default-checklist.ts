@@ -362,10 +362,30 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     requiresDocument: true,
   },
   {
+    title: 'Submit results for judge approval',
+    description:
+      'Stewards submit results to each judge for digital approval after judging is complete.',
+    phase: 'post_show',
+    sortOrder: 2,
+    relativeDueDays: -1,
+    actionKey: 'results_approve',
+    autoDetectKey: 'judge_approvals_sent',
+  },
+  {
+    title: 'Publish results',
+    description:
+      'Make results public and send notification emails to exhibitors.',
+    phase: 'post_show',
+    sortOrder: 3,
+    relativeDueDays: -2,
+    actionKey: 'results_publish',
+    autoDetectKey: 'results_published',
+  },
+  {
     title: 'Send judge thank-you letters',
     description: 'Send written thanks to all judges. Include expenses if not already settled.',
     phase: 'post_show',
-    sortOrder: 2,
+    sortOrder: 4,
     relativeDueDays: -7,
     perJudge: true,
     actionKey: 'judge_thankyou',
@@ -375,7 +395,7 @@ export const DEFAULT_CHECKLIST_ITEMS: DefaultChecklistItem[] = [
     description:
       'Retain marked catalogue indefinitely. Keep schedules and entry forms for at least 1 year per RKC regulations.',
     phase: 'post_show',
-    sortOrder: 3,
+    sortOrder: 5,
     relativeDueDays: -30,
     actionKey: 'archive',
   },

@@ -27,6 +27,8 @@ import { JudgeThankYouAction } from './checklist-actions/judge-thankyou-action';
 import { ShowStatusAction } from './checklist-actions/show-status-action';
 import { QuickLinkAction } from './checklist-actions/quick-link-action';
 import { PrintOrderAction } from './checklist-actions/print-order-action';
+import { ResultsApprovalAction } from './checklist-actions/results-approval-action';
+import { ResultsPublishAction } from './checklist-actions/results-publish-action';
 
 export const ACTION_REGISTRY: Record<string, ActionRegistryEntry> = {
   // Judge pipeline — the centrepiece
@@ -52,4 +54,8 @@ export const ACTION_REGISTRY: Record<string, ActionRegistryEntry> = {
   judges_assign_breeds: { component: QuickLinkAction, mode: 'augment' },
   rings_finalise: { component: QuickLinkAction, mode: 'augment' },
   catalogue_generate: { component: PrintOrderAction, mode: 'augment' },
+
+  // Results publication pipeline
+  results_approve: { component: ResultsApprovalAction, mode: 'replace' },
+  results_publish: { component: ResultsPublishAction, mode: 'replace' },
 };

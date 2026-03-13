@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, isNull, asc } from 'drizzle-orm';
+import { and, eq, isNull, isNotNull, asc } from 'drizzle-orm';
 import { stewardProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import type { Database } from '@/server/db';
@@ -15,8 +15,11 @@ import {
   classDefinitions,
   achievements,
   dogs,
+  judges,
+  judgeAssignments,
 } from '@/server/db/schema';
 import { isUuid } from '@/lib/slugify';
+import { sendJudgeApprovalRequestEmail } from '@/server/services/email';
 
 /** Resolve a show slug or UUID to a UUID */
 async function resolveShowId(db: Database, idOrSlug: string): Promise<string> {
@@ -47,6 +50,20 @@ async function verifyStewardAssignment(
     });
   }
   return assignment;
+}
+
+/** Throws if results are locked (published). Stewards cannot edit results while published. */
+async function assertResultsNotLocked(db: Database, showId: string) {
+  const show = await db.query.shows.findFirst({
+    where: eq(shows.id, showId),
+    columns: { resultsLockedAt: true },
+  });
+  if (show?.resultsLockedAt) {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'Results are published and locked. The secretary must unpublish before changes can be made.',
+    });
+  }
 }
 
 export const stewardRouter = createTRPCRouter({
@@ -274,6 +291,8 @@ export const stewardRouter = createTRPCRouter({
         ec.showClass.showId
       );
 
+      await assertResultsNotLocked(ctx.db, ec.showClass.showId);
+
       // Upsert the result
       const [result] = await ctx.db
         .insert(results)
@@ -321,6 +340,8 @@ export const stewardRouter = createTRPCRouter({
         ctx.session.user.id,
         ec.showClass.showId
       );
+
+      await assertResultsNotLocked(ctx.db, ec.showClass.showId);
 
       await ctx.db
         .delete(results)
@@ -396,6 +417,7 @@ export const stewardRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       await verifyStewardAssignment(ctx.db, ctx.session.user.id, input.showId);
+      await assertResultsNotLocked(ctx.db, input.showId);
 
       // Verify the dog is entered in this show
       const dogEntry = await ctx.db.query.entries.findFirst({
@@ -485,6 +507,7 @@ export const stewardRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       await verifyStewardAssignment(ctx.db, ctx.session.user.id, input.showId);
+      await assertResultsNotLocked(ctx.db, input.showId);
 
       await ctx.db
         .delete(achievements)
@@ -503,6 +526,18 @@ export const stewardRouter = createTRPCRouter({
     .input(z.object({ showId: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
       const showId = await resolveShowId(ctx.db, input.showId);
+
+      // Check publication status for non-privileged users
+      const userRole = ctx.session?.user?.role;
+      const isPrivileged = userRole && ['secretary', 'steward', 'admin'].includes(userRole);
+      if (!isPrivileged) {
+        const show = await ctx.db.query.shows.findFirst({
+          where: eq(shows.id, showId),
+          columns: { resultsPublishedAt: true },
+        });
+        if (!show?.resultsPublishedAt) return [];
+      }
+
       return ctx.db.query.achievements.findMany({
         where: eq(achievements.showId, showId),
         with: {
@@ -527,8 +562,31 @@ export const stewardRouter = createTRPCRouter({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
       }
 
+      // Check if caller is privileged (secretary/steward/admin)
+      const userRole = ctx.session?.user?.role;
+      const isPrivileged = userRole && ['secretary', 'steward', 'admin'].includes(userRole);
+
+      // If results not published and caller is not privileged, return empty
+      if (!show.resultsPublishedAt && !isPrivileged) {
+        return {
+          show: {
+            id: show.id,
+            name: show.name,
+            startDate: show.startDate,
+            endDate: show.endDate,
+            status: show.status,
+            organisation: show.organisation,
+            venue: show.venue,
+            resultsPublishedAt: show.resultsPublishedAt,
+          },
+          breedGroups: [],
+          achievements: [],
+          unpublished: true as const,
+        };
+      }
+
       const classes = await ctx.db.query.showClasses.findMany({
-        where: eq(showClasses.showId, input.showId),
+        where: eq(showClasses.showId, showId),
         with: {
           classDefinition: true,
           breed: true,
@@ -632,7 +690,7 @@ export const stewardRouter = createTRPCRouter({
 
       // Fetch breed-level and show-level achievements
       const showAchievements = await ctx.db.query.achievements.findMany({
-        where: eq(achievements.showId, input.showId),
+        where: eq(achievements.showId, showId),
         with: {
           dog: {
             columns: { id: true, registeredName: true },
@@ -649,6 +707,7 @@ export const stewardRouter = createTRPCRouter({
           status: show.status,
           organisation: show.organisation,
           venue: show.venue,
+          resultsPublishedAt: show.resultsPublishedAt,
         },
         breedGroups: Array.from(breedGroups.values()).sort((a, b) =>
           a.breedName.localeCompare(b.breedName)
@@ -660,6 +719,7 @@ export const stewardRouter = createTRPCRouter({
           dogName: a.dog?.registeredName ?? 'Unknown',
           details: a.details as Record<string, unknown> | null,
         })),
+        unpublished: false as const,
       };
     }),
 
@@ -719,5 +779,146 @@ export const stewardRouter = createTRPCRouter({
       });
 
       return showAchievements;
+    }),
+
+  // ── Submit results for judge approval ──────────────────
+  submitForJudgeApproval: stewardProcedure
+    .input(z.object({ showId: z.string().uuid(), judgeId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyStewardAssignment(ctx.db, ctx.session.user.id, input.showId);
+
+      // Find all assignments for this judge/show
+      const assignments = await ctx.db.query.judgeAssignments.findMany({
+        where: and(
+          eq(judgeAssignments.showId, input.showId),
+          eq(judgeAssignments.judgeId, input.judgeId)
+        ),
+      });
+
+      if (assignments.length === 0) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'No assignments found for this judge at this show',
+        });
+      }
+
+      // Get judge details
+      const judge = await ctx.db.query.judges.findFirst({
+        where: eq(judges.id, input.judgeId),
+      });
+
+      if (!judge?.contactEmail) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'This judge does not have an email address on file. Please ask the secretary to add one.',
+        });
+      }
+
+      // Get show details for the email
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+        with: { organisation: true, venue: true },
+      });
+
+      if (!show) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
+      }
+
+      // Generate a shared approval token for all assignments
+      const crypto = await import('crypto');
+      const sharedToken = crypto.randomUUID();
+
+      // Update all assignment rows with the shared token
+      for (const assignment of assignments) {
+        await ctx.db
+          .update(judgeAssignments)
+          .set({
+            approvalToken: sharedToken,
+            approvalStatus: 'pending',
+            approvalSentAt: new Date(),
+          })
+          .where(eq(judgeAssignments.id, assignment.id));
+      }
+
+      // Send approval email
+      await sendJudgeApprovalRequestEmail({
+        judge: { name: judge.name, email: judge.contactEmail },
+        show: {
+          name: show.name,
+          startDate: show.startDate,
+          slug: show.slug,
+          id: show.id,
+          organisation: show.organisation,
+        },
+        approvalToken: sharedToken,
+        breeds: assignments
+          .filter((a) => a.breedId)
+          .map((a) => a.breedId!),
+      });
+
+      return { sent: true, judgeEmail: judge.contactEmail };
+    }),
+
+  // ── Get judge approval status for a show ───────────────
+  getJudgeApprovalStatus: stewardProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyStewardAssignment(ctx.db, ctx.session.user.id, input.showId);
+
+      const assignments = await ctx.db.query.judgeAssignments.findMany({
+        where: eq(judgeAssignments.showId, input.showId),
+        with: {
+          judge: true,
+          breed: true,
+        },
+      });
+
+      // Group by judge
+      const judgeMap = new Map<string, {
+        judgeId: string;
+        judgeName: string;
+        contactEmail: string | null;
+        breeds: string[];
+        approvalStatus: string | null;
+        approvalSentAt: Date | null;
+        approvedAt: Date | null;
+        approvalNote: string | null;
+      }>();
+
+      for (const a of assignments) {
+        if (!judgeMap.has(a.judgeId)) {
+          judgeMap.set(a.judgeId, {
+            judgeId: a.judgeId,
+            judgeName: a.judge.name,
+            contactEmail: a.judge.contactEmail,
+            breeds: [],
+            approvalStatus: a.approvalStatus,
+            approvalSentAt: a.approvalSentAt,
+            approvedAt: a.approvedAt,
+            approvalNote: a.approvalNote,
+          });
+        }
+        if (a.breed) {
+          judgeMap.get(a.judgeId)!.breeds.push(a.breed.name);
+        }
+      }
+
+      return Array.from(judgeMap.values());
+    }),
+
+  // ── Get results lock status for a show ─────────────────
+  getResultsLockStatus: stewardProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyStewardAssignment(ctx.db, ctx.session.user.id, input.showId);
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+        columns: { resultsLockedAt: true, resultsPublishedAt: true },
+      });
+      return {
+        locked: !!show?.resultsLockedAt,
+        lockedAt: show?.resultsLockedAt ?? null,
+        publishedAt: show?.resultsPublishedAt ?? null,
+      };
     }),
 });

@@ -1,18 +1,38 @@
 'use client';
 
+import { useState } from 'react';
 import { useShowId } from '../_lib/show-context';
 import Link from 'next/link';
 import {
   Trophy,
   Award,
-  Loader2,
+  CheckCircle2,
+  Clock,
   ExternalLink,
+  Globe,
+  Loader2,
+  Lock,
+  Send,
+  Unlock,
+  XCircle,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { getPlacementLabel, placementColors } from '@/lib/placements';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 const achievementLabels: Record<string, string> = {
   best_in_show: 'Best in Show',
@@ -36,6 +56,8 @@ const achievementLabels: Record<string, string> = {
 
 export default function SecretaryResultsPage() {
   const showId = useShowId();
+  const [sendNotifications, setSendNotifications] = useState(true);
+  const utils = trpc.useUtils();
 
   const { data, isLoading, dataUpdatedAt } =
     trpc.steward.getLiveResults.useQuery(
@@ -53,6 +75,33 @@ export default function SecretaryResultsPage() {
       { showId },
       { refetchInterval: 10_000 }
     );
+
+  const { data: pubStatus } =
+    trpc.secretary.getResultsPublicationStatus.useQuery({ showId });
+
+  const publishMutation = trpc.secretary.publishResults.useMutation({
+    onSuccess: () => {
+      utils.secretary.getResultsPublicationStatus.invalidate({ showId });
+      toast.success('Results published successfully');
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const unpublishMutation = trpc.secretary.unpublishResults.useMutation({
+    onSuccess: () => {
+      utils.secretary.getResultsPublicationStatus.invalidate({ showId });
+      toast.success('Results unpublished');
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const resendApproval = trpc.secretary.resendJudgeApprovalRequest.useMutation({
+    onSuccess: () => {
+      utils.secretary.getResultsPublicationStatus.invalidate({ showId });
+      toast.success('Approval request sent');
+    },
+    onError: (err) => toast.error(err.message),
+  });
 
   if (isLoading) {
     return (
@@ -105,8 +154,149 @@ export default function SecretaryResultsPage() {
       })
     : null;
 
+  const published = pubStatus?.published ?? false;
+  const publishedAt = pubStatus?.publishedAt;
+  const canPublish = pubStatus ? ['in_progress', 'completed'].includes(pubStatus.showStatus) : false;
+
   return (
     <div className="space-y-6">
+      {/* Publication Status Banner */}
+      {published ? (
+        <div className="flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 p-4">
+          <Globe className="mt-0.5 size-5 shrink-0 text-green-600" />
+          <div className="flex-1">
+            <p className="font-medium text-green-800">Results Published</p>
+            {publishedAt && (
+              <p className="mt-0.5 text-xs text-green-600">
+                Published {new Date(publishedAt).toLocaleString('en-GB', {
+                  day: 'numeric', month: 'short', year: 'numeric',
+                  hour: '2-digit', minute: '2-digit',
+                })}
+              </p>
+            )}
+            <p className="mt-1 text-xs text-green-700">
+              <Lock className="mr-0.5 inline size-3" />
+              Stewards cannot edit results while published
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <Unlock className="mt-0.5 size-5 shrink-0 text-amber-600" />
+          <div>
+            <p className="font-medium text-amber-800">Results Not Published</p>
+            <p className="mt-0.5 text-xs text-amber-700">
+              Results are only visible to stewards, secretaries, and admins.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Judge Approval Summary */}
+      {pubStatus && pubStatus.approvals.total > 0 && (
+        <div className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex gap-1.5">
+              <Badge variant="secondary" className="gap-1 text-xs">
+                <CheckCircle2 className="size-3 text-green-500" />
+                {pubStatus.approvals.approved} approved
+              </Badge>
+              {pubStatus.approvals.pending > 0 && (
+                <Badge variant="secondary" className="gap-1 text-xs">
+                  <Clock className="size-3 text-amber-500" />
+                  {pubStatus.approvals.pending} pending
+                </Badge>
+              )}
+              {pubStatus.approvals.declined > 0 && (
+                <Badge variant="secondary" className="gap-1 text-xs">
+                  <XCircle className="size-3 text-red-500" />
+                  {pubStatus.approvals.declined} queried
+                </Badge>
+              )}
+            </div>
+            <span className="text-xs text-muted-foreground">
+              {pubStatus.approvals.approved} of {pubStatus.approvals.total} judges
+            </span>
+          </div>
+
+          {/* Publish / Unpublish */}
+          {published ? (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 border-red-200 text-red-700 hover:bg-red-50"
+                  disabled={unpublishMutation.isPending}
+                >
+                  <Unlock className="mr-1 size-3" />
+                  Unpublish
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Unpublish Results?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Results will be hidden from the public and stewards will be able to edit again.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => unpublishMutation.mutate({ showId })}
+                    className="bg-red-600 hover:bg-red-700"
+                  >
+                    Unpublish
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          ) : (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  size="sm"
+                  className="h-8 bg-green-700 hover:bg-green-800"
+                  disabled={!canPublish || publishMutation.isPending}
+                >
+                  <Globe className="mr-1 size-3" />
+                  Publish Results
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Publish Results?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Publishing will make results public, lock steward editing, and send notification emails.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <div className="flex items-center gap-2 px-1 py-2">
+                  <input
+                    type="checkbox"
+                    id="send-notifs-results"
+                    checked={sendNotifications}
+                    onChange={(e) => setSendNotifications(e.target.checked)}
+                    className="size-4 rounded border-gray-300"
+                  />
+                  <label htmlFor="send-notifs-results" className="text-sm">
+                    Send notification emails
+                  </label>
+                </div>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => publishMutation.mutate({ showId, sendNotifications })}
+                    className="bg-green-700 hover:bg-green-800"
+                  >
+                    Publish
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+        </div>
+      )}
+
       {/* Header with progress */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>

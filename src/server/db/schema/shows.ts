@@ -102,6 +102,8 @@ export const shows = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
+    resultsPublishedAt: timestamp('results_published_at', { withTimezone: true }),
+    resultsLockedAt: timestamp('results_locked_at', { withTimezone: true }),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()
       .notNull()

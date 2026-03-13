@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
+  Lock,
   Award,
   X,
   UserX,
@@ -47,6 +48,10 @@ export default function StewardClassResultsPage({
   });
 
   const { data: allClasses } = trpc.steward.getShowClasses.useQuery({
+    showId,
+  });
+
+  const { data: lockStatus } = trpc.steward.getResultsLockStatus.useQuery({
     showId,
   });
 
@@ -96,6 +101,7 @@ export default function StewardClassResultsPage({
   }
 
   const { showClass, entries } = data;
+  const isLocked = lockStatus?.locked ?? false;
 
   // Scope-aware placements: all-breed = 1st–HC, breed = 1st–Commended
   const availablePlacements = getPlacementsForScope(showClass.showScope);
@@ -175,8 +181,16 @@ export default function StewardClassResultsPage({
         </div>
       </div>
 
+      {/* Locked banner */}
+      {isLocked && (
+        <div className="mt-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          <Lock className="size-4 shrink-0" />
+          <p>Results have been published. Editing is locked. Contact the secretary to make changes.</p>
+        </div>
+      )}
+
       {/* Entries list */}
-      <div className="mt-6 space-y-2">
+      <div className={`mt-6 space-y-2 ${isLocked ? 'pointer-events-none opacity-60' : ''}`}>
         {entries.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
             No confirmed entries in this class.

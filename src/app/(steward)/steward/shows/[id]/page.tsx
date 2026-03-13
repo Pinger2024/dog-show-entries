@@ -8,9 +8,14 @@ import {
   Award,
   CheckCircle2,
   ChevronRight,
+  Clock,
   Loader2,
+  Lock,
+  Mail,
+  Send,
   Trophy,
   Users,
+  XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
@@ -41,6 +46,10 @@ export default function StewardShowPage({
     trpc.steward.getShowAchievements.useQuery({ showId });
   const { data: liveResults } =
     trpc.steward.getLiveResults.useQuery({ showId });
+  const { data: lockStatus } =
+    trpc.steward.getResultsLockStatus.useQuery({ showId });
+  const { data: judgeApprovals } =
+    trpc.steward.getJudgeApprovalStatus.useQuery({ showId });
 
   if (isLoading) {
     return (
@@ -158,6 +167,14 @@ export default function StewardShowPage({
         ))}
       </div>
 
+      {/* Locked banner */}
+      {lockStatus?.locked && (
+        <div className="mt-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          <Lock className="size-4 shrink-0" />
+          <p>Results have been published. Contact the secretary to make changes.</p>
+        </div>
+      )}
+
       {/* Best of Breed / BIS Section */}
       {judged > 0 && showData && (
         <BestOfBreedSection
@@ -166,6 +183,15 @@ export default function StewardShowPage({
           showType={showData.showType}
           liveResults={liveResults}
           existingAchievements={existingAchievements ?? []}
+        />
+      )}
+
+      {/* Judge Approval Section */}
+      {judgeApprovals && judgeApprovals.length > 0 && (
+        <JudgeApprovalSection
+          showId={showId}
+          judges={judgeApprovals}
+          isLocked={lockStatus?.locked ?? false}
         />
       )}
     </div>
@@ -419,6 +445,119 @@ function BestOfBreedSection({
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Judge Approval Section ───────────────────────────────
+function JudgeApprovalSection({
+  showId,
+  judges,
+  isLocked,
+}: {
+  showId: string;
+  judges: {
+    judgeId: string;
+    judgeName: string;
+    contactEmail: string | null;
+    breeds: string[];
+    approvalStatus: string | null;
+    approvalSentAt: Date | null;
+    approvedAt: Date | null;
+    approvalNote: string | null;
+  }[];
+  isLocked: boolean;
+}) {
+  const utils = trpc.useUtils();
+
+  const submitApproval = trpc.steward.submitForJudgeApproval.useMutation({
+    onSuccess: () => {
+      utils.steward.getJudgeApprovalStatus.invalidate({ showId });
+      toast.success('Approval request sent to judge');
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  return (
+    <div className="mt-6 sm:mt-8 space-y-4">
+      <div className="flex items-center gap-2">
+        <Mail className="size-5 text-blue-500" />
+        <h2 className="text-sm sm:text-base font-semibold">Judge Approval</h2>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        When you've finished recording results for a judge, submit for their digital approval.
+      </p>
+
+      <div className="space-y-2">
+        {judges.map((judge) => (
+          <div
+            key={judge.judgeId}
+            className="rounded-lg border p-3 space-y-2"
+          >
+            <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{judge.judgeName}</p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {judge.breeds.length > 0 ? judge.breeds.join(', ') : 'All breeds'}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {judge.approvalStatus === 'approved' ? (
+                  <Badge className="bg-green-100 text-green-800 text-xs gap-1">
+                    <CheckCircle2 className="size-3" />
+                    Approved
+                  </Badge>
+                ) : judge.approvalStatus === 'pending' ? (
+                  <Badge className="bg-amber-100 text-amber-800 text-xs gap-1">
+                    <Clock className="size-3" />
+                    Awaiting
+                  </Badge>
+                ) : judge.approvalStatus === 'declined' ? (
+                  <Badge className="bg-red-100 text-red-800 text-xs gap-1">
+                    <XCircle className="size-3" />
+                    Query
+                  </Badge>
+                ) : null}
+              </div>
+            </div>
+
+            {judge.approvalNote && (
+              <p className="text-xs italic text-amber-700">"{judge.approvalNote}"</p>
+            )}
+
+            {!judge.contactEmail ? (
+              <p className="text-xs text-red-500">
+                No email on file — ask the secretary to add one.
+              </p>
+            ) : !judge.approvalStatus ? (
+              <Button
+                size="sm"
+                className="h-9 w-full bg-blue-600 hover:bg-blue-700 sm:w-auto"
+                disabled={submitApproval.isPending || isLocked}
+                onClick={() =>
+                  submitApproval.mutate({ showId, judgeId: judge.judgeId })
+                }
+              >
+                <Send className="mr-1 size-3" />
+                Submit for Approval
+              </Button>
+            ) : judge.approvalStatus === 'declined' ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 w-full sm:w-auto"
+                disabled={submitApproval.isPending}
+                onClick={() =>
+                  submitApproval.mutate({ showId, judgeId: judge.judgeId })
+                }
+              >
+                <Send className="mr-1 size-3" />
+                Resubmit
+              </Button>
+            ) : null}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

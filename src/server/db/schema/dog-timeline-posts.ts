@@ -3,6 +3,7 @@ import { relations } from 'drizzle-orm';
 import { timelinePostTypeEnum } from './enums';
 import { dogs } from './dogs';
 import { users } from './users';
+import { shows } from './shows';
 
 export const dogTimelinePosts = pgTable(
   'dog_timeline_posts',
@@ -20,6 +21,7 @@ export const dogTimelinePosts = pgTable(
     imageStorageKey: text('image_storage_key'),
     videoUrl: text('video_url'),
     pinned: boolean('pinned').notNull().default(false),
+    sourceShowId: uuid('source_show_id').references(() => shows.id),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -45,6 +47,10 @@ export const dogTimelinePostsRelations = relations(
     author: one(users, {
       fields: [dogTimelinePosts.authorId],
       references: [users.id],
+    }),
+    sourceShow: one(shows, {
+      fields: [dogTimelinePosts.sourceShowId],
+      references: [shows.id],
     }),
   })
 );
