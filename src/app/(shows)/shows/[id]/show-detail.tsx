@@ -178,13 +178,24 @@ function BreedSection({
   const bitchClasses = classes.filter((c) => c.sex === 'bitch');
   const mixedClasses = classes.filter((c) => c.sex === null);
 
-  const copyBreedLink = useCallback(() => {
+  const shareBreed = useCallback(async () => {
     const url = `${window.location.origin}${window.location.pathname}#${sectionId}`;
-    navigator.clipboard.writeText(url);
+    const text = `${breedName} classes${judgeName ? ` — Judge: ${judgeName}` : ''}`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: breedName, text, url });
+        return;
+      } catch (e) {
+        if ((e as Error).name === 'AbortError') return;
+      }
+    }
+    // Fallback: copy to clipboard
+    await navigator.clipboard.writeText(`${text}\n${url}`);
     setLinkCopied(true);
-    toast.success(`Link to ${breedName} section copied!`);
+    toast.success('Copied to clipboard — paste into WhatsApp, Facebook, etc.');
     setTimeout(() => setLinkCopied(false), 2000);
-  }, [sectionId, breedName]);
+  }, [sectionId, breedName, judgeName]);
 
   return (
     <div id={sectionId} className="overflow-hidden rounded-xl border border-border/60 bg-card">
@@ -256,7 +267,7 @@ function BreedSection({
 
           {/* Per-breed share link */}
           <button
-            onClick={(e) => { e.stopPropagation(); copyBreedLink(); }}
+            onClick={(e) => { e.stopPropagation(); shareBreed(); }}
             className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-border/60 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/50"
           >
             {linkCopied ? <Check className="size-3 text-emerald-600" /> : <Share2 className="size-3" />}
