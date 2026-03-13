@@ -105,9 +105,6 @@ export default function OverviewPage() {
       {/* Show Readiness */}
       <ReadinessCard showId={showId} />
 
-      {/* Entry Stats */}
-      <EntryStatsBar showId={showId} />
-
       {/* Show Details — compact "boarding pass" style */}
       <Card className="overflow-hidden">
         {/* Hero strip — key info at a glance */}

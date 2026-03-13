@@ -2,29 +2,22 @@
 
 import { use, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import {
   ArrowLeft,
+  ClipboardList,
   Clock,
   Database,
   Loader2,
   PoundSterling,
-  Ticket,
   Trash2,
   Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
-import { formatCurrency } from '@/lib/date-utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-} from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import {
   Select,
   SelectContent,
@@ -50,8 +43,22 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { statusConfig, daysUntil } from './_lib/show-utils';
+import { statusConfig } from './_lib/show-utils';
 import { ShowIdProvider } from './_lib/show-context';
+
+function formatRelativeTime(date: Date): string {
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
 import { ShowSectionNav } from './_components/show-section-nav';
 
 export default function ShowManagementLayout({
@@ -62,22 +69,16 @@ export default function ShowManagementLayout({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const pathname = usePathname();
-
   const { data: show, isLoading: showLoading } = trpc.shows.getById.useQuery({
     id,
   });
-  const { data: stats } = trpc.secretary.getShowStats.useQuery(
+  const { data: entryStats } = trpc.secretary.getShowEntryStats.useQuery(
     { showId: show?.id ?? '' },
     { enabled: !!show }
   );
 
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === 'admin';
-
-  // Hide layout stats on Overview tab — it has its own richer stats
-  const basePath = `/secretary/shows/${id}`;
-  const isOverview = pathname === basePath || pathname === `${basePath}/`;
 
   const updateMutation = trpc.shows.update.useMutation();
   const populateMutation = trpc.dev.populateShowTestData.useMutation();
@@ -373,30 +374,53 @@ export default function ShowManagementLayout({
         </>
       )}
 
-      {/* Stats — hidden on Overview tab which has its own richer stats */}
-      <div className={`grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3 ${isOverview ? 'hidden' : ''}`}>
-        {(() => {
-          const days = daysUntil(show.startDate);
-          return [
-            { label: 'Entries', value: stats?.totalEntries ?? 0, icon: Ticket },
-            { label: 'Confirmed', value: stats?.confirmedEntries ?? 0, icon: Users },
-            { label: 'Revenue', value: formatCurrency(stats?.totalRevenue ?? 0), icon: PoundSterling },
-            { label: 'Days Until', value: days > 0 ? days : 'Past', icon: Clock },
-          ];
-        })().map((stat) => (
-          <Card key={stat.label}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-4">
-              <CardDescription className="text-xs sm:text-sm font-medium">
-                {stat.label}
-              </CardDescription>
-              <stat.icon className="size-3.5 text-muted-foreground" />
-            </CardHeader>
-            <CardContent className="px-3 pb-3 pt-0 sm:px-4 sm:pb-4">
-              <p className="text-xl sm:text-2xl font-bold">{stat.value}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {/* Stats */}
+      {entryStats && entryStats.totalEntries > 0 && (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-lg border bg-card p-3">
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <ClipboardList className="size-3.5" />
+              <span className="text-[10px] font-medium uppercase tracking-wider">Entries</span>
+            </div>
+            <p className="mt-1 text-lg font-bold">{entryStats.totalEntries}</p>
+            <p className="text-[11px] text-muted-foreground">
+              {entryStats.confirmed > 0 && <span className="text-emerald-600">{entryStats.confirmed} confirmed</span>}
+              {entryStats.pending > 0 && <span>{entryStats.confirmed > 0 ? ' · ' : ''}<span className="text-amber-600">{entryStats.pending} pending</span></span>}
+            </p>
+          </div>
+          <div className="rounded-lg border bg-card p-3">
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <PoundSterling className="size-3.5" />
+              <span className="text-[10px] font-medium uppercase tracking-wider">Revenue</span>
+            </div>
+            <p className="mt-1 text-lg font-bold text-emerald-700">
+              {(() => {
+                const pounds = entryStats.totalRevenue / 100;
+                return pounds >= 1000 ? `£${(pounds / 1000).toFixed(1)}k` : `£${pounds.toFixed(0)}`;
+              })()}
+            </p>
+            <p className="text-[11px] text-muted-foreground">{entryStats.paidOrders} paid</p>
+          </div>
+          <div className="rounded-lg border bg-card p-3">
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <Users className="size-3.5" />
+              <span className="text-[10px] font-medium uppercase tracking-wider">Exhibitors</span>
+            </div>
+            <p className="mt-1 text-lg font-bold">{entryStats.uniqueExhibitors}</p>
+            <p className="text-[11px] text-muted-foreground">unique</p>
+          </div>
+          <div className="rounded-lg border bg-card p-3">
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <Clock className="size-3.5" />
+              <span className="text-[10px] font-medium uppercase tracking-wider">Latest</span>
+            </div>
+            <p className="mt-1 text-lg font-bold">
+              {entryStats.lastEntryAt ? formatRelativeTime(new Date(entryStats.lastEntryAt)) : '—'}
+            </p>
+            <p className="text-[11px] text-muted-foreground">most recent</p>
+          </div>
+        </div>
+      )}
 
       {/* Section navigation */}
       <ShowSectionNav showId={show.id} />
