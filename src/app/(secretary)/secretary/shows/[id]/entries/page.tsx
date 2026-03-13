@@ -58,7 +58,7 @@ export default function EntriesPage() {
   const showId = useShowId();
 
   const { data: showData } = trpc.shows.getById.useQuery({ id: showId });
-  const { data: entriesData, isLoading: entriesLoading } = trpc.entries.getForShow.useQuery({ showId, limit: 100 });
+  const { data: entriesData, isLoading: entriesLoading } = trpc.entries.getForShow.useQuery({ showId, limit: 500 });
   const entries = entriesData?.items ?? [];
   const total = entriesData?.total ?? 0;
 

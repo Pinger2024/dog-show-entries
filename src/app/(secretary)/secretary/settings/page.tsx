@@ -353,7 +353,7 @@ export default function SettingsPage() {
       {/* Save bar — fixed on mobile to avoid -mx negative margin overflow */}
       <div
         className={`
-          fixed bottom-16 left-0 right-0 z-40 px-2 pb-2 pt-3 md:relative md:bottom-auto md:left-auto md:right-auto md:px-0 md:pb-0 md:pt-0
+          fixed bottom-16 left-0 right-0 z-50 px-2 pb-2 pt-3 md:relative md:bottom-auto md:left-auto md:right-auto md:px-0 md:pb-0 md:pt-0
           transition-all duration-200
           ${isDirty ? 'opacity-100' : 'pointer-events-none opacity-0'}
         `}

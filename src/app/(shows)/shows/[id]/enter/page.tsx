@@ -1185,6 +1185,22 @@ export default function EnterShowPage() {
             </div>
           </div>
 
+          {/* Second add-dog button — easier to find after scrolling through entries */}
+          {cart.entries.length >= 2 && (
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button variant="outline" className="flex-1" onClick={handleAddAnother}>
+                <Plus className="size-4" />
+                Add Another Dog
+              </Button>
+              {hasJhClasses && (
+                <Button variant="outline" className="flex-1" onClick={handleAddJuniorHandler}>
+                  <Users className="size-4" />
+                  Add Junior Handler
+                </Button>
+              )}
+            </div>
+          )}
+
           {/* Declarations */}
           <div className="space-y-4">
             <h3 className="text-sm font-semibold">Declarations</h3>

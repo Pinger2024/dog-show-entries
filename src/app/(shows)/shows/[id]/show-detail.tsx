@@ -947,6 +947,20 @@ export function ShowDetailClient() {
               </div>
             </div>
           )}
+
+          {/* Directions fallback — show even if no venue is linked */}
+          {!venue && scheduleData?.directions && (
+            <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
+              <div className="p-5 sm:p-6">
+                <h2 className="gold-rule font-serif text-sm font-semibold text-foreground">
+                  Directions
+                </h2>
+                <div className="mt-3">
+                  <DirectionsBlock text={scheduleData.directions} />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ─── At the Show ───────────────────────── */}
