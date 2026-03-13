@@ -1,9 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { format, isPast, parseISO, compareAsc, compareDesc } from 'date-fns';
-import { Ticket, CalendarDays, Dog, ChevronRight, Loader2, MapPin } from 'lucide-react';
+import {
+  Ticket,
+  CalendarDays,
+  Dog,
+  ChevronRight,
+  ChevronDown,
+  Loader2,
+  MapPin,
+} from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
 import type { RouterOutputs } from '@/server/trpc/router';
 import { Button } from '@/components/ui/button';
@@ -21,7 +29,7 @@ const statusConfig: Record<
   string,
   { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }
 > = {
-  pending: { label: 'Pending Payment', variant: 'outline' },
+  pending: { label: 'Pending', variant: 'outline' },
   confirmed: { label: 'Confirmed', variant: 'default' },
   withdrawn: { label: 'Withdrawn', variant: 'secondary' },
   transferred: { label: 'Transferred', variant: 'secondary' },
@@ -37,9 +45,44 @@ const filterOptions: { value: StatusFilter; label: string }[] = [
   { value: 'withdrawn', label: 'Withdrawn' },
 ];
 
+type Entry = RouterOutputs['entries']['list']['items'][number];
+
+type ShowGroup = {
+  showId: string;
+  showName: string;
+  startDate: string;
+  endDate: string;
+  venue: { name: string } | null;
+  entries: Entry[];
+  totalFee: number;
+};
+
+function groupByShow(entries: Entry[]): ShowGroup[] {
+  const map = new Map<string, ShowGroup>();
+  for (const entry of entries) {
+    const existing = map.get(entry.show.id);
+    if (existing) {
+      existing.entries.push(entry);
+      existing.totalFee += entry.totalFee;
+    } else {
+      map.set(entry.show.id, {
+        showId: entry.show.id,
+        showName: entry.show.name,
+        startDate: entry.show.startDate,
+        endDate: entry.show.endDate,
+        venue: entry.show.venue,
+        entries: [entry],
+        totalFee: entry.totalFee,
+      });
+    }
+  }
+  return Array.from(map.values());
+}
+
 export default function EntriesPage() {
   const { data, isLoading } = trpc.entries.list.useQuery({ limit: 100, cursor: 0 });
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [collapsedPast, setCollapsedPast] = useState(true);
 
   const allEntries = data?.items ?? [];
 
@@ -48,13 +91,22 @@ export default function EntriesPage() {
     ? allEntries
     : allEntries.filter((e) => e.status === statusFilter);
 
-  // Split and sort: upcoming by soonest first, past by most recent first
-  const upcoming = entries
-    .filter((e) => !isPast(parseISO(e.show.endDate)))
-    .sort((a, b) => compareAsc(parseISO(a.show.startDate), parseISO(b.show.startDate)));
-  const past = entries
-    .filter((e) => isPast(parseISO(e.show.endDate)))
-    .sort((a, b) => compareDesc(parseISO(a.show.startDate), parseISO(b.show.startDate)));
+  // Group by show, then split into upcoming/past
+  const grouped = useMemo(() => groupByShow(entries), [entries]);
+
+  const upcoming = useMemo(
+    () => grouped
+      .filter((g) => !isPast(parseISO(g.endDate)))
+      .sort((a, b) => compareAsc(parseISO(a.startDate), parseISO(b.startDate))),
+    [grouped]
+  );
+
+  const past = useMemo(
+    () => grouped
+      .filter((g) => isPast(parseISO(g.endDate)))
+      .sort((a, b) => compareDesc(parseISO(a.startDate), parseISO(b.startDate))),
+    [grouped]
+  );
 
   // Summary stats from unfiltered entries
   const confirmedCount = allEntries.filter((e) => e.status === 'confirmed').length;
@@ -83,7 +135,7 @@ export default function EntriesPage() {
             <p className="mb-4 text-sm text-muted-foreground">
               Browse upcoming shows and enter your dog.
             </p>
-            <Button asChild>
+            <Button asChild className="min-h-[2.75rem]">
               <Link href="/browse">Find Shows</Link>
             </Button>
           </CardContent>
@@ -96,13 +148,11 @@ export default function EntriesPage() {
     <div className="space-y-6 pb-16 md:pb-0">
       <div>
         <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">My Entries</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-sm text-muted-foreground">
           {confirmedCount > 0 && <span className="font-medium text-emerald-600">{confirmedCount} confirmed</span>}
-          {confirmedCount > 0 && pendingCount > 0 && ' · '}
           {pendingCount > 0 && <span className="font-medium text-amber-600">{pendingCount} pending</span>}
-          {(confirmedCount > 0 || pendingCount > 0) && withdrawnCount > 0 && ' · '}
           {withdrawnCount > 0 && <span>{withdrawnCount} withdrawn</span>}
-          {totalFees > 0 && <span className="ml-1"> · {formatFee(totalFees)} total</span>}
+          {totalFees > 0 && <span className="font-medium text-foreground">{formatFee(totalFees)} total</span>}
         </p>
       </div>
 
@@ -144,11 +194,11 @@ export default function EntriesPage() {
         <section>
           <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
             <div className="size-2 rounded-full bg-emerald-500" />
-            Upcoming
+            Upcoming ({upcoming.reduce((sum, g) => sum + g.entries.length, 0)} entries)
           </h2>
-          <div className="space-y-3">
-            {upcoming.map((entry) => (
-              <EntryCard key={entry.id} entry={entry} />
+          <div className="space-y-4">
+            {upcoming.map((group) => (
+              <ShowGroupCard key={group.showId} group={group} />
             ))}
           </div>
         </section>
@@ -157,22 +207,68 @@ export default function EntriesPage() {
       {/* Past */}
       {past.length > 0 && (
         <section>
-          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          <button
+            onClick={() => setCollapsedPast(!collapsedPast)}
+            className="mb-3 flex w-full items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground min-h-[2.75rem]"
+          >
             <div className="size-2 rounded-full bg-muted-foreground/30" />
-            Past
-          </h2>
-          <div className="space-y-3">
-            {past.map((entry) => (
-              <EntryCard key={entry.id} entry={entry} />
-            ))}
-          </div>
+            Past ({past.reduce((sum, g) => sum + g.entries.length, 0)} entries)
+            <ChevronDown className={`ml-auto size-4 transition-transform ${collapsedPast ? '-rotate-90' : ''}`} />
+          </button>
+          {!collapsedPast && (
+            <div className="space-y-4">
+              {past.map((group) => (
+                <ShowGroupCard key={group.showId} group={group} isPast />
+              ))}
+            </div>
+          )}
         </section>
       )}
     </div>
   );
 }
 
-function EntryCard({ entry }: { entry: RouterOutputs['entries']['list']['items'][number] }) {
+function ShowGroupCard({ group, isPast }: { group: ShowGroup; isPast?: boolean }) {
+  return (
+    <Card className={isPast ? 'opacity-70' : ''}>
+      {/* Show header */}
+      <div className="border-b bg-muted/30 px-3 py-3 sm:px-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold sm:text-lg">{group.showName}</p>
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <CalendarDays className="size-3.5" />
+                {format(parseISO(group.startDate), 'dd MMM yyyy')}
+              </span>
+              {group.venue && (
+                <span className="flex items-center gap-1">
+                  <MapPin className="size-3.5" />
+                  {group.venue.name}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="shrink-0 text-right">
+            <p className="text-sm font-bold">{formatFee(group.totalFee)}</p>
+            <p className="text-xs text-muted-foreground">
+              {group.entries.length} {group.entries.length === 1 ? 'dog' : 'dogs'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Dog entries */}
+      <div className="divide-y">
+        {group.entries.map((entry) => (
+          <DogEntryRow key={entry.id} entry={entry} />
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function DogEntryRow({ entry }: { entry: Entry }) {
   const status = statusConfig[entry.status] ?? statusConfig.pending;
   const isInactive = entry.status === 'withdrawn' || entry.status === 'cancelled';
   const classLabels = entry.entryClasses
@@ -185,47 +281,28 @@ function EntryCard({ entry }: { entry: RouterOutputs['entries']['list']['items']
     .filter(Boolean);
 
   return (
-    <Link href={`/entries/${entry.id}`}>
-      <Card className={`transition-colors hover:bg-accent/30 active:bg-accent/40 ${isInactive ? 'opacity-60' : ''}`}>
-        <CardContent className="flex items-center gap-3 px-3 py-3 sm:gap-4 sm:px-4 sm:py-4 lg:px-6">
-          <div className="hidden size-12 items-center justify-center rounded-lg bg-primary/10 sm:flex">
-            <CalendarDays className="size-5 text-primary" />
-          </div>
-          <div className="min-w-0 flex-1 space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="truncate text-sm font-medium sm:text-base">{entry.show.name}</span>
-              <Badge variant={status.variant} className="shrink-0">
-                {status.label}
-              </Badge>
-            </div>
-            <div className="flex flex-col gap-0.5 text-sm text-muted-foreground sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-1">
-              <span className="flex items-center gap-1">
-                <Dog className="size-3.5" />
-                {entry.dog?.registeredName ?? 'Junior Handler'}
-              </span>
-              <span className="flex items-center gap-1">
-                <CalendarDays className="size-3.5" />
-                {format(parseISO(entry.show.startDate), 'dd MMM yyyy')}
-              </span>
-              {entry.show.venue && (
-                <span className="flex items-center gap-1">
-                  <MapPin className="size-3.5" />
-                  {entry.show.venue.name}
-                </span>
-              )}
-              <span className="font-medium text-foreground">
-                {formatFee(entry.totalFee)}
-              </span>
-            </div>
-            {classLabels.length > 0 && (
-              <p className="text-xs text-muted-foreground/70">
-                {classLabels.join(' · ')}
-              </p>
-            )}
-          </div>
-          <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-        </CardContent>
-      </Card>
+    <Link
+      href={`/entries/${entry.id}`}
+      className={`flex items-center gap-3 px-3 py-3 transition-colors hover:bg-accent/30 active:bg-accent/40 sm:px-4 ${isInactive ? 'opacity-50' : ''}`}
+    >
+      <Dog className="size-4 shrink-0 text-muted-foreground" />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-sm font-medium">
+            {entry.dog?.registeredName ?? 'Junior Handler'}
+          </span>
+          <Badge variant={status.variant} className="shrink-0 text-[10px]">
+            {status.label}
+          </Badge>
+        </div>
+        {classLabels.length > 0 && (
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+            {classLabels.join(' · ')}
+          </p>
+        )}
+      </div>
+      <span className="shrink-0 text-sm font-medium">{formatFee(entry.totalFee)}</span>
+      <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
     </Link>
   );
 }
