@@ -69,11 +69,12 @@ export default function EntriesPage() {
 
   const filtered = useMemo(() => {
     return entries.filter((entry) => {
+      const q = search.toLowerCase();
       const matchesSearch =
         !search ||
-        entry.dog?.registeredName.toLowerCase().includes(search.toLowerCase()) ||
-        entry.exhibitor?.name.toLowerCase().includes(search.toLowerCase()) ||
-        entry.dog?.breed?.name.toLowerCase().includes(search.toLowerCase());
+        entry.dog?.registeredName?.toLowerCase().includes(q) ||
+        entry.exhibitor?.name?.toLowerCase().includes(q) ||
+        entry.dog?.breed?.name?.toLowerCase().includes(q);
 
       const matchesStatus =
         statusFilter === 'all' || entry.status === statusFilter;
@@ -94,7 +95,8 @@ export default function EntriesPage() {
       'NFC',
       'Date',
     ];
-    const rows = filtered.map((e) => [
+    // Always export ALL entries, not just the filtered view
+    const rows = entries.map((e) => [
       e.exhibitor?.name ?? '',
       e.exhibitor?.email ?? '',
       e.dog?.registeredName ?? '',
@@ -122,7 +124,7 @@ export default function EntriesPage() {
     a.download = `entries-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success('Entries exported to CSV');
+    toast.success(`${entries.length} entries exported to CSV`);
   }
 
   return (

@@ -103,13 +103,14 @@ function WinnerPhotoButton({
           onClick={() => fileRef.current?.click()}
           disabled={uploading}
           title={`Add winner photo for ${dogName}`}
-          className="shrink-0 rounded p-2.5 text-muted-foreground/40 transition-colors hover:bg-muted hover:text-primary"
+          className="flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-primary min-h-[2.75rem]"
         >
           {uploading ? (
-            <Loader2 className="size-5 animate-spin" />
+            <Loader2 className="size-4 animate-spin" />
           ) : (
-            <Camera className="size-5" />
+            <Camera className="size-4" />
           )}
+          <span className="hidden sm:inline">Add Photo</span>
         </button>
       )}
     </>
