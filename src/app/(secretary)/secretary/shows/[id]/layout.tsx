@@ -2,6 +2,7 @@
 
 import { use, useState } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import {
   ArrowLeft,
@@ -61,6 +62,7 @@ export default function ShowManagementLayout({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const pathname = usePathname();
 
   const { data: show, isLoading: showLoading } = trpc.shows.getById.useQuery({
     id,
@@ -72,6 +74,10 @@ export default function ShowManagementLayout({
 
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === 'admin';
+
+  // Hide layout stats on Overview tab — it has its own richer stats
+  const basePath = `/secretary/shows/${id}`;
+  const isOverview = pathname === basePath || pathname === `${basePath}/`;
 
   const updateMutation = trpc.shows.update.useMutation();
   const populateMutation = trpc.dev.populateShowTestData.useMutation();
@@ -367,8 +373,8 @@ export default function ShowManagementLayout({
         </>
       )}
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+      {/* Stats — hidden on Overview tab which has its own richer stats */}
+      <div className={`grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3 ${isOverview ? 'hidden' : ''}`}>
         {(() => {
           const days = daysUntil(show.startDate);
           return [
