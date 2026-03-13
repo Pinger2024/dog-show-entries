@@ -1,7 +1,8 @@
 'use client';
 
-import { use } from 'react';
+import { use, useCallback, useEffect } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { format, parseISO } from 'date-fns';
 import {
   ArrowLeft,
@@ -11,10 +12,70 @@ import {
   Loader2,
   Trophy,
   Award,
+  Share2,
+  Check,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { getPlacementLabel, placementColors, achievementLabels } from '@/lib/placements';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+
+function slugify(text: string) {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+}
+
+/** Share via native share sheet on mobile, copy to clipboard on desktop */
+async function shareOrCopy({ title, text, url }: { title: string; text: string; url: string }) {
+  if (typeof navigator !== 'undefined' && navigator.share) {
+    try {
+      await navigator.share({ title, text, url });
+      return;
+    } catch (e) {
+      // User cancelled or share failed — fall through to clipboard
+      if ((e as Error).name === 'AbortError') return;
+    }
+  }
+  // Fallback: copy link to clipboard
+  try {
+    await navigator.clipboard.writeText(`${text}\n${url}`);
+    toast.success('Copied to clipboard — paste into WhatsApp, Facebook, etc.');
+  } catch {
+    toast.error('Could not copy to clipboard');
+  }
+}
+
+function ShareButton({
+  title,
+  text,
+  hash,
+  className,
+  size = 'sm',
+}: {
+  title: string;
+  text: string;
+  hash?: string;
+  className?: string;
+  size?: 'sm' | 'icon';
+}) {
+  const pathname = usePathname();
+  const baseUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}${pathname}`
+    : '';
+  const url = hash ? `${baseUrl}#${hash}` : baseUrl;
+
+  return (
+    <Button
+      variant="ghost"
+      size={size}
+      className={`min-h-[2.75rem] text-muted-foreground hover:text-primary ${className ?? ''}`}
+      onClick={() => shareOrCopy({ title, text, url })}
+    >
+      <Share2 className="size-4" />
+      {size !== 'icon' && <span className="hidden sm:inline">Share</span>}
+    </Button>
+  );
+}
 
 export default function LiveResultsPage({
   params,
@@ -39,6 +100,18 @@ export default function LiveResultsPage({
       { showId },
       { refetchInterval: 10_000 }
     );
+
+  // Scroll to hash anchor on mount (for deep-linked shares)
+  useEffect(() => {
+    if (!data || data.breedGroups.length === 0) return;
+    const hash = window.location.hash.slice(1);
+    if (!hash) return;
+    // Small delay to let the DOM render
+    const timer = setTimeout(() => {
+      document.getElementById(hash)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [data]);
 
   if (isLoading) {
     return (
@@ -97,13 +170,23 @@ export default function LiveResultsPage({
       })
     : null;
 
+  // Build share text for show-level awards
+  const showAwardsShareText = showAwards.length > 0
+    ? showAwards.map((a) => {
+        const label = achievementLabels[a.type] ?? a.type;
+        const dog = a.dog?.registeredName ?? 'TBC';
+        const breed = a.dog?.breed?.name ? ` (${a.dog.breed.name})` : '';
+        return `${label}: ${dog}${breed}`;
+      }).join('\n')
+    : '';
+
   return (
     <div className="min-h-screen">
       {/* Hero header */}
       <div className="relative overflow-hidden border-b bg-gradient-to-b from-primary/[0.04] to-transparent">
         <div className="relative mx-auto max-w-4xl px-4 pb-6 pt-6 sm:px-6">
           <Link
-            href={`/shows/${showId}`} /* showId is the slug from URL */
+            href={`/shows/${showId}`}
             className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             <ArrowLeft className="size-4" />
@@ -196,12 +279,20 @@ export default function LiveResultsPage({
           <div className="space-y-8">
             {/* Show-level awards (BIS/RBIS/BPS) */}
             {showAwards.length > 0 && (
-              <div className="rounded-lg border border-amber-200 bg-gradient-to-b from-amber-50/80 to-amber-50/30 p-4 sm:p-5">
-                <div className="mb-3 flex items-center gap-2">
-                  <Trophy className="size-5 text-amber-600" />
-                  <h2 className="font-serif text-lg font-semibold text-amber-900">
-                    Show Awards
-                  </h2>
+              <div id="show-awards" className="rounded-lg border border-amber-200 bg-gradient-to-b from-amber-50/80 to-amber-50/30 p-4 sm:p-5">
+                <div className="mb-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Trophy className="size-5 text-amber-600" />
+                    <h2 className="font-serif text-lg font-semibold text-amber-900">
+                      Show Awards
+                    </h2>
+                  </div>
+                  <ShareButton
+                    title={`${show.name} — Show Awards`}
+                    text={`Show Awards at ${show.name}\n\n${showAwardsShareText}`}
+                    hash="show-awards"
+                    size="sm"
+                  />
                 </div>
                 <div className="space-y-2">
                   {showAwards.map((a) => (
@@ -230,123 +321,155 @@ export default function LiveResultsPage({
               </div>
             )}
 
-            {breedGroups.map((group) => (
-              <div key={group.breedName}>
-                <h2 className="mb-3 font-serif text-lg font-semibold">
-                  {group.breedName}
-                </h2>
+            {breedGroups.map((group) => {
+              const breedSlug = slugify(group.breedName);
+              const breedAwardsForGroup = breedAwardsByBreed.get(group.breedName);
 
-                {/* Breed-level awards (BOB/BPB/BVB) */}
-                {breedAwardsByBreed.has(group.breedName) && (
-                  <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1.5">
-                    {breedAwardsByBreed.get(group.breedName)!.map((a) => (
-                      <div key={a.id} className="flex items-center gap-1.5 text-sm">
-                        <Award className="size-4 text-amber-500" />
-                        <span className="text-xs font-medium text-muted-foreground">
-                          {achievementLabels[a.type] ?? a.type}:
-                        </span>
-                        {a.dog ? (
-                          <Link
-                            href={`/dog/${a.dogId}`}
-                            className="text-xs font-medium text-primary hover:underline"
-                          >
-                            {a.dog.registeredName}
-                          </Link>
-                        ) : (
-                          <span className="text-xs font-medium">Unknown</span>
-                        )}
+              // Build share text for this breed
+              const topResults = group.classes
+                .flatMap((cls) =>
+                  cls.results
+                    .filter((r) => r.placement && r.placement <= 3)
+                    .map((r) => `${getPlacementLabel(r.placement!)}: ${r.dogName}${cls.className ? ` (${cls.className})` : ''}`)
+                )
+                .slice(0, 6);
+
+              const breedShareText = [
+                `${group.breedName} results at ${show.name}`,
+                '',
+                ...(breedAwardsForGroup?.map((a) =>
+                  `${achievementLabels[a.type] ?? a.type}: ${a.dog?.registeredName ?? 'TBC'}`
+                ) ?? []),
+                ...(breedAwardsForGroup?.length ? [''] : []),
+                ...topResults,
+              ].join('\n');
+
+              return (
+                <div key={group.breedName} id={`breed-${breedSlug}`}>
+                  <div className="mb-3 flex items-center justify-between">
+                    <h2 className="font-serif text-lg font-semibold">
+                      {group.breedName}
+                    </h2>
+                    <ShareButton
+                      title={`${group.breedName} — ${show.name}`}
+                      text={breedShareText}
+                      hash={`breed-${breedSlug}`}
+                    />
+                  </div>
+
+                  {/* Breed-level awards (BOB/BPB/BVB) */}
+                  {breedAwardsForGroup && breedAwardsForGroup.length > 0 && (
+                    <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1.5">
+                      {breedAwardsForGroup.map((a) => (
+                        <div key={a.id} className="flex items-center gap-1.5 text-sm">
+                          <Award className="size-4 text-amber-500" />
+                          <span className="text-xs font-medium text-muted-foreground">
+                            {achievementLabels[a.type] ?? a.type}:
+                          </span>
+                          {a.dog ? (
+                            <Link
+                              href={`/dog/${a.dogId}`}
+                              className="text-xs font-medium text-primary hover:underline"
+                            >
+                              {a.dog.registeredName}
+                            </Link>
+                          ) : (
+                            <span className="text-xs font-medium">Unknown</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="space-y-4">
+                    {group.classes.map((cls) => (
+                      <div
+                        key={cls.classId}
+                        id={`class-${cls.classId}`}
+                        className="rounded-lg border bg-white p-4"
+                      >
+                        <div className="mb-3 flex items-center gap-2">
+                          {cls.classNumber != null && (
+                            <span className="text-xs font-bold text-muted-foreground">
+                              #{cls.classNumber}
+                            </span>
+                          )}
+                          <h3 className="font-semibold text-sm">
+                            {cls.className}
+                          </h3>
+                          {cls.sex && (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] capitalize"
+                            >
+                              {cls.sex}
+                            </Badge>
+                          )}
+                          <span className="text-[10px] text-muted-foreground">
+                            ({cls.dogsForward} forward)
+                          </span>
+                        </div>
+                        <div className="space-y-1.5">
+                          {cls.results.map((result) => (
+                            <div key={result.entryClassId}>
+                              <div className="flex flex-wrap items-center gap-1.5 sm:gap-3 text-sm">
+                                {result.placement && (
+                                  <Badge
+                                    variant="outline"
+                                    className={`w-auto sm:w-16 justify-center text-xs font-semibold whitespace-nowrap ${placementColors[result.placement] ?? ''}`}
+                                  >
+                                    {getPlacementLabel(result.placement)}
+                                  </Badge>
+                                )}
+                                <span className="font-mono text-xs text-muted-foreground">
+                                  {result.catalogueNumber ?? '—'}
+                                </span>
+                                {result.dogId ? (
+                                  <Link
+                                    href={`/dog/${result.dogId}`}
+                                    className="flex-1 truncate font-medium text-primary hover:underline"
+                                  >
+                                    {result.dogName}
+                                  </Link>
+                                ) : (
+                                  <span className="flex-1 truncate font-medium">
+                                    {result.dogName}
+                                  </span>
+                                )}
+                                {result.specialAward && (
+                                  <Badge
+                                    variant="secondary"
+                                    className="shrink-0 text-[10px] bg-amber-50 text-amber-700"
+                                  >
+                                    <Award className="mr-0.5 size-3" />
+                                    {result.specialAward}
+                                  </Badge>
+                                )}
+                              </div>
+                              {result.winnerPhotoUrl && result.placement === 1 && (
+                                <div className="mt-1.5 ml-[4.75rem]">
+                                  <img
+                                    src={result.winnerPhotoUrl}
+                                    alt={`${result.dogName} — 1st place`}
+                                    className="h-20 w-auto rounded-lg object-cover ring-1 ring-border/40 sm:h-24"
+                                  />
+                                </div>
+                              )}
+                              {result.critiqueText && (
+                                <div className="ml-[4.75rem] mt-1.5 rounded-lg border-l-2 border-gold/30 bg-muted/50 px-3 py-2">
+                                  <p className="text-sm italic leading-relaxed text-muted-foreground">
+                                    &ldquo;{result.critiqueText}&rdquo;
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     ))}
                   </div>
-                )}
-                <div className="space-y-4">
-                  {group.classes.map((cls) => (
-                    <div
-                      key={cls.classId}
-                      className="rounded-lg border bg-white p-4"
-                    >
-                      <div className="mb-3 flex items-center gap-2">
-                        {cls.classNumber != null && (
-                          <span className="text-xs font-bold text-muted-foreground">
-                            #{cls.classNumber}
-                          </span>
-                        )}
-                        <h3 className="font-semibold text-sm">
-                          {cls.className}
-                        </h3>
-                        {cls.sex && (
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] capitalize"
-                          >
-                            {cls.sex}
-                          </Badge>
-                        )}
-                        <span className="text-[10px] text-muted-foreground">
-                          ({cls.dogsForward} forward)
-                        </span>
-                      </div>
-                      <div className="space-y-1.5">
-                        {cls.results.map((result) => (
-                          <div key={result.entryClassId}>
-                            <div className="flex flex-wrap items-center gap-1.5 sm:gap-3 text-sm">
-                              {result.placement && (
-                                <Badge
-                                  variant="outline"
-                                  className={`w-auto sm:w-16 justify-center text-xs font-semibold whitespace-nowrap ${placementColors[result.placement] ?? ''}`}
-                                >
-                                  {getPlacementLabel(result.placement)}
-                                </Badge>
-                              )}
-                              <span className="font-mono text-xs text-muted-foreground">
-                                {result.catalogueNumber ?? '—'}
-                              </span>
-                              {result.dogId ? (
-                                <Link
-                                  href={`/dog/${result.dogId}`}
-                                  className="flex-1 truncate font-medium text-primary hover:underline"
-                                >
-                                  {result.dogName}
-                                </Link>
-                              ) : (
-                                <span className="flex-1 truncate font-medium">
-                                  {result.dogName}
-                                </span>
-                              )}
-                              {result.specialAward && (
-                                <Badge
-                                  variant="secondary"
-                                  className="shrink-0 text-[10px] bg-amber-50 text-amber-700"
-                                >
-                                  <Award className="mr-0.5 size-3" />
-                                  {result.specialAward}
-                                </Badge>
-                              )}
-                            </div>
-                            {result.winnerPhotoUrl && result.placement === 1 && (
-                              <div className="mt-1.5 ml-[4.75rem]">
-                                <img
-                                  src={result.winnerPhotoUrl}
-                                  alt={`${result.dogName} — 1st place`}
-                                  className="h-20 w-auto rounded-lg object-cover ring-1 ring-border/40 sm:h-24"
-                                />
-                              </div>
-                            )}
-                            {result.critiqueText && (
-                              <div className="ml-[4.75rem] mt-1.5 rounded-lg border-l-2 border-gold/30 bg-muted/50 px-3 py-2">
-                                <p className="text-sm italic leading-relaxed text-muted-foreground">
-                                  &ldquo;{result.critiqueText}&rdquo;
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
