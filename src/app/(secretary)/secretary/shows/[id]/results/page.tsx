@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useShowId } from '../_lib/show-context';
 import Link from 'next/link';
 import {
   Trophy,
   Award,
+  Camera,
   CheckCircle2,
   Clock,
   ExternalLink,
@@ -18,6 +19,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
+import { uploadImage } from '@/lib/upload';
 import { getPlacementLabel, placementColors, achievementLabels } from '@/lib/placements';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -33,6 +35,86 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+
+function WinnerPhotoButton({
+  entryClassId,
+  currentPhotoUrl,
+  dogName,
+  showId,
+}: {
+  entryClassId: string;
+  currentPhotoUrl: string | null;
+  dogName: string;
+  showId: string;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const utils = trpc.useUtils();
+
+  const updatePhoto = trpc.steward.updateWinnerPhoto.useMutation({
+    onSuccess: () => {
+      utils.steward.getLiveResults.invalidate({ showId });
+      toast.success('Winner photo updated');
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const handleUpload = useCallback(async (file: File) => {
+    setUploading(true);
+    try {
+      const publicUrl = await uploadImage(file);
+      updatePhoto.mutate({
+        entryClassId,
+        winnerPhotoUrl: publicUrl,
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to upload photo');
+    } finally {
+      setUploading(false);
+    }
+  }, [entryClassId, updatePhoto]);
+
+  return (
+    <>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleUpload(file);
+          e.target.value = '';
+        }}
+      />
+      {currentPhotoUrl ? (
+        <div className="mt-1.5 flex items-center gap-2">
+          <img src={currentPhotoUrl} alt={dogName} className="size-10 rounded object-cover ring-1 ring-border/40" />
+          <button
+            onClick={() => fileRef.current?.click()}
+            className="text-[10px] text-primary hover:underline"
+            disabled={uploading}
+          >
+            {uploading ? 'Uploading...' : 'Replace'}
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          title={`Add winner photo for ${dogName}`}
+          className="shrink-0 rounded p-1 text-muted-foreground/40 transition-colors hover:bg-muted hover:text-primary"
+        >
+          {uploading ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Camera className="size-3.5" />
+          )}
+        </button>
+      )}
+    </>
+  );
+}
 
 export default function SecretaryResultsPage() {
   const showId = useShowId();
@@ -409,31 +491,39 @@ export default function SecretaryResultsPage() {
                       </p>
                     ) : (
                       <div className="space-y-1">
-                        {cls.results.map((result, i) => (
-                          <div key={i} className="flex flex-wrap items-center gap-1.5 sm:gap-3 text-sm">
-                            {result.placement && (
-                              <Badge
-                                variant="outline"
-                                className={`text-xs font-semibold whitespace-nowrap ${placementColors[result.placement] ?? ''}`}
-                              >
-                                {getPlacementLabel(result.placement)}
-                              </Badge>
-                            )}
-                            <span className="font-mono text-xs text-muted-foreground">
-                              {result.catalogueNumber ?? '—'}
-                            </span>
-                            <span className="flex-1 truncate font-medium">
-                              {result.dogName}
-                            </span>
-                            {result.specialAward && (
-                              <Badge
-                                variant="secondary"
-                                className="shrink-0 text-[10px] bg-amber-50 text-amber-700"
-                              >
-                                <Award className="mr-0.5 size-3" />
-                                {result.specialAward}
-                              </Badge>
-                            )}
+                        {cls.results.map((result) => (
+                          <div key={result.entryClassId} className="flex flex-wrap items-center gap-1.5 sm:gap-3 text-sm">
+                              {result.placement && (
+                                <Badge
+                                  variant="outline"
+                                  className={`text-xs font-semibold whitespace-nowrap ${placementColors[result.placement] ?? ''}`}
+                                >
+                                  {getPlacementLabel(result.placement)}
+                                </Badge>
+                              )}
+                              <span className="font-mono text-xs text-muted-foreground">
+                                {result.catalogueNumber ?? '—'}
+                              </span>
+                              <span className="flex-1 truncate font-medium">
+                                {result.dogName}
+                              </span>
+                              {result.specialAward && (
+                                <Badge
+                                  variant="secondary"
+                                  className="shrink-0 text-[10px] bg-amber-50 text-amber-700"
+                                >
+                                  <Award className="mr-0.5 size-3" />
+                                  {result.specialAward}
+                                </Badge>
+                              )}
+                              {result.placement === 1 && (
+                                <WinnerPhotoButton
+                                  entryClassId={result.entryClassId}
+                                  currentPhotoUrl={result.winnerPhotoUrl}
+                                  dogName={result.dogName}
+                                  showId={showId}
+                                />
+                              )}
                           </div>
                         ))}
                       </div>

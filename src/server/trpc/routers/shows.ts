@@ -615,6 +615,8 @@ export const showsRouter = createTRPCRouter({
         showOpenTime: z.string().nullable().optional(),
         onCallVet: z.string().nullable().optional(),
         classSexArrangement: z.enum(['separate_sex', 'combined_sex']).nullable().optional(),
+        bannerImageUrl: z.string().nullable().optional(),
+        bannerImageStorageKey: z.string().nullable().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -763,6 +765,7 @@ export const showsRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const photos = await ctx.db
         .select({
+          dogId: dogs.id,
           photoUrl: dogPhotos.url,
           dogName: dogs.registeredName,
           breedName: breeds.name,

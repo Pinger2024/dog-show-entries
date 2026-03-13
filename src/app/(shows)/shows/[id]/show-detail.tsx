@@ -457,6 +457,7 @@ export function ShowDetailClient() {
     lat?: string | null;
     lng?: string | null;
     indoorOutdoor?: string | null;
+    imageUrl?: string | null;
   };
   const scheduleData = showAny.scheduleData;
 
@@ -535,11 +536,26 @@ export function ShowDetailClient() {
     <div className="min-h-screen">
       {/* ─── Hero header ──────────────────────── */}
       <div className="relative overflow-hidden bg-stone-900">
+        {/* Banner image background (if uploaded) */}
+        {show.bannerImageUrl && (
+          <img
+            src={show.bannerImageUrl}
+            alt=""
+            className="absolute inset-0 size-full object-cover opacity-30"
+          />
+        )}
         {/* Gradient layers for depth + warmth */}
         <div className="pointer-events-none absolute inset-0">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_60%_30%,rgba(180,130,60,0.08),transparent_70%)]" />
-          <div className="absolute -right-32 -top-32 h-96 w-96 rounded-full bg-gold/[0.06] blur-3xl" />
-          <div className="absolute -left-20 bottom-0 h-64 w-64 rounded-full bg-primary/[0.03] blur-3xl" />
+          {show.bannerImageUrl ? (
+            /* Stronger overlay when banner exists for text readability */
+            <div className="absolute inset-0 bg-gradient-to-t from-stone-900 via-stone-900/80 to-stone-900/60" />
+          ) : (
+            <>
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_60%_30%,rgba(180,130,60,0.08),transparent_70%)]" />
+              <div className="absolute -right-32 -top-32 h-96 w-96 rounded-full bg-gold/[0.06] blur-3xl" />
+              <div className="absolute -left-20 bottom-0 h-64 w-64 rounded-full bg-primary/[0.03] blur-3xl" />
+            </>
+          )}
         </div>
         {/* Top gold accent line */}
         <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
@@ -812,8 +828,9 @@ export function ShowDetailClient() {
             </p>
             <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none sm:justify-center sm:flex-wrap sm:gap-4 sm:overflow-visible sm:pb-0">
               {dogPhotos.map((photo, i) => (
-                <div
+                <Link
                   key={i}
+                  href={`/dog/${photo.dogId}`}
                   className="group relative shrink-0 overflow-hidden rounded-xl"
                   style={{ width: 140, height: 140 }}
                 >
@@ -827,7 +844,7 @@ export function ShowDetailClient() {
                     <p className="truncate text-xs font-medium text-white">{photo.dogName}</p>
                     <p className="truncate text-[10px] text-white/60">{photo.breedName}</p>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           </div>
@@ -890,7 +907,15 @@ export function ShowDetailClient() {
 
           {/* Venue card */}
           {venue && (
-            <div className="rounded-xl border border-border/60 bg-card p-5 sm:p-6">
+            <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
+              {venue.imageUrl && (
+                <img
+                  src={venue.imageUrl}
+                  alt={venue.name}
+                  className="h-40 w-full object-cover sm:h-48"
+                />
+              )}
+              <div className="p-5 sm:p-6">
               <h2 className="gold-rule font-serif text-sm font-semibold text-foreground">
                 Venue
               </h2>
@@ -920,6 +945,7 @@ export function ShowDetailClient() {
                   <ExternalLink className="size-3" />
                 </a>
                 {scheduleData?.directions && <DirectionsBlock text={scheduleData.directions} />}
+              </div>
               </div>
             </div>
           )}

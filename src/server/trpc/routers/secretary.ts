@@ -267,6 +267,35 @@ export const secretaryRouter = createTRPCRouter({
       return venue!;
     }),
 
+  updateVenue: secretaryProcedure
+    .input(
+      z.object({
+        venueId: z.string().uuid(),
+        imageUrl: z.string().nullable().optional(),
+        imageStorageKey: z.string().nullable().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { venueId, ...rest } = input;
+      // Verify the caller's org owns this venue
+      const venue = await ctx.db.query.venues.findFirst({
+        where: eq(venues.id, venueId),
+        columns: { organisationId: true },
+      });
+      if (!venue) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Venue not found' });
+      }
+      if (venue.organisationId) {
+        await verifyOrgAccess(ctx.db, ctx.session.user.id, venue.organisationId);
+      }
+      const [updated] = await ctx.db
+        .update(venues)
+        .set(rest)
+        .where(eq(venues.id, venueId))
+        .returning();
+      return updated!;
+    }),
+
   listClassDefinitions: publicProcedure.query(async ({ ctx }) => {
     return ctx.db.query.classDefinitions.findMany({
       orderBy: (cd, { asc }) => [asc(cd.type), asc(cd.sortOrder), asc(cd.name)],

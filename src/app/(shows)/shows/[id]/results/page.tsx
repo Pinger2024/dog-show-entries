@@ -287,8 +287,8 @@ export default function LiveResultsPage({
                         </span>
                       </div>
                       <div className="space-y-1.5">
-                        {cls.results.map((result, i) => (
-                          <div key={i}>
+                        {cls.results.map((result) => (
+                          <div key={result.entryClassId}>
                             <div className="flex flex-wrap items-center gap-1.5 sm:gap-3 text-sm">
                               {result.placement && (
                                 <Badge
@@ -323,6 +323,15 @@ export default function LiveResultsPage({
                                 </Badge>
                               )}
                             </div>
+                            {result.winnerPhotoUrl && result.placement === 1 && (
+                              <div className="mt-1.5 ml-[4.75rem]">
+                                <img
+                                  src={result.winnerPhotoUrl}
+                                  alt={`${result.dogName} — 1st place`}
+                                  className="h-20 w-auto rounded-lg object-cover ring-1 ring-border/40 sm:h-24"
+                                />
+                              </div>
+                            )}
                             {result.critiqueText && (
                               <p className="ml-[4.75rem] mt-0.5 text-xs italic text-muted-foreground">
                                 {result.critiqueText}

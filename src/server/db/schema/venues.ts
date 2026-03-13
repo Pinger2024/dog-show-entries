@@ -19,6 +19,8 @@ export const venues = pgTable('venues', {
   lng: numeric('lng', { precision: 10, scale: 7 }),
   indoorOutdoor: text('indoor_outdoor'),
   capacity: integer('capacity'),
+  imageUrl: text('image_url'),
+  imageStorageKey: text('image_storage_key'),
   organisationId: uuid('organisation_id').references(() => organisations.id),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()

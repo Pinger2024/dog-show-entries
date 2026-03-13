@@ -96,6 +96,8 @@ export const shows = pgTable(
     acceptsPostalEntries: boolean('accepts_postal_entries').notNull().default(false),
     classSexArrangement: classSexArrangementEnum('class_sex_arrangement'),
     scheduleData: jsonb('schedule_data').$type<ScheduleData>(),
+    bannerImageUrl: text('banner_image_url'),
+    bannerImageStorageKey: text('banner_image_storage_key'),
     firstEntryFee: integer('first_entry_fee'),
     subsequentEntryFee: integer('subsequent_entry_fee'),
     nfcEntryFee: integer('nfc_entry_fee'),

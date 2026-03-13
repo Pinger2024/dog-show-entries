@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   DragDropContext,
   Droppable,
@@ -9,6 +9,7 @@ import {
 } from '@hello-pangea/dnd';
 import {
   CalendarDays,
+  Camera,
   ChevronDown,
   ChevronsDownUp,
   ChevronsUpDown,
@@ -16,6 +17,7 @@ import {
   Gavel,
   GripVertical,
   Hash,
+  ImageIcon,
   Loader2,
   ListChecks,
   AlertTriangle,
@@ -23,6 +25,7 @@ import {
   MapPin,
   Plus,
   Trash2,
+  Upload,
   X,
   Users,
   PoundSterling,
@@ -71,6 +74,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { uploadImage } from '@/lib/upload';
 import { formatDate } from './_lib/show-utils';
 import { useShowId } from './_lib/show-context';
 
@@ -239,6 +243,16 @@ export default function OverviewPage() {
         )}
       </Card>
 
+      {/* Venue image upload */}
+      {show.venue && (
+        <VenueImageUpload
+          venueId={show.venue.id}
+          currentImageUrl={(show.venue as Record<string, unknown>).imageUrl as string | null}
+          venueName={show.venue.name}
+          showId={showId}
+        />
+      )}
+
       {/* Class management */}
       <ClassManager showId={showId} classes={show.showClasses ?? []} />
 
@@ -258,6 +272,145 @@ export default function OverviewPage() {
         <DeleteShowSection showId={showId} showName={show.name} />
       )}
     </div>
+  );
+}
+
+// ── Venue Image Upload ───────────────────────────────────
+
+function VenueImageUpload({
+  venueId,
+  currentImageUrl,
+  venueName,
+  showId,
+}: {
+  venueId: string;
+  currentImageUrl: string | null;
+  venueName: string;
+  showId: string;
+}) {
+  const [imageUrl, setImageUrl] = useState(currentImageUrl ?? '');
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const utils = trpc.useUtils();
+
+  const updateMutation = trpc.secretary.updateVenue.useMutation({
+    onSuccess: () => {
+      utils.shows.getById.invalidate({ id: showId });
+      toast.success('Venue photo updated');
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to update venue'),
+  });
+
+  const handleUpload = useCallback(async (file: File) => {
+    setUploading(true);
+    try {
+      const publicUrl = await uploadImage(file);
+      setImageUrl(publicUrl);
+      updateMutation.mutate({ venueId, imageUrl: publicUrl });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to upload image');
+    } finally {
+      setUploading(false);
+    }
+  }, [venueId, updateMutation]);
+
+  function handleRemove() {
+    setImageUrl('');
+    updateMutation.mutate({ venueId, imageUrl: null });
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 font-serif text-base">
+          <MapPin className="size-4 text-primary" />
+          Venue Photo — {venueName}
+        </CardTitle>
+        <CardDescription className="text-xs">
+          Shows on the public page in the venue section. Landscape images work best.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div
+          className={cn(
+            'group relative flex cursor-pointer items-center justify-center overflow-hidden rounded-lg border-2 border-dashed transition-all duration-200',
+            imageUrl ? 'h-36 border-transparent' : 'h-28',
+            dragOver
+              ? 'border-primary bg-primary/5 scale-[1.01]'
+              : !imageUrl && 'border-muted-foreground/20 bg-muted/20 hover:border-primary/40 hover:bg-muted/40'
+          )}
+          onClick={() => fileRef.current?.click()}
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+            const file = e.dataTransfer.files?.[0];
+            if (file) handleUpload(file);
+          }}
+        >
+          {uploading ? (
+            <div className="flex flex-col items-center gap-2">
+              <Loader2 className="size-6 animate-spin text-primary" />
+              <span className="text-xs font-medium text-muted-foreground">Uploading...</span>
+            </div>
+          ) : imageUrl ? (
+            <>
+              <img src={imageUrl} alt={`${venueName} photo`} className="size-full object-cover" />
+              <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+                <Camera className="size-6 text-white" />
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-center gap-1.5 px-3 text-center">
+              <div className="rounded-full bg-muted p-2.5">
+                <ImageIcon className="size-5 text-muted-foreground" />
+              </div>
+              <span className="text-xs font-medium text-muted-foreground">
+                {dragOver ? 'Drop here' : 'Click or drag to upload venue photo'}
+              </span>
+            </div>
+          )}
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) handleUpload(file);
+            e.target.value = '';
+          }}
+        />
+        {imageUrl && (
+          <div className="mt-2 flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={(e) => { e.stopPropagation(); fileRef.current?.click(); }}
+              disabled={uploading}
+            >
+              <Upload className="size-3.5" />
+              Replace
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={handleRemove}
+              disabled={uploading}
+            >
+              <X className="size-3.5" />
+              Remove
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -284,6 +437,8 @@ function EditShowDetailsDialog({
     postalCloseDate: Date | string | null;
     kcLicenceNo: string | null;
     description: string | null;
+    bannerImageUrl: string | null;
+    bannerImageStorageKey: string | null;
   };
   showId: string;
 }) {
@@ -312,6 +467,23 @@ function EditShowDetailsDialog({
   );
   const [kcLicenceNo, setKcLicenceNo] = useState(show.kcLicenceNo ?? '');
   const [description, setDescription] = useState(show.description ?? '');
+  const [bannerImageUrl, setBannerImageUrl] = useState(show.bannerImageUrl ?? '');
+  const [bannerUploading, setBannerUploading] = useState(false);
+  const [bannerDragOver, setBannerDragOver] = useState(false);
+  const bannerFileRef = useRef<HTMLInputElement>(null);
+
+  const handleBannerUpload = useCallback(async (file: File) => {
+    setBannerUploading(true);
+    try {
+      const publicUrl = await uploadImage(file);
+      setBannerImageUrl(publicUrl);
+      toast.success('Banner image uploaded');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to upload image');
+    } finally {
+      setBannerUploading(false);
+    }
+  }, []);
 
   const utils = trpc.useUtils();
   const updateMutation = trpc.shows.update.useMutation({
@@ -346,6 +518,7 @@ function EditShowDetailsDialog({
         : null,
       kcLicenceNo: kcLicenceNo || null,
       description: description || null,
+      bannerImageUrl: bannerImageUrl || null,
     });
   }
 
@@ -376,6 +549,7 @@ function EditShowDetailsDialog({
     setSecretaryPhone(show.secretaryPhone ?? '');
     setShowOpenTime(show.showOpenTime ?? '');
     setOnCallVet(show.onCallVet ?? '');
+    setBannerImageUrl(show.bannerImageUrl ?? '');
   }, [open]); // reads current `show` via closure when dialog opens
 
   return (
@@ -393,6 +567,91 @@ function EditShowDetailsDialog({
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
+            {/* Banner image upload */}
+            <div className="space-y-1.5">
+              <Label>Banner Image</Label>
+              <p className="text-xs text-muted-foreground">
+                Appears as the hero background on your show page. Use a wide landscape photo (1200&times;400px or larger).
+              </p>
+              <div
+                className={cn(
+                  'group relative flex cursor-pointer items-center justify-center overflow-hidden rounded-lg border-2 border-dashed transition-all duration-200',
+                  bannerImageUrl ? 'h-32 border-transparent' : 'h-28',
+                  bannerDragOver
+                    ? 'border-primary bg-primary/5 scale-[1.01]'
+                    : !bannerImageUrl && 'border-muted-foreground/20 bg-muted/20 hover:border-primary/40 hover:bg-muted/40'
+                )}
+                onClick={() => bannerFileRef.current?.click()}
+                onDragOver={(e) => { e.preventDefault(); setBannerDragOver(true); }}
+                onDragLeave={() => setBannerDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setBannerDragOver(false);
+                  const file = e.dataTransfer.files?.[0];
+                  if (file) handleBannerUpload(file);
+                }}
+              >
+                {bannerUploading ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <Loader2 className="size-6 animate-spin text-primary" />
+                    <span className="text-xs font-medium text-muted-foreground">Uploading...</span>
+                  </div>
+                ) : bannerImageUrl ? (
+                  <>
+                    <img src={bannerImageUrl} alt="Banner preview" className="size-full object-cover" />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+                      <Camera className="size-6 text-white" />
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center gap-1.5 px-3 text-center">
+                    <div className="rounded-full bg-muted p-2.5">
+                      <ImageIcon className="size-5 text-muted-foreground" />
+                    </div>
+                    <span className="text-xs font-medium text-muted-foreground">
+                      {bannerDragOver ? 'Drop here' : 'Click or drag to upload banner'}
+                    </span>
+                  </div>
+                )}
+              </div>
+              <input
+                ref={bannerFileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleBannerUpload(file);
+                  e.target.value = '';
+                }}
+              />
+              {bannerImageUrl && (
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => { e.stopPropagation(); bannerFileRef.current?.click(); }}
+                    disabled={bannerUploading}
+                  >
+                    <Upload className="size-3.5" />
+                    Replace
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                    onClick={(e) => { e.stopPropagation(); setBannerImageUrl(''); }}
+                    disabled={bannerUploading}
+                  >
+                    <X className="size-3.5" />
+                    Remove
+                  </Button>
+                </div>
+              )}
+            </div>
+
             <div className="space-y-1.5">
               <Label htmlFor="edit-name">Show Name</Label>
               <Input

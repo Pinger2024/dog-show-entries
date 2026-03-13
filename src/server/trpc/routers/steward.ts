@@ -259,6 +259,8 @@ export const stewardRouter = createTRPCRouter({
         placement: z.number().int().min(1).max(7).nullable(),
         specialAward: z.string().nullable().optional(),
         critiqueText: z.string().nullable().optional(),
+        winnerPhotoUrl: z.string().nullable().optional(),
+        winnerPhotoStorageKey: z.string().nullable().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -301,6 +303,8 @@ export const stewardRouter = createTRPCRouter({
           placement: input.placement,
           specialAward: input.specialAward ?? null,
           critiqueText: input.critiqueText ?? null,
+          winnerPhotoUrl: input.winnerPhotoUrl ?? null,
+          winnerPhotoStorageKey: input.winnerPhotoStorageKey ?? null,
           recordedBy: ctx.session.user.id,
           recordedAt: new Date(),
         })
@@ -310,6 +314,8 @@ export const stewardRouter = createTRPCRouter({
             placement: input.placement,
             specialAward: input.specialAward ?? null,
             critiqueText: input.critiqueText ?? null,
+            winnerPhotoUrl: input.winnerPhotoUrl ?? null,
+            winnerPhotoStorageKey: input.winnerPhotoStorageKey ?? null,
             recordedBy: ctx.session.user.id,
             recordedAt: new Date(),
           },
@@ -317,6 +323,32 @@ export const stewardRouter = createTRPCRouter({
         .returning();
 
       return result!;
+    }),
+
+  // ── Update winner photo only (no data loss) ──────────────
+  updateWinnerPhoto: stewardProcedure
+    .input(
+      z.object({
+        entryClassId: z.string().uuid(),
+        winnerPhotoUrl: z.string().nullable(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.results.findFirst({
+        where: eq(results.entryClassId, input.entryClassId),
+      });
+      if (!existing) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Result not found — record a placement first',
+        });
+      }
+      const [updated] = await ctx.db
+        .update(results)
+        .set({ winnerPhotoUrl: input.winnerPhotoUrl })
+        .where(eq(results.entryClassId, input.entryClassId))
+        .returning();
+      return updated!;
     }),
 
   // ── Remove a result ────────────────────────────────────
@@ -629,9 +661,11 @@ export const stewardRouter = createTRPCRouter({
             entriesCount: number;
             dogsForward: number;
             results: {
+              entryClassId: string;
               placement: number | null;
               specialAward: string | null;
               critiqueText: string | null;
+              winnerPhotoUrl: string | null;
               catalogueNumber: string | null;
               dogId: string | null;
               dogName: string;
@@ -664,9 +698,11 @@ export const stewardRouter = createTRPCRouter({
               !ec.entry.deletedAt
           )
           .map((ec) => ({
+            entryClassId: ec.id,
             placement: ec.result!.placement,
             specialAward: ec.result!.specialAward,
             critiqueText: ec.result!.critiqueText,
+            winnerPhotoUrl: ec.result!.winnerPhotoUrl,
             catalogueNumber: ec.entry.catalogueNumber,
             dogId: ec.entry.dog?.id ?? null,
             dogName: ec.entry.dog?.registeredName ?? 'Unknown',
