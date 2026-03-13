@@ -269,18 +269,31 @@ function SponsorLogo({
   alt,
   href,
   className,
+  fallbackName,
 }: {
   src: string;
   alt: string;
   href?: string | null;
   className: string;
+  fallbackName?: string;
 }) {
+  const [imgFailed, setImgFailed] = useState(false);
+
+  if (imgFailed && fallbackName) {
+    return (
+      <span className="font-serif text-sm font-medium text-foreground">
+        {fallbackName}
+      </span>
+    );
+  }
+
   const img = (
     <img
       src={src}
       alt={alt}
       loading="lazy"
       decoding="async"
+      onError={() => setImgFailed(true)}
       className={`max-w-full object-contain ${className}`}
     />
   );
@@ -578,10 +591,27 @@ export function ShowDetailClient() {
 
               {/* Judge names — judges sell entries */}
               {uniqueJudges.length > 0 && (
-                <div className="mt-2 flex items-center gap-1.5 text-sm">
-                  <User className="size-4 text-muted-foreground/60" />
-                  <span className="text-muted-foreground">Judge:</span>
-                  <span className="font-serif font-medium">{uniqueJudges.join(', ')}</span>
+                <div className="mt-2 text-sm">
+                  <div className="flex items-center gap-1.5">
+                    <User className="size-4 shrink-0 text-muted-foreground/60" />
+                    <span className="text-muted-foreground">
+                      {uniqueJudges.length === 1 ? 'Judge:' : 'Judges:'}
+                    </span>
+                    {uniqueJudges.length <= 2 && (
+                      <span className="font-serif font-medium">{uniqueJudges.join(', ')}</span>
+                    )}
+                  </div>
+                  {uniqueJudges.length > 2 && (
+                    <div className="mt-1 flex flex-wrap items-center gap-x-1 gap-y-0.5 pl-[1.375rem]">
+                      {uniqueJudges.map((name, i) => (
+                        <span key={name} className="font-serif font-medium">
+                          {name}{i < uniqueJudges.length - 1 && (
+                            <span className="ml-1 text-muted-foreground/40">&middot;</span>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -597,6 +627,7 @@ export function ShowDetailClient() {
                       alt={titleSponsors[0].sponsor.name}
                       href={titleSponsors[0].sponsor.website}
                       className="h-7"
+                      fallbackName={titleSponsors[0].sponsor.name}
                     />
                   ) : (
                     <span className="font-serif text-sm font-medium text-foreground">
@@ -917,6 +948,7 @@ export function ShowDetailClient() {
                             alt={ts.sponsor.name}
                             href={ts.sponsor.website}
                             className="h-14 sm:h-16"
+                            fallbackName={ts.sponsor.name}
                           />
                         ) : (
                           <span className="font-serif text-xl font-bold">{ts.sponsor.name}</span>
@@ -945,6 +977,7 @@ export function ShowDetailClient() {
                             alt={ss.sponsor.name}
                             href={ss.sponsor.website}
                             className="h-10"
+                            fallbackName={ss.sponsor.name}
                           />
                         ) : (
                           <span className="font-serif text-sm font-medium">{ss.sponsor.name}</span>
