@@ -351,6 +351,10 @@ export function ShowDetailClient() {
     { enabled: !!show?.id }
   );
   const showHasEntries = !!show && ['entries_open', 'entries_closed', 'in_progress', 'completed'].includes(show.status);
+  const { data: publicStats } = trpc.shows.getPublicStats.useQuery(
+    { showId: show?.id ?? '' },
+    { enabled: !!show?.id && showHasEntries, refetchInterval: 60_000 }
+  );
   const { data: breedEntryStats } = trpc.shows.getBreedEntryStats.useQuery(
     { showId: show?.id ?? '' },
     { enabled: !!show?.id && showHasEntries, refetchInterval: 60_000 }
@@ -509,26 +513,58 @@ export function ShowDetailClient() {
   return (
     <div className="min-h-screen">
       {/* ─── Hero header ──────────────────────── */}
-      <div className="relative overflow-hidden border-b bg-gradient-to-b from-primary/[0.08] to-transparent">
+      <div className="relative overflow-hidden bg-stone-900">
+        {/* Gradient layers for depth + warmth */}
         <div className="pointer-events-none absolute inset-0">
-          <div className="absolute -right-32 -top-32 h-80 w-80 rounded-full bg-primary/[0.06] blur-3xl" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_60%_30%,rgba(180,130,60,0.08),transparent_70%)]" />
+          <div className="absolute -right-32 -top-32 h-96 w-96 rounded-full bg-gold/[0.06] blur-3xl" />
+          <div className="absolute -left-20 bottom-0 h-64 w-64 rounded-full bg-primary/[0.03] blur-3xl" />
         </div>
-        <div className="relative mx-auto max-w-4xl px-3 pb-4 pt-6 sm:px-4 sm:pb-8 sm:pt-10 lg:px-6">
+        {/* Top gold accent line */}
+        <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
+        {/* Bottom gold accent line */}
+        <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-gold/20 to-transparent" />
+
+        <div className="relative mx-auto max-w-4xl px-3 pb-8 pt-6 sm:px-4 sm:pb-14 sm:pt-10 lg:px-6">
           <Link
             href="/shows"
-            className="inline-flex items-center gap-1 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+            className="inline-flex items-center gap-1 py-2 text-sm text-stone-400 transition-colors hover:text-stone-200"
           >
             <ChevronLeft className="size-4" />
             All shows
           </Link>
 
-          <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
+          <div className="mt-4 flex flex-wrap items-start justify-between gap-4 sm:mt-6">
             <div className="min-w-0 flex-1">
+              {/* Org name + logo */}
+              {show.organisation && (
+                <div className="flex items-center gap-2.5">
+                  {(show.organisation as Record<string, unknown>).logoUrl && (
+                    <img
+                      src={(show.organisation as Record<string, unknown>).logoUrl as string}
+                      alt=""
+                      className="size-7 rounded object-contain sm:size-8"
+                    />
+                  )}
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold/80">
+                    {show.organisation.name}
+                  </p>
+                </div>
+              )}
+
+              {/* Show name — billboard sized */}
+              <h1 className="mt-3 font-serif text-3xl font-bold tracking-tight text-white sm:text-4xl lg:text-5xl">
+                {show.name}
+              </h1>
+
+              {/* Gold rule — wider, gradient */}
+              <div className="mt-4 h-[2px] w-20 bg-gradient-to-r from-gold to-gold/20" />
+
               {/* Badges */}
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="mt-5 flex flex-wrap items-center gap-2">
                 <Badge
                   variant="outline"
-                  className={`border text-[11px] font-semibold uppercase tracking-wide ${meta?.bg ?? ''}`}
+                  className="border-gold/30 bg-gold/10 text-[11px] font-semibold uppercase tracking-wide text-gold"
                 >
                   {showTypeLabels[show.showType] ?? show.showType}
                 </Badge>
@@ -542,7 +578,7 @@ export function ShowDetailClient() {
                   </span>
                 )}
                 {!isOpen && (
-                  <Badge variant="outline" className="text-[11px] capitalize">
+                  <Badge variant="outline" className="border-stone-600 text-[11px] capitalize text-stone-300">
                     {(show.status === 'entries_open' && closeDatePast
                       ? 'Entries Closed'
                       : show.status
@@ -551,39 +587,24 @@ export function ShowDetailClient() {
                 )}
               </div>
 
-              {/* Org name — prominent, shown once */}
-              {show.organisation && (
-                <p className="mt-4 text-xs font-semibold uppercase tracking-[0.15em] text-primary/70">
-                  {show.organisation.name}
-                </p>
-              )}
-
-              {/* Show name — billboard sized */}
-              <h1 className="mt-1 font-serif text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
-                {show.name}
-              </h1>
-
-              {/* Gold rule — confident accent */}
-              <div className="mt-3 h-[2px] w-14 bg-gold" />
-
               {/* Date, time, venue */}
-              <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-muted-foreground">
+              <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-stone-400">
                 <span className="flex items-center gap-1.5">
-                  <CalendarDays className="size-4 text-muted-foreground/60" />
+                  <CalendarDays className="size-4 text-stone-500" />
                   {format(parseISO(show.startDate), 'EEEE d MMMM yyyy')}
                   {show.startDate !== show.endDate &&
                     ` – ${format(parseISO(show.endDate), 'EEEE d MMMM yyyy')}`}
                 </span>
                 {showAny.startTime && (
                   <span className="flex items-center gap-1.5">
-                    <Clock className="size-4 text-muted-foreground/60" />
+                    <Clock className="size-4 text-stone-500" />
                     {showAny.startTime}
                   </span>
                 )}
               </div>
               {venue && (
-                <div className="mt-1.5 flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <MapPin className="size-4 text-muted-foreground/60" />
+                <div className="mt-1.5 flex items-center gap-1.5 text-sm text-stone-400">
+                  <MapPin className="size-4 text-stone-500" />
                   {venue.name}
                   {venue.postcode && `, ${venue.postcode}`}
                 </div>
@@ -591,22 +612,22 @@ export function ShowDetailClient() {
 
               {/* Judge names — judges sell entries */}
               {uniqueJudges.length > 0 && (
-                <div className="mt-2 text-sm">
+                <div className="mt-3 text-sm">
                   <div className="flex items-center gap-1.5">
-                    <User className="size-4 shrink-0 text-muted-foreground/60" />
-                    <span className="text-muted-foreground">
+                    <User className="size-4 shrink-0 text-stone-500" />
+                    <span className="text-stone-400">
                       {uniqueJudges.length === 1 ? 'Judge:' : 'Judges:'}
                     </span>
                     {uniqueJudges.length <= 2 && (
-                      <span className="font-serif font-medium">{uniqueJudges.join(', ')}</span>
+                      <span className="font-serif font-medium text-stone-200">{uniqueJudges.join(', ')}</span>
                     )}
                   </div>
                   {uniqueJudges.length > 2 && (
                     <div className="mt-1 flex flex-wrap items-center gap-x-1 gap-y-0.5 pl-[1.375rem]">
                       {uniqueJudges.map((name, i) => (
-                        <span key={name} className="font-serif font-medium">
+                        <span key={name} className="font-serif font-medium text-stone-200">
                           {name}{i < uniqueJudges.length - 1 && (
-                            <span className="ml-1 text-muted-foreground/40">&middot;</span>
+                            <span className="ml-1 text-stone-600">&middot;</span>
                           )}
                         </span>
                       ))}
@@ -615,10 +636,35 @@ export function ShowDetailClient() {
                 </div>
               )}
 
+              {/* Hero stats strip — social proof */}
+              {publicStats && publicStats.totalDogs > 0 && (
+                <div className="mt-6 inline-flex items-center gap-4 rounded-lg border border-stone-700/50 bg-stone-800/50 px-4 py-2.5 sm:gap-6 sm:px-5 sm:py-3">
+                  <div className="flex items-center gap-2">
+                    <Dog className="size-4 text-gold/60" />
+                    <span className="font-serif text-xl font-bold text-white sm:text-2xl">{publicStats.totalDogs}</span>
+                    <span className="text-xs text-stone-400">{publicStats.totalDogs === 1 ? 'dog' : 'dogs'}</span>
+                  </div>
+                  <div className="h-5 w-px bg-stone-700" />
+                  <div className="flex items-center gap-2">
+                    <span className="font-serif text-xl font-bold text-white sm:text-2xl">{publicStats.totalExhibitors}</span>
+                    <span className="text-xs text-stone-400">{publicStats.totalExhibitors === 1 ? 'exhibitor' : 'exhibitors'}</span>
+                  </div>
+                  {breeds.length > 1 && (
+                    <>
+                      <div className="h-5 w-px bg-stone-700" />
+                      <div className="flex items-center gap-2">
+                        <span className="font-serif text-xl font-bold text-white sm:text-2xl">{breeds.length}</span>
+                        <span className="text-xs text-stone-400">{breeds.length === 1 ? 'breed' : 'breeds'}</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
               {/* Title sponsor inline */}
               {titleSponsors.length > 0 && (
-                <div className="mt-3 flex items-center gap-2.5">
-                  <span className="text-xs uppercase tracking-[0.15em] text-muted-foreground/50">
+                <div className="mt-4 flex items-center gap-2.5">
+                  <span className="text-xs uppercase tracking-[0.15em] text-stone-500">
                     {titleSponsors[0].customTitle ?? 'Sponsored by'}
                   </span>
                   {titleSponsors[0].sponsor.logoUrl ? (
@@ -626,11 +672,11 @@ export function ShowDetailClient() {
                       src={titleSponsors[0].sponsor.logoUrl}
                       alt={titleSponsors[0].sponsor.name}
                       href={titleSponsors[0].sponsor.website}
-                      className="h-7"
+                      className="h-7 brightness-0 invert"
                       fallbackName={titleSponsors[0].sponsor.name}
                     />
                   ) : (
-                    <span className="font-serif text-sm font-medium text-foreground">
+                    <span className="font-serif text-sm font-medium text-stone-200">
                       {titleSponsors[0].sponsor.name}
                     </span>
                   )}
@@ -638,10 +684,10 @@ export function ShowDetailClient() {
               )}
             </div>
 
-            {/* CTA buttons — primary prominent, secondary compact */}
+            {/* CTA buttons */}
             <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto">
               {isOpen && (
-                <Button size="lg" className="h-12 w-full text-base shadow-sm sm:w-auto" asChild>
+                <Button size="lg" className="h-12 w-full bg-primary text-base shadow-lg shadow-primary/25 sm:w-auto" asChild>
                   <Link href={`/shows/${showSlug}/enter`}>
                     <Ticket className="size-5" />
                     Enter This Show
@@ -652,6 +698,7 @@ export function ShowDetailClient() {
                 {hasResults && (
                   <Button
                     variant={isOpen ? 'outline' : 'default'}
+                    className={isOpen ? 'border-stone-600 text-stone-200 hover:bg-stone-800 hover:text-white' : ''}
                     asChild
                   >
                     <Link href={`/shows/${showSlug}/results`}>
@@ -663,6 +710,7 @@ export function ShowDetailClient() {
                 {(show.showClasses?.length ?? 0) > 0 && (
                   <Button
                     variant="outline"
+                    className="border-stone-600 text-stone-200 hover:bg-stone-800 hover:text-white"
                     disabled={generatingSchedule}
                     onClick={async () => {
                       setGeneratingSchedule(true);
@@ -694,7 +742,7 @@ export function ShowDetailClient() {
                 {show.status !== 'draft' && show.status !== 'cancelled' && (
                   <Button
                     variant="outline"
-                    className="h-9"
+                    className="h-9 border-stone-600 text-stone-200 hover:bg-stone-800 hover:text-white"
                     onClick={() => {
                       window.location.href = `/api/shows/${show.id}/calendar`;
                     }}
@@ -709,7 +757,7 @@ export function ShowDetailClient() {
                   showDate={format(parseISO(show.startDate), 'd MMMM yyyy')}
                   organisationName={show.organisation?.name ?? ''}
                   venueName={show.venue?.name}
-                  className="h-9"
+                  className="h-9 border-stone-600 text-stone-200 hover:bg-stone-800 hover:text-white"
                 />
               </div>
             </div>
@@ -717,14 +765,14 @@ export function ShowDetailClient() {
 
           {/* Description — editorial treatment */}
           {show.description && (
-            <div className="mt-5 border-l-2 border-gold/30 pl-4 sm:pl-5">
-              <p className={`max-w-2xl leading-relaxed text-muted-foreground ${!descExpanded ? 'line-clamp-3 sm:line-clamp-none' : ''}`}>
+            <div className="mt-6 border-l-2 border-gold/30 pl-4 sm:pl-5">
+              <p className={`max-w-2xl leading-relaxed text-stone-300 ${!descExpanded ? 'line-clamp-3 sm:line-clamp-none' : ''}`}>
                 {show.description}
               </p>
               {show.description.length > 120 && (
                 <button
                   onClick={() => setDescExpanded(!descExpanded)}
-                  className="mt-1 text-xs font-medium text-primary hover:underline sm:hidden"
+                  className="mt-1 text-xs font-medium text-gold hover:underline sm:hidden"
                 >
                   {descExpanded ? 'Show less' : 'Read more'}
                 </button>
@@ -735,10 +783,10 @@ export function ShowDetailClient() {
       </div>
 
       {/* ─── Content ──────────────────────────── */}
-      <div className="mx-auto max-w-4xl px-3 py-4 sm:px-4 sm:py-12 lg:px-6">
+      <div className="mx-auto max-w-4xl px-3 py-6 sm:px-4 sm:py-12 lg:px-6">
         {/* Live entry stats + countdown */}
         {show.status !== 'draft' && show.status !== 'published' && (
-          <div className="mb-4 sm:mb-8">
+          <div className="mb-6 sm:mb-10">
             <LiveEntryStats showId={show.id} breedStats={breedEntryStats} />
           </div>
         )}
@@ -1014,9 +1062,13 @@ export function ShowDetailClient() {
         {/* ─── Classification ─────────────────────── */}
         {breeds.length > 0 && (
           <div className="mt-10">
-            <h2 className="gold-rule font-serif text-lg font-bold">
-              {breeds.length === 1 ? 'Classification' : `Breeds (${breeds.length})`}
-            </h2>
+            <div className="flex items-center gap-3">
+              <div className="h-px flex-1 bg-border/50" />
+              <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                {breeds.length === 1 ? 'Classification' : `${breeds.length} Breeds`}
+              </h2>
+              <div className="h-px flex-1 bg-border/50" />
+            </div>
 
             <div className="mt-5 space-y-3">
               {breeds.map(([breedName, { classes }], i) => {
@@ -1050,13 +1102,18 @@ export function ShowDetailClient() {
             </div>
 
             {isOpen && (
-              <div className="mt-8 text-center">
-                <Button size="lg" className="shadow-sm" asChild>
+              <div className="mt-8 flex flex-col items-center gap-2 text-center">
+                <Button size="lg" className="h-12 text-base shadow-lg shadow-primary/20" asChild>
                   <Link href={`/shows/${showSlug}/enter`}>
-                    <Ticket className="size-4" />
+                    <Ticket className="size-5" />
                     Enter This Show
                   </Link>
                 </Button>
+                {publicStats && publicStats.totalExhibitors > 5 && (
+                  <p className="text-xs text-muted-foreground">
+                    Join {publicStats.totalExhibitors} exhibitors already entered
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -1098,6 +1155,9 @@ export function ShowDetailClient() {
             <Link href={`/shows/${showSlug}/enter`}>
               <Ticket className="size-5" />
               Enter This Show
+              {publicStats && publicStats.totalExhibitors > 5 && (
+                <span className="ml-1 text-xs opacity-70">· {publicStats.totalExhibitors} entered</span>
+              )}
             </Link>
           </Button>
         </div>
