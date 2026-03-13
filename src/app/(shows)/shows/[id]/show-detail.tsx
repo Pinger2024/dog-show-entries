@@ -157,6 +157,7 @@ function BreedSection({
   defaultOpen,
   entryCount,
   showHasEntries,
+  photoUrl,
 }: {
   breedName: string;
   classes: Array<ClassItem & { sex: 'dog' | 'bitch' | null; entryFee: number }>;
@@ -166,6 +167,7 @@ function BreedSection({
   defaultOpen: boolean;
   entryCount?: number;
   showHasEntries?: boolean;
+  photoUrl?: string;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const [linkCopied, setLinkCopied] = useState(false);
@@ -192,7 +194,11 @@ function BreedSection({
         aria-controls={`${sectionId}-content`}
         className="flex w-full items-center gap-3 px-4 py-4 text-left transition-colors hover:bg-muted/30 active:bg-muted/50"
       >
-        <Dog className="size-5 shrink-0 text-primary/40" />
+        {photoUrl ? (
+          <img src={photoUrl} alt="" className="size-8 shrink-0 rounded-full object-cover ring-1 ring-border/40 sm:size-9" />
+        ) : (
+          <Dog className="size-5 shrink-0 text-primary/40" />
+        )}
         <div className="min-w-0 flex-1">
           <span className="font-serif text-base font-bold">{breedName}</span>
           <span className="ml-2 text-xs text-muted-foreground">
@@ -359,6 +365,10 @@ export function ShowDetailClient() {
     { showId: show?.id ?? '' },
     { enabled: !!show?.id && showHasEntries, refetchInterval: 60_000 }
   );
+  const { data: dogPhotos } = trpc.shows.getShowDogPhotos.useQuery(
+    { showId: show?.id ?? '' },
+    { enabled: !!show?.id && showHasEntries }
+  );
 
   // URL segment for links — prefer slug over UUID
   const showSlug = show?.slug ?? idOrSlug;
@@ -458,6 +468,17 @@ export function ShowDetailClient() {
     }
     return map;
   }, [breedEntryStats]);
+
+  // Breed → representative photo URL lookup
+  const breedPhotoMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const photo of dogPhotos ?? []) {
+      if (!map.has(photo.breedName)) {
+        map.set(photo.breedName, photo.photoUrl);
+      }
+    }
+    return map;
+  }, [dogPhotos]);
 
   /* Group classes by breed */
   const breedMap = new Map<string, { groupSortOrder: number; classes: typeof show.showClasses }>();
@@ -782,6 +803,37 @@ export function ShowDetailClient() {
         </div>
       </div>
 
+      {/* ─── Dog photo strip ────────────────────── */}
+      {dogPhotos && dogPhotos.length >= 4 && (
+        <div className="overflow-hidden border-b bg-stone-900/[0.03]">
+          <div className="mx-auto max-w-6xl px-3 py-6 sm:px-4 sm:py-8">
+            <p className="mb-4 text-center text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground/60">
+              Dogs entering this show
+            </p>
+            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none sm:justify-center sm:flex-wrap sm:gap-4 sm:overflow-visible sm:pb-0">
+              {dogPhotos.map((photo, i) => (
+                <div
+                  key={i}
+                  className="group relative shrink-0 overflow-hidden rounded-xl"
+                  style={{ width: 140, height: 140 }}
+                >
+                  <img
+                    src={photo.photoUrl}
+                    alt={photo.dogName}
+                    loading="lazy"
+                    className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2 pb-2 pt-6">
+                    <p className="truncate text-xs font-medium text-white">{photo.dogName}</p>
+                    <p className="truncate text-[10px] text-white/60">{photo.breedName}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ─── Content ──────────────────────────── */}
       <div className="mx-auto max-w-4xl px-3 py-6 sm:px-4 sm:py-12 lg:px-6">
         {/* Live entry stats + countdown */}
@@ -1007,6 +1059,16 @@ export function ShowDetailClient() {
                           {ts.specialPrizes}
                         </p>
                       )}
+                      {(ts as Record<string, unknown>).adImageUrl && (
+                        <div className="mt-4 flex justify-center">
+                          <img
+                            src={(ts as Record<string, unknown>).adImageUrl as string}
+                            alt={`${ts.sponsor.name} advertisement`}
+                            loading="lazy"
+                            className="max-h-48 max-w-full rounded-lg object-contain sm:max-h-64"
+                          />
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1089,6 +1151,7 @@ export function ShowDetailClient() {
                     defaultOpen={breeds.length <= 2 || i === 0 || hashBreedRef.current === breedSectionId}
                     entryCount={breedEntryMap.get(breedName)}
                     showHasEntries={showHasEntries}
+                    photoUrl={breedPhotoMap.get(breedName)}
                   />
                 );
               })}

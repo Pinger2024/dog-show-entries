@@ -18,6 +18,7 @@ import {
   showSponsors,
   dogs,
   breeds,
+  dogPhotos,
 } from '@/server/db/schema';
 import { verifyShowAccess } from '../verify-show-access';
 import { isUuid, generateShowSlug } from '@/lib/slugify';
@@ -755,5 +756,32 @@ export const showsRouter = createTRPCRouter({
         breedName: r.breedName,
         dogCount: Number(r.dogCount),
       }));
+    }),
+
+  getShowDogPhotos: publicProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const photos = await ctx.db
+        .select({
+          photoUrl: dogPhotos.url,
+          dogName: dogs.registeredName,
+          breedName: breeds.name,
+        })
+        .from(dogPhotos)
+        .innerJoin(dogs, eq(dogPhotos.dogId, dogs.id))
+        .innerJoin(entries, eq(entries.dogId, dogs.id))
+        .innerJoin(breeds, eq(dogs.breedId, breeds.id))
+        .where(
+          and(
+            eq(entries.showId, input.showId),
+            eq(entries.status, 'confirmed'),
+            isNull(entries.deletedAt),
+            eq(dogPhotos.isPrimary, true)
+          )
+        )
+        .orderBy(sql`random()`)
+        .limit(24);
+
+      return photos;
     }),
 });
