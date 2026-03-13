@@ -698,7 +698,7 @@ export function ShowDetailClient() {
                 {hasResults && (
                   <Button
                     variant={isOpen ? 'outline' : 'default'}
-                    className={isOpen ? 'border-stone-600 text-stone-200 hover:bg-stone-800 hover:text-white' : ''}
+                    className={isOpen ? 'border-stone-600 bg-transparent text-stone-300 shadow-none hover:bg-stone-700/50 hover:text-white' : ''}
                     asChild
                   >
                     <Link href={`/shows/${showSlug}/results`}>
@@ -710,7 +710,7 @@ export function ShowDetailClient() {
                 {(show.showClasses?.length ?? 0) > 0 && (
                   <Button
                     variant="outline"
-                    className="border-stone-600 text-stone-200 hover:bg-stone-800 hover:text-white"
+                    className="border-stone-600 bg-transparent text-stone-300 shadow-none hover:bg-stone-700/50 hover:text-white"
                     disabled={generatingSchedule}
                     onClick={async () => {
                       setGeneratingSchedule(true);
@@ -742,7 +742,7 @@ export function ShowDetailClient() {
                 {show.status !== 'draft' && show.status !== 'cancelled' && (
                   <Button
                     variant="outline"
-                    className="h-9 border-stone-600 text-stone-200 hover:bg-stone-800 hover:text-white"
+                    className="h-9 border-stone-600 bg-transparent text-stone-300 shadow-none hover:bg-stone-700/50 hover:text-white"
                     onClick={() => {
                       window.location.href = `/api/shows/${show.id}/calendar`;
                     }}
@@ -757,7 +757,7 @@ export function ShowDetailClient() {
                   showDate={format(parseISO(show.startDate), 'd MMMM yyyy')}
                   organisationName={show.organisation?.name ?? ''}
                   venueName={show.venue?.name}
-                  className="h-9 border-stone-600 text-stone-200 hover:bg-stone-800 hover:text-white"
+                  className="h-9 border-stone-600 bg-transparent text-stone-300 shadow-none hover:bg-stone-700/50 hover:text-white"
                 />
               </div>
             </div>
