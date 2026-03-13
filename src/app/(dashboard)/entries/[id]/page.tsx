@@ -227,11 +227,11 @@ export default function EntryDetailPage() {
 
       {/* Actions */}
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-3">
-        <Button variant="outline" asChild>
+        <Button variant="outline" asChild className="w-full sm:w-auto min-h-[2.75rem]">
           <Link href={`/shows/${entry.show.slug ?? entry.showId}`}>View Show</Link>
         </Button>
         {(entry.status === 'confirmed' || entry.status === 'pending') && entry.show.status === 'entries_open' && (
-          <Button variant="outline" asChild>
+          <Button variant="outline" asChild className="w-full sm:w-auto min-h-[2.75rem]">
             <Link href={`/shows/${entry.show.slug ?? entry.showId}/entries/${entry.id}/edit`}>
               <Pencil className="size-4" />
               Edit Classes
@@ -241,7 +241,7 @@ export default function EntryDetailPage() {
         {entry.status !== 'withdrawn' && entry.status !== 'cancelled' && (
           <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
             <DialogTrigger asChild>
-              <Button variant="destructive" size="default">
+              <Button variant="destructive" size="default" className="w-full sm:w-auto min-h-[2.75rem]">
                 <AlertTriangle className="size-4" />
                 Withdraw Entry
               </Button>
@@ -265,6 +265,7 @@ export default function EntryDetailPage() {
                 <Button
                   variant="outline"
                   onClick={() => setWithdrawOpen(false)}
+                  className="min-h-[2.75rem]"
                 >
                   Cancel
                 </Button>
@@ -272,6 +273,7 @@ export default function EntryDetailPage() {
                   variant="destructive"
                   disabled={withdrawEntry.isPending}
                   onClick={() => withdrawEntry.mutate({ id: entryId })}
+                  className="min-h-[2.75rem]"
                 >
                   {withdrawEntry.isPending && (
                     <Loader2 className="size-4 animate-spin" />

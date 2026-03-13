@@ -554,7 +554,7 @@ function EditShowDetailsDialog({
 
   return (
     <>
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+      <Button variant="outline" size="sm" className="min-h-[2.75rem]" onClick={() => setOpen(true)}>
         <Edit3 className="size-4" />
         Edit
       </Button>
@@ -1115,7 +1115,7 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 gap-1 px-2 text-xs text-muted-foreground"
+              className="min-h-[2.75rem] gap-1 px-2 text-xs text-muted-foreground"
               onClick={() => {
                 const allCollapsed = grouped.every((g) => collapsedGroups[g.key]);
                 const next: Record<string, boolean> = {};
@@ -1138,7 +1138,7 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
             <Button
               variant="outline"
               size="sm"
-              className="h-8"
+              className="min-h-[2.75rem]"
               onClick={() => autoAssignMutation.mutate({ showId })}
               disabled={autoAssignMutation.isPending}
             >
@@ -1329,7 +1329,7 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
                                             <Button
                                               size="icon"
                                               variant="ghost"
-                                              className="size-9 text-destructive hover:text-destructive"
+                                              className="size-11 text-destructive hover:text-destructive"
                                               onClick={() => {
                                                 if (confirm('Remove this class from the show?')) {
                                                   deleteMutation.mutate({ showClassId: sc.id });
@@ -1535,7 +1535,7 @@ function BulkClassCreator({ showId }: { showId: string }) {
                   </Button>
                 </div>
               </div>
-              <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-1 rounded-lg border p-2">
+              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1 rounded-lg border p-2">
                 {matchedClassDefs.map((cd) => (
                   <label
                     key={cd.id}
@@ -1631,7 +1631,7 @@ function BulkClassCreator({ showId }: { showId: string }) {
                             {groupName}
                           </button>
                         </div>
-                        <div className="grid grid-cols-2 gap-1 pl-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 pl-2">
                           {groupBreeds.map((breed) => (
                             <label
                               key={breed.id}
@@ -2036,17 +2036,18 @@ function SundryItemManager({ showId }: { showId: string }) {
     <>
       <Card>
         <CardHeader>
-          <div className="flex items-start justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <CardTitle>Sundry Items</CardTitle>
               <CardDescription>
                 Add-on items exhibitors can purchase at checkout — catalogues, memberships, donations, etc.
               </CardDescription>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:gap-2">
               <Button
                 variant="outline"
                 size="sm"
+                className="min-h-[2.75rem]"
                 onClick={handleAddCommon}
                 disabled={bulkCreateMutation.isPending}
               >
@@ -2055,6 +2056,7 @@ function SundryItemManager({ showId }: { showId: string }) {
               </Button>
               <Button
                 size="sm"
+                className="min-h-[2.75rem]"
                 onClick={() => {
                   resetForm();
                   setShowAddDialog(true);
@@ -2089,15 +2091,19 @@ function SundryItemManager({ showId }: { showId: string }) {
                       </p>
                     </div>
                     <div className="flex gap-1">
-                      <Button variant="outline" size="sm" className="h-9 px-2.5" onClick={() => openEditDialog(item)}>
+                      <Button variant="outline" size="sm" className="min-h-[2.75rem] px-2.5" onClick={() => openEditDialog(item)}>
                         <Edit3 className="size-3.5" />
                         Edit
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-9 px-2.5 text-destructive hover:bg-destructive/10"
-                        onClick={() => deleteMutation.mutate({ id: item.id, showId })}
+                        className="min-h-[2.75rem] px-2.5 text-destructive hover:bg-destructive/10"
+                        onClick={() => {
+                          if (confirm('Delete this sundry item?')) {
+                            deleteMutation.mutate({ id: item.id, showId });
+                          }
+                        }}
                       >
                         <Trash2 className="size-3.5" />
                       </Button>
@@ -2215,7 +2221,7 @@ function SundryItemManager({ showId }: { showId: string }) {
                 onChange={(e) => setFormDescription(e.target.value)}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="sundry-price">Price (GBP)</Label>
                 <Input
@@ -2279,7 +2285,7 @@ function SundryItemManager({ showId }: { showId: string }) {
                 onChange={(e) => setFormDescription(e.target.value)}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="edit-sundry-price">Price (GBP)</Label>
                 <Input

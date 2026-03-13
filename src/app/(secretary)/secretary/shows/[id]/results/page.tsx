@@ -92,7 +92,7 @@ function WinnerPhotoButton({
           <img src={currentPhotoUrl} alt={dogName} className="size-10 rounded object-cover ring-1 ring-border/40" />
           <button
             onClick={() => fileRef.current?.click()}
-            className="text-[10px] text-primary hover:underline"
+            className="text-xs text-primary hover:underline min-h-[2rem] px-2"
             disabled={uploading}
           >
             {uploading ? 'Uploading...' : 'Replace'}
@@ -103,12 +103,12 @@ function WinnerPhotoButton({
           onClick={() => fileRef.current?.click()}
           disabled={uploading}
           title={`Add winner photo for ${dogName}`}
-          className="shrink-0 rounded p-1 text-muted-foreground/40 transition-colors hover:bg-muted hover:text-primary"
+          className="shrink-0 rounded p-2.5 text-muted-foreground/40 transition-colors hover:bg-muted hover:text-primary"
         >
           {uploading ? (
-            <Loader2 className="size-3.5 animate-spin" />
+            <Loader2 className="size-5 animate-spin" />
           ) : (
-            <Camera className="size-3.5" />
+            <Camera className="size-5" />
           )}
         </button>
       )}
@@ -288,7 +288,7 @@ export default function SecretaryResultsPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-8 border-red-200 text-red-700 hover:bg-red-50"
+                  className="min-h-[2.75rem] border-red-200 text-red-700 hover:bg-red-50"
                   disabled={unpublishMutation.isPending}
                 >
                   <Unlock className="mr-1 size-3" />
@@ -318,7 +318,7 @@ export default function SecretaryResultsPage() {
               <AlertDialogTrigger asChild>
                 <Button
                   size="sm"
-                  className="h-8 bg-green-700 hover:bg-green-800"
+                  className="min-h-[2.75rem] bg-green-700 hover:bg-green-800"
                   disabled={!canPublish || publishMutation.isPending}
                 >
                   <Globe className="mr-1 size-3" />

@@ -962,13 +962,13 @@ function AddEntryDialog({
                         <span className="text-xs text-muted-foreground mr-2">{formatCurrency(item.priceInPence)} each</span>
                         <div className="flex items-center gap-1">
                           <Button
-                            type="button" variant="outline" size="icon" className="size-6"
+                            type="button" variant="outline" size="icon" className="size-10"
                             disabled={qty === 0}
                             onClick={() => setSundryQuantities((prev) => ({ ...prev, [item.id]: Math.max(0, qty - 1) }))}
                           >−</Button>
-                          <span className="w-5 text-center text-sm">{qty}</span>
+                          <span className="w-8 text-center text-sm">{qty}</span>
                           <Button
-                            type="button" variant="outline" size="icon" className="size-6"
+                            type="button" variant="outline" size="icon" className="size-10"
                             disabled={item.maxPerOrder != null && qty >= item.maxPerOrder}
                             onClick={() => setSundryQuantities((prev) => ({ ...prev, [item.id]: qty + 1 }))}
                           >+</Button>

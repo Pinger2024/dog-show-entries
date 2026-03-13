@@ -611,7 +611,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                     value={field.value}
                   >
                     <FormControl>
-                      <SelectTrigger className="w-full">
+                      <SelectTrigger className="w-full h-11">
                         <SelectValue placeholder="Select sex" />
                       </SelectTrigger>
                     </FormControl>
@@ -1000,7 +1000,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                     addTitle.mutate({ dogId, title: value as 'ch' | 'sh_ch' | 'ir_ch' | 'ir_sh_ch' | 'int_ch' | 'ob_ch' | 'ft_ch' | 'wt_ch' });
                   }}
                 >
-                  <SelectTrigger className="w-full sm:w-64">
+                  <SelectTrigger className="w-full sm:w-64 h-11">
                     <SelectValue placeholder="Add a title..." />
                   </SelectTrigger>
                   <SelectContent>

@@ -545,7 +545,7 @@ export default function ShowChecklistPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="size-6 shrink-0 text-muted-foreground hover:text-destructive"
+                          className="size-10 shrink-0 text-muted-foreground hover:text-destructive"
                           onClick={() =>
                             updateItemMut.mutate({
                               itemId: item.id,
@@ -625,7 +625,7 @@ export default function ShowChecklistPage() {
                           })
                         }
                       >
-                        <SelectTrigger className="h-8 text-xs">
+                        <SelectTrigger className="h-10 text-sm">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -641,7 +641,7 @@ export default function ShowChecklistPage() {
                   <div className="space-y-1">
                     <Label className="text-xs">Assigned to</Label>
                     <Input
-                      className="h-8 text-xs"
+                      className="h-10 text-sm"
                       placeholder="e.g. Amanda, Treasurer"
                       defaultValue={item.assignedToName ?? ''}
                       key={`assignee-${item.id}`}
@@ -944,11 +944,12 @@ export default function ShowChecklistPage() {
                 />
               </div>
               <div className="flex gap-2 justify-end">
-                <Button variant="outline" size="sm" onClick={() => setShowAddItem(false)}>
+                <Button variant="outline" size="sm" className="min-h-[2.75rem]" onClick={() => setShowAddItem(false)}>
                   Cancel
                 </Button>
                 <Button
                   size="sm"
+                  className="min-h-[2.75rem]"
                   onClick={() =>
                     addItemMut.mutate({
                       showId,

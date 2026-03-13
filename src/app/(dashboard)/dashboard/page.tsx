@@ -87,7 +87,7 @@ export default function DashboardPage() {
       <SecretaryCTA />
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
+      <div className="grid grid-cols-3 gap-3 sm:gap-4">
         {stats.map((stat) => (
           <Link key={stat.label} href={stat.href}>
             <Card className="transition-all hover:border-primary/20 hover:shadow-md hover:shadow-primary/5 active:bg-accent/30">

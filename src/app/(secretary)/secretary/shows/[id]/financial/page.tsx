@@ -400,7 +400,7 @@ export default function FinancialPage() {
         <CardHeader>
           <CardTitle>Payment Status Breakdown</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>

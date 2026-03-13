@@ -240,7 +240,7 @@ export default function SettingsPage() {
                     <ImageIcon className="size-5 text-muted-foreground" />
                   </div>
                   <span className="text-[11px] font-medium text-muted-foreground">
-                    {dragOver ? 'Drop here' : 'Upload logo'}
+                    Tap to upload logo
                   </span>
                 </div>
               )}

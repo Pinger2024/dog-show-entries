@@ -396,22 +396,22 @@ export default function ScheduleSettingsPage() {
               {officers.map((officer, idx) => (
                 <div key={idx} className="space-y-2 rounded-lg border p-3">
                   <div className="flex items-start gap-2">
-                    <Input
-                      placeholder="Name"
-                      value={officer.name}
-                      onChange={(e) => updateOfficer(idx, 'name', e.target.value)}
-                      className="flex-1"
-                    />
-                    <Input
-                      placeholder="Position (e.g. Chairman)"
-                      value={officer.position}
-                      onChange={(e) => updateOfficer(idx, 'position', e.target.value)}
-                      className="flex-1"
-                    />
+                    <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-2">
+                      <Input
+                        placeholder="Name"
+                        value={officer.name}
+                        onChange={(e) => updateOfficer(idx, 'name', e.target.value)}
+                      />
+                      <Input
+                        placeholder="Position (e.g. Chairman)"
+                        value={officer.position}
+                        onChange={(e) => updateOfficer(idx, 'position', e.target.value)}
+                      />
+                    </div>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="shrink-0"
+                      className="shrink-0 min-h-[2.75rem] min-w-[2.75rem]"
                       onClick={() => removeOfficer(idx)}
                     >
                       <Trash2 className="size-4 text-muted-foreground" />
@@ -548,8 +548,8 @@ export default function ScheduleSettingsPage() {
       </Accordion>
 
       {/* Bottom save bar */}
-      <div className="flex justify-end gap-2 pb-4">
-        <Button variant="outline" asChild>
+      <div className="flex flex-col gap-2 sm:flex-row sm:justify-end pb-4">
+        <Button variant="outline" asChild className="w-full sm:w-auto min-h-[2.75rem]">
           <a href={`/api/schedule/${showId}`} download>
             <Download className="size-4" />
             Download Schedule PDF
@@ -558,6 +558,7 @@ export default function ScheduleSettingsPage() {
         <Button
           onClick={handleSave}
           disabled={updateMutation.isPending}
+          className="w-full sm:w-auto min-h-[2.75rem]"
         >
           {updateMutation.isPending ? (
             <Loader2 className="size-4 animate-spin" />

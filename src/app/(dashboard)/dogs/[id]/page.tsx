@@ -867,7 +867,7 @@ function AchievementsCard({
                             removeResult.mutate({ id: a.id });
                           }
                         }}
-                        className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:text-destructive"
+                        className="shrink-0 rounded-md p-1.5 min-h-[2.75rem] min-w-[2.75rem] flex items-center justify-center text-muted-foreground hover:text-destructive"
                         title="Remove"
                       >
                         <Trash2 className="size-3.5" />
@@ -980,13 +980,13 @@ export default function DogDetailPage({
           </div>
 
           <div className="flex gap-2">
-            <Button asChild>
+            <Button asChild className="min-h-[2.75rem]">
               <Link href="/shows">
                 <Ticket className="size-4" />
                 Enter a Show
               </Link>
             </Button>
-            <Button variant="outline" asChild>
+            <Button variant="outline" asChild className="min-h-[2.75rem]">
               <Link href={`/dogs/${id}/edit`}>
                 <Pencil className="size-4" />
                 Edit

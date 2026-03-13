@@ -297,6 +297,7 @@ function JudgesSection({ showId }: { showId: string }) {
                         });
                       }
                     }}
+                    className="h-11"
                   />
                 </div>
                 <div>
@@ -306,6 +307,7 @@ function JudgesSection({ showId }: { showId: string }) {
                     placeholder="e.g. German Shepherd Dog"
                     value={kcSearchBreed}
                     onChange={(e) => setKcSearchBreed(e.target.value)}
+                    className="h-11"
                   />
                 </div>
                 <div className="flex items-end">
@@ -409,11 +411,13 @@ function JudgesSection({ showId }: { showId: string }) {
                   placeholder="Name *"
                   value={judgeName}
                   onChange={(e) => setJudgeName(e.target.value)}
+                  className="h-11"
                 />
                 <Input
                   placeholder="RKC Number"
                   value={judgeKc}
                   onChange={(e) => setJudgeKc(e.target.value)}
+                  className="h-11"
                 />
                 <Input
                   type="email"
@@ -422,6 +426,7 @@ function JudgesSection({ showId }: { showId: string }) {
                   placeholder="Email"
                   value={judgeEmail}
                   onChange={(e) => setJudgeEmail(e.target.value)}
+                  className="h-11"
                 />
               </div>
               <div className="mt-3 flex gap-2">
@@ -735,7 +740,7 @@ function JudgesSection({ showId }: { showId: string }) {
                         <Button
                           size="icon"
                           variant="ghost"
-                          className="size-7 text-destructive hover:text-destructive"
+                          className="size-11 text-destructive hover:text-destructive"
                           onClick={() => {
                             if (confirm('Remove all assignments for this judge from this show?')) {
                               for (const aId of j.assignmentIds) {
@@ -745,7 +750,7 @@ function JudgesSection({ showId }: { showId: string }) {
                           }}
                           disabled={removeMutation.isPending}
                         >
-                          <Trash2 className="size-3.5" />
+                          <Trash2 className="size-4" />
                         </Button>
                       </div>
                     </div>
@@ -794,7 +799,7 @@ function JudgesSection({ showId }: { showId: string }) {
                                   placeholder="0.00"
                                   value={expenseForm.hotelCost}
                                   onChange={(e) => setExpenseForm({ ...expenseForm, hotelCost: e.target.value })}
-                                  className="mt-1"
+                                  className="mt-1 h-11"
                                 />
                               </div>
                               <div>
@@ -806,7 +811,7 @@ function JudgesSection({ showId }: { showId: string }) {
                                   placeholder="0.00"
                                   value={expenseForm.travelCost}
                                   onChange={(e) => setExpenseForm({ ...expenseForm, travelCost: e.target.value })}
-                                  className="mt-1"
+                                  className="mt-1 h-11"
                                 />
                               </div>
                               <div>
@@ -818,7 +823,7 @@ function JudgesSection({ showId }: { showId: string }) {
                                   placeholder="0.00"
                                   value={expenseForm.otherExpenses}
                                   onChange={(e) => setExpenseForm({ ...expenseForm, otherExpenses: e.target.value })}
-                                  className="mt-1"
+                                  className="mt-1 h-11"
                                 />
                               </div>
                             </div>
@@ -828,7 +833,7 @@ function JudgesSection({ showId }: { showId: string }) {
                                 placeholder="e.g. 2 nights at Premier Inn"
                                 value={expenseForm.expenseNotes}
                                 onChange={(e) => setExpenseForm({ ...expenseForm, expenseNotes: e.target.value })}
-                                className="mt-1"
+                                className="mt-1 h-11"
                               />
                             </div>
                             <Button
@@ -876,7 +881,7 @@ function JudgesSection({ showId }: { showId: string }) {
                 placeholder="judge@example.com"
                 value={offerEmail}
                 onChange={(e) => setOfferEmail(e.target.value)}
-                className="mt-1"
+                className="mt-1 h-11"
               />
             </div>
             <div>
@@ -885,7 +890,7 @@ function JudgesSection({ showId }: { showId: string }) {
                 placeholder="Any special instructions or details..."
                 value={offerNotes}
                 onChange={(e) => setOfferNotes(e.target.value)}
-                className="mt-1"
+                className="mt-1 h-11"
               />
               <p className="text-xs text-muted-foreground mt-1">
                 These notes will appear in the offer email sent to the judge.
@@ -991,6 +996,7 @@ function RingsSection({ showId }: { showId: string }) {
                   placeholder="e.g. 1"
                   value={ringNumber}
                   onChange={(e) => setRingNumber(e.target.value)}
+                  className="h-11"
                 />
               </div>
               <div className="space-y-1">
@@ -1001,6 +1007,7 @@ function RingsSection({ showId }: { showId: string }) {
                   placeholder="e.g. 1"
                   value={ringDay}
                   onChange={(e) => setRingDay(e.target.value)}
+                  className="h-11"
                 />
               </div>
               <div className="space-y-1">
@@ -1009,6 +1016,7 @@ function RingsSection({ showId }: { showId: string }) {
                   type="time"
                   value={ringTime}
                   onChange={(e) => setRingTime(e.target.value)}
+                  className="h-11"
                 />
               </div>
             </div>
@@ -1100,7 +1108,7 @@ function RingsSection({ showId }: { showId: string }) {
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="size-7 text-destructive hover:text-destructive"
+                        className="size-11 text-destructive hover:text-destructive"
                         onClick={() => {
                           if (confirm('Remove this ring? Any judge/steward assignments to this ring will be unlinked.')) {
                             removeMutation.mutate({ ringId: ring.id });
@@ -1108,7 +1116,7 @@ function RingsSection({ showId }: { showId: string }) {
                         }}
                         disabled={removeMutation.isPending}
                       >
-                        <Trash2 className="size-3.5" />
+                        <Trash2 className="size-4" />
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -1284,7 +1292,7 @@ function StewardsSection({ showId }: { showId: string }) {
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="size-8 text-destructive hover:text-destructive"
+                        className="size-11 text-destructive hover:text-destructive"
                         onClick={() => {
                           if (confirm('Remove this steward from the show?')) {
                             removeMutation.mutate({ assignmentId: assignment.id });
@@ -1292,7 +1300,7 @@ function StewardsSection({ showId }: { showId: string }) {
                         }}
                         disabled={removeMutation.isPending}
                       >
-                        <Trash2 className="size-3.5" />
+                        <Trash2 className="size-4" />
                       </Button>
                     </div>
                   </div>
@@ -1445,12 +1453,12 @@ function BreedAssignmentDialog({
                         const key = `${breed.id}:${date}`;
                         const checked = selected.has(key);
                         return (
-                          <label key={date} className="flex items-center gap-1 cursor-pointer">
+                          <label key={date} className="flex items-center gap-1 cursor-pointer py-1.5">
                             <input
                               type="checkbox"
                               checked={checked}
                               onChange={() => toggleBreedDate(breed.id, date)}
-                              className="size-3.5 rounded border-gray-300"
+                              className="size-4 rounded border-gray-300"
                             />
                             <span className="text-xs text-muted-foreground">
                               {new Date(date + 'T00:00:00').toLocaleDateString('en-GB', {
@@ -1496,7 +1504,7 @@ export default function PeoplePage() {
 
   return (
     <Tabs defaultValue="judges">
-      <TabsList>
+      <TabsList className="grid w-full grid-cols-3">
         <TabsTrigger value="judges">Judges</TabsTrigger>
         <TabsTrigger value="rings">Rings</TabsTrigger>
         <TabsTrigger value="stewards">Stewards</TabsTrigger>

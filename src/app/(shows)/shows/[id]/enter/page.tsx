@@ -464,6 +464,7 @@ export default function EnterShowPage() {
                 />
               </div>
               <Button
+                className="min-h-[2.75rem] w-full"
                 onClick={() => {
                   const updates: Record<string, string> = {};
                   if (profileName) updates.name = profileName;
@@ -1007,7 +1008,7 @@ export default function EnterShowPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="size-10"
+                        className="size-11"
                         onClick={() => cart.editEntry(entry.id)}
                       >
                         <Pencil className="size-4" />
@@ -1015,7 +1016,7 @@ export default function EnterShowPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="size-10 text-destructive"
+                        className="size-11 text-destructive"
                         onClick={() => cart.removeEntry(entry.id)}
                       >
                         <Trash2 className="size-4" />

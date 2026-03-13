@@ -261,7 +261,7 @@ export default function DocumentsPage() {
                 value={prizeCardPlacements}
                 onValueChange={setPrizeCardPlacements}
               >
-                <SelectTrigger id="placements" className="w-40">
+                <SelectTrigger id="placements" className="w-full sm:w-40">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent position="popper">
@@ -279,7 +279,7 @@ export default function DocumentsPage() {
                 value={prizeCardStyle}
                 onValueChange={(v) => setPrizeCardStyle(v as 'filled' | 'outline')}
               >
-                <SelectTrigger id="card-style" className="w-40">
+                <SelectTrigger id="card-style" className="w-full sm:w-40">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent position="popper">
@@ -298,8 +298,8 @@ export default function DocumentsPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 rounded-lg border bg-muted/50 p-4">
-            <Award className="size-8 shrink-0 text-amber-500" />
+          <div className="flex flex-col gap-3 rounded-lg border bg-muted/50 p-4 sm:flex-row sm:items-center">
+            <Award className="size-8 shrink-0 text-amber-500 hidden sm:block" />
             <div className="flex-1">
               <p className="font-medium">
                 {(stats?.totalClasses ?? 0) > 0
@@ -311,7 +311,7 @@ export default function DocumentsPage() {
                 by placement
               </p>
             </div>
-            <Button asChild>
+            <Button asChild className="w-full sm:w-auto min-h-[2.75rem]">
               <a href={prizeCardHref} download>
                 <Download className="size-4" />
                 Download

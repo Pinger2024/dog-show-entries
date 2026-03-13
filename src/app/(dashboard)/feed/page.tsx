@@ -11,6 +11,7 @@ import {
   Rss,
   Dog,
   Heart,
+  ChevronDown,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +20,7 @@ import { getPlacementLabel, placementColors } from '@/lib/placements';
 import { formatRelativeDate } from '@/lib/date-utils';
 
 export default function FeedPage() {
+  const [mobileFollowingOpen, setMobileFollowingOpen] = useState(false);
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
     trpc.timeline.getFeed.useInfiniteQuery(
       { limit: 20 },
@@ -92,7 +94,69 @@ export default function FeedPage() {
           )}
         </div>
 
-        {/* Sidebar: followed dogs */}
+        {/* Mobile: followed dogs (collapsible) */}
+        <div className="lg:hidden">
+          <button
+            onClick={() => setMobileFollowingOpen((v) => !v)}
+            className="flex w-full items-center justify-between rounded-lg border p-3 text-left"
+          >
+            <span className="flex items-center gap-2 font-serif text-sm font-semibold">
+              <Heart className="size-3.5 text-muted-foreground" />
+              Following
+              {followedDogs && followedDogs.length > 0 && (
+                <span className="text-xs font-normal text-muted-foreground">
+                  ({followedDogs.length})
+                </span>
+              )}
+            </span>
+            <ChevronDown
+              className={`size-4 text-muted-foreground transition-transform ${mobileFollowingOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
+          {mobileFollowingOpen && (
+            <div className="mt-2 rounded-lg border p-3">
+              {!followedDogs || followedDogs.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  You&apos;re not following any dogs yet. Visit a dog&apos;s profile and click Follow.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {followedDogs.map((dog) => (
+                    <Link
+                      key={dog.id}
+                      href={`/dog/${dog.id}`}
+                      className="flex items-center gap-2.5 rounded-md p-1.5 transition-colors hover:bg-muted/50"
+                    >
+                      {dog.photoUrl ? (
+                        <Image
+                          src={dog.photoUrl}
+                          alt={dog.registeredName}
+                          width={32}
+                          height={32}
+                          className="size-8 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex size-8 items-center justify-center rounded-full bg-muted">
+                          <Dog className="size-3.5 text-muted-foreground" />
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-medium">
+                          {dog.registeredName}
+                        </p>
+                        <p className="truncate text-[10px] text-muted-foreground">
+                          {dog.breed}
+                        </p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Sidebar: followed dogs (desktop) */}
         <div className="hidden lg:block">
           <div className="sticky top-6 rounded-lg border p-4">
             <h3 className="flex items-center gap-2 font-serif text-sm font-semibold">

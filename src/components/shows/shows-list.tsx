@@ -154,7 +154,7 @@ function FilterPills({
       {search && (
         <button
           onClick={onClearSearch}
-          className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground transition-colors hover:bg-secondary/80"
+          className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1.5 min-h-[2.75rem] text-xs font-medium text-secondary-foreground transition-colors hover:bg-secondary/80"
         >
           &ldquo;{search}&rdquo;
           <X className="size-3" />
@@ -163,7 +163,7 @@ function FilterPills({
       {showType !== 'all' && (
         <button
           onClick={onClearShowType}
-          className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground transition-colors hover:bg-secondary/80"
+          className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1.5 min-h-[2.75rem] text-xs font-medium text-secondary-foreground transition-colors hover:bg-secondary/80"
         >
           {showTypeLabels[showType]}
           <X className="size-3" />
@@ -172,7 +172,7 @@ function FilterPills({
       {status !== 'all' && (
         <button
           onClick={onClearStatus}
-          className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground transition-colors hover:bg-secondary/80"
+          className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1.5 min-h-[2.75rem] text-xs font-medium text-secondary-foreground transition-colors hover:bg-secondary/80"
         >
           {statusLabels[status]}
           <X className="size-3" />
@@ -181,7 +181,7 @@ function FilterPills({
       {breedName && (
         <button
           onClick={onClearBreed}
-          className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground transition-colors hover:bg-secondary/80"
+          className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1.5 min-h-[2.75rem] text-xs font-medium text-secondary-foreground transition-colors hover:bg-secondary/80"
         >
           {breedName}
           <X className="size-3" />
@@ -286,13 +286,13 @@ function NearMeControls({
               onKeyDown={(e) => {
                 if (e.key === 'Enter') onPostcodeSubmit();
               }}
-              className="h-10 flex-1 rounded-lg border-border/60 bg-white"
+              className="h-11 flex-1 rounded-lg border-border/60 bg-white"
             />
             <Button
               size="sm"
               onClick={onPostcodeSubmit}
               disabled={!postcode.trim()}
-              className="h-10 px-4"
+              className="h-11 px-4"
             >
               Search
             </Button>

@@ -405,13 +405,15 @@ export default function PrintShopPage() {
                   <div className="flex items-start gap-3">
                     <button
                       onClick={() => handleToggleItem(product, !isSelected)}
-                      className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded border-2 transition-colors ${
+                      className={`flex min-h-[2.75rem] min-w-[2.75rem] shrink-0 items-center justify-center rounded transition-colors`}
+                    >
+                      <span className={`flex size-5 items-center justify-center rounded border-2 transition-colors ${
                         isSelected
                           ? 'border-primary bg-primary text-primary-foreground'
                           : 'border-muted-foreground/30 hover:border-primary/50'
-                      }`}
-                    >
-                      {isSelected && <Check className="size-3" />}
+                      }`}>
+                        {isSelected && <Check className="size-3" />}
+                      </span>
                     </button>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
@@ -462,7 +464,7 @@ export default function PrintShopPage() {
                           value={String(selectedItem?.quantity ?? product.suggestedQuantity)}
                           onValueChange={(v) => handleUpdateItem(product.documentType, { quantity: parseInt(v) })}
                         >
-                          <SelectTrigger className="h-9">
+                          <SelectTrigger className="h-11">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -481,7 +483,7 @@ export default function PrintShopPage() {
                             value={selectedItem?.documentFormat ?? 'standard'}
                             onValueChange={(v) => handleUpdateItem(product.documentType, { documentFormat: v })}
                           >
-                            <SelectTrigger className="h-9">
+                            <SelectTrigger className="h-11">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -549,7 +551,7 @@ export default function PrintShopPage() {
                           }
                           setExpandedProduct(isExpanded ? null : product.documentType);
                         }}
-                        className="flex w-full items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                        className="flex w-full items-center gap-1.5 min-h-[2.75rem] py-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
                       >
                         <Settings2 className="size-3" />
                         <span>Customise specs</span>
@@ -670,7 +672,7 @@ export default function PrintShopPage() {
                 }));
               }}
             />
-            <div>
+            <div className="space-y-1.5">
               <Label htmlFor="delivery-name">Recipient Name *</Label>
               <Input
                 id="delivery-name"
@@ -679,7 +681,7 @@ export default function PrintShopPage() {
                 placeholder="e.g. Amanda Smith"
               />
             </div>
-            <div>
+            <div className="space-y-1.5">
               <Label htmlFor="delivery-address1">Address Line 1 *</Label>
               <Input
                 id="delivery-address1"
@@ -687,7 +689,7 @@ export default function PrintShopPage() {
                 onChange={(e) => setDelivery((d) => ({ ...d, address1: e.target.value }))}
               />
             </div>
-            <div>
+            <div className="space-y-1.5">
               <Label htmlFor="delivery-address2">Address Line 2</Label>
               <Input
                 id="delivery-address2"
@@ -696,7 +698,7 @@ export default function PrintShopPage() {
               />
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
+              <div className="space-y-1.5">
                 <Label htmlFor="delivery-town">Town/City *</Label>
                 <Input
                   id="delivery-town"
@@ -704,7 +706,7 @@ export default function PrintShopPage() {
                   onChange={(e) => setDelivery((d) => ({ ...d, town: e.target.value }))}
                 />
               </div>
-              <div>
+              <div className="space-y-1.5">
                 <Label htmlFor="delivery-postcode">Postcode *</Label>
                 <Input
                   id="delivery-postcode"
@@ -714,7 +716,7 @@ export default function PrintShopPage() {
                 />
               </div>
             </div>
-            <div>
+            <div className="space-y-1.5">
               <Label htmlFor="delivery-phone">Phone Number</Label>
               <Input
                 id="delivery-phone"
@@ -1065,7 +1067,7 @@ function SpecConfigurator({
                   onUpdate({ customSpecs: newSpecs, presetId: 'custom', customUnitPrice: undefined });
                 }}
               >
-                <SelectTrigger className="h-8 text-xs">
+                <SelectTrigger className="h-11 text-sm">
                   <SelectValue placeholder="Choose..." />
                 </SelectTrigger>
                 <SelectContent>
