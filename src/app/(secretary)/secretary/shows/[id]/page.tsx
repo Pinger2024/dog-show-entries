@@ -242,11 +242,13 @@ export default function OverviewPage() {
       {/* Class management */}
       <ClassManager showId={showId} classes={show.showClasses ?? []} />
 
-      {/* Bulk class creation */}
-      <BulkClassCreator showId={showId} />
-
-      {/* Add individual class */}
-      <AddIndividualClass showId={showId} />
+      {/* Add classes — prominent when empty, folded into ClassManager when classes exist */}
+      {(show.showClasses?.length ?? 0) === 0 && (
+        <>
+          <BulkClassCreator showId={showId} />
+          <AddIndividualClass showId={showId} />
+        </>
+      )}
 
       {/* Sundry items management */}
       <SundryItemManager showId={showId} />
@@ -625,6 +627,14 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
     onError: () => toast.error('Failed to remove class'),
   });
 
+  const bulkDeleteMutation = trpc.secretary.bulkDeleteShowClasses.useMutation({
+    onSuccess: (data) => {
+      utils.shows.getById.invalidate({ id: showId });
+      toast.success(`${data.deleted} classes removed`);
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to delete classes'),
+  });
+
   const autoAssignMutation = trpc.secretary.autoAssignClassNumbers.useMutation({
     onSuccess: (data) => {
       utils.shows.getById.invalidate({ id: showId });
@@ -673,19 +683,23 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
     }));
   }, [classes, optimisticOrder]);
 
-  const { isMultiBreed, grouped } = useMemo(() => {
+  const { isMultiBreed, grouped, breedGroupHeaders } = useMemo(() => {
     const distinctBreeds = new Set(effectiveClasses.filter((c) => c.breed).map((c) => c.breed!.name));
     const multiBreed = distinctBreeds.size >= 3;
 
     type GroupEntry = { key: string; label: string; classes: typeof effectiveClasses };
     const groups: GroupEntry[] = [];
 
+    // Maps group index → breed group header to insert before that section
+    const breedGroupHeaders = new Map<number, { name: string; breedCount: number }>();
+
     if (multiBreed) {
-      const breedMap = new Map<string, { groupSort: number; classes: typeof effectiveClasses }>();
+      const breedMap = new Map<string, { groupSort: number; groupName: string; classes: typeof effectiveClasses }>();
       for (const sc of effectiveClasses) {
         const breedName = sc.breed?.name ?? 'Other';
         const entry = breedMap.get(breedName) ?? {
           groupSort: sc.breed?.group?.sortOrder ?? 999,
+          groupName: sc.breed?.group?.name ?? 'Other',
           classes: [],
         };
         entry.classes.push(sc);
@@ -698,7 +712,14 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
       });
 
       const sexRank = (s: string | null) => s === 'dog' ? 0 : s === 'bitch' ? 1 : 2;
-      for (const [breedName, { classes: breedClasses }] of sortedBreeds) {
+      let lastGroupName = '';
+      for (const [breedName, { groupName, classes: breedClasses }] of sortedBreeds) {
+        // Track group header positions
+        if (groupName !== lastGroupName) {
+          const breedsInGroup = sortedBreeds.filter(([, b]) => b.groupName === groupName).length;
+          breedGroupHeaders.set(groups.length, { name: groupName, breedCount: breedsInGroup });
+          lastGroupName = groupName;
+        }
         const sorted = [...breedClasses].sort((a, b) => {
           const ra = sexRank(a.sex), rb = sexRank(b.sex);
           if (ra !== rb) return ra - rb;
@@ -744,7 +765,7 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
       return minA - minB;
     });
 
-    return { isMultiBreed: multiBreed, grouped: groups };
+    return { isMultiBreed: multiBreed, grouped: groups, breedGroupHeaders };
   }, [effectiveClasses]);
 
   // Collapse all sections except the first one on initial load
@@ -894,9 +915,24 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
                   const classRange = group.classes[0]?.classNumber && group.classes[group.classes.length - 1]?.classNumber
                     ? `#${group.classes[0].classNumber}–${group.classes[group.classes.length - 1].classNumber}`
                     : '';
+                  const groupHeader = breedGroupHeaders.get(gi);
 
                   return (
-                    <Draggable key={group.key} draggableId={`section-${group.key}`} index={gi}>
+                    <div key={group.key}>
+                      {/* RKC breed group divider (multi-breed shows only) */}
+                      {groupHeader && (
+                        <div className="flex items-center gap-3 px-2 pb-1 pt-3 first:pt-0">
+                          <div className="h-px flex-1 bg-border" />
+                          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                            {groupHeader.name}
+                          </span>
+                          <Badge variant="outline" className="text-[10px] font-normal tabular-nums">
+                            {groupHeader.breedCount} {groupHeader.breedCount === 1 ? 'breed' : 'breeds'}
+                          </Badge>
+                          <div className="h-px flex-1 bg-border" />
+                        </div>
+                      )}
+                    <Draggable draggableId={`section-${group.key}`} index={gi}>
                       {(sectionDragProvided, sectionSnapshot) => (
                         <div
                           ref={sectionDragProvided.innerRef}
@@ -941,6 +977,39 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
                               {group.classes.length} {group.classes.length === 1 ? 'class' : 'classes'}
                               {classRange && <span className="text-muted-foreground">{classRange}</span>}
                             </Badge>
+
+                            {/* Delete entire breed section (multi-breed only) */}
+                            {isMultiBreed && (
+                              <div
+                                role="button"
+                                tabIndex={0}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (confirm(`Delete all ${group.classes.length} classes for ${group.label}?`)) {
+                                    bulkDeleteMutation.mutate({
+                                      showId,
+                                      showClassIds: group.classes.map((c) => c.id),
+                                    });
+                                  }
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    if (confirm(`Delete all ${group.classes.length} classes for ${group.label}?`)) {
+                                      bulkDeleteMutation.mutate({
+                                        showId,
+                                        showClassIds: group.classes.map((c) => c.id),
+                                      });
+                                    }
+                                  }
+                                }}
+                                className="flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground/40 transition-colors hover:bg-destructive/10 hover:text-destructive"
+                                title={`Delete all ${group.label} classes`}
+                              >
+                                <Trash2 className="size-3.5" />
+                              </div>
+                            )}
                           </button>
 
                           {/* Class items — collapsible */}
@@ -1024,6 +1093,7 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
                         </div>
                       )}
                     </Draggable>
+                    </div>
                   );
                 })}
                 {sectionProvided.placeholder}
@@ -1031,8 +1101,42 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
             )}
           </Droppable>
         </DragDropContext>
+
+        {/* Add more classes — collapsed disclosure at the bottom of the card */}
+        <AddClassesDisclosure showId={showId} />
       </CardContent>
     </Card>
+  );
+}
+
+// ── Add Classes Disclosure (collapsed when show already has classes) ────
+
+function AddClassesDisclosure({ showId }: { showId: string }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="mt-4 border-t pt-4">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className={cn(
+          'flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors',
+          expanded
+            ? 'bg-muted/50 text-foreground'
+            : 'bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+        )}
+      >
+        <Plus className="size-4" />
+        Add more classes
+        <ChevronDown className={cn('ml-auto size-4 transition-transform duration-200', expanded && 'rotate-180')} />
+      </button>
+      {expanded && (
+        <div className="mt-3 space-y-6">
+          <BulkClassCreator showId={showId} />
+          <AddIndividualClass showId={showId} />
+        </div>
+      )}
+    </div>
   );
 }
 

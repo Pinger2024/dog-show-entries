@@ -864,6 +864,41 @@ export const secretaryRouter = createTRPCRouter({
       return deleted!;
     }),
 
+  bulkDeleteShowClasses: secretaryProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        showClassIds: z.array(z.string().uuid()).min(1),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      // Check for existing entries on any of these classes
+      const existingEntries = await ctx.db.query.entryClasses.findFirst({
+        where: inArray(entryClasses.showClassId, input.showClassIds),
+        columns: { id: true },
+      });
+      if (existingEntries) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: 'Cannot delete — one or more of these classes already has entries. Remove the entries first.',
+        });
+      }
+
+      const deleted = await ctx.db
+        .delete(showClasses)
+        .where(
+          and(
+            inArray(showClasses.id, input.showClassIds),
+            eq(showClasses.showId, input.showId)
+          )
+        )
+        .returning({ id: showClasses.id });
+
+      return { deleted: deleted.length };
+    }),
+
   reorderClasses: secretaryProcedure
     .input(
       z.object({

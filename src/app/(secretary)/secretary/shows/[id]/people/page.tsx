@@ -82,6 +82,7 @@ function JudgesSection({ showId }: { showId: string }) {
   const [selectedJudgeId, setSelectedJudgeId] = useState('');
   const [judgePopoverOpen, setJudgePopoverOpen] = useState(false);
   const [selectedBreedId, setSelectedBreedId] = useState('');
+  const [breedPopoverOpen, setBreedPopoverOpen] = useState(false);
   const [selectedRingId, setSelectedRingId] = useState('');
   const [offerDialogOpen, setOfferDialogOpen] = useState(false);
   const [offerJudgeId, setOfferJudgeId] = useState('');
@@ -103,6 +104,20 @@ function JudgesSection({ showId }: { showId: string }) {
   const { data: breeds } = trpc.breeds.list.useQuery();
   const { data: showRings } = trpc.secretary.getShowRings.useQuery({ showId });
   const { data: contracts } = trpc.secretary.getJudgeContracts.useQuery({ showId });
+
+  // Group breeds by their RKC breed group for the searchable combobox
+  const breedsByGroup = useMemo(() => {
+    if (!breeds) return null;
+    return breeds.reduce(
+      (acc, breed) => {
+        const groupName = breed.group?.name ?? 'Other';
+        if (!acc[groupName]) acc[groupName] = [];
+        acc[groupName].push(breed);
+        return acc;
+      },
+      {} as Record<string, typeof breeds>
+    );
+  }, [breeds]);
 
   const addJudgeMutation = trpc.secretary.addJudge.useMutation({
     onSuccess: (judge) => {
@@ -503,19 +518,61 @@ function JudgesSection({ showId }: { showId: string }) {
                 </Command>
               </PopoverContent>
             </Popover>
-            <Select value={selectedBreedId} onValueChange={setSelectedBreedId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Breed (optional)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">All breeds</SelectItem>
-                {(breeds ?? []).map((b) => (
-                  <SelectItem key={b.id} value={b.id}>
-                    {b.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover open={breedPopoverOpen} onOpenChange={setBreedPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={breedPopoverOpen}
+                  className={cn(
+                    'w-full justify-between font-normal',
+                    !selectedBreedId && 'text-muted-foreground'
+                  )}
+                >
+                  {selectedBreedId
+                    ? (breeds ?? []).find((b) => b.id === selectedBreedId)?.name ?? 'Select breed...'
+                    : 'Breed (optional)'}
+                  <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="max-w-[calc(100vw-2rem)] w-72 p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Search breeds..." />
+                  <CommandList className="max-h-[300px]">
+                    <CommandEmpty>No breeds found.</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem
+                        value="all-breeds"
+                        onSelect={() => {
+                          setSelectedBreedId('');
+                          setBreedPopoverOpen(false);
+                        }}
+                      >
+                        <Check className={cn('mr-2 size-4', !selectedBreedId ? 'opacity-100' : 'opacity-0')} />
+                        All breeds
+                      </CommandItem>
+                    </CommandGroup>
+                    {breedsByGroup && Object.entries(breedsByGroup).map(([groupName, groupBreeds]) => (
+                      <CommandGroup key={groupName} heading={groupName}>
+                        {groupBreeds.map((b) => (
+                          <CommandItem
+                            key={b.id}
+                            value={b.name}
+                            onSelect={() => {
+                              setSelectedBreedId(b.id);
+                              setBreedPopoverOpen(false);
+                            }}
+                          >
+                            <Check className={cn('mr-2 size-4', b.id === selectedBreedId ? 'opacity-100' : 'opacity-0')} />
+                            {b.name}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    ))}
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
             <Select value={selectedRingId} onValueChange={setSelectedRingId}>
               <SelectTrigger>
                 <SelectValue placeholder="Ring (optional)" />
