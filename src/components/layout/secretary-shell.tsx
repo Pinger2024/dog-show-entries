@@ -76,9 +76,11 @@ function getParentPath(pathname: string): string | null {
 
 function getMobileTitle(pathname: string): string | null {
   const segments = pathname.split('/').filter(Boolean);
-  if (segments.length <= 2) return null;
+  if (segments.length <= 1) return null;
   const last = segments[segments.length - 1];
   if (isUuid(last)) return null;
+  if (last === 'new') return 'Add New';
+  if (last === 'edit') return 'Edit';
   return last.charAt(0).toUpperCase() + last.slice(1).replace(/-/g, ' ');
 }
 

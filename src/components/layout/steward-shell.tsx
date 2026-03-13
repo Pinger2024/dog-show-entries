@@ -28,18 +28,34 @@ const navItems = [
   { href: '/steward', label: 'My Shows', icon: Eye },
 ];
 
+// Steward routes: /steward → /steward/shows/[uuid] → /steward/shows/[uuid]/classes/[uuid]
+// Note: /steward/shows and /steward/shows/[uuid]/classes don't exist as pages
 function getParentPath(pathname: string): string | null {
   if (pathname === '/steward') return null;
   const segments = pathname.split('/').filter(Boolean);
-  if (segments.length <= 1) return null;
-  return '/' + segments.slice(0, -1).join('/');
+  // /steward/shows/[uuid] → /steward
+  if (segments.length === 3 && segments[1] === 'shows') {
+    return '/steward';
+  }
+  // /steward/shows/[uuid]/classes/[uuid] → /steward/shows/[uuid]
+  if (segments.length >= 5 && segments[3] === 'classes') {
+    return `/steward/shows/${segments[2]}`;
+  }
+  // Fallback
+  return '/steward';
 }
 
 function getMobileTitle(pathname: string): string | null {
   const segments = pathname.split('/').filter(Boolean);
   if (segments.length <= 1) return null;
+  // /steward/shows/[uuid]/classes/[uuid] → "Class"
+  if (segments.length >= 5 && segments[3] === 'classes') {
+    return 'Class';
+  }
   const last = segments[segments.length - 1];
   if (isUuid(last)) return null;
+  if (last === 'new') return 'Add New';
+  if (last === 'edit') return 'Edit';
   return last.charAt(0).toUpperCase() + last.slice(1).replace(/-/g, ' ');
 }
 
