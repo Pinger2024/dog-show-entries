@@ -11,6 +11,7 @@ import {
   Trophy,
   Image as ImageIcon,
   Upload,
+  ArrowRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
@@ -24,9 +25,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from '@/components/ui/card';
 import {
   Select,
@@ -42,14 +40,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { useShowId } from '../_lib/show-context';
 
 const SPONSOR_CATEGORIES: Record<string, string> = {
@@ -196,16 +186,17 @@ function SponsorDirectory({
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
+      {/* Header — stacks on mobile */}
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
-          Sponsors added here are available to assign to any of your shows.
+          Your sponsor directory — add sponsors here, then assign them to any show.
         </p>
         <Dialog open={dialogOpen} onOpenChange={(open) => {
           setDialogOpen(open);
           if (!open) { setEditingId(null); resetForm(); }
         }}>
           <DialogTrigger asChild>
-            <Button size="sm">
+            <Button size="sm" className="min-h-[2.75rem] w-full sm:w-auto">
               <Plus className="size-4" />
               Add Sponsor
             </Button>
@@ -217,12 +208,12 @@ function SponsorDirectory({
             <div className="space-y-4">
               <div>
                 <Label>Name *</Label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Royal Canin" />
+                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Royal Canin" className="h-11" />
               </div>
               <div>
                 <Label>Category</Label>
                 <Select value={category} onValueChange={setCategory}>
-                  <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                  <SelectTrigger className="h-11"><SelectValue placeholder="Select category" /></SelectTrigger>
                   <SelectContent>
                     {Object.entries(SPONSOR_CATEGORIES).map(([k, v]) => (
                       <SelectItem key={k} value={k}>{v}</SelectItem>
@@ -237,29 +228,28 @@ function SponsorDirectory({
                     <img src={logoUrl} alt="Logo" className="h-16 rounded border object-contain" />
                   </div>
                 )}
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" disabled={uploading} asChild>
-                    <label className="cursor-pointer">
-                      {uploading ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
-                      {uploading ? 'Uploading...' : 'Upload Logo'}
-                      <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
-                    </label>
-                  </Button>
-                </div>
+                <Button variant="outline" size="sm" disabled={uploading} className="min-h-[2.75rem]" asChild>
+                  <label className="cursor-pointer">
+                    {uploading ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
+                    {uploading ? 'Uploading...' : 'Upload Logo'}
+                    <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+                  </label>
+                </Button>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              {/* Stack on mobile, side-by-side on larger screens */}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <Label>Contact Name</Label>
-                  <Input value={contactName} onChange={(e) => setContactName(e.target.value)} />
+                  <Input value={contactName} onChange={(e) => setContactName(e.target.value)} className="h-11" />
                 </div>
                 <div>
                   <Label>Contact Email</Label>
-                  <Input value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} type="email" />
+                  <Input value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} type="email" className="h-11" />
                 </div>
               </div>
               <div>
                 <Label>Website</Label>
-                <Input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://" />
+                <Input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://" className="h-11" />
               </div>
               <div>
                 <Label>Notes</Label>
@@ -268,7 +258,7 @@ function SponsorDirectory({
               <Button
                 onClick={handleSubmit}
                 disabled={!name.trim() || createMutation.isPending || updateMutation.isPending}
-                className="w-full"
+                className="w-full min-h-[2.75rem]"
               >
                 {(createMutation.isPending || updateMutation.isPending) && (
                   <Loader2 className="size-4 animate-spin" />
@@ -284,8 +274,9 @@ function SponsorDirectory({
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
             <Handshake className="size-10 text-muted-foreground/40" />
-            <p className="mt-3 text-sm text-muted-foreground">
-              No sponsors yet. Add your first sponsor to get started.
+            <p className="mt-3 text-sm font-medium">No sponsors yet</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Add your first sponsor to get started. They&apos;ll appear here and can be assigned to any show.
             </p>
           </CardContent>
         </Card>
@@ -293,7 +284,7 @@ function SponsorDirectory({
         <div className="space-y-2">
           {sponsors.map((s) => (
             <Card key={s.id}>
-              <CardContent className="flex items-center gap-4 py-3">
+              <CardContent className="flex items-center gap-3 py-3 sm:gap-4">
                 {s.logoUrl ? (
                   <img src={s.logoUrl} alt={s.name} className="size-10 rounded object-contain" />
                 ) : (
@@ -303,9 +294,8 @@ function SponsorDirectory({
                 )}
                 <div className="min-w-0 flex-1">
                   <p className="font-medium">{s.name}</p>
-                  <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                  <div className="flex flex-wrap gap-1.5 text-xs text-muted-foreground">
                     {s.category && <span>{SPONSOR_CATEGORIES[s.category] ?? s.category}</span>}
-                    {s.contactEmail && <span>· {s.contactEmail}</span>}
                     {s.website && (
                       <a href={s.website} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-primary hover:underline">
                         Website <ExternalLink className="size-3" />
@@ -313,18 +303,19 @@ function SponsorDirectory({
                     )}
                   </div>
                 </div>
+                {/* Action buttons — 44px touch targets */}
                 <div className="flex shrink-0 gap-1">
-                  <Button variant="ghost" size="icon" className="size-8" onClick={() => openEdit(s)}>
-                    <Pencil className="size-3.5" />
+                  <Button variant="ghost" size="icon" className="size-11" onClick={() => openEdit(s)}>
+                    <Pencil className="size-4" />
                   </Button>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="size-8 text-destructive hover:text-destructive"
+                    className="size-11 text-destructive hover:text-destructive"
                     onClick={() => deleteMutation.mutate({ id: s.id })}
                     disabled={deleteMutation.isPending}
                   >
-                    <Trash2 className="size-3.5" />
+                    <Trash2 className="size-4" />
                   </Button>
                 </div>
               </CardContent>
@@ -341,9 +332,11 @@ function SponsorDirectory({
 function ShowSponsorAssignments({
   showId,
   organisationId,
+  onSwitchToDirectory,
 }: {
   showId: string;
   organisationId: string;
+  onSwitchToDirectory: () => void;
 }) {
   const utils = trpc.useUtils();
   const { data: showSponsorList, isLoading } = trpc.secretary.listShowSponsors.useQuery({ showId });
@@ -403,6 +396,7 @@ function ShowSponsorAssignments({
   // Sponsors not yet assigned to this show
   const assignedIds = new Set(showSponsorList?.map((ss) => ss.sponsorId) ?? []);
   const availableSponsors = orgSponsors?.filter((s) => !assignedIds.has(s.id)) ?? [];
+  const hasDirectorySponsors = (orgSponsors?.length ?? 0) > 0;
 
   if (isLoading) {
     return (
@@ -414,90 +408,18 @@ function ShowSponsorAssignments({
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
+      {/* Header — stacks on mobile */}
+      <div className="mb-4 space-y-3">
         <p className="text-sm text-muted-foreground">
           Assign sponsors from your directory to this show with their tier and visibility.
         </p>
-        <div className="flex gap-2">
-          <Dialog open={classDialogOpen} onOpenChange={(open) => {
-            setClassDialogOpen(open);
-            if (!open) resetClassForm();
-          }}>
-            <DialogTrigger asChild>
-              <Button size="sm" variant="outline" disabled={!showSponsorList?.length}>
-                <Trophy className="size-4" />
-                Class Sponsorship
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>Assign Class Sponsorship</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label>Sponsor *</Label>
-                  <Select value={classShowSponsorId} onValueChange={setClassShowSponsorId}>
-                    <SelectTrigger><SelectValue placeholder="Select show sponsor" /></SelectTrigger>
-                    <SelectContent>
-                      {showSponsorList?.map((ss) => (
-                        <SelectItem key={ss.id} value={ss.id}>{ss.sponsor.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Class *</Label>
-                  <Select value={selectedClassId} onValueChange={setSelectedClassId}>
-                    <SelectTrigger><SelectValue placeholder="Select class" /></SelectTrigger>
-                    <SelectContent>
-                      {classes?.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.classNumber ? `${c.classNumber}. ` : ''}{c.classDefinition.name}
-                          {c.sex ? ` (${c.sex === 'dog' ? 'Dog' : 'Bitch'})` : ''}
-                          {c.breed ? ` — ${c.breed.name}` : ''}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Trophy Name</Label>
-                  <Input value={trophyName} onChange={(e) => setTrophyName(e.target.value)} placeholder="The Dorado Memorial Trophy" />
-                </div>
-                <div>
-                  <Label>Trophy Donor</Label>
-                  <Input value={trophyDonor} onChange={(e) => setTrophyDonor(e.target.value)} placeholder="May differ from sponsor" />
-                </div>
-                <div>
-                  <Label>Prize Description</Label>
-                  <Input value={prizeDescription} onChange={(e) => setPrizeDescription(e.target.value)} placeholder="Best in class rosette" />
-                </div>
-                <Button
-                  onClick={() => {
-                    if (!classShowSponsorId || !selectedClassId) return;
-                    assignClassMutation.mutate({
-                      showSponsorId: classShowSponsorId,
-                      showClassId: selectedClassId,
-                      trophyName: trophyName.trim() || undefined,
-                      trophyDonor: trophyDonor.trim() || undefined,
-                      prizeDescription: prizeDescription.trim() || undefined,
-                    });
-                  }}
-                  disabled={!classShowSponsorId || !selectedClassId || assignClassMutation.isPending}
-                  className="w-full"
-                >
-                  {assignClassMutation.isPending && <Loader2 className="size-4 animate-spin" />}
-                  Assign Sponsorship
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+        <div className="flex flex-col gap-2 sm:flex-row">
           <Dialog open={assignDialogOpen} onOpenChange={(open) => {
             setAssignDialogOpen(open);
             if (!open) { setSelectedSponsorId(''); setSelectedTier(''); setCustomTitle(''); }
           }}>
             <DialogTrigger asChild>
-              <Button size="sm" disabled={!availableSponsors.length}>
+              <Button size="sm" className="min-h-[2.75rem] w-full sm:w-auto" disabled={!availableSponsors.length}>
                 <Plus className="size-4" />
                 Assign Sponsor
               </Button>
@@ -510,7 +432,7 @@ function ShowSponsorAssignments({
                 <div>
                   <Label>Sponsor *</Label>
                   <Select value={selectedSponsorId} onValueChange={setSelectedSponsorId}>
-                    <SelectTrigger><SelectValue placeholder="Select sponsor" /></SelectTrigger>
+                    <SelectTrigger className="h-11"><SelectValue placeholder="Select sponsor" /></SelectTrigger>
                     <SelectContent>
                       {availableSponsors.map((s) => (
                         <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
@@ -521,7 +443,7 @@ function ShowSponsorAssignments({
                 <div>
                   <Label>Tier *</Label>
                   <Select value={selectedTier} onValueChange={setSelectedTier}>
-                    <SelectTrigger><SelectValue placeholder="Select tier" /></SelectTrigger>
+                    <SelectTrigger className="h-11"><SelectValue placeholder="Select tier" /></SelectTrigger>
                     <SelectContent>
                       {Object.entries(TIER_LABELS).map(([k, v]) => (
                         <SelectItem key={k} value={k}>{v}</SelectItem>
@@ -535,6 +457,7 @@ function ShowSponsorAssignments({
                     value={customTitle}
                     onChange={(e) => setCustomTitle(e.target.value)}
                     placeholder="e.g. Official Nutrition Partner"
+                    className="h-11"
                   />
                 </div>
                 <Button
@@ -548,7 +471,7 @@ function ShowSponsorAssignments({
                     });
                   }}
                   disabled={!selectedSponsorId || !selectedTier || assignMutation.isPending}
-                  className="w-full"
+                  className="w-full min-h-[2.75rem]"
                 >
                   {assignMutation.isPending && <Loader2 className="size-4 animate-spin" />}
                   Assign to Show
@@ -556,6 +479,81 @@ function ShowSponsorAssignments({
               </div>
             </DialogContent>
           </Dialog>
+          {showSponsorList && showSponsorList.length > 0 && (
+            <Dialog open={classDialogOpen} onOpenChange={(open) => {
+              setClassDialogOpen(open);
+              if (!open) resetClassForm();
+            }}>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="outline" className="min-h-[2.75rem] w-full sm:w-auto">
+                  <Trophy className="size-4" />
+                  Class Sponsorship
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Assign Class Sponsorship</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <Label>Sponsor *</Label>
+                    <Select value={classShowSponsorId} onValueChange={setClassShowSponsorId}>
+                      <SelectTrigger className="h-11"><SelectValue placeholder="Select show sponsor" /></SelectTrigger>
+                      <SelectContent>
+                        {showSponsorList?.map((ss) => (
+                          <SelectItem key={ss.id} value={ss.id}>{ss.sponsor.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Class *</Label>
+                    <Select value={selectedClassId} onValueChange={setSelectedClassId}>
+                      <SelectTrigger className="h-11"><SelectValue placeholder="Select class" /></SelectTrigger>
+                      <SelectContent>
+                        {classes?.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.classNumber ? `${c.classNumber}. ` : ''}{c.classDefinition.name}
+                            {c.sex ? ` (${c.sex === 'dog' ? 'Dog' : 'Bitch'})` : ''}
+                            {c.breed ? ` — ${c.breed.name}` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Trophy Name</Label>
+                    <Input value={trophyName} onChange={(e) => setTrophyName(e.target.value)} placeholder="The Dorado Memorial Trophy" className="h-11" />
+                  </div>
+                  <div>
+                    <Label>Trophy Donor</Label>
+                    <Input value={trophyDonor} onChange={(e) => setTrophyDonor(e.target.value)} placeholder="May differ from sponsor" className="h-11" />
+                  </div>
+                  <div>
+                    <Label>Prize Description</Label>
+                    <Input value={prizeDescription} onChange={(e) => setPrizeDescription(e.target.value)} placeholder="Best in class rosette" className="h-11" />
+                  </div>
+                  <Button
+                    onClick={() => {
+                      if (!classShowSponsorId || !selectedClassId) return;
+                      assignClassMutation.mutate({
+                        showSponsorId: classShowSponsorId,
+                        showClassId: selectedClassId,
+                        trophyName: trophyName.trim() || undefined,
+                        trophyDonor: trophyDonor.trim() || undefined,
+                        prizeDescription: prizeDescription.trim() || undefined,
+                      });
+                    }}
+                    disabled={!classShowSponsorId || !selectedClassId || assignClassMutation.isPending}
+                    className="w-full min-h-[2.75rem]"
+                  >
+                    {assignClassMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+                    Assign Sponsorship
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
       </div>
 
@@ -563,12 +561,27 @@ function ShowSponsorAssignments({
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
             <Handshake className="size-10 text-muted-foreground/40" />
-            <p className="mt-3 text-sm text-muted-foreground">
-              No sponsors assigned to this show yet.{' '}
-              {!orgSponsors?.length
-                ? 'Add sponsors to your directory first.'
-                : 'Assign a sponsor from your directory.'}
-            </p>
+            <p className="mt-3 text-sm font-medium">No sponsors assigned yet</p>
+            {hasDirectorySponsors ? (
+              <p className="mt-1 text-sm text-muted-foreground">
+                Use the &quot;Assign Sponsor&quot; button above to add sponsors from your directory.
+              </p>
+            ) : (
+              <>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  You need to add sponsors to your directory first, then assign them here.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-4 min-h-[2.75rem]"
+                  onClick={onSwitchToDirectory}
+                >
+                  Go to Sponsor Directory
+                  <ArrowRight className="size-4" />
+                </Button>
+              </>
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -577,22 +590,22 @@ function ShowSponsorAssignments({
             <Card key={ss.id}>
               <CardContent className="py-4">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
                     {ss.sponsor.logoUrl ? (
-                      <img src={ss.sponsor.logoUrl} alt={ss.sponsor.name} className="size-10 rounded object-contain" />
+                      <img src={ss.sponsor.logoUrl} alt={ss.sponsor.name} className="size-10 shrink-0 rounded object-contain" />
                     ) : (
-                      <div className="flex size-10 items-center justify-center rounded bg-muted">
+                      <div className="flex size-10 shrink-0 items-center justify-center rounded bg-muted">
                         <Handshake className="size-5 text-muted-foreground/50" />
                       </div>
                     )}
-                    <div>
-                      <p className="font-medium">{ss.sponsor.name}</p>
-                      <div className="mt-0.5 flex items-center gap-2">
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">{ss.sponsor.name}</p>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-2">
                         <Badge variant="secondary" className={TIER_COLORS[ss.tier]}>
                           {TIER_LABELS[ss.tier]}
                         </Badge>
                         {ss.customTitle && (
-                          <span className="text-xs text-muted-foreground">{ss.customTitle}</span>
+                          <span className="text-xs text-muted-foreground truncate">{ss.customTitle}</span>
                         )}
                       </div>
                     </div>
@@ -600,11 +613,11 @@ function ShowSponsorAssignments({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="size-8 shrink-0 text-destructive hover:text-destructive"
+                    className="size-11 shrink-0 text-destructive hover:text-destructive"
                     onClick={() => removeMutation.mutate({ id: ss.id })}
                     disabled={removeMutation.isPending}
                   >
-                    <Trash2 className="size-3.5" />
+                    <Trash2 className="size-4" />
                   </Button>
                 </div>
                 {ss.classSponsorships?.length > 0 && (
@@ -614,29 +627,29 @@ function ShowSponsorAssignments({
                     </p>
                     <div className="space-y-1.5">
                       {ss.classSponsorships.map((cs) => (
-                        <div key={cs.id} className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-1.5 text-sm">
-                          <div>
-                            <span className="font-medium">
+                        <div key={cs.id} className="flex items-center justify-between gap-2 rounded-lg bg-muted/50 px-3 py-2.5">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium truncate">
                               {cs.showClass?.classNumber ? `${cs.showClass.classNumber}. ` : ''}
                               {cs.showClass?.classDefinition?.name ?? 'Class'}
-                            </span>
-                            {cs.showClass?.breed && (
-                              <span className="text-muted-foreground"> — {cs.showClass.breed.name}</span>
-                            )}
+                              {cs.showClass?.breed && (
+                                <span className="text-muted-foreground"> — {cs.showClass.breed.name}</span>
+                              )}
+                            </p>
                             {cs.trophyName && (
-                              <span className="ml-2 text-xs text-amber-600">
-                                <Trophy className="mr-0.5 inline size-3" />
-                                {cs.trophyName}
-                              </span>
+                              <p className="mt-0.5 flex items-center gap-1 text-xs text-amber-600">
+                                <Trophy className="size-3 shrink-0" />
+                                <span className="truncate">{cs.trophyName}</span>
+                              </p>
                             )}
                           </div>
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="size-6 text-destructive hover:text-destructive"
+                            className="size-10 shrink-0 text-destructive hover:text-destructive"
                             onClick={() => removeClassMutation.mutate({ id: cs.id })}
                           >
-                            <Trash2 className="size-3" />
+                            <Trash2 className="size-3.5" />
                           </Button>
                         </div>
                       ))}
@@ -656,6 +669,7 @@ function ShowSponsorAssignments({
 
 export default function SponsorsPage() {
   const showId = useShowId();
+  const [activeTab, setActiveTab] = useState('assignments');
 
   // Get show to retrieve organisationId
   const { data: show } = trpc.shows.getById.useQuery({ id: showId });
@@ -677,7 +691,7 @@ export default function SponsorsPage() {
         </p>
       </div>
 
-      <Tabs defaultValue="assignments">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="assignments">Show Sponsors</TabsTrigger>
           <TabsTrigger value="directory">Sponsor Directory</TabsTrigger>
@@ -686,6 +700,7 @@ export default function SponsorsPage() {
           <ShowSponsorAssignments
             showId={showId}
             organisationId={show.organisationId}
+            onSwitchToDirectory={() => setActiveTab('directory')}
           />
         </TabsContent>
         <TabsContent value="directory" className="mt-4">
