@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -24,6 +24,7 @@ import {
   Users,
 } from 'lucide-react';
 import { differenceInMonths, format, parseISO } from 'date-fns';
+import { isWithinAgeRange, handlerAgeYearsOnDate } from '@/lib/date-utils';
 import { trpc } from '@/lib/trpc/client';
 import { formatDogName } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -57,6 +58,13 @@ const STEPS: { key: WizardStep; label: string; icon: React.ElementType }[] = [
 function formatFee(pence: number) {
   return `£${(pence / 100).toFixed(2)}`;
 }
+
+const EMPTY_GROUPED_CLASSES = {
+  age: [] as never[],
+  achievement: [] as never[],
+  special: [] as never[],
+  junior_handler: [] as never[],
+};
 
 export default function EnterShowPage() {
   const params = useParams();
@@ -198,7 +206,7 @@ export default function EnterShowPage() {
 
   // Group classes by type, filtering by the selected dog's sex
   const groupedClasses = useMemo(() => {
-    if (!showClasses) return { age: [], achievement: [], special: [], junior_handler: [] };
+    if (!showClasses) return EMPTY_GROUPED_CLASSES;
 
     // Filter to only show classes matching the dog's sex (or unisex classes)
     const sexFiltered = selectedDogSex
@@ -239,13 +247,9 @@ export default function EnterShowPage() {
         show?.startDate ? new Date(show.startDate) : new Date(),
         new Date(handlerDob)
       );
-      return groupedClasses.junior_handler.filter((sc) => {
-        const { minAgeMonths, maxAgeMonths } = sc.classDefinition;
-        if (minAgeMonths === null && maxAgeMonths === null) return true;
-        const aboveMin = minAgeMonths === null || handlerAgeMonths >= minAgeMonths;
-        const belowMax = maxAgeMonths === null || handlerAgeMonths < maxAgeMonths;
-        return aboveMin && belowMax;
-      });
+      return groupedClasses.junior_handler.filter((sc) =>
+        isWithinAgeRange(handlerAgeMonths, sc.classDefinition.minAgeMonths, sc.classDefinition.maxAgeMonths)
+      );
     }
     return [
       ...groupedClasses.age,
@@ -255,24 +259,23 @@ export default function EnterShowPage() {
   }, [cart.activeEntry?.entryType, cart.activeEntry?.handlerDob, groupedClasses, show?.startDate]);
 
   // Auto-select the single eligible JH class
-  const [jhAutoSelected, setJhAutoSelected] = useState(false);
+  const jhAutoSelectedRef = useRef(false);
   useEffect(() => {
+    if (cart.step !== 'select_classes') {
+      jhAutoSelectedRef.current = false;
+      return;
+    }
     if (
-      cart.step === 'select_classes' &&
       cart.activeEntry?.entryType === 'junior_handler' &&
       !cart.editingExisting &&
       availableClasses.length === 1 &&
       selectedClassIds.length === 0 &&
-      !jhAutoSelected
+      !jhAutoSelectedRef.current
     ) {
+      jhAutoSelectedRef.current = true;
       setSelectedClassIds([availableClasses[0].id]);
-      setJhAutoSelected(true);
     }
-    if (cart.step !== 'select_classes') {
-      setJhAutoSelected(false);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cart.step, cart.activeEntry?.entryType, cart.editingExisting, availableClasses, selectedClassIds.length, jhAutoSelected]);
+  }, [cart.step, cart.activeEntry?.entryType, cart.editingExisting, availableClasses, selectedClassIds.length]);
 
   // Calculate total for current selection using show-level fee tiers
   const selectedTotal = useMemo(() => {
@@ -685,16 +688,15 @@ export default function EnterShowPage() {
         const jhAgeMonths = jhDob && show?.startDate
           ? differenceInMonths(new Date(show.startDate), new Date(jhDob))
           : null;
-        const jhAgeYears = jhAgeMonths !== null ? Math.floor(jhAgeMonths / 12) : null;
+        const jhAgeYears = jhDob && show?.startDate
+          ? handlerAgeYearsOnDate(jhDob, show.startDate)
+          : null;
         const jhTooYoung = jhAgeMonths !== null && jhAgeMonths < 72;
         const jhTooOld = jhAgeMonths !== null && jhAgeMonths >= 300;
         const jhHasMatchingClasses = jhAgeMonths !== null && !jhTooYoung && !jhTooOld
-          ? (groupedClasses.junior_handler ?? []).some((sc) => {
-              const { minAgeMonths, maxAgeMonths } = sc.classDefinition;
-              const aboveMin = minAgeMonths === null || jhAgeMonths >= minAgeMonths;
-              const belowMax = maxAgeMonths === null || jhAgeMonths < maxAgeMonths;
-              return aboveMin && belowMax;
-            })
+          ? (groupedClasses.junior_handler ?? []).some((sc) =>
+              isWithinAgeRange(jhAgeMonths, sc.classDefinition.minAgeMonths, sc.classDefinition.maxAgeMonths)
+            )
           : true;
         const jhAgeError = jhTooYoung
           ? 'Handler must be at least 6 years old on the day of the show.'
@@ -859,7 +861,7 @@ export default function EnterShowPage() {
                 </>
               ) : (
                 <>
-                  {jhAutoSelected && availableClasses.length === 1 && (
+                  {availableClasses.length === 1 && selectedClassIds.length === 1 && (
                     <div className="flex gap-3 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-950">
                       <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-green-600" />
                       <p className="text-sm text-green-800 dark:text-green-200">
@@ -1010,7 +1012,7 @@ export default function EnterShowPage() {
                   {entry.entryType === 'junior_handler' && entry.handlerDob && show?.startDate && (
                     <div className="flex flex-wrap gap-2">
                       <Badge variant="secondary">
-                        Age on show day: {Math.floor(differenceInMonths(new Date(show.startDate), new Date(entry.handlerDob)) / 12)} years
+                        Age on show day: {handlerAgeYearsOnDate(entry.handlerDob, show.startDate)} years
                       </Badge>
                       {entry.handlerKcNumber && (
                         <Badge variant="outline">

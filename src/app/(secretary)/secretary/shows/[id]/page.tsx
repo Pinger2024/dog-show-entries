@@ -1203,7 +1203,8 @@ function BulkClassCreator({ showId }: { showId: string }) {
   function handleCreate() {
     if (!template || selectedClassDefIds.length === 0) return;
     if (!template.isHandling && selectedBreedIds.length === 0) return;
-    const fee = poundsToPence(parseFloat(feeInput || '0')) ?? template.defaultFeePence;
+    const parsedPounds = parseFloat(feeInput);
+    const fee = Number.isNaN(parsedPounds) ? template.defaultFeePence : poundsToPence(parsedPounds);
     bulkMutation.mutate({
       showId,
       breedIds: template.isHandling ? [] : selectedBreedIds,

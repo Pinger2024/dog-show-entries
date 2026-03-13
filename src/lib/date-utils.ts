@@ -1,4 +1,4 @@
-import { format, parseISO, formatDistanceToNow, isToday, isYesterday } from 'date-fns';
+import { format, parseISO, formatDistanceToNow, differenceInMonths, isToday, isYesterday } from 'date-fns';
 
 /**
  * Formats a date range for display.
@@ -55,6 +55,27 @@ export function penceToPounds(pence: number): number {
  */
 export function penceToPoundsString(pence: number): string {
   return (pence / 100).toFixed(2);
+}
+
+/**
+ * Returns true if ageMonths falls within the nullable [min, max) window
+ * used by class definitions. Inclusive lower, exclusive upper.
+ */
+export function isWithinAgeRange(
+  ageMonths: number,
+  minAgeMonths: number | null,
+  maxAgeMonths: number | null,
+): boolean {
+  const aboveMin = minAgeMonths === null || ageMonths >= minAgeMonths;
+  const belowMax = maxAgeMonths === null || ageMonths < maxAgeMonths;
+  return aboveMin && belowMax;
+}
+
+/**
+ * Computes a handler's age in whole years on the show date.
+ */
+export function handlerAgeYearsOnDate(handlerDob: string, showDate: string): number {
+  return Math.floor(differenceInMonths(new Date(showDate), new Date(handlerDob)) / 12);
 }
 
 /**
