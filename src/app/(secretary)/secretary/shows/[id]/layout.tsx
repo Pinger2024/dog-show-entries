@@ -45,21 +45,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { statusConfig } from './_lib/show-utils';
 import { ShowIdProvider } from './_lib/show-context';
-
-function formatRelativeTime(date: Date): string {
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays === 1) return 'Yesterday';
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-}
 import { ShowSectionNav } from './_components/show-section-nav';
+import { formatRelativeTime, formatCompactRevenue } from './_lib/show-utils';
 
 export default function ShowManagementLayout({
   children,
@@ -74,7 +61,7 @@ export default function ShowManagementLayout({
   });
   const { data: entryStats } = trpc.secretary.getShowEntryStats.useQuery(
     { showId: show?.id ?? '' },
-    { enabled: !!show }
+    { enabled: !!show, staleTime: 60_000 }
   );
 
   const { data: session } = useSession();
@@ -321,7 +308,7 @@ export default function ShowManagementLayout({
                     try {
                       const result = await populateMutation.mutateAsync({ showId: show.id });
                       await utils.shows.getById.invalidate({ id });
-                      await utils.secretary.getShowStats.invalidate({ showId: show.id });
+                      await utils.secretary.getShowEntryStats.invalidate({ showId: show.id });
                       setShowTestDataDialog(false);
                       const parts = [
                         `${result.entriesCreated} entries`,
@@ -394,10 +381,7 @@ export default function ShowManagementLayout({
               <span className="text-[10px] font-medium uppercase tracking-wider">Revenue</span>
             </div>
             <p className="mt-1 text-lg font-bold text-emerald-700">
-              {(() => {
-                const pounds = entryStats.totalRevenue / 100;
-                return pounds >= 1000 ? `£${(pounds / 1000).toFixed(1)}k` : `£${pounds.toFixed(0)}`;
-              })()}
+              {formatCompactRevenue(entryStats.totalRevenue)}
             </p>
             <p className="text-[11px] text-muted-foreground">{entryStats.paidOrders} paid</p>
           </div>

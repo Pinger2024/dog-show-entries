@@ -142,12 +142,12 @@ export default function EnterShowPage() {
 
   const addDogsButtons = (
     <div className="flex flex-col gap-2 sm:flex-row">
-      <Button variant="outline" className="flex-1" onClick={handleAddAnother}>
+      <Button variant="outline" className="flex-1 min-h-[2.75rem]" onClick={handleAddAnother}>
         <Plus className="size-4" />
         Add Another Dog
       </Button>
       {hasJhClasses && (
-        <Button variant="outline" className="flex-1" onClick={handleAddJuniorHandler}>
+        <Button variant="outline" className="flex-1 min-h-[2.75rem]" onClick={handleAddJuniorHandler}>
           <Users className="size-4" />
           Add Junior Handler
         </Button>

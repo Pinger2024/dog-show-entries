@@ -91,7 +91,7 @@ export default function SecretaryDashboardPage() {
       </div>
 
       {/* Stats — scoped to active shows */}
-      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardDescription className="text-sm font-medium">
