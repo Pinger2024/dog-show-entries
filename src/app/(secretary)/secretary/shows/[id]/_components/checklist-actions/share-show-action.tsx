@@ -46,22 +46,10 @@ export function ShareShowAction({ actionKey }: ActionPanelProps) {
   const messageFn = actionKey ? MESSAGES[actionKey] : undefined;
   const message = messageFn ? messageFn(show.name, closeDate) : '';
 
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Fallback for older browsers
-      const textarea = document.createElement('textarea');
-      textarea.value = shareUrl;
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
+  const handleCopy = () => {
+    navigator.clipboard.writeText(shareUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
@@ -77,7 +65,7 @@ export function ShareShowAction({ actionKey }: ActionPanelProps) {
         <Button
           size="sm"
           variant="outline"
-          className="h-7 shrink-0 text-xs"
+          className="min-h-[2.75rem] shrink-0 text-xs"
           onClick={handleCopy}
         >
           {copied ? (
@@ -95,7 +83,7 @@ export function ShareShowAction({ actionKey }: ActionPanelProps) {
           <Button
             size="sm"
             variant="outline"
-            className="h-9 w-full text-xs"
+            className="min-h-[2.75rem] w-full text-xs"
             asChild
           >
             <span>
@@ -109,7 +97,7 @@ export function ShareShowAction({ actionKey }: ActionPanelProps) {
           <Button
             size="sm"
             variant="outline"
-            className="h-9 w-full text-xs"
+            className="min-h-[2.75rem] w-full text-xs"
             asChild
           >
             <span>
@@ -122,7 +110,7 @@ export function ShareShowAction({ actionKey }: ActionPanelProps) {
         <Button
           size="sm"
           variant="outline"
-          className="h-9 flex-1 text-xs"
+          className="min-h-[2.75rem] flex-1 text-xs"
           onClick={handleCopy}
         >
           {copied ? (

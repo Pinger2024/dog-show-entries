@@ -76,27 +76,27 @@ export default async function OGImage({
     );
   }
 
-  // Entry count
-  const countResult = await db
-    ?.select({ count: sql<number>`count(*)` })
-    .from(entries)
-    .where(
-      and(
-        eq(entries.showId, id),
-        eq(entries.status, 'confirmed'),
-        isNull(entries.deletedAt)
-      )
-    );
+  // Entry count + title sponsor in parallel (both only need show.id)
+  const [countResult, titleSponsor] = await Promise.all([
+    db
+      ?.select({ count: sql<number>`count(*)` })
+      .from(entries)
+      .where(
+        and(
+          eq(entries.showId, show.id),
+          eq(entries.status, 'confirmed'),
+          isNull(entries.deletedAt)
+        )
+      ),
+    db?.query.showSponsors.findFirst({
+      where: and(
+        eq(showSponsors.showId, show.id),
+        eq(showSponsors.tier, 'title')
+      ),
+      with: { sponsor: true },
+    }),
+  ]);
   const entryCount = Number(countResult?.[0]?.count ?? 0);
-
-  // Title sponsor
-  const titleSponsor = await db?.query.showSponsors.findFirst({
-    where: and(
-      eq(showSponsors.showId, id),
-      eq(showSponsors.tier, 'title')
-    ),
-    with: { sponsor: true },
-  });
 
   let sponsorLogoData: ArrayBuffer | null = null;
   if (titleSponsor?.sponsor.logoUrl) {

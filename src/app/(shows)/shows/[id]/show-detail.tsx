@@ -26,7 +26,7 @@ import {
   Share2,
   Check,
 } from 'lucide-react';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -337,16 +337,19 @@ export function ShowDetailClient() {
     { showId: show?.id ?? '' },
     { enabled: !!show?.id }
   );
+  const showHasEntries = !!show && ['entries_open', 'entries_closed', 'in_progress', 'completed'].includes(show.status);
   const { data: breedEntryStats } = trpc.shows.getBreedEntryStats.useQuery(
     { showId: show?.id ?? '' },
-    { enabled: !!show?.id, refetchInterval: 60_000 }
+    { enabled: !!show?.id && showHasEntries, refetchInterval: 60_000 }
   );
 
   // URL segment for links — prefer slug over UUID
-  const showSlug = (show as typeof show & { slug?: string | null })?.slug ?? idOrSlug;
+  const showSlug = show?.slug ?? idOrSlug;
 
-  // Track which breed section to auto-expand from URL hash
-  const [hashBreed, setHashBreed] = useState<string | null>(null);
+  // Read hash once for breed deep-link auto-expand
+  const hashBreedRef = useRef(
+    typeof window !== 'undefined' ? window.location.hash.replace('#', '') : ''
+  );
   const scrolledToHash = useRef(false);
 
   // Show sticky CTA bar after scrolling past the hero
@@ -359,23 +362,16 @@ export function ShowDetailClient() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Auto-expand and scroll to breed section from URL hash (Phase 6b)
+  // Auto-expand and scroll to breed section from URL hash
   useEffect(() => {
-    const hash = window.location.hash.replace('#', '');
-    if (hash.startsWith('breed-')) {
-      setHashBreed(hash);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (hashBreed && !scrolledToHash.current && show) {
-      scrolledToHash.current = true;
-      requestAnimationFrame(() => {
-        const el = document.getElementById(hashBreed);
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      });
-    }
-  }, [hashBreed, show]);
+    if (!show || scrolledToHash.current) return;
+    const hash = hashBreedRef.current;
+    if (!hash.startsWith('breed-')) return;
+    scrolledToHash.current = true;
+    requestAnimationFrame(() => {
+      document.getElementById(hash)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, [show]);
 
   if (isLoading) {
     return (
@@ -426,6 +422,7 @@ export function ShowDetailClient() {
     showOpenTime?: string | null;
     onCallVet?: string | null;
     acceptsPostalEntries?: boolean;
+    scheduleData?: ScheduleData | null;
   };
   const venue = show.venue as typeof show.venue & {
     address?: string | null;
@@ -434,14 +431,16 @@ export function ShowDetailClient() {
     lng?: string | null;
     indoorOutdoor?: string | null;
   };
-  const scheduleData = (show as typeof show & { scheduleData?: ScheduleData | null }).scheduleData;
+  const scheduleData = showAny.scheduleData;
 
-  // Build breed → entry count lookup
-  const breedEntryMap = new Map<string, number>();
-  for (const stat of breedEntryStats ?? []) {
-    breedEntryMap.set(stat.breedName, stat.dogCount);
-  }
-  const showHasEntries = ['entries_open', 'entries_closed', 'in_progress', 'completed'].includes(show.status);
+  // Build breed → entry count lookup (memoized — avoids rebuild on scroll-driven re-renders)
+  const breedEntryMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const stat of breedEntryStats ?? []) {
+      map.set(stat.breedName, stat.dogCount);
+    }
+    return map;
+  }, [breedEntryStats]);
 
   /* Group classes by breed */
   const breedMap = new Map<string, { groupSortOrder: number; classes: typeof show.showClasses }>();
@@ -1002,7 +1001,7 @@ export function ShowDetailClient() {
                     judgeName={judgeInfo?.judgeName}
                     ringName={judgeInfo?.ringName}
                     classSponsorMap={classSponsorMap}
-                    defaultOpen={breeds.length <= 2 || i === 0 || hashBreed === breedSectionId}
+                    defaultOpen={breeds.length <= 2 || i === 0 || hashBreedRef.current === breedSectionId}
                     entryCount={breedEntryMap.get(breedName)}
                     showHasEntries={showHasEntries}
                   />
