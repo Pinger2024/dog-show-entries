@@ -39,7 +39,7 @@ export default function FinancialPage() {
   const showId = useShowId();
   const { data: show } = trpc.shows.getById.useQuery({ id: showId });
   const { data: stats } = trpc.secretary.getShowStats.useQuery({ showId });
-  const { data: entriesData } = trpc.entries.getForShow.useQuery({ showId, limit: 100 });
+  const { data: entriesData } = trpc.entries.getForShow.useQuery({ showId, limit: 500 });
   const { data: entryReport } = trpc.secretary.getEntryReport.useQuery({ showId });
   const { data: catalogueOrders } = trpc.secretary.getCatalogueOrders.useQuery({ showId });
   const { data: sundryReport } = trpc.secretary.getSundryItemReport.useQuery({ showId });

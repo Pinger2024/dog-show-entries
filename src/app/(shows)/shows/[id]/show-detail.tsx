@@ -315,10 +315,10 @@ function SponsorLogo({
 
 /* ─── Collapsible directions ─────────────────── */
 
-function DirectionsBlock({ text }: { text: string }) {
+function DirectionsBlock({ text, standalone }: { text: string; standalone?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   return (
-    <div className="mt-3 border-t pt-3">
+    <div className={standalone ? '' : 'mt-3 border-t pt-3'}>
       <div className="flex items-start gap-2">
         <Navigation className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/60" />
         <div className="min-w-0 flex-1">
@@ -956,7 +956,7 @@ export function ShowDetailClient() {
                   Directions
                 </h2>
                 <div className="mt-3">
-                  <DirectionsBlock text={scheduleData.directions} />
+                  <DirectionsBlock text={scheduleData.directions} standalone />
                 </div>
               </div>
             </div>

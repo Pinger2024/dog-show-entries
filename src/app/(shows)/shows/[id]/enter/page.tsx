@@ -140,6 +140,21 @@ export default function EnterShowPage() {
     (sc) => sc.classDefinition.type === 'junior_handler'
   ) ?? false;
 
+  const addDogsButtons = (
+    <div className="flex flex-col gap-2 sm:flex-row">
+      <Button variant="outline" className="flex-1" onClick={handleAddAnother}>
+        <Plus className="size-4" />
+        Add Another Dog
+      </Button>
+      {hasJhClasses && (
+        <Button variant="outline" className="flex-1" onClick={handleAddJuniorHandler}>
+          <Users className="size-4" />
+          Add Junior Handler
+        </Button>
+      )}
+    </div>
+  );
+
   // Pre-fetch sundry items from select_classes onwards so they're ready at cart_review
   const { data: sundryItemsData } = trpc.shows.getSundryItems.useQuery(
     { showId },
@@ -1042,18 +1057,7 @@ export default function EnterShowPage() {
             ))}
 
           {/* Add another */}
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Button variant="outline" className="flex-1" onClick={handleAddAnother}>
-              <Plus className="size-4" />
-              Add Another Dog
-            </Button>
-            {hasJhClasses && (
-              <Button variant="outline" className="flex-1" onClick={handleAddJuniorHandler}>
-                <Users className="size-4" />
-                Add Junior Handler
-              </Button>
-            )}
-          </div>
+          {addDogsButtons}
 
           {/* Sundry items (catalogues, memberships, donations, etc.) — shown BEFORE total */}
           {sundryItemsData && sundryItemsData.length > 0 && (
@@ -1186,20 +1190,7 @@ export default function EnterShowPage() {
           </div>
 
           {/* Second add-dog button — easier to find after scrolling through entries */}
-          {cart.entries.length >= 2 && (
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Button variant="outline" className="flex-1" onClick={handleAddAnother}>
-                <Plus className="size-4" />
-                Add Another Dog
-              </Button>
-              {hasJhClasses && (
-                <Button variant="outline" className="flex-1" onClick={handleAddJuniorHandler}>
-                  <Users className="size-4" />
-                  Add Junior Handler
-                </Button>
-              )}
-            </div>
-          )}
+          {cart.entries.length >= 2 && addDogsButtons}
 
           {/* Declarations */}
           <div className="space-y-4">

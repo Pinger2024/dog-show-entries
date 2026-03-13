@@ -135,6 +135,11 @@ export default function EntriesPage() {
               <CardDescription>
                 All entries for this show
               </CardDescription>
+              {total > entries.length && (
+                <p className="text-xs text-amber-600">
+                  Showing {entries.length} of {total} — CSV export may be incomplete
+                </p>
+              )}
             </div>
             <div className="flex flex-wrap gap-2">
               <Button size="sm" className="min-h-[2.75rem] sm:min-h-0" onClick={() => setShowAddEntry(true)}>
