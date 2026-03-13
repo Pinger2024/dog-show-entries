@@ -1181,10 +1181,11 @@ function BulkClassCreator({ showId }: { showId: string }) {
     return groups;
   }, [breeds]);
 
-  const totalClasses =
-    selectedBreedIds.length *
-    selectedClassDefIds.length *
-    (splitBySex ? 2 : 1);
+  const totalClasses = template?.isHandling
+    ? selectedClassDefIds.length
+    : selectedBreedIds.length *
+      selectedClassDefIds.length *
+      (splitBySex ? 2 : 1);
 
   function handleSelectTemplate(templateId: string) {
     const t = CLASS_TEMPLATES.find((t) => t.id === templateId);
@@ -1200,14 +1201,15 @@ function BulkClassCreator({ showId }: { showId: string }) {
   }
 
   function handleCreate() {
-    if (!template || selectedBreedIds.length === 0 || selectedClassDefIds.length === 0) return;
-    const fee = poundsToPence(parseFloat(feeInput || '0')) || template.defaultFeePence;
+    if (!template || selectedClassDefIds.length === 0) return;
+    if (!template.isHandling && selectedBreedIds.length === 0) return;
+    const fee = poundsToPence(parseFloat(feeInput || '0')) ?? template.defaultFeePence;
     bulkMutation.mutate({
       showId,
-      breedIds: selectedBreedIds,
+      breedIds: template.isHandling ? [] : selectedBreedIds,
       classDefinitionIds: selectedClassDefIds,
       entryFee: fee,
-      splitBySex,
+      splitBySex: template.isHandling ? false : splitBySex,
     });
   }
 
@@ -1297,91 +1299,108 @@ function BulkClassCreator({ showId }: { showId: string }) {
               </div>
             </div>
 
-            <div>
-              <div className="flex items-center justify-between">
-                <Label className="text-sm font-medium">
-                  Breeds ({selectedBreedIds.length} selected)
-                </Label>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      setSelectedBreedIds(
-                        (breeds ?? []).map((b) => b.id)
-                      )
-                    }
-                  >
-                    Select All
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setSelectedBreedIds([])}
-                  >
-                    Clear
-                  </Button>
+            {template.isHandling ? (
+              <div className="rounded-lg border border-dashed border-primary/30 bg-primary/5 p-3 text-sm">
+                {template.id === 'ykc_handling' ? (
+                  <p className="text-muted-foreground">
+                    <span className="font-medium text-foreground">Young Kennel Club</span> is the official RKC junior handling route. Handlers need YKC membership. Dogs can be on the Breed or Activity Register — crossbreeds welcome. Winners qualify for Crufts YKC Handling finals.
+                  </p>
+                ) : (
+                  <p className="text-muted-foreground">
+                    <span className="font-medium text-foreground">Junior Handling Association</span> is an independent organisation with its own finals pathway. JHA membership required. The dog typically needs to enter another class at the show.
+                  </p>
+                )}
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Handling classes are not breed-specific and are not split by sex.
+                </p>
+              </div>
+            ) : (
+              <div>
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">
+                    Breeds ({selectedBreedIds.length} selected)
+                  </Label>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        setSelectedBreedIds(
+                          (breeds ?? []).map((b) => b.id)
+                        )
+                      }
+                    >
+                      Select All
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelectedBreedIds([])}
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                </div>
+                <div className="mt-2 max-h-60 overflow-y-auto rounded-lg border p-2 space-y-3">
+                  {Object.entries(breedsByGroup)
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([groupName, groupBreeds]) => (
+                      <div key={groupName}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const groupIds = groupBreeds.map((b) => b.id);
+                              const allSelected = groupIds.every((id) =>
+                                selectedBreedIds.includes(id)
+                              );
+                              if (allSelected) {
+                                setSelectedBreedIds((prev) =>
+                                  prev.filter((id) => !groupIds.includes(id))
+                                );
+                              } else {
+                                setSelectedBreedIds((prev) => [
+                                  ...new Set([...prev, ...groupIds]),
+                                ]);
+                              }
+                            }}
+                            className="text-xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground"
+                          >
+                            {groupName}
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1 pl-2">
+                          {groupBreeds.map((breed) => (
+                            <label
+                              key={breed.id}
+                              className="flex items-center gap-2 text-sm cursor-pointer"
+                            >
+                              <Checkbox
+                                checked={selectedBreedIds.includes(breed.id)}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setSelectedBreedIds((prev) => [
+                                      ...prev,
+                                      breed.id,
+                                    ]);
+                                  } else {
+                                    setSelectedBreedIds((prev) =>
+                                      prev.filter((id) => id !== breed.id)
+                                    );
+                                  }
+                                }}
+                              />
+                              {breed.name}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
                 </div>
               </div>
-              <div className="mt-2 max-h-60 overflow-y-auto rounded-lg border p-2 space-y-3">
-                {Object.entries(breedsByGroup)
-                  .sort(([a], [b]) => a.localeCompare(b))
-                  .map(([groupName, groupBreeds]) => (
-                    <div key={groupName}>
-                      <div className="flex items-center gap-2 mb-1">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const groupIds = groupBreeds.map((b) => b.id);
-                            const allSelected = groupIds.every((id) =>
-                              selectedBreedIds.includes(id)
-                            );
-                            if (allSelected) {
-                              setSelectedBreedIds((prev) =>
-                                prev.filter((id) => !groupIds.includes(id))
-                              );
-                            } else {
-                              setSelectedBreedIds((prev) => [
-                                ...new Set([...prev, ...groupIds]),
-                              ]);
-                            }
-                          }}
-                          className="text-xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground"
-                        >
-                          {groupName}
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-1 pl-2">
-                        {groupBreeds.map((breed) => (
-                          <label
-                            key={breed.id}
-                            className="flex items-center gap-2 text-sm cursor-pointer"
-                          >
-                            <Checkbox
-                              checked={selectedBreedIds.includes(breed.id)}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setSelectedBreedIds((prev) => [
-                                    ...prev,
-                                    breed.id,
-                                  ]);
-                                } else {
-                                  setSelectedBreedIds((prev) =>
-                                    prev.filter((id) => id !== breed.id)
-                                  );
-                                }
-                              }}
-                            />
-                            {breed.name}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </div>
+            )}
 
             <div className="grid gap-4 sm:grid-cols-3">
               <div>
@@ -1399,15 +1418,17 @@ function BulkClassCreator({ showId }: { showId: string }) {
                   {feeInput ? formatCurrency(poundsToPence(parseFloat(feeInput)) || 0) : '£0.00'}
                 </p>
               </div>
-              <div className="flex items-end gap-2 pb-6">
-                <label className="flex items-center gap-2 text-sm cursor-pointer">
-                  <Checkbox
-                    checked={splitBySex}
-                    onCheckedChange={(v) => setSplitBySex(v === true)}
-                  />
-                  Split by sex (Dog / Bitch)
-                </label>
-              </div>
+              {!template.isHandling && (
+                <div className="flex items-end gap-2 pb-6">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <Checkbox
+                      checked={splitBySex}
+                      onCheckedChange={(v) => setSplitBySex(v === true)}
+                    />
+                    Split by sex (Dog / Bitch)
+                  </label>
+                </div>
+              )}
               <div className="flex items-end pb-6">
                 <p className="text-sm text-muted-foreground">
                   <span className="font-bold text-foreground">{totalClasses}</span>{' '}
@@ -1420,7 +1441,7 @@ function BulkClassCreator({ showId }: { showId: string }) {
               onClick={handleCreate}
               disabled={
                 bulkMutation.isPending ||
-                selectedBreedIds.length === 0 ||
+                (!template.isHandling && selectedBreedIds.length === 0) ||
                 selectedClassDefIds.length === 0
               }
             >

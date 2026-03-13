@@ -114,9 +114,16 @@ async function seed() {
       // Special
       { name: 'Good Citizen Dog Scheme', type: 'special' as const, sortOrder: 1, description: 'For dogs that have passed any level of the Royal Kennel Club Good Citizen Dog Scheme.' },
       { name: 'Special Beginners', type: 'special' as const, sortOrder: 2, description: 'For dogs whose owners/handlers have never won a CC or Reserve CC at Championship Shows.' },
-      // Junior Handler classes
+      // Junior Handler classes (legacy — kept for existing entries)
       { name: 'Junior Handler (6-11)', type: 'junior_handler' as const, sortOrder: 1, minAgeMonths: 72, maxAgeMonths: 143, description: 'For handlers aged 6-11 years on the day of the show. Judged on handling skill, not the dog.' },
       { name: 'Junior Handler (12-16)', type: 'junior_handler' as const, sortOrder: 2, minAgeMonths: 144, maxAgeMonths: 203, description: 'For handlers aged 12-16 years on the day of the show. Judged on handling skill, not the dog.' },
+      // YKC Handling (official RKC route — 3 age groups, Crufts qualifier)
+      { name: 'YKC Handling (6-11)', type: 'junior_handler' as const, sortOrder: 10, minAgeMonths: 72, maxAgeMonths: 144, description: 'Young Kennel Club handling. YKC membership required. Crufts qualifier.' },
+      { name: 'YKC Handling (12-17)', type: 'junior_handler' as const, sortOrder: 11, minAgeMonths: 144, maxAgeMonths: 216, description: 'Young Kennel Club handling. YKC membership required. Crufts qualifier.' },
+      { name: 'YKC Handling (18-24)', type: 'junior_handler' as const, sortOrder: 12, minAgeMonths: 216, maxAgeMonths: 300, description: 'Young Kennel Club handling. YKC membership required. Crufts qualifier.' },
+      // JHA Handling (independent organisation — 2 age groups)
+      { name: 'JHA Handling (6-11)', type: 'junior_handler' as const, sortOrder: 20, minAgeMonths: 72, maxAgeMonths: 144, description: 'Junior Handling Association. JHA membership required.' },
+      { name: 'JHA Handling (12-16)', type: 'junior_handler' as const, sortOrder: 21, minAgeMonths: 144, maxAgeMonths: 204, description: 'Junior Handling Association. JHA membership required.' },
     ])
     .onConflictDoNothing({ target: schema.classDefinitions.name })
     .returning();

@@ -4,11 +4,13 @@ import { useState, useMemo, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
+  AlertTriangle,
   Dog,
   CheckCircle2,
   ChevronRight,
   ChevronLeft,
   CreditCard,
+  Info,
   Loader2,
   Minus,
   PawPrint,
@@ -251,6 +253,26 @@ export default function EnterShowPage() {
       ...groupedClasses.special,
     ];
   }, [cart.activeEntry?.entryType, cart.activeEntry?.handlerDob, groupedClasses, show?.startDate]);
+
+  // Auto-select the single eligible JH class
+  const [jhAutoSelected, setJhAutoSelected] = useState(false);
+  useEffect(() => {
+    if (
+      cart.step === 'select_classes' &&
+      cart.activeEntry?.entryType === 'junior_handler' &&
+      !cart.editingExisting &&
+      availableClasses.length === 1 &&
+      selectedClassIds.length === 0 &&
+      !jhAutoSelected
+    ) {
+      setSelectedClassIds([availableClasses[0].id]);
+      setJhAutoSelected(true);
+    }
+    if (cart.step !== 'select_classes') {
+      setJhAutoSelected(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cart.step, cart.activeEntry?.entryType, cart.editingExisting, availableClasses, selectedClassIds.length, jhAutoSelected]);
 
   // Calculate total for current selection using show-level fee tiers
   const selectedTotal = useMemo(() => {
@@ -558,7 +580,7 @@ export default function EnterShowPage() {
                 <div>
                   <p className="text-sm font-medium sm:text-base">Junior Handler</p>
                   <p className="text-xs text-muted-foreground sm:text-sm">
-                    Handler aged 6-16, judged on handling skill.
+                    Young handler entry — judged on handling skill, not the dog.
                   </p>
                 </div>
               </button>
@@ -659,70 +681,119 @@ export default function EnterShowPage() {
       )}
 
       {/* Step: Junior Handler Details */}
-      {cart.step === 'junior_handler' && (
-        <div className="space-y-6">
-          <h2 className="text-lg font-semibold">Junior Handler Details</h2>
-          <p className="text-sm text-muted-foreground">
-            Enter the details of the young handler. They must be aged 6-16 years on the day of the show.
-          </p>
+      {cart.step === 'junior_handler' && (() => {
+        const jhAgeMonths = jhDob && show?.startDate
+          ? differenceInMonths(new Date(show.startDate), new Date(jhDob))
+          : null;
+        const jhAgeYears = jhAgeMonths !== null ? Math.floor(jhAgeMonths / 12) : null;
+        const jhTooYoung = jhAgeMonths !== null && jhAgeMonths < 72;
+        const jhTooOld = jhAgeMonths !== null && jhAgeMonths >= 300;
+        const jhHasMatchingClasses = jhAgeMonths !== null && !jhTooYoung && !jhTooOld
+          ? (groupedClasses.junior_handler ?? []).some((sc) => {
+              const { minAgeMonths, maxAgeMonths } = sc.classDefinition;
+              const aboveMin = minAgeMonths === null || jhAgeMonths >= minAgeMonths;
+              const belowMax = maxAgeMonths === null || jhAgeMonths < maxAgeMonths;
+              return aboveMin && belowMax;
+            })
+          : true;
+        const jhAgeError = jhTooYoung
+          ? 'Handler must be at least 6 years old on the day of the show.'
+          : jhTooOld
+            ? 'Handler must be under 25 years old on the day of the show.'
+            : null;
 
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="jh-name">Handler Name</Label>
-              <Input
-                id="jh-name"
-                value={jhName}
-                onChange={(e) => setJhName(e.target.value)}
-                placeholder="Full name of handler"
-                className="h-11"
-              />
+        return (
+          <div className="space-y-6">
+            <h2 className="text-lg font-semibold">Junior Handler Details</h2>
+
+            <div className="flex gap-3 rounded-lg border border-dashed border-primary/30 bg-primary/5 p-3">
+              <Info className="mt-0.5 size-4 shrink-0 text-primary" />
+              <p className="text-sm text-muted-foreground">
+                Junior handling classes are judged on the handler&apos;s skill in presenting and moving their dog — not on the dog itself. Age is calculated on the first day of the show.
+              </p>
             </div>
-            <div>
-              <Label htmlFor="jh-dob">Date of Birth</Label>
-              <Input
-                id="jh-dob"
-                type="date"
-                value={jhDob}
-                onChange={(e) => setJhDob(e.target.value)}
-                className="h-11"
-              />
+
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="jh-name">Handler Name</Label>
+                <Input
+                  id="jh-name"
+                  value={jhName}
+                  onChange={(e) => setJhName(e.target.value)}
+                  placeholder="Full name of handler"
+                  className="mt-1 h-11"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  The name of the person handling the dog in the ring.
+                </p>
+              </div>
+
+              <div>
+                <Label htmlFor="jh-dob">Date of Birth</Label>
+                <Input
+                  id="jh-dob"
+                  type="date"
+                  value={jhDob}
+                  onChange={(e) => setJhDob(e.target.value)}
+                  className="mt-1 h-11"
+                />
+                {jhAgeYears !== null && !jhAgeError && (
+                  <Badge variant="secondary" className="mt-2">
+                    Age on show day: {jhAgeYears} years
+                  </Badge>
+                )}
+                {jhAgeError && (
+                  <p className="mt-2 text-sm font-medium text-destructive">
+                    {jhAgeError}
+                  </p>
+                )}
+                {!jhAgeError && jhAgeMonths !== null && !jhHasMatchingClasses && (
+                  <div className="mt-2 flex gap-2 rounded-md border border-amber-300 bg-amber-50 p-2 dark:border-amber-700 dark:bg-amber-950">
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+                    <p className="text-sm text-amber-800 dark:text-amber-200">
+                      No handling classes at this show match the handler&apos;s age.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <Label htmlFor="jh-kc">Membership Number</Label>
+                <Input
+                  id="jh-kc"
+                  value={jhKcNumber}
+                  onChange={(e) => setJhKcNumber(e.target.value)}
+                  placeholder="YKC or JHA number"
+                  className="mt-1 h-11"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  YKC or JHA membership number, if applicable.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-4">
+              <Button variant="outline" className="h-11 flex-1 text-sm sm:flex-none" onClick={() => cart.setStep('entry_type')}>
+                <ChevronLeft className="size-4" />
+                Back
+              </Button>
+              <Button
+                className="h-11 flex-1 text-sm sm:flex-none"
+                onClick={() => {
+                  cart.setJHDetails(jhName, jhDob, jhKcNumber || undefined);
+                  setJhName('');
+                  setJhDob('');
+                  setJhKcNumber('');
+                }}
+                disabled={!jhName || !jhDob || !!jhAgeError}
+              >
+                Next
+                <ChevronRight className="size-4" />
+              </Button>
             </div>
           </div>
-
-          <div className="flex gap-2 pt-4">
-            <Button variant="outline" className="h-11 flex-1 text-sm sm:flex-none" onClick={() => cart.setStep('entry_type')}>
-              <ChevronLeft className="size-4" />
-              Back
-            </Button>
-            <Button
-              className="h-11 flex-1 text-sm sm:flex-none"
-              onClick={() => {
-                // Validate handler age (6-16 years on day of show)
-                if (jhDob && show?.startDate) {
-                  const ageMonths = differenceInMonths(new Date(show.startDate), new Date(jhDob));
-                  const ageYears = ageMonths / 12;
-                  if (ageYears < 6) {
-                    alert('The handler must be at least 6 years old on the day of the show.');
-                    return;
-                  }
-                  if (ageYears >= 17) {
-                    alert('The handler must be under 17 years old on the day of the show.');
-                    return;
-                  }
-                }
-                cart.setJHDetails(jhName, jhDob, jhKcNumber || undefined);
-                setJhName('');
-                setJhDob('');
-                setJhKcNumber('');
-              }}
-              disabled={!jhName || !jhDob}
-            >
-              Next
-              <ChevronRight className="size-4" />
-            </Button>
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Step: Select Classes */}
       {cart.step === 'select_classes' && (
@@ -788,6 +859,16 @@ export default function EnterShowPage() {
                 </>
               ) : (
                 <>
+                  {jhAutoSelected && availableClasses.length === 1 && (
+                    <div className="flex gap-3 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-950">
+                      <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-green-600" />
+                      <p className="text-sm text-green-800 dark:text-green-200">
+                        Based on the handler&apos;s age, they are eligible for{' '}
+                        <span className="font-medium">{availableClasses[0].classDefinition.name}</span>.
+                        This has been automatically selected.
+                      </p>
+                    </div>
+                  )}
                   {availableClasses.length > 0 ? (
                     <ClassGroup
                       title="Junior Handler Classes"
@@ -796,9 +877,12 @@ export default function EnterShowPage() {
                       onToggle={toggleClass}
                     />
                   ) : (
-                    <p className="text-sm text-muted-foreground">
-                      No junior handler classes available for this show.
-                    </p>
+                    <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
+                      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+                      <p className="text-sm text-amber-800 dark:text-amber-200">
+                        No handling classes match the handler&apos;s age. Go back and check the date of birth.
+                      </p>
+                    </div>
                   )}
                 </>
               )}
@@ -923,6 +1007,18 @@ export default function EnterShowPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
+                  {entry.entryType === 'junior_handler' && entry.handlerDob && show?.startDate && (
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="secondary">
+                        Age on show day: {Math.floor(differenceInMonths(new Date(show.startDate), new Date(entry.handlerDob)) / 12)} years
+                      </Badge>
+                      {entry.handlerKcNumber && (
+                        <Badge variant="outline">
+                          Membership: {entry.handlerKcNumber}
+                        </Badge>
+                      )}
+                    </div>
+                  )}
                   {entry.classNames.length > 0 ? (
                     <ul className="space-y-0.5 text-muted-foreground">
                       {entry.classNames.map((name, i) => (

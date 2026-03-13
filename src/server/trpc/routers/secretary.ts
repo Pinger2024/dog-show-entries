@@ -739,7 +739,7 @@ export const secretaryRouter = createTRPCRouter({
         showId: z.string().uuid(),
         breedIds: z.array(z.string().uuid()),
         classDefinitionIds: z.array(z.string().uuid()),
-        entryFee: z.number().int().positive(),
+        entryFee: z.number().int().nonnegative(),
         splitBySex: z.boolean().default(false),
       })
     )
@@ -755,7 +755,7 @@ export const secretaryRouter = createTRPCRouter({
 
       const values: Array<{
         showId: string;
-        breedId: string;
+        breedId: string | null;
         classDefinitionId: string;
         sex: 'dog' | 'bitch' | null;
         entryFee: number;
@@ -763,33 +763,48 @@ export const secretaryRouter = createTRPCRouter({
         isBreedSpecific: boolean;
       }> = [];
 
-      for (const breedId of input.breedIds) {
-        if (input.splitBySex) {
-          // All Dog classes first, then all Bitch classes (within each breed)
-          for (const sex of ['dog', 'bitch'] as const) {
+      if (input.breedIds.length === 0) {
+        // Handling classes — no breeds, no sex split
+        for (const classDefId of input.classDefinitionIds) {
+          values.push({
+            showId: input.showId,
+            breedId: null,
+            classDefinitionId: classDefId,
+            sex: null,
+            entryFee: input.entryFee,
+            sortOrder: sortOrder++,
+            isBreedSpecific: false,
+          });
+        }
+      } else {
+        for (const breedId of input.breedIds) {
+          if (input.splitBySex) {
+            // All Dog classes first, then all Bitch classes (within each breed)
+            for (const sex of ['dog', 'bitch'] as const) {
+              for (const classDefId of input.classDefinitionIds) {
+                values.push({
+                  showId: input.showId,
+                  breedId,
+                  classDefinitionId: classDefId,
+                  sex,
+                  entryFee: input.entryFee,
+                  sortOrder: sortOrder++,
+                  isBreedSpecific: true,
+                });
+              }
+            }
+          } else {
             for (const classDefId of input.classDefinitionIds) {
               values.push({
                 showId: input.showId,
                 breedId,
                 classDefinitionId: classDefId,
-                sex,
+                sex: null,
                 entryFee: input.entryFee,
                 sortOrder: sortOrder++,
                 isBreedSpecific: true,
               });
             }
-          }
-        } else {
-          for (const classDefId of input.classDefinitionIds) {
-            values.push({
-              showId: input.showId,
-              breedId,
-              classDefinitionId: classDefId,
-              sex: null,
-              entryFee: input.entryFee,
-              sortOrder: sortOrder++,
-              isBreedSpecific: true,
-            });
           }
         }
       }

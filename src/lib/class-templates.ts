@@ -17,6 +17,7 @@ export interface ClassTemplate {
   classNames: string[];
   defaultFeePence: number;
   splitBySex: boolean;
+  isHandling?: boolean;
 }
 
 export const CLASS_TEMPLATES: ClassTemplate[] = [
@@ -134,14 +135,28 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
     splitBySex: false,
   },
   {
-    id: 'junior_handling',
-    name: 'Junior Handling',
-    description: 'RKC Junior Handling classes by age group. Add alongside any other template.',
+    id: 'ykc_handling',
+    name: 'YKC Handling',
+    description: 'Young Kennel Club handling classes — official RKC route with Crufts qualifier pathway.',
     classNames: [
-      'Junior Handler (6-11)',
-      'Junior Handler (12-16)',
+      'YKC Handling (6-11)',
+      'YKC Handling (12-17)',
+      'YKC Handling (18-24)',
     ],
     defaultFeePence: 0,
     splitBySex: false,
+    isHandling: true,
+  },
+  {
+    id: 'jha_handling',
+    name: 'JHA Handling',
+    description: 'Junior Handling Association classes — independent organisation with its own finals pathway.',
+    classNames: [
+      'JHA Handling (6-11)',
+      'JHA Handling (12-16)',
+    ],
+    defaultFeePence: 0,
+    splitBySex: false,
+    isHandling: true,
   },
 ];
