@@ -598,24 +598,8 @@ export const stewardRouter = createTRPCRouter({
       const userRole = ctx.session?.user?.role;
       const isPrivileged = userRole && ['secretary', 'steward', 'admin'].includes(userRole);
 
-      // If results not published and caller is not privileged, return empty
-      if (!show.resultsPublishedAt && !isPrivileged) {
-        return {
-          show: {
-            id: show.id,
-            name: show.name,
-            startDate: show.startDate,
-            endDate: show.endDate,
-            status: show.status,
-            organisation: show.organisation,
-            venue: show.venue,
-            resultsPublishedAt: show.resultsPublishedAt,
-          },
-          breedGroups: [],
-          achievements: [],
-          unpublished: true as const,
-        };
-      }
+      // Per-result publication: public users only see results with publishedAt set.
+      // Privileged users (secretary/steward/admin) see all results.
 
       const classes = await ctx.db.query.showClasses.findMany({
         where: eq(showClasses.showId, showId),
@@ -695,7 +679,9 @@ export const stewardRouter = createTRPCRouter({
             (ec) =>
               ec.result !== null &&
               ec.entry.status === 'confirmed' &&
-              !ec.entry.deletedAt
+              !ec.entry.deletedAt &&
+              // Public users only see published results
+              (isPrivileged || ec.result!.publishedAt !== null)
           )
           .map((ec) => ({
             entryClassId: ec.id,
@@ -734,6 +720,30 @@ export const stewardRouter = createTRPCRouter({
         },
       });
 
+      const sortedGroups = Array.from(breedGroups.values()).sort((a, b) =>
+        a.breedName.localeCompare(b.breedName)
+      );
+
+      // For public users: if no results are visible, show unpublished message
+      const hasVisibleResults = sortedGroups.some((g) => g.classes.length > 0);
+      if (!isPrivileged && !hasVisibleResults) {
+        return {
+          show: {
+            id: show.id,
+            name: show.name,
+            startDate: show.startDate,
+            endDate: show.endDate,
+            status: show.status,
+            organisation: show.organisation,
+            venue: show.venue,
+            resultsPublishedAt: show.resultsPublishedAt,
+          },
+          breedGroups: [],
+          achievements: [],
+          unpublished: true as const,
+        };
+      }
+
       return {
         show: {
           id: show.id,
@@ -745,9 +755,7 @@ export const stewardRouter = createTRPCRouter({
           venue: show.venue,
           resultsPublishedAt: show.resultsPublishedAt,
         },
-        breedGroups: Array.from(breedGroups.values()).sort((a, b) =>
-          a.breedName.localeCompare(b.breedName)
-        ),
+        breedGroups: sortedGroups,
         achievements: showAchievements.map((a) => ({
           id: a.id,
           type: a.type,

@@ -3935,6 +3935,17 @@ export const secretaryRouter = createTRPCRouter({
         .set({ resultsPublishedAt: now, resultsLockedAt: now })
         .where(eq(shows.id, input.showId));
 
+      // Also publish all individual results
+      await ctx.db.execute(sql`
+        UPDATE results r
+        SET published_at = ${now}
+        FROM entry_classes ec
+        JOIN entries e ON ec.entry_id = e.id
+        WHERE r.entry_class_id = ec.id
+          AND e.show_id = ${input.showId}
+          AND r.published_at IS NULL
+      `);
+
       // Fire downstream notifications async (Phase 4)
       if (input.sendNotifications) {
         const { sendExhibitorResultsEmails, sendFollowerResultsNotifications, createResultsMilestonePosts } = await import('@/server/services/results-notifications');
@@ -3971,7 +3982,63 @@ export const secretaryRouter = createTRPCRouter({
         .set({ resultsPublishedAt: null, resultsLockedAt: null })
         .where(eq(shows.id, input.showId));
 
+      // Also unpublish all individual results
+      await ctx.db.execute(sql`
+        UPDATE results r
+        SET published_at = NULL
+        FROM entry_classes ec
+        JOIN entries e ON ec.entry_id = e.id
+        WHERE r.entry_class_id = ec.id
+          AND e.show_id = ${input.showId}
+      `);
+
       return { unpublished: true };
+    }),
+
+  // Per-class publish: make a single class's results visible to the public
+  publishClassResults: secretaryProcedure
+    .input(z.object({
+      showId: z.string().uuid(),
+      showClassId: z.string().uuid(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      const now = new Date();
+      await ctx.db.execute(sql`
+        UPDATE results r
+        SET published_at = ${now}
+        FROM entry_classes ec
+        JOIN entries e ON ec.entry_id = e.id
+        WHERE r.entry_class_id = ec.id
+          AND e.show_id = ${input.showId}
+          AND ec.show_class_id = ${input.showClassId}
+          AND r.published_at IS NULL
+      `);
+
+      return { published: true, classId: input.showClassId };
+    }),
+
+  // Per-class unpublish: hide a single class's results from the public
+  unpublishClassResults: secretaryProcedure
+    .input(z.object({
+      showId: z.string().uuid(),
+      showClassId: z.string().uuid(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      await ctx.db.execute(sql`
+        UPDATE results r
+        SET published_at = NULL
+        FROM entry_classes ec
+        JOIN entries e ON ec.entry_id = e.id
+        WHERE r.entry_class_id = ec.id
+          AND e.show_id = ${input.showId}
+          AND ec.show_class_id = ${input.showClassId}
+      `);
+
+      return { unpublished: true, classId: input.showClassId };
     }),
 
   getResultsPublicationStatus: secretaryProcedure

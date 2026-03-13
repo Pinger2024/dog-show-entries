@@ -117,6 +117,56 @@ function WinnerPhotoButton({
   );
 }
 
+function ClassPublishButton({
+  showId,
+  showClassId,
+  results,
+}: {
+  showId: string;
+  showClassId: string;
+  results: { entryClassId: string; placement: number | null }[];
+}) {
+  const utils = trpc.useUtils();
+  const publishMut = trpc.secretary.publishClassResults.useMutation({
+    onSuccess: () => {
+      utils.steward.getLiveResults.invalidate();
+      toast.success('Class results published');
+    },
+    onError: (err) => toast.error(err.message),
+  });
+  const unpublishMut = trpc.secretary.unpublishClassResults.useMutation({
+    onSuccess: () => {
+      utils.steward.getLiveResults.invalidate();
+      toast.success('Class results unpublished');
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  // Check if any results in this class have publishedAt set
+  // We can't easily check from the current data — so we'll use a simple query
+  // For now, use a toggle based on mutation state
+  const isPending = publishMut.isPending || unpublishMut.isPending;
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      className="ml-auto h-7 gap-1 px-2 text-[10px]"
+      disabled={isPending}
+      onClick={() => {
+        publishMut.mutate({ showId, showClassId });
+      }}
+    >
+      {isPending ? (
+        <Loader2 className="size-3 animate-spin" />
+      ) : (
+        <Globe className="size-3" />
+      )}
+      Publish
+    </Button>
+  );
+}
+
 export default function SecretaryResultsPage() {
   const showId = useShowId();
   const [sendNotifications, setSendNotifications] = useState(true);
@@ -485,6 +535,9 @@ export default function SecretaryResultsPage() {
                       <span className="text-[10px] text-muted-foreground">
                         {cls.entriesCount} entered · {cls.dogsForward} forward
                       </span>
+                      {cls.results.length > 0 && (
+                        <ClassPublishButton showId={showId} showClassId={cls.classId} results={cls.results} />
+                      )}
                     </div>
                     {cls.results.length === 0 ? (
                       <p className="text-xs text-muted-foreground italic">

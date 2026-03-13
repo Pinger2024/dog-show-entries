@@ -25,6 +25,7 @@ export const results = pgTable(
     winnerPhotoUrl: text('winner_photo_url'),
     winnerPhotoStorageKey: text('winner_photo_storage_key'),
     recordedBy: uuid('recorded_by').references(() => users.id, { onDelete: 'set null' }),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
     recordedAt: timestamp('recorded_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
