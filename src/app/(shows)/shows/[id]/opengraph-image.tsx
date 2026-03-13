@@ -7,7 +7,7 @@ import { isUuid } from '@/lib/slugify';
 export const runtime = 'nodejs';
 export const contentType = 'image/png';
 export const size = { width: 1200, height: 630 };
-export const revalidate = 3600;
+export const revalidate = 900;
 
 const SHOW_TYPE_LABELS: Record<string, string> = {
   companion: 'Companion Show',
@@ -133,7 +133,39 @@ export default async function OGImage({
   const judges = [...new Set(
     show.judgeAssignments?.map((ja) => ja.judge?.name).filter(Boolean) as string[]
   )];
-  const isOpen = show.status === 'entries_open';
+
+  // Lifecycle-aware status badge
+  const closeDateMs = show.entryCloseDate ? new Date(show.entryCloseDate).getTime() : null;
+  const hoursToClose = closeDateMs ? (closeDateMs - Date.now()) / 3600000 : Infinity;
+  const closeDate = show.entryCloseDate
+    ? new Date(show.entryCloseDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+    : null;
+
+  let badgeText = '';
+  let badgeBg = '';
+  let badgeColor = '#FAFAF8';
+
+  if (show.status === 'entries_open') {
+    if (hoursToClose <= 72) {
+      badgeText = `Closing ${closeDate}`;
+      badgeBg = '#DC2626'; // red
+    } else {
+      badgeText = 'Entries Open';
+      badgeBg = '#059669'; // green
+    }
+  } else if (show.status === 'entries_closed') {
+    badgeText = 'Entries Closed';
+    badgeBg = '#57534E'; // grey
+  } else if (show.status === 'in_progress') {
+    badgeText = 'Live Today';
+    badgeBg = '#059669'; // emerald
+  } else if (show.status === 'completed') {
+    badgeText = 'Results Published';
+    badgeBg = '#059669';
+  } else if (show.status === 'published') {
+    badgeText = 'Coming Soon';
+    badgeBg = '#2563EB'; // blue
+  }
 
   return new ImageResponse(
     (
@@ -390,22 +422,22 @@ export default async function OGImage({
                 {entryCount} {entryCount === 1 ? 'entry' : 'entries'}
               </div>
             )}
-            {isOpen && (
+            {badgeText && (
               <div
                 style={{
                   display: 'flex',
                   fontFamily: 'Inter',
                   fontWeight: 600,
                   fontSize: 12,
-                  color: '#FAFAF8',
-                  backgroundColor: '#059669',
+                  color: badgeColor,
+                  backgroundColor: badgeBg,
                   padding: '5px 12px',
                   borderRadius: 20,
                   textTransform: 'uppercase',
                   letterSpacing: '0.06em',
                 }}
               >
-                Entries Open
+                {badgeText}
               </div>
             )}
           </div>

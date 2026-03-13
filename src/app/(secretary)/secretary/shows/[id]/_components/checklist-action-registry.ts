@@ -29,6 +29,7 @@ import { QuickLinkAction } from './checklist-actions/quick-link-action';
 import { PrintOrderAction } from './checklist-actions/print-order-action';
 import { ResultsApprovalAction } from './checklist-actions/results-approval-action';
 import { ResultsPublishAction } from './checklist-actions/results-publish-action';
+import { ShareShowAction } from './checklist-actions/share-show-action';
 
 export const ACTION_REGISTRY: Record<string, ActionRegistryEntry> = {
   // Judge pipeline — the centrepiece
@@ -58,4 +59,9 @@ export const ACTION_REGISTRY: Record<string, ActionRegistryEntry> = {
   // Results publication pipeline
   results_approve: { component: ResultsApprovalAction, mode: 'replace' },
   results_publish: { component: ResultsPublishAction, mode: 'replace' },
+
+  // Share / social prompts
+  share_show: { component: ShareShowAction, mode: 'augment' },
+  share_closing: { component: ShareShowAction, mode: 'augment' },
+  share_results: { component: ShareShowAction, mode: 'augment' },
 };

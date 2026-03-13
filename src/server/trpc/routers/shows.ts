@@ -16,6 +16,8 @@ import {
   memberships,
   entries,
   showSponsors,
+  dogs,
+  breeds,
 } from '@/server/db/schema';
 import { verifyShowAccess } from '../verify-show-access';
 import { isUuid, generateShowSlug } from '@/lib/slugify';
@@ -724,5 +726,34 @@ export const showsRouter = createTRPCRouter({
         },
         orderBy: [asc(showSponsors.displayOrder)],
       });
+    }),
+
+  getBreedEntryStats: publicProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const results = await ctx.db
+        .select({
+          breedId: breeds.id,
+          breedName: breeds.name,
+          dogCount: sql<number>`count(distinct ${entries.dogId})`,
+        })
+        .from(entries)
+        .innerJoin(dogs, eq(entries.dogId, dogs.id))
+        .innerJoin(breeds, eq(dogs.breedId, breeds.id))
+        .where(
+          and(
+            eq(entries.showId, input.showId),
+            eq(entries.status, 'confirmed'),
+            isNull(entries.deletedAt)
+          )
+        )
+        .groupBy(breeds.id, breeds.name)
+        .orderBy(desc(sql`count(distinct ${entries.dogId})`));
+
+      return results.map((r) => ({
+        breedId: r.breedId,
+        breedName: r.breedName,
+        dogCount: Number(r.dogCount),
+      }));
     }),
 });

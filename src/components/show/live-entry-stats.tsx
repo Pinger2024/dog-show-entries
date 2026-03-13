@@ -59,7 +59,13 @@ function CountdownUnit({
   );
 }
 
-export function LiveEntryStats({ showId }: { showId: string }) {
+export function LiveEntryStats({
+  showId,
+  breedStats,
+}: {
+  showId: string;
+  breedStats?: { breedName: string; dogCount: number }[];
+}) {
   const { data: stats } = trpc.shows.getPublicStats.useQuery(
     { showId },
     { refetchInterval: 60_000 }
@@ -155,6 +161,18 @@ export function LiveEntryStats({ showId }: { showId: string }) {
           </div>
         )}
       </div>
+      {/* Top breeds — compelling for breed-specific sharing */}
+      {breedStats && breedStats.length >= 3 && stats.totalDogs > 0 && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          <span className="font-medium">Most entered:</span>{' '}
+          {breedStats.slice(0, 3).map((b, i) => (
+            <span key={b.breedName}>
+              {i > 0 && ' \u00b7 '}
+              {b.breedName} ({b.dogCount})
+            </span>
+          ))}
+        </p>
+      )}
     </div>
   );
 }

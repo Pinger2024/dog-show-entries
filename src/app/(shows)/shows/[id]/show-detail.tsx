@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import {
   CalendarDays,
+  CalendarPlus,
   MapPin,
   ChevronLeft,
   Clock,
@@ -18,8 +19,14 @@ import {
   FileText,
   User,
   Award,
+  UtensilsCrossed,
+  Stethoscope,
+  Navigation,
+  PoundSterling,
+  Share2,
+  Check,
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -28,6 +35,8 @@ import { formatCurrency } from '@/lib/date-utils';
 import { LiveEntryStats } from '@/components/show/live-entry-stats';
 import { ShowShareDropdown } from '@/components/show/show-share-dropdown';
 import { sanitizeFilename } from '@/lib/slugify';
+import { toast } from 'sonner';
+import type { ScheduleData } from '@/server/db/schema/shows';
 
 /* ─── Show type badge colours ─────────────────── */
 
@@ -146,6 +155,8 @@ function BreedSection({
   ringName,
   classSponsorMap,
   defaultOpen,
+  entryCount,
+  showHasEntries,
 }: {
   breedName: string;
   classes: Array<ClassItem & { sex: 'dog' | 'bitch' | null; entryFee: number }>;
@@ -153,21 +164,32 @@ function BreedSection({
   ringName?: string | null;
   classSponsorMap: Map<string, { sponsorName: string; trophyName: string | null }>;
   defaultOpen: boolean;
+  entryCount?: number;
+  showHasEntries?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  const sectionId = `breed-${breedName.replace(/\s+/g, '-').toLowerCase()}`;
 
   const dogClasses = classes.filter((c) => c.sex === 'dog');
   const bitchClasses = classes.filter((c) => c.sex === 'bitch');
   const mixedClasses = classes.filter((c) => c.sex === null);
 
-  const sectionId = `breed-${breedName.replace(/\s+/g, '-').toLowerCase()}`;
+  const copyBreedLink = useCallback(() => {
+    const url = `${window.location.origin}${window.location.pathname}#${sectionId}`;
+    navigator.clipboard.writeText(url);
+    setLinkCopied(true);
+    toast.success(`Link to ${breedName} section copied!`);
+    setTimeout(() => setLinkCopied(false), 2000);
+  }, [sectionId, breedName]);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
+    <div id={sectionId} className="overflow-hidden rounded-xl border border-border/60 bg-card">
       <button
         onClick={() => setOpen(!open)}
         aria-expanded={open}
-        aria-controls={sectionId}
+        aria-controls={`${sectionId}-content`}
         className="flex w-full items-center gap-3 px-4 py-4 text-left transition-colors hover:bg-muted/30 active:bg-muted/50"
       >
         <Dog className="size-5 shrink-0 text-primary/40" />
@@ -175,6 +197,9 @@ function BreedSection({
           <span className="font-serif text-base font-bold">{breedName}</span>
           <span className="ml-2 text-xs text-muted-foreground">
             {classes.length} class{classes.length !== 1 ? 'es' : ''}
+            {entryCount != null && entryCount > 0 && showHasEntries && (
+              <> · <span className="font-medium text-primary">{entryCount} entered</span></>
+            )}
           </span>
         </div>
         {judgeName && (
@@ -191,8 +216,8 @@ function BreedSection({
       </button>
 
       {open && (
-        <div id={sectionId} className="border-t px-4 pb-4 pt-3">
-          {/* Judge + ring on mobile */}
+        <div id={`${sectionId}-content`} className="border-t px-4 pb-4 pt-3">
+          {/* Judge + ring on mobile + share link */}
           {(judgeName || ringName) && (
             <div className="mb-3 flex flex-wrap gap-3 text-xs text-muted-foreground sm:hidden">
               {judgeName && (
@@ -222,6 +247,15 @@ function BreedSection({
               <ClassColumn title="Open to Both" classes={mixedClasses} classSponsorMap={classSponsorMap} />
             </div>
           )}
+
+          {/* Per-breed share link */}
+          <button
+            onClick={(e) => { e.stopPropagation(); copyBreedLink(); }}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-border/60 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/50"
+          >
+            {linkCopied ? <Check className="size-3 text-emerald-600" /> : <Share2 className="size-3" />}
+            {linkCopied ? 'Copied!' : 'Share this breed'}
+          </button>
         </div>
       )}
     </div>
@@ -260,6 +294,32 @@ function SponsorLogo({
   return img;
 }
 
+/* ─── Collapsible directions ─────────────────── */
+
+function DirectionsBlock({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="mt-3 border-t pt-3">
+      <div className="flex items-start gap-2">
+        <Navigation className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/60" />
+        <div className="min-w-0 flex-1">
+          <p className={`text-sm leading-relaxed text-muted-foreground ${!expanded ? 'line-clamp-3 sm:line-clamp-none' : ''}`}>
+            {text}
+          </p>
+          {text.length > 120 && (
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="mt-1 text-xs font-medium text-primary hover:underline sm:hidden"
+            >
+              {expanded ? 'Show less' : 'Show directions'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Main page ───────────────────────────────── */
 
 export function ShowDetailClient() {
@@ -277,9 +337,17 @@ export function ShowDetailClient() {
     { showId: show?.id ?? '' },
     { enabled: !!show?.id }
   );
+  const { data: breedEntryStats } = trpc.shows.getBreedEntryStats.useQuery(
+    { showId: show?.id ?? '' },
+    { enabled: !!show?.id, refetchInterval: 60_000 }
+  );
 
   // URL segment for links — prefer slug over UUID
   const showSlug = (show as typeof show & { slug?: string | null })?.slug ?? idOrSlug;
+
+  // Track which breed section to auto-expand from URL hash
+  const [hashBreed, setHashBreed] = useState<string | null>(null);
+  const scrolledToHash = useRef(false);
 
   // Show sticky CTA bar after scrolling past the hero
   useEffect(() => {
@@ -290,6 +358,24 @@ export function ShowDetailClient() {
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  // Auto-expand and scroll to breed section from URL hash (Phase 6b)
+  useEffect(() => {
+    const hash = window.location.hash.replace('#', '');
+    if (hash.startsWith('breed-')) {
+      setHashBreed(hash);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (hashBreed && !scrolledToHash.current && show) {
+      scrolledToHash.current = true;
+      requestAnimationFrame(() => {
+        const el = document.getElementById(hashBreed);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+  }, [hashBreed, show]);
 
   if (isLoading) {
     return (
@@ -334,13 +420,28 @@ export function ShowDetailClient() {
   const isOpen = show.status === 'entries_open' && !closeDatePast;
   const hasResults = show.status === 'in_progress' || show.status === 'completed';
   const meta = showTypeMeta[show.showType];
-  const showAny = show as typeof show & { startTime?: string | null; endTime?: string | null };
+  const showAny = show as typeof show & {
+    startTime?: string | null;
+    endTime?: string | null;
+    showOpenTime?: string | null;
+    onCallVet?: string | null;
+    acceptsPostalEntries?: boolean;
+  };
   const venue = show.venue as typeof show.venue & {
     address?: string | null;
     postcode?: string | null;
     lat?: string | null;
     lng?: string | null;
+    indoorOutdoor?: string | null;
   };
+  const scheduleData = (show as typeof show & { scheduleData?: ScheduleData | null }).scheduleData;
+
+  // Build breed → entry count lookup
+  const breedEntryMap = new Map<string, number>();
+  for (const stat of breedEntryStats ?? []) {
+    breedEntryMap.set(stat.breedName, stat.dogCount);
+  }
+  const showHasEntries = ['entries_open', 'entries_closed', 'in_progress', 'completed'].includes(show.status);
 
   /* Group classes by breed */
   const breedMap = new Map<string, { groupSortOrder: number; classes: typeof show.showClasses }>();
@@ -560,6 +661,18 @@ export function ShowDetailClient() {
                     {generatingSchedule ? 'Generating...' : 'Schedule'}
                   </Button>
                 )}
+                {show.status !== 'draft' && show.status !== 'cancelled' && (
+                  <Button
+                    variant="outline"
+                    className="h-9"
+                    onClick={() => {
+                      window.location.href = `/api/shows/${show.id}/calendar`;
+                    }}
+                  >
+                    <CalendarPlus className="size-4" />
+                    <span className="hidden sm:inline">Calendar</span>
+                  </Button>
+                )}
                 <ShowShareDropdown
                   showName={show.name}
                   showType={showTypeLabels[show.showType] ?? show.showType}
@@ -596,7 +709,7 @@ export function ShowDetailClient() {
         {/* Live entry stats + countdown */}
         {show.status !== 'draft' && show.status !== 'published' && (
           <div className="mb-4 sm:mb-8">
-            <LiveEntryStats showId={show.id} />
+            <LiveEntryStats showId={show.id} breedStats={breedEntryStats} />
           </div>
         )}
 
@@ -676,10 +789,105 @@ export function ShowDetailClient() {
                   Get directions
                   <ExternalLink className="size-3" />
                 </a>
+                {scheduleData?.directions && <DirectionsBlock text={scheduleData.directions} />}
               </div>
             </div>
           )}
         </div>
+
+        {/* ─── At the Show ───────────────────────── */}
+        {(showAny.showOpenTime || scheduleData?.latestArrivalTime || scheduleData?.wetWeatherAccommodation ||
+          scheduleData?.isBenched || scheduleData?.acceptsNfc || showAny.acceptsPostalEntries ||
+          scheduleData?.catering || showAny.onCallVet || venue?.indoorOutdoor) && (
+          <div className="mt-10 rounded-xl border border-border/60 bg-card p-5 sm:p-6">
+            <h2 className="gold-rule font-serif text-sm font-semibold text-foreground">
+              At the Show
+            </h2>
+            <div className="mt-5 space-y-3 text-sm">
+              {showAny.showOpenTime && (
+                <div className="flex items-center gap-2">
+                  <Clock className="size-4 shrink-0 text-muted-foreground/60" />
+                  <span className="text-muted-foreground">Show opens:</span>
+                  <span className="font-semibold">{showAny.showOpenTime}</span>
+                </div>
+              )}
+              {scheduleData?.latestArrivalTime && (
+                <div className="flex items-center gap-2">
+                  <Clock className="size-4 shrink-0 text-muted-foreground/60" />
+                  <span className="text-muted-foreground">Latest arrival:</span>
+                  <span className="font-semibold">{scheduleData.latestArrivalTime}</span>
+                </div>
+              )}
+
+              {/* Facility badges */}
+              <div className="flex flex-wrap gap-2">
+                {scheduleData?.wetWeatherAccommodation && (
+                  <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
+                    Wet weather cover
+                  </span>
+                )}
+                {scheduleData?.isBenched && (
+                  <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-medium text-sky-700">
+                    Benched{scheduleData.benchingRemovalTime ? ` (removal ${scheduleData.benchingRemovalTime})` : ''}
+                  </span>
+                )}
+                {venue?.indoorOutdoor && (
+                  <span className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2.5 py-0.5 text-xs font-medium text-violet-700">
+                    {venue.indoorOutdoor === 'both' ? 'Indoor & Outdoor' : venue.indoorOutdoor.charAt(0).toUpperCase() + venue.indoorOutdoor.slice(1)}
+                  </span>
+                )}
+                {scheduleData?.acceptsNfc && (
+                  <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700">
+                    NFC entries accepted
+                  </span>
+                )}
+                {showAny.acceptsPostalEntries && (
+                  <span className="inline-flex items-center rounded-full border border-stone-200 bg-stone-50 px-2.5 py-0.5 text-xs font-medium text-stone-700">
+                    Postal entries accepted
+                  </span>
+                )}
+              </div>
+
+              {scheduleData?.catering && (
+                <div className="flex items-start gap-2">
+                  <UtensilsCrossed className="mt-0.5 size-4 shrink-0 text-muted-foreground/60" />
+                  <div>
+                    <span className="text-muted-foreground">Catering:</span>{' '}
+                    <span className="text-foreground/90">{scheduleData.catering}</span>
+                  </div>
+                </div>
+              )}
+              {showAny.onCallVet && (
+                <div className="flex items-center gap-2">
+                  <Stethoscope className="size-4 shrink-0 text-muted-foreground/60" />
+                  <span className="text-muted-foreground">On-call vet:</span>
+                  <span className="font-semibold">{showAny.onCallVet}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ─── Awards & Prizes ──────────────────────── */}
+        {(scheduleData?.awardsDescription || scheduleData?.prizeMoney) && (
+          <div className="mt-10 rounded-xl border border-border/60 bg-card p-5 sm:p-6">
+            <h2 className="gold-rule font-serif text-sm font-semibold text-foreground">
+              <Trophy className="mr-1.5 inline size-4 text-gold/70" />
+              Awards & Prizes
+            </h2>
+            <div className="mt-5 space-y-3 text-sm">
+              {scheduleData?.awardsDescription && (
+                <p className="leading-relaxed text-muted-foreground">{scheduleData.awardsDescription}</p>
+              )}
+              {scheduleData?.prizeMoney && (
+                <div className="flex items-center gap-2">
+                  <PoundSterling className="size-4 shrink-0 text-gold/70" />
+                  <span className="font-semibold text-foreground/90">{scheduleData.prizeMoney}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* ─── Our Partners ───────────────────────── */}
         {showSponsors && showSponsors.length > 0 && (
@@ -781,6 +989,7 @@ export function ShowDetailClient() {
             <div className="mt-5 space-y-3">
               {breeds.map(([breedName, { classes }], i) => {
                 const judgeInfo = breedJudgeMap.get(breedName) ?? allBreedsJudge;
+                const breedSectionId = `breed-${breedName.replace(/\s+/g, '-').toLowerCase()}`;
                 return (
                   <BreedSection
                     key={breedName}
@@ -793,7 +1002,9 @@ export function ShowDetailClient() {
                     judgeName={judgeInfo?.judgeName}
                     ringName={judgeInfo?.ringName}
                     classSponsorMap={classSponsorMap}
-                    defaultOpen={breeds.length <= 2 || i === 0}
+                    defaultOpen={breeds.length <= 2 || i === 0 || hashBreed === breedSectionId}
+                    entryCount={breedEntryMap.get(breedName)}
+                    showHasEntries={showHasEntries}
                   />
                 );
               })}
@@ -816,6 +1027,28 @@ export function ShowDetailClient() {
                 </Button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ─── Additional Notes ──────────────────── */}
+        {scheduleData?.additionalNotes && (
+          <div className="mt-10 border-l-2 border-gold/30 pl-4">
+            <p className="max-w-2xl leading-relaxed text-muted-foreground">
+              {scheduleData.additionalNotes}
+            </p>
+          </div>
+        )}
+
+        {/* ─── Future Shows ─────────────────────── */}
+        {scheduleData?.futureShowDates && (
+          <div className="mt-10 rounded-xl border border-muted bg-muted/30 p-5 sm:p-6">
+            <h2 className="flex items-center gap-1.5 font-serif text-sm font-semibold text-foreground/80">
+              <CalendarDays className="size-4 text-muted-foreground/60" />
+              Upcoming from {show.organisation?.name ?? 'this club'}
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+              {scheduleData.futureShowDates}
+            </p>
           </div>
         )}
 
