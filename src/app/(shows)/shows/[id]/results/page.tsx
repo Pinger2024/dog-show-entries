@@ -333,9 +333,11 @@ export default function LiveResultsPage({
                               </div>
                             )}
                             {result.critiqueText && (
-                              <p className="ml-[4.75rem] mt-0.5 text-xs italic text-muted-foreground">
-                                {result.critiqueText}
-                              </p>
+                              <div className="ml-[4.75rem] mt-1.5 rounded-lg border-l-2 border-gold/30 bg-muted/50 px-3 py-2">
+                                <p className="text-sm italic leading-relaxed text-muted-foreground">
+                                  &ldquo;{result.critiqueText}&rdquo;
+                                </p>
+                              </div>
                             )}
                           </div>
                         ))}

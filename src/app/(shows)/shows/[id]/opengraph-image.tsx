@@ -98,6 +98,16 @@ export default async function OGImage({
   ]);
   const entryCount = Number(countResult?.[0]?.count ?? 0);
 
+  // Banner image as background
+  let bannerData: ArrayBuffer | null = null;
+  const showAny = show as typeof show & { bannerImageUrl?: string | null };
+  if (showAny.bannerImageUrl) {
+    try {
+      const res = await fetch(showAny.bannerImageUrl, { signal: AbortSignal.timeout(3000) });
+      if (res.ok) bannerData = await res.arrayBuffer();
+    } catch { /* no banner fallback */ }
+  }
+
   let sponsorLogoData: ArrayBuffer | null = null;
   if (titleSponsor?.sponsor.logoUrl) {
     try {
@@ -179,7 +189,23 @@ export default async function OGImage({
           overflow: 'hidden',
         }}
       >
-        {/* Subtle gradient overlay */}
+        {/* Banner image background */}
+        {bannerData && (
+          <img
+            src={`data:image/jpeg;base64,${Buffer.from(bannerData).toString('base64')}`}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              opacity: 0.2,
+            }}
+          />
+        )}
+
+        {/* Gradient overlay */}
         <div
           style={{
             display: 'flex',
@@ -188,8 +214,9 @@ export default async function OGImage({
             left: 0,
             right: 0,
             bottom: 0,
-            background:
-              'radial-gradient(ellipse at 60% 40%, rgba(180,130,80,0.08) 0%, transparent 70%)',
+            background: bannerData
+              ? 'linear-gradient(to top, rgba(28,25,23,1) 0%, rgba(28,25,23,0.85) 40%, rgba(28,25,23,0.7) 100%)'
+              : 'radial-gradient(ellipse at 60% 40%, rgba(180,130,80,0.08) 0%, transparent 70%)',
           }}
         />
 

@@ -442,6 +442,7 @@ export function ShowDetailClient() {
     : false;
   const isOpen = show.status === 'entries_open' && !closeDatePast;
   const hasResults = show.status === 'in_progress' || show.status === 'completed';
+  const isCompleted = show.status === 'completed';
   const meta = showTypeMeta[show.showType];
   const showAny = show as typeof show & {
     startTime?: string | null;
@@ -605,6 +606,12 @@ export function ShowDetailClient() {
                 >
                   {showTypeLabels[show.showType] ?? show.showType}
                 </Badge>
+                {isCompleted && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-stone-700 px-2.5 py-0.5 text-[11px] font-semibold text-stone-300">
+                    <Trophy className="size-3" />
+                    Show Complete — Results Available
+                  </span>
+                )}
                 {isOpen && (
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-2.5 py-0.5 text-[11px] font-semibold text-white">
                     <span className="relative flex size-1.5">
@@ -731,8 +738,16 @@ export function ShowDetailClient() {
                   </Link>
                 </Button>
               )}
+              {isCompleted && (
+                <Button size="lg" className="h-12 w-full text-base sm:w-auto" asChild>
+                  <Link href={`/shows/${showSlug}/results`}>
+                    <Trophy className="size-5" />
+                    View Results &amp; Critiques
+                  </Link>
+                </Button>
+              )}
               <div className="flex gap-2 [&>*]:flex-1 sm:[&>*]:flex-initial">
-                {hasResults && (
+                {hasResults && !isCompleted && (
                   <Button
                     variant={isOpen ? 'outline' : 'default'}
                     className={isOpen ? 'border-stone-600 bg-transparent text-stone-300 shadow-none hover:bg-stone-700/50 hover:text-white' : ''}
