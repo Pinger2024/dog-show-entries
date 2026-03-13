@@ -819,32 +819,30 @@ export function ShowDetailClient() {
         </div>
       </div>
 
-      {/* ─── Dog photo strip ────────────────────── */}
-      {dogPhotos && dogPhotos.length >= 4 && (
+      {/* ─── Breed photo strip ────────────────────── */}
+      {breedPhotoMap.size >= 3 && (
         <div className="overflow-hidden border-b bg-stone-900/[0.03]">
           <div className="mx-auto max-w-6xl px-3 py-6 sm:px-4 sm:py-8">
             <p className="mb-4 text-center text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground/60">
-              Dogs entering this show
+              Breeds at this show
             </p>
             <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none sm:justify-center sm:flex-wrap sm:gap-4 sm:overflow-visible sm:pb-0">
-              {dogPhotos.map((photo, i) => (
-                <Link
-                  key={i}
-                  href={`/dog/${photo.dogId}`}
+              {Array.from(breedPhotoMap.entries()).map(([breedName, photoUrl]) => (
+                <div
+                  key={breedName}
                   className="group relative shrink-0 overflow-hidden rounded-xl"
                   style={{ width: 140, height: 140 }}
                 >
                   <img
-                    src={photo.photoUrl}
-                    alt={photo.dogName}
+                    src={photoUrl}
+                    alt={breedName}
                     loading="lazy"
-                    className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    className="size-full object-cover"
                   />
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2 pb-2 pt-6">
-                    <p className="truncate text-xs font-medium text-white">{photo.dogName}</p>
-                    <p className="truncate text-[10px] text-white/60">{photo.breedName}</p>
+                    <p className="truncate text-xs font-medium text-white">{breedName}</p>
                   </div>
-                </Link>
+                </div>
               ))}
             </div>
           </div>
