@@ -8,8 +8,10 @@ import {
   LogOut,
   LayoutDashboard,
   ClipboardList,
+  ChevronLeft,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { isUuid } from '@/lib/slugify';
 import { Button } from '@/components/ui/button';
 
 interface StewardShellProps {
@@ -26,8 +28,25 @@ const navItems = [
   { href: '/steward', label: 'My Shows', icon: Eye },
 ];
 
+function getParentPath(pathname: string): string | null {
+  if (pathname === '/steward') return null;
+  const segments = pathname.split('/').filter(Boolean);
+  if (segments.length <= 1) return null;
+  return '/' + segments.slice(0, -1).join('/');
+}
+
+function getMobileTitle(pathname: string): string | null {
+  const segments = pathname.split('/').filter(Boolean);
+  if (segments.length <= 1) return null;
+  const last = segments[segments.length - 1];
+  if (isUuid(last)) return null;
+  return last.charAt(0).toUpperCase() + last.slice(1).replace(/-/g, ' ');
+}
+
 export function StewardShell({ user, children }: StewardShellProps) {
   const pathname = usePathname();
+  const parentPath = getParentPath(pathname);
+  const mobileTitle = getMobileTitle(pathname);
   const canAccessSecretary =
     user.role === 'secretary' || user.role === 'admin';
 
@@ -35,16 +54,34 @@ export function StewardShell({ user, children }: StewardShellProps) {
     <div className="flex min-h-screen flex-col overflow-x-hidden">
       {/* Top header */}
       <header className="flex h-14 items-center justify-between border-b px-3 sm:px-4">
-        <div className="flex items-center gap-2">
-          <Link
-            href="/"
-            className="font-serif text-xl font-bold tracking-tight text-primary"
-          >
-            Remi
-          </Link>
-          <span className="rounded-md bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">
-            Steward
-          </span>
+        <div className="flex items-center gap-2 min-w-0">
+          {parentPath ? (
+            <>
+              <Link
+                href={parentPath}
+                className="flex size-10 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <ChevronLeft className="size-5" />
+              </Link>
+              {mobileTitle && (
+                <span className="truncate text-[0.9375rem] font-medium">
+                  {mobileTitle}
+                </span>
+              )}
+            </>
+          ) : (
+            <>
+              <Link
+                href="/"
+                className="font-serif text-xl font-bold tracking-tight text-primary"
+              >
+                Remi
+              </Link>
+              <span className="rounded-md bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">
+                Steward
+              </span>
+            </>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {canAccessSecretary && (

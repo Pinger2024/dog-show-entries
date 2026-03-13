@@ -38,8 +38,8 @@ const sidebarNavItems = [
 
 const mobileNavItems = [
   { href: '/secretary', label: 'Home', icon: LayoutDashboard },
-  { href: '/secretary/shows', label: 'Shows', icon: CalendarDays },
   { href: '/secretary/shows/new', label: 'New', icon: PlusCircle },
+  { href: '/secretary/billing', label: 'Billing', icon: CreditCard },
   { href: '/secretary/settings', label: 'Settings', icon: Settings },
 ];
 

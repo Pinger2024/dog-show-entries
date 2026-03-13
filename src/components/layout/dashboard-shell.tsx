@@ -17,10 +17,12 @@ import {
   Settings,
   LogOut,
   ChevronRight,
+  ChevronLeft,
   Activity,
   ListTodo,
   Rss,
 } from 'lucide-react';
+import { isUuid } from '@/lib/slugify';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -77,6 +79,30 @@ function getInitials(name?: string | null, email?: string | null) {
   return '?';
 }
 
+// Paths that are "top-level" — no back button shown
+const rootPaths = new Set([
+  '/dashboard', '/dogs', '/entries', '/browse', '/feed', '/settings', '/apply',
+  '/admin', '/admin/users', '/admin/applications', '/admin/invitations', '/admin/reference-data',
+  '/feedback', '/backlog',
+]);
+
+function getParentPath(pathname: string): string | null {
+  if (rootPaths.has(pathname)) return null;
+  const segments = pathname.split('/').filter(Boolean);
+  if (segments.length <= 1) return null;
+  return '/' + segments.slice(0, -1).join('/');
+}
+
+function getMobileTitle(pathname: string): string | null {
+  const segments = pathname.split('/').filter(Boolean);
+  if (segments.length <= 1) return null;
+  const last = segments[segments.length - 1];
+  if (isUuid(last)) return null;
+  if (last === 'new') return 'Add New';
+  if (last === 'edit') return 'Edit';
+  return last.charAt(0).toUpperCase() + last.slice(1).replace(/-/g, ' ');
+}
+
 function getBreadcrumbs(pathname: string) {
   const segments = pathname.split('/').filter(Boolean);
   return segments.map((segment, i) => ({
@@ -89,6 +115,8 @@ function getBreadcrumbs(pathname: string) {
 export function DashboardShell({ user, children }: DashboardShellProps) {
   const pathname = usePathname();
   const breadcrumbs = getBreadcrumbs(pathname);
+  const parentPath = getParentPath(pathname);
+  const mobileTitle = getMobileTitle(pathname);
 
   return (
     <div className="flex min-h-screen overflow-x-hidden">
@@ -238,9 +266,27 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
 
         {/* Mobile header */}
         <header className="flex h-16 items-center justify-between border-b px-3 sm:px-4 md:hidden">
-          <Link href="/" className="font-serif text-xl font-bold tracking-tight text-primary">
-            Remi
-          </Link>
+          <div className="flex items-center gap-2 min-w-0">
+            {parentPath ? (
+              <>
+                <Link
+                  href={parentPath}
+                  className="flex size-10 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground"
+                >
+                  <ChevronLeft className="size-5" />
+                </Link>
+                {mobileTitle && (
+                  <span className="truncate text-[0.9375rem] font-medium">
+                    {mobileTitle}
+                  </span>
+                )}
+              </>
+            ) : (
+              <Link href="/" className="font-serif text-xl font-bold tracking-tight text-primary">
+                Remi
+              </Link>
+            )}
+          </div>
           <div className="flex items-center gap-1.5">
             {(user.role === 'secretary' || user.role === 'admin') && (
               <RoleSwitcherCompact activeView="exhibitor" />
