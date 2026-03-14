@@ -2,7 +2,14 @@
 
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
-import { format, parseISO, differenceInDays } from 'date-fns';
+import { format, differenceInDays } from 'date-fns';
+
+/** Safely convert string or Date to Date — handles superjson Date serialization */
+function toDate(value: string | Date | null | undefined): Date {
+  if (!value) return new Date();
+  if (value instanceof Date) return value;
+  return new Date(value);
+}
 import {
   CalendarDays,
   MapPin,
@@ -211,7 +218,7 @@ function EmptyDashboard() {
 
 function NextShowCard({ show }: { show: NonNullable<ReturnType<typeof trpc.dashboard.getSummary.useQuery>['data']>['nextShow'] }) {
   if (!show) return null;
-  const days = differenceInDays(parseISO(show.showDate), new Date());
+  const days = differenceInDays(toDate(show.showDate), new Date());
   const daysLabel = days === 0 ? 'Today!' : days === 1 ? 'Tomorrow' : `${days} days to go`;
 
   return (
@@ -225,7 +232,7 @@ function NextShowCard({ show }: { show: NonNullable<ReturnType<typeof trpc.dashb
               <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-amber-800/70">
                 <span className="flex items-center gap-1">
                   <CalendarDays className="size-3.5" />
-                  {format(parseISO(show.showDate), 'EEE d MMM yyyy')}
+                  {format(toDate(show.showDate), 'EEE d MMM yyyy')}
                 </span>
                 {show.venueName && (
                   <span className="flex items-center gap-1">
@@ -300,7 +307,7 @@ function ResultCard({ result }: { result: { dogId: string | null; dogName: strin
               )}
             </div>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {result.showName} &middot; {format(parseISO(result.showDate), 'd MMM')}
+              {result.showName} &middot; {format(toDate(result.showDate), 'd MMM')}
             </p>
             <div className="mt-1.5 flex flex-wrap gap-1">
               {result.placements.map((p, i) => (
@@ -411,7 +418,7 @@ function JudgeIntelCard({ item }: { item: { showId: string; showName: string; sh
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{item.judgeName}</p>
           <p className="truncate text-xs text-muted-foreground">
-            {item.breedName} at {item.showName} &middot; {format(parseISO(item.showDate), 'd MMM')}
+            {item.breedName} at {item.showName} &middot; {format(toDate(item.showDate), 'd MMM')}
           </p>
         </div>
         {item.alreadyEntered ? (
@@ -441,7 +448,7 @@ function RecommendedShowCard({ show }: { show: { showId: string; showName: strin
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{show.showName}</p>
           <p className="truncate text-xs text-muted-foreground">
-            {format(parseISO(show.startDate), 'd MMM yyyy')}
+            {format(toDate(show.startDate), 'd MMM yyyy')}
             {show.venueName && ` · ${show.venueName}`}
           </p>
           <div className="mt-0.5 flex flex-wrap gap-1">
