@@ -67,14 +67,14 @@ export function InstallPrompt() {
             Quick access to shows and entries, even with spotty signal ringside.
           </p>
           <div className="flex gap-2">
-            <Button size="sm" onClick={handleInstall} className="h-8 text-xs">
+            <Button size="sm" onClick={handleInstall} className="min-h-[2.75rem] text-xs">
               Install
             </Button>
             <Button
               size="sm"
               variant="ghost"
               onClick={handleDismiss}
-              className="h-8 text-xs"
+              className="min-h-[2.75rem] text-xs"
             >
               Not now
             </Button>

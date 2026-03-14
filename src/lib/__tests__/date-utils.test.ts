@@ -19,7 +19,7 @@ describe('formatCurrency', () => {
   });
 
   it('handles large values', () => {
-    expect(formatCurrency(100000)).toBe('£1000.00');
+    expect(formatCurrency(100000)).toBe('£1,000.00');
   });
 
   it('handles negative values (refunds)', () => {

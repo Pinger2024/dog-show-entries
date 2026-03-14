@@ -24,6 +24,8 @@ import {
 } from 'lucide-react';
 import { isUuid } from '@/lib/slugify';
 import { cn } from '@/lib/utils';
+import { getInitials } from '@/lib/user-utils';
+import { getBreadcrumbs } from '@/lib/nav-utils';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
@@ -66,19 +68,6 @@ const adminMobileItems = [
   { href: '/admin/applications', label: 'Applications', mobileLabel: 'Apps', icon: ClipboardCheck },
 ];
 
-function getInitials(name?: string | null, email?: string | null) {
-  if (name) {
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-  }
-  if (email) return email[0].toUpperCase();
-  return '?';
-}
-
 // Paths that are "top-level" — no back button shown
 const rootPaths = new Set([
   '/dashboard', '/dogs', '/entries', '/browse', '/feed', '/settings', '/apply',
@@ -101,15 +90,6 @@ function getMobileTitle(pathname: string): string | null {
   if (last === 'new') return 'Add New';
   if (last === 'edit') return 'Edit';
   return last.charAt(0).toUpperCase() + last.slice(1).replace(/-/g, ' ');
-}
-
-function getBreadcrumbs(pathname: string) {
-  const segments = pathname.split('/').filter(Boolean);
-  return segments.map((segment, i) => ({
-    label: segment.charAt(0).toUpperCase() + segment.slice(1),
-    href: '/' + segments.slice(0, i + 1).join('/'),
-    isLast: i === segments.length - 1,
-  }));
 }
 
 export function DashboardShell({ user, children }: DashboardShellProps) {

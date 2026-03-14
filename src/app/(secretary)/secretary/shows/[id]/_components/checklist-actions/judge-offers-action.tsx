@@ -459,10 +459,10 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
               placeholder="Search judges or breeds..."
               value={searchQuery}
               onChange={(e) => { setSearchQuery(e.target.value); setPage(0); }}
-              className="h-8 text-xs flex-1"
+              className="h-10 text-xs flex-1"
             />
             <Select value={filter} onValueChange={(v) => { setFilter(v as StageFilter); setPage(0); }}>
-              <SelectTrigger className="h-8 text-xs w-full sm:w-36">
+              <SelectTrigger className="h-10 text-xs w-full sm:w-36">
                 <Filter className="size-3 mr-1" />
                 <SelectValue />
               </SelectTrigger>

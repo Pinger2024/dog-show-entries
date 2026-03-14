@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { isUuid } from '@/lib/slugify';
+import { getInitials } from '@/lib/user-utils';
+import { getBreadcrumbs } from '@/lib/nav-utils';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { RoleSwitcher, RoleSwitcherCompact } from '@/components/layout/role-switcher';
@@ -42,28 +44,6 @@ const mobileNavItems = [
   { href: '/secretary/billing', label: 'Billing', icon: CreditCard },
   { href: '/secretary/settings', label: 'Settings', icon: Settings },
 ];
-
-function getInitials(name?: string | null, email?: string | null) {
-  if (name) {
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-  }
-  if (email) return email[0].toUpperCase();
-  return '?';
-}
-
-function getBreadcrumbs(pathname: string) {
-  const segments = pathname.split('/').filter(Boolean);
-  return segments.map((segment, i) => ({
-    label: segment.charAt(0).toUpperCase() + segment.slice(1),
-    href: '/' + segments.slice(0, i + 1).join('/'),
-    isLast: i === segments.length - 1,
-  }));
-}
 
 const rootPaths = new Set(['/secretary', '/secretary/shows', '/secretary/shows/new', '/secretary/billing', '/secretary/settings']);
 

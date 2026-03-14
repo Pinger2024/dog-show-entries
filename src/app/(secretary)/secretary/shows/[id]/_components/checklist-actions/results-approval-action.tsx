@@ -107,7 +107,7 @@ export function ResultsApprovalAction({ showId }: ActionPanelProps) {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 text-xs"
+                  className="min-h-[2.75rem] text-xs"
                   disabled={resendApproval.isPending}
                   onClick={() =>
                     resendApproval.mutate({ showId, judgeId: judge.judgeId })

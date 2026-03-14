@@ -1283,7 +1283,7 @@ function StewardsSection({ showId }: { showId: string }) {
                       <Button
                         size="sm"
                         variant="outline"
-                        className="h-8 text-xs"
+                        className="min-h-[2.75rem] text-xs"
                         onClick={() => setBreedDialogId(assignment.id)}
                       >
                         <CircleDot className="size-3.5" />

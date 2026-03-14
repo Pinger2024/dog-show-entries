@@ -1258,7 +1258,7 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
                                     }
                                   }
                                 }}
-                                className="flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground/40 transition-colors hover:bg-destructive/10 hover:text-destructive"
+                                className="flex size-11 shrink-0 items-center justify-center rounded text-muted-foreground/40 transition-colors hover:bg-destructive/10 hover:text-destructive"
                                 title={`Delete all ${group.label} classes`}
                               >
                                 <Trash2 className="size-3.5" />

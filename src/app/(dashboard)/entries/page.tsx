@@ -13,6 +13,7 @@ import {
   MapPin,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
+import { formatCurrency } from '@/lib/date-utils';
 import type { RouterOutputs } from '@/server/trpc/router';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,10 +21,6 @@ import {
   CardContent,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-
-function formatFee(pence: number) {
-  return `£${(pence / 100).toFixed(2)}`;
-}
 
 const statusConfig: Record<
   string,
@@ -152,7 +149,7 @@ export default function EntriesPage() {
           {confirmedCount > 0 && <span className="font-medium text-emerald-600">{confirmedCount} confirmed</span>}
           {pendingCount > 0 && <span className="font-medium text-amber-600">{pendingCount} pending</span>}
           {withdrawnCount > 0 && <span>{withdrawnCount} withdrawn</span>}
-          {totalFees > 0 && <span className="font-medium text-foreground">{formatFee(totalFees)} total</span>}
+          {totalFees > 0 && <span className="font-medium text-foreground">{formatCurrency(totalFees)} total</span>}
         </p>
       </div>
 
@@ -250,7 +247,7 @@ function ShowGroupCard({ group, isPast }: { group: ShowGroup; isPast?: boolean }
             </div>
           </div>
           <div className="shrink-0 text-right">
-            <p className="text-sm font-bold">{formatFee(group.totalFee)}</p>
+            <p className="text-sm font-bold">{formatCurrency(group.totalFee)}</p>
             <p className="text-xs text-muted-foreground">
               {group.entries.length} {group.entries.length === 1 ? 'dog' : 'dogs'}
             </p>
@@ -301,7 +298,7 @@ function DogEntryRow({ entry }: { entry: Entry }) {
           </p>
         )}
       </div>
-      <span className="shrink-0 text-sm font-medium">{formatFee(entry.totalFee)}</span>
+      <span className="shrink-0 text-sm font-medium">{formatCurrency(entry.totalFee)}</span>
       <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
     </Link>
   );

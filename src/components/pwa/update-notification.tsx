@@ -76,7 +76,7 @@ export function UpdateNotification() {
         <Button
           size="sm"
           onClick={handleUpdate}
-          className="h-8 shrink-0 text-xs"
+          className="min-h-[2.75rem] shrink-0 text-xs"
         >
           Update
         </Button>

@@ -24,7 +24,7 @@ import {
   Users,
 } from 'lucide-react';
 import { differenceInMonths, format, parseISO } from 'date-fns';
-import { isWithinAgeRange, handlerAgeYearsOnDate } from '@/lib/date-utils';
+import { isWithinAgeRange, handlerAgeYearsOnDate, formatCurrency } from '@/lib/date-utils';
 import { trpc } from '@/lib/trpc/client';
 import { formatDogName } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -54,10 +54,6 @@ const STEPS: { key: WizardStep; label: string; icon: React.ElementType }[] = [
   { key: 'payment', label: 'Payment', icon: CreditCard },
   { key: 'confirmation', label: 'Confirmed', icon: PartyPopper },
 ];
-
-function formatFee(pence: number) {
-  return `£${(pence / 100).toFixed(2)}`;
-}
 
 const EMPTY_GROUPED_CLASSES = {
   age: [] as never[],
@@ -551,7 +547,7 @@ export default function EnterShowPage() {
               {cart.entries.filter((e) => e.classIds.length > 0).length !== 1 ? 'ies' : 'y'} in cart
             </span>
             {cart.grandTotal > 0 && (
-              <Badge variant="secondary">{formatFee(cart.grandTotal)}</Badge>
+              <Badge variant="secondary">{formatCurrency(cart.grandTotal)}</Badge>
             )}
           </div>
           <Button
@@ -934,7 +930,7 @@ export default function EnterShowPage() {
                   {selectedClassIds.length} class
                   {selectedClassIds.length !== 1 ? 'es' : ''} selected
                 </p>
-                <p className="text-base font-bold sm:text-lg">{formatFee(selectedTotal)}</p>
+                <p className="text-base font-bold sm:text-lg">{formatCurrency(selectedTotal)}</p>
               </div>
               <div className="flex w-full gap-2 sm:w-auto">
                 <Button
@@ -1052,7 +1048,7 @@ export default function EnterShowPage() {
                   {entry.isNfc && (
                     <p className="text-xs font-semibold text-amber-600">NOT FOR COMPETITION</p>
                   )}
-                  <p className="font-semibold">{formatFee(entry.totalFee)}</p>
+                  <p className="font-semibold">{formatCurrency(entry.totalFee)}</p>
                 </CardContent>
               </Card>
             ))}
@@ -1094,7 +1090,7 @@ export default function EnterShowPage() {
                       <div className="flex-1">
                         <span className="text-sm font-medium">{item.name}</span>
                         <span className="ml-2 text-sm text-muted-foreground">
-                          {formatFee(item.priceInPence)}
+                          {formatCurrency(item.priceInPence)}
                         </span>
                         {item.description && (
                           <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
@@ -1116,7 +1112,7 @@ export default function EnterShowPage() {
                         <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
                       )}
                       <p className="text-xs text-muted-foreground">
-                        {formatFee(item.priceInPence)} each
+                        {formatCurrency(item.priceInPence)} each
                         {max ? ` · max ${max}` : ''}
                       </p>
                     </div>
@@ -1175,17 +1171,17 @@ export default function EnterShowPage() {
                   {cart.entries.filter((e) => e.classIds.length > 0).length} entr
                   {cart.entries.filter((e) => e.classIds.length > 0).length !== 1 ? 'ies' : 'y'}
                 </span>
-                <span>{formatFee(cart.entriesTotal)}</span>
+                <span>{formatCurrency(cart.entriesTotal)}</span>
               </div>
               {cart.sundryTotal > 0 && (
                 <div className="flex justify-between text-sm text-muted-foreground">
                   <span>Add-ons</span>
-                  <span>{formatFee(cart.sundryTotal)}</span>
+                  <span>{formatCurrency(cart.sundryTotal)}</span>
                 </div>
               )}
               <div className="flex justify-between border-t pt-1.5 text-sm font-bold sm:text-base">
                 <span>Grand Total</span>
-                <span>{formatFee(cart.grandTotal)}</span>
+                <span>{formatCurrency(cart.grandTotal)}</span>
               </div>
             </div>
           </div>
@@ -1254,7 +1250,7 @@ export default function EnterShowPage() {
               </>
             ) : (
               <>
-                Proceed to Payment &middot; {formatFee(cart.grandTotal)}
+                Proceed to Payment &middot; {formatCurrency(cart.grandTotal)}
               </>
             )}
           </Button>
@@ -1268,7 +1264,7 @@ export default function EnterShowPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                Pay {formatFee(paymentAmount)}
+                Pay {formatCurrency(paymentAmount)}
               </CardTitle>
               <CardDescription>Secure payment powered by Stripe</CardDescription>
             </CardHeader>
@@ -1333,7 +1329,7 @@ export default function EnterShowPage() {
               <Separator />
               <div className="flex justify-between font-bold">
                 <span>Paid</span>
-                <span>{formatFee(paymentAmount)}</span>
+                <span>{formatCurrency(paymentAmount)}</span>
               </div>
             </CardContent>
           </Card>
@@ -1466,7 +1462,7 @@ function ClassGroup({
                 )}
               </div>
               <span className="shrink-0 text-sm font-semibold">
-                {formatFee(sc.entryFee)}
+                {formatCurrency(sc.entryFee)}
               </span>
             </label>
           );

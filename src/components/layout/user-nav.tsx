@@ -21,6 +21,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { getInitials } from '@/lib/user-utils';
 
 interface UserNavProps {
   user: {
@@ -29,19 +30,6 @@ interface UserNavProps {
     image?: string | null;
   } | null;
   isSecretary?: boolean;
-}
-
-function getInitials(name?: string | null, email?: string | null) {
-  if (name) {
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-  }
-  if (email) return email[0].toUpperCase();
-  return '?';
 }
 
 export function UserNav({ user, isSecretary }: UserNavProps) {

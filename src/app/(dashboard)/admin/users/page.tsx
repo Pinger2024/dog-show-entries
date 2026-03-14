@@ -157,7 +157,7 @@ export default function AdminUsersPage() {
                           value={u.role}
                           onValueChange={(value) => handleRoleChange(u.id, value)}
                         >
-                          <SelectTrigger className="w-[130px] h-8 text-xs">
+                          <SelectTrigger className="w-[130px] h-10 text-xs">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>

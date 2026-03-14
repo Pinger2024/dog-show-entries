@@ -83,7 +83,7 @@ export function JudgeHotelAction({ showId, itemId, entityId, entityName }: Actio
             type="number"
             step="0.01"
             min="0"
-            className="h-8 text-xs"
+            className="h-10 text-xs"
             placeholder="0.00"
             value={hotel}
             onChange={(e) => setHotel(e.target.value)}
@@ -95,7 +95,7 @@ export function JudgeHotelAction({ showId, itemId, entityId, entityName }: Actio
             type="number"
             step="0.01"
             min="0"
-            className="h-8 text-xs"
+            className="h-10 text-xs"
             placeholder="0.00"
             value={travel}
             onChange={(e) => setTravel(e.target.value)}
@@ -107,7 +107,7 @@ export function JudgeHotelAction({ showId, itemId, entityId, entityName }: Actio
             type="number"
             step="0.01"
             min="0"
-            className="h-8 text-xs"
+            className="h-10 text-xs"
             placeholder="0.00"
             value={other}
             onChange={(e) => setOther(e.target.value)}

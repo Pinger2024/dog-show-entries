@@ -158,7 +158,7 @@ function CreatePost({
           )}
           <button
             onClick={removeImage}
-            className="absolute right-2 top-2 flex size-6 items-center justify-center rounded-full bg-black/50 text-white"
+            className="absolute right-2 top-2 flex size-6 min-h-[2.75rem] min-w-[2.75rem] items-center justify-center rounded-full bg-black/50 text-white"
           >
             <X className="size-3.5" />
           </button>
@@ -177,7 +177,7 @@ function CreatePost({
           />
           <button
             onClick={() => { setShowVideoInput(false); setVideoUrl(''); }}
-            className="flex size-6 items-center justify-center rounded-full text-stone-300 hover:text-stone-500"
+            className="flex size-6 min-h-[2.75rem] min-w-[2.75rem] items-center justify-center rounded-full text-stone-300 hover:text-stone-500"
           >
             <X className="size-3.5" />
           </button>
@@ -226,7 +226,7 @@ function CreatePost({
               setShowVideoInput(false);
               removeImage();
             }}
-            className="h-8 text-xs"
+            className="min-h-[2.75rem] text-xs"
           >
             Cancel
           </Button>
@@ -238,7 +238,7 @@ function CreatePost({
               uploading ||
               (!caption.trim() && !uploadedImage && !videoUrl.trim())
             }
-            className="h-8 text-xs"
+            className="min-h-[2.75rem] text-xs"
           >
             {createPost.isPending ? (
               <Loader2 className="size-3.5 animate-spin" />
@@ -482,7 +482,7 @@ function UserPostCard({
           <button
             onClick={onDelete}
             disabled={deleting}
-            className="flex size-6 items-center justify-center rounded-full text-stone-300 opacity-0 transition-all hover:bg-stone-50 hover:text-stone-500 group-hover:opacity-100"
+            className="flex size-6 min-h-[2.75rem] min-w-[2.75rem] items-center justify-center rounded-full text-stone-300 opacity-100 transition-all hover:bg-stone-50 hover:text-stone-500 sm:opacity-0 sm:group-hover:opacity-100"
             title="Delete post"
           >
             <Trash2 className="size-3" />

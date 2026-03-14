@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { trpc } from '@/lib/trpc';
+import { formatCurrency } from '@/lib/date-utils';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -27,10 +28,6 @@ import {
   PoundSterling,
   ArrowRight,
 } from 'lucide-react';
-
-function formatCurrency(pence: number) {
-  return `\u00A3${(pence / 100).toFixed(2)}`;
-}
 
 function formatDate(date: Date | string) {
   return new Date(date).toLocaleDateString('en-GB', {

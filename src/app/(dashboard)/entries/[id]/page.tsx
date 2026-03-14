@@ -15,6 +15,7 @@ import {
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc/client';
+import { formatCurrency } from '@/lib/date-utils';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -32,10 +33,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-
-function formatFee(pence: number) {
-  return `£${(pence / 100).toFixed(2)}`;
-}
 
 const statusConfig: Record<
   string,
@@ -214,13 +211,13 @@ export default function EntryDetailPage() {
           {entry.entryClasses.map((ec) => (
             <div key={ec.id} className="flex justify-between text-sm">
               <span>{ec.showClass?.classDefinition?.name ?? 'Class'}</span>
-              <span className="font-medium">{formatFee(ec.fee)}</span>
+              <span className="font-medium">{formatCurrency(ec.fee)}</span>
             </div>
           ))}
           <Separator />
           <div className="flex justify-between font-bold">
             <span>Total</span>
-            <span>{formatFee(entry.totalFee)}</span>
+            <span>{formatCurrency(entry.totalFee)}</span>
           </div>
         </CardContent>
       </Card>

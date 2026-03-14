@@ -11,6 +11,7 @@ import {
   Minus,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
+import { formatCurrency } from '@/lib/date-utils';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -26,10 +27,6 @@ import { StripeProvider } from '@/components/providers/stripe-provider';
 import { PaymentForm } from '@/app/(shows)/shows/[id]/enter/payment-form';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-
-function formatFee(pence: number) {
-  return `£${(pence / 100).toFixed(2)}`;
-}
 
 export default function EditEntryPage({
   params,
@@ -61,7 +58,7 @@ export default function EditEntryPage({
         toast.success('Entry updated', {
           description:
             result.feeDiff < 0
-              ? `A refund of ${formatFee(Math.abs(result.feeDiff))} has been processed.`
+              ? `A refund of ${formatCurrency(Math.abs(result.feeDiff))} has been processed.`
               : 'Your class selections have been updated.',
         });
         router.push(`/entries/${entryId}`);
@@ -139,7 +136,7 @@ export default function EditEntryPage({
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              Pay {formatFee(feeDiff)}
+              Pay {formatCurrency(feeDiff)}
             </CardTitle>
             <CardDescription>
               Your class changes require an additional payment.
@@ -241,7 +238,7 @@ export default function EditEntryPage({
                             )}
                           </div>
                           <span className="shrink-0 text-sm font-semibold">
-                            {formatFee(sc.entryFee)}
+                            {formatCurrency(sc.entryFee)}
                           </span>
                         </label>
                       );
@@ -258,11 +255,11 @@ export default function EditEntryPage({
           <CardContent className="space-y-2 py-4">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Current total</span>
-              <span>{formatFee(currentTotal)}</span>
+              <span>{formatCurrency(currentTotal)}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">New total</span>
-              <span>{formatFee(newTotal)}</span>
+              <span>{formatCurrency(newTotal)}</span>
             </div>
             <Separator />
             <div className="flex items-center justify-between font-bold">
@@ -282,18 +279,18 @@ export default function EditEntryPage({
                     <Minus className="size-4" />
                   )}
                   {feeDiff > 0 ? '+' : ''}
-                  {formatFee(feeDiff)}
+                  {formatCurrency(feeDiff)}
                 </span>
               </span>
             </div>
             {feeDiff > 0 && (
               <p className="text-sm text-muted-foreground">
-                An additional payment of {formatFee(feeDiff)} will be required.
+                An additional payment of {formatCurrency(feeDiff)} will be required.
               </p>
             )}
             {feeDiff < 0 && (
               <p className="text-sm text-muted-foreground">
-                A refund of {formatFee(Math.abs(feeDiff))} will be processed.
+                A refund of {formatCurrency(Math.abs(feeDiff))} will be processed.
               </p>
             )}
           </CardContent>
