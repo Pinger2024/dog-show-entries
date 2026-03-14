@@ -624,6 +624,24 @@ export const showsRouter = createTRPCRouter({
 
       await verifyShowAccess(ctx.db, ctx.session.user.id, id, { callerIsAdmin: ctx.callerIsAdmin });
 
+      // Validate that close dates are before the show start date
+      const effectiveStartDate = rest.startDate;
+      if (effectiveStartDate) {
+        const showStart = new Date(effectiveStartDate);
+        if (entryCloseDate && new Date(entryCloseDate) >= showStart) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Entry close date must be before the show start date',
+          });
+        }
+        if (postalCloseDate && new Date(postalCloseDate) >= showStart) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Postal close date must be before the show start date',
+          });
+        }
+      }
+
       const updateData: Record<string, unknown> = { ...rest };
       if (entriesOpenDate !== undefined) {
         updateData.entriesOpenDate = entriesOpenDate

@@ -501,6 +501,15 @@ function EditShowDetailsDialog({
   });
 
   function handleSave() {
+    // Validate close dates are before show start date
+    if (entryCloseDate && startDate && new Date(entryCloseDate) >= new Date(startDate)) {
+      toast.error('Entry close date must be before the show start date');
+      return;
+    }
+    if (postalCloseDate && startDate && new Date(postalCloseDate) >= new Date(startDate)) {
+      toast.error('Postal close date must be before the show start date');
+      return;
+    }
     updateMutation.mutate({
       id: showId,
       name,
@@ -781,7 +790,39 @@ function EditShowDetailsDialog({
                   id="edit-start"
                   type="date"
                   value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
+                  onChange={(e) => {
+                    const newStartDate = e.target.value;
+                    setStartDate(newStartDate);
+
+                    // If entry close date is on or after the new start date, auto-adjust
+                    if (newStartDate && entryCloseDate) {
+                      const closeDate = new Date(entryCloseDate);
+                      const showDate = new Date(newStartDate);
+                      if (closeDate >= showDate) {
+                        // Set entry close to 7 days before the new start date at 23:59
+                        const adjusted = new Date(showDate);
+                        adjusted.setDate(adjusted.getDate() - 7);
+                        const adjustedStr = adjusted.toISOString().slice(0, 11) + '23:59';
+                        setEntryCloseDate(adjustedStr);
+                        const displayDate = adjusted.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+                        toast.info(`Entry close date adjusted to ${displayDate} — it can't be after the show date`);
+                      }
+                    }
+
+                    // Also check postal close date
+                    if (newStartDate && postalCloseDate) {
+                      const postalDate = new Date(postalCloseDate);
+                      const showDate = new Date(newStartDate);
+                      if (postalDate >= showDate) {
+                        const adjusted = new Date(showDate);
+                        adjusted.setDate(adjusted.getDate() - 10);
+                        const adjustedStr = adjusted.toISOString().slice(0, 11) + '23:59';
+                        setPostalCloseDate(adjustedStr);
+                        const displayDate = adjusted.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+                        toast.info(`Postal close date adjusted to ${displayDate} — it can't be after the show date`);
+                      }
+                    }
+                  }}
                 />
               </div>
               <div className="space-y-1.5">
@@ -801,7 +842,15 @@ function EditShowDetailsDialog({
                   id="edit-entry-close"
                   type="datetime-local"
                   value={entryCloseDate}
-                  onChange={(e) => setEntryCloseDate(e.target.value)}
+                  max={startDate ? `${startDate}T00:00` : undefined}
+                  onChange={(e) => {
+                    const newClose = e.target.value;
+                    if (newClose && startDate && new Date(newClose) >= new Date(startDate)) {
+                      toast.error('Entry close date must be before the show date');
+                      return;
+                    }
+                    setEntryCloseDate(newClose);
+                  }}
                 />
               </div>
               <div className="space-y-1.5">
@@ -810,7 +859,15 @@ function EditShowDetailsDialog({
                   id="edit-postal-close"
                   type="datetime-local"
                   value={postalCloseDate}
-                  onChange={(e) => setPostalCloseDate(e.target.value)}
+                  max={startDate ? `${startDate}T00:00` : undefined}
+                  onChange={(e) => {
+                    const newClose = e.target.value;
+                    if (newClose && startDate && new Date(newClose) >= new Date(startDate)) {
+                      toast.error('Postal close date must be before the show date');
+                      return;
+                    }
+                    setPostalCloseDate(newClose);
+                  }}
                 />
               </div>
             </div>

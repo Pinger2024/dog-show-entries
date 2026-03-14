@@ -388,13 +388,15 @@ function CCProgressCard({ dog }: { dog: { dogId: string; dogName: string; breedN
                       />
                     </div>
                     <span className="shrink-0 text-xs font-medium text-muted-foreground">
-                      {dog.ccCount}/{targetCCs} CCs
+                      {dog.ccCount === 0 ? 'No CCs yet' : `${dog.ccCount}/${targetCCs} CCs`}
                     </span>
                   </div>
                   <p className="mt-0.5 text-[11px] text-muted-foreground">
                     {dog.rccCount > 0 && `${dog.rccCount} RCC${dog.rccCount !== 1 ? 's' : ''} · `}
-                    {judgesNeeded > 0 && `${judgesNeeded} new judge${judgesNeeded !== 1 ? 's' : ''} needed`}
-                    {judgesNeeded === 0 && dog.ccCount < 3 && 'Judges requirement met'}
+                    {dog.ccCount === 0 && 'Needs 3 CCs under 3 different judges to become Champion'}
+                    {dog.ccCount === 1 && '1 CC · 2 more needed under new judges'}
+                    {dog.ccCount === 2 && '2 CCs · 1 more needed (must be a different judge)'}
+                    {dog.ccCount >= 3 && !dog.isChampion && 'Judges requirement met'}
                   </p>
                 </>
               )}
