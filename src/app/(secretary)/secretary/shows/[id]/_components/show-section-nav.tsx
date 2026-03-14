@@ -37,7 +37,7 @@ type Section = {
 };
 
 const sections: Section[] = [
-  { path: '', label: 'Overview', icon: LayoutDashboard, exact: true },
+  { path: '', label: 'Secretary Tools', icon: LayoutDashboard, exact: true },
   { path: '/checklist', label: 'Show Checklist', icon: ListChecks, hasBadge: true },
   { path: '/entries', label: 'Entries', icon: Ticket },
   { path: '/financial', label: 'Financial', icon: PoundSterling },
@@ -54,7 +54,7 @@ const sections: Section[] = [
 // Grouped for the mobile sheet
 const sectionGroups = [
   {
-    label: 'Show Day',
+    label: 'Manage',
     items: ['', '/checklist', '/entries', '/results'],
   },
   {
