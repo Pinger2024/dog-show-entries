@@ -245,7 +245,7 @@ function NextShowCard({ show }: { show: NonNullable<ReturnType<typeof trpc.dashb
                 <Dog className="size-3.5" />
                 <span className="font-medium">{show.dogName}</span>
                 <span className="text-amber-700/50">&middot;</span>
-                <span>{show.classes.join(', ')}</span>
+                <span>{show.classes.map((c: { className: string; classNumber: number | null }) => c.classNumber ? `${c.classNumber}. ${c.className}` : c.className).join(', ')}</span>
               </div>
             </div>
             <div className="shrink-0 text-right">

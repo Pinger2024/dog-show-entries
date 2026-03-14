@@ -326,10 +326,11 @@ export const dashboardRouter = createTRPCRouter({
     const nextEntry = confirmedFutureEntries[0] ?? null;
     const nextShow = nextEntry
       ? {
+          entryId: nextEntry.id,
           showId: nextEntry.show.id,
           showName: nextEntry.show.name,
           showSlug: nextEntry.show.slug,
-          startDate: nextEntry.show.startDate,
+          showDate: nextEntry.show.startDate,
           venueName: nextEntry.show.venue?.name ?? null,
           dogName: nextEntry.dog?.registeredName ?? null,
           classes: nextEntry.entryClasses.map((ec) => ({
@@ -347,6 +348,7 @@ export const dashboardRouter = createTRPCRouter({
       showName: string;
       showSlug: string | null;
       entryCloseDate?: Date | null;
+      entryId?: string;
     }> = [];
 
     // Shows where user's entered show IDs (to exclude from closing_soon)
@@ -382,6 +384,7 @@ export const dashboardRouter = createTRPCRouter({
         showId: entry.show.id,
         showName: entry.show.name,
         showSlug: entry.show.slug,
+        entryId: entry.id,
       });
     }
 
@@ -520,10 +523,17 @@ export const dashboardRouter = createTRPCRouter({
           distinctJudgeCount: ccJudgeIds.size,
           isChampion,
         };
-      });
+      })
+      // Sort: champions first, then by CC count desc, limit to 5
+      .sort((a, b) => {
+        if (a.isChampion !== b.isChampion) return a.isChampion ? -1 : 1;
+        return b.ccCount - a.ccCount || b.rccCount - a.rccCount;
+      })
+      .slice(0, 5);
 
     // ── Build: judgeIntel ────────────────────────────────────────────
-    const judgeIntel = upcomingJudgeAssignments.map((row) => ({
+    // Prioritise shows the user HASN'T entered, limit to 5
+    const judgeIntelAll = upcomingJudgeAssignments.map((row) => ({
       showId: row.showId,
       showName: row.showName,
       showSlug: row.showSlug,
@@ -532,6 +542,10 @@ export const dashboardRouter = createTRPCRouter({
       breedName: row.breedName,
       alreadyEntered: enteredShowIds.has(row.showId),
     }));
+    const judgeIntel = [
+      ...judgeIntelAll.filter((j) => !j.alreadyEntered),
+      ...judgeIntelAll.filter((j) => j.alreadyEntered),
+    ].slice(0, 5);
 
     // ── Build: feedDigest ────────────────────────────────────────────
     const feedDigest = { count: feedCount as number };
