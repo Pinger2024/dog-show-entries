@@ -1527,17 +1527,23 @@ function BulkClassCreator({ showId }: { showId: string }) {
       selectedClassDefIds.length *
       (splitBySex ? 2 : 1);
 
+  // Auto-select matching class defs when template or classDefs changes
+  // This fixes the race condition where clicking a template before
+  // classDefs loads would leave all checkboxes unchecked
+  useEffect(() => {
+    if (template && classDefs) {
+      const ids = classDefs
+        .filter((cd) => template.classNames.includes(cd.name))
+        .map((cd) => cd.id);
+      setSelectedClassDefIds(ids);
+    }
+  }, [template, classDefs]);
+
   function handleSelectTemplate(templateId: string) {
     const t = CLASS_TEMPLATES.find((t) => t.id === templateId);
     setSelectedTemplate(templateId);
     setSplitBySex(t?.splitBySex ?? false);
     setFeeInput(penceToPoundsString(t?.defaultFeePence ?? 500));
-    if (t && classDefs) {
-      const ids = classDefs
-        .filter((cd) => t.classNames.includes(cd.name))
-        .map((cd) => cd.id);
-      setSelectedClassDefIds(ids);
-    }
   }
 
   function handleCreate() {
