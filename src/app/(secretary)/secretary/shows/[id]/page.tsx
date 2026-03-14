@@ -72,6 +72,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { uploadImage } from '@/lib/upload';
 import { formatDate } from './_lib/show-utils';
 import { useShowId } from './_lib/show-context';
@@ -863,6 +873,7 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
   const [hasInitializedCollapse, setHasInitializedCollapse] = useState(false);
   // Optimistic ordering: maps classId → sortOrder for instant visual feedback during drag
   const [optimisticOrder, setOptimisticOrder] = useState<Record<string, number> | null>(null);
+  const [pendingAction, setPendingAction] = useState<{ message: string; action: () => void } | null>(null);
   const utils = trpc.useUtils();
 
   const updateMutation = trpc.secretary.updateShowClass.useMutation({
@@ -1099,6 +1110,7 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
   }
 
   return (
+    <>
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between gap-3">
@@ -1239,23 +1251,25 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
                                 tabIndex={0}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  if (confirm(`Delete all ${group.classes.length} classes for ${group.label}?`)) {
-                                    bulkDeleteMutation.mutate({
+                                  setPendingAction({
+                                    message: `Delete all ${group.classes.length} classes for ${group.label}?`,
+                                    action: () => bulkDeleteMutation.mutate({
                                       showId,
                                       showClassIds: group.classes.map((c) => c.id),
-                                    });
-                                  }
+                                    }),
+                                  });
                                 }}
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter' || e.key === ' ') {
                                     e.stopPropagation();
                                     e.preventDefault();
-                                    if (confirm(`Delete all ${group.classes.length} classes for ${group.label}?`)) {
-                                      bulkDeleteMutation.mutate({
+                                    setPendingAction({
+                                      message: `Delete all ${group.classes.length} classes for ${group.label}?`,
+                                      action: () => bulkDeleteMutation.mutate({
                                         showId,
                                         showClassIds: group.classes.map((c) => c.id),
-                                      });
-                                    }
+                                      }),
+                                    });
                                   }
                                 }}
                                 className="flex size-11 shrink-0 items-center justify-center rounded text-muted-foreground/40 transition-colors hover:bg-destructive/10 hover:text-destructive"
@@ -1325,11 +1339,10 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
                                               size="icon"
                                               variant="ghost"
                                               className="size-11 text-destructive hover:text-destructive"
-                                              onClick={() => {
-                                                if (confirm('Remove this class from the show?')) {
-                                                  deleteMutation.mutate({ showClassId: sc.id });
-                                                }
-                                              }}
+                                              onClick={() => setPendingAction({
+                                                message: 'Remove this class from the show?',
+                                                action: () => deleteMutation.mutate({ showClassId: sc.id }),
+                                              })}
                                               disabled={deleteMutation.isPending}
                                             >
                                               <Trash2 className="size-4" />
@@ -1360,6 +1373,22 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
         <AddClassesDisclosure showId={showId} />
       </CardContent>
     </Card>
+
+    <AlertDialog open={!!pendingAction} onOpenChange={(open) => { if (!open) setPendingAction(null); }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+          <AlertDialogDescription>{pendingAction?.message}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" onClick={() => { pendingAction?.action(); setPendingAction(null); }}>
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 
@@ -1924,6 +1953,7 @@ function SundryItemManager({ showId }: { showId: string }) {
     maxPerOrder: number | null;
     enabled: boolean;
   } | null>(null);
+  const [pendingAction, setPendingAction] = useState<{ message: string; action: () => void } | null>(null);
 
   // Form state
   const [formName, setFormName] = useState('');
@@ -2094,11 +2124,10 @@ function SundryItemManager({ showId }: { showId: string }) {
                         variant="outline"
                         size="sm"
                         className="min-h-[2.75rem] px-2.5 text-destructive hover:bg-destructive/10"
-                        onClick={() => {
-                          if (confirm('Delete this sundry item?')) {
-                            deleteMutation.mutate({ id: item.id, showId });
-                          }
-                        }}
+                        onClick={() => setPendingAction({
+                          message: 'Delete this sundry item?',
+                          action: () => deleteMutation.mutate({ id: item.id, showId }),
+                        })}
                       >
                         <Trash2 className="size-3.5" />
                       </Button>
@@ -2319,6 +2348,21 @@ function SundryItemManager({ showId }: { showId: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!pendingAction} onOpenChange={(open) => { if (!open) setPendingAction(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>{pendingAction?.message}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => { pendingAction?.action(); setPendingAction(null); }}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
@@ -2326,6 +2370,7 @@ function SundryItemManager({ showId }: { showId: string }) {
 // ── Delete Show ─────────────────────────────────────────────
 
 function DeleteShowSection({ showId, showName }: { showId: string; showName: string }) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const deleteMutation = trpc.secretary.deleteShow.useMutation({
     onSuccess: () => {
       toast.success('Show deleted');
@@ -2334,17 +2379,8 @@ function DeleteShowSection({ showId, showName }: { showId: string; showName: str
     onError: (err) => toast.error(err.message),
   });
 
-  function handleDelete() {
-    if (
-      confirm(
-        `Are you sure you want to delete "${showName}"?\n\nThis will permanently delete the show and all its classes. This cannot be undone.`
-      )
-    ) {
-      deleteMutation.mutate({ showId });
-    }
-  }
-
   return (
+    <>
     <Card className="border-destructive/50">
       <CardHeader>
         <CardTitle className="text-destructive">Danger Zone</CardTitle>
@@ -2355,7 +2391,7 @@ function DeleteShowSection({ showId, showName }: { showId: string; showName: str
       <CardContent>
         <Button
           variant="destructive"
-          onClick={handleDelete}
+          onClick={() => setConfirmOpen(true)}
           disabled={deleteMutation.isPending}
         >
           {deleteMutation.isPending && (
@@ -2366,6 +2402,24 @@ function DeleteShowSection({ showId, showName }: { showId: string; showName: str
         </Button>
       </CardContent>
     </Card>
+
+    <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete &ldquo;{showName}&rdquo;?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This will permanently delete the show and all its classes. This action cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" onClick={() => deleteMutation.mutate({ showId })}>
+            Delete Show
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 

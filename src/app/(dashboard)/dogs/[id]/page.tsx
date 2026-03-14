@@ -57,6 +57,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 function formatAge(dateOfBirth: string): string {
   const dob = parseISO(dateOfBirth);
@@ -480,6 +490,7 @@ function PhotoGalleryCard({ dogId }: { dogId: string }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<{ message: string; action: () => void } | null>(null);
   const utils = trpc.useUtils();
 
   const { data: photos, isLoading } = trpc.dogs.listPhotos.useQuery({ dogId });
@@ -528,6 +539,7 @@ function PhotoGalleryCard({ dogId }: { dogId: string }) {
   const galleryPhotos = photos?.filter((p) => !p.isPrimary) ?? [];
 
   return (
+    <>
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
@@ -624,9 +636,10 @@ function PhotoGalleryCard({ dogId }: { dogId: string }) {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (confirm('Delete this photo?')) {
-                        deletePhoto.mutate({ photoId: photo.id, dogId });
-                      }
+                      setPendingAction({
+                        message: 'Delete this photo? This cannot be undone.',
+                        action: () => deletePhoto.mutate({ photoId: photo.id, dogId }),
+                      });
                     }}
                     className="min-h-[44px] min-w-[44px] rounded-full bg-white/90 p-2 shadow active:bg-white sm:min-h-0 sm:min-w-0 sm:p-1.5"
                     title="Delete photo"
@@ -663,6 +676,21 @@ function PhotoGalleryCard({ dogId }: { dogId: string }) {
         )}
       </CardContent>
     </Card>
+    <AlertDialog open={!!pendingAction} onOpenChange={(open) => !open && setPendingAction(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+          <AlertDialogDescription>{pendingAction?.message}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => { pendingAction?.action(); setPendingAction(null); }}>
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 
@@ -701,6 +729,7 @@ function AchievementsCard({
   const [date, setDate] = useState('');
   const [type, setType] = useState('');
   const [judgeName, setJudgeName] = useState('');
+  const [pendingAction, setPendingAction] = useState<{ message: string; action: () => void } | null>(null);
   const utils = trpc.useUtils();
 
   const addResult = trpc.dogs.addExternalResult.useMutation({
@@ -739,6 +768,7 @@ function AchievementsCard({
   }
 
   return (
+    <>
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
@@ -863,9 +893,10 @@ function AchievementsCard({
                     {isSelfReported && (
                       <button
                         onClick={() => {
-                          if (confirm('Remove this result?')) {
-                            removeResult.mutate({ id: a.id });
-                          }
+                          setPendingAction({
+                            message: 'Remove this result? This cannot be undone.',
+                            action: () => removeResult.mutate({ id: a.id }),
+                          });
                         }}
                         className="shrink-0 rounded-md p-1.5 min-h-[2.75rem] min-w-[2.75rem] flex items-center justify-center text-muted-foreground hover:text-destructive"
                         title="Remove"
@@ -880,6 +911,21 @@ function AchievementsCard({
         )}
       </CardContent>
     </Card>
+    <AlertDialog open={!!pendingAction} onOpenChange={(open) => !open && setPendingAction(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+          <AlertDialogDescription>{pendingAction?.message}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => { pendingAction?.action(); setPendingAction(null); }}>
+            Remove
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 

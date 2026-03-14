@@ -43,6 +43,16 @@ import {
 } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { ListChecks } from 'lucide-react';
 import { useShowId } from '../_lib/show-context';
 import { ACTION_REGISTRY } from '../_components/checklist-action-registry';
@@ -129,6 +139,7 @@ export default function ShowChecklistPage() {
   });
   // Collapsed per-judge groups: track which base titles are collapsed
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [pendingAction, setPendingAction] = useState<{ message: string; action: () => void } | null>(null);
 
   // Build contract lookup by judgeId from judgeSummary (avoids separate query)
   const contractsByJudge = useMemo(() => {
@@ -677,12 +688,13 @@ export default function ShowChecklistPage() {
                       variant="ghost"
                       size="sm"
                       className="text-xs text-destructive hover:text-destructive"
-                      onClick={() => {
-                        if (confirm('Remove this item from the checklist?')) {
+                      onClick={() => setPendingAction({
+                        message: 'Remove this item from the checklist?',
+                        action: () => {
                           deleteItemMut.mutate({ itemId: item.id });
                           setExpandedItem(null);
-                        }
-                      }}
+                        },
+                      })}
                     >
                       <Trash2 className="size-3 mr-1" />
                       Remove
@@ -977,6 +989,21 @@ export default function ShowChecklistPage() {
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog open={!!pendingAction} onOpenChange={(open) => { if (!open) setPendingAction(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>{pendingAction?.message}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { pendingAction?.action(); setPendingAction(null); }}>
+              Continue
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

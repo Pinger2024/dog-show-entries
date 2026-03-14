@@ -69,6 +69,16 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { contractStageConfig } from '../_lib/show-utils';
 import { useShowId } from '../_lib/show-context';
 
@@ -174,6 +184,7 @@ function JudgesSection({ showId }: { showId: string }) {
   const kcSearchMutation = trpc.secretary.kcJudgeSearch.useMutation();
   const kcProfileMutation = trpc.secretary.kcJudgeProfile.useMutation();
 
+  const [pendingAction, setPendingAction] = useState<{ message: string; action: () => void } | null>(null);
   const [expandedExpenses, setExpandedExpenses] = useState<string | null>(null);
   const [expenseForm, setExpenseForm] = useState({
     hotelCost: '',
@@ -694,11 +705,10 @@ function JudgesSection({ showId }: { showId: string }) {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => {
-                              if (confirm('Resend the offer email to this judge?')) {
-                                resendOfferMutation.mutate({ contractId: contract.id });
-                              }
-                            }}
+                            onClick={() => setPendingAction({
+                              message: 'Resend the offer email to this judge?',
+                              action: () => resendOfferMutation.mutate({ contractId: contract.id }),
+                            })}
                             disabled={resendOfferMutation.isPending}
                           >
                             {resendOfferMutation.isPending ? (
@@ -712,11 +722,10 @@ function JudgesSection({ showId }: { showId: string }) {
                         {stage === 'offer_accepted' && contract && (
                           <Button
                             size="sm"
-                            onClick={() => {
-                              if (confirm('Send the formal confirmation email to this judge?')) {
-                                confirmMutation.mutate({ contractId: contract.id });
-                              }
-                            }}
+                            onClick={() => setPendingAction({
+                              message: 'Send the formal confirmation email to this judge?',
+                              action: () => confirmMutation.mutate({ contractId: contract.id }),
+                            })}
                             disabled={confirmMutation.isPending}
                           >
                             {confirmMutation.isPending ? (
@@ -741,13 +750,14 @@ function JudgesSection({ showId }: { showId: string }) {
                           size="icon"
                           variant="ghost"
                           className="size-11 text-destructive hover:text-destructive"
-                          onClick={() => {
-                            if (confirm('Remove all assignments for this judge from this show?')) {
+                          onClick={() => setPendingAction({
+                            message: 'Remove all assignments for this judge from this show?',
+                            action: () => {
                               for (const aId of j.assignmentIds) {
                                 removeMutation.mutate({ assignmentId: aId });
                               }
-                            }
-                          }}
+                            },
+                          })}
                           disabled={removeMutation.isPending}
                         >
                           <Trash2 className="size-4" />
@@ -922,6 +932,21 @@ function JudgesSection({ showId }: { showId: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!pendingAction} onOpenChange={(open) => { if (!open) setPendingAction(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>{pendingAction?.message}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { pendingAction?.action(); setPendingAction(null); }}>
+              Continue
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -933,6 +958,7 @@ function RingsSection({ showId }: { showId: string }) {
   const [ringNumber, setRingNumber] = useState('');
   const [ringDay, setRingDay] = useState('');
   const [ringTime, setRingTime] = useState('');
+  const [pendingAction, setPendingAction] = useState<{ message: string; action: () => void } | null>(null);
   const utils = trpc.useUtils();
 
   const { data: showRings, isLoading } =
@@ -962,6 +988,7 @@ function RingsSection({ showId }: { showId: string }) {
   const nextNumber = (showRings?.length ?? 0) + 1;
 
   return (
+    <>
     <Card>
       <CardHeader>
         <div className="flex items-start justify-between">
@@ -1073,11 +1100,10 @@ function RingsSection({ showId }: { showId: string }) {
                   size="icon"
                   variant="ghost"
                   className="size-9 text-destructive hover:text-destructive"
-                  onClick={() => {
-                    if (confirm('Remove this ring? Any judge/steward assignments to this ring will be unlinked.')) {
-                      removeMutation.mutate({ ringId: ring.id });
-                    }
-                  }}
+                  onClick={() => setPendingAction({
+                    message: 'Remove this ring? Any judge/steward assignments to this ring will be unlinked.',
+                    action: () => removeMutation.mutate({ ringId: ring.id }),
+                  })}
                   disabled={removeMutation.isPending}
                 >
                   <Trash2 className="size-4" />
@@ -1109,11 +1135,10 @@ function RingsSection({ showId }: { showId: string }) {
                         size="icon"
                         variant="ghost"
                         className="size-11 text-destructive hover:text-destructive"
-                        onClick={() => {
-                          if (confirm('Remove this ring? Any judge/steward assignments to this ring will be unlinked.')) {
-                            removeMutation.mutate({ ringId: ring.id });
-                          }
-                        }}
+                        onClick={() => setPendingAction({
+                          message: 'Remove this ring? Any judge/steward assignments to this ring will be unlinked.',
+                          action: () => removeMutation.mutate({ ringId: ring.id }),
+                        })}
                         disabled={removeMutation.isPending}
                       >
                         <Trash2 className="size-4" />
@@ -1128,6 +1153,22 @@ function RingsSection({ showId }: { showId: string }) {
         )}
       </CardContent>
     </Card>
+
+    <AlertDialog open={!!pendingAction} onOpenChange={(open) => { if (!open) setPendingAction(null); }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+          <AlertDialogDescription>{pendingAction?.message}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={() => { pendingAction?.action(); setPendingAction(null); }}>
+            Continue
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 
@@ -1137,6 +1178,7 @@ function StewardsSection({ showId }: { showId: string }) {
   const [email, setEmail] = useState('');
   const [adding, setAdding] = useState(false);
   const [breedDialogId, setBreedDialogId] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<{ message: string; action: () => void } | null>(null);
   const utils = trpc.useUtils();
 
   const { data: stewards, isLoading } =
@@ -1192,6 +1234,7 @@ function StewardsSection({ showId }: { showId: string }) {
   const dialogAssignment = stewards?.find((s) => s.id === breedDialogId);
 
   return (
+    <>
     <Card>
       <CardHeader>
         <div className="flex items-start justify-between">
@@ -1293,11 +1336,10 @@ function StewardsSection({ showId }: { showId: string }) {
                         size="icon"
                         variant="ghost"
                         className="size-11 text-destructive hover:text-destructive"
-                        onClick={() => {
-                          if (confirm('Remove this steward from the show?')) {
-                            removeMutation.mutate({ assignmentId: assignment.id });
-                          }
-                        }}
+                        onClick={() => setPendingAction({
+                          message: 'Remove this steward from the show?',
+                          action: () => removeMutation.mutate({ assignmentId: assignment.id }),
+                        })}
                         disabled={removeMutation.isPending}
                       >
                         <Trash2 className="size-4" />
@@ -1334,6 +1376,22 @@ function StewardsSection({ showId }: { showId: string }) {
         )}
       </CardContent>
     </Card>
+
+    <AlertDialog open={!!pendingAction} onOpenChange={(open) => { if (!open) setPendingAction(null); }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+          <AlertDialogDescription>{pendingAction?.message}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={() => { pendingAction?.action(); setPendingAction(null); }}>
+            Continue
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 
