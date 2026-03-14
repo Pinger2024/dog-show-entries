@@ -60,7 +60,7 @@ function getMobileTitle(pathname: string): string | null {
 }
 
 export function StewardShell({ user, children }: StewardShellProps) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? '/steward';
   const parentPath = getParentPath(pathname);
   const mobileTitle = getMobileTitle(pathname);
   const canAccessSecretary =

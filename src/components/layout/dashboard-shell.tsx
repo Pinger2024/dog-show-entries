@@ -93,7 +93,7 @@ function getMobileTitle(pathname: string): string | null {
 }
 
 export function DashboardShell({ user, children }: DashboardShellProps) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? '/dashboard';
   const breadcrumbs = getBreadcrumbs(pathname);
   const parentPath = getParentPath(pathname);
   const mobileTitle = getMobileTitle(pathname);

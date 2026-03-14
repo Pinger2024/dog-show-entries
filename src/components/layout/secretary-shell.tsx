@@ -65,7 +65,7 @@ function getMobileTitle(pathname: string): string | null {
 }
 
 export function SecretaryShell({ user, children }: SecretaryShellProps) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? '/secretary';
   const breadcrumbs = getBreadcrumbs(pathname);
   const parentPath = getParentPath(pathname);
   const mobileTitle = getMobileTitle(pathname);
