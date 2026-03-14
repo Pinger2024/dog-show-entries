@@ -1392,6 +1392,7 @@ export const secretaryRouter = createTRPCRouter({
         judgeId: z.string().uuid(),
         breedId: z.string().uuid().nullable().optional(),
         ringId: z.string().uuid().nullable().optional(),
+        sex: z.enum(['dog', 'bitch']).nullable().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -1404,10 +1405,43 @@ export const secretaryRouter = createTRPCRouter({
           judgeId: input.judgeId,
           breedId: input.breedId ?? null,
           ringId: input.ringId ?? null,
+          sex: input.sex ?? null,
         })
         .returning();
 
       return assignment!;
+    }),
+
+  // Bulk assign: assign a judge to multiple breeds at once
+  bulkAssignJudge: secretaryProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        judgeId: z.string().uuid(),
+        breedIds: z.array(z.string().uuid()),
+        ringId: z.string().uuid().nullable().optional(),
+        sex: z.enum(['dog', 'bitch']).nullable().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      if (input.breedIds.length === 0) return { count: 0 };
+
+      const values = input.breedIds.map((breedId) => ({
+        showId: input.showId,
+        judgeId: input.judgeId,
+        breedId,
+        ringId: input.ringId ?? null,
+        sex: input.sex ?? null,
+      }));
+
+      const rows = await ctx.db
+        .insert(judgeAssignments)
+        .values(values)
+        .returning();
+
+      return { count: rows.length };
     }),
 
   removeJudgeAssignment: secretaryProcedure

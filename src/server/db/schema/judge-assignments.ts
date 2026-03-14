@@ -17,6 +17,7 @@ export const judgeAssignments = pgTable(
       .references(() => judges.id),
     breedId: uuid('breed_id').references(() => breeds.id),
     ringId: uuid('ring_id').references(() => rings.id),
+    sex: text('sex'), // null = both, 'dog' = dogs only, 'bitch' = bitches only
     // Results approval fields
     approvalToken: uuid('approval_token'),
     approvalStatus: text('approval_status'), // null | 'pending' | 'approved' | 'declined'

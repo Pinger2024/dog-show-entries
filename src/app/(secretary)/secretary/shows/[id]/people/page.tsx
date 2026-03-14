@@ -91,9 +91,10 @@ function JudgesSection({ showId }: { showId: string }) {
   const [judgeEmail, setJudgeEmail] = useState('');
   const [selectedJudgeId, setSelectedJudgeId] = useState('');
   const [judgePopoverOpen, setJudgePopoverOpen] = useState(false);
-  const [selectedBreedId, setSelectedBreedId] = useState('');
+  const [selectedBreedIds, setSelectedBreedIds] = useState<string[]>([]);
   const [breedPopoverOpen, setBreedPopoverOpen] = useState(false);
   const [selectedRingId, setSelectedRingId] = useState('');
+  const [selectedSexFilter, setSelectedSexFilter] = useState('both');
   const [offerDialogOpen, setOfferDialogOpen] = useState(false);
   const [offerJudgeId, setOfferJudgeId] = useState('');
   const [offerEmail, setOfferEmail] = useState('');
@@ -142,12 +143,34 @@ function JudgesSection({ showId }: { showId: string }) {
     onError: (err) => toast.error(err.message ?? 'Failed to add judge'),
   });
 
+  // Track which breed IDs are already assigned to any judge for this show
+  const assignedBreedIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const a of assignments ?? []) {
+      if (a.breedId) ids.add(a.breedId);
+    }
+    return ids;
+  }, [assignments]);
+
   const assignMutation = trpc.secretary.assignJudge.useMutation({
     onSuccess: () => {
       toast.success('Judge assigned to show');
       setSelectedJudgeId('');
-      setSelectedBreedId('');
+      setSelectedBreedIds([]);
       setSelectedRingId('');
+      setSelectedSexFilter('both');
+      utils.secretary.getShowJudges.invalidate({ showId });
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to assign judge'),
+  });
+
+  const bulkAssignMutation = trpc.secretary.bulkAssignJudge.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Judge assigned to ${data.count} breed${data.count !== 1 ? 's' : ''}`);
+      setSelectedJudgeId('');
+      setSelectedBreedIds([]);
+      setSelectedRingId('');
+      setSelectedSexFilter('both');
       utils.secretary.getShowJudges.invalidate({ showId });
     },
     onError: (err) => toast.error(err.message ?? 'Failed to assign judge'),
@@ -480,142 +503,197 @@ function JudgesSection({ showId }: { showId: string }) {
         <CardHeader>
           <CardTitle>Assign Judge to Show</CardTitle>
           <CardDescription>
-            Select an existing judge and optionally assign them to a breed and ring.
+            Select a judge, pick one or more breeds, then assign. Already-assigned breeds are marked.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Popover open={judgePopoverOpen} onOpenChange={setJudgePopoverOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={judgePopoverOpen}
-                  className={cn(
-                    'w-full justify-between font-normal',
-                    !selectedJudgeId && 'text-muted-foreground'
-                  )}
-                >
-                  {selectedJudgeId
-                    ? (() => {
-                        const j = (allJudges ?? []).find((j) => j.id === selectedJudgeId);
-                        return j ? `${j.name}${j.kcNumber ? ` (${j.kcNumber})` : ''}` : 'Select judge...';
-                      })()
-                    : 'Select judge...'}
-                  <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[min(90vw,400px)] sm:w-[--radix-popover-trigger-width] p-0" align="start">
-                <Command>
-                  <CommandInput placeholder="Search judges..." />
-                  <CommandList className="max-h-[300px]">
-                    <CommandEmpty>No judges found.</CommandEmpty>
-                    <CommandGroup>
-                      {(allJudges ?? []).map((j) => (
-                        <CommandItem
-                          key={j.id}
-                          value={j.name}
-                          onSelect={() => {
-                            setSelectedJudgeId(j.id);
-                            setJudgePopoverOpen(false);
-                          }}
-                        >
-                          <Check
-                            className={cn(
-                              'mr-2 size-4',
-                              j.id === selectedJudgeId ? 'opacity-100' : 'opacity-0'
-                            )}
-                          />
-                          {j.name} {j.kcNumber ? `(${j.kcNumber})` : ''}
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-            <Popover open={breedPopoverOpen} onOpenChange={setBreedPopoverOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={breedPopoverOpen}
-                  className={cn(
-                    'w-full justify-between font-normal',
-                    !selectedBreedId && 'text-muted-foreground'
-                  )}
-                >
-                  {selectedBreedId
-                    ? (breeds ?? []).find((b) => b.id === selectedBreedId)?.name ?? 'Select breed...'
-                    : 'Breed (optional)'}
-                  <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="max-w-[calc(100vw-2rem)] w-72 p-0" align="start">
-                <Command>
-                  <CommandInput placeholder="Search breeds..." />
-                  <CommandList className="max-h-[300px]">
-                    <CommandEmpty>No breeds found.</CommandEmpty>
-                    <CommandGroup>
-                      <CommandItem
-                        value="all-breeds"
-                        onSelect={() => {
-                          setSelectedBreedId('');
-                          setBreedPopoverOpen(false);
-                        }}
-                      >
-                        <Check className={cn('mr-2 size-4', !selectedBreedId ? 'opacity-100' : 'opacity-0')} />
-                        All breeds
-                      </CommandItem>
-                    </CommandGroup>
-                    {breedsByGroup && Object.entries(breedsByGroup).map(([groupName, groupBreeds]) => (
-                      <CommandGroup key={groupName} heading={groupName}>
-                        {groupBreeds.map((b) => (
+          <div className="space-y-3">
+            {/* Row 1: Judge + Ring + Sex */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Popover open={judgePopoverOpen} onOpenChange={setJudgePopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={judgePopoverOpen}
+                    className={cn(
+                      'w-full justify-between font-normal h-11',
+                      !selectedJudgeId && 'text-muted-foreground'
+                    )}
+                  >
+                    {selectedJudgeId
+                      ? (() => {
+                          const j = (allJudges ?? []).find((j) => j.id === selectedJudgeId);
+                          return j ? `${j.name}${j.kcNumber ? ` (${j.kcNumber})` : ''}` : 'Select judge...';
+                        })()
+                      : 'Select judge...'}
+                    <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[min(90vw,400px)] sm:w-[--radix-popover-trigger-width] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search judges..." />
+                    <CommandList className="max-h-[300px]">
+                      <CommandEmpty>No judges found.</CommandEmpty>
+                      <CommandGroup>
+                        {(allJudges ?? []).map((j) => (
                           <CommandItem
-                            key={b.id}
-                            value={b.name}
+                            key={j.id}
+                            value={j.name}
                             onSelect={() => {
-                              setSelectedBreedId(b.id);
-                              setBreedPopoverOpen(false);
+                              setSelectedJudgeId(j.id);
+                              setJudgePopoverOpen(false);
                             }}
                           >
-                            <Check className={cn('mr-2 size-4', b.id === selectedBreedId ? 'opacity-100' : 'opacity-0')} />
-                            {b.name}
+                            <Check
+                              className={cn(
+                                'mr-2 size-4',
+                                j.id === selectedJudgeId ? 'opacity-100' : 'opacity-0'
+                              )}
+                            />
+                            {j.name} {j.kcNumber ? `(${j.kcNumber})` : ''}
                           </CommandItem>
                         ))}
                       </CommandGroup>
-                    ))}
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-            <Select value={selectedRingId} onValueChange={setSelectedRingId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Ring (optional)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No ring</SelectItem>
-                {(showRings ?? []).map((r) => (
-                  <SelectItem key={r.id} value={r.id}>
-                    Ring {r.number}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              onClick={() =>
-                assignMutation.mutate({
-                  showId,
-                  judgeId: selectedJudgeId,
-                  breedId: selectedBreedId && selectedBreedId !== 'none' ? selectedBreedId : null,
-                  ringId: selectedRingId && selectedRingId !== 'none' ? selectedRingId : null,
-                })
-              }
-              disabled={!selectedJudgeId || assignMutation.isPending}
-            >
-              {assignMutation.isPending && <Loader2 className="size-4 animate-spin" />}
-              Assign
-            </Button>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              <Select value={selectedRingId} onValueChange={setSelectedRingId}>
+                <SelectTrigger className="h-11">
+                  <SelectValue placeholder="Ring (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No ring</SelectItem>
+                  {(showRings ?? []).map((r) => (
+                    <SelectItem key={r.id} value={r.id}>
+                      Ring {r.number}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={selectedSexFilter} onValueChange={setSelectedSexFilter}>
+                <SelectTrigger className="h-11">
+                  <SelectValue placeholder="Both sexes" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="both">Both sexes</SelectItem>
+                  <SelectItem value="dog">Dogs only</SelectItem>
+                  <SelectItem value="bitch">Bitches only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Row 2: Multi-breed selection */}
+            {selectedJudgeId && (
+              <>
+                <Popover open={breedPopoverOpen} onOpenChange={setBreedPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={breedPopoverOpen}
+                      className="w-full justify-between font-normal h-11 text-muted-foreground"
+                    >
+                      {selectedBreedIds.length > 0
+                        ? `${selectedBreedIds.length} breed${selectedBreedIds.length !== 1 ? 's' : ''} selected`
+                        : 'Select breeds to assign...'}
+                      <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="max-w-[calc(100vw-2rem)] w-80 p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search breeds..." />
+                      <CommandList className="max-h-[300px]">
+                        <CommandEmpty>No breeds found.</CommandEmpty>
+                        {breedsByGroup && Object.entries(breedsByGroup).map(([groupName, groupBreeds]) => (
+                          <CommandGroup key={groupName} heading={groupName}>
+                            {groupBreeds.map((b) => {
+                              const isSelected = selectedBreedIds.includes(b.id);
+                              const isAssigned = assignedBreedIds.has(b.id);
+                              return (
+                                <CommandItem
+                                  key={b.id}
+                                  value={b.name}
+                                  onSelect={() => {
+                                    setSelectedBreedIds((prev) =>
+                                      isSelected
+                                        ? prev.filter((id) => id !== b.id)
+                                        : [...prev, b.id]
+                                    );
+                                  }}
+                                  className={isAssigned ? 'opacity-50' : ''}
+                                >
+                                  <Check className={cn('mr-2 size-4', isSelected ? 'opacity-100' : 'opacity-0')} />
+                                  {b.name}
+                                  {isAssigned && <span className="ml-auto text-[10px] text-muted-foreground">assigned</span>}
+                                </CommandItem>
+                              );
+                            })}
+                          </CommandGroup>
+                        ))}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+
+                {/* Selected breed chips */}
+                {selectedBreedIds.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedBreedIds.map((id) => {
+                      const breed = (breeds ?? []).find((b) => b.id === id);
+                      return breed ? (
+                        <Badge
+                          key={id}
+                          variant="secondary"
+                          className="cursor-pointer gap-1 text-xs hover:bg-destructive/10"
+                          onClick={() => setSelectedBreedIds((prev) => prev.filter((bid) => bid !== id))}
+                        >
+                          {breed.name}
+                          <X className="size-3" />
+                        </Badge>
+                      ) : null;
+                    })}
+                    <button
+                      onClick={() => setSelectedBreedIds([])}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      Clear all
+                    </button>
+                  </div>
+                )}
+
+                {/* Assign button */}
+                <Button
+                  onClick={() => {
+                    if (selectedBreedIds.length > 0) {
+                      bulkAssignMutation.mutate({
+                        showId,
+                        judgeId: selectedJudgeId,
+                        breedIds: selectedBreedIds,
+                        ringId: selectedRingId && selectedRingId !== 'none' ? selectedRingId : null,
+                        sex: selectedSexFilter === 'both' ? null : selectedSexFilter as 'dog' | 'bitch',
+                      });
+                    } else {
+                      assignMutation.mutate({
+                        showId,
+                        judgeId: selectedJudgeId,
+                        breedId: null,
+                        ringId: selectedRingId && selectedRingId !== 'none' ? selectedRingId : null,
+                        sex: selectedSexFilter === 'both' ? null : selectedSexFilter as 'dog' | 'bitch',
+                      });
+                    }
+                  }}
+                  disabled={assignMutation.isPending || bulkAssignMutation.isPending}
+                  className="w-full min-h-[2.75rem] sm:w-auto"
+                >
+                  {(assignMutation.isPending || bulkAssignMutation.isPending) && <Loader2 className="size-4 animate-spin" />}
+                  {selectedBreedIds.length > 0
+                    ? `Assign ${selectedBreedIds.length} breed${selectedBreedIds.length !== 1 ? 's' : ''}`
+                    : 'Assign to all breeds'}
+                </Button>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
