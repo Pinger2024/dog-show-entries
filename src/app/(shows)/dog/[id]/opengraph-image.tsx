@@ -123,7 +123,7 @@ export default async function OGImage({
 
   // Build display name with title prefix
   const titlePrefix = dog.titles
-    ?.map((t: { titleType: string }) => TITLE_LABELS[t.titleType])
+    ?.map((t: { title: string }) => TITLE_LABELS[t.title])
     .filter(Boolean)
     .join(' ');
   const displayName = titlePrefix

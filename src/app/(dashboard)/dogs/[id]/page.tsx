@@ -25,6 +25,7 @@ import {
   Lock,
   Sparkles,
   Plus,
+  ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
@@ -1025,7 +1026,13 @@ export default function DogDetailPage({
             </div>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" asChild className="min-h-[2.75rem]">
+              <Link href={`/dog/${id}`}>
+                <ExternalLink className="size-4" />
+                View Profile
+              </Link>
+            </Button>
             <Button asChild className="min-h-[2.75rem]">
               <Link href="/shows">
                 <Ticket className="size-4" />

@@ -12,7 +12,9 @@ import {
   Dog,
   Heart,
   ChevronDown,
+  Play,
 } from 'lucide-react';
+import { getEmbedUrl } from '@/lib/video-utils';
 import { trpc } from '@/lib/trpc/client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -225,6 +227,7 @@ type FeedItemData = {
     name: string;
     date: string;
     showType: string;
+    slug?: string;
   };
   classes?: {
     className: string;
@@ -342,6 +345,29 @@ function FeedItem({ item }: { item: FeedItemData }) {
               />
             </div>
           )}
+          {item.videoUrl && (() => {
+            const embedUrl = getEmbedUrl(item.videoUrl);
+            return embedUrl ? (
+              <div className="mt-2 aspect-video overflow-hidden rounded-md">
+                <iframe
+                  src={embedUrl}
+                  className="size-full"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+            ) : (
+              <a
+                href={item.videoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <Play className="size-4" />
+                Watch video
+              </a>
+            );
+          })()}
         </>
       )}
     </div>
