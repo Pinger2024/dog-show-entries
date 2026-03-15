@@ -29,8 +29,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
 
-    // Generate a unique key with folder structure
-    const ext = fileName.split('.').pop() ?? '';
+    // Derive extension from validated MIME type, not client-supplied filename
+    const extByMime: Record<string, string> = {
+      'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp',
+      'image/svg+xml': 'svg', 'application/pdf': 'pdf',
+    };
+    const ext = extByMime[contentType] ?? 'bin';
     const key = `uploads/${session.user.id}/${randomUUID()}.${ext}`;
 
     const presignedUrl = await generatePresignedPutUrl(key, contentType);

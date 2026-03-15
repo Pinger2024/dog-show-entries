@@ -243,6 +243,7 @@ export const secretaryRouter = createTRPCRouter({
   listVenues: secretaryProcedure
     .input(z.object({ organisationId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
+      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
       return ctx.db.query.venues.findMany({
         where: eq(venues.organisationId, input.organisationId),
         orderBy: (venues, { asc }) => [asc(venues.name)],
@@ -260,6 +261,7 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
       const [venue] = await ctx.db
         .insert(venues)
         .values(input)

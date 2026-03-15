@@ -336,6 +336,7 @@ export const stewardRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const existing = await ctx.db.query.results.findFirst({
         where: eq(results.entryClassId, input.entryClassId),
+        with: { entryClass: { with: { showClass: true } } },
       });
       if (!existing) {
         throw new TRPCError({
@@ -343,6 +344,9 @@ export const stewardRouter = createTRPCRouter({
           message: 'Result not found — record a placement first',
         });
       }
+      const showId = (existing as typeof existing & { entryClass: { showClass: { showId: string } } }).entryClass.showClass.showId;
+      await verifyStewardAssignment(ctx.db, ctx.session.user.id, showId);
+      await assertResultsNotLocked(ctx.db, showId);
       const [updated] = await ctx.db
         .update(results)
         .set({ winnerPhotoUrl: input.winnerPhotoUrl })
