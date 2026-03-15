@@ -530,7 +530,7 @@ function JudgesSection({ showId }: { showId: string }) {
                     <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[min(90vw,400px)] sm:w-[--radix-popover-trigger-width] p-0" align="start">
+                <PopoverContent className="max-w-[calc(100vw-2rem)] w-[400px] p-0" align="start">
                   <Command>
                     <CommandInput placeholder="Search judges..." />
                     <CommandList className="max-h-[300px]">
@@ -1179,7 +1179,7 @@ function RingsSection({ showId }: { showId: string }) {
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="size-9 text-destructive hover:text-destructive"
+                  className="size-11 text-destructive hover:text-destructive"
                   onClick={() => setPendingAction({
                     message: 'Remove this ring? Any judge/steward assignments to this ring will be unlinked.',
                     action: () => removeMutation.mutate({ ringId: ring.id }),
