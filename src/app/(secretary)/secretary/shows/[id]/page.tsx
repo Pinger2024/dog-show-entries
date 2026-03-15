@@ -1530,6 +1530,7 @@ function BulkClassCreator({ showId }: { showId: string }) {
   // Auto-select matching class defs when template or classDefs changes
   // This fixes the race condition where clicking a template before
   // classDefs loads would leave all checkboxes unchecked
+  // Auto-select class defs + breeds when template changes
   useEffect(() => {
     if (template && classDefs) {
       const ids = classDefs
@@ -1537,7 +1538,11 @@ function BulkClassCreator({ showId }: { showId: string }) {
         .map((cd) => cd.id);
       setSelectedClassDefIds(ids);
     }
-  }, [template, classDefs]);
+    // For non-handling templates, pre-select all breeds
+    if (template && !template.isHandling && breeds) {
+      setSelectedBreedIds(breeds.map((b) => b.id));
+    }
+  }, [template, classDefs, breeds]);
 
   function handleSelectTemplate(templateId: string) {
     const t = CLASS_TEMPLATES.find((t) => t.id === templateId);
@@ -1663,6 +1668,9 @@ function BulkClassCreator({ showId }: { showId: string }) {
               </div>
             ) : (
               <div>
+                <p className="mb-2 text-xs text-muted-foreground">
+                  All breeds are selected by default. Untick any you don&apos;t need.
+                </p>
                 <div className="flex items-center justify-between">
                   <Label className="text-sm font-medium">
                     Breeds ({selectedBreedIds.length} selected)
