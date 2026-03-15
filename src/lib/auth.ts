@@ -20,7 +20,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     : undefined,
   session: {
     strategy: 'jwt',
-    maxAge: 365 * 24 * 60 * 60, // 1 year — sessions stay open indefinitely
+    maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   pages: {
     signIn: '/login',
@@ -144,7 +144,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      allowDangerousEmailAccountLinking: true,
     }),
   ],
   callbacks: {

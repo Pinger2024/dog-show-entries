@@ -110,15 +110,17 @@ export async function POST(request: NextRequest) {
     // Notify Michael about new feedback
     const notifyEmail = process.env.FEEDBACK_NOTIFY_EMAIL;
     if (notifyEmail) {
-      const displaySender = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
-      const preview = textBody ? textBody.slice(0, 500) : '(No text body)';
+      // Escape HTML to prevent XSS via malicious email sender names/subjects
+      const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      const displaySender = fromName ? `${esc(fromName)} &lt;${esc(fromEmail)}&gt;` : esc(fromEmail);
+      const preview = textBody ? esc(textBody.slice(0, 500)) : '(No text body)';
       resend.emails
         .send({
           from: process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>',
           to: notifyEmail,
           subject: `New feedback from ${fromName ?? fromEmail}`,
           html: `<p><strong>From:</strong> ${displaySender}</p>
-<p><strong>Subject:</strong> ${data.subject || '(No subject)'}</p>
+<p><strong>Subject:</strong> ${esc(data.subject || '(No subject)')}</p>
 <hr>
 <p>${preview}</p>
 <hr>
