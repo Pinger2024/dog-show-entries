@@ -150,6 +150,14 @@ export async function GET(
       : null,
   };
 
+  // Guard against extremely large shows that crash the PDF renderer
+  if (classes.length > 2000) {
+    return NextResponse.json(
+      { error: 'This show has too many classes for PDF generation. Please contact support.' },
+      { status: 400 }
+    );
+  }
+
   try {
     const pdfDocument = React.createElement(ShowSchedule, {
       show: showInfo,
@@ -165,7 +173,7 @@ export async function GET(
     console.error('Schedule PDF generation failed:', err);
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { error: 'PDF generation failed', detail: message },
+      { error: 'PDF generation failed. The show may have too many classes or invalid data. Please try again or contact support.', detail: message },
       { status: 500 }
     );
   }

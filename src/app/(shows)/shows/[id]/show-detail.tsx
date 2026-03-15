@@ -778,8 +778,13 @@ export function ShowDetailClient() {
                     onClick={async () => {
                       setGeneratingSchedule(true);
                       try {
-                        const res = await fetch(`/api/schedule/${show.id}`);
-                        if (!res.ok) throw new Error('Failed to generate schedule');
+                        const res = await fetch(`/api/schedule/${show.id}`, {
+                          signal: AbortSignal.timeout(30000),
+                        });
+                        if (!res.ok) {
+                          const data = await res.json().catch(() => null);
+                          throw new Error(data?.error ?? 'Failed to generate schedule');
+                        }
                         const blob = await res.blob();
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement('a');
@@ -787,8 +792,8 @@ export function ShowDetailClient() {
                         a.download = `${sanitizeFilename(show.name)}-Schedule.pdf`;
                         a.click();
                         setTimeout(() => URL.revokeObjectURL(url), 1000);
-                      } catch {
-                        alert('Unable to generate schedule. Please try again.');
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : 'Unable to generate schedule. Please try again.');
                       } finally {
                         setGeneratingSchedule(false);
                       }
