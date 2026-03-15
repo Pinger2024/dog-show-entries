@@ -601,8 +601,8 @@ function JudgesSection({ showId }: { showId: string }) {
                       <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="max-w-[calc(100vw-2rem)] w-80 p-0" align="start">
-                    <Command>
+                  <PopoverContent className="max-w-[calc(100vw-2rem)] w-80 p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+                    <Command shouldFilter={true}>
                       <CommandInput placeholder="Search breeds..." />
                       <CommandList className="max-h-[300px]">
                         <CommandEmpty>No breeds found.</CommandEmpty>
@@ -621,7 +621,9 @@ function JudgesSection({ showId }: { showId: string }) {
                                         ? prev.filter((id) => id !== b.id)
                                         : [...prev, b.id]
                                     );
+                                    // Keep popover open for multi-select
                                   }}
+                                  onPointerDown={(e) => e.preventDefault()}
                                   className={isAssigned ? 'opacity-50' : ''}
                                 >
                                   <Check className={cn('mr-2 size-4', isSelected ? 'opacity-100' : 'opacity-0')} />
