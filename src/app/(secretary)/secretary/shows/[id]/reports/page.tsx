@@ -101,7 +101,7 @@ function EntryReportContent({ showId }: { showId: string }) {
     const q = search.toLowerCase();
     return entries.filter(
       (e) =>
-        e.exhibitor?.name.toLowerCase().includes(q) ||
+        e.exhibitor?.name?.toLowerCase().includes(q) ||
         e.dog?.registeredName?.toLowerCase().includes(q) ||
         e.dog?.breed?.name?.toLowerCase().includes(q)
     );
@@ -418,7 +418,7 @@ function PaymentReportContent({ showId }: { showId: string }) {
     const q = search.toLowerCase();
     return data.entries.filter(
       (e) =>
-        e.exhibitor?.name.toLowerCase().includes(q) ||
+        e.exhibitor?.name?.toLowerCase().includes(q) ||
         e.dog?.registeredName?.toLowerCase().includes(q)
     );
   }, [data, search]);

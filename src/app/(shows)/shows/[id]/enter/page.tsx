@@ -368,7 +368,7 @@ export default function EnterShowPage() {
         showId,
         catalogueRequested: false,
         entries: cart.entries
-          .filter((e) => e.classIds.length > 0)
+          .filter((e) => e.classIds.length > 0 || e.isNfc)
           .map((e) => ({
             entryType: e.entryType,
             dogId: e.dogId,
