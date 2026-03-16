@@ -389,6 +389,78 @@ export async function generateRingBoardPdf(showId: string): Promise<Buffer> {
   return Buffer.from(await renderToBuffer(pdfDocument));
 }
 
+// ── Ring Numbers PDF ──
+
+export async function generateRingNumbersPdf(showId: string): Promise<Buffer> {
+  const show = await db.query.shows.findFirst({
+    where: eq(schema.shows.id, showId),
+    with: { organisation: true },
+  });
+  if (!show) throw new Error(`Show ${showId} not found`);
+
+  // Get all confirmed entries with catalogue numbers
+  const entries = await db.query.entries.findMany({
+    where: and(
+      eq(schema.entries.showId, showId),
+      eq(schema.entries.status, 'confirmed'),
+      isNull(schema.entries.deletedAt),
+    ),
+    columns: { catalogueNumber: true },
+    orderBy: [asc(schema.entries.catalogueNumber)],
+  });
+
+  const numbers = entries
+    .map((e) => e.catalogueNumber)
+    .filter((n): n is string => n != null && n.trim() !== '')
+    .map((n) => parseInt(n, 10))
+    .filter((n) => !isNaN(n))
+    .sort((a, b) => a - b);
+
+  if (numbers.length === 0) {
+    throw new Error('No catalogue numbers found — assign catalogue numbers before generating ring numbers');
+  }
+
+  // Generate simple A6 cards with large numbers using react-pdf
+  const { Document, Page, View, Text, StyleSheet } = await import('@react-pdf/renderer');
+
+  const styles = StyleSheet.create({
+    page: {
+      width: '105mm',
+      height: '148mm',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    number: {
+      fontFamily: 'Helvetica-Bold',
+      fontSize: 120,
+      textAlign: 'center',
+    },
+    showName: {
+      fontFamily: 'Helvetica',
+      fontSize: 10,
+      color: '#666',
+      textAlign: 'center',
+      marginTop: 10,
+    },
+  });
+
+  const pdfDocument = React.createElement(
+    Document,
+    {},
+    numbers.map((num) =>
+      React.createElement(
+        Page,
+        { key: num, size: [297.64, 419.53], style: styles.page },
+        React.createElement(Text, { style: styles.number }, String(num)),
+        React.createElement(Text, { style: styles.showName }, show.name)
+      )
+    )
+  );
+
+  return Buffer.from(await renderToBuffer(pdfDocument));
+}
+
 // ── Upload helper for print pipeline ──
 
 import { uploadToR2, getPublicUrl } from '@/server/services/storage';
@@ -412,6 +484,9 @@ export async function generateAndUploadForPrint(
       break;
     case 'ring_board':
       buffer = await generateRingBoardPdf(showId);
+      break;
+    case 'ring_numbers':
+      buffer = await generateRingNumbersPdf(showId);
       break;
     default:
       throw new Error(`Unsupported document type: ${documentType}`);
