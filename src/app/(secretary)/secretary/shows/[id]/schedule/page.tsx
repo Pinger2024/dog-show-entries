@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Loader2, Save, Eye, Download, Check } from 'lucide-react';
+import { Plus, Trash2, Loader2, Save, Eye, Download, Check, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -43,6 +43,7 @@ export default function ScheduleSettingsPage() {
 
   const { data: existing, isLoading } =
     trpc.secretary.getScheduleData.useQuery({ showId });
+  const { data: showData } = trpc.shows.getById.useQuery({ id: showId });
   const updateMutation = trpc.secretary.updateScheduleData.useMutation();
   const utils = trpc.useUtils();
 
@@ -402,11 +403,28 @@ export default function ScheduleSettingsPage() {
                         value={officer.name}
                         onChange={(e) => updateOfficer(idx, 'name', e.target.value)}
                       />
-                      <Input
-                        placeholder="Position (e.g. Chairman)"
-                        value={officer.position}
-                        onChange={(e) => updateOfficer(idx, 'position', e.target.value)}
-                      />
+                      <Select value={officer.position} onValueChange={(v) => updateOfficer(idx, 'position', v)}>
+                        <SelectTrigger className="h-10"><SelectValue placeholder="Position" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="President">President</SelectItem>
+                          <SelectItem value="Vice President">Vice President</SelectItem>
+                          <SelectItem value="Chairman">Chairman</SelectItem>
+                          <SelectItem value="Vice Chairman">Vice Chairman</SelectItem>
+                          <SelectItem value="Honorary Secretary">Honorary Secretary</SelectItem>
+                          <SelectItem value="Honorary Treasurer">Honorary Treasurer</SelectItem>
+                          <SelectItem value="Committee Member">Committee Member</SelectItem>
+                          <SelectItem value="Show Manager">Show Manager</SelectItem>
+                          <SelectItem value="Show Secretary">Show Secretary</SelectItem>
+                          <SelectItem value="Assistant Secretary">Assistant Secretary</SelectItem>
+                          <SelectItem value="Chief Steward">Chief Steward</SelectItem>
+                          <SelectItem value="Ring Steward">Ring Steward</SelectItem>
+                          <SelectItem value="Veterinary Surgeon">Veterinary Surgeon</SelectItem>
+                          <SelectItem value="Health & Safety Officer">Health & Safety Officer</SelectItem>
+                          <SelectItem value="First Aid Officer">First Aid Officer</SelectItem>
+                          <SelectItem value="Trophy Steward">Trophy Steward</SelectItem>
+                          <SelectItem value="Field Officer">Field Officer</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                     <Button
                       variant="ghost"
@@ -442,12 +460,20 @@ export default function ScheduleSettingsPage() {
                   )}
                 </div>
               ))}
-              {officers.filter((o) => o.isGuarantor).length > 0 && (
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Check className="size-3" />
-                  {officers.filter((o) => o.isGuarantor).length} guarantor{officers.filter((o) => o.isGuarantor).length !== 1 ? 's' : ''} selected
-                </p>
-              )}
+              {(() => {
+                const count = officers.filter((o) => o.isGuarantor).length;
+                const isChampionship = showData?.showType === 'championship';
+                const required = isChampionship ? 6 : 3;
+                const met = count >= required;
+                return (
+                  <p className={`text-xs flex items-center gap-1 ${met ? 'text-emerald-600' : 'text-amber-600'}`}>
+                    {met ? <Check className="size-3" /> : <AlertTriangle className="size-3" />}
+                    {count} of {required} guarantors {met ? 'added' : 'required'}
+                    {isChampionship ? ' (championship)' : ' (open/limited)'}
+                    {!met && ' — must include Chairman, Secretary & Treasurer'}
+                  </p>
+                );
+              })()}
             </div>
           </AccordionContent>
         </AccordionItem>
