@@ -12,8 +12,35 @@
 import { eq, and, sql } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { printPriceCache } from '@/server/db/schema';
-import { getPrintableProducts } from '@/lib/print-products';
+import { getPrintableProducts, type PrintProduct } from '@/lib/print-products';
 import { getSDK, parseCSVLine } from './tradeprint';
+
+/**
+ * Build a set of allowed spec values per key from a product's presets and defaults.
+ * Only rows matching these specs will be cached — dramatically reduces storage
+ * for products like Perfect Bound Booklets that have millions of combinations.
+ */
+function buildSpecFilter(product: PrintProduct): Map<string, Set<string>> {
+  const filter = new Map<string, Set<string>>();
+  // Collect all spec values from default specs and all presets
+  const allSpecs = [product.defaultSpecs, ...product.presets.map((p) => p.specs)];
+  for (const specs of allSpecs) {
+    for (const [key, value] of Object.entries(specs)) {
+      if (!filter.has(key)) filter.set(key, new Set());
+      filter.get(key)!.add(value);
+    }
+  }
+  return filter;
+}
+
+/** Check if a row's specs match the allowed values (all keys must match) */
+function matchesSpecFilter(specs: Record<string, string>, filter: Map<string, Set<string>>): boolean {
+  for (const [key, allowed] of filter) {
+    const value = specs[key];
+    if (value && !allowed.has(value)) return false;
+  }
+  return true;
+}
 
 const SERVICE_LEVELS = ['Saver', 'Standard', 'Express'] as const;
 
@@ -33,7 +60,7 @@ export async function refreshAllPrintPrices(): Promise<{
     try {
       console.log(`[print-price-refresh] Fetching ${product.tradeprintProductName}...`);
 
-      const rows = await fetchAndParseAllPrices(product.tradeprintProductName);
+      const rows = await fetchAndParseAllPrices(product.tradeprintProductName, product);
 
       if (rows.length === 0) {
         console.log(`[print-price-refresh] No prices found for ${product.tradeprintProductName}`);
@@ -68,8 +95,10 @@ export async function refreshAllPrintPrices(): Promise<{
  * Uses streaming to avoid loading the full CSV into memory.
  */
 async function fetchAndParseAllPrices(
-  productName: string
+  productName: string,
+  product: PrintProduct
 ): Promise<Array<typeof printPriceCache.$inferInsert>> {
+  const specFilter = buildSpecFilter(product);
   const SDK = getSDK();
   const productService = new SDK.ProductService();
   const response = await productService
@@ -136,13 +165,13 @@ async function fetchAndParseAllPrices(
         continue;
       }
 
-      processDataRow(cols, qtyIdx, specColumnNames, specColumnIndices, priceIndices, productName, now, rows);
+      processDataRow(cols, qtyIdx, specColumnNames, specColumnIndices, priceIndices, productName, now, rows, specFilter);
     }
   }
 
   // Process remaining buffer
   if (buffer.trim() && headersParsed) {
-    processDataRow(parseCSVLine(buffer.trim()), qtyIdx, specColumnNames, specColumnIndices, priceIndices, productName, now, rows);
+    processDataRow(parseCSVLine(buffer.trim()), qtyIdx, specColumnNames, specColumnIndices, priceIndices, productName, now, rows, specFilter);
   }
 
   return rows;
@@ -157,7 +186,8 @@ function processDataRow(
   priceIndices: Record<string, number>,
   productName: string,
   now: Date,
-  rows: Array<typeof printPriceCache.$inferInsert>
+  rows: Array<typeof printPriceCache.$inferInsert>,
+  specFilter: Map<string, Set<string>>
 ) {
   if (qtyIdx < 0) return;
   const qty = parseInt(cols[qtyIdx]?.trim(), 10);
@@ -168,6 +198,9 @@ function processDataRow(
     const val = cols[specColumnIndices[i]];
     if (val) specs[specColumnNames[i]] = val.trim();
   }
+
+  // Skip rows that don't match our product's configured specs
+  if (!matchesSpecFilter(specs, specFilter)) return;
 
   for (const level of SERVICE_LEVELS) {
     const priceIdx = priceIndices[level];
