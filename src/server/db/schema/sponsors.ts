@@ -115,8 +115,10 @@ export const classSponsorships = pgTable(
       .notNull()
       .references(() => showClasses.id, { onDelete: 'cascade' }),
     showSponsorId: uuid('show_sponsor_id')
-      .notNull()
       .references(() => showSponsors.id, { onDelete: 'cascade' }),
+    // Free-text sponsor fields — for class sponsors typed directly (not from directory)
+    sponsorName: text('sponsor_name'),
+    sponsorAffix: text('sponsor_affix'),
     trophyName: text('trophy_name'),
     trophyDonor: text('trophy_donor'),
     prizeMoney: integer('prize_money'),

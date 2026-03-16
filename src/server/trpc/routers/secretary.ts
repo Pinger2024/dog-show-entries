@@ -4034,6 +4034,85 @@ export const secretaryRouter = createTRPCRouter({
       return removed;
     }),
 
+  // Free-text class sponsorship — type name + affix directly (no directory link)
+  upsertClassSponsor: secretaryProcedure
+    .input(z.object({
+      showClassId: z.string().uuid(),
+      sponsorName: z.string().max(255),
+      sponsorAffix: z.string().max(255).optional(),
+      trophyName: z.string().max(255).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const [created] = await ctx.db
+        .insert(classSponsorships)
+        .values({
+          showClassId: input.showClassId,
+          sponsorName: input.sponsorName.trim(),
+          sponsorAffix: input.sponsorAffix?.trim() || null,
+          trophyName: input.trophyName?.trim() || null,
+        })
+        .returning();
+      return created!;
+    }),
+
+  // Update an existing class sponsorship in place
+  updateClassSponsor: secretaryProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      sponsorName: z.string().max(255).optional(),
+      sponsorAffix: z.string().max(255).nullable().optional(),
+      trophyName: z.string().max(255).nullable().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { id, ...data } = input;
+      const updateData: Record<string, unknown> = {};
+      if (data.sponsorName !== undefined) updateData.sponsorName = data.sponsorName.trim();
+      if (data.sponsorAffix !== undefined) updateData.sponsorAffix = data.sponsorAffix?.trim() || null;
+      if (data.trophyName !== undefined) updateData.trophyName = data.trophyName?.trim() || null;
+      if (Object.keys(updateData).length === 0) return null;
+      const [updated] = await ctx.db
+        .update(classSponsorships)
+        .set(updateData)
+        .where(eq(classSponsorships.id, id))
+        .returning();
+      if (!updated) throw new TRPCError({ code: 'NOT_FOUND', message: 'Class sponsorship not found' });
+      return updated;
+    }),
+
+  // Get all classes for a show with their sponsorships (for the spreadsheet view)
+  getClassesWithSponsorships: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      return ctx.db.query.showClasses.findMany({
+        where: eq(showClasses.showId, input.showId),
+        with: {
+          classDefinition: true,
+          breed: true,
+          classSponsorships: true,
+        },
+        orderBy: [asc(showClasses.sortOrder)],
+      });
+    }),
+
+  // Autocomplete: get previously used sponsor names across the org's shows
+  getSponsorNameSuggestions: secretaryProcedure
+    .input(z.object({ organisationId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
+      const rows = await ctx.db.execute(sql`
+        SELECT DISTINCT cs.sponsor_name, cs.sponsor_affix
+        FROM class_sponsorships cs
+        JOIN show_classes sc ON cs.show_class_id = sc.id
+        JOIN shows s ON sc.show_id = s.id
+        WHERE s.organisation_id = ${input.organisationId}
+          AND cs.sponsor_name IS NOT NULL
+          AND cs.sponsor_name != ''
+        ORDER BY cs.sponsor_name
+      `);
+      return rows as { sponsor_name: string; sponsor_affix: string | null }[];
+    }),
+
   // ── Results Publication Pipeline ───────────────────────
 
   publishResults: secretaryProcedure

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import {
   Handshake,
   Loader2,
@@ -13,10 +13,9 @@ import {
   Upload,
   ArrowRight,
   X,
-  Award,
-  Gift,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import { trpc } from '@/lib/trpc';
 import { uploadImage } from '@/lib/upload';
 import { Button } from '@/components/ui/button';
@@ -43,11 +42,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
 import { useShowId } from '../_lib/show-context';
 
 const SPONSOR_CATEGORIES: Record<string, string> = {
@@ -696,158 +690,564 @@ function ShowSponsorAssignments({
   );
 }
 
-/* ─── Class Sponsorship Table Tab ────────────────────── */
+/* ─── Class Sponsorship Tab — Inline-Editable Spreadsheet ──── */
 
-const BEST_AWARDS = [
-  'Best in Show',
-  'Reserve Best in Show',
-  'Best Dog',
-  'Best Bitch',
-  'Best Puppy Dog',
-  'Best Puppy Bitch',
-  'Best Long Coat Dog',
-  'Best Long Coat Bitch',
-  'Best Long Coat in Show',
-  'Best of Breed',
-];
+/* ─── Autocomplete Input ────────────────────────────── */
 
-/** Inline form for adding a sponsor to a class row */
-function AddSponsorPopover({
-  orgSponsors,
-  showSponsorList,
-  showId,
-  showClassId,
-  onAssigned,
+type Suggestion = { sponsor_name: string; sponsor_affix: string | null };
+
+function AutocompleteInput({
+  value,
+  onChange,
+  onBlur,
+  onTab,
+  suggestions,
+  placeholder,
+  onPickSuggestion,
+  className,
 }: {
-  orgSponsors: { id: string; name: string; notes: string | null }[];
-  showSponsorList: { id: string; sponsorId: string }[];
-  showId: string;
-  showClassId: string;
-  onAssigned: () => void;
+  value: string;
+  onChange: (v: string) => void;
+  onBlur?: () => void;
+  onTab?: () => void;
+  suggestions: Suggestion[];
+  placeholder?: string;
+  onPickSuggestion?: (s: Suggestion) => void;
+  className?: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const [selectedOrgSponsorId, setSelectedOrgSponsorId] = useState('');
-  const [trophyName, setTrophyName] = useState('');
+  const [focused, setFocused] = useState(false);
+  const [highlightIdx, setHighlightIdx] = useState(-1);
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
-  const assignShowSponsorMutation = trpc.secretary.assignShowSponsor.useMutation({
+  const filtered = useMemo(() => {
+    if (!value.trim()) return suggestions;
+    const lower = value.toLowerCase();
+    return suggestions.filter((s) =>
+      s.sponsor_name.toLowerCase().includes(lower)
+    );
+  }, [value, suggestions]);
+
+  const showDropdown = focused && filtered.length > 0;
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Tab') {
+        setFocused(false);
+        onBlur?.();
+        onTab?.();
+        // don't prevent default — let focus naturally move to next cell
+        return;
+      }
+      if (!showDropdown) return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setHighlightIdx((i) => Math.min(i + 1, filtered.length - 1));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setHighlightIdx((i) => Math.max(i - 1, 0));
+      } else if (e.key === 'Enter' && highlightIdx >= 0) {
+        e.preventDefault();
+        const picked = filtered[highlightIdx];
+        if (picked) {
+          onChange(picked.sponsor_name);
+          onPickSuggestion?.(picked);
+          setFocused(false);
+        }
+      } else if (e.key === 'Escape') {
+        setFocused(false);
+      }
+    },
+    [showDropdown, highlightIdx, filtered, onChange, onPickSuggestion, onBlur, onTab]
+  );
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setFocused(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setHighlightIdx(-1);
+        }}
+        onFocus={() => setFocused(true)}
+        onBlur={() => {
+          // Delay to allow dropdown click to register
+          setTimeout(() => {
+            if (!wrapperRef.current?.contains(document.activeElement)) {
+              setFocused(false);
+              onBlur?.();
+            }
+          }, 150);
+        }}
+        onKeyDown={handleKeyDown}
+        placeholder={placeholder}
+        className={cn(
+          'h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none',
+          'focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400',
+          'placeholder:text-muted-foreground/40',
+          className
+        )}
+      />
+      {showDropdown && (
+        <div className="absolute left-0 top-full z-50 max-h-48 w-full min-w-[200px] overflow-auto rounded-b-md border border-t-0 bg-popover shadow-md">
+          {filtered.map((s, i) => (
+            <button
+              key={`${s.sponsor_name}-${s.sponsor_affix ?? ''}`}
+              type="button"
+              className={cn(
+                'flex w-full flex-col px-3 py-2 text-left text-sm hover:bg-accent',
+                i === highlightIdx && 'bg-accent'
+              )}
+              onMouseDown={(e) => {
+                e.preventDefault(); // prevent blur
+                onChange(s.sponsor_name);
+                onPickSuggestion?.(s);
+                setFocused(false);
+              }}
+            >
+              <span className="font-medium">{s.sponsor_name}</span>
+              {s.sponsor_affix && (
+                <span className="text-xs text-muted-foreground">{s.sponsor_affix}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Editable Sponsorship Row ──────────────────────── */
+
+type ClassSponsorship = {
+  id: string;
+  showClassId: string;
+  sponsorName: string | null;
+  sponsorAffix: string | null;
+  trophyName: string | null;
+};
+
+function SponsorshipRow({
+  sponsorship,
+  suggestions,
+  onSaved,
+  onRemoved,
+}: {
+  sponsorship: ClassSponsorship;
+  suggestions: Suggestion[];
+  onSaved: () => void;
+  onRemoved: () => void;
+}) {
+  const [name, setName] = useState(sponsorship.sponsorName ?? '');
+  const [affix, setAffix] = useState(sponsorship.sponsorAffix ?? '');
+  const [trophy, setTrophy] = useState(sponsorship.trophyName ?? '');
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const updateMutation = trpc.secretary.updateClassSponsor.useMutation({
+    onSuccess: () => onSaved(),
     onError: (err) => toast.error(err.message),
   });
-  const assignClassMutation = trpc.secretary.assignClassSponsorship.useMutation({
+  const removeMutation = trpc.secretary.removeClassSponsorship.useMutation({
+    onSuccess: () => onRemoved(),
+    onError: (err) => toast.error(err.message),
+  });
+
+  const debouncedSave = useCallback(
+    (field: 'sponsorName' | 'sponsorAffix' | 'trophyName', value: string) => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        // If name is cleared, delete the sponsorship
+        if (field === 'sponsorName' && !value.trim()) {
+          removeMutation.mutate({ id: sponsorship.id });
+          return;
+        }
+        updateMutation.mutate({
+          id: sponsorship.id,
+          [field]: field === 'sponsorName' ? value : (value || null),
+        });
+      }, 500);
+    },
+    [sponsorship.id, updateMutation, removeMutation]
+  );
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, []);
+
+  const handlePickSuggestion = useCallback(
+    (s: Suggestion) => {
+      setName(s.sponsor_name);
+      if (s.sponsor_affix) {
+        setAffix(s.sponsor_affix);
+        // Save both fields
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = setTimeout(() => {
+          updateMutation.mutate({
+            id: sponsorship.id,
+            sponsorName: s.sponsor_name,
+            sponsorAffix: s.sponsor_affix,
+          });
+        }, 300);
+      } else {
+        debouncedSave('sponsorName', s.sponsor_name);
+      }
+    },
+    [sponsorship.id, updateMutation, debouncedSave]
+  );
+
+  return (
+    <>
+      {/* Desktop: inline cells */}
+      <div className="hidden sm:contents">
+        <div className="border-b border-r">
+          <AutocompleteInput
+            value={name}
+            onChange={(v) => {
+              setName(v);
+              debouncedSave('sponsorName', v);
+            }}
+            suggestions={suggestions}
+            placeholder="Sponsor name"
+            onPickSuggestion={handlePickSuggestion}
+            onBlur={() => debouncedSave('sponsorName', name)}
+          />
+        </div>
+        <div className="border-b border-r">
+          <input
+            type="text"
+            value={affix}
+            onChange={(e) => {
+              setAffix(e.target.value);
+              debouncedSave('sponsorAffix', e.target.value);
+            }}
+            onBlur={() => debouncedSave('sponsorAffix', affix)}
+            placeholder="Affix"
+            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-muted-foreground/40"
+          />
+        </div>
+        <div className="border-b border-r">
+          <input
+            type="text"
+            value={trophy}
+            onChange={(e) => {
+              setTrophy(e.target.value);
+              debouncedSave('trophyName', e.target.value);
+            }}
+            onBlur={() => debouncedSave('trophyName', trophy)}
+            placeholder="Trophy"
+            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-muted-foreground/40"
+          />
+        </div>
+        <div className="flex items-center justify-center border-b">
+          <button
+            type="button"
+            onClick={() => removeMutation.mutate({ id: sponsorship.id })}
+            disabled={removeMutation.isPending}
+            className="flex size-7 items-center justify-center rounded text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive"
+          >
+            {removeMutation.isPending ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <X className="size-3.5" />
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile: stacked fields */}
+      <div className="sm:hidden">
+        <div className="flex items-start gap-2 rounded-md border bg-card p-3">
+          <div className="min-w-0 flex-1 space-y-2">
+            <div>
+              <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Sponsor</label>
+              <AutocompleteInput
+                value={name}
+                onChange={(v) => {
+                  setName(v);
+                  debouncedSave('sponsorName', v);
+                }}
+                suggestions={suggestions}
+                placeholder="Sponsor name"
+                onPickSuggestion={handlePickSuggestion}
+                onBlur={() => debouncedSave('sponsorName', name)}
+                className="mt-0.5 rounded-md border bg-background px-2"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Affix</label>
+                <input
+                  type="text"
+                  value={affix}
+                  onChange={(e) => {
+                    setAffix(e.target.value);
+                    debouncedSave('sponsorAffix', e.target.value);
+                  }}
+                  onBlur={() => debouncedSave('sponsorAffix', affix)}
+                  placeholder="Affix"
+                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Trophy</label>
+                <input
+                  type="text"
+                  value={trophy}
+                  onChange={(e) => {
+                    setTrophy(e.target.value);
+                    debouncedSave('trophyName', e.target.value);
+                  }}
+                  onBlur={() => debouncedSave('trophyName', trophy)}
+                  placeholder="Trophy"
+                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
+                />
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => removeMutation.mutate({ id: sponsorship.id })}
+            disabled={removeMutation.isPending}
+            className="mt-4 flex size-8 shrink-0 items-center justify-center rounded text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive"
+          >
+            {removeMutation.isPending ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <X className="size-3.5" />
+            )}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ─── New Sponsorship Row (empty, for adding) ───────── */
+
+function NewSponsorshipRow({
+  showClassId,
+  suggestions,
+  onCreated,
+}: {
+  showClassId: string;
+  suggestions: Suggestion[];
+  onCreated: () => void;
+}) {
+  const [name, setName] = useState('');
+  const [affix, setAffix] = useState('');
+  const [trophy, setTrophy] = useState('');
+  const [isActive, setIsActive] = useState(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const createMutation = trpc.secretary.upsertClassSponsor.useMutation({
     onSuccess: () => {
-      onAssigned();
-      setOpen(false);
-      setSelectedOrgSponsorId('');
-      setTrophyName('');
+      setName('');
+      setAffix('');
+      setTrophy('');
+      setIsActive(false);
+      onCreated();
     },
     onError: (err) => toast.error(err.message),
   });
 
-  const handleAssign = useCallback(() => {
-    if (!selectedOrgSponsorId) return;
-    const existingShowSponsor = showSponsorList.find(
-      (ss) => ss.sponsorId === selectedOrgSponsorId
-    );
-    if (existingShowSponsor) {
-      assignClassMutation.mutate({
-        showSponsorId: existingShowSponsor.id,
-        showClassId,
-        trophyName: trophyName.trim() || undefined,
-      });
-    } else {
-      assignShowSponsorMutation.mutate(
-        { showId, sponsorId: selectedOrgSponsorId, tier: 'class' as const },
-        {
-          onSuccess: (newShowSponsor) => {
-            assignClassMutation.mutate({
-              showSponsorId: newShowSponsor.id,
-              showClassId,
-              trophyName: trophyName.trim() || undefined,
-            });
-          },
-        }
-      );
-    }
-  }, [selectedOrgSponsorId, showSponsorList, showClassId, showId, trophyName, assignClassMutation, assignShowSponsorMutation]);
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, []);
 
-  const isPending = assignClassMutation.isPending || assignShowSponsorMutation.isPending;
+  const trySave = useCallback(() => {
+    if (!name.trim()) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      createMutation.mutate({
+        showClassId,
+        sponsorName: name.trim(),
+        sponsorAffix: affix.trim() || undefined,
+        trophyName: trophy.trim() || undefined,
+      });
+    }, 500);
+  }, [name, affix, trophy, showClassId, createMutation]);
+
+  const handlePickSuggestion = useCallback(
+    (s: Suggestion) => {
+      setName(s.sponsor_name);
+      if (s.sponsor_affix) setAffix(s.sponsor_affix);
+      setIsActive(true);
+      // Auto-save after picking a suggestion
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        createMutation.mutate({
+          showClassId,
+          sponsorName: s.sponsor_name,
+          sponsorAffix: s.sponsor_affix ?? undefined,
+          trophyName: trophy.trim() || undefined,
+        });
+      }, 800);
+    },
+    [showClassId, trophy, createMutation]
+  );
+
+  if (!isActive) {
+    return (
+      <>
+        {/* Desktop: + button in the grid */}
+        <div className="hidden sm:contents">
+          <div className="border-b border-r">
+            <button
+              type="button"
+              onClick={() => setIsActive(true)}
+              className="flex h-9 w-full items-center gap-1.5 px-2 text-xs text-muted-foreground/50 transition-colors hover:bg-muted/50 hover:text-muted-foreground"
+            >
+              <Plus className="size-3" />
+              Add sponsor
+            </button>
+          </div>
+          <div className="border-b border-r" />
+          <div className="border-b border-r" />
+          <div className="border-b" />
+        </div>
+        {/* Mobile: + button */}
+        <div className="sm:hidden">
+          <button
+            type="button"
+            onClick={() => setIsActive(true)}
+            className="flex min-h-[2.75rem] w-full items-center justify-center gap-1.5 rounded-md border border-dashed text-xs text-muted-foreground transition-colors hover:bg-muted/50"
+          >
+            <Plus className="size-3.5" />
+            Add sponsor
+          </button>
+        </div>
+      </>
+    );
+  }
 
   return (
-    <Popover open={open} onOpenChange={(o) => {
-      setOpen(o);
-      if (!o) { setSelectedOrgSponsorId(''); setTrophyName(''); }
-    }}>
-      <PopoverTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-8 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground">
-          <Plus className="size-3.5" />
-          <span className="hidden sm:inline">Add</span>
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-72 max-w-[calc(100vw-2rem)] space-y-3 p-3" align="start">
-        <div>
-          <Label className="text-xs">Sponsor</Label>
-          <Select value={selectedOrgSponsorId} onValueChange={setSelectedOrgSponsorId}>
-            <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select sponsor" /></SelectTrigger>
-            <SelectContent>
-              {orgSponsors.map((s) => (
-                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label className="text-xs">Trophy / Affix</Label>
-          <Input
-            value={trophyName}
-            onChange={(e) => setTrophyName(e.target.value)}
-            placeholder="e.g. Hundark GSD"
-            className="h-9 text-sm"
+    <>
+      {/* Desktop: inline cells */}
+      <div className="hidden sm:contents">
+        <div className="border-b border-r bg-blue-50/30">
+          <AutocompleteInput
+            value={name}
+            onChange={(v) => setName(v)}
+            suggestions={suggestions}
+            placeholder="Type sponsor name..."
+            onPickSuggestion={handlePickSuggestion}
+            onBlur={trySave}
+            className="bg-blue-50/30"
           />
         </div>
-        <Button
-          size="sm"
-          className="w-full min-h-[2.75rem]"
-          disabled={!selectedOrgSponsorId || isPending}
-          onClick={handleAssign}
-        >
-          {isPending && <Loader2 className="size-3.5 animate-spin" />}
-          Add Sponsor
-        </Button>
-      </PopoverContent>
-    </Popover>
+        <div className="border-b border-r bg-blue-50/30">
+          <input
+            type="text"
+            value={affix}
+            onChange={(e) => setAffix(e.target.value)}
+            onBlur={trySave}
+            placeholder="Affix"
+            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-muted-foreground/40"
+          />
+        </div>
+        <div className="border-b border-r bg-blue-50/30">
+          <input
+            type="text"
+            value={trophy}
+            onChange={(e) => setTrophy(e.target.value)}
+            onBlur={trySave}
+            placeholder="Trophy"
+            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-muted-foreground/40"
+          />
+        </div>
+        <div className="flex items-center justify-center border-b bg-blue-50/30">
+          <button
+            type="button"
+            onClick={() => {
+              setName('');
+              setAffix('');
+              setTrophy('');
+              setIsActive(false);
+            }}
+            className="flex size-7 items-center justify-center rounded text-muted-foreground/50 transition-colors hover:bg-muted hover:text-muted-foreground"
+          >
+            <X className="size-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile: stacked fields */}
+      <div className="sm:hidden">
+        <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50/30 p-3">
+          <div className="min-w-0 flex-1 space-y-2">
+            <div>
+              <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Sponsor</label>
+              <AutocompleteInput
+                value={name}
+                onChange={(v) => setName(v)}
+                suggestions={suggestions}
+                placeholder="Type sponsor name..."
+                onPickSuggestion={handlePickSuggestion}
+                onBlur={trySave}
+                className="mt-0.5 rounded-md border bg-background px-2"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Affix</label>
+                <input
+                  type="text"
+                  value={affix}
+                  onChange={(e) => setAffix(e.target.value)}
+                  onBlur={trySave}
+                  placeholder="Affix"
+                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Trophy</label>
+                <input
+                  type="text"
+                  value={trophy}
+                  onChange={(e) => setTrophy(e.target.value)}
+                  onBlur={trySave}
+                  placeholder="Trophy"
+                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
+                />
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setName('');
+              setAffix('');
+              setTrophy('');
+              setIsActive(false);
+            }}
+            className="mt-4 flex size-8 shrink-0 items-center justify-center rounded text-muted-foreground/50 transition-colors hover:bg-muted hover:text-muted-foreground"
+          >
+            <X className="size-3.5" />
+          </button>
+        </div>
+      </div>
+    </>
   );
 }
 
-/** A single sponsor chip shown in a class row */
-function SponsorChip({
-  sponsorName,
-  trophyName,
-  onRemove,
-  removing,
-}: {
-  sponsorName: string;
-  trophyName?: string | null;
-  onRemove: () => void;
-  removing: boolean;
-}) {
-  return (
-    <div className="flex items-center gap-1.5 rounded-md bg-muted/60 px-2 py-1.5 text-sm">
-      <div className="min-w-0 flex-1">
-        <span className="font-medium">{sponsorName}</span>
-        {trophyName && (
-          <span className="ml-1.5 text-muted-foreground">{trophyName}</span>
-        )}
-      </div>
-      <button
-        type="button"
-        onClick={onRemove}
-        disabled={removing}
-        className="flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-      >
-        {removing ? <Loader2 className="size-3 animate-spin" /> : <X className="size-3" />}
-      </button>
-    </div>
-  );
-}
+/* ─── Class Sponsorship Table (Inline-Editable Spreadsheet) ─── */
 
 function ClassSponsorshipTable({
   showId,
@@ -857,47 +1257,15 @@ function ClassSponsorshipTable({
   organisationId: string;
 }) {
   const utils = trpc.useUtils();
-  const { data: showSponsorList, isLoading: sponsorsLoading } = trpc.secretary.listShowSponsors.useQuery({ showId });
-  const { data: classes, isLoading: classesLoading } = trpc.shows.getClasses.useQuery({ showId });
-  const { data: orgSponsors } = trpc.secretary.listSponsors.useQuery({ organisationId });
-  const removeClassMutation = trpc.secretary.removeClassSponsorship.useMutation({
-    onSuccess: () => {
-      utils.secretary.listShowSponsors.invalidate();
-      toast.success('Sponsorship removed');
-    },
-    onError: (err) => toast.error(err.message),
-  });
+  const { data: classes, isLoading: classesLoading } = trpc.secretary.getClassesWithSponsorships.useQuery({ showId });
+  const { data: suggestions } = trpc.secretary.getSponsorNameSuggestions.useQuery({ organisationId });
 
-  const handleAssigned = useCallback(() => {
-    utils.secretary.listShowSponsors.invalidate();
-    toast.success('Sponsor assigned');
-  }, [utils]);
+  const invalidate = useCallback(() => {
+    utils.secretary.getClassesWithSponsorships.invalidate({ showId });
+    utils.secretary.getSponsorNameSuggestions.invalidate({ organisationId });
+  }, [utils, showId, organisationId]);
 
-  // Build a map: showClassId -> array of sponsorships
-  const classSponsorshipMap = useMemo(() => {
-    const map = new Map<string, {
-      id: string;
-      sponsorName: string;
-      trophyName: string | null;
-      trophyDonor: string | null;
-      prizeDescription: string | null;
-    }[]>();
-    if (!showSponsorList) return map;
-    for (const ss of showSponsorList) {
-      for (const cs of ss.classSponsorships ?? []) {
-        const existing = map.get(cs.showClassId) ?? [];
-        existing.push({
-          id: cs.id,
-          sponsorName: ss.sponsor.name,
-          trophyName: cs.trophyName,
-          trophyDonor: cs.trophyDonor,
-          prizeDescription: cs.prizeDescription,
-        });
-        map.set(cs.showClassId, existing);
-      }
-    }
-    return map;
-  }, [showSponsorList]);
+  const suggestionsList = suggestions ?? [];
 
   // Group classes by sex: Dog first, then Bitch, then ungendered
   const groupedClasses = useMemo(() => {
@@ -908,21 +1276,25 @@ function ClassSponsorshipTable({
     return { dog, bitch, other };
   }, [classes]);
 
-  // Show-level sponsors for "Best Awards" and "Donations" sections
-  const showLevelSponsors = useMemo(() => {
-    if (!showSponsorList) return { titleShow: [], donations: [] };
-    const titleShow = showSponsorList.filter(
-      (ss) => ss.tier === 'title' || ss.tier === 'show' || ss.tier === 'prize'
-    );
-    const donations = showSponsorList.filter(
-      (ss) => ss.tier === 'advertiser'
-    );
-    return { titleShow, donations };
-  }, [showSponsorList]);
+  // Count stats
+  const stats = useMemo(() => {
+    if (!classes) return { total: 0, sponsored: 0, sponsorships: 0, needSponsors: 0 };
+    let sponsorships = 0;
+    let sponsored = 0;
+    for (const cls of classes) {
+      const count = cls.classSponsorships?.length ?? 0;
+      sponsorships += count;
+      if (count > 0) sponsored++;
+    }
+    return {
+      total: classes.length,
+      sponsored,
+      sponsorships,
+      needSponsors: classes.length - sponsored,
+    };
+  }, [classes]);
 
-  const isLoading = sponsorsLoading || classesLoading;
-
-  if (isLoading) {
+  if (classesLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="size-6 animate-spin text-muted-foreground" />
@@ -930,11 +1302,7 @@ function ClassSponsorshipTable({
     );
   }
 
-  const orgSponsorList = orgSponsors ?? [];
-  const showSponsorListSafe = showSponsorList ?? [];
-  const hasClasses = classes && classes.length > 0;
-
-  if (!hasClasses) {
+  if (!classes || classes.length === 0) {
     return (
       <Card>
         <CardContent className="flex flex-col items-center justify-center py-12 text-center">
@@ -948,86 +1316,107 @@ function ClassSponsorshipTable({
     );
   }
 
-  function renderClassRow(
-    cls: NonNullable<typeof classes>[number],
-    label?: string,
+  type ShowClass = (typeof classes)[number];
+
+  function renderSection(
+    title: string,
+    icon: React.ReactNode,
+    sectionClasses: ShowClass[],
+    colorClass: string,
   ) {
-    const sponsorships = classSponsorshipMap.get(cls.id) ?? [];
-    const displayLabel = label ?? `#${cls.classNumber ?? '?'} ${cls.classDefinition.name}`;
+    if (sectionClasses.length === 0) return null;
 
     return (
-      <div key={cls.id} className="group">
-        {/* Mobile: card layout */}
-        <div className="sm:hidden">
-          <div className="rounded-lg border bg-card px-3 py-3">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-medium">{displayLabel}</p>
-              <AddSponsorPopover
-                orgSponsors={orgSponsorList}
-                showSponsorList={showSponsorListSafe}
-                showId={showId}
-                showClassId={cls.id}
-                onAssigned={handleAssigned}
-              />
-            </div>
-            {sponsorships.length > 0 ? (
-              <div className="mt-2 space-y-1.5">
-                {sponsorships.map((sp) => (
-                  <SponsorChip
-                    key={sp.id}
-                    sponsorName={sp.sponsorName}
-                    trophyName={sp.trophyName}
-                    onRemove={() => removeClassMutation.mutate({ id: sp.id })}
-                    removing={removeClassMutation.isPending}
-                  />
-                ))}
-              </div>
-            ) : (
-              <p className="mt-1.5 text-xs text-muted-foreground/60">No sponsor assigned</p>
-            )}
-          </div>
+      <div className="mb-8">
+        <div className="mb-2 flex items-center gap-2">
+          {icon}
+          <h3 className={cn('text-sm font-semibold uppercase tracking-wider', colorClass)}>{title}</h3>
         </div>
 
-        {/* Desktop: table row */}
-        <div className="hidden sm:grid sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-start sm:gap-3 sm:border-b sm:py-2.5 sm:last:border-b-0">
-          <div className="text-sm font-medium">{displayLabel}</div>
-          <div className="min-w-0 space-y-1">
-            {sponsorships.map((sp) => (
-              <div key={sp.id} className="flex items-center gap-1.5">
-                <span className="truncate text-sm">{sp.sponsorName}</span>
-                <button
-                  type="button"
-                  onClick={() => removeClassMutation.mutate({ id: sp.id })}
-                  disabled={removeClassMutation.isPending}
-                  className="flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-                >
-                  <X className="size-3" />
-                </button>
+        {/* Desktop: spreadsheet grid */}
+        <div className="hidden overflow-hidden rounded-md border sm:block">
+          {/* Header */}
+          <div className="grid grid-cols-[minmax(140px,1.2fr)_minmax(120px,1fr)_minmax(100px,0.8fr)_minmax(100px,0.8fr)_36px] border-b-2 bg-muted/60 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <div className="border-r px-2 py-2">Class / Award</div>
+            <div className="border-r px-2 py-2">Sponsor Name</div>
+            <div className="border-r px-2 py-2">Affix</div>
+            <div className="border-r px-2 py-2">Trophy</div>
+            <div className="px-1 py-2" />
+          </div>
+
+          {/* Rows */}
+          {sectionClasses.map((cls, idx) => {
+            const sponsorships = cls.classSponsorships ?? [];
+            const displayLabel = `#${cls.classNumber ?? '?'} ${cls.classDefinition.name}`;
+            const rowBg = idx % 2 === 0 ? '' : 'bg-muted/20';
+
+            return (
+              <div key={cls.id} className={rowBg}>
+                {/* One sub-grid per class: class label spans all sponsorship rows */}
+                <div className="grid grid-cols-[minmax(140px,1.2fr)_minmax(120px,1fr)_minmax(100px,0.8fr)_minmax(100px,0.8fr)_36px]">
+                  {/* Class label cell — spans all sponsorship rows */}
+                  <div
+                    className="flex items-start border-b border-r px-2 py-2 text-sm font-medium"
+                    style={{
+                      gridRow: `1 / span ${sponsorships.length + 1}`,
+                    }}
+                  >
+                    {displayLabel}
+                  </div>
+
+                  {/* Existing sponsorship rows */}
+                  {sponsorships.map((sp) => (
+                    <SponsorshipRow
+                      key={sp.id}
+                      sponsorship={sp}
+                      suggestions={suggestionsList}
+                      onSaved={invalidate}
+                      onRemoved={invalidate}
+                    />
+                  ))}
+
+                  {/* Add new row */}
+                  <NewSponsorshipRow
+                    showClassId={cls.id}
+                    suggestions={suggestionsList}
+                    onCreated={invalidate}
+                  />
+                </div>
               </div>
-            ))}
-            {sponsorships.length === 0 && (
-              <span className="text-sm text-muted-foreground/40">—</span>
-            )}
-          </div>
-          <div className="min-w-0 space-y-1">
-            {sponsorships.map((sp) => (
-              <p key={sp.id} className="truncate text-sm text-muted-foreground">
-                {sp.trophyName || '—'}
-              </p>
-            ))}
-            {sponsorships.length === 0 && (
-              <span className="text-sm text-muted-foreground/40">—</span>
-            )}
-          </div>
-          <div>
-            <AddSponsorPopover
-              orgSponsors={orgSponsorList}
-              showSponsorList={showSponsorListSafe}
-              showId={showId}
-              showClassId={cls.id}
-              onAssigned={handleAssigned}
-            />
-          </div>
+            );
+          })}
+        </div>
+
+        {/* Mobile: card-based layout */}
+        <div className="space-y-2 sm:hidden">
+          {sectionClasses.map((cls) => {
+            const sponsorships = cls.classSponsorships ?? [];
+            const displayLabel = `#${cls.classNumber ?? '?'} ${cls.classDefinition.name}`;
+
+            return (
+              <div key={cls.id} className="rounded-lg border bg-card">
+                <div className="border-b px-3 py-2">
+                  <p className="text-sm font-medium">{displayLabel}</p>
+                </div>
+                <div className="space-y-2 p-2">
+                  {sponsorships.map((sp) => (
+                    <SponsorshipRow
+                      key={sp.id}
+                      sponsorship={sp}
+                      suggestions={suggestionsList}
+                      onSaved={invalidate}
+                      onRemoved={invalidate}
+                    />
+                  ))}
+                  <NewSponsorshipRow
+                    showClassId={cls.id}
+                    suggestions={suggestionsList}
+                    onCreated={invalidate}
+                  />
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -1036,206 +1425,41 @@ function ClassSponsorshipTable({
   return (
     <div>
       <p className="mb-4 text-sm text-muted-foreground">
-        Spreadsheet view of all class sponsorships — like Amanda&apos;s Excel sheet. Add sponsors inline to any class or award.
+        Manage class and award sponsorships — tap any cell to edit.
       </p>
 
-      {/* ── Best Awards Section ────────────── */}
-      <div className="mb-6">
-        <div className="mb-2 flex items-center gap-2">
-          <Award className="size-4 text-amber-600" />
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-amber-800">Best Awards</h3>
-        </div>
-        {/* Desktop header */}
-        <div className="hidden sm:grid sm:grid-cols-[1fr_1fr_1fr_auto] sm:gap-3 sm:border-b sm:border-b-2 sm:pb-2 sm:text-xs sm:font-medium sm:uppercase sm:tracking-wider sm:text-muted-foreground">
-          <div>Class / Award</div>
-          <div>Sponsor Name</div>
-          <div>Affix / Notes</div>
-          <div className="w-16" />
-        </div>
-        <div className="space-y-1.5 sm:space-y-0">
-          {BEST_AWARDS.map((awardName) => {
-            // Best awards are show-level sponsors — show read-only from show sponsors data
-            const matchingSponsors = showLevelSponsors.titleShow.filter((ss) => {
-              const title = ss.customTitle?.toLowerCase() ?? '';
-              const name = awardName.toLowerCase();
-              return title.includes(name) || title === name;
-            });
-
-            return (
-              <div key={awardName} className="group">
-                {/* Mobile */}
-                <div className="sm:hidden">
-                  <div className="rounded-lg border border-amber-200/50 bg-amber-50/30 px-3 py-3">
-                    <p className="text-sm font-medium text-amber-900">{awardName}</p>
-                    {matchingSponsors.length > 0 ? (
-                      <div className="mt-1.5 space-y-1">
-                        {matchingSponsors.map((ss) => (
-                          <p key={ss.id} className="text-sm">
-                            <span className="font-medium">{ss.sponsor.name}</span>
-                            {ss.sponsor.notes && (
-                              <span className="ml-1.5 text-muted-foreground">{ss.sponsor.notes}</span>
-                            )}
-                          </p>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="mt-1 text-xs text-muted-foreground/60">
-                        Assign via Show Sponsors tab
-                      </p>
-                    )}
-                  </div>
-                </div>
-                {/* Desktop */}
-                <div className="hidden sm:grid sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-center sm:gap-3 sm:border-b sm:py-2.5">
-                  <div className="text-sm font-medium text-amber-900">{awardName}</div>
-                  <div className="min-w-0">
-                    {matchingSponsors.length > 0 ? (
-                      matchingSponsors.map((ss) => (
-                        <p key={ss.id} className="truncate text-sm">{ss.sponsor.name}</p>
-                      ))
-                    ) : (
-                      <span className="text-sm text-muted-foreground/40">—</span>
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    {matchingSponsors.length > 0 ? (
-                      matchingSponsors.map((ss) => (
-                        <p key={ss.id} className="truncate text-sm text-muted-foreground">
-                          {ss.sponsor.notes || '—'}
-                        </p>
-                      ))
-                    ) : (
-                      <span className="text-sm text-muted-foreground/40">—</span>
-                    )}
-                  </div>
-                  <div className="w-16" />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* ── Dog Classes Section ─────────────── */}
-      {groupedClasses.dog.length > 0 && (
-        <div className="mb-6">
-          <div className="mb-2 flex items-center gap-2">
-            <Trophy className="size-4 text-sky-600" />
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-sky-800">Dog Classes</h3>
-          </div>
-          {/* Desktop header */}
-          <div className="hidden sm:grid sm:grid-cols-[1fr_1fr_1fr_auto] sm:gap-3 sm:border-b sm:border-b-2 sm:pb-2 sm:text-xs sm:font-medium sm:uppercase sm:tracking-wider sm:text-muted-foreground">
-            <div>Class / Award</div>
-            <div>Sponsor Name</div>
-            <div>Affix / Notes</div>
-            <div className="w-16" />
-          </div>
-          <div className="space-y-1.5 sm:space-y-0">
-            {groupedClasses.dog.map((cls) => renderClassRow(cls))}
-          </div>
-        </div>
+      {renderSection(
+        'Dog Classes',
+        <Trophy className="size-4 text-sky-600" />,
+        groupedClasses.dog,
+        'text-sky-800',
       )}
-
-      {/* ── Bitch Classes Section ──────────── */}
-      {groupedClasses.bitch.length > 0 && (
-        <div className="mb-6">
-          <div className="mb-2 flex items-center gap-2">
-            <Trophy className="size-4 text-pink-600" />
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-pink-800">Bitch Classes</h3>
-          </div>
-          {/* Desktop header */}
-          <div className="hidden sm:grid sm:grid-cols-[1fr_1fr_1fr_auto] sm:gap-3 sm:border-b sm:border-b-2 sm:pb-2 sm:text-xs sm:font-medium sm:uppercase sm:tracking-wider sm:text-muted-foreground">
-            <div>Class / Award</div>
-            <div>Sponsor Name</div>
-            <div>Affix / Notes</div>
-            <div className="w-16" />
-          </div>
-          <div className="space-y-1.5 sm:space-y-0">
-            {groupedClasses.bitch.map((cls) => renderClassRow(cls))}
-          </div>
-        </div>
+      {renderSection(
+        'Bitch Classes',
+        <Trophy className="size-4 text-pink-600" />,
+        groupedClasses.bitch,
+        'text-pink-800',
       )}
-
-      {/* ── Other Classes (ungendered) ──────── */}
-      {groupedClasses.other.length > 0 && (
-        <div className="mb-6">
-          <div className="mb-2 flex items-center gap-2">
-            <Trophy className="size-4 text-violet-600" />
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-violet-800">Other Classes</h3>
-          </div>
-          <div className="hidden sm:grid sm:grid-cols-[1fr_1fr_1fr_auto] sm:gap-3 sm:border-b sm:border-b-2 sm:pb-2 sm:text-xs sm:font-medium sm:uppercase sm:tracking-wider sm:text-muted-foreground">
-            <div>Class / Award</div>
-            <div>Sponsor Name</div>
-            <div>Affix / Notes</div>
-            <div className="w-16" />
-          </div>
-          <div className="space-y-1.5 sm:space-y-0">
-            {groupedClasses.other.map((cls) => renderClassRow(cls))}
-          </div>
-        </div>
-      )}
-
-      {/* ── Donations Section ──────────────── */}
-      {showLevelSponsors.donations.length > 0 && (
-        <div className="mb-6">
-          <div className="mb-2 flex items-center gap-2">
-            <Gift className="size-4 text-emerald-600" />
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-emerald-800">Donations</h3>
-          </div>
-          <div className="hidden sm:grid sm:grid-cols-[1fr_1fr_1fr_auto] sm:gap-3 sm:border-b sm:border-b-2 sm:pb-2 sm:text-xs sm:font-medium sm:uppercase sm:tracking-wider sm:text-muted-foreground">
-            <div>Donor</div>
-            <div>Sponsor Name</div>
-            <div>Notes</div>
-            <div className="w-16" />
-          </div>
-          <div className="space-y-1.5 sm:space-y-0">
-            {showLevelSponsors.donations.map((ss) => (
-              <div key={ss.id} className="group">
-                {/* Mobile */}
-                <div className="sm:hidden">
-                  <div className="rounded-lg border border-emerald-200/50 bg-emerald-50/30 px-3 py-3">
-                    <p className="text-sm font-medium">{ss.sponsor.name}</p>
-                    {(ss.sponsor.notes || ss.customTitle) && (
-                      <p className="mt-0.5 text-sm text-muted-foreground">
-                        {ss.customTitle || ss.sponsor.notes}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                {/* Desktop */}
-                <div className="hidden sm:grid sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-center sm:gap-3 sm:border-b sm:py-2.5">
-                  <div className="text-sm font-medium">Donation</div>
-                  <div className="truncate text-sm">{ss.sponsor.name}</div>
-                  <div className="truncate text-sm text-muted-foreground">
-                    {ss.customTitle || ss.sponsor.notes || '—'}
-                  </div>
-                  <div className="w-16" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+      {renderSection(
+        'Other Classes',
+        <Trophy className="size-4 text-violet-600" />,
+        groupedClasses.other,
+        'text-violet-800',
       )}
 
       {/* Summary stats */}
-      <div className="mt-4 flex flex-wrap gap-4 rounded-lg bg-muted/50 px-4 py-3 text-xs text-muted-foreground">
+      <div className="flex flex-wrap gap-4 rounded-lg bg-muted/50 px-4 py-3 text-xs text-muted-foreground">
         <span>
-          <strong className="text-foreground">{classes?.length ?? 0}</strong> classes
+          <strong className="text-foreground">{stats.total}</strong> classes
         </span>
         <span>
-          <strong className="text-foreground">
-            {Array.from(classSponsorshipMap.values()).reduce((sum, arr) => sum + arr.length, 0)}
-          </strong> class sponsorships
+          <strong className="text-foreground">{stats.sponsorships}</strong> sponsorships
         </span>
         <span>
-          <strong className="text-foreground">
-            {classes ? classes.filter((c) => classSponsorshipMap.has(c.id)).length : 0}
-          </strong> classes sponsored
+          <strong className="text-foreground">{stats.sponsored}</strong> sponsored
         </span>
         <span>
-          <strong className="text-foreground">
-            {classes ? classes.filter((c) => !classSponsorshipMap.has(c.id)).length : 0}
-          </strong> need sponsors
+          <strong className="text-foreground">{stats.needSponsors}</strong> need sponsors
         </span>
       </div>
     </div>
