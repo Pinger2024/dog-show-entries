@@ -26,6 +26,7 @@ import { trpc } from '@/lib/trpc';
 import { cn } from '@/lib/utils';
 import { penceToPoundsString } from '@/lib/date-utils';
 import { PHASE_CONFIG } from '@/lib/default-checklist';
+import { deriveCurrentChecklistPhase } from '../_lib/phase-utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -85,6 +86,8 @@ export default function ShowChecklistPage() {
   const showId = useShowId();
 
   const utils = trpc.useUtils();
+  const { data: showData } = trpc.shows.getById.useQuery({ id: showId });
+  const currentChecklistPhase = deriveCurrentChecklistPhase(showData?.status ?? 'draft');
   const { data: items, isLoading: checklistLoading } = trpc.secretary.getChecklist.useQuery({
     showId,
   });
@@ -128,7 +131,7 @@ export default function ShowChecklistPage() {
   });
 
   const [expandedPhases, setExpandedPhases] = useState<Set<string>>(
-    new Set(['pre_planning', 'planning', 'pre_show', 'final_prep', 'show_day', 'post_show'])
+    new Set([currentChecklistPhase])
   );
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
   const [showAddItem, setShowAddItem] = useState(false);
@@ -831,8 +834,11 @@ export default function ShowChecklistPage() {
 
         const groupedItems = groupPhaseItems(phase.items);
 
+        const isCurrent = phase.key === currentChecklistPhase;
+        const isPast = phase.sortOrder < (PHASE_CONFIG[currentChecklistPhase as keyof typeof PHASE_CONFIG]?.sortOrder ?? 0);
+
         return (
-          <Card key={phase.key}>
+          <Card key={phase.key} className={isCurrent ? 'border-primary/30 ring-1 ring-primary/10' : isPast && phasePercent === 100 ? 'opacity-60' : ''}>
             <button
               className="flex w-full items-center gap-2 px-3 py-3 sm:gap-3 sm:px-6 sm:py-4 text-left hover:bg-muted/50 active:bg-muted/70 transition-colors"
               onClick={() => togglePhase(phase.key)}
@@ -847,6 +853,16 @@ export default function ShowChecklistPage() {
                   <h3 className="font-semibold text-sm sm:text-base truncate">
                     {phase.label}
                   </h3>
+                  {isCurrent && (
+                    <span className="shrink-0 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">
+                      Now
+                    </span>
+                  )}
+                  {isPast && phasePercent === 100 && (
+                    <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                      Done
+                    </span>
+                  )}
                   <span className="text-xs text-muted-foreground shrink-0">
                     {phaseComplete}/{phaseTotal}
                   </span>
