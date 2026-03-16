@@ -842,6 +842,19 @@ export const secretaryRouter = createTRPCRouter({
 
       if (values.length > 0) {
         await ctx.db.insert(showClasses).values(values);
+
+        // Auto-number all classes for this show based on sort order
+        const allClasses = await ctx.db.query.showClasses.findMany({
+          where: eq(showClasses.showId, input.showId),
+          columns: { id: true },
+          orderBy: [asc(showClasses.sortOrder)],
+        });
+        for (let i = 0; i < allClasses.length; i++) {
+          await ctx.db
+            .update(showClasses)
+            .set({ classNumber: i + 1 })
+            .where(eq(showClasses.id, allClasses[i].id));
+        }
       }
 
       return { created: values.length };
