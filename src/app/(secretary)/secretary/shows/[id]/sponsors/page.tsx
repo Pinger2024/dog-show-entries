@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import {
   Handshake,
   Loader2,
@@ -12,6 +12,9 @@ import {
   Image as ImageIcon,
   Upload,
   ArrowRight,
+  X,
+  Award,
+  Gift,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
@@ -40,6 +43,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { useShowId } from '../_lib/show-context';
 
 const SPONSOR_CATEGORIES: Record<string, string> = {
@@ -688,6 +696,552 @@ function ShowSponsorAssignments({
   );
 }
 
+/* ─── Class Sponsorship Table Tab ────────────────────── */
+
+const BEST_AWARDS = [
+  'Best in Show',
+  'Reserve Best in Show',
+  'Best Dog',
+  'Best Bitch',
+  'Best Puppy Dog',
+  'Best Puppy Bitch',
+  'Best Long Coat Dog',
+  'Best Long Coat Bitch',
+  'Best Long Coat in Show',
+  'Best of Breed',
+];
+
+/** Inline form for adding a sponsor to a class row */
+function AddSponsorPopover({
+  orgSponsors,
+  showSponsorList,
+  showId,
+  showClassId,
+  onAssigned,
+}: {
+  orgSponsors: { id: string; name: string; notes: string | null }[];
+  showSponsorList: { id: string; sponsorId: string }[];
+  showId: string;
+  showClassId: string;
+  onAssigned: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [selectedOrgSponsorId, setSelectedOrgSponsorId] = useState('');
+  const [trophyName, setTrophyName] = useState('');
+
+  const assignShowSponsorMutation = trpc.secretary.assignShowSponsor.useMutation({
+    onError: (err) => toast.error(err.message),
+  });
+  const assignClassMutation = trpc.secretary.assignClassSponsorship.useMutation({
+    onSuccess: () => {
+      onAssigned();
+      setOpen(false);
+      setSelectedOrgSponsorId('');
+      setTrophyName('');
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const handleAssign = useCallback(() => {
+    if (!selectedOrgSponsorId) return;
+    const existingShowSponsor = showSponsorList.find(
+      (ss) => ss.sponsorId === selectedOrgSponsorId
+    );
+    if (existingShowSponsor) {
+      assignClassMutation.mutate({
+        showSponsorId: existingShowSponsor.id,
+        showClassId,
+        trophyName: trophyName.trim() || undefined,
+      });
+    } else {
+      assignShowSponsorMutation.mutate(
+        { showId, sponsorId: selectedOrgSponsorId, tier: 'class' as const },
+        {
+          onSuccess: (newShowSponsor) => {
+            assignClassMutation.mutate({
+              showSponsorId: newShowSponsor.id,
+              showClassId,
+              trophyName: trophyName.trim() || undefined,
+            });
+          },
+        }
+      );
+    }
+  }, [selectedOrgSponsorId, showSponsorList, showClassId, showId, trophyName, assignClassMutation, assignShowSponsorMutation]);
+
+  const isPending = assignClassMutation.isPending || assignShowSponsorMutation.isPending;
+
+  return (
+    <Popover open={open} onOpenChange={(o) => {
+      setOpen(o);
+      if (!o) { setSelectedOrgSponsorId(''); setTrophyName(''); }
+    }}>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="sm" className="h-8 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground">
+          <Plus className="size-3.5" />
+          <span className="hidden sm:inline">Add</span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72 max-w-[calc(100vw-2rem)] space-y-3 p-3" align="start">
+        <div>
+          <Label className="text-xs">Sponsor</Label>
+          <Select value={selectedOrgSponsorId} onValueChange={setSelectedOrgSponsorId}>
+            <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select sponsor" /></SelectTrigger>
+            <SelectContent>
+              {orgSponsors.map((s) => (
+                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-xs">Trophy / Affix</Label>
+          <Input
+            value={trophyName}
+            onChange={(e) => setTrophyName(e.target.value)}
+            placeholder="e.g. Hundark GSD"
+            className="h-9 text-sm"
+          />
+        </div>
+        <Button
+          size="sm"
+          className="w-full min-h-[2.75rem]"
+          disabled={!selectedOrgSponsorId || isPending}
+          onClick={handleAssign}
+        >
+          {isPending && <Loader2 className="size-3.5 animate-spin" />}
+          Add Sponsor
+        </Button>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** A single sponsor chip shown in a class row */
+function SponsorChip({
+  sponsorName,
+  trophyName,
+  onRemove,
+  removing,
+}: {
+  sponsorName: string;
+  trophyName?: string | null;
+  onRemove: () => void;
+  removing: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-1.5 rounded-md bg-muted/60 px-2 py-1.5 text-sm">
+      <div className="min-w-0 flex-1">
+        <span className="font-medium">{sponsorName}</span>
+        {trophyName && (
+          <span className="ml-1.5 text-muted-foreground">{trophyName}</span>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={onRemove}
+        disabled={removing}
+        className="flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+      >
+        {removing ? <Loader2 className="size-3 animate-spin" /> : <X className="size-3" />}
+      </button>
+    </div>
+  );
+}
+
+function ClassSponsorshipTable({
+  showId,
+  organisationId,
+}: {
+  showId: string;
+  organisationId: string;
+}) {
+  const utils = trpc.useUtils();
+  const { data: showSponsorList, isLoading: sponsorsLoading } = trpc.secretary.listShowSponsors.useQuery({ showId });
+  const { data: classes, isLoading: classesLoading } = trpc.shows.getClasses.useQuery({ showId });
+  const { data: orgSponsors } = trpc.secretary.listSponsors.useQuery({ organisationId });
+  const removeClassMutation = trpc.secretary.removeClassSponsorship.useMutation({
+    onSuccess: () => {
+      utils.secretary.listShowSponsors.invalidate();
+      toast.success('Sponsorship removed');
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const handleAssigned = useCallback(() => {
+    utils.secretary.listShowSponsors.invalidate();
+    toast.success('Sponsor assigned');
+  }, [utils]);
+
+  // Build a map: showClassId -> array of sponsorships
+  const classSponsorshipMap = useMemo(() => {
+    const map = new Map<string, {
+      id: string;
+      sponsorName: string;
+      trophyName: string | null;
+      trophyDonor: string | null;
+      prizeDescription: string | null;
+    }[]>();
+    if (!showSponsorList) return map;
+    for (const ss of showSponsorList) {
+      for (const cs of ss.classSponsorships ?? []) {
+        const existing = map.get(cs.showClassId) ?? [];
+        existing.push({
+          id: cs.id,
+          sponsorName: ss.sponsor.name,
+          trophyName: cs.trophyName,
+          trophyDonor: cs.trophyDonor,
+          prizeDescription: cs.prizeDescription,
+        });
+        map.set(cs.showClassId, existing);
+      }
+    }
+    return map;
+  }, [showSponsorList]);
+
+  // Group classes by sex: Dog first, then Bitch, then ungendered
+  const groupedClasses = useMemo(() => {
+    if (!classes) return { dog: [], bitch: [], other: [] };
+    const dog = classes.filter((c) => c.sex === 'dog');
+    const bitch = classes.filter((c) => c.sex === 'bitch');
+    const other = classes.filter((c) => !c.sex);
+    return { dog, bitch, other };
+  }, [classes]);
+
+  // Show-level sponsors for "Best Awards" and "Donations" sections
+  const showLevelSponsors = useMemo(() => {
+    if (!showSponsorList) return { titleShow: [], donations: [] };
+    const titleShow = showSponsorList.filter(
+      (ss) => ss.tier === 'title' || ss.tier === 'show' || ss.tier === 'prize'
+    );
+    const donations = showSponsorList.filter(
+      (ss) => ss.tier === 'advertiser'
+    );
+    return { titleShow, donations };
+  }, [showSponsorList]);
+
+  const isLoading = sponsorsLoading || classesLoading;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const orgSponsorList = orgSponsors ?? [];
+  const showSponsorListSafe = showSponsorList ?? [];
+  const hasClasses = classes && classes.length > 0;
+
+  if (!hasClasses) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+          <Trophy className="size-10 text-muted-foreground/40" />
+          <p className="mt-3 text-sm font-medium">No classes configured</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Add classes to this show first, then you can assign sponsors here.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  function renderClassRow(
+    cls: NonNullable<typeof classes>[number],
+    label?: string,
+  ) {
+    const sponsorships = classSponsorshipMap.get(cls.id) ?? [];
+    const displayLabel = label ?? `#${cls.classNumber ?? '?'} ${cls.classDefinition.name}`;
+
+    return (
+      <div key={cls.id} className="group">
+        {/* Mobile: card layout */}
+        <div className="sm:hidden">
+          <div className="rounded-lg border bg-card px-3 py-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-medium">{displayLabel}</p>
+              <AddSponsorPopover
+                orgSponsors={orgSponsorList}
+                showSponsorList={showSponsorListSafe}
+                showId={showId}
+                showClassId={cls.id}
+                onAssigned={handleAssigned}
+              />
+            </div>
+            {sponsorships.length > 0 ? (
+              <div className="mt-2 space-y-1.5">
+                {sponsorships.map((sp) => (
+                  <SponsorChip
+                    key={sp.id}
+                    sponsorName={sp.sponsorName}
+                    trophyName={sp.trophyName}
+                    onRemove={() => removeClassMutation.mutate({ id: sp.id })}
+                    removing={removeClassMutation.isPending}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="mt-1.5 text-xs text-muted-foreground/60">No sponsor assigned</p>
+            )}
+          </div>
+        </div>
+
+        {/* Desktop: table row */}
+        <div className="hidden sm:grid sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-start sm:gap-3 sm:border-b sm:py-2.5 sm:last:border-b-0">
+          <div className="text-sm font-medium">{displayLabel}</div>
+          <div className="min-w-0 space-y-1">
+            {sponsorships.map((sp) => (
+              <div key={sp.id} className="flex items-center gap-1.5">
+                <span className="truncate text-sm">{sp.sponsorName}</span>
+                <button
+                  type="button"
+                  onClick={() => removeClassMutation.mutate({ id: sp.id })}
+                  disabled={removeClassMutation.isPending}
+                  className="flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                >
+                  <X className="size-3" />
+                </button>
+              </div>
+            ))}
+            {sponsorships.length === 0 && (
+              <span className="text-sm text-muted-foreground/40">—</span>
+            )}
+          </div>
+          <div className="min-w-0 space-y-1">
+            {sponsorships.map((sp) => (
+              <p key={sp.id} className="truncate text-sm text-muted-foreground">
+                {sp.trophyName || '—'}
+              </p>
+            ))}
+            {sponsorships.length === 0 && (
+              <span className="text-sm text-muted-foreground/40">—</span>
+            )}
+          </div>
+          <div>
+            <AddSponsorPopover
+              orgSponsors={orgSponsorList}
+              showSponsorList={showSponsorListSafe}
+              showId={showId}
+              showClassId={cls.id}
+              onAssigned={handleAssigned}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <p className="mb-4 text-sm text-muted-foreground">
+        Spreadsheet view of all class sponsorships — like Amanda&apos;s Excel sheet. Add sponsors inline to any class or award.
+      </p>
+
+      {/* ── Best Awards Section ────────────── */}
+      <div className="mb-6">
+        <div className="mb-2 flex items-center gap-2">
+          <Award className="size-4 text-amber-600" />
+          <h3 className="text-sm font-semibold uppercase tracking-wider text-amber-800">Best Awards</h3>
+        </div>
+        {/* Desktop header */}
+        <div className="hidden sm:grid sm:grid-cols-[1fr_1fr_1fr_auto] sm:gap-3 sm:border-b sm:border-b-2 sm:pb-2 sm:text-xs sm:font-medium sm:uppercase sm:tracking-wider sm:text-muted-foreground">
+          <div>Class / Award</div>
+          <div>Sponsor Name</div>
+          <div>Affix / Notes</div>
+          <div className="w-16" />
+        </div>
+        <div className="space-y-1.5 sm:space-y-0">
+          {BEST_AWARDS.map((awardName) => {
+            // Best awards are show-level sponsors — show read-only from show sponsors data
+            const matchingSponsors = showLevelSponsors.titleShow.filter((ss) => {
+              const title = ss.customTitle?.toLowerCase() ?? '';
+              const name = awardName.toLowerCase();
+              return title.includes(name) || title === name;
+            });
+
+            return (
+              <div key={awardName} className="group">
+                {/* Mobile */}
+                <div className="sm:hidden">
+                  <div className="rounded-lg border border-amber-200/50 bg-amber-50/30 px-3 py-3">
+                    <p className="text-sm font-medium text-amber-900">{awardName}</p>
+                    {matchingSponsors.length > 0 ? (
+                      <div className="mt-1.5 space-y-1">
+                        {matchingSponsors.map((ss) => (
+                          <p key={ss.id} className="text-sm">
+                            <span className="font-medium">{ss.sponsor.name}</span>
+                            {ss.sponsor.notes && (
+                              <span className="ml-1.5 text-muted-foreground">{ss.sponsor.notes}</span>
+                            )}
+                          </p>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-1 text-xs text-muted-foreground/60">
+                        Assign via Show Sponsors tab
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {/* Desktop */}
+                <div className="hidden sm:grid sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-center sm:gap-3 sm:border-b sm:py-2.5">
+                  <div className="text-sm font-medium text-amber-900">{awardName}</div>
+                  <div className="min-w-0">
+                    {matchingSponsors.length > 0 ? (
+                      matchingSponsors.map((ss) => (
+                        <p key={ss.id} className="truncate text-sm">{ss.sponsor.name}</p>
+                      ))
+                    ) : (
+                      <span className="text-sm text-muted-foreground/40">—</span>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    {matchingSponsors.length > 0 ? (
+                      matchingSponsors.map((ss) => (
+                        <p key={ss.id} className="truncate text-sm text-muted-foreground">
+                          {ss.sponsor.notes || '—'}
+                        </p>
+                      ))
+                    ) : (
+                      <span className="text-sm text-muted-foreground/40">—</span>
+                    )}
+                  </div>
+                  <div className="w-16" />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Dog Classes Section ─────────────── */}
+      {groupedClasses.dog.length > 0 && (
+        <div className="mb-6">
+          <div className="mb-2 flex items-center gap-2">
+            <Trophy className="size-4 text-sky-600" />
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-sky-800">Dog Classes</h3>
+          </div>
+          {/* Desktop header */}
+          <div className="hidden sm:grid sm:grid-cols-[1fr_1fr_1fr_auto] sm:gap-3 sm:border-b sm:border-b-2 sm:pb-2 sm:text-xs sm:font-medium sm:uppercase sm:tracking-wider sm:text-muted-foreground">
+            <div>Class / Award</div>
+            <div>Sponsor Name</div>
+            <div>Affix / Notes</div>
+            <div className="w-16" />
+          </div>
+          <div className="space-y-1.5 sm:space-y-0">
+            {groupedClasses.dog.map((cls) => renderClassRow(cls))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Bitch Classes Section ──────────── */}
+      {groupedClasses.bitch.length > 0 && (
+        <div className="mb-6">
+          <div className="mb-2 flex items-center gap-2">
+            <Trophy className="size-4 text-pink-600" />
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-pink-800">Bitch Classes</h3>
+          </div>
+          {/* Desktop header */}
+          <div className="hidden sm:grid sm:grid-cols-[1fr_1fr_1fr_auto] sm:gap-3 sm:border-b sm:border-b-2 sm:pb-2 sm:text-xs sm:font-medium sm:uppercase sm:tracking-wider sm:text-muted-foreground">
+            <div>Class / Award</div>
+            <div>Sponsor Name</div>
+            <div>Affix / Notes</div>
+            <div className="w-16" />
+          </div>
+          <div className="space-y-1.5 sm:space-y-0">
+            {groupedClasses.bitch.map((cls) => renderClassRow(cls))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Other Classes (ungendered) ──────── */}
+      {groupedClasses.other.length > 0 && (
+        <div className="mb-6">
+          <div className="mb-2 flex items-center gap-2">
+            <Trophy className="size-4 text-violet-600" />
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-violet-800">Other Classes</h3>
+          </div>
+          <div className="hidden sm:grid sm:grid-cols-[1fr_1fr_1fr_auto] sm:gap-3 sm:border-b sm:border-b-2 sm:pb-2 sm:text-xs sm:font-medium sm:uppercase sm:tracking-wider sm:text-muted-foreground">
+            <div>Class / Award</div>
+            <div>Sponsor Name</div>
+            <div>Affix / Notes</div>
+            <div className="w-16" />
+          </div>
+          <div className="space-y-1.5 sm:space-y-0">
+            {groupedClasses.other.map((cls) => renderClassRow(cls))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Donations Section ──────────────── */}
+      {showLevelSponsors.donations.length > 0 && (
+        <div className="mb-6">
+          <div className="mb-2 flex items-center gap-2">
+            <Gift className="size-4 text-emerald-600" />
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-emerald-800">Donations</h3>
+          </div>
+          <div className="hidden sm:grid sm:grid-cols-[1fr_1fr_1fr_auto] sm:gap-3 sm:border-b sm:border-b-2 sm:pb-2 sm:text-xs sm:font-medium sm:uppercase sm:tracking-wider sm:text-muted-foreground">
+            <div>Donor</div>
+            <div>Sponsor Name</div>
+            <div>Notes</div>
+            <div className="w-16" />
+          </div>
+          <div className="space-y-1.5 sm:space-y-0">
+            {showLevelSponsors.donations.map((ss) => (
+              <div key={ss.id} className="group">
+                {/* Mobile */}
+                <div className="sm:hidden">
+                  <div className="rounded-lg border border-emerald-200/50 bg-emerald-50/30 px-3 py-3">
+                    <p className="text-sm font-medium">{ss.sponsor.name}</p>
+                    {(ss.sponsor.notes || ss.customTitle) && (
+                      <p className="mt-0.5 text-sm text-muted-foreground">
+                        {ss.customTitle || ss.sponsor.notes}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {/* Desktop */}
+                <div className="hidden sm:grid sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-center sm:gap-3 sm:border-b sm:py-2.5">
+                  <div className="text-sm font-medium">Donation</div>
+                  <div className="truncate text-sm">{ss.sponsor.name}</div>
+                  <div className="truncate text-sm text-muted-foreground">
+                    {ss.customTitle || ss.sponsor.notes || '—'}
+                  </div>
+                  <div className="w-16" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Summary stats */}
+      <div className="mt-4 flex flex-wrap gap-4 rounded-lg bg-muted/50 px-4 py-3 text-xs text-muted-foreground">
+        <span>
+          <strong className="text-foreground">{classes?.length ?? 0}</strong> classes
+        </span>
+        <span>
+          <strong className="text-foreground">
+            {Array.from(classSponsorshipMap.values()).reduce((sum, arr) => sum + arr.length, 0)}
+          </strong> class sponsorships
+        </span>
+        <span>
+          <strong className="text-foreground">
+            {classes ? classes.filter((c) => classSponsorshipMap.has(c.id)).length : 0}
+          </strong> classes sponsored
+        </span>
+        <span>
+          <strong className="text-foreground">
+            {classes ? classes.filter((c) => !classSponsorshipMap.has(c.id)).length : 0}
+          </strong> need sponsors
+        </span>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Main Page ──────────────────────────────────────── */
 
 export default function SponsorsPage() {
@@ -717,6 +1271,7 @@ export default function SponsorsPage() {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="assignments">Show Sponsors</TabsTrigger>
+          <TabsTrigger value="table">Class Sponsorship</TabsTrigger>
           <TabsTrigger value="directory">Sponsor Directory</TabsTrigger>
         </TabsList>
         <TabsContent value="assignments" className="mt-4">
@@ -724,6 +1279,12 @@ export default function SponsorsPage() {
             showId={showId}
             organisationId={show.organisationId}
             onSwitchToDirectory={() => setActiveTab('directory')}
+          />
+        </TabsContent>
+        <TabsContent value="table" className="mt-4">
+          <ClassSponsorshipTable
+            showId={showId}
+            organisationId={show.organisationId}
           />
         </TabsContent>
         <TabsContent value="directory" className="mt-4">
