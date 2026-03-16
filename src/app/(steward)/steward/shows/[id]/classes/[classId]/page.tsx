@@ -3,6 +3,7 @@
 import { use, useState } from 'react';
 import Link from 'next/link';
 import {
+  AlertTriangle,
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
@@ -100,8 +101,18 @@ export default function StewardClassResultsPage({
     );
   }
 
-  const { showClass, entries } = data;
+  const { showClass, entries, judgeName } = data;
   const isLocked = lockStatus?.locked ?? false;
+
+  // Check if judge bred any dogs in this class
+  const judgeBreederWarnings = judgeName
+    ? entries.filter(
+        (e) =>
+          e.breederName &&
+          judgeName &&
+          e.breederName.toLowerCase().trim() === judgeName.toLowerCase().trim()
+      )
+    : [];
 
   // Scope-aware placements: all-breed = 1st–HC, breed = 1st–Commended
   const availablePlacements = getPlacementsForScope(showClass.showScope);
@@ -186,6 +197,18 @@ export default function StewardClassResultsPage({
         <div className="mt-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
           <Lock className="size-4 shrink-0" />
           <p>Results have been published. Editing is locked. Contact the secretary to make changes.</p>
+        </div>
+      )}
+
+      {/* Judge breeder conflict warnings */}
+      {judgeBreederWarnings.length > 0 && (
+        <div className="mt-4 space-y-1.5 rounded-lg border border-amber-200 bg-amber-50 p-3">
+          {judgeBreederWarnings.map((entry) => (
+            <div key={entry.entryClassId} className="flex items-center gap-2 text-sm text-amber-800">
+              <AlertTriangle className="size-4 shrink-0" />
+              <p>{entry.dogName} was bred by the assigned judge ({judgeName})</p>
+            </div>
+          ))}
         </div>
       )}
 

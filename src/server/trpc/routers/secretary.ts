@@ -523,8 +523,18 @@ export const secretaryRouter = createTRPCRouter({
           isNull(entries.deletedAt)
         ),
         with: {
-          dog: { with: { breed: true } },
+          dog: {
+            with: {
+              breed: true,
+              owners: { orderBy: [asc(dogOwners.sortOrder)] },
+            },
+          },
           exhibitor: true,
+          entryClasses: {
+            with: {
+              showClass: { with: { classDefinition: true } },
+            },
+          },
         },
         orderBy: [asc(entries.catalogueNumber)],
       });
@@ -767,6 +777,96 @@ export const secretaryRouter = createTRPCRouter({
         },
         orderBy: [desc(entryAuditLog.createdAt)],
       });
+    }),
+
+  // ── Class transfer ─────────────────────────────────────────
+
+  transferClass: secretaryProcedure
+    .input(
+      z.object({
+        entryClassId: z.string().uuid(),
+        newShowClassId: z.string().uuid(),
+        reason: z.string().min(1, 'A reason for the transfer is required'),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Find the entry class and its current show class
+      const ec = await ctx.db.query.entryClasses.findFirst({
+        where: eq(entryClasses.id, input.entryClassId),
+        with: {
+          showClass: {
+            with: { classDefinition: true },
+          },
+          entry: {
+            columns: { id: true, showId: true, status: true, deletedAt: true },
+            with: {
+              dog: { columns: { registeredName: true } },
+            },
+          },
+        },
+      });
+
+      if (!ec || ec.entry.deletedAt) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Entry class not found',
+        });
+      }
+
+      await verifyShowAccess(ctx.db, ctx.session.user.id, ec.entry.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      // Validate the new class exists and belongs to the same show
+      const newShowClass = await ctx.db.query.showClasses.findFirst({
+        where: and(
+          eq(showClasses.id, input.newShowClassId),
+          eq(showClasses.showId, ec.entry.showId)
+        ),
+        with: { classDefinition: true },
+      });
+
+      if (!newShowClass) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Target class not found or belongs to a different show',
+        });
+      }
+
+      if (input.newShowClassId === ec.showClass.id) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Entry is already in this class',
+        });
+      }
+
+      const oldClassName = ec.showClass.classDefinition.name;
+      const newClassName = newShowClass.classDefinition.name;
+
+      // Update the entry class
+      await ctx.db
+        .update(entryClasses)
+        .set({ showClassId: input.newShowClassId })
+        .where(eq(entryClasses.id, input.entryClassId));
+
+      // Log the transfer in the audit log
+      await ctx.db.insert(entryAuditLog).values({
+        entryId: ec.entry.id,
+        action: 'class_transferred',
+        userId: ctx.session.user.id,
+        changes: {
+          fromClassId: ec.showClass.id,
+          fromClassName: oldClassName,
+          toClassId: input.newShowClassId,
+          toClassName: newClassName,
+        },
+        reason: input.reason,
+      });
+
+      return {
+        transferred: true,
+        dogName: ec.entry.dog?.registeredName ?? 'Unknown',
+        fromClass: oldClassName,
+        toClass: newClassName,
+      };
     }),
 
   // ── Custom class definition creation ─────────────────────
@@ -2379,6 +2479,20 @@ export const secretaryRouter = createTRPCRouter({
           actionPath: '/schedule', severity: 'required',
         });
       }
+      // Minimum class count validation (RKC regulation, non-companion shows only)
+      if (show.showType !== 'companion') {
+        const numClasses = Number(classCount[0]?.count);
+        const minClasses = show.showScope === 'single_breed' ? 12 : 16;
+        if (numClasses > 0 && numClasses < minClasses) {
+          openEntriesBlockers.push({
+            key: 'insufficient_classes',
+            label: `Only ${numClasses} classes (RKC minimum: ${minClasses})`,
+            detail: `${show.showScope === 'single_breed' ? 'Single breed' : 'Multi-breed'} shows should have at least ${minClasses} classes per RKC regulations`,
+            actionPath: '', severity: 'recommended',
+          });
+        }
+      }
+
       if (!show.venueId) {
         openEntriesBlockers.push({
           key: 'no_venue', label: 'Venue not confirmed',
@@ -4673,5 +4787,66 @@ export const secretaryRouter = createTRPCRouter({
       });
 
       return { sent: true };
+    }),
+
+  // ── RKC Submission Tracking ──────────────────────────────────
+
+  markRkcSubmitted: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+        columns: { scheduleData: true, status: true },
+      });
+
+      if (!show) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
+      }
+
+      if (show.status !== 'completed') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Can only mark RKC submission for completed shows',
+        });
+      }
+
+      const updatedData = {
+        ...(show.scheduleData ?? {}),
+        rkcSubmittedAt: new Date().toISOString(),
+      };
+
+      await ctx.db
+        .update(shows)
+        .set({ scheduleData: updatedData })
+        .where(eq(shows.id, input.showId));
+
+      return { submitted: true, submittedAt: updatedData.rkcSubmittedAt };
+    }),
+
+  unmarkRkcSubmitted: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+        columns: { scheduleData: true },
+      });
+
+      if (!show) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
+      }
+
+      const updatedData = { ...(show.scheduleData ?? {}) };
+      delete updatedData.rkcSubmittedAt;
+
+      await ctx.db
+        .update(shows)
+        .set({ scheduleData: updatedData })
+        .where(eq(shows.id, input.showId));
+
+      return { unsubmitted: true };
     }),
 });

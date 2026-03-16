@@ -10,6 +10,7 @@ import {
   Loader2,
   PoundSterling,
   Search,
+  UserX,
   Users,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
@@ -41,7 +42,7 @@ export default function ReportsPage() {
 
   return (
     <Tabs defaultValue="entries" className="space-y-4">
-      <TabsList className="grid w-full grid-cols-4">
+      <TabsList className="grid w-full grid-cols-5">
         <TabsTrigger value="entries" className="gap-1.5 text-xs sm:text-sm">
           <FileText className="size-3.5 hidden sm:block" />
           Entries
@@ -50,6 +51,11 @@ export default function ReportsPage() {
           <PoundSterling className="size-3.5 hidden sm:block" />
           <span className="sm:hidden">Pay</span>
           <span className="hidden sm:inline">Payments</span>
+        </TabsTrigger>
+        <TabsTrigger value="absentees" className="gap-1.5 text-xs sm:text-sm">
+          <UserX className="size-3.5 hidden sm:block" />
+          <span className="sm:hidden">Abs.</span>
+          <span className="hidden sm:inline">Absentees</span>
         </TabsTrigger>
         <TabsTrigger value="catalogue" className="gap-1.5 text-xs sm:text-sm">
           <BookOpen className="size-3.5 hidden sm:block" />
@@ -68,6 +74,9 @@ export default function ReportsPage() {
       </TabsContent>
       <TabsContent value="payments">
         <PaymentReportContent showId={showId} />
+      </TabsContent>
+      <TabsContent value="absentees">
+        <AbsenteeReportContent showId={showId} />
       </TabsContent>
       <TabsContent value="catalogue">
         <CatalogueOrdersContent showId={showId} />
@@ -767,6 +776,207 @@ function CatalogueOrdersContent({ showId }: { showId: string }) {
                       <TableRow key={i}>
                         <TableCell className="font-medium">{o.name}</TableCell>
                         <TableCell>{o.email}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function AbsenteeReportContent({ showId }: { showId: string }) {
+  const { data: absentees, isLoading } =
+    trpc.secretary.getAbsenteeList.useQuery({ showId });
+
+  const absenteeCount = absentees?.length ?? 0;
+
+  function exportCsv() {
+    if (!absentees) return;
+    const headers = [
+      'Catalogue No',
+      'Dog Name',
+      'Breed',
+      'Sex',
+      'Classes',
+      'Owner',
+      'Exhibitor',
+      'Status',
+    ];
+    const rows = absentees.map((e) => [
+      e.catalogueNumber ?? '',
+      e.dog?.registeredName ?? 'Junior Handler',
+      e.dog?.breed?.name ?? '',
+      e.dog?.sex === 'dog' ? 'Dog' : e.dog?.sex === 'bitch' ? 'Bitch' : '',
+      (e.entryClasses ?? [])
+        .map((ec) => {
+          const num = ec.showClass?.classNumber;
+          const name = ec.showClass?.classDefinition?.name ?? '';
+          return num != null ? `${num}. ${name}` : name;
+        })
+        .filter(Boolean)
+        .join('; '),
+      e.dog?.owners?.map((o) => o.ownerName).join(' & ') ?? '',
+      e.exhibitor?.name ?? '',
+      e.status === 'withdrawn' ? 'Withdrawn' : 'Absent',
+    ]);
+
+    downloadCsv(headers, rows, `absentee-report-${showId}`);
+  }
+
+  if (isLoading) return <LoadingCard />;
+
+  return (
+    <div className="space-y-4">
+      {/* Summary */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <Card>
+          <CardContent className="pt-4 pb-3">
+            <p className="text-xs font-medium text-muted-foreground">Total Absentees</p>
+            <p className="text-2xl font-bold">{absenteeCount}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3">
+            <p className="text-xs font-medium text-muted-foreground">Absent</p>
+            <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+              {absentees?.filter((e) => e.status !== 'withdrawn' && e.absent).length ?? 0}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3">
+            <p className="text-xs font-medium text-muted-foreground">Withdrawn</p>
+            <p className="text-2xl font-bold text-red-600 dark:text-red-400">
+              {absentees?.filter((e) => e.status === 'withdrawn').length ?? 0}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle className="text-base">Absentee Report</CardTitle>
+              <CardDescription>
+                All entries marked as absent or withdrawn
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={exportCsv} disabled={absenteeCount === 0}>
+                <Download className="size-4" />
+                <span className="hidden sm:inline">Export CSV</span>
+              </Button>
+              <Button variant="outline" size="sm" asChild disabled={absenteeCount === 0}>
+                <a href={`/api/absentee-report/${showId}`} download>
+                  <Download className="size-4" />
+                  <span className="hidden sm:inline">Download CSV</span>
+                </a>
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {absenteeCount === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              No absentees recorded.
+            </p>
+          ) : (
+            <>
+              {/* Mobile card view */}
+              <div className="space-y-3 sm:hidden">
+                {absentees?.map((entry) => (
+                  <div key={entry.id} className="rounded-lg border p-3 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          {entry.catalogueNumber && (
+                            <span className="text-xs font-mono font-bold text-muted-foreground">
+                              #{entry.catalogueNumber}
+                            </span>
+                          )}
+                          <p className="font-medium text-sm truncate">
+                            {entry.dog?.registeredName ?? 'Junior Handler'}
+                          </p>
+                        </div>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {entry.dog?.breed?.name ?? ''} {entry.dog?.sex ? `\u00b7 ${entry.dog.sex === 'dog' ? 'Dog' : 'Bitch'}` : ''}
+                        </p>
+                      </div>
+                      <Badge
+                        variant={entry.status === 'withdrawn' ? 'destructive' : 'secondary'}
+                        className="shrink-0"
+                      >
+                        {entry.status === 'withdrawn' ? 'Withdrawn' : 'Absent'}
+                      </Badge>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {(entry.entryClasses ?? []).map((ec, i) => (
+                        <Badge key={i} variant="outline" className="text-[10px]">
+                          {ec.showClass?.classNumber != null ? `${ec.showClass.classNumber}. ` : ''}
+                          {ec.showClass?.classDefinition?.name ?? '?'}
+                        </Badge>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {entry.exhibitor?.name ?? ''}
+                      {entry.dog?.owners?.length ? ` \u00b7 Owner: ${entry.dog.owners.map((o) => o.ownerName).join(' & ')}` : ''}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              {/* Desktop table */}
+              <div className="hidden sm:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Cat.</TableHead>
+                      <TableHead>Dog Name</TableHead>
+                      <TableHead>Breed</TableHead>
+                      <TableHead className="hidden md:table-cell">Sex</TableHead>
+                      <TableHead>Classes</TableHead>
+                      <TableHead className="hidden lg:table-cell">Owner</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {absentees?.map((entry) => (
+                      <TableRow key={entry.id}>
+                        <TableCell className="font-mono font-bold">
+                          {entry.catalogueNumber ?? '\u2014'}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {entry.dog?.registeredName ?? 'Junior Handler'}
+                        </TableCell>
+                        <TableCell>{entry.dog?.breed?.name ?? '\u2014'}</TableCell>
+                        <TableCell className="hidden md:table-cell capitalize">
+                          {entry.dog?.sex ?? '\u2014'}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {(entry.entryClasses ?? []).map((ec, i) => (
+                              <Badge key={i} variant="outline" className="text-[10px]">
+                                {ec.showClass?.classNumber != null ? `${ec.showClass.classNumber}. ` : ''}
+                                {ec.showClass?.classDefinition?.name ?? '?'}
+                              </Badge>
+                            ))}
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell">
+                          {entry.dog?.owners?.map((o) => o.ownerName).join(' & ') ?? '\u2014'}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={entry.status === 'withdrawn' ? 'destructive' : 'secondary'}
+                          >
+                            {entry.status === 'withdrawn' ? 'Withdrawn' : 'Absent'}
+                          </Badge>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

@@ -18,6 +18,7 @@ import {
   entryAuditLog,
   users,
   dogOwners,
+  judgeAssignments,
 } from '@/server/db/schema';
 import { createPaymentIntent, getStripe } from '@/server/services/stripe';
 
@@ -134,6 +135,28 @@ export const entriesRouter = createTRPCRouter({
           throw new TRPCError({
             code: 'BAD_REQUEST',
             message: `This dog is already entered in: ${names}`,
+          });
+        }
+      }
+
+      // Judge conflict check: exhibitors cannot exhibit at shows they are judging
+      const exhibitor = await ctx.db.query.users.findFirst({
+        where: eq(users.id, ctx.session.user.id),
+        columns: { name: true },
+      });
+      if (exhibitor?.name) {
+        const assignedJudges = await ctx.db.query.judgeAssignments.findMany({
+          where: eq(judgeAssignments.showId, input.showId),
+          with: { judge: { columns: { name: true } } },
+        });
+        const exhibitorName = exhibitor.name.toLowerCase().trim();
+        const isJudge = assignedJudges.some(
+          (a) => a.judge?.name?.toLowerCase().trim() === exhibitorName
+        );
+        if (isJudge) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'You appear to be assigned as a judge at this show. Judges cannot exhibit dogs at shows they are judging.',
           });
         }
       }

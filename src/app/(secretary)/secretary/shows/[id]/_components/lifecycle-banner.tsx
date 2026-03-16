@@ -14,11 +14,11 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { trpc } from '@/lib/trpc';
+import type { ScheduleData } from '@/server/db/schema/shows';
 import { Button } from '@/components/ui/button';
 import type { RouterOutputs } from '@/server/trpc/router';
 import {
   derivePhase,
-  formatDaysUntil,
   formatDeadline,
   PHASE_CONFIG,
   type ShowPhase,
@@ -293,11 +293,15 @@ function ShowDayContent({ show }: { show: Show }) {
 
 function PostShowContent({ show }: { show: Show }) {
   const resultsPublished = !!show.resultsPublishedAt;
+  const scheduleData = show.scheduleData as ScheduleData | null;
+  const rkcSubmitted = !!scheduleData?.rkcSubmittedAt;
 
   // RKC deadline: 14 days after show end date
   const rkcDeadline = new Date(show.endDate);
   rkcDeadline.setDate(rkcDeadline.getDate() + 14);
-  const rkcInfo = formatDeadline(rkcDeadline, 'RKC submission deadline');
+  const rkcInfo = rkcSubmitted
+    ? { text: 'Submitted to RKC', urgent: false, overdue: false }
+    : formatDeadline(rkcDeadline, 'RKC submission deadline');
 
   return (
     <div className="space-y-2">
@@ -314,8 +318,10 @@ function PostShowContent({ show }: { show: Show }) {
       </div>
       <span className={cn(
         'block text-xs',
-        rkcInfo.urgent ? 'text-amber-600 font-medium' : 'text-muted-foreground',
-        rkcInfo.overdue && 'text-destructive font-medium',
+        rkcSubmitted && 'text-emerald-600',
+        !rkcSubmitted && rkcInfo.urgent ? 'text-amber-600 font-medium' : '',
+        !rkcSubmitted && rkcInfo.overdue && 'text-destructive font-medium',
+        !rkcSubmitted && !rkcInfo.urgent && !rkcInfo.overdue && 'text-muted-foreground',
       )}>
         {rkcInfo.text}
       </span>

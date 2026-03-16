@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { judgeAssignments } from './judge-assignments';
 import { judgeContracts } from './judge-contracts';
@@ -8,6 +8,7 @@ export const judges = pgTable('judges', {
   name: text('name').notNull(),
   kcNumber: text('kc_number').unique(),
   contactEmail: text('contact_email'),
+  jepLevel: integer('jep_level'), // RKC Judges Education Programme level 1-6
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),

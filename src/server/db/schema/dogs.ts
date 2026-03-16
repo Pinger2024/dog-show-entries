@@ -31,6 +31,7 @@ export const dogs = pgTable(
     damName: text('dam_name'),
     breederName: text('breeder_name'),
     colour: text('colour'),
+    registrationStatus: text('registration_status'), // null=registered, 'naf', 'taf', 'cnaf'
     bio: text('bio'),
     ownerId: uuid('owner_id')
       .notNull()

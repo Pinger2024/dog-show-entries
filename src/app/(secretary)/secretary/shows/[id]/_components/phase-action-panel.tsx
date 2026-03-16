@@ -3,18 +3,23 @@
 import Link from 'next/link';
 import {
   Check,
+  CheckCircle,
   ChevronRight,
   CircleDot,
   ClipboardList,
+  FileText,
   Gavel,
   Loader2,
+  Send,
   Trophy,
   X,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import type { ScheduleData } from '@/server/db/schema/shows';
 import {
   Card,
   CardContent,
@@ -551,16 +556,40 @@ function ShowDayPanel({ show, showId }: { show: Show; showId: string }) {
 
 function PostShowPanel({ show, showId }: { show: Show; showId: string }) {
   const resultsPublished = !!show.resultsPublishedAt;
+  const scheduleData = show.scheduleData as ScheduleData | null;
+  const rkcSubmittedAt = scheduleData?.rkcSubmittedAt;
+  const rkcSubmitted = !!rkcSubmittedAt;
+
+  const utils = trpc.useUtils();
+
+  const markRkcSubmitted = trpc.secretary.markRkcSubmitted.useMutation({
+    onSuccess: () => {
+      utils.shows.getById.invalidate({ id: showId });
+      toast.success('Marked as submitted to RKC');
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const unmarkRkcSubmitted = trpc.secretary.unmarkRkcSubmitted.useMutation({
+    onSuccess: () => {
+      utils.shows.getById.invalidate({ id: showId });
+      toast.success('RKC submission status cleared');
+    },
+    onError: (err) => toast.error(err.message),
+  });
 
   // RKC deadline: 14 days after show end date
   const rkcDeadline = new Date(show.endDate);
   rkcDeadline.setDate(rkcDeadline.getDate() + 14);
-  const rkcInfo = formatDeadline(rkcDeadline, 'RKC submission deadline');
+  const rkcInfo = rkcSubmitted
+    ? { text: 'Submitted to RKC', urgent: false, overdue: false }
+    : formatDeadline(rkcDeadline, 'RKC submission deadline');
 
   // Count post-show tasks
   const tasks = [
     { label: 'Publish results', done: resultsPublished, href: `/secretary/shows/${showId}/results` },
-    { label: 'Submit to RKC', done: false, href: `/secretary/shows/${showId}/documents` },
+    { label: 'Submit marked catalogue to RKC', done: rkcSubmitted, href: `/secretary/shows/${showId}/documents` },
+    { label: 'Download marked catalogue', done: false, href: `/api/catalogue/${showId}/marked`, isDownload: true },
   ];
   const completedTasks = tasks.filter(t => t.done).length;
 
@@ -574,22 +603,31 @@ function PostShowPanel({ show, showId }: { show: Show; showId: string }) {
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Results status */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {resultsPublished ? (
             <Badge variant="default" className="bg-emerald-600">Results published</Badge>
           ) : (
             <Badge variant="secondary">Results not yet published</Badge>
           )}
+          {rkcSubmitted ? (
+            <Badge variant="default" className="bg-emerald-600 gap-1">
+              <CheckCircle className="size-3" />
+              RKC submitted
+            </Badge>
+          ) : null}
         </div>
 
         {/* RKC deadline */}
         <p className={cn(
           'text-sm',
-          rkcInfo.urgent && !rkcInfo.overdue && 'font-medium text-amber-600 dark:text-amber-400',
-          rkcInfo.overdue && 'font-medium text-destructive',
-          !rkcInfo.urgent && !rkcInfo.overdue && 'text-muted-foreground',
+          rkcSubmitted && 'text-emerald-600',
+          !rkcSubmitted && rkcInfo.urgent && !rkcInfo.overdue && 'font-medium text-amber-600 dark:text-amber-400',
+          !rkcSubmitted && rkcInfo.overdue && 'font-medium text-destructive',
+          !rkcSubmitted && !rkcInfo.urgent && !rkcInfo.overdue && 'text-muted-foreground',
         )}>
-          {rkcInfo.text}
+          {rkcSubmitted
+            ? `Submitted to RKC on ${new Date(rkcSubmittedAt!).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
+            : rkcInfo.text}
         </p>
 
         {/* Post-show task list */}
@@ -597,28 +635,77 @@ function PostShowPanel({ show, showId }: { show: Show; showId: string }) {
           <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Post-show tasks ({completedTasks}/{tasks.length})
           </h4>
-          {tasks.map((task) => (
-            <Link
-              key={task.label}
-              href={task.href}
-              className="flex items-center gap-2 min-h-[2.75rem] sm:min-h-0 rounded-md px-2 py-1 transition-colors hover:bg-muted/50"
+          {tasks.map((task) => {
+            const isDownload = 'isDownload' in task && task.isDownload;
+            const sharedClassName = "flex items-center gap-2 min-h-[2.75rem] sm:min-h-0 rounded-md px-2 py-1 transition-colors hover:bg-muted/50";
+            const inner = (
+              <>
+                {task.done ? (
+                  <div className="flex size-4 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
+                    <Check className="size-2.5 text-emerald-600" />
+                  </div>
+                ) : (
+                  <CircleDot className="size-4 shrink-0 text-muted-foreground/50" />
+                )}
+                <span className={cn(
+                  'flex-1 text-sm',
+                  task.done ? 'text-muted-foreground line-through' : 'text-foreground',
+                )}>
+                  {task.label}
+                </span>
+                {isDownload ? (
+                  <FileText className="size-3 shrink-0 text-muted-foreground/50" />
+                ) : (
+                  <ChevronRight className="size-3 shrink-0 text-muted-foreground/50" />
+                )}
+              </>
+            );
+
+            return isDownload ? (
+              <a key={task.label} href={task.href} download className={sharedClassName}>
+                {inner}
+              </a>
+            ) : (
+              <Link key={task.label} href={task.href} className={sharedClassName}>
+                {inner}
+              </Link>
+            );
+          })}
+        </div>
+
+        {/* RKC submission action */}
+        <div className="border-t pt-3">
+          {rkcSubmitted ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs text-muted-foreground"
+              disabled={unmarkRkcSubmitted.isPending}
+              onClick={() => unmarkRkcSubmitted.mutate({ showId })}
             >
-              {task.done ? (
-                <div className="flex size-4 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
-                  <Check className="size-2.5 text-emerald-600" />
-                </div>
+              {unmarkRkcSubmitted.isPending ? (
+                <Loader2 className="size-3 animate-spin" />
               ) : (
-                <CircleDot className="size-4 shrink-0 text-muted-foreground/50" />
+                <X className="size-3" />
               )}
-              <span className={cn(
-                'flex-1 text-sm',
-                task.done ? 'text-muted-foreground line-through' : 'text-foreground',
-              )}>
-                {task.label}
-              </span>
-              <ChevronRight className="size-3 shrink-0 text-muted-foreground/50" />
-            </Link>
-          ))}
+              Clear RKC submission
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full sm:w-auto min-h-[2.75rem] gap-1.5"
+              disabled={markRkcSubmitted.isPending}
+              onClick={() => markRkcSubmitted.mutate({ showId })}
+            >
+              {markRkcSubmitted.isPending ? (
+                <Loader2 className="size-3 animate-spin" />
+              ) : (
+                <Send className="size-3" />
+              )}
+              Mark as submitted to RKC
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>

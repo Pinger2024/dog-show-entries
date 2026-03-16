@@ -702,6 +702,9 @@ export default function EnterShowPage() {
                           </p>
                         </div>
                       )}
+                      {show?.showType === 'limited' && (
+                        <LimitedShowDogWarning dogId={dog.id} />
+                      )}
                     </div>
                   </button>
                 );
@@ -1538,6 +1541,25 @@ function ClassGroup({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// ── Limited show eligibility warning ──────────────────────────
+function LimitedShowDogWarning({ dogId }: { dogId: string }) {
+  const { data } = trpc.dogs.checkLimitedShowEligibility.useQuery(
+    { dogId },
+    { enabled: !!dogId }
+  );
+
+  if (!data?.ineligible) return null;
+
+  return (
+    <div className="mt-1.5 flex gap-1.5 items-start">
+      <AlertTriangle className="mt-0.5 size-3 shrink-0 text-destructive" />
+      <p className="text-xs font-medium text-destructive">
+        {data.reason}
+      </p>
     </div>
   );
 }

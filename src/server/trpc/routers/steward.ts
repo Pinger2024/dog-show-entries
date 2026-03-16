@@ -195,6 +195,19 @@ export const stewardRouter = createTRPCRouter({
         columns: { showScope: true },
       });
 
+      // Fetch judge for this class's breed to check breeder conflicts
+      let judgeName: string | null = null;
+      if (showClass.breedId) {
+        const assignment = await ctx.db.query.judgeAssignments.findFirst({
+          where: and(
+            eq(judgeAssignments.showId, showClass.showId),
+            eq(judgeAssignments.breedId, showClass.breedId)
+          ),
+          with: { judge: { columns: { name: true } } },
+        });
+        judgeName = assignment?.judge?.name ?? null;
+      }
+
       const classEntries = await ctx.db.query.entryClasses.findMany({
         where: eq(entryClasses.showClassId, input.showClassId),
         with: {
@@ -224,6 +237,7 @@ export const stewardRouter = createTRPCRouter({
           sex: showClass.sex,
           showScope: show?.showScope ?? 'general',
         },
+        judgeName,
         entries: confirmed
           .sort((a, b) => {
             const aCat = Number(a.entry.catalogueNumber) || 9999;
@@ -236,6 +250,7 @@ export const stewardRouter = createTRPCRouter({
             dogId: ec.entry.dog?.id ?? null,
             catalogueNumber: ec.entry.catalogueNumber,
             dogName: ec.entry.dog?.registeredName ?? 'Unknown',
+            breederName: ec.entry.dog?.breederName ?? null,
             breedName: ec.entry.dog?.breed?.name ?? '',
             exhibitorName: ec.entry.exhibitor.name,
             absent: ec.entry.absent,

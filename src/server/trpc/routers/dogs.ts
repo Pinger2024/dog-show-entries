@@ -1277,4 +1277,52 @@ export const dogsRouter = createTRPCRouter({
 
       return { success: true };
     }),
+
+  // ── Limited show eligibility check (2026 RKC rule) ──────
+  checkLimitedShowEligibility: protectedProcedure
+    .input(z.object({ dogId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      // Count CCs (any type: cc, dog_cc, bitch_cc)
+      const ccTypes = ['cc', 'dog_cc', 'bitch_cc'] as const;
+      const ccRows = await ctx.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(achievements)
+        .where(
+          and(
+            eq(achievements.dogId, input.dogId),
+            inArray(achievements.type, [...ccTypes])
+          )
+        );
+      const ccCount = ccRows[0]?.count ?? 0;
+
+      // Count RCCs with distinct judges (reserve_cc, reserve_dog_cc, reserve_bitch_cc)
+      const rccTypes = ['reserve_cc', 'reserve_dog_cc', 'reserve_bitch_cc'] as const;
+      const rccRows = await ctx.db
+        .select({
+          judgeId: achievements.judgeId,
+        })
+        .from(achievements)
+        .where(
+          and(
+            eq(achievements.dogId, input.dogId),
+            inArray(achievements.type, [...rccTypes])
+          )
+        );
+      // Count distinct judges (null judgeId counts as one)
+      const distinctJudges = new Set(rccRows.map((r) => r.judgeId ?? 'unknown'));
+      const rccDistinctJudgeCount = distinctJudges.size;
+
+      return {
+        hasCC: ccCount > 0,
+        ccCount,
+        rccDistinctJudgeCount,
+        rccTotal: rccRows.length,
+        ineligible: ccCount > 0 || rccDistinctJudgeCount >= 5,
+        reason: ccCount > 0
+          ? 'This dog has won a CC and is ineligible for Limited shows'
+          : rccDistinctJudgeCount >= 5
+            ? 'This dog has 5+ RCCs under different judges and is ineligible for Limited shows (2026 rule)'
+            : null,
+      };
+    }),
 });

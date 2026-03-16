@@ -121,6 +121,7 @@ export async function generateCataloguePdf(
       sex: ec.showClass?.sex,
       classNumber: ec.showClass?.classNumber,
       sortOrder: ec.showClass?.sortOrder,
+      showClassId: ec.showClassId,
     })),
     status: entry.status,
     entryType: entry.entryType,

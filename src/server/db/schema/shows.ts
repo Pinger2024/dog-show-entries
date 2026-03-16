@@ -57,6 +57,10 @@ export interface ScheduleData {
   catering?: string;
   futureShowDates?: string;
   additionalNotes?: string;
+
+  // Post-show tracking
+  /** ISO timestamp when the marked catalogue was submitted to RKC */
+  rkcSubmittedAt?: string;
 }
 import { organisations } from './organisations';
 import { users } from './users';

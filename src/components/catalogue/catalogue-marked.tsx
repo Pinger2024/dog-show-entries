@@ -1,58 +1,150 @@
-import { Document, Page, View, Text } from '@react-pdf/renderer';
+import { Document, Page, View, Text, StyleSheet } from '@react-pdf/renderer';
 import { styles } from './catalogue-styles';
 import { CoverPage, JudgesListPage, ClassDefinitionsPage } from './catalogue-front-matter';
 import { formatDobKC, formatPedigreeKC, formatOwnerKC, uppercaseName } from './catalogue-utils';
+import type { CatalogueEntry, CatalogueShowInfo } from './catalogue-standard';
 
-export interface CatalogueEntry {
-  catalogueNumber: string | null;
-  dogName: string | null;
-  breed: string | undefined;
-  breedId?: string | undefined;
-  group: string | undefined;
-  groupSortOrder: number | undefined;
-  sex: string | undefined;
-  dateOfBirth: string | null | undefined;
-  kcRegNumber: string | null | undefined;
-  colour: string | null | undefined;
-  sire: string | null | undefined;
-  dam: string | null | undefined;
-  breeder: string | null | undefined;
-  owners: { name: string; address: string | null; userId: string | null }[];
-  exhibitorId: string | undefined;
-  handler: string | undefined;
-  exhibitor: string | undefined;
-  classes: { name: string | undefined; sex: string | null | undefined; classNumber: number | null | undefined; sortOrder: number | undefined; showClassId?: string | undefined }[];
-  status: string;
-  entryType: string;
+// ── Marked catalogue result data ─────────────────────────────
+
+export interface MarkedResult {
+  /** Catalogue number of the entry */
+  catalogueNumber: string;
+  /** Show class ID */
+  showClassId: string;
+  /** Placement: 1=1st, 2=2nd, 3=3rd, 4=Reserve, 5=VHC, 6=HC, 7=Commended */
+  placement: number | null;
+  /** Special award text (e.g. "Best of Breed") */
+  specialAward: string | null;
 }
 
-export interface CatalogueShowInfo {
-  name: string;
-  showType: string | undefined;
-  date: string;
-  venue: string | undefined;
-  venueAddress: string | undefined;
-  organisation: string | undefined;
-  kcLicenceNo: string | null | undefined;
-  logoUrl?: string;
-  secretaryEmail?: string;
-  judgesByBreedName?: Record<string, string>;
-  classDefinitions?: { name: string; description: string | null }[];
-  showScope?: string;
+export interface MarkedAchievement {
+  type: string;
+  dogName: string;
+  breedName: string | null;
 }
 
-interface Props {
+export interface MarkedCatalogueProps {
   show: CatalogueShowInfo;
   entries: CatalogueEntry[];
+  /** Results keyed by `${catalogueNumber}-${showClassId}` */
+  results: Map<string, MarkedResult>;
+  /** Set of catalogue numbers marked absent */
+  absentees: Set<string>;
+  /** Show-level and breed-level achievements */
+  achievements: MarkedAchievement[];
 }
 
-// ── RKC layout grouping ──────────────────────────────────────
+// ── Placement label helpers ──────────────────────────────────
+
+const PLACEMENT_LABELS: Record<number, string> = {
+  1: '1st',
+  2: '2nd',
+  3: '3rd',
+  4: 'Res',
+  5: 'VHC',
+  6: 'HC',
+  7: 'C',
+};
+
+function getPlacementLabel(placement: number): string {
+  return PLACEMENT_LABELS[placement] ?? `${placement}th`;
+}
+
+// ── Marked-specific styles ───────────────────────────────────
+
+const markedStyles = StyleSheet.create({
+  placementBadge: {
+    fontSize: 7,
+    fontWeight: 'bold',
+    color: '#b91c1c',
+    marginLeft: 4,
+  },
+  absentBadge: {
+    fontSize: 7,
+    fontWeight: 'bold',
+    fontStyle: 'italic',
+    color: '#6b7280',
+    marginLeft: 4,
+  },
+  specialAwardBadge: {
+    fontSize: 6.5,
+    fontWeight: 'bold',
+    color: '#92400e',
+    paddingLeft: 22,
+    marginBottom: 0.5,
+  },
+  achievementsSectionTitle: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    textAlign: 'center',
+    letterSpacing: 0.8,
+    marginBottom: 12,
+    borderBottomWidth: 1.5,
+    borderBottomColor: '#000',
+    paddingBottom: 4,
+  },
+  achievementRow: {
+    flexDirection: 'row',
+    paddingVertical: 2,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#ddd',
+  },
+  achievementType: {
+    fontSize: 7.5,
+    fontWeight: 'bold',
+    width: '40%',
+  },
+  achievementDog: {
+    fontSize: 7.5,
+    width: '35%',
+  },
+  achievementBreed: {
+    fontSize: 7.5,
+    color: '#444',
+    width: '25%',
+  },
+  watermark: {
+    fontSize: 8,
+    fontWeight: 'bold',
+    color: '#b91c1c',
+    textAlign: 'center',
+    marginBottom: 4,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+});
+
+// ── Achievement type labels ──────────────────────────────────
+
+const ACHIEVEMENT_LABELS: Record<string, string> = {
+  best_in_show: 'Best in Show',
+  reserve_best_in_show: 'Reserve Best in Show',
+  best_puppy_in_show: 'Best Puppy in Show',
+  best_long_coat_in_show: 'Best Long Coat in Show',
+  best_of_breed: 'Best of Breed',
+  best_puppy_in_breed: 'Best Puppy in Breed',
+  best_veteran_in_breed: 'Best Veteran in Breed',
+  dog_cc: 'Dog CC',
+  reserve_dog_cc: 'Reserve Dog CC',
+  bitch_cc: 'Bitch CC',
+  reserve_bitch_cc: 'Reserve Bitch CC',
+  best_puppy_dog: 'Best Puppy Dog',
+  best_puppy_bitch: 'Best Puppy Bitch',
+  best_long_coat_dog: 'Best Long Coat Dog',
+  best_long_coat_bitch: 'Best Long Coat Bitch',
+  cc: 'CC',
+  reserve_cc: 'Reserve CC',
+};
+
+// ── RKC layout grouping (same as catalogue-standard) ─────────
 
 interface ClassBucket {
   className: string;
   classNumber: number | null | undefined;
   sortOrder: number | undefined;
   sex: string | null | undefined;
+  showClassId: string | undefined;
   entries: CatalogueEntry[];
 }
 
@@ -65,10 +157,6 @@ interface GroupBucket {
   breeds: Map<string, BreedBucket>;
 }
 
-/**
- * Group entries RKC-style: Group > Breed > Sex > Class.
- * Each entry appears under every class it's entered in.
- */
 function groupEntriesKC(entries: CatalogueEntry[]) {
   const groups = new Map<string, GroupBucket>();
 
@@ -87,7 +175,6 @@ function groupEntriesKC(entries: CatalogueEntry[]) {
     const breedBucket = breedMap.get(breed)!;
     breedBucket.sexes[sex] ??= [];
 
-    // Place entry into each class it's entered in
     for (const cls of entry.classes) {
       const className = cls.name ?? 'Unknown Class';
       const classKey = `${cls.classNumber ?? ''}-${className}`;
@@ -101,6 +188,7 @@ function groupEntriesKC(entries: CatalogueEntry[]) {
           classNumber: cls.classNumber,
           sortOrder: cls.sortOrder,
           sex: cls.sex,
+          showClassId: (cls as { showClassId?: string }).showClassId,
           entries: [],
         };
         breedBucket.sexes[sex].push(classBucket);
@@ -109,7 +197,6 @@ function groupEntriesKC(entries: CatalogueEntry[]) {
     }
   }
 
-  // Sort class buckets within each sex
   for (const [, groupBucket] of groups) {
     for (const [, breedBucket] of groupBucket.breeds) {
       for (const sex of Object.keys(breedBucket.sexes)) {
@@ -126,21 +213,18 @@ function groupEntriesKC(entries: CatalogueEntry[]) {
   return groups;
 }
 
-/** Sort entries within a class by catalogue number */
 function sortByCatNo(entries: CatalogueEntry[]) {
   return [...entries].sort((a, b) =>
     (a.catalogueNumber ?? '').localeCompare(b.catalogueNumber ?? '', undefined, { numeric: true })
   );
 }
 
-/** Build a label for a class heading: "Class 1. Minor Puppy Dog (4 entries)" */
 function classHeadingLabel(bucket: ClassBucket, sex: string) {
   const parts: string[] = [];
   if (bucket.classNumber != null) {
     parts.push(`Class ${bucket.classNumber}.`);
   }
   parts.push(bucket.className);
-  // Append sex qualifier
   if (sex === 'dog') parts.push('Dog');
   else if (sex === 'bitch') parts.push('Bitch');
   const count = bucket.entries.length;
@@ -148,15 +232,12 @@ function classHeadingLabel(bucket: ClassBucket, sex: string) {
   return parts.join(' ');
 }
 
-export function CatalogueStandard({ show, entries }: Props) {
-  const grouped = groupEntriesKC(entries);
+// ── Marked Catalogue Component ───────────────────────────────
 
-  // Sort groups by sortOrder
+export function CatalogueMarked({ show, entries, results, absentees, achievements }: MarkedCatalogueProps) {
+  const grouped = groupEntriesKC(entries);
   const sortedGroups = [...grouped.entries()].sort(([, a], [, b]) => a.sortOrder - b.sortOrder);
 
-  // Flatten all breeds into a list of page-sized chunks to avoid @react-pdf/renderer
-  // coordinate overflow bug (single <Page wrap> with many nodes causes layout.top to
-  // exceed pdfkit's number limits). Each breed gets its own <Page>.
   const breedPages: {
     groupName: string;
     breedName: string;
@@ -175,10 +256,7 @@ export function CatalogueStandard({ show, entries }: Props) {
     }
   }
 
-  // Sort entries within each bucket once, and pre-compute first-appearance data
-  // in a single pass (same iteration order as render) to avoid:
-  // - calling sortByCatNo 3x per bucket
-  // - mutating state during JSX render
+  // Pre-compute first-appearance tracking
   const firstSeenClass = new Map<string, string>();
   const firstAppearanceBucket = new Map<string, ClassBucket>();
   for (const { breedBucket } of breedPages) {
@@ -199,16 +277,69 @@ export function CatalogueStandard({ show, entries }: Props) {
     }
   }
 
+  // Separate show-level vs breed-level achievements
+  const showLevelTypes = new Set([
+    'best_in_show', 'reserve_best_in_show', 'best_puppy_in_show', 'best_long_coat_in_show',
+  ]);
+  const showAwards = achievements.filter((a) => showLevelTypes.has(a.type));
+  const breedAwards = achievements.filter((a) => !showLevelTypes.has(a.type));
+
   return (
     <Document>
-      {/* Front matter pages */}
-      <CoverPage show={show} />
+      {/* Cover page with MARKED CATALOGUE subtitle */}
+      <CoverPage show={{ ...show, name: `${show.name}\nMARKED CATALOGUE` }} />
       <JudgesListPage show={show} />
       <ClassDefinitionsPage show={show} />
 
-      {/* One <Page> per breed — resets coordinate system to avoid renderer overflow */}
+      {/* Achievements summary page */}
+      {achievements.length > 0 && (
+        <Page size="A5" style={styles.frontMatterPage} wrap>
+          <Text style={markedStyles.achievementsSectionTitle}>Awards Summary</Text>
+
+          {showAwards.length > 0 && (
+            <View>
+              <Text style={{ ...styles.breedHeading, marginTop: 4 }}>Show Awards</Text>
+              {showAwards.map((a, i) => (
+                <View key={i} style={markedStyles.achievementRow}>
+                  <Text style={markedStyles.achievementType}>
+                    {ACHIEVEMENT_LABELS[a.type] ?? a.type}
+                  </Text>
+                  <Text style={markedStyles.achievementDog}>{a.dogName}</Text>
+                  <Text style={markedStyles.achievementBreed}>{a.breedName ?? ''}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {breedAwards.length > 0 && (
+            <View>
+              <Text style={{ ...styles.breedHeading, marginTop: 8 }}>Breed Awards</Text>
+              {breedAwards.map((a, i) => (
+                <View key={i} style={markedStyles.achievementRow}>
+                  <Text style={markedStyles.achievementType}>
+                    {ACHIEVEMENT_LABELS[a.type] ?? a.type}
+                  </Text>
+                  <Text style={markedStyles.achievementDog}>{a.dogName}</Text>
+                  <Text style={markedStyles.achievementBreed}>{a.breedName ?? ''}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          <Text
+            style={styles.footer}
+            render={({ pageNumber, totalPages }) =>
+              `Page ${pageNumber} of ${totalPages}  ·  Marked Catalogue  ·  Generated by Remi`
+            }
+            fixed
+          />
+        </Page>
+      )}
+
+      {/* One <Page> per breed with result annotations */}
       {breedPages.map(({ groupName, breedName, judge, breedBucket }) => (
         <Page key={`${groupName}-${breedName}`} size="A5" style={styles.page} wrap>
+          <Text style={markedStyles.watermark}>MARKED CATALOGUE</Text>
           <Text style={styles.groupHeading}>{groupName}</Text>
           <Text style={styles.breedHeading}>{breedName}</Text>
           {judge && (
@@ -234,9 +365,15 @@ export function CatalogueStandard({ show, entries }: Props) {
                     {bucket.entries.map((entry) => {
                       const catNo = entry.catalogueNumber ?? '';
                       const isFirstAppearance = !catNo || firstAppearanceBucket.get(catNo) === bucket;
+                      const isAbsent = catNo ? absentees.has(catNo) : false;
+
+                      // Look up result for this entry in this class
+                      const resultKey = catNo && bucket.showClassId
+                        ? `${catNo}-${bucket.showClassId}`
+                        : null;
+                      const result = resultKey ? results.get(resultKey) : undefined;
 
                       if (!isFirstAppearance) {
-                        // Abbreviated entry — [see class X]
                         const firstClass = firstSeenClass.get(catNo) ?? '';
                         return (
                           <View
@@ -246,7 +383,7 @@ export function CatalogueStandard({ show, entries }: Props) {
                           >
                             <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
                               <Text style={styles.catalogueNumber}>
-                                {catNo || '—'}
+                                {catNo || '\u2014'}
                               </Text>
                               <Text style={styles.dogName}>
                                 {entry.dogName ?? 'Unnamed'}
@@ -254,12 +391,20 @@ export function CatalogueStandard({ show, entries }: Props) {
                               <Text style={styles.seeClassRef}>
                                 {'  '}[see {firstClass}]
                               </Text>
+                              {isAbsent && (
+                                <Text style={markedStyles.absentBadge}> Abs.</Text>
+                              )}
+                              {result?.placement && (
+                                <Text style={markedStyles.placementBadge}>
+                                  {' '}{getPlacementLabel(result.placement)}
+                                </Text>
+                              )}
                             </View>
                           </View>
                         );
                       }
 
-                      // Full entry — first appearance
+                      // Full entry with result annotation
                       const pedigree = formatPedigreeKC(entry.sire, entry.dam);
                       return (
                         <View
@@ -267,34 +412,38 @@ export function CatalogueStandard({ show, entries }: Props) {
                           style={styles.entryRowWrap}
                           wrap={false}
                         >
-                          {/* Catalogue number + dog name */}
                           <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
                             <Text style={styles.catalogueNumber}>
-                              {catNo || '—'}
+                              {catNo || '\u2014'}
                             </Text>
                             <Text style={styles.dogName}>
                               {entry.dogName ?? 'Unnamed'}
                             </Text>
+                            {isAbsent && (
+                              <Text style={markedStyles.absentBadge}> Abs.</Text>
+                            )}
+                            {result?.placement && (
+                              <Text style={markedStyles.placementBadge}>
+                                {' '}{getPlacementLabel(result.placement)}
+                              </Text>
+                            )}
                           </View>
 
-                          {/* RKC reg + DOB + colour */}
                           <Text style={styles.entryDetail}>
                             {[
                               entry.kcRegNumber,
                               entry.dateOfBirth ? `D.O.B: ${formatDobKC(entry.dateOfBirth)}` : null,
                               entry.colour,
                               entry.sex === 'dog' ? 'Dog' : entry.sex === 'bitch' ? 'Bitch' : null,
-                            ].filter(Boolean).join('  —  ')}
+                            ].filter(Boolean).join('  \u2014  ')}
                           </Text>
 
-                          {/* Pedigree: By [sire] ex [dam] */}
                           {pedigree && (
                             <Text style={styles.entryDetail}>
                               {pedigree}
                             </Text>
                           )}
 
-                          {/* Breeder */}
                           {entry.breeder && (
                             <Text style={styles.entryDetail}>
                               <Text style={styles.entryDetailLabel}>Breeder: </Text>
@@ -302,7 +451,6 @@ export function CatalogueStandard({ show, entries }: Props) {
                             </Text>
                           )}
 
-                          {/* Owner(s) — UPPER CASE + address (or "Exh." if owner is exhibiting) */}
                           {entry.owners.length > 0 && (
                             <Text style={styles.entryDetail}>
                               <Text style={styles.entryDetailLabel}>
@@ -312,11 +460,17 @@ export function CatalogueStandard({ show, entries }: Props) {
                             </Text>
                           )}
 
-                          {/* Handler (if different from exhibitor) */}
                           {entry.handler && entry.handler !== entry.exhibitor && (
                             <Text style={styles.entryDetail}>
                               <Text style={styles.entryDetailLabel}>Handler: </Text>
                               {entry.handler}
+                            </Text>
+                          )}
+
+                          {/* Special award annotation */}
+                          {result?.specialAward && (
+                            <Text style={markedStyles.specialAwardBadge}>
+                              {result.specialAward}
                             </Text>
                           )}
                         </View>
@@ -330,7 +484,7 @@ export function CatalogueStandard({ show, entries }: Props) {
           <Text
             style={styles.footer}
             render={({ pageNumber, totalPages }) =>
-              `Page ${pageNumber} of ${totalPages}  ·  Generated by Remi`
+              `Page ${pageNumber} of ${totalPages}  ·  Marked Catalogue  ·  Generated by Remi`
             }
             fixed
           />

@@ -16,6 +16,10 @@ import {
   entryAuditLog,
   sundryItems,
   orderSundryItems,
+  judgeAssignments,
+  judges,
+  users,
+  achievements,
 } from '@/server/db/schema';
 import { createPaymentIntent } from '@/server/services/stripe';
 
@@ -130,6 +134,56 @@ export const ordersRouter = createTRPCRouter({
         }
       }
 
+      // Limited show eligibility check (2026 RKC rule)
+      if (show.showType === 'limited' && dogIds.length > 0) {
+        for (const dogId of [...new Set(dogIds)]) {
+          const ccTypes = ['cc', 'dog_cc', 'bitch_cc'] as const;
+          const ccRows = await ctx.db
+            .select({ count: sql<number>`count(*)::int` })
+            .from(achievements)
+            .where(
+              and(
+                eq(achievements.dogId, dogId),
+                inArray(achievements.type, [...ccTypes])
+              )
+            );
+          const ccCount = ccRows[0]?.count ?? 0;
+
+          if (ccCount > 0) {
+            const dog = await ctx.db.query.dogs.findFirst({
+              where: eq(dogs.id, dogId),
+              columns: { registeredName: true },
+            });
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `${dog?.registeredName ?? 'This dog'} has won a CC and is ineligible for Limited shows`,
+            });
+          }
+
+          const rccTypes = ['reserve_cc', 'reserve_dog_cc', 'reserve_bitch_cc'] as const;
+          const rccRows = await ctx.db
+            .select({ judgeId: achievements.judgeId })
+            .from(achievements)
+            .where(
+              and(
+                eq(achievements.dogId, dogId),
+                inArray(achievements.type, [...rccTypes])
+              )
+            );
+          const distinctJudges = new Set(rccRows.map((r) => r.judgeId ?? 'unknown'));
+          if (distinctJudges.size >= 5) {
+            const dog = await ctx.db.query.dogs.findFirst({
+              where: eq(dogs.id, dogId),
+              columns: { registeredName: true },
+            });
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `${dog?.registeredName ?? 'This dog'} has 5+ RCCs under different judges and is ineligible for Limited shows (2026 rule)`,
+            });
+          }
+        }
+      }
+
       // Non-NFC entries must have at least one class
       for (const entryInput of input.entries) {
         if (!entryInput.isNfc && entryInput.classIds.length === 0) {
@@ -172,6 +226,28 @@ export const ordersRouter = createTRPCRouter({
               });
             }
           }
+        }
+      }
+
+      // Judge conflict check: warn if exhibitor's name matches an assigned judge
+      const exhibitor = await ctx.db.query.users.findFirst({
+        where: eq(users.id, ctx.session.user.id),
+        columns: { name: true },
+      });
+      if (exhibitor?.name) {
+        const assignedJudges = await ctx.db.query.judgeAssignments.findMany({
+          where: eq(judgeAssignments.showId, input.showId),
+          with: { judge: { columns: { name: true } } },
+        });
+        const exhibitorName = exhibitor.name.toLowerCase().trim();
+        const isJudge = assignedJudges.some(
+          (a) => a.judge?.name?.toLowerCase().trim() === exhibitorName
+        );
+        if (isJudge) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'You appear to be assigned as a judge at this show. Judges cannot exhibit dogs at shows they are judging.',
+          });
         }
       }
 

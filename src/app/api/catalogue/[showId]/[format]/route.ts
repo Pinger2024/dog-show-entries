@@ -9,7 +9,9 @@ import { CatalogueAbsentees } from '@/components/catalogue/catalogue-absentees';
 import { CatalogueByClass } from '@/components/catalogue/catalogue-by-class';
 import { CatalogueByBreed } from '@/components/catalogue/catalogue-by-breed';
 import { CatalogueAlphabetical } from '@/components/catalogue/catalogue-alphabetical';
+import { CatalogueMarked } from '@/components/catalogue/catalogue-marked';
 import type { CatalogueEntry, CatalogueShowInfo } from '@/components/catalogue/catalogue-standard';
+import type { MarkedResult, MarkedAchievement } from '@/components/catalogue/catalogue-marked';
 import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, validateRasterLogoUrl, makePdfResponse } from '@/lib/pdf-utils';
@@ -24,8 +26,8 @@ export async function GET(
     return NextResponse.json({ error: 'Database not available' }, { status: 500 });
   }
 
-  if (!['standard', 'absentees', 'by-class', 'alphabetical'].includes(format)) {
-    return NextResponse.json({ error: 'Invalid format. Use "standard", "by-class", "alphabetical", or "absentees".' }, { status: 400 });
+  if (!['standard', 'absentees', 'by-class', 'alphabetical', 'marked'].includes(format)) {
+    return NextResponse.json({ error: 'Invalid format. Use "standard", "by-class", "alphabetical", "absentees", or "marked".' }, { status: 400 });
   }
 
   const show = await db.query.shows.findFirst({
@@ -70,7 +72,10 @@ export async function GET(
         exhibitor: true,
         handler: true,
         entryClasses: {
-          with: { showClass: { with: { classDefinition: true } } },
+          with: {
+            showClass: { with: { classDefinition: true } },
+            ...(format === 'marked' ? { result: true } : {}),
+          },
         },
       },
       orderBy: [asc(schema.entries.catalogueNumber)],
@@ -99,7 +104,7 @@ export async function GET(
   }
 
   // Use RKC catalogue formatting for standard and by-breed formats
-  const useKCFormat = format === 'standard' || (format === 'by-class' && show.showScope !== 'single_breed');
+  const useKCFormat = format === 'standard' || format === 'marked' || (format === 'by-class' && show.showScope !== 'single_breed');
 
   const catalogueEntries: CatalogueEntry[] = entries.map((entry) => ({
     catalogueNumber: entry.catalogueNumber,
@@ -130,6 +135,7 @@ export async function GET(
       sex: ec.showClass?.sex,
       classNumber: ec.showClass?.classNumber,
       sortOrder: ec.showClass?.sortOrder,
+      showClassId: ec.showClassId,
     })),
     status: entry.status,
     entryType: entry.entryType,
@@ -165,15 +171,68 @@ export async function GET(
   try {
     // For all-breed shows, the "by-class" format uses the Crufts-style breed-grouped layout
     const isAllBreed = show.showScope !== 'single_breed';
-    const formatComponents = {
-      standard: CatalogueStandard,
-      'by-class': isAllBreed ? CatalogueByBreed : CatalogueByClass,
-      alphabetical: CatalogueAlphabetical,
-      absentees: CatalogueAbsentees,
-    } as const;
+    let pdfDocument: React.ReactElement;
 
-    const Component = formatComponents[format as keyof typeof formatComponents];
-    const pdfDocument = React.createElement(Component, { show: showInfo, entries: catalogueEntries });
+    if (format === 'marked') {
+      // Build results map and absentees set for the marked catalogue
+      const resultsMap = new Map<string, MarkedResult>();
+      const absenteesSet = new Set<string>();
+
+      for (const entry of entries) {
+        // Mark absent entries
+        if (entry.absent && entry.catalogueNumber) {
+          absenteesSet.add(entry.catalogueNumber);
+        }
+
+        // Collect results from entry classes
+        for (const ec of entry.entryClasses) {
+          const result = (ec as { result?: { placement: number | null; specialAward: string | null } | null }).result;
+          if (result && entry.catalogueNumber) {
+            const key = `${entry.catalogueNumber}-${ec.showClassId}`;
+            resultsMap.set(key, {
+              catalogueNumber: entry.catalogueNumber,
+              showClassId: ec.showClassId,
+              placement: result.placement,
+              specialAward: result.specialAward,
+            });
+          }
+        }
+      }
+
+      // Fetch achievements for the awards summary
+      const achievementRows = await db.query.achievements.findMany({
+        where: eq(schema.achievements.showId, showId),
+        with: {
+          dog: {
+            with: { breed: true },
+          },
+        },
+      });
+
+      const markedAchievements: MarkedAchievement[] = achievementRows.map((a) => ({
+        type: a.type,
+        dogName: a.dog?.registeredName ?? 'Unknown',
+        breedName: a.dog?.breed?.name ?? null,
+      }));
+
+      pdfDocument = React.createElement(CatalogueMarked, {
+        show: showInfo,
+        entries: catalogueEntries,
+        results: resultsMap,
+        absentees: absenteesSet,
+        achievements: markedAchievements,
+      });
+    } else {
+      const formatComponents = {
+        standard: CatalogueStandard,
+        'by-class': isAllBreed ? CatalogueByBreed : CatalogueByClass,
+        alphabetical: CatalogueAlphabetical,
+        absentees: CatalogueAbsentees,
+      } as const;
+
+      const Component = formatComponents[format as keyof typeof formatComponents];
+      pdfDocument = React.createElement(Component, { show: showInfo, entries: catalogueEntries });
+    }
 
     const buffer = await renderToBuffer(pdfDocument);
 
@@ -182,6 +241,7 @@ export async function GET(
       'by-class': isAllBreed ? 'Catalogue-By-Breed' : 'Catalogue-By-Class',
       alphabetical: 'Catalogue-Alphabetical',
       absentees: 'Absentees',
+      marked: 'Marked-Catalogue',
     };
     const filename = `${sanitizeFilename(show.name)}-${formatLabels[format] ?? 'Catalogue'}.pdf`;
     const isPreview = request.nextUrl.searchParams.has('preview');

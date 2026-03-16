@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import {
   ArrowRight,
+  ArrowLeftRight,
   Download,
   Edit3,
   Loader2,
@@ -65,6 +66,7 @@ export default function EntriesPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [editingEntry, setEditingEntry] = useState<EntryItem | null>(null);
+  const [transferringEntry, setTransferringEntry] = useState<EntryItem | null>(null);
   const [showAddEntry, setShowAddEntry] = useState(false);
 
   const filtered = useMemo(() => {
@@ -233,6 +235,15 @@ export default function EntriesPage() {
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
                           <Badge variant={es.variant}>{es.label}</Badge>
+                          {entry.entryClasses.length > 0 && (
+                            <button
+                              onClick={() => setTransferringEntry(entry)}
+                              className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                              title="Transfer class"
+                            >
+                              <ArrowLeftRight className="size-4" />
+                            </button>
+                          )}
                           {entry.dog && (
                             <button
                               onClick={() => setEditingEntry(entry)}
@@ -328,15 +339,26 @@ export default function EntriesPage() {
                           {formatDate(entry.createdAt)}
                         </TableCell>
                         <TableCell>
-                          {entry.dog && (
-                            <button
-                              onClick={() => setEditingEntry(entry)}
-                              className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-                              title="Edit dog details"
-                            >
-                              <Edit3 className="size-4" />
-                            </button>
-                          )}
+                          <div className="flex items-center gap-1">
+                            {entry.entryClasses.length > 0 && (
+                              <button
+                                onClick={() => setTransferringEntry(entry)}
+                                className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                                title="Transfer class"
+                              >
+                                <ArrowLeftRight className="size-4" />
+                              </button>
+                            )}
+                            {entry.dog && (
+                              <button
+                                onClick={() => setEditingEntry(entry)}
+                                className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                                title="Edit dog details"
+                              >
+                                <Edit3 className="size-4" />
+                              </button>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -361,6 +383,14 @@ export default function EntriesPage() {
             showId={showId}
             showDate={showData?.startDate ?? null}
             onClose={() => setShowAddEntry(false)}
+          />
+        )}
+
+        {transferringEntry && (
+          <TransferClassDialog
+            entry={transferringEntry}
+            showId={showId}
+            onClose={() => setTransferringEntry(null)}
           />
         )}
       </Card>
@@ -1022,6 +1052,159 @@ function AddEntryDialog({
             </DialogFooter>
           </div>
         )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// -- Transfer Class Dialog ---------------------------------------------------
+
+function TransferClassDialog({
+  entry,
+  showId,
+  onClose,
+}: {
+  entry: EntryItem;
+  showId: string;
+  onClose: () => void;
+}) {
+  const [selectedEntryClassId, setSelectedEntryClassId] = useState(
+    entry.entryClasses.length === 1 ? entry.entryClasses[0].id : ''
+  );
+  const [newShowClassId, setNewShowClassId] = useState('');
+  const [reason, setReason] = useState('');
+
+  const utils = trpc.useUtils();
+
+  // Get all classes for this show
+  const { data: classesData } = trpc.shows.getClasses.useQuery({ showId });
+
+  const transferClass = trpc.secretary.transferClass.useMutation({
+    onSuccess: (result) => {
+      toast.success(
+        `Transferred ${result.dogName} from ${result.fromClass} to ${result.toClass}`
+      );
+      utils.entries.getForShow.invalidate({ showId });
+      onClose();
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to transfer class'),
+  });
+
+  // Find current class IDs to exclude from transfer targets
+  const currentClassIds = new Set(
+    entry.entryClasses.map((ec) => ec.showClass?.id).filter(Boolean)
+  );
+
+  // Available target classes (exclude current classes)
+  const availableClasses = (classesData ?? []).filter(
+    (sc) => !currentClassIds.has(sc.id)
+  );
+
+  const currentEntryClass = entry.entryClasses.find(
+    (ec) => ec.id === selectedEntryClassId
+  );
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Transfer Class</DialogTitle>
+          <DialogDescription>
+            Move {entry.dog?.registeredName ?? 'this entry'} to a different class.
+            This will be recorded in the audit log.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          {/* Select which entry class to transfer (if multiple) */}
+          {entry.entryClasses.length > 1 && (
+            <div>
+              <Label className="text-sm font-medium">Class to Transfer</Label>
+              <Select value={selectedEntryClassId} onValueChange={setSelectedEntryClassId}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select class..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {entry.entryClasses.map((ec) => (
+                    <SelectItem key={ec.id} value={ec.id}>
+                      {ec.showClass?.classDefinition?.name ?? 'Unknown'}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* Show current class */}
+          {currentEntryClass && (
+            <div className="rounded-lg bg-muted/50 p-3">
+              <p className="text-xs text-muted-foreground">Current class</p>
+              <p className="font-medium">
+                {currentEntryClass.showClass?.classDefinition?.name ?? 'Unknown'}
+              </p>
+            </div>
+          )}
+
+          {/* Select target class */}
+          <div>
+            <Label className="text-sm font-medium">Transfer To</Label>
+            <Select value={newShowClassId} onValueChange={setNewShowClassId}>
+              <SelectTrigger className="mt-1">
+                <SelectValue placeholder="Select target class..." />
+              </SelectTrigger>
+              <SelectContent>
+                {availableClasses.map((sc) => (
+                  <SelectItem key={sc.id} value={sc.id}>
+                    {sc.classDefinition?.name ?? 'Unknown'}
+                    {sc.sex ? ` (${sc.sex === 'dog' ? 'Dog' : 'Bitch'})` : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Reason */}
+          <div>
+            <Label className="text-sm font-medium">
+              Reason for Transfer <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="e.g. Wrong age group selected"
+              className="mt-1"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              This will be recorded in the audit log
+            </p>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              transferClass.mutate({
+                entryClassId: selectedEntryClassId,
+                newShowClassId,
+                reason: reason.trim(),
+              });
+            }}
+            disabled={
+              !selectedEntryClassId ||
+              !newShowClassId ||
+              !reason.trim() ||
+              transferClass.isPending
+            }
+          >
+            {transferClass.isPending && (
+              <Loader2 className="size-4 animate-spin" />
+            )}
+            Transfer
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

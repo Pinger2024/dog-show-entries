@@ -30,6 +30,7 @@ import { PrintOrderAction } from './checklist-actions/print-order-action';
 import { ResultsApprovalAction } from './checklist-actions/results-approval-action';
 import { ResultsPublishAction } from './checklist-actions/results-publish-action';
 import { ShareShowAction } from './checklist-actions/share-show-action';
+import { RkcSubmissionAction } from './checklist-actions/rkc-submission-action';
 
 export const ACTION_REGISTRY: Record<string, ActionRegistryEntry> = {
   // Judge pipeline — the centrepiece
@@ -64,4 +65,8 @@ export const ACTION_REGISTRY: Record<string, ActionRegistryEntry> = {
   share_show: { component: ShareShowAction, mode: 'augment' },
   share_closing: { component: ShareShowAction, mode: 'augment' },
   share_results: { component: ShareShowAction, mode: 'augment' },
+
+  // Post-show RKC submissions
+  rkc_marked_catalogue: { component: RkcSubmissionAction, mode: 'replace' },
+  rkc_analysis: { component: RkcSubmissionAction, mode: 'augment' },
 };

@@ -114,6 +114,7 @@ export const orderStatusEnum = pgEnum('order_status', [
 export const entryAuditActionEnum = pgEnum('entry_audit_action', [
   'created',
   'classes_changed',
+  'class_transferred',
   'handler_changed',
   'withdrawn',
   'reinstated',

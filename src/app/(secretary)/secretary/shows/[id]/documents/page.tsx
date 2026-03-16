@@ -5,6 +5,7 @@ import {
   Award,
   BookOpen,
   Calendar,
+  CheckCircle,
   ClipboardList,
   Download,
   FileText,
@@ -12,6 +13,8 @@ import {
   List,
   Map,
   SortAsc,
+  Trophy,
+  UserX,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -165,6 +168,26 @@ export default function DocumentsPage() {
 
   const prizeCardHref = `/api/prize-cards/${showId}?placements=${prizeCardPlacements}&judge=${includeJudge}&style=${prizeCardStyle}`;
 
+  const postShowDocuments: DocumentLink[] = hasNumbers
+    ? [
+        {
+          label: 'Marked Catalogue',
+          href: `/api/catalogue/${showId}/marked`,
+          icon: <CheckCircle className="size-4" />,
+          description:
+            'Full catalogue with results, placements, absentees, and awards annotated — required by the RKC within 14 days for championship shows',
+          badge: 'RKC',
+        },
+        {
+          label: 'Absentee Report',
+          href: `/api/absentee-report/${showId}`,
+          icon: <UserX className="size-4" />,
+          description:
+            'All entries marked absent — dog name, catalogue number, breed, class, and owner',
+        },
+      ]
+    : [];
+
   return (
     <div className="space-y-6">
       {!hasNumbers && (
@@ -241,6 +264,24 @@ export default function DocumentsPage() {
           <DocumentGrid documents={showDayDocuments} />
         </CardContent>
       </Card>
+
+      {/* Post-Show Documents */}
+      {postShowDocuments.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Trophy className="size-5" />
+              Post-Show Documents
+            </CardTitle>
+            <CardDescription>
+              Documents for RKC submission and show records after judging is complete
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <DocumentGrid documents={postShowDocuments} />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Prize Cards */}
       <Card>
