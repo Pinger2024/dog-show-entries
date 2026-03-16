@@ -122,8 +122,35 @@ export const showsRouter = createTRPCRouter({
         );
       }
 
+      // Breed filter: only shows with at least one class matching the breed
+      if (input.breedId) {
+        conditions.push(
+          exists(
+            ctx.db
+              .select({ one: sql`1` })
+              .from(showClasses)
+              .where(
+                and(
+                  eq(showClasses.showId, shows.id),
+                  or(
+                    eq(showClasses.breedId, input.breedId),
+                    eq(showClasses.isBreedSpecific, false)
+                  )
+                )
+              )
+          )
+        );
+      }
+
       const where =
         conditions.length > 0 ? and(...conditions) : undefined;
+
+      // Prioritise entries_open shows first, then published, then by date
+      const statusPriority = sql<number>`CASE
+        WHEN ${shows.status} = 'entries_open' THEN 0
+        WHEN ${shows.status} = 'published' THEN 1
+        ELSE 2
+      END`;
 
       const items = await ctx.db.query.shows.findMany({
         where,
@@ -131,7 +158,7 @@ export const showsRouter = createTRPCRouter({
           organisation: true,
           venue: true,
         },
-        orderBy: [asc(shows.startDate)],
+        orderBy: [asc(statusPriority), asc(shows.startDate)],
         limit: input.limit,
         offset: input.cursor,
       });

@@ -4187,6 +4187,7 @@ export const secretaryRouter = createTRPCRouter({
             sponsorAffix: z.string().optional(),
             trophyName: z.string().optional(),
           })).optional(),
+          customStatements: z.array(z.string()).optional(),
           directions: z.string().optional(),
           catering: z.string().optional(),
           futureShowDates: z.string().optional(),

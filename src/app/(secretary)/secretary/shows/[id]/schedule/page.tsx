@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Loader2, Save, Eye, Download, Check, AlertTriangle, ChevronsUpDown, Users } from 'lucide-react';
+import { Plus, Trash2, Loader2, Save, Eye, Download, Check, AlertTriangle, ChevronsUpDown, Users, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -85,6 +85,7 @@ export default function ScheduleSettingsPage() {
   const [catering, setCatering] = useState('');
   const [futureShowDates, setFutureShowDates] = useState('');
   const [additionalNotes, setAdditionalNotes] = useState('');
+  const [customStatements, setCustomStatements] = useState<string[]>([]);
   const [hasLoaded, setHasLoaded] = useState(false);
 
   // Populate from existing data
@@ -120,12 +121,15 @@ export default function ScheduleSettingsPage() {
       setCatering(existing.catering ?? '');
       setFutureShowDates(existing.futureShowDates ?? '');
       setAdditionalNotes(existing.additionalNotes ?? '');
+      setCustomStatements(existing.customStatements ?? []);
       setHasLoaded(true);
     }
   }, [existing, hasLoaded]);
 
   async function handleSave() {
     const data: ScheduleData = {
+      // Preserve fields managed by other pages (e.g. sponsors page saves awardSponsors)
+      ...existing,
       country: country as ScheduleData['country'],
       publicAdmission,
       wetWeatherAccommodation: wetWeather,
@@ -147,6 +151,9 @@ export default function ScheduleSettingsPage() {
       catering: catering || undefined,
       futureShowDates: futureShowDates || undefined,
       additionalNotes: additionalNotes || undefined,
+      customStatements: customStatements.filter((s) => s.trim()).length > 0
+        ? customStatements.filter((s) => s.trim())
+        : undefined,
     };
 
     try {
@@ -421,83 +428,89 @@ export default function ScheduleSettingsPage() {
             {/* Officers & Committee */}
             <div className="space-y-3">
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Officers & Committee</Label>
-                    <p className="text-xs text-muted-foreground">
-                      Add officers then tick the ones who are guarantors to the RKC
-                    </p>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={addOfficer}>
-                    <Plus className="size-3.5" />
-                    Add
-                  </Button>
+                <div>
+                  <Label>Officers & Committee</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Add officers then tick the ones who are guarantors to the RKC
+                  </p>
                 </div>
 
-                {/* Select from Club picker */}
+                {/* Select from Club Roster — prominent, shown first */}
                 {clubPeople && clubPeople.length > 0 && (
-                  <Popover open={clubPickerOpen} onOpenChange={setClubPickerOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full justify-between min-h-[2.75rem] text-muted-foreground"
-                      >
-                        <span className="flex items-center gap-2">
-                          <Users className="size-3.5" />
-                          Select from Club Roster
-                        </span>
-                        <ChevronsUpDown className="size-3.5 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[--radix-popover-trigger-width] max-w-[calc(100vw-2rem)] p-0" align="start">
-                      <Command>
-                        <CommandInput placeholder="Search club people..." />
-                        <CommandList className="max-h-[40vh] sm:max-h-[300px]">
-                          <CommandEmpty>No people found.</CommandEmpty>
-                          <CommandGroup>
-                            {clubPeople.map((person) => {
-                              const alreadyAdded = officers.some(
-                                (o) => o.name.toLowerCase() === person.name.toLowerCase()
-                              );
-                              return (
-                                <CommandItem
-                                  key={person.id}
-                                  value={person.name}
-                                  disabled={alreadyAdded}
-                                  onSelect={() => {
-                                    if (!alreadyAdded) addFromClub(person);
-                                  }}
-                                  className={alreadyAdded ? 'opacity-40' : ''}
-                                >
-                                  <div className="flex flex-col gap-0.5 min-w-0">
-                                    <span className="truncate font-medium">
-                                      {person.name}
-                                      {alreadyAdded && (
-                                        <span className="ml-1.5 text-xs font-normal text-muted-foreground">
-                                          (already added)
+                  <div className="rounded-lg border-2 border-primary/30 bg-primary/5 p-3 space-y-2">
+                    <p className="text-xs font-medium text-primary">
+                      Quick add from your club roster ({clubPeople.length} {clubPeople.length === 1 ? 'person' : 'people'} saved)
+                    </p>
+                    <Popover open={clubPickerOpen} onOpenChange={setClubPickerOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="w-full justify-between min-h-[2.75rem]"
+                        >
+                          <span className="flex items-center gap-2">
+                            <Users className="size-4" />
+                            Select from Club Roster
+                          </span>
+                          <ChevronsUpDown className="size-3.5 opacity-70" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[--radix-popover-trigger-width] max-w-[calc(100vw-2rem)] p-0" align="start">
+                        <Command>
+                          <CommandInput placeholder="Search club people..." />
+                          <CommandList className="max-h-[40vh] sm:max-h-[300px]">
+                            <CommandEmpty>No people found.</CommandEmpty>
+                            <CommandGroup>
+                              {clubPeople.map((person) => {
+                                const alreadyAdded = officers.some(
+                                  (o) => o.name.toLowerCase() === person.name.toLowerCase()
+                                );
+                                return (
+                                  <CommandItem
+                                    key={person.id}
+                                    value={person.name}
+                                    disabled={alreadyAdded}
+                                    onSelect={() => {
+                                      if (!alreadyAdded) addFromClub(person);
+                                    }}
+                                    className={alreadyAdded ? 'opacity-40' : ''}
+                                  >
+                                    <div className="flex flex-col gap-0.5 min-w-0">
+                                      <span className="truncate font-medium">
+                                        {person.name}
+                                        {alreadyAdded && (
+                                          <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                                            (already added)
+                                          </span>
+                                        )}
+                                      </span>
+                                      {person.position && (
+                                        <span className="text-xs text-muted-foreground truncate">
+                                          {person.position}
+                                          {person.isGuarantor ? ' · Guarantor' : ''}
                                         </span>
                                       )}
-                                    </span>
-                                    {person.position && (
-                                      <span className="text-xs text-muted-foreground truncate">
-                                        {person.position}
-                                        {person.isGuarantor ? ' · Guarantor' : ''}
-                                      </span>
+                                    </div>
+                                    {alreadyAdded && (
+                                      <Check className="ml-auto size-3.5 shrink-0 text-muted-foreground" />
                                     )}
-                                  </div>
-                                  {alreadyAdded && (
-                                    <Check className="ml-auto size-3.5 shrink-0 text-muted-foreground" />
-                                  )}
-                                </CommandItem>
-                              );
-                            })}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
+                                  </CommandItem>
+                                );
+                              })}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
                 )}
+
+                <div className="flex items-center justify-end">
+                  <Button variant="outline" size="sm" onClick={addOfficer}>
+                    <Plus className="size-3.5" />
+                    Add Manually
+                  </Button>
+                </div>
               </div>
               {officers.map((officer, idx) => (
                 <div key={idx} className="space-y-2 rounded-lg border p-3">
@@ -673,6 +686,51 @@ export default function ScheduleSettingsPage() {
                 placeholder="Any other information to include in the schedule"
                 rows={3}
               />
+            </div>
+
+            {/* Custom statements — shown as warning boxes in the rules section */}
+            <div className="space-y-1.5">
+              <Label>Custom Statements</Label>
+              <p className="text-xs text-muted-foreground">
+                Bold statements shown in the Rules section of the schedule (e.g. &quot;PLEASE NOTE: OUTSIDE ATTRACTION - KC RULE F(1) 16h WILL BE STRICTLY ENFORCED&quot;).
+              </p>
+              <div className="space-y-2">
+                {customStatements.map((stmt, i) => (
+                  <div key={i} className="flex gap-2">
+                    <Input
+                      value={stmt}
+                      onChange={(e) => {
+                        const updated = [...customStatements];
+                        updated[i] = e.target.value;
+                        setCustomStatements(updated);
+                      }}
+                      placeholder="Enter statement..."
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="shrink-0 size-10 text-destructive hover:text-destructive"
+                      onClick={() => {
+                        setCustomStatements(customStatements.filter((_, idx) => idx !== i));
+                      }}
+                    >
+                      <X className="size-4" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-[2.75rem]"
+                  onClick={() => setCustomStatements([...customStatements, ''])}
+                >
+                  <Plus className="size-4" />
+                  Add Statement
+                </Button>
+              </div>
             </div>
           </AccordionContent>
         </AccordionItem>

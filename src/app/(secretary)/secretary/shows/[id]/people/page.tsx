@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Send,
   Trash2,
+  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
@@ -115,6 +116,18 @@ function JudgesSection({ showId }: { showId: string }) {
   const { data: breeds } = trpc.breeds.list.useQuery();
   const { data: showRings } = trpc.secretary.getShowRings.useQuery({ showId });
   const { data: contracts } = trpc.secretary.getJudgeContracts.useQuery({ showId });
+  const { data: showData } = trpc.shows.getById.useQuery({ id: showId });
+
+  // For single-breed shows, derive the breed from the show's classes
+  const singleBreedId = useMemo(() => {
+    if (!showData || showData.showScope !== 'single_breed') return null;
+    const breedIds = new Set<string>();
+    for (const sc of showData.showClasses ?? []) {
+      if (sc.breed?.id) breedIds.add(sc.breed.id);
+    }
+    // If all classes share one breed, that's our single breed
+    return breedIds.size === 1 ? Array.from(breedIds)[0]! : null;
+  }, [showData]);
 
   // Group breeds by their RKC breed group for the searchable combobox
   const breedsByGroup = useMemo(() => {
@@ -138,9 +151,23 @@ function JudgesSection({ showId }: { showId: string }) {
       setJudgeEmail('');
       setAdding(false);
       setSelectedJudgeId(judge.id);
+      // Auto-select breed for single-breed shows
+      if (singleBreedId) {
+        setSelectedBreedIds([singleBreedId]);
+      }
       utils.secretary.getJudges.invalidate();
     },
-    onError: (err) => toast.error(err.message ?? 'Failed to add judge'),
+    onError: (err) => {
+      const msg = err.message ?? 'Failed to add judge';
+      // Provide more helpful error messages for common issues
+      if (msg.includes('unique') || msg.includes('duplicate')) {
+        toast.error('A judge with this name or RKC number already exists. Select them from the dropdown instead.');
+      } else if (msg.includes('required') || msg.includes('min')) {
+        toast.error('Judge name is required.');
+      } else {
+        toast.error(msg);
+      }
+    },
   });
 
   // Track which breed IDs are already assigned to any judge for this show
@@ -161,7 +188,14 @@ function JudgesSection({ showId }: { showId: string }) {
       setSelectedSexFilter('both');
       utils.secretary.getShowJudges.invalidate({ showId });
     },
-    onError: (err) => toast.error(err.message ?? 'Failed to assign judge'),
+    onError: (err) => {
+      const msg = err.message ?? 'Failed to assign judge';
+      if (msg.includes('unique') || msg.includes('duplicate') || msg.includes('already')) {
+        toast.error('This judge is already assigned to that breed. Check the assignments below.');
+      } else {
+        toast.error(msg);
+      }
+    },
   });
 
   const bulkAssignMutation = trpc.secretary.bulkAssignJudge.useMutation({
@@ -173,7 +207,14 @@ function JudgesSection({ showId }: { showId: string }) {
       setSelectedSexFilter('both');
       utils.secretary.getShowJudges.invalidate({ showId });
     },
-    onError: (err) => toast.error(err.message ?? 'Failed to assign judge'),
+    onError: (err) => {
+      const msg = err.message ?? 'Failed to assign judge';
+      if (msg.includes('unique') || msg.includes('duplicate') || msg.includes('already')) {
+        toast.error('This judge is already assigned to one or more of those breeds.');
+      } else {
+        toast.error(msg);
+      }
+    },
   });
 
   const removeMutation = trpc.secretary.removeJudgeAssignment.useMutation({
@@ -543,6 +584,10 @@ function JudgesSection({ showId }: { showId: string }) {
                             onSelect={() => {
                               setSelectedJudgeId(j.id);
                               setJudgePopoverOpen(false);
+                              // Auto-select breed for single-breed shows
+                              if (singleBreedId && selectedBreedIds.length === 0) {
+                                setSelectedBreedIds([singleBreedId]);
+                              }
                             }}
                           >
                             <Check

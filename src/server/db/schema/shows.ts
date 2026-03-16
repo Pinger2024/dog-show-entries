@@ -52,6 +52,9 @@ export interface ScheduleData {
     trophyName?: string;
   }[];
 
+  // Custom statements (e.g. "OUTSIDE ATTRACTION - KC RULE F(1) 16h WILL BE STRICTLY ENFORCED")
+  customStatements?: string[];
+
   // Optional text sections
   directions?: string;
   catering?: string;

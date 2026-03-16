@@ -854,6 +854,8 @@ function SponsorshipRow({
   const [affix, setAffix] = useState(sponsorship.sponsorAffix ?? '');
   const [trophy, setTrophy] = useState(sponsorship.trophyName ?? '');
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const mobileRowRef = useRef<HTMLDivElement>(null);
 
   const updateMutation = trpc.secretary.updateClassSponsor.useMutation({
     onSuccess: () => onSaved(),
@@ -880,6 +882,23 @@ function SponsorshipRow({
       }, 500);
     },
     [sponsorship.id, updateMutation, removeMutation]
+  );
+
+  // Don't save on blur if focus moved to another field in the same row
+  const handleBlur = useCallback(
+    (field: 'sponsorName' | 'sponsorAffix' | 'trophyName', value: string) => {
+      setTimeout(() => {
+        const active = document.activeElement;
+        if (
+          (rowRef.current && rowRef.current.contains(active)) ||
+          (mobileRowRef.current && mobileRowRef.current.contains(active))
+        ) {
+          return; // focus stayed within the row — skip auto-save
+        }
+        debouncedSave(field, value);
+      }, 50);
+    },
+    [debouncedSave]
   );
 
   // Cleanup timer on unmount
@@ -913,7 +932,7 @@ function SponsorshipRow({
   return (
     <>
       {/* Desktop: inline cells */}
-      <div className="hidden sm:contents">
+      <div ref={rowRef} className="hidden sm:contents">
         <div className="border-b border-r">
           <AutocompleteInput
             value={name}
@@ -924,7 +943,7 @@ function SponsorshipRow({
             suggestions={suggestions}
             placeholder="Sponsor name"
             onPickSuggestion={handlePickSuggestion}
-            onBlur={() => debouncedSave('sponsorName', name)}
+            onBlur={() => handleBlur('sponsorName', name)}
           />
         </div>
         <div className="border-b border-r">
@@ -935,7 +954,7 @@ function SponsorshipRow({
               setAffix(e.target.value);
               debouncedSave('sponsorAffix', e.target.value);
             }}
-            onBlur={() => debouncedSave('sponsorAffix', affix)}
+            onBlur={() => handleBlur('sponsorAffix', affix)}
             placeholder="Affix"
             className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-muted-foreground/40"
           />
@@ -948,7 +967,7 @@ function SponsorshipRow({
               setTrophy(e.target.value);
               debouncedSave('trophyName', e.target.value);
             }}
-            onBlur={() => debouncedSave('trophyName', trophy)}
+            onBlur={() => handleBlur('trophyName', trophy)}
             placeholder="Trophy"
             className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-muted-foreground/40"
           />
@@ -970,7 +989,7 @@ function SponsorshipRow({
       </div>
 
       {/* Mobile: stacked fields */}
-      <div className="sm:hidden">
+      <div ref={mobileRowRef} className="sm:hidden">
         <div className="flex items-start gap-2 rounded-md border bg-card p-3">
           <div className="min-w-0 flex-1 space-y-2">
             <div>
@@ -984,7 +1003,7 @@ function SponsorshipRow({
                 suggestions={suggestions}
                 placeholder="Sponsor name"
                 onPickSuggestion={handlePickSuggestion}
-                onBlur={() => debouncedSave('sponsorName', name)}
+                onBlur={() => handleBlur('sponsorName', name)}
                 className="mt-0.5 rounded-md border bg-background px-2"
               />
             </div>
@@ -998,7 +1017,7 @@ function SponsorshipRow({
                     setAffix(e.target.value);
                     debouncedSave('sponsorAffix', e.target.value);
                   }}
-                  onBlur={() => debouncedSave('sponsorAffix', affix)}
+                  onBlur={() => handleBlur('sponsorAffix', affix)}
                   placeholder="Affix"
                   className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
                 />
@@ -1012,7 +1031,7 @@ function SponsorshipRow({
                     setTrophy(e.target.value);
                     debouncedSave('trophyName', e.target.value);
                   }}
-                  onBlur={() => debouncedSave('trophyName', trophy)}
+                  onBlur={() => handleBlur('trophyName', trophy)}
                   placeholder="Trophy"
                   className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
                 />
@@ -1053,6 +1072,8 @@ function NewSponsorshipRow({
   const [trophy, setTrophy] = useState('');
   const [isActive, setIsActive] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const mobileRowRef = useRef<HTMLDivElement>(null);
 
   const createMutation = trpc.secretary.upsertClassSponsor.useMutation({
     onSuccess: () => {
@@ -1084,6 +1105,20 @@ function NewSponsorshipRow({
       });
     }, 500);
   }, [name, affix, trophy, showClassId, createMutation]);
+
+  // Don't save on blur if focus moved to another field in the same row
+  const handleRowBlur = useCallback(() => {
+    setTimeout(() => {
+      const active = document.activeElement;
+      if (
+        (rowRef.current && rowRef.current.contains(active)) ||
+        (mobileRowRef.current && mobileRowRef.current.contains(active))
+      ) {
+        return; // focus stayed within the row — skip auto-save
+      }
+      trySave();
+    }, 50);
+  }, [trySave]);
 
   const handlePickSuggestion = useCallback(
     (s: Suggestion) => {
@@ -1141,7 +1176,7 @@ function NewSponsorshipRow({
   return (
     <>
       {/* Desktop: inline cells */}
-      <div className="hidden sm:contents">
+      <div ref={rowRef} className="hidden sm:contents">
         <div className="border-b border-r bg-blue-50/30">
           <AutocompleteInput
             value={name}
@@ -1149,7 +1184,7 @@ function NewSponsorshipRow({
             suggestions={suggestions}
             placeholder="Type sponsor name..."
             onPickSuggestion={handlePickSuggestion}
-            onBlur={trySave}
+            onBlur={handleRowBlur}
             className="bg-blue-50/30"
           />
         </div>
@@ -1158,7 +1193,7 @@ function NewSponsorshipRow({
             type="text"
             value={affix}
             onChange={(e) => setAffix(e.target.value)}
-            onBlur={trySave}
+            onBlur={handleRowBlur}
             placeholder="Affix"
             className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-muted-foreground/40"
           />
@@ -1168,7 +1203,7 @@ function NewSponsorshipRow({
             type="text"
             value={trophy}
             onChange={(e) => setTrophy(e.target.value)}
-            onBlur={trySave}
+            onBlur={handleRowBlur}
             placeholder="Trophy"
             className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-muted-foreground/40"
           />
@@ -1190,7 +1225,7 @@ function NewSponsorshipRow({
       </div>
 
       {/* Mobile: stacked fields */}
-      <div className="sm:hidden">
+      <div ref={mobileRowRef} className="sm:hidden">
         <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50/30 p-3">
           <div className="min-w-0 flex-1 space-y-2">
             <div>
@@ -1201,7 +1236,7 @@ function NewSponsorshipRow({
                 suggestions={suggestions}
                 placeholder="Type sponsor name..."
                 onPickSuggestion={handlePickSuggestion}
-                onBlur={trySave}
+                onBlur={handleRowBlur}
                 className="mt-0.5 rounded-md border bg-background px-2"
               />
             </div>
@@ -1212,7 +1247,7 @@ function NewSponsorshipRow({
                   type="text"
                   value={affix}
                   onChange={(e) => setAffix(e.target.value)}
-                  onBlur={trySave}
+                  onBlur={handleRowBlur}
                   placeholder="Affix"
                   className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
                 />
@@ -1223,7 +1258,7 @@ function NewSponsorshipRow({
                   type="text"
                   value={trophy}
                   onChange={(e) => setTrophy(e.target.value)}
-                  onBlur={trySave}
+                  onBlur={handleRowBlur}
                   placeholder="Trophy"
                   className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
                 />
@@ -1289,6 +1324,8 @@ function AwardSponsorshipRow({
   const [affix, setAffix] = useState(entry.sponsorAffix ?? '');
   const [trophy, setTrophy] = useState(entry.trophyName ?? '');
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const mobileRowRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     return () => {
@@ -1317,6 +1354,23 @@ function AwardSponsorshipRow({
       }, 500);
     },
     [allEntries, entryIndex, onSave]
+  );
+
+  // Don't save on blur if focus moved to another field in the same row
+  const handleBlur = useCallback(
+    (field: 'sponsorName' | 'sponsorAffix' | 'trophyName', value: string) => {
+      setTimeout(() => {
+        const active = document.activeElement;
+        if (
+          (rowRef.current && rowRef.current.contains(active)) ||
+          (mobileRowRef.current && mobileRowRef.current.contains(active))
+        ) {
+          return; // focus stayed within the row — skip auto-save
+        }
+        debouncedSave(field, value);
+      }, 50);
+    },
+    [debouncedSave]
   );
 
   const handleRemove = useCallback(() => {
@@ -1350,7 +1404,7 @@ function AwardSponsorshipRow({
   return (
     <>
       {/* Desktop: inline cells */}
-      <div className="hidden sm:contents">
+      <div ref={rowRef} className="hidden sm:contents">
         <div className="border-b border-r">
           <AutocompleteInput
             value={name}
@@ -1361,7 +1415,7 @@ function AwardSponsorshipRow({
             suggestions={suggestions}
             placeholder="Sponsor name"
             onPickSuggestion={handlePickSuggestion}
-            onBlur={() => debouncedSave('sponsorName', name)}
+            onBlur={() => handleBlur('sponsorName', name)}
           />
         </div>
         <div className="border-b border-r">
@@ -1372,7 +1426,7 @@ function AwardSponsorshipRow({
               setAffix(e.target.value);
               debouncedSave('sponsorAffix', e.target.value);
             }}
-            onBlur={() => debouncedSave('sponsorAffix', affix)}
+            onBlur={() => handleBlur('sponsorAffix', affix)}
             placeholder="Affix"
             className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-muted-foreground/40"
           />
@@ -1385,7 +1439,7 @@ function AwardSponsorshipRow({
               setTrophy(e.target.value);
               debouncedSave('trophyName', e.target.value);
             }}
-            onBlur={() => debouncedSave('trophyName', trophy)}
+            onBlur={() => handleBlur('trophyName', trophy)}
             placeholder="Trophy"
             className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-muted-foreground/40"
           />
@@ -1402,7 +1456,7 @@ function AwardSponsorshipRow({
       </div>
 
       {/* Mobile: stacked fields */}
-      <div className="sm:hidden">
+      <div ref={mobileRowRef} className="sm:hidden">
         <div className="flex items-start gap-2 rounded-md border bg-card p-3">
           <div className="min-w-0 flex-1 space-y-2">
             <div>
@@ -1416,7 +1470,7 @@ function AwardSponsorshipRow({
                 suggestions={suggestions}
                 placeholder="Sponsor name"
                 onPickSuggestion={handlePickSuggestion}
-                onBlur={() => debouncedSave('sponsorName', name)}
+                onBlur={() => handleBlur('sponsorName', name)}
                 className="mt-0.5 rounded-md border bg-background px-2"
               />
             </div>
@@ -1430,7 +1484,7 @@ function AwardSponsorshipRow({
                     setAffix(e.target.value);
                     debouncedSave('sponsorAffix', e.target.value);
                   }}
-                  onBlur={() => debouncedSave('sponsorAffix', affix)}
+                  onBlur={() => handleBlur('sponsorAffix', affix)}
                   placeholder="Affix"
                   className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
                 />
@@ -1444,7 +1498,7 @@ function AwardSponsorshipRow({
                     setTrophy(e.target.value);
                     debouncedSave('trophyName', e.target.value);
                   }}
-                  onBlur={() => debouncedSave('trophyName', trophy)}
+                  onBlur={() => handleBlur('trophyName', trophy)}
                   placeholder="Trophy"
                   className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
                 />
@@ -1482,6 +1536,8 @@ function NewAwardSponsorshipRow({
   const [trophy, setTrophy] = useState('');
   const [isActive, setIsActive] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const mobileRowRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     return () => {
@@ -1506,6 +1562,20 @@ function NewAwardSponsorshipRow({
       setIsActive(false);
     }, 500);
   }, [name, affix, trophy, award, allEntries, onSave]);
+
+  // Don't save on blur if focus moved to another field in the same row
+  const handleRowBlur = useCallback(() => {
+    setTimeout(() => {
+      const active = document.activeElement;
+      if (
+        (rowRef.current && rowRef.current.contains(active)) ||
+        (mobileRowRef.current && mobileRowRef.current.contains(active))
+      ) {
+        return; // focus stayed within the row — skip auto-save
+      }
+      trySave();
+    }, 50);
+  }, [trySave]);
 
   const handlePickSuggestion = useCallback(
     (s: Suggestion) => {
@@ -1567,7 +1637,7 @@ function NewAwardSponsorshipRow({
   return (
     <>
       {/* Desktop: inline cells */}
-      <div className="hidden sm:contents">
+      <div ref={rowRef} className="hidden sm:contents">
         <div className="border-b border-r bg-blue-50/30">
           <AutocompleteInput
             value={name}
@@ -1575,7 +1645,7 @@ function NewAwardSponsorshipRow({
             suggestions={suggestions}
             placeholder="Type sponsor name..."
             onPickSuggestion={handlePickSuggestion}
-            onBlur={trySave}
+            onBlur={handleRowBlur}
             className="bg-blue-50/30"
           />
         </div>
@@ -1584,7 +1654,7 @@ function NewAwardSponsorshipRow({
             type="text"
             value={affix}
             onChange={(e) => setAffix(e.target.value)}
-            onBlur={trySave}
+            onBlur={handleRowBlur}
             placeholder="Affix"
             className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-muted-foreground/40"
           />
@@ -1594,7 +1664,7 @@ function NewAwardSponsorshipRow({
             type="text"
             value={trophy}
             onChange={(e) => setTrophy(e.target.value)}
-            onBlur={trySave}
+            onBlur={handleRowBlur}
             placeholder="Trophy"
             className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-muted-foreground/40"
           />
@@ -1616,7 +1686,7 @@ function NewAwardSponsorshipRow({
       </div>
 
       {/* Mobile: stacked fields */}
-      <div className="sm:hidden">
+      <div ref={mobileRowRef} className="sm:hidden">
         <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50/30 p-3">
           <div className="min-w-0 flex-1 space-y-2">
             <div>
@@ -1627,7 +1697,7 @@ function NewAwardSponsorshipRow({
                 suggestions={suggestions}
                 placeholder="Type sponsor name..."
                 onPickSuggestion={handlePickSuggestion}
-                onBlur={trySave}
+                onBlur={handleRowBlur}
                 className="mt-0.5 rounded-md border bg-background px-2"
               />
             </div>
@@ -1638,7 +1708,7 @@ function NewAwardSponsorshipRow({
                   type="text"
                   value={affix}
                   onChange={(e) => setAffix(e.target.value)}
-                  onBlur={trySave}
+                  onBlur={handleRowBlur}
                   placeholder="Affix"
                   className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
                 />
@@ -1649,7 +1719,7 @@ function NewAwardSponsorshipRow({
                   type="text"
                   value={trophy}
                   onChange={(e) => setTrophy(e.target.value)}
-                  onBlur={trySave}
+                  onBlur={handleRowBlur}
                   placeholder="Trophy"
                   className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
                 />
