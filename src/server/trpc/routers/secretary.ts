@@ -2257,7 +2257,157 @@ export const secretaryRouter = createTRPCRouter({
         detected.judge_offers_sent = false;
       }
 
+      // Additional auto-detect keys for lifecycle gates
+      detected.entry_fees_set = show.firstEntryFee != null && show.firstEntryFee > 0;
+      detected.entry_close_date_set = show.entryCloseDate != null;
+      detected.secretary_details_set = !!(show.secretaryName && show.secretaryEmail);
+      const scheduleData = show.scheduleData as Record<string, unknown> | null;
+      const guarantors = (scheduleData?.guarantors as { name: string }[] | undefined) ?? [];
+      const minGuarantors = show.showType === 'championship' ? 6 : 3;
+      detected.guarantors_added = guarantors.length >= minGuarantors;
+
       return detected;
+    }),
+
+  // ── Phase Blockers (lifecycle gates) ──────────────────────
+  getPhaseBlockers: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+      });
+      if (!show) throw new TRPCError({ code: 'NOT_FOUND' });
+
+      const [classCount, judgeCount, ringCount, stewardCount] = await Promise.all([
+        ctx.db.select({ count: sql<number>`count(*)` }).from(showClasses).where(eq(showClasses.showId, input.showId)),
+        ctx.db.select({ count: sql<number>`count(*)` }).from(judgeAssignments).where(eq(judgeAssignments.showId, input.showId)),
+        ctx.db.select({ count: sql<number>`count(*)` }).from(rings).where(eq(rings.showId, input.showId)),
+        ctx.db.select({ count: sql<number>`count(*)` }).from(stewardAssignments).where(eq(stewardAssignments.showId, input.showId)),
+      ]);
+
+      const scheduleData = show.scheduleData as Record<string, unknown> | null;
+      const guarantors = (scheduleData?.guarantors as { name: string }[] | undefined) ?? [];
+      const minGuarantors = show.showType === 'championship' ? 6 : 3;
+
+      type Blocker = {
+        key: string;
+        label: string;
+        detail: string;
+        actionPath: string;
+        severity: 'required' | 'recommended';
+      };
+
+      // Blockers for opening entries
+      const openEntriesBlockers: Blocker[] = [];
+
+      if (Number(classCount[0]?.count) === 0) {
+        openEntriesBlockers.push({
+          key: 'no_classes', label: 'No classes created',
+          detail: 'Set up your show classes before opening entries',
+          actionPath: '', severity: 'required',
+        });
+      }
+      if (Number(judgeCount[0]?.count) === 0) {
+        openEntriesBlockers.push({
+          key: 'no_judge', label: 'No judge assigned',
+          detail: 'Assign at least one judge to the show',
+          actionPath: '/people', severity: 'required',
+        });
+      }
+      if (!show.firstEntryFee || show.firstEntryFee <= 0) {
+        openEntriesBlockers.push({
+          key: 'no_entry_fees', label: 'Entry fees not set',
+          detail: 'Set your first entry fee',
+          actionPath: '', severity: 'required',
+        });
+      }
+      if (!show.entryCloseDate) {
+        openEntriesBlockers.push({
+          key: 'no_close_date', label: 'Entry close date not set',
+          detail: 'Set when entries should close',
+          actionPath: '', severity: 'required',
+        });
+      }
+      if (!show.secretaryName || !show.secretaryEmail) {
+        openEntriesBlockers.push({
+          key: 'no_secretary_details', label: 'Secretary contact details missing',
+          detail: 'Add secretary name and email for the schedule',
+          actionPath: '', severity: 'required',
+        });
+      }
+      if (guarantors.length < minGuarantors) {
+        openEntriesBlockers.push({
+          key: 'insufficient_guarantors',
+          label: `Guarantors (${guarantors.length} of ${minGuarantors})`,
+          detail: `${show.showType === 'championship' ? 'Championship' : 'Open'} shows need ${minGuarantors} guarantors`,
+          actionPath: '/schedule', severity: 'required',
+        });
+      }
+      if (!show.venueId) {
+        openEntriesBlockers.push({
+          key: 'no_venue', label: 'Venue not confirmed',
+          detail: 'Confirm the show venue',
+          actionPath: '', severity: 'recommended',
+        });
+      }
+      if (!show.kcLicenceNo) {
+        openEntriesBlockers.push({
+          key: 'no_rkc_licence', label: 'RKC licence not recorded',
+          detail: 'Record the RKC licence number',
+          actionPath: '', severity: 'recommended',
+        });
+      }
+
+      const requiredBlockers = openEntriesBlockers.filter((b) => b.severity === 'required');
+
+      // Blockers for starting show (entries_closed → in_progress)
+      const startShowBlockers: Blocker[] = [];
+      if (Number(ringCount[0]?.count) === 0) {
+        startShowBlockers.push({
+          key: 'no_rings', label: 'Rings not set up',
+          detail: 'Create at least one ring for judging',
+          actionPath: '/people', severity: 'recommended',
+        });
+      }
+      if (Number(stewardCount[0]?.count) === 0) {
+        startShowBlockers.push({
+          key: 'no_stewards', label: 'No stewards assigned',
+          detail: 'Assign stewards to help on show day',
+          actionPath: '/people', severity: 'recommended',
+        });
+      }
+
+      return {
+        canOpenEntries: requiredBlockers.length === 0,
+        openEntriesBlockers,
+        canStartShow: true, // start show blockers are all recommended
+        startShowBlockers,
+      };
+    }),
+
+  // ── Show Phase Context (lightweight, for section nav badges) ──
+  getShowPhaseContext: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+        columns: { status: true, resultsPublishedAt: true },
+      });
+      if (!show) return null;
+
+      const phase = show.status === 'draft' || show.status === 'published' ? 'setup'
+        : show.status === 'entries_open' ? 'entries_open'
+        : show.status === 'entries_closed' ? 'pre_show'
+        : show.status === 'in_progress' ? 'show_day'
+        : show.status === 'completed' ? 'post_show'
+        : 'setup';
+
+      return {
+        phase,
+        resultsPublished: !!show.resultsPublishedAt,
+      };
     }),
 
   // ─── Judge Contracts ────────────────────────────────────
