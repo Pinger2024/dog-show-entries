@@ -44,6 +44,14 @@ export interface ScheduleData {
   // Sponsorship
   sponsorships?: { sponsorName: string; description: string }[];
 
+  // Best award sponsorships (BOB, Best Dog, Best Bitch, etc.)
+  awardSponsors?: {
+    award: string;
+    sponsorName: string;
+    sponsorAffix?: string;
+    trophyName?: string;
+  }[];
+
   // Optional text sections
   directions?: string;
   catering?: string;

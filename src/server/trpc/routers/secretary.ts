@@ -3833,6 +3833,12 @@ export const secretaryRouter = createTRPCRouter({
             sponsorName: z.string(),
             description: z.string(),
           })).optional(),
+          awardSponsors: z.array(z.object({
+            award: z.string(),
+            sponsorName: z.string(),
+            sponsorAffix: z.string().optional(),
+            trophyName: z.string().optional(),
+          })).optional(),
           directions: z.string().optional(),
           catering: z.string().optional(),
           futureShowDates: z.string().optional(),
@@ -3846,6 +3852,47 @@ export const secretaryRouter = createTRPCRouter({
         .update(shows)
         .set({ scheduleData: input.scheduleData })
         .where(eq(shows.id, input.showId));
+
+      // Sync new officers into organisation_people so they're available for future shows
+      const scheduleOfficers = input.scheduleData.officers;
+      if (scheduleOfficers && scheduleOfficers.length > 0) {
+        const show = await ctx.db.query.shows.findFirst({
+          where: eq(shows.id, input.showId),
+          columns: { organisationId: true },
+        });
+        if (show) {
+          const existingPeople = await ctx.db.query.organisationPeople.findMany({
+            where: eq(organisationPeople.organisationId, show.organisationId),
+            columns: { name: true },
+          });
+          const existingNames = new Set(
+            existingPeople.map((p) => p.name.toLowerCase().trim())
+          );
+
+          // Build guarantor lookup from schedule data
+          const guarantorNames = new Set(
+            (input.scheduleData.guarantors ?? []).map((g) => g.name.toLowerCase().trim())
+          );
+          const guarantorAddresses = new Map(
+            (input.scheduleData.guarantors ?? []).map((g) => [g.name.toLowerCase().trim(), g.address])
+          );
+
+          const newPeople = scheduleOfficers
+            .filter((o) => o.name.trim() && !existingNames.has(o.name.toLowerCase().trim()))
+            .map((o) => ({
+              organisationId: show.organisationId,
+              name: o.name.trim(),
+              position: o.position || null,
+              isGuarantor: guarantorNames.has(o.name.toLowerCase().trim()),
+              address: guarantorAddresses.get(o.name.toLowerCase().trim()) ?? null,
+            }));
+
+          if (newPeople.length > 0) {
+            await ctx.db.insert(organisationPeople).values(newPeople);
+          }
+        }
+      }
+
       return { success: true };
     }),
 

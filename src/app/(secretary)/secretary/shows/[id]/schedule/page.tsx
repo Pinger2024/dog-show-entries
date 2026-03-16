@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Loader2, Save, Eye, Download, Check, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, Loader2, Save, Eye, Download, Check, AlertTriangle, ChevronsUpDown, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -28,6 +28,19 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 import { Badge } from '@/components/ui/badge';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
 import type { ScheduleData } from '@/server/db/schema/shows';
 import { useShowId } from '../_lib/show-context';
 
@@ -46,6 +59,14 @@ export default function ScheduleSettingsPage() {
   const { data: showData } = trpc.shows.getById.useQuery({ id: showId });
   const updateMutation = trpc.secretary.updateScheduleData.useMutation();
   const utils = trpc.useUtils();
+
+  // Club people for "Select from Club" picker
+  const orgId = showData?.organisationId;
+  const { data: clubPeople } = trpc.secretary.listOrgPeople.useQuery(
+    { organisationId: orgId ?? '' },
+    { enabled: !!orgId }
+  );
+  const [clubPickerOpen, setClubPickerOpen] = useState(false);
 
   // ── Form state ──
   const [country, setCountry] = useState<string>('england');
@@ -130,7 +151,11 @@ export default function ScheduleSettingsPage() {
 
     try {
       await updateMutation.mutateAsync({ showId, scheduleData: data });
-      await utils.secretary.getScheduleData.invalidate({ showId });
+      await Promise.all([
+        utils.secretary.getScheduleData.invalidate({ showId }),
+        // Invalidate club people cache in case new officers were synced to the roster
+        orgId ? utils.secretary.listOrgPeople.invalidate({ organisationId: orgId }) : Promise.resolve(),
+      ]);
       toast.success('Schedule settings saved');
     } catch {
       toast.error('Failed to save schedule settings');
@@ -146,6 +171,19 @@ export default function ScheduleSettingsPage() {
   }
   function updateOfficer(idx: number, field: keyof OfficerWithGuarantor, value: string | boolean) {
     setOfficers(officers.map((o, i) => (i === idx ? { ...o, [field]: value } : o)));
+  }
+
+  function addFromClub(person: NonNullable<typeof clubPeople>[number]) {
+    setOfficers([
+      ...officers,
+      {
+        name: person.name,
+        position: person.position ?? '',
+        isGuarantor: person.isGuarantor,
+        address: person.address ?? '',
+      },
+    ]);
+    setClubPickerOpen(false);
   }
 
   if (isLoading) {
@@ -382,17 +420,84 @@ export default function ScheduleSettingsPage() {
 
             {/* Officers & Committee */}
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>Officers & Committee</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Add officers then tick the ones who are guarantors to the RKC
-                  </p>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label>Officers & Committee</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Add officers then tick the ones who are guarantors to the RKC
+                    </p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={addOfficer}>
+                    <Plus className="size-3.5" />
+                    Add
+                  </Button>
                 </div>
-                <Button variant="outline" size="sm" onClick={addOfficer}>
-                  <Plus className="size-3.5" />
-                  Add
-                </Button>
+
+                {/* Select from Club picker */}
+                {clubPeople && clubPeople.length > 0 && (
+                  <Popover open={clubPickerOpen} onOpenChange={setClubPickerOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full justify-between min-h-[2.75rem] text-muted-foreground"
+                      >
+                        <span className="flex items-center gap-2">
+                          <Users className="size-3.5" />
+                          Select from Club Roster
+                        </span>
+                        <ChevronsUpDown className="size-3.5 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] max-w-[calc(100vw-2rem)] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search club people..." />
+                        <CommandList className="max-h-[40vh] sm:max-h-[300px]">
+                          <CommandEmpty>No people found.</CommandEmpty>
+                          <CommandGroup>
+                            {clubPeople.map((person) => {
+                              const alreadyAdded = officers.some(
+                                (o) => o.name.toLowerCase() === person.name.toLowerCase()
+                              );
+                              return (
+                                <CommandItem
+                                  key={person.id}
+                                  value={person.name}
+                                  disabled={alreadyAdded}
+                                  onSelect={() => {
+                                    if (!alreadyAdded) addFromClub(person);
+                                  }}
+                                  className={alreadyAdded ? 'opacity-40' : ''}
+                                >
+                                  <div className="flex flex-col gap-0.5 min-w-0">
+                                    <span className="truncate font-medium">
+                                      {person.name}
+                                      {alreadyAdded && (
+                                        <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                                          (already added)
+                                        </span>
+                                      )}
+                                    </span>
+                                    {person.position && (
+                                      <span className="text-xs text-muted-foreground truncate">
+                                        {person.position}
+                                        {person.isGuarantor ? ' · Guarantor' : ''}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {alreadyAdded && (
+                                    <Check className="ml-auto size-3.5 shrink-0 text-muted-foreground" />
+                                  )}
+                                </CommandItem>
+                              );
+                            })}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                )}
               </div>
               {officers.map((officer, idx) => (
                 <div key={idx} className="space-y-2 rounded-lg border p-3">
