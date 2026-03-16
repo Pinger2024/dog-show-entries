@@ -38,6 +38,7 @@ export {
 
 // Tables
 export { organisations, organisationsRelations } from './organisations';
+export { organisationPeople, organisationPeopleRelations } from './organisation-people';
 export { venues, venuesRelations } from './venues';
 export { breedGroups, breedGroupsRelations } from './breed-groups';
 export { breeds, breedsRelations } from './breeds';

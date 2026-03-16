@@ -33,6 +33,7 @@ import {
   sponsors,
   showSponsors,
   classSponsorships,
+  organisationPeople,
 } from '@/server/db/schema';
 import {
   DEFAULT_CHECKLIST_ITEMS,
@@ -296,6 +297,68 @@ export const secretaryRouter = createTRPCRouter({
         .where(eq(venues.id, venueId))
         .returning();
       return updated!;
+    }),
+
+  // ── Organisation People (My Club) ──────────────────────────
+  listOrgPeople: secretaryProcedure
+    .input(z.object({ organisationId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
+      return ctx.db.query.organisationPeople.findMany({
+        where: eq(organisationPeople.organisationId, input.organisationId),
+        orderBy: (op, { asc }) => [asc(op.name)],
+      });
+    }),
+
+  createOrgPerson: secretaryProcedure
+    .input(z.object({
+      organisationId: z.string().uuid(),
+      name: z.string().min(1).max(255),
+      position: z.string().max(100).optional(),
+      email: z.string().email().optional(),
+      phone: z.string().max(50).optional(),
+      address: z.string().optional(),
+      isGuarantor: z.boolean().default(false),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
+      const [person] = await ctx.db.insert(organisationPeople).values(input).returning();
+      return person!;
+    }),
+
+  updateOrgPerson: secretaryProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      name: z.string().min(1).max(255).optional(),
+      position: z.string().max(100).nullable().optional(),
+      email: z.string().email().nullable().optional(),
+      phone: z.string().max(50).nullable().optional(),
+      address: z.string().nullable().optional(),
+      isGuarantor: z.boolean().optional(),
+      notes: z.string().nullable().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { id, ...rest } = input;
+      const person = await ctx.db.query.organisationPeople.findFirst({
+        where: eq(organisationPeople.id, id),
+      });
+      if (!person) throw new TRPCError({ code: 'NOT_FOUND' });
+      await verifyOrgAccess(ctx.db, ctx.session.user.id, person.organisationId);
+      const [updated] = await ctx.db.update(organisationPeople).set(rest).where(eq(organisationPeople.id, id)).returning();
+      return updated!;
+    }),
+
+  deleteOrgPerson: secretaryProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const person = await ctx.db.query.organisationPeople.findFirst({
+        where: eq(organisationPeople.id, input.id),
+      });
+      if (!person) throw new TRPCError({ code: 'NOT_FOUND' });
+      await verifyOrgAccess(ctx.db, ctx.session.user.id, person.organisationId);
+      await ctx.db.delete(organisationPeople).where(eq(organisationPeople.id, input.id));
+      return { deleted: true };
     }),
 
   listClassDefinitions: publicProcedure.query(async ({ ctx }) => {
