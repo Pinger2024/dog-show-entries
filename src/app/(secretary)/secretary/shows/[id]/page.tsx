@@ -19,8 +19,6 @@ import {
   Hash,
   ImageIcon,
   Loader2,
-  ListChecks,
-  AlertTriangle,
   Mail,
   MapPin,
   Plus,
@@ -40,7 +38,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Progress } from '@/components/ui/progress';
 import {
   Card,
   CardContent,
@@ -86,6 +83,7 @@ import { uploadImage } from '@/lib/upload';
 import { PostcodeLookup, formatAddress } from '@/components/postcode-lookup';
 import { formatDate } from './_lib/show-utils';
 import { useShowId } from './_lib/show-context';
+import { PhaseActionPanel } from './_components/phase-action-panel';
 
 export default function OverviewPage() {
   const showId = useShowId();
@@ -111,8 +109,8 @@ export default function OverviewPage() {
 
   return (
     <div className="space-y-6">
-      {/* Show Readiness */}
-      <ReadinessCard showId={showId} />
+      {/* Phase Action Panel */}
+      <PhaseActionPanel />
 
       {/* Show Details — compact "boarding pass" style */}
       <Card className="overflow-hidden">
@@ -2502,54 +2500,3 @@ function DeleteShowSection({ showId, showName }: { showId: string; showName: str
   );
 }
 
-// ── Readiness Card ──────────────────────────────────────────
-
-function ReadinessCard({ showId }: { showId: string }) {
-  const { data: items } = trpc.secretary.getChecklist.useQuery({ showId });
-  const { data: autoDetect } = trpc.secretary.getChecklistAutoDetect.useQuery({ showId });
-
-  if (!items || items.length === 0) return null;
-
-  const enriched = items.map((item) => {
-    const isAuto = item.autoDetectKey && autoDetect?.[item.autoDetectKey] === true;
-    return {
-      ...item,
-      effectiveStatus: isAuto ? 'complete' : item.status,
-    };
-  });
-
-  const total = enriched.length;
-  const done = enriched.filter(
-    (i) => i.effectiveStatus === 'complete' || i.effectiveStatus === 'not_applicable'
-  ).length;
-  const overdueItems = enriched.filter((i) => {
-    if (i.effectiveStatus === 'complete' || i.effectiveStatus === 'not_applicable') return false;
-    if (!i.dueDate) return false;
-    return new Date(i.dueDate) < new Date();
-  });
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardDescription className="text-sm font-medium">Show Readiness</CardDescription>
-        <ListChecks className="size-4 text-muted-foreground" />
-      </CardHeader>
-      <CardContent className="space-y-2">
-        <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-bold">{pct}%</span>
-          <span className="text-xs text-muted-foreground">
-            {done}/{total} items
-          </span>
-        </div>
-        <Progress value={pct} className="h-2" />
-        {overdueItems.length > 0 && (
-          <p className="text-xs text-destructive flex items-center gap-1 mt-1">
-            <AlertTriangle className="size-3" />
-            {overdueItems.length} overdue item{overdueItems.length !== 1 ? 's' : ''}
-          </p>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
