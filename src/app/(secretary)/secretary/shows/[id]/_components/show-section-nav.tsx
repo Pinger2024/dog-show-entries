@@ -88,7 +88,30 @@ export function ShowSectionNav({ showId }: { showId: string }) {
     { staleTime: 30_000 }
   );
 
+  // Phase context for section badges
+  const { data: phaseContext } = trpc.secretary.getShowPhaseContext.useQuery(
+    { showId },
+    { staleTime: 60_000 }
+  );
+
   const pendingActions = (judgeSummary?.summary.accepted ?? 0) + (judgeSummary?.summary.declined ?? 0);
+
+  // Phase-aware badges for sections
+  function getSectionBadge(path: string): { label: string; color: string } | null {
+    if (!phaseContext) return null;
+    const { phase } = phaseContext;
+
+    if (path === '/entries' && phase === 'entries_open') {
+      return { label: 'Live', color: 'bg-emerald-100 text-emerald-700' };
+    }
+    if (path === '/results' && phase === 'show_day') {
+      return { label: 'Recording', color: 'bg-emerald-100 text-emerald-700' };
+    }
+    if (path === '/results' && phase === 'post_show' && !phaseContext.resultsPublished) {
+      return { label: 'Publish', color: 'bg-amber-100 text-amber-700' };
+    }
+    return null;
+  }
 
   // Find the currently active section
   const currentSection = sections.find((s) => isActive(s, pathname, basePath)) ?? sections[0];
@@ -152,6 +175,17 @@ export function ShowSectionNav({ showId }: { showId: string }) {
                         >
                           <Icon className="size-4 shrink-0" />
                           <span className="truncate">{section.label}</span>
+                          {(() => {
+                            const phaseBadge = getSectionBadge(path);
+                            if (phaseBadge && !active) {
+                              return (
+                                <span className={`ml-auto shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${phaseBadge.color}`}>
+                                  {phaseBadge.label}
+                                </span>
+                              );
+                            }
+                            return null;
+                          })()}
                           {showBadge && (
                             <span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white">
                               {pendingActions > 9 ? '9+' : pendingActions}
@@ -189,6 +223,17 @@ export function ShowSectionNav({ showId }: { showId: string }) {
             >
               <Icon className="size-3.5" />
               {section.label}
+              {(() => {
+                const phaseBadge = getSectionBadge(section.path);
+                if (phaseBadge && !active) {
+                  return (
+                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${phaseBadge.color}`}>
+                      {phaseBadge.label}
+                    </span>
+                  );
+                }
+                return null;
+              })()}
               {showBadge && (
                 <span className="absolute -top-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white">
                   {pendingActions > 9 ? '9+' : pendingActions}
