@@ -300,7 +300,7 @@ export const secretaryRouter = createTRPCRouter({
 
   listClassDefinitions: publicProcedure.query(async ({ ctx }) => {
     return ctx.db.query.classDefinitions.findMany({
-      orderBy: (cd, { asc }) => [asc(cd.type), asc(cd.sortOrder), asc(cd.name)],
+      orderBy: (cd, { asc }) => [asc(cd.sortOrder), asc(cd.name)],
     });
   }),
 
@@ -808,20 +808,44 @@ export const secretaryRouter = createTRPCRouter({
           });
         }
       } else {
+        // Fetch class definition types to handle junior_handler correctly
+        const classDefs = await ctx.db.query.classDefinitions.findMany({
+          where: inArray(classDefinitions.id, input.classDefinitionIds),
+          columns: { id: true, type: true },
+        });
+        const classDefTypeMap = new Map(classDefs.map((cd) => [cd.id, cd.type]));
+
         for (const breedId of input.breedIds) {
           if (input.splitBySex) {
             // All Dog classes first, then all Bitch classes (within each breed)
+            // But junior_handler classes are never split by sex
             for (const sex of ['dog', 'bitch'] as const) {
               for (const classDefId of input.classDefinitionIds) {
-                values.push({
-                  showId: input.showId,
-                  breedId,
-                  classDefinitionId: classDefId,
-                  sex,
-                  entryFee: input.entryFee,
-                  sortOrder: sortOrder++,
-                  isBreedSpecific: true,
-                });
+                const classType = classDefTypeMap.get(classDefId);
+                if (classType === 'junior_handler') {
+                  // JH classes only added once (on the 'dog' pass), not split
+                  if (sex === 'dog') {
+                    values.push({
+                      showId: input.showId,
+                      breedId: null,
+                      classDefinitionId: classDefId,
+                      sex: null,
+                      entryFee: input.entryFee,
+                      sortOrder: sortOrder++,
+                      isBreedSpecific: false,
+                    });
+                  }
+                } else {
+                  values.push({
+                    showId: input.showId,
+                    breedId,
+                    classDefinitionId: classDefId,
+                    sex,
+                    entryFee: input.entryFee,
+                    sortOrder: sortOrder++,
+                    isBreedSpecific: true,
+                  });
+                }
               }
             }
           } else {
