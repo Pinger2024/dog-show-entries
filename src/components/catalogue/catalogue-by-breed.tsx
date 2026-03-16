@@ -221,13 +221,13 @@ export function CatalogueByBreed({ show, entries }: Props) {
                           </Text>
                         )}
 
-                        {/* Owner(s) — UPPER CASE + address */}
+                        {/* Owner(s) — UPPER CASE + address (or "Exh." if owner is exhibiting) */}
                         {entry.owners.length > 0 && (
                           <Text style={styles.entryDetail}>
                             <Text style={styles.entryDetailLabel}>
                               Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
                             </Text>
-                            {formatOwnerKC(entry.owners)}
+                            {formatOwnerKC(entry.owners, entry.exhibitorId)}
                           </Text>
                         )}
 

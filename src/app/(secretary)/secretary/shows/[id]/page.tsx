@@ -24,6 +24,7 @@ import {
   Plus,
   Trash2,
   Upload,
+  TriangleAlert,
   X,
   Users,
   Clock,
@@ -258,7 +259,7 @@ export default function OverviewPage() {
       )}
 
       {/* Class management */}
-      <ClassManager showId={showId} classes={show.showClasses ?? []} />
+      <ClassManager showId={showId} showType={show.showType} classes={show.showClasses ?? []} />
 
       {/* Add classes — prominent when empty, folded into ClassManager when classes exist */}
       {(show.showClasses?.length ?? 0) === 0 && (
@@ -919,6 +920,7 @@ function EditShowDetailsDialog({
 
 interface ClassManagerProps {
   showId: string;
+  showType: string;
   classes: {
     id: string;
     entryFee: number;
@@ -930,7 +932,7 @@ interface ClassManagerProps {
   }[];
 }
 
-function ClassManager({ showId, classes }: ClassManagerProps) {
+function ClassManager({ showId, showType, classes }: ClassManagerProps) {
   const [editingFees, setEditingFees] = useState<Record<string, string>>({});
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [hasInitializedCollapse, setHasInitializedCollapse] = useState(false);
@@ -1105,6 +1107,35 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
     setHasInitializedCollapse(true);
   }, [grouped, hasInitializedCollapse]);
 
+  // Championship shows: compute which breeds are missing required Open + Limit classes
+  const championshipWarnings = useMemo(() => {
+    if (showType !== 'championship') return [];
+    const breedMap = new Map<string, { name: string; hasOpenDog: boolean; hasOpenBitch: boolean; hasLimitDog: boolean; hasLimitBitch: boolean }>();
+    for (const sc of classes) {
+      if (!sc.breed) continue;
+      const breedName = sc.breed.name;
+      if (!breedMap.has(breedName)) {
+        breedMap.set(breedName, { name: breedName, hasOpenDog: false, hasOpenBitch: false, hasLimitDog: false, hasLimitBitch: false });
+      }
+      const entry = breedMap.get(breedName)!;
+      const className = sc.classDefinition?.name?.toLowerCase() ?? '';
+      if (className === 'open' && sc.sex === 'dog') entry.hasOpenDog = true;
+      if (className === 'open' && sc.sex === 'bitch') entry.hasOpenBitch = true;
+      if (className === 'limit' && sc.sex === 'dog') entry.hasLimitDog = true;
+      if (className === 'limit' && sc.sex === 'bitch') entry.hasLimitBitch = true;
+    }
+    const warnings: { breed: string; missing: string[] }[] = [];
+    for (const [, entry] of breedMap) {
+      const missing: string[] = [];
+      if (!entry.hasOpenDog) missing.push('Open Dog');
+      if (!entry.hasOpenBitch) missing.push('Open Bitch');
+      if (!entry.hasLimitDog) missing.push('Limit Dog');
+      if (!entry.hasLimitBitch) missing.push('Limit Bitch');
+      if (missing.length > 0) warnings.push({ breed: entry.name, missing });
+    }
+    return warnings;
+  }, [showType, classes]);
+
   if (classes.length === 0) {
     return (
       <Card>
@@ -1222,6 +1253,26 @@ function ClassManager({ showId, classes }: ClassManagerProps) {
           </div>
         </div>
       </CardHeader>
+      {/* Championship class requirement warning */}
+      {championshipWarnings.length > 0 && (
+        <div className="mx-4 mb-3 rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30">
+          <div className="flex items-start gap-2">
+            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-600" />
+            <div className="min-w-0 space-y-1">
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                Championship shows require Open and Limit classes for each sex per RKC regulations
+              </p>
+              <ul className="space-y-0.5">
+                {championshipWarnings.map((w) => (
+                  <li key={w.breed} className="text-xs text-amber-700 dark:text-amber-300">
+                    <span className="font-medium">{w.breed}</span>: missing {w.missing.join(', ')}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
       <CardContent>
         {/* Section-level drag and drop */}
         <DragDropContext onDragEnd={(result) => {

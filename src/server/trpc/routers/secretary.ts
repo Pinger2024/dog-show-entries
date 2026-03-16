@@ -498,6 +498,7 @@ export const secretaryRouter = createTRPCRouter({
             },
           },
           exhibitor: true,
+          handler: true,
           entryClasses: {
             with: {
               showClass: { with: { classDefinition: true } },
@@ -2266,6 +2267,39 @@ export const secretaryRouter = createTRPCRouter({
       const minGuarantors = show.showType === 'championship' ? 6 : 3;
       detected.guarantors_added = guarantors.length >= minGuarantors;
 
+      // Championship shows: check Open + Limit for each sex per breed
+      if (show.showType === 'championship' && Number(classCount?.count) > 0) {
+        const showClassRows = await ctx.db.query.showClasses.findMany({
+          where: eq(showClasses.showId, input.showId),
+          with: { classDefinition: true },
+        });
+
+        let allBreedsComplete = true;
+        const breedClassMap = new Map<string, { hasOpenDog: boolean; hasOpenBitch: boolean; hasLimitDog: boolean; hasLimitBitch: boolean }>();
+        for (const sc of showClassRows) {
+          if (!sc.breedId) continue;
+          if (!breedClassMap.has(sc.breedId)) {
+            breedClassMap.set(sc.breedId, { hasOpenDog: false, hasOpenBitch: false, hasLimitDog: false, hasLimitBitch: false });
+          }
+          const entry = breedClassMap.get(sc.breedId)!;
+          const className = sc.classDefinition?.name?.toLowerCase() ?? '';
+          if (className === 'open' && sc.sex === 'dog') entry.hasOpenDog = true;
+          if (className === 'open' && sc.sex === 'bitch') entry.hasOpenBitch = true;
+          if (className === 'limit' && sc.sex === 'dog') entry.hasLimitDog = true;
+          if (className === 'limit' && sc.sex === 'bitch') entry.hasLimitBitch = true;
+        }
+        for (const [, entry] of breedClassMap) {
+          if (!entry.hasOpenDog || !entry.hasOpenBitch || !entry.hasLimitDog || !entry.hasLimitBitch) {
+            allBreedsComplete = false;
+            break;
+          }
+        }
+        detected.championship_classes_complete = breedClassMap.size > 0 && allBreedsComplete;
+      } else {
+        // Non-championship shows or shows with no classes — not applicable, mark as complete
+        detected.championship_classes_complete = true;
+      }
+
       return detected;
     }),
 
@@ -2358,6 +2392,56 @@ export const secretaryRouter = createTRPCRouter({
           detail: 'Record the RKC licence number',
           actionPath: '', severity: 'recommended',
         });
+      }
+
+      // Championship shows: every breed with classes must have Open + Limit for each sex
+      if (show.showType === 'championship' && Number(classCount[0]?.count) > 0) {
+        const showClassRows = await ctx.db.query.showClasses.findMany({
+          where: eq(showClasses.showId, input.showId),
+          with: { classDefinition: true },
+        });
+
+        // Group classes by breedId, only for breed-specific classes
+        const breedClassMap = new Map<string, { hasOpenDog: boolean; hasOpenBitch: boolean; hasLimitDog: boolean; hasLimitBitch: boolean }>();
+        for (const sc of showClassRows) {
+          if (!sc.breedId) continue;
+          if (!breedClassMap.has(sc.breedId)) {
+            breedClassMap.set(sc.breedId, { hasOpenDog: false, hasOpenBitch: false, hasLimitDog: false, hasLimitBitch: false });
+          }
+          const entry = breedClassMap.get(sc.breedId)!;
+          const className = sc.classDefinition?.name?.toLowerCase() ?? '';
+          if (className === 'open' && sc.sex === 'dog') entry.hasOpenDog = true;
+          if (className === 'open' && sc.sex === 'bitch') entry.hasOpenBitch = true;
+          if (className === 'limit' && sc.sex === 'dog') entry.hasLimitDog = true;
+          if (className === 'limit' && sc.sex === 'bitch') entry.hasLimitBitch = true;
+        }
+
+        // Find breeds missing required classes
+        const missingBreedIds: string[] = [];
+        for (const [breedId, entry] of breedClassMap) {
+          if (!entry.hasOpenDog || !entry.hasOpenBitch || !entry.hasLimitDog || !entry.hasLimitBitch) {
+            missingBreedIds.push(breedId);
+          }
+        }
+
+        if (missingBreedIds.length > 0) {
+          // Fetch breed names for the label
+          const missingBreeds = await ctx.db.query.breeds.findMany({
+            where: inArray(breeds.id, missingBreedIds),
+            columns: { name: true },
+          });
+          const breedNames = missingBreeds.map((b) => b.name);
+          const breedList = breedNames.length <= 3
+            ? breedNames.join(', ')
+            : `${breedNames.slice(0, 2).join(', ')} + ${breedNames.length - 2} more`;
+
+          openEntriesBlockers.push({
+            key: 'championship_missing_classes',
+            label: `Open + Limit classes missing (${breedList})`,
+            detail: 'Championship shows require Open and Limit classes for each sex per RKC regulations',
+            actionPath: '', severity: 'required',
+          });
+        }
       }
 
       const requiredBlockers = openEntriesBlockers.filter((b) => b.severity === 'required');

@@ -2,7 +2,7 @@ import { Document, Page, View, Text } from '@react-pdf/renderer';
 import { styles } from './catalogue-styles';
 import { CatalogueHeader } from './catalogue-header';
 import type { CatalogueEntry, CatalogueShowInfo } from './catalogue-standard';
-import { formatDobKC, formatPedigreeKC, uppercaseName } from './catalogue-utils';
+import { formatDobKC, formatPedigreeKC, formatOwnerKC, uppercaseName } from './catalogue-utils';
 
 interface Props {
   show: CatalogueShowInfo;
@@ -111,10 +111,12 @@ export function CatalogueByClass({ show, entries }: Props) {
                       {uppercaseName(entry.dogName) || 'Unnamed'}
                     </Text>
                   </View>
+                  {/* RKC reg + DOB + colour + sex */}
                   <Text style={styles.entryDetail}>
                     {[
-                      entry.breed,
+                      entry.kcRegNumber,
                       entry.dateOfBirth ? `D.O.B: ${formatDobKC(entry.dateOfBirth)}` : null,
+                      entry.colour,
                       entry.sex === 'dog' ? 'Dog' : entry.sex === 'bitch' ? 'Bitch' : null,
                     ].filter(Boolean).join('  —  ')}
                   </Text>
@@ -122,12 +124,20 @@ export function CatalogueByClass({ show, entries }: Props) {
                   {pedigree && (
                     <Text style={styles.entryDetail}>{pedigree}</Text>
                   )}
+                  {/* Breeder */}
+                  {entry.breeder && (
+                    <Text style={styles.entryDetail}>
+                      <Text style={styles.entryDetailLabel}>Breeder: </Text>
+                      {entry.breeder}
+                    </Text>
+                  )}
+                  {/* Owner(s) — UPPER CASE + address (or "Exh." if owner is exhibiting) */}
                   {entry.owners.length > 0 && (
                     <Text style={styles.entryDetail}>
                       <Text style={styles.entryDetailLabel}>
                         Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
                       </Text>
-                      {entry.owners.map((o) => uppercaseName(o.name)).join(' & ')}
+                      {formatOwnerKC(entry.owners, entry.exhibitorId)}
                     </Text>
                   )}
                 </View>

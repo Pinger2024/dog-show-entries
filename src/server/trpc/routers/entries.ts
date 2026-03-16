@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { and, eq, isNull, inArray, asc, desc, sql } from 'drizzle-orm';
+import { differenceInMonths, differenceInWeeks } from 'date-fns';
 import {
   protectedProcedure,
   secretaryProcedure,
@@ -73,6 +74,40 @@ export const entriesRouter = createTRPCRouter({
           code: 'BAD_REQUEST',
           message: 'Entry closing date has passed',
         });
+      }
+
+      // RKC age validation: dogs must meet minimum age on show day
+      if (dog.dateOfBirth) {
+        const showDate = new Date(show.startDate);
+        const dob = new Date(dog.dateOfBirth);
+        const ageMonths = differenceInMonths(showDate, dob);
+        const ageWeeks = differenceInWeeks(showDate, dob);
+        const dogName = dog.registeredName ?? 'This dog';
+
+        if (input.isNfc) {
+          // NFC entries: minimum 12 weeks (RKC 2026 regulations)
+          if (ageWeeks < 12) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `${dogName} will only be ${ageWeeks} weeks old on show day. Dogs must be at least 12 weeks old for NFC entries.`,
+            });
+          }
+        } else {
+          // Competition entries: minimum 6 months
+          if (ageMonths < 4) {
+            // Under 4 months: reject entirely
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `${dogName} will only be ${ageMonths} months old on show day. Dogs must be at least 6 months old to enter competition classes, or at least 12 weeks old for Not For Competition (NFC) entries.`,
+            });
+          } else if (ageMonths < 6) {
+            // Between 4 and 6 months: suggest NFC
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `${dogName} will only be ${ageMonths} months old on show day. Dogs must be at least 6 months old for competition classes. You can enter Not For Competition (NFC) instead.`,
+            });
+          }
+        }
       }
 
       // Check for duplicate classes (same dog can enter multiple classes, but not the same class twice)

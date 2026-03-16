@@ -39,14 +39,22 @@ export function formatPedigreeKC(
   return parts.join(' ');
 }
 
-/** Format owner names + address for RKC catalogue (UPPER CASE name) */
+/**
+ * Format owner names + address for RKC catalogue (UPPER CASE name).
+ * Per RKC regulations, when an owner is also the exhibitor the address
+ * is replaced with "Exh." (short for "Exhibitor").
+ */
 export function formatOwnerKC(
-  owners: { name: string; address: string | null }[]
+  owners: { name: string; address: string | null; userId: string | null }[],
+  exhibitorId?: string | undefined
 ): string {
   if (owners.length === 0) return '';
   return owners
     .map((o) => {
       const name = uppercaseName(o.name);
+      // RKC convention: if the owner is the exhibitor, show "Exh." instead of address
+      const isExhibitor = exhibitorId && o.userId && o.userId === exhibitorId;
+      if (isExhibitor) return `${name}, Exh.`;
       return o.address ? `${name}, ${o.address}` : name;
     })
     .join(' & ');

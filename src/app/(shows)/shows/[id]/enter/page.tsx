@@ -23,7 +23,7 @@ import {
   Trash2,
   Users,
 } from 'lucide-react';
-import { differenceInMonths, format, parseISO } from 'date-fns';
+import { differenceInMonths, differenceInWeeks, format, parseISO } from 'date-fns';
 import { isWithinAgeRange, handlerAgeYearsOnDate, formatCurrency } from '@/lib/date-utils';
 import { trpc } from '@/lib/trpc/client';
 import { formatDogName } from '@/lib/utils';
@@ -619,29 +619,56 @@ export default function EnterShowPage() {
                 const alreadyInCart = cart.entries.some(
                   (e) => e.dogId === dog.id && e.classIds.length > 0
                 );
+
+                // RKC age validation on show day
+                const showDate = show?.startDate ? new Date(show.startDate) : null;
+                const dob = dog.dateOfBirth ? new Date(dog.dateOfBirth) : null;
+                const ageMonths = showDate && dob ? differenceInMonths(showDate, dob) : null;
+                const ageWeeks = showDate && dob ? differenceInWeeks(showDate, dob) : null;
+                const tooYoungForAll = ageWeeks !== null && ageWeeks < 12;
+                const tooYoungForCompetition = ageMonths !== null && ageMonths < 6 && !tooYoungForAll;
+
                 return (
                   <button
                     key={dog.id}
                     type="button"
-                    onClick={() =>
+                    onClick={() => {
+                      if (tooYoungForAll) return; // Block entirely
                       cart.setDog(
                         dog.id,
                         formatDogName(dog),
                         dog.breed?.name ?? ''
-                      )
-                    }
+                      );
+                    }}
+                    disabled={tooYoungForAll}
                     className={cn(
                       'flex min-h-[44px] items-start gap-3 rounded-xl border p-3 text-left transition-all sm:p-4',
+                      tooYoungForAll && 'cursor-not-allowed opacity-50',
                       alreadyInCart
                         ? 'border-primary/30 bg-primary/5'
-                        : 'hover:border-primary/50'
+                        : !tooYoungForAll && 'hover:border-primary/50',
+                      tooYoungForCompetition && 'border-amber-300 dark:border-amber-700'
                     )}
                   >
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                      <Dog className="size-5 text-primary" />
+                    <div className={cn(
+                      'flex size-10 shrink-0 items-center justify-center rounded-full',
+                      tooYoungForAll
+                        ? 'bg-destructive/10'
+                        : tooYoungForCompetition
+                          ? 'bg-amber-100 dark:bg-amber-900/30'
+                          : 'bg-primary/10'
+                    )}>
+                      {tooYoungForAll ? (
+                        <AlertTriangle className="size-5 text-destructive" />
+                      ) : (
+                        <Dog className={cn(
+                          'size-5',
+                          tooYoungForCompetition ? 'text-amber-600 dark:text-amber-400' : 'text-primary'
+                        )} />
+                      )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         <p className="font-medium">{formatDogName(dog)}</p>
                         {alreadyInCart && (
                           <Badge variant="secondary" className="text-[10px] shrink-0">
@@ -656,6 +683,24 @@ export default function EnterShowPage() {
                         <p className="text-xs text-muted-foreground">
                           RKC: {dog.kcRegNumber}
                         </p>
+                      )}
+                      {ageMonths !== null && show?.startDate && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Age on show day: {ageMonths} months
+                        </p>
+                      )}
+                      {tooYoungForAll && (
+                        <p className="mt-1 text-xs font-medium text-destructive">
+                          Too young to enter — must be at least 12 weeks old
+                        </p>
+                      )}
+                      {tooYoungForCompetition && (
+                        <div className="mt-1.5 flex gap-1.5 items-start">
+                          <AlertTriangle className="mt-0.5 size-3 shrink-0 text-amber-600 dark:text-amber-400" />
+                          <p className="text-xs text-amber-700 dark:text-amber-300">
+                            Under 6 months — eligible for NFC (Not For Competition) only
+                          </p>
+                        </div>
                       )}
                     </div>
                   </button>
@@ -810,7 +855,15 @@ export default function EnterShowPage() {
       })()}
 
       {/* Step: Select Classes */}
-      {cart.step === 'select_classes' && (
+      {cart.step === 'select_classes' && (() => {
+        // Check if selected dog is under 6 months on show day
+        const dogUnder6Months = (() => {
+          if (cart.activeEntry?.entryType !== 'standard' || !selectedDog?.dateOfBirth || !show?.startDate) return false;
+          const ageMonths = differenceInMonths(new Date(show.startDate), new Date(selectedDog.dateOfBirth));
+          return ageMonths < 6;
+        })();
+
+        return (
         <div className="space-y-6">
           <div>
             <h2 className="text-base font-semibold sm:text-lg">Select classes</h2>
@@ -820,6 +873,19 @@ export default function EnterShowPage() {
                 : `Choose classes for ${cart.activeEntry?.handlerName ?? 'the handler'}`}
             </p>
           </div>
+
+          {dogUnder6Months && (
+            <div className="flex gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+              <div className="text-sm text-amber-800 dark:text-amber-200">
+                <p className="font-medium">This dog is under 6 months old on show day</p>
+                <p className="mt-0.5 text-xs">
+                  Per RKC regulations, dogs must be at least 6 months old for competition classes.
+                  You can still enter Not For Competition (NFC) — tick the NFC checkbox below.
+                </p>
+              </div>
+            </div>
+          )}
 
           {classesLoading ? (
             <div className="flex justify-center py-12">
@@ -954,7 +1020,10 @@ export default function EnterShowPage() {
                 <Button
                   className="h-11 flex-1 text-sm sm:flex-none"
                   onClick={handleConfirmClasses}
-                  disabled={selectedClassIds.length === 0 && !isNfc}
+                  disabled={
+                    (selectedClassIds.length === 0 && !isNfc) ||
+                    (dogUnder6Months && !isNfc)
+                  }
                 >
                   {cart.editingExisting ? 'Update' : 'Add to Cart'}
                   <ChevronRight className="size-4" />
@@ -963,7 +1032,8 @@ export default function EnterShowPage() {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Step: Cart Review */}
       {cart.step === 'cart_review' && (

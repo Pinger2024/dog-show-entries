@@ -120,7 +120,9 @@ export async function GET(
     owners: entry.dog?.owners?.map((o) => ({
       name: o.ownerName,
       address: o.ownerAddress,
+      userId: o.userId,
     })) ?? [],
+    exhibitorId: entry.exhibitorId,
     handler: entry.handler?.name,
     exhibitor: entry.exhibitor?.name,
     classes: entry.entryClasses.map((ec) => ({

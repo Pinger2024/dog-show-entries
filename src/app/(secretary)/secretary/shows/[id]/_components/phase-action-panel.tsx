@@ -91,8 +91,11 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
   const checklist: ChecklistItem[] = [];
 
   // Auto-detected complete items
+  const isChampionship = show.showType === 'championship';
+
   const autoKeys: { key: string; label: string; count?: string }[] = [
     { key: 'classes_created', label: 'Classes created' },
+    ...(isChampionship ? [{ key: 'championship_classes_complete', label: 'Open + Limit classes for each sex' }] : []),
     { key: 'judges_assigned', label: 'Judge assigned' },
     { key: 'entry_fees_set', label: 'Entry fees set' },
     { key: 'entry_close_date_set', label: 'Entry close date set' },
@@ -115,6 +118,7 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
         if (ak.key === 'guarantors_added' && b.key === 'insufficient_guarantors') return true;
         if (ak.key === 'venue_set' && b.key === 'no_venue') return true;
         if (ak.key === 'kc_licence_recorded' && b.key === 'no_rkc_licence') return true;
+        if (ak.key === 'championship_classes_complete' && b.key === 'championship_missing_classes') return true;
         return false;
       });
 

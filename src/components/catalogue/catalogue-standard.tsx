@@ -17,7 +17,8 @@ export interface CatalogueEntry {
   sire: string | null | undefined;
   dam: string | null | undefined;
   breeder: string | null | undefined;
-  owners: { name: string; address: string | null }[];
+  owners: { name: string; address: string | null; userId: string | null }[];
+  exhibitorId: string | undefined;
   handler: string | undefined;
   exhibitor: string | undefined;
   classes: { name: string | undefined; sex: string | null | undefined; classNumber: number | null | undefined; sortOrder: number | undefined }[];
@@ -301,13 +302,13 @@ export function CatalogueStandard({ show, entries }: Props) {
                             </Text>
                           )}
 
-                          {/* Owner(s) — UPPER CASE + address */}
+                          {/* Owner(s) — UPPER CASE + address (or "Exh." if owner is exhibiting) */}
                           {entry.owners.length > 0 && (
                             <Text style={styles.entryDetail}>
                               <Text style={styles.entryDetailLabel}>
                                 Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
                               </Text>
-                              {formatOwnerKC(entry.owners)}
+                              {formatOwnerKC(entry.owners, entry.exhibitorId)}
                             </Text>
                           )}
 
