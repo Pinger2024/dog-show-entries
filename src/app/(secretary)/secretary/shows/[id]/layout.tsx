@@ -46,6 +46,7 @@ import {
 import { statusConfig } from './_lib/show-utils';
 import { ShowIdProvider } from './_lib/show-context';
 import { ShowSectionNav } from './_components/show-section-nav';
+import { LifecycleBanner } from './_components/lifecycle-banner';
 import { formatRelativeTime, formatCompactRevenue } from './_lib/show-utils';
 
 export default function ShowManagementLayout({
@@ -185,35 +186,20 @@ export default function ShowManagementLayout({
       </div>
 
       {/* Status change confirmation dialog */}
-      <Dialog
-        open={!!pendingStatus}
-        onOpenChange={(open) => !open && setPendingStatus(null)}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              Change status to{' '}
-              {statusConfig[pendingStatus ?? '']?.label ?? pendingStatus}?
-            </DialogTitle>
-            <DialogDescription>
-              {riskyTransitions[pendingStatus ?? '']}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setPendingStatus(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant={
-                pendingStatus === 'cancelled' ? 'destructive' : 'default'
-              }
-              onClick={() => pendingStatus && applyStatusChange(pendingStatus)}
-            >
-              Confirm
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <StatusChangeDialog
+        pendingStatus={pendingStatus}
+        showId={show.id}
+        onCancel={() => setPendingStatus(null)}
+        onConfirm={(status) => applyStatusChange(status)}
+        riskyTransitions={riskyTransitions}
+      />
+
+      {/* Lifecycle Banner */}
+      <LifecycleBanner
+        show={show}
+        entryStats={entryStats}
+        onOpenEntries={() => handleStatusChange('entries_open')}
+      />
 
       {/* Admin test data tools — only visible to admins */}
       {isAdmin && (
@@ -412,5 +398,89 @@ export default function ShowManagementLayout({
       {/* Active section content */}
       <ShowIdProvider showId={show.id}>{children}</ShowIdProvider>
     </div>
+  );
+}
+
+// ── Enhanced status change dialog with blocker checking ─────
+
+function StatusChangeDialog({
+  pendingStatus,
+  showId,
+  onCancel,
+  onConfirm,
+  riskyTransitions,
+}: {
+  pendingStatus: string | null;
+  showId: string;
+  onCancel: () => void;
+  onConfirm: (status: string) => void;
+  riskyTransitions: Record<string, string>;
+}) {
+  const isEntriesOpen = pendingStatus === 'entries_open';
+
+  const { data: blockers, isLoading: blockersLoading } =
+    trpc.secretary.getPhaseBlockers.useQuery(
+      { showId },
+      { enabled: isEntriesOpen, staleTime: 30_000 },
+    );
+
+  const canOpen = blockers?.canOpenEntries ?? false;
+  const openBlockers = blockers?.openEntriesBlockers.filter(
+    (b) => b.severity === 'required',
+  ) ?? [];
+
+  return (
+    <Dialog
+      open={!!pendingStatus}
+      onOpenChange={(open) => !open && onCancel()}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            Change status to{' '}
+            {statusConfig[pendingStatus ?? '']?.label ?? pendingStatus}?
+          </DialogTitle>
+          <DialogDescription>
+            {isEntriesOpen && !canOpen && !blockersLoading
+              ? 'Some items need to be completed before you can open entries.'
+              : riskyTransitions[pendingStatus ?? '']}
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Show blocker list for entries_open when there are blockers */}
+        {isEntriesOpen && !canOpen && !blockersLoading && openBlockers.length > 0 && (
+          <div className="space-y-1.5 rounded-lg border bg-muted/30 p-3">
+            {openBlockers.map((blocker) => (
+              <div
+                key={blocker.key}
+                className="flex items-center gap-2 text-sm"
+              >
+                <span className="size-1.5 shrink-0 rounded-full bg-destructive" />
+                <span className="text-muted-foreground">{blocker.label}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button
+            variant={
+              pendingStatus === 'cancelled' ? 'destructive' : 'default'
+            }
+            disabled={isEntriesOpen && (blockersLoading || !canOpen)}
+            onClick={() => pendingStatus && onConfirm(pendingStatus)}
+          >
+            {isEntriesOpen && blockersLoading
+              ? 'Checking...'
+              : isEntriesOpen && !canOpen
+                ? `${openBlockers.length} item${openBlockers.length !== 1 ? 's' : ''} remaining`
+                : 'Confirm'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
