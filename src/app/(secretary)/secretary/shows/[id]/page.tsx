@@ -83,6 +83,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { uploadImage } from '@/lib/upload';
+import { PostcodeLookup, formatAddress } from '@/components/postcode-lookup';
 import { formatDate } from './_lib/show-utils';
 import { useShowId } from './_lib/show-context';
 
@@ -754,6 +755,13 @@ function EditShowDetailsDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="edit-secretary-address">Secretary Address</Label>
+              <PostcodeLookup
+                compact
+                onSelect={(result) => {
+                  const full = [formatAddress(result), result.postcode].filter(Boolean).join(', ');
+                  setSecretaryAddress(full);
+                }}
+              />
               <Input
                 id="edit-secretary-address"
                 value={secretaryAddress}

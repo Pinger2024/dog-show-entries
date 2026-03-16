@@ -39,6 +39,7 @@ type Section = {
 const sections: Section[] = [
   { path: '', label: 'Secretary Tools', icon: LayoutDashboard, exact: true },
   { path: '/checklist', label: 'Show Checklist', icon: ListChecks, hasBadge: true },
+  { path: '/schedule', label: 'Schedule', icon: CalendarDays },
   { path: '/entries', label: 'Entries', icon: Ticket },
   { path: '/financial', label: 'Financial', icon: PoundSterling },
   { path: '/catalogue', label: 'Catalogue', icon: BookOpen },
@@ -46,7 +47,6 @@ const sections: Section[] = [
   { path: '/reports', label: 'Reports', icon: FileText },
   { path: '/people', label: 'People', icon: Users },
   { path: '/sponsors', label: 'Sponsors', icon: Handshake },
-  { path: '/schedule', label: 'Schedule', icon: CalendarDays },
   { path: '/documents', label: 'Documents', icon: FolderOpen },
   { path: '/print-shop', label: 'Print Shop', icon: Printer },
 ];
@@ -55,7 +55,7 @@ const sections: Section[] = [
 const sectionGroups = [
   {
     label: 'Manage',
-    items: ['', '/checklist', '/entries', '/results'],
+    items: ['', '/checklist', '/schedule', '/entries', '/results'],
   },
   {
     label: 'Finance & Print',
@@ -63,7 +63,7 @@ const sectionGroups = [
   },
   {
     label: 'Setup',
-    items: ['/schedule', '/people', '/sponsors', '/documents'],
+    items: ['/people', '/sponsors', '/documents'],
   },
 ];
 
