@@ -9,7 +9,7 @@ import { db } from '@/server/db';
 import { and, eq, isNull, asc, sql } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
 import { formatDogName, formatDogNameForCatalogue } from '@/lib/utils';
-import { renderToBuffer } from '@react-pdf/renderer';
+import { renderToBuffer, Document, Page, Text, StyleSheet } from '@react-pdf/renderer';
 import { CatalogueStandard } from '@/components/catalogue/catalogue-standard';
 import { CatalogueByClass } from '@/components/catalogue/catalogue-by-class';
 import { CatalogueByBreed } from '@/components/catalogue/catalogue-by-breed';
@@ -391,6 +391,28 @@ export async function generateRingBoardPdf(showId: string): Promise<Buffer> {
 
 // ── Ring Numbers PDF ──
 
+const ringNumberStyles = StyleSheet.create({
+  page: {
+    width: '105mm',
+    height: '148mm',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  number: {
+    fontFamily: 'Helvetica-Bold',
+    fontSize: 120,
+    textAlign: 'center',
+  },
+  showName: {
+    fontFamily: 'Helvetica',
+    fontSize: 10,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 10,
+  },
+});
+
 export async function generateRingNumbersPdf(showId: string): Promise<Buffer> {
   const show = await db.query.shows.findFirst({
     where: eq(schema.shows.id, showId),
@@ -398,7 +420,6 @@ export async function generateRingNumbersPdf(showId: string): Promise<Buffer> {
   });
   if (!show) throw new Error(`Show ${showId} not found`);
 
-  // Get all confirmed entries with catalogue numbers
   const entries = await db.query.entries.findMany({
     where: and(
       eq(schema.entries.showId, showId),
@@ -420,40 +441,15 @@ export async function generateRingNumbersPdf(showId: string): Promise<Buffer> {
     throw new Error('No catalogue numbers found — assign catalogue numbers before generating ring numbers');
   }
 
-  // Generate simple A6 cards with large numbers using react-pdf
-  const { Document, Page, View, Text, StyleSheet } = await import('@react-pdf/renderer');
-
-  const styles = StyleSheet.create({
-    page: {
-      width: '105mm',
-      height: '148mm',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    number: {
-      fontFamily: 'Helvetica-Bold',
-      fontSize: 120,
-      textAlign: 'center',
-    },
-    showName: {
-      fontFamily: 'Helvetica',
-      fontSize: 10,
-      color: '#666',
-      textAlign: 'center',
-      marginTop: 10,
-    },
-  });
-
   const pdfDocument = React.createElement(
     Document,
     {},
     numbers.map((num) =>
       React.createElement(
         Page,
-        { key: num, size: [297.64, 419.53], style: styles.page },
-        React.createElement(Text, { style: styles.number }, String(num)),
-        React.createElement(Text, { style: styles.showName }, show.name)
+        { key: num, size: [297.64, 419.53], style: ringNumberStyles.page },
+        React.createElement(Text, { style: ringNumberStyles.number }, String(num)),
+        React.createElement(Text, { style: ringNumberStyles.showName }, show.name)
       )
     )
   );

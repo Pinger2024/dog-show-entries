@@ -33,11 +33,11 @@ function buildSpecFilter(product: PrintProduct): Map<string, Set<string>> {
   return filter;
 }
 
-/** Check if a row's specs match the allowed values (all keys must match) */
+/** Check if a row's specs match the allowed values (all filter keys must match) */
 function matchesSpecFilter(specs: Record<string, string>, filter: Map<string, Set<string>>): boolean {
   for (const [key, allowed] of filter) {
     const value = specs[key];
-    if (value && !allowed.has(value)) return false;
+    if (value === undefined || !allowed.has(value)) return false;
   }
   return true;
 }
