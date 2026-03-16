@@ -114,8 +114,13 @@ export const printOrdersRouter = createTRPCRouter({
 
             if (quantities.length === 0) return null;
 
+            // Use show-aware quantity options if available, otherwise raw Tradeprint quantities
+            const displayQuantities = product.getQuantityOptions
+              ? product.getQuantityOptions(stats, quantities)
+              : quantities;
+
             const suggestedQty = product.suggestQuantity(stats);
-            const bestQty = quantities.find((q) => q >= suggestedQty) ?? quantities[quantities.length - 1];
+            const bestQty = displayQuantities.find((q) => q >= suggestedQty) ?? displayQuantities[displayQuantities.length - 1];
 
             // Get total price for the suggested quantity with default specs (instant from cache)
             const defaultTotalCost = await getCachedTotalPrice(
@@ -154,7 +159,7 @@ export const printOrdersRouter = createTRPCRouter({
               label: product.label,
               description: product.description,
               suggestedQuantity: bestQty,
-              availableQuantities: quantities,
+              availableQuantities: displayQuantities,
               tradeprintProductId: product.tradeprintProductId,
               unitSellingPrice: defaultTotalCost !== null
                 ? calculateUnitSellingPrice(defaultTotalCost, bestQty)

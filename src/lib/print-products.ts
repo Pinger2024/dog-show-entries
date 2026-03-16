@@ -21,6 +21,8 @@ export interface PrintProduct {
   configurableSpecs: SpecConfig[];
   /** Suggest quantity based on show data */
   suggestQuantity: (stats: ShowStats) => number;
+  /** Generate show-aware quantity options (snapped to Tradeprint available quantities) */
+  getQuantityOptions?: (stats: ShowStats, tradeprintQuantities: number[]) => number[];
   /** Whether this is download-only (no printing available) */
   downloadOnly?: boolean;
 }
@@ -56,6 +58,26 @@ export interface ShowStats {
 /** Round up to nearest 10 */
 function roundUp10(n: number): number {
   return Math.ceil(n / 10) * 10;
+}
+
+/** Round up to nearest 5 */
+function roundUp5(n: number): number {
+  return Math.ceil(n / 5) * 5;
+}
+
+/** Snap a value to the nearest available Tradeprint quantity (always rounds up) */
+function snapToAvailable(value: number, available: number[]): number {
+  if (available.length === 0) return value;
+  return available.find((q) => q >= value) ?? available[available.length - 1];
+}
+
+/** Generate a range of quantities snapped to Tradeprint options */
+function generateSnappedOptions(
+  values: number[],
+  available: number[]
+): number[] {
+  const snapped = [...new Set(values.map((v) => snapToAvailable(v, available)))];
+  return snapped.sort((a, b) => a - b);
 }
 
 /** Suggested quantity for documents distributed per-attendee (catalogues, schedules) */
@@ -117,6 +139,15 @@ export const PRINT_PRODUCTS: PrintProduct[] = [
       { key: 'Size', label: 'Size', description: 'Booklet dimensions' },
     ],
     suggestQuantity: suggestPerAttendeeCopies,
+    getQuantityOptions: (stats, tpQty) => {
+      // Catalogues: start from pre-orders, offer increments of 5 up
+      const base = Math.max(stats.catalogueOrders, 10);
+      const options = [];
+      for (let i = 0; i < 8; i++) options.push(roundUp5(base + i * 5));
+      // Also add the suggested quantity
+      options.push(roundUp5(suggestPerAttendeeCopies(stats)));
+      return generateSnappedOptions(options, tpQty);
+    },
   },
   {
     documentType: 'prize_cards',
@@ -213,6 +244,13 @@ export const PRINT_PRODUCTS: PrintProduct[] = [
       { key: 'Size', label: 'Size' },
     ],
     suggestQuantity: suggestPerAttendeeCopies,
+    getQuantityOptions: (stats, tpQty) => {
+      // Schedules: min 5, increments of 10
+      const options = [];
+      for (let i = 0; i < 8; i++) options.push(Math.max(5, (i + 1) * 10));
+      options.push(roundUp10(suggestPerAttendeeCopies(stats)));
+      return generateSnappedOptions(options, tpQty);
+    },
   },
   {
     documentType: 'ring_board',
@@ -243,6 +281,12 @@ export const PRINT_PRODUCTS: PrintProduct[] = [
       { key: 'Size', label: 'Size' },
     ],
     suggestQuantity: (stats) => Math.max(stats.ringCount, 1),
+    getQuantityOptions: (stats, tpQty) => {
+      // Ring boards: based on ring count, offer a few options around it
+      const ringCount = Math.max(stats.ringCount, 1);
+      const options = [ringCount, ringCount * 2, ringCount * 3, 10, 20, 50];
+      return generateSnappedOptions(options.filter((n) => n > 0), tpQty);
+    },
   },
   {
     documentType: 'ring_numbers',
@@ -276,6 +320,12 @@ export const PRINT_PRODUCTS: PrintProduct[] = [
       { key: 'Paper Type', label: 'Card Weight' },
     ],
     suggestQuantity: (stats) => roundUp10(stats.confirmedEntries),
+    getQuantityOptions: (stats, tpQty) => {
+      // Ring numbers: 1 set = total entries. Offer the exact count snapped to available
+      const entryCount = Math.max(stats.confirmedEntries, 50);
+      const options = [entryCount, roundUp10(entryCount * 1.1)];
+      return generateSnappedOptions(options, tpQty);
+    },
   },
   {
     documentType: 'judges_books',
