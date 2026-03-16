@@ -52,6 +52,9 @@ export interface ScheduleData {
     trophyName?: string;
   }[];
 
+  // Customisable best award names (e.g. Best in Show, Best Dog, Best Bitch, etc.)
+  bestAwards?: string[];
+
   // Custom statements (e.g. "OUTSIDE ATTRACTION - KC RULE F(1) 16h WILL BE STRICTLY ENFORCED")
   customStatements?: string[];
 

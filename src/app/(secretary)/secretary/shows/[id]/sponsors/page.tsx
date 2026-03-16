@@ -6,6 +6,7 @@ import {
   Handshake,
   Loader2,
   Plus,
+  RotateCcw,
   Trash2,
   Pencil,
   ExternalLink,
@@ -13,6 +14,8 @@ import {
   Image as ImageIcon,
   Upload,
   ArrowRight,
+  ArrowUp,
+  ArrowDown,
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -1285,18 +1288,177 @@ function NewSponsorshipRow({
 
 /* ─── Best Award Types ────────────────────────────── */
 
-const BEST_AWARDS = [
+const DEFAULT_AWARDS_SINGLE_BREED = [
+  'Best in Show',
+  'Reserve Best in Show',
+  'Best Dog',
+  'Best Bitch',
+  'Best Puppy Dog',
+  'Best Puppy Bitch',
+  'Best Veteran',
+];
+
+const DEFAULT_AWARDS_MULTI_BREED = [
   'Best of Breed',
   'Best Dog',
   'Best Bitch',
   'Best Puppy Dog',
   'Best Puppy Bitch',
-  'Best Long Coat Dog',
-  'Best Long Coat Bitch',
-  'Best Long Coat in Show',
   'Best in Show',
   'Reserve Best in Show',
-] as const;
+];
+
+function getDefaultAwards(showScope?: string): string[] {
+  return showScope === 'single_breed'
+    ? [...DEFAULT_AWARDS_SINGLE_BREED]
+    : [...DEFAULT_AWARDS_MULTI_BREED];
+}
+
+/* ─── Edit Awards Dialog ──────────────────────────── */
+
+function EditAwardsDialog({
+  awards,
+  showScope,
+  onSave,
+}: {
+  awards: string[];
+  showScope?: string;
+  onSave: (awards: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [editAwards, setEditAwards] = useState<string[]>([]);
+
+  const handleOpen = useCallback(
+    (isOpen: boolean) => {
+      if (isOpen) {
+        setEditAwards([...awards]);
+      }
+      setOpen(isOpen);
+    },
+    [awards]
+  );
+
+  const handleAdd = useCallback(() => {
+    setEditAwards((prev) => [...prev, '']);
+  }, []);
+
+  const handleRemove = useCallback((index: number) => {
+    setEditAwards((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const handleChange = useCallback((index: number, value: string) => {
+    setEditAwards((prev) => prev.map((v, i) => (i === index ? value : v)));
+  }, []);
+
+  const handleMoveUp = useCallback((index: number) => {
+    if (index === 0) return;
+    setEditAwards((prev) => {
+      const next = [...prev];
+      [next[index - 1], next[index]] = [next[index]!, next[index - 1]!];
+      return next;
+    });
+  }, []);
+
+  const handleMoveDown = useCallback((index: number) => {
+    setEditAwards((prev) => {
+      if (index >= prev.length - 1) return prev;
+      const next = [...prev];
+      [next[index], next[index + 1]] = [next[index + 1]!, next[index]!];
+      return next;
+    });
+  }, []);
+
+  const handleReset = useCallback(() => {
+    setEditAwards(getDefaultAwards(showScope));
+  }, [showScope]);
+
+  const handleSave = useCallback(() => {
+    const cleaned = editAwards
+      .map((a) => a.trim())
+      .filter((a) => a.length > 0);
+    if (cleaned.length === 0) {
+      toast.error('You need at least one award');
+      return;
+    }
+    onSave(cleaned);
+    setOpen(false);
+    toast.success('Awards updated');
+  }, [editAwards, onSave]);
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" className="gap-1.5">
+          <Pencil className="size-3.5" />
+          Edit Awards
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-h-[85vh] max-w-md overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edit Best Awards</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          Customise which best awards appear in the sponsorship table. Reorder, add, or remove as needed.
+        </p>
+        <div className="mt-2 space-y-2">
+          {editAwards.map((award, idx) => (
+            <div key={idx} className="flex items-center gap-1.5">
+              <div className="flex flex-col">
+                <button
+                  type="button"
+                  className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30"
+                  disabled={idx === 0}
+                  onClick={() => handleMoveUp(idx)}
+                >
+                  <ArrowUp className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30"
+                  disabled={idx === editAwards.length - 1}
+                  onClick={() => handleMoveDown(idx)}
+                >
+                  <ArrowDown className="size-3.5" />
+                </button>
+              </div>
+              <Input
+                value={award}
+                onChange={(e) => handleChange(idx, e.target.value)}
+                placeholder="Award name"
+                className="flex-1"
+              />
+              <button
+                type="button"
+                className="rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => handleRemove(idx)}
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={handleAdd}>
+            <Plus className="size-3.5" />
+            Add Award
+          </Button>
+          <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={handleReset}>
+            <RotateCcw className="size-3.5" />
+            Reset to Defaults
+          </Button>
+        </div>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave}>
+            Save Awards
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 type AwardSponsor = {
   award: string;
@@ -1770,6 +1932,28 @@ function ClassSponsorshipTable({
     [show?.scheduleData]
   );
 
+  // Customisable best awards list — falls back to defaults based on show scope
+  const bestAwards: string[] = useMemo(() => {
+    const stored = (show?.scheduleData as Record<string, unknown> | null)?.bestAwards as string[] | undefined;
+    if (stored && stored.length > 0) return stored;
+    return getDefaultAwards(show?.showScope);
+  }, [show?.scheduleData, show?.showScope]);
+
+  const saveBestAwards = useCallback(
+    (awards: string[]) => {
+      if (!show) return;
+      const existing = (show.scheduleData ?? {}) as Record<string, unknown>;
+      updateScheduleData.mutate({
+        showId,
+        scheduleData: {
+          ...existing,
+          bestAwards: awards,
+        } as Parameters<typeof updateScheduleData.mutate>[0]['scheduleData'],
+      });
+    },
+    [show, showId, updateScheduleData]
+  );
+
   const saveAwardSponsors = useCallback(
     (updated: AwardSponsor[]) => {
       if (!show) return;
@@ -1858,9 +2042,16 @@ function ClassSponsorshipTable({
 
     return (
       <div className="mb-8">
-        <div className="mb-2 flex items-center gap-2">
-          <Award className="size-4 text-amber-600" />
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-amber-800">Best Awards</h3>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Award className="size-4 text-amber-600" />
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-amber-800">Best Awards</h3>
+          </div>
+          <EditAwardsDialog
+            awards={bestAwards}
+            showScope={show?.showScope}
+            onSave={saveBestAwards}
+          />
         </div>
 
         {/* Desktop: spreadsheet grid */}
@@ -1875,7 +2066,7 @@ function ClassSponsorshipTable({
           </div>
 
           {/* Rows */}
-          {BEST_AWARDS.map((award, awardIdx) => {
+          {bestAwards.map((award, awardIdx) => {
             const data = awardMap.get(award);
             const entries = data?.entries ?? [];
             const indices = data?.indices ?? [];
@@ -1921,7 +2112,7 @@ function ClassSponsorshipTable({
 
         {/* Mobile: card-based layout */}
         <div className="space-y-2 sm:hidden">
-          {BEST_AWARDS.map((award) => {
+          {bestAwards.map((award) => {
             const data = awardMap.get(award);
             const entries = data?.entries ?? [];
             const indices = data?.indices ?? [];
