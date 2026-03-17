@@ -22,6 +22,7 @@ import {
   UserPlus,
   MapPin,
   Banknote,
+  Building2,
   LayoutGrid,
   ClipboardCheck,
   Trophy,
@@ -484,6 +485,34 @@ export default function NewShowPage() {
         form.setValue('classSexArrangement', 'separate_sex');
       }
     }
+  }
+
+  // Gate: must have an organisation (club) before creating a show
+  if (dashboardData && organisations.length === 0) {
+    return (
+      <div className="space-y-6 pb-16 md:pb-0">
+        <div>
+          <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">Create New Show</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            You need to set up your club before creating a show.
+          </p>
+        </div>
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+            <Building2 className="size-12 text-muted-foreground/40" />
+            <h2 className="mt-3 text-lg font-semibold">Set up your club first</h2>
+            <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+              Every show is run by a club. Set up your club with its officers, committee members, and contact details — then come back to create your show.
+            </p>
+            <Button className="mt-5 min-h-[2.75rem]" asChild>
+              <Link href="/secretary/club">
+                Set Up My Club
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   return (
