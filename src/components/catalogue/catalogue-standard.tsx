@@ -1,6 +1,7 @@
 import { Document, Page, View, Text } from '@react-pdf/renderer';
 import { styles } from './catalogue-styles';
-import { CoverPage, JudgesListPage, ClassDefinitionsPage } from './catalogue-front-matter';
+import { CoverPage, JudgesListPage, ClassDefinitionsPage, TrophiesPage } from './catalogue-front-matter';
+import type { ClassSponsorshipInfo } from './catalogue-front-matter';
 import { formatDobKC, formatPedigreeKC, formatOwnerKC, uppercaseName } from './catalogue-utils';
 
 export interface CatalogueEntry {
@@ -37,8 +38,12 @@ export interface CatalogueShowInfo {
   logoUrl?: string;
   secretaryEmail?: string;
   judgesByBreedName?: Record<string, string>;
+  /** Judge name -> bio text */
+  judgeBios?: Record<string, string>;
   classDefinitions?: { name: string; description: string | null }[];
   showScope?: string;
+  /** Class sponsorship data for trophies page + inline display */
+  classSponsorships?: ClassSponsorshipInfo[];
 }
 
 interface Props {
@@ -151,6 +156,14 @@ function classHeadingLabel(bucket: ClassBucket, sex: string) {
 export function CatalogueStandard({ show, entries }: Props) {
   const grouped = groupEntriesKC(entries);
 
+  // Build a lookup: classNumber -> sponsorship info for inline display
+  const sponsorByClassNumber = new Map<number, ClassSponsorshipInfo>();
+  for (const sp of show.classSponsorships ?? []) {
+    if (sp.classNumber != null) {
+      sponsorByClassNumber.set(sp.classNumber, sp);
+    }
+  }
+
   // Sort groups by sortOrder
   const sortedGroups = [...grouped.entries()].sort(([, a], [, b]) => a.sortOrder - b.sortOrder);
 
@@ -205,6 +218,7 @@ export function CatalogueStandard({ show, entries }: Props) {
       <CoverPage show={show} />
       <JudgesListPage show={show} />
       <ClassDefinitionsPage show={show} />
+      <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />
 
       {/* One <Page> per breed — resets coordinate system to avoid renderer overflow */}
       {breedPages.map(({ groupName, breedName, judge, breedBucket }) => (
@@ -225,11 +239,33 @@ export function CatalogueStandard({ show, entries }: Props) {
                   </Text>
                 )}
 
-                {breedBucket.sexes[sex].map((bucket) => (
+                {breedBucket.sexes[sex].map((bucket) => {
+                  // Look up sponsorship for this class
+                  const sp = bucket.classNumber != null
+                    ? sponsorByClassNumber.get(bucket.classNumber)
+                    : undefined;
+                  const sponsorParts: string[] = [];
+                  if (sp?.trophyName) {
+                    let part = `Trophy: ${sp.trophyName}`;
+                    if (sp.sponsorName) {
+                      part += ` — sponsored by ${sp.sponsorName}`;
+                      if (sp.sponsorAffix) part += ` (${sp.sponsorAffix})`;
+                    }
+                    sponsorParts.push(part);
+                  } else if (sp?.sponsorName) {
+                    let part = `Sponsored by ${sp.sponsorName}`;
+                    if (sp.sponsorAffix) part += ` (${sp.sponsorAffix})`;
+                    sponsorParts.push(part);
+                  }
+
+                  return (
                   <View key={`${bucket.classNumber}-${bucket.className}`}>
                     <Text style={styles.classHeadingInBreed} minPresenceAhead={50}>
                       {classHeadingLabel(bucket, sex)}
                     </Text>
+                    {sponsorParts.map((line, i) => (
+                      <Text key={i} style={styles.sponsorLine}>{line}</Text>
+                    ))}
 
                     {bucket.entries.map((entry) => {
                       const catNo = entry.catalogueNumber ?? '';
@@ -323,7 +359,8 @@ export function CatalogueStandard({ show, entries }: Props) {
                       );
                     })}
                   </View>
-                ))}
+                  );
+                })}
               </View>
             ))}
 

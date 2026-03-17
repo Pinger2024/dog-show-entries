@@ -9,6 +9,7 @@ export const judges = pgTable('judges', {
   kcNumber: text('kc_number').unique(),
   contactEmail: text('contact_email'),
   jepLevel: integer('jep_level'), // RKC Judges Education Programme level 1-6
+  bio: text('bio'), // Optional biography for catalogue display
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),

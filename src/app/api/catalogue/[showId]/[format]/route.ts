@@ -50,7 +50,12 @@ export async function GET(
     }),
     db.query.showClasses.findMany({
       where: eq(schema.showClasses.showId, showId),
-      with: { classDefinition: true },
+      with: {
+        classDefinition: true,
+        classSponsorships: {
+          with: { showSponsor: { with: { sponsor: true } } },
+        },
+      },
       orderBy: [asc(schema.showClasses.sortOrder), asc(schema.showClasses.classNumber)],
     }),
     db.query.entries.findMany({
@@ -84,9 +89,14 @@ export async function GET(
   ]);
 
   const judgesByBreedName: Record<string, string> = {};
+  const judgeBios: Record<string, string> = {};
   for (const ja of judgeAssignmentRows) {
     if (ja.breed?.name && ja.judge?.name) {
       judgesByBreedName[ja.breed.name] = ja.judge.name;
+      // Collect judge bios (keyed by judge name for dedup)
+      if (ja.judge.bio && !judgeBios[ja.judge.name]) {
+        judgeBios[ja.judge.name] = ja.judge.bio;
+      }
     }
   }
 
@@ -100,6 +110,26 @@ export async function GET(
         name: sc.classDefinition.name,
         description: sc.classDefinition.description,
       });
+    }
+  }
+
+  // Collect class sponsorship data for trophies page + inline display
+  const classSponsorships: { className: string; classNumber: number | null; trophyName: string | null; trophyDonor: string | null; sponsorName: string | null; sponsorAffix: string | null; prizeDescription: string | null }[] = [];
+  for (const sc of showClassRows) {
+    for (const cs of sc.classSponsorships ?? []) {
+      // Sponsor name comes from either the free-text field or the linked sponsor
+      const sponsorName = cs.sponsorName ?? cs.showSponsor?.sponsor?.name ?? null;
+      if (cs.trophyName || sponsorName || cs.prizeDescription) {
+        classSponsorships.push({
+          className: sc.classDefinition?.name ?? 'Unknown Class',
+          classNumber: sc.classNumber,
+          trophyName: cs.trophyName,
+          trophyDonor: cs.trophyDonor,
+          sponsorName,
+          sponsorAffix: cs.sponsorAffix ?? null,
+          prizeDescription: cs.prizeDescription,
+        });
+      }
     }
   }
 
@@ -152,8 +182,10 @@ export async function GET(
     logoUrl: safeLogoUrl ?? undefined,
     secretaryEmail: show.secretaryEmail ?? undefined,
     judgesByBreedName,
+    judgeBios: Object.keys(judgeBios).length > 0 ? judgeBios : undefined,
     classDefinitions,
     showScope: show.showScope ?? undefined,
+    classSponsorships: classSponsorships.length > 0 ? classSponsorships : undefined,
   };
 
   // Check if JSON format was explicitly requested (for data export)

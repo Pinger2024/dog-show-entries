@@ -1,5 +1,5 @@
 import { Page, View, Text, Image } from '@react-pdf/renderer';
-import { styles } from './catalogue-styles';
+import { styles, C } from './catalogue-styles';
 import type { CatalogueShowInfo } from './catalogue-standard';
 
 const SHOW_TYPE_LABELS: Record<string, string> = {
@@ -13,97 +13,169 @@ const SHOW_TYPE_LABELS: Record<string, string> = {
 
 function formatCoverDate(dateStr: string): string {
   const d = new Date(dateStr);
-  const day = String(d.getDate()).padStart(2, '0');
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const year = d.getFullYear();
-  return `${day}.${month}.${year}`;
+  return d.toLocaleDateString('en-GB', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
 }
 
 interface FrontMatterProps {
   show: CatalogueShowInfo;
 }
 
-/** Cover page for the RKC standard catalogue */
+// ── Reusable components (matching schedule) ─────────────────────
+
+function GoldRule() {
+  return <View style={styles.coverGoldRule} />;
+}
+
+function SectionBand({ title }: { title: string }) {
+  return (
+    <View style={styles.sectionBand}>
+      <Text style={styles.sectionBandText}>{title}</Text>
+    </View>
+  );
+}
+
+function InfoCard({ title, children }: { title?: string; children: React.ReactNode }) {
+  return (
+    <View style={styles.infoCard} wrap={false}>
+      {title && <Text style={styles.infoCardTitle}>{title}</Text>}
+      {children}
+    </View>
+  );
+}
+
+// ── Cover Page ──────────────────────────────────────────────────
+
+/** Cover page for the RKC standard catalogue — matching schedule design */
 export function CoverPage({ show }: FrontMatterProps) {
   const showTypeLabel = show.showType ? SHOW_TYPE_LABELS[show.showType] : undefined;
 
   return (
     <Page size="A5" style={styles.coverPage}>
-      {show.logoUrl && (
-        <Image
-          src={show.logoUrl}
-          style={{ width: 80, height: 80, marginBottom: 20 }}
-        />
-      )}
-
+      {/* Green top band with organisation name */}
       {show.organisation && (
-        <Text style={styles.coverOrganisation}>{show.organisation}</Text>
+        <View style={styles.coverTopBand}>
+          <Text style={styles.coverOrgName}>{show.organisation}</Text>
+        </View>
       )}
+      {!show.organisation && <View style={{ height: 12 }} />}
 
-      <Text style={styles.coverShowName}>{show.name}</Text>
+      {/* Main cover content */}
+      <View style={styles.coverContent}>
+        {/* Organisation logo */}
+        {show.logoUrl && (
+          <Image src={show.logoUrl} style={styles.coverLogo} />
+        )}
 
-      {showTypeLabel && (
-        <Text style={styles.coverSubtitle}>{showTypeLabel}</Text>
-      )}
+        {/* Show name — LibreBaskerville */}
+        <Text style={styles.coverShowName}>{show.name}</Text>
 
-      <Text style={styles.coverRegulatory}>
-        held under Royal Kennel Club Rules &amp; Show Regulations F(1)
-      </Text>
+        {/* Show type badge */}
+        {showTypeLabel && (
+          <View style={styles.coverBadge}>
+            <Text style={styles.coverBadgeText}>{showTypeLabel}</Text>
+          </View>
+        )}
 
-      <Text style={styles.coverDetail}>{formatCoverDate(show.date)}</Text>
-
-      {show.venue && (
-        <Text style={styles.coverDetail}>
-          {show.venue}{show.venueAddress ? `, ${show.venueAddress}` : ''}
+        {/* "CATALOGUE" label */}
+        <Text style={{
+          fontFamily: 'Inter',
+          fontSize: 8,
+          color: C.textLight,
+          letterSpacing: 2,
+          textTransform: 'uppercase',
+          marginBottom: 4,
+        }}>
+          Catalogue
         </Text>
-      )}
 
-      {show.kcLicenceNo && (
-        <Text style={{ ...styles.coverDetail, marginTop: 12 }}>
-          RKC Licence No: {show.kcLicenceNo}
+        {/* RKC jurisdiction */}
+        <Text style={styles.coverRegulatory}>
+          Held under Royal Kennel Club Rules &amp; Show Regulations F(1)
         </Text>
-      )}
 
-      {show.secretaryEmail && (
-        <Text style={styles.coverDetail}>
-          Show Secretary: {show.secretaryEmail}
+        <GoldRule />
+
+        {/* Key details card with gold left border */}
+        <View style={styles.coverDetailCard}>
+          <View style={styles.coverDetailRow}>
+            <Text style={styles.coverDetailLabel}>Date</Text>
+            <Text style={styles.coverDetailValue}>{formatCoverDate(show.date)}</Text>
+          </View>
+          {show.venue && (
+            <View style={styles.coverDetailRow}>
+              <Text style={styles.coverDetailLabel}>Venue</Text>
+              <Text style={styles.coverDetailValue}>
+                {show.venue}{show.venueAddress ? `, ${show.venueAddress}` : ''}
+              </Text>
+            </View>
+          )}
+          {show.kcLicenceNo && (
+            <View style={styles.coverDetailRow}>
+              <Text style={styles.coverDetailLabel}>Licence</Text>
+              <Text style={styles.coverDetailValue}>{show.kcLicenceNo}</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Secretary details — green left border */}
+        {show.secretaryEmail && (
+          <View style={{ ...styles.coverDetailCard, borderLeftColor: C.primary }}>
+            <Text style={styles.coverSectionLabel}>Show Secretary</Text>
+            <Text style={styles.coverSectionText}>{show.secretaryEmail}</Text>
+          </View>
+        )}
+
+        <Text style={styles.coverFooterText}>
+          Generated by Remi  ·  remishowmanager.co.uk
         </Text>
-      )}
+      </View>
 
-      <Text
-        style={styles.footer}
-        render={({ pageNumber, totalPages }) =>
-          `Page ${pageNumber} of ${totalPages}  ·  Generated by Remi`
-        }
-        fixed
-      />
+      {/* Green bottom band */}
+      <View style={styles.coverBottomBand} />
     </Page>
   );
 }
 
-/** Judges list page — breed → judge name table */
+// ── Judges List Page ────────────────────────────────────────────
+
+/** Judges list page — breed -> judge name table with optional bios */
 export function JudgesListPage({ show }: FrontMatterProps) {
   const judges = show.judgesByBreedName ?? {};
+  const judgeBios = show.judgeBios ?? {};
   const sortedBreeds = Object.keys(judges).sort();
 
   if (sortedBreeds.length === 0) return null;
 
   return (
-    <Page size="A5" style={styles.frontMatterPage}>
-      <Text style={styles.frontMatterTitle}>List of Judges</Text>
+    <Page size="A5" style={styles.frontMatterPage} wrap>
+      <SectionBand title="List of Judges" />
 
       {/* Table header */}
-      <View style={{ ...styles.judgesListRow, borderBottomWidth: 1.5, borderBottomColor: '#000', marginBottom: 4 }}>
+      <View style={{ ...styles.judgesListRow, borderBottomWidth: 1.5, borderBottomColor: C.primary, marginBottom: 4 }}>
         <Text style={{ ...styles.judgesListBreed, fontWeight: 'bold' }}>Breed</Text>
         <Text style={{ ...styles.judgesListJudge, fontWeight: 'bold' }}>Judge</Text>
       </View>
 
-      {sortedBreeds.map((breed) => (
-        <View key={breed} style={styles.judgesListRow}>
-          <Text style={styles.judgesListBreed}>{breed}</Text>
-          <Text style={styles.judgesListJudge}>{judges[breed]}</Text>
-        </View>
-      ))}
+      {sortedBreeds.map((breed) => {
+        const judgeName = judges[breed];
+        const bio = judgeBios[judgeName ?? ''];
+        return (
+          <View key={breed} wrap={false}>
+            <View style={styles.judgesListRow}>
+              <Text style={styles.judgesListBreed}>{breed}</Text>
+              <Text style={styles.judgesListJudge}>{judgeName}</Text>
+            </View>
+            {bio && (
+              <Text style={styles.judgeBio}>{bio}</Text>
+            )}
+          </View>
+        );
+      })}
 
       <Text
         style={styles.footer}
@@ -115,6 +187,8 @@ export function JudgesListPage({ show }: FrontMatterProps) {
     </Page>
   );
 }
+
+// ── Class Definitions Page ──────────────────────────────────────
 
 /** Class definitions page — name + description for each class */
 export function ClassDefinitionsPage({ show }: FrontMatterProps) {
@@ -125,8 +199,8 @@ export function ClassDefinitionsPage({ show }: FrontMatterProps) {
   if (defsWithDesc.length === 0) return null;
 
   return (
-    <Page size="A5" style={styles.frontMatterPage}>
-      <Text style={styles.frontMatterTitle}>Definitions of Classes</Text>
+    <Page size="A5" style={styles.frontMatterPage} wrap>
+      <SectionBand title="Definitions of Classes" />
 
       {defsWithDesc.map((def) => (
         <View key={def.name} wrap={false}>
@@ -134,6 +208,91 @@ export function ClassDefinitionsPage({ show }: FrontMatterProps) {
           <Text style={styles.classDefDescription}>{def.description}</Text>
         </View>
       ))}
+
+      <Text
+        style={styles.footer}
+        render={({ pageNumber, totalPages }) =>
+          `Page ${pageNumber} of ${totalPages}  ·  Generated by Remi`
+        }
+        fixed
+      />
+    </Page>
+  );
+}
+
+// ── Trophies & Sponsorships Page ────────────────────────────────
+
+export interface ClassSponsorshipInfo {
+  className: string;
+  classNumber: number | null;
+  trophyName: string | null;
+  trophyDonor: string | null;
+  sponsorName: string | null;
+  sponsorAffix: string | null;
+  prizeDescription: string | null;
+}
+
+interface TrophiesPageProps {
+  show: CatalogueShowInfo;
+  sponsorships: ClassSponsorshipInfo[];
+}
+
+/** Trophies & Sponsorships front-matter page */
+export function TrophiesPage({ show, sponsorships }: TrophiesPageProps) {
+  if (sponsorships.length === 0) return null;
+
+  // Sort by class number, then class name
+  const sorted = [...sponsorships].sort((a, b) => {
+    if (a.classNumber != null && b.classNumber != null) return a.classNumber - b.classNumber;
+    if (a.classNumber != null) return -1;
+    if (b.classNumber != null) return 1;
+    return a.className.localeCompare(b.className);
+  });
+
+  return (
+    <Page size="A5" style={styles.frontMatterPage} wrap>
+      <SectionBand title="Trophies & Sponsorships" />
+
+      {sorted.map((sp, idx) => {
+        const classLabel = sp.classNumber != null
+          ? `Class ${sp.classNumber}. ${sp.className}`
+          : sp.className;
+
+        // Build trophy/sponsor description lines
+        const lines: string[] = [];
+        if (sp.trophyName) {
+          let trophyLine = `Trophy: ${sp.trophyName}`;
+          if (sp.trophyDonor) trophyLine += ` — donated by ${sp.trophyDonor}`;
+          lines.push(trophyLine);
+        }
+        if (sp.sponsorName) {
+          let sponsorLine = `Sponsored by ${sp.sponsorName}`;
+          if (sp.sponsorAffix) sponsorLine += ` (${sp.sponsorAffix})`;
+          lines.push(sponsorLine);
+        }
+        if (sp.prizeDescription) {
+          lines.push(sp.prizeDescription);
+        }
+
+        return (
+          <InfoCard key={`${sp.classNumber}-${sp.className}-${idx}`}>
+            <Text style={{
+              fontFamily: 'Inter',
+              fontSize: 8,
+              fontWeight: 'bold',
+              color: C.textDark,
+              marginBottom: 2,
+            }}>
+              {classLabel}
+            </Text>
+            {lines.map((line, i) => (
+              <Text key={i} style={styles.sponsorLine}>
+                {line}
+              </Text>
+            ))}
+          </InfoCard>
+        );
+      })}
 
       <Text
         style={styles.footer}

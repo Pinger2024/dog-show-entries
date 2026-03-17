@@ -8,12 +8,14 @@ import {
   Award,
   Camera,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  ClipboardEdit,
   Clock,
   ExternalLink,
   Globe,
   Loader2,
   Lock,
-  Send,
   Unlock,
   XCircle,
 } from 'lucide-react';
@@ -25,6 +27,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -35,6 +44,61 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+
+// ── Achievement type definitions ──────────────────────────
+
+type AchievementType =
+  | 'best_of_breed'
+  | 'best_puppy_in_breed'
+  | 'best_veteran_in_breed'
+  | 'group_placement'
+  | 'best_in_show'
+  | 'reserve_best_in_show'
+  | 'best_puppy_in_show'
+  | 'dog_cc'
+  | 'reserve_dog_cc'
+  | 'bitch_cc'
+  | 'reserve_bitch_cc'
+  | 'best_puppy_dog'
+  | 'best_puppy_bitch'
+  | 'best_long_coat_dog'
+  | 'best_long_coat_bitch'
+  | 'best_long_coat_in_show'
+  | 'cc'
+  | 'reserve_cc';
+
+const SHOW_LEVEL_AWARDS: { type: AchievementType; label: string }[] = [
+  { type: 'best_in_show', label: 'Best in Show' },
+  { type: 'reserve_best_in_show', label: 'Reserve Best in Show' },
+  { type: 'best_puppy_in_show', label: 'Best Puppy in Show' },
+  { type: 'best_long_coat_in_show', label: 'Best Long Coat in Show' },
+];
+
+const BREED_LEVEL_AWARDS: { type: AchievementType; label: string }[] = [
+  { type: 'best_of_breed', label: 'Best of Breed' },
+  { type: 'best_puppy_in_breed', label: 'Best Puppy in Breed' },
+  { type: 'best_veteran_in_breed', label: 'Best Veteran in Breed' },
+];
+
+const CHAMPIONSHIP_AWARDS: { type: AchievementType; label: string }[] = [
+  { type: 'dog_cc', label: 'Dog CC' },
+  { type: 'reserve_dog_cc', label: 'Reserve Dog CC' },
+  { type: 'best_puppy_dog', label: 'Best Puppy Dog' },
+  { type: 'best_long_coat_dog', label: 'Best Long Coat Dog' },
+  { type: 'bitch_cc', label: 'Bitch CC' },
+  { type: 'reserve_bitch_cc', label: 'Reserve Bitch CC' },
+  { type: 'best_puppy_bitch', label: 'Best Puppy Bitch' },
+  { type: 'best_long_coat_bitch', label: 'Best Long Coat Bitch' },
+];
+
+/** Returns the required sex for a sex-specific award, or null if open */
+function requiredSexForAward(type: AchievementType): 'dog' | 'bitch' | null {
+  if (['dog_cc', 'reserve_dog_cc', 'best_puppy_dog', 'best_long_coat_dog'].includes(type)) return 'dog';
+  if (['bitch_cc', 'reserve_bitch_cc', 'best_puppy_bitch', 'best_long_coat_bitch'].includes(type)) return 'bitch';
+  return null;
+}
+
+// ── Sub-components ────────────────────────────────────────
 
 function WinnerPhotoButton({
   entryClassId,
@@ -142,9 +206,6 @@ function ClassPublishButton({
     onError: (err) => toast.error(err.message),
   });
 
-  // Check if any results in this class have publishedAt set
-  // We can't easily check from the current data — so we'll use a simple query
-  // For now, use a toggle based on mutation state
   const isPending = publishMut.isPending || unpublishMut.isPending;
 
   return (
@@ -167,11 +228,245 @@ function ClassPublishButton({
   );
 }
 
+// ── Best Awards Section ───────────────────────────────────
+
+function BestAwardsSection({
+  showId,
+  showDate,
+  showType,
+  confirmedDogs,
+  existingAchievements,
+}: {
+  showId: string;
+  showDate: string;
+  showType: string;
+  confirmedDogs: {
+    dogId: string;
+    registeredName: string;
+    sex: string | null;
+    breedName: string | null;
+    catalogueNumber: string | null;
+  }[];
+  existingAchievements: {
+    id: string;
+    dogId: string;
+    type: string;
+    dog?: {
+      id: string;
+      registeredName: string;
+      sex: string | null;
+      breed?: { name: string } | null;
+    } | null;
+  }[];
+}) {
+  const [expanded, setExpanded] = useState(true);
+  const utils = trpc.useUtils();
+  const isChampionship = showType === 'championship';
+
+  const recordMut = trpc.secretary.recordAchievement.useMutation({
+    onSuccess: () => {
+      utils.secretary.getShowAchievements.invalidate({ showId });
+      utils.steward.getPublicShowAchievements.invalidate({ showId });
+      utils.steward.getLiveResults.invalidate({ showId });
+      toast.success('Award recorded');
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const removeMut = trpc.secretary.removeAchievement.useMutation({
+    onSuccess: () => {
+      utils.secretary.getShowAchievements.invalidate({ showId });
+      utils.steward.getPublicShowAchievements.invalidate({ showId });
+      utils.steward.getLiveResults.invalidate({ showId });
+      toast.success('Award removed');
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  // Group dogs by breed for breed-level awards
+  const breedNames = [...new Set(confirmedDogs.map((d) => d.breedName).filter(Boolean))] as string[];
+  breedNames.sort((a, b) => a.localeCompare(b));
+
+  function getExisting(type: string) {
+    return existingAchievements.find((a) => a.type === type);
+  }
+
+  function handleAwardChange(type: AchievementType, dogId: string) {
+    const existing = getExisting(type);
+    if (dogId === 'none') {
+      if (existing) {
+        removeMut.mutate({ showId, achievementId: existing.id });
+      }
+    } else {
+      // If there was a previous winner, the server will replace it
+      recordMut.mutate({ showId, dogId, type, date: showDate });
+    }
+  }
+
+  const isPending = recordMut.isPending || removeMut.isPending;
+  const hasAnyAwards = existingAchievements.length > 0;
+
+  return (
+    <div className="rounded-lg border border-amber-200 bg-gradient-to-b from-amber-50/80 to-amber-50/30">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center gap-2 p-3 sm:p-4 min-h-[2.75rem]"
+      >
+        <Trophy className="size-5 text-amber-600" />
+        <h3 className="flex-1 text-left font-serif text-base font-semibold text-amber-900">
+          Best Awards
+        </h3>
+        {hasAnyAwards && (
+          <Badge variant="secondary" className="text-xs mr-2">
+            {existingAchievements.length} recorded
+          </Badge>
+        )}
+        {expanded ? (
+          <ChevronUp className="size-4 text-amber-600" />
+        ) : (
+          <ChevronDown className="size-4 text-amber-600" />
+        )}
+      </button>
+
+      {expanded && (
+        <div className="space-y-4 border-t border-amber-200 p-3 sm:p-4">
+          {/* Show-level awards */}
+          <div className="space-y-2">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-amber-700">
+              Show Awards
+            </h4>
+            {SHOW_LEVEL_AWARDS
+              .filter((award) => award.type !== 'best_long_coat_in_show' || isChampionship)
+              .map((award) => (
+                <AwardRow
+                  key={award.type}
+                  label={award.label}
+                  type={award.type}
+                  existing={getExisting(award.type)}
+                  candidates={confirmedDogs}
+                  isPending={isPending}
+                  onSelect={(dogId) => handleAwardChange(award.type, dogId)}
+                />
+              ))}
+          </div>
+
+          {/* Breed-level awards per breed */}
+          {breedNames.map((breedName) => {
+            const breedDogs = confirmedDogs.filter((d) => d.breedName === breedName);
+            // For breed-level awards, we need to filter by breed
+            // But achievements are global — find the one matching this breed
+            const breedAchievements = existingAchievements.filter(
+              (a) => a.dog?.breed?.name === breedName
+            );
+
+            return (
+              <div key={breedName} className="space-y-2 border-t border-amber-100 pt-3">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {breedName}
+                </h4>
+                {BREED_LEVEL_AWARDS.map((award) => {
+                  const existing = breedAchievements.find((a) => a.type === award.type);
+                  return (
+                    <AwardRow
+                      key={`${breedName}-${award.type}`}
+                      label={award.label}
+                      type={award.type}
+                      existing={existing}
+                      candidates={breedDogs}
+                      isPending={isPending}
+                      onSelect={(dogId) => handleAwardChange(award.type, dogId)}
+                    />
+                  );
+                })}
+                {isChampionship && (
+                  <>
+                    {CHAMPIONSHIP_AWARDS.map((award) => {
+                      const sexFilter = requiredSexForAward(award.type);
+                      const filtered = sexFilter
+                        ? breedDogs.filter((d) => d.sex === sexFilter)
+                        : breedDogs;
+                      const existing = breedAchievements.find((a) => a.type === award.type);
+                      return (
+                        <AwardRow
+                          key={`${breedName}-${award.type}`}
+                          label={award.label}
+                          type={award.type}
+                          existing={existing}
+                          candidates={filtered}
+                          isPending={isPending}
+                          onSelect={(dogId) => handleAwardChange(award.type, dogId)}
+                        />
+                      );
+                    })}
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Single award row with label + select dropdown */
+function AwardRow({
+  label,
+  type,
+  existing,
+  candidates,
+  isPending,
+  onSelect,
+}: {
+  label: string;
+  type: AchievementType;
+  existing?: {
+    id: string;
+    dogId: string;
+    dog?: { id: string; registeredName: string } | null;
+  };
+  candidates: {
+    dogId: string;
+    registeredName: string;
+    catalogueNumber: string | null;
+  }[];
+  isPending: boolean;
+  onSelect: (dogId: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+      <span className="text-xs sm:text-sm font-medium w-full sm:w-44 shrink-0 truncate" title={label}>
+        {label}
+      </span>
+      <Select
+        value={existing?.dogId ?? 'none'}
+        onValueChange={onSelect}
+        disabled={isPending}
+      >
+        <SelectTrigger className="h-11 flex-1 text-xs sm:text-sm">
+          <SelectValue placeholder="Select winner..." />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="none">-- None --</SelectItem>
+          {candidates.map((d) => (
+            <SelectItem key={d.dogId} value={d.dogId}>
+              {d.catalogueNumber ? `#${d.catalogueNumber} ` : ''}{d.registeredName}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+// ── Main Page Component ───────────────────────────────────
+
 export default function SecretaryResultsPage() {
   const showId = useShowId();
   const [sendNotifications, setSendNotifications] = useState(true);
   const utils = trpc.useUtils();
 
+  // All hooks must be called before any early returns (React Rules of Hooks)
   const { data, isLoading, dataUpdatedAt } =
     trpc.steward.getLiveResults.useQuery(
       { showId },
@@ -191,6 +486,18 @@ export default function SecretaryResultsPage() {
 
   const { data: pubStatus } =
     trpc.secretary.getResultsPublicationStatus.useQuery({ showId });
+
+  const { data: showData } =
+    trpc.shows.getById.useQuery({ id: showId });
+
+  const { data: confirmedDogs } =
+    trpc.secretary.getConfirmedDogs.useQuery({ showId });
+
+  const { data: secAchievements } =
+    trpc.secretary.getShowAchievements.useQuery(
+      { showId },
+      { refetchInterval: 10_000 }
+    );
 
   const publishMutation = trpc.secretary.publishResults.useMutation({
     onSuccess: () => {
@@ -410,7 +717,7 @@ export default function SecretaryResultsPage() {
         </div>
       )}
 
-      {/* Header with progress */}
+      {/* Header with progress + Record Results button */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-2">
@@ -430,12 +737,20 @@ export default function SecretaryResultsPage() {
             {lastUpdated && <span>Updated {lastUpdated}</span>}
           </div>
         </div>
-        <Button variant="outline" size="sm" asChild>
-          <Link href={`/shows/${showId}/results`}>
-            <ExternalLink className="size-3.5" />
-            Public Results Page
-          </Link>
-        </Button>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button size="sm" className="min-h-[2.75rem]" asChild>
+            <Link href={`/steward/shows/${showId}`}>
+              <ClipboardEdit className="size-3.5" />
+              Record Results
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" className="min-h-[2.75rem]" asChild>
+            <Link href={`/shows/${showId}/results`}>
+              <ExternalLink className="size-3.5" />
+              Public Results Page
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Progress bar */}
@@ -449,6 +764,17 @@ export default function SecretaryResultsPage() {
         </div>
       )}
 
+      {/* Best Awards Section */}
+      {showData && confirmedDogs && confirmedDogs.length > 0 && (
+        <BestAwardsSection
+          showId={showId}
+          showDate={showData.startDate}
+          showType={showData.showType}
+          confirmedDogs={confirmedDogs}
+          existingAchievements={secAchievements ?? []}
+        />
+      )}
+
       {breedGroups.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
           <Trophy className="size-12 text-muted-foreground/30" />
@@ -459,19 +785,19 @@ export default function SecretaryResultsPage() {
         </div>
       ) : (
         <div className="space-y-6">
-          {/* Show-level awards */}
+          {/* Show-level awards (read-only display from public achievements) */}
           {showAwards.length > 0 && (
-            <div className="rounded-lg border border-amber-200 bg-gradient-to-b from-amber-50/80 to-amber-50/30 p-3 sm:p-4">
+            <div className="rounded-lg border border-green-200 bg-gradient-to-b from-green-50/80 to-green-50/30 p-3 sm:p-4">
               <div className="mb-3 flex items-center gap-2">
-                <Trophy className="size-5 text-amber-600" />
-                <h3 className="font-serif text-base font-semibold text-amber-900">
-                  Show Awards
+                <Trophy className="size-5 text-green-600" />
+                <h3 className="font-serif text-base font-semibold text-green-900">
+                  Recorded Show Awards
                 </h3>
               </div>
               <div className="space-y-2">
                 {showAwards.map((a) => (
                   <div key={a.id} className="flex flex-wrap items-center gap-1.5 sm:gap-3">
-                    <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-xs font-semibold whitespace-nowrap">
+                    <Badge className="bg-green-100 text-green-800 border-green-300 text-xs font-semibold whitespace-nowrap">
                       {achievementLabels[a.type] ?? a.type}
                     </Badge>
                     <span className="font-medium text-sm">

@@ -1,5 +1,5 @@
 import { View, Text, Image } from '@react-pdf/renderer';
-import { styles } from './catalogue-styles';
+import { styles, C } from './catalogue-styles';
 
 const SHOW_TYPE_LABELS: Record<string, string> = {
   championship: 'Championship Show',

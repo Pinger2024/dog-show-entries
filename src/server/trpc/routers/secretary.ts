@@ -34,6 +34,7 @@ import {
   showSponsors,
   classSponsorships,
   organisationPeople,
+  achievements,
 } from '@/server/db/schema';
 import {
   DEFAULT_CHECKLIST_ITEMS,
@@ -4850,5 +4851,195 @@ export const secretaryRouter = createTRPCRouter({
         .where(eq(shows.id, input.showId));
 
       return { unsubmitted: true };
+    }),
+
+  // ── Best Awards (Secretary-scoped achievement management) ─────
+
+  /** Get confirmed dogs for a show (for award selection dropdowns) */
+  getConfirmedDogs: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      const showEntries = await ctx.db.query.entries.findMany({
+        where: and(
+          eq(entries.showId, input.showId),
+          eq(entries.status, 'confirmed'),
+          isNull(entries.deletedAt)
+        ),
+        with: {
+          dog: {
+            columns: { id: true, registeredName: true, sex: true },
+            with: { breed: true },
+          },
+        },
+        columns: { id: true, catalogueNumber: true, dogId: true },
+      });
+
+      // Deduplicate by dogId
+      const dogMap = new Map<string, {
+        dogId: string;
+        registeredName: string;
+        sex: string | null;
+        breedName: string | null;
+        catalogueNumber: string | null;
+      }>();
+
+      for (const entry of showEntries) {
+        if (entry.dog && !dogMap.has(entry.dog.id)) {
+          dogMap.set(entry.dog.id, {
+            dogId: entry.dog.id,
+            registeredName: entry.dog.registeredName,
+            sex: entry.dog.sex,
+            breedName: entry.dog.breed?.name ?? null,
+            catalogueNumber: entry.catalogueNumber,
+          });
+        }
+      }
+
+      return Array.from(dogMap.values()).sort((a, b) =>
+        a.registeredName.localeCompare(b.registeredName)
+      );
+    }),
+
+  /** Get achievements for a show (secretary-scoped, no steward assignment needed) */
+  getShowAchievements: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      return ctx.db.query.achievements.findMany({
+        where: eq(achievements.showId, input.showId),
+        with: {
+          dog: {
+            columns: { id: true, registeredName: true, sex: true },
+            with: { breed: true },
+          },
+        },
+      });
+    }),
+
+  /** Record a best award / achievement (secretary-scoped) */
+  recordAchievement: secretaryProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        dogId: z.string().uuid(),
+        type: z.enum([
+          'cc',
+          'reserve_cc',
+          'best_of_breed',
+          'best_puppy_in_breed',
+          'best_veteran_in_breed',
+          'group_placement',
+          'best_in_show',
+          'reserve_best_in_show',
+          'best_puppy_in_show',
+          'dog_cc',
+          'reserve_dog_cc',
+          'bitch_cc',
+          'reserve_bitch_cc',
+          'best_puppy_dog',
+          'best_puppy_bitch',
+          'best_long_coat_dog',
+          'best_long_coat_bitch',
+          'best_long_coat_in_show',
+        ]),
+        date: z.string(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      // Verify the dog is entered in this show
+      const dogEntry = await ctx.db.query.entries.findFirst({
+        where: and(
+          eq(entries.showId, input.showId),
+          eq(entries.dogId, input.dogId),
+          eq(entries.status, 'confirmed'),
+          isNull(entries.deletedAt)
+        ),
+        columns: { id: true },
+      });
+      if (!dogEntry) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'This dog is not entered in this show',
+        });
+      }
+
+      // Validate sex matches award type
+      const DOG_ONLY_AWARDS = ['dog_cc', 'reserve_dog_cc', 'best_puppy_dog', 'best_long_coat_dog'];
+      const BITCH_ONLY_AWARDS = ['bitch_cc', 'reserve_bitch_cc', 'best_puppy_bitch', 'best_long_coat_bitch'];
+
+      if (DOG_ONLY_AWARDS.includes(input.type) || BITCH_ONLY_AWARDS.includes(input.type)) {
+        const dog = await ctx.db.query.dogs.findFirst({
+          where: eq(dogs.id, input.dogId),
+          columns: { sex: true },
+        });
+        const requiredSex = DOG_ONLY_AWARDS.includes(input.type) ? 'dog' : 'bitch';
+        if (dog?.sex !== requiredSex) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `This award is for ${requiredSex === 'dog' ? 'dogs' : 'bitches'} only`,
+          });
+        }
+      }
+
+      // Remove any existing same-type award for this show (not dog-specific — e.g. only one BIS)
+      // For show-level awards: only one dog can hold it
+      const UNIQUE_SHOW_AWARDS = [
+        'best_in_show', 'reserve_best_in_show', 'best_puppy_in_show', 'best_long_coat_in_show',
+        'best_of_breed', 'best_puppy_in_breed', 'best_veteran_in_breed',
+        'dog_cc', 'reserve_dog_cc', 'bitch_cc', 'reserve_bitch_cc',
+        'best_puppy_dog', 'best_puppy_bitch', 'best_long_coat_dog', 'best_long_coat_bitch',
+        'cc', 'reserve_cc',
+      ];
+
+      if (UNIQUE_SHOW_AWARDS.includes(input.type)) {
+        await ctx.db
+          .delete(achievements)
+          .where(
+            and(
+              eq(achievements.showId, input.showId),
+              eq(achievements.type, input.type)
+            )
+          );
+      }
+
+      const [achievement] = await ctx.db
+        .insert(achievements)
+        .values({
+          showId: input.showId,
+          dogId: input.dogId,
+          type: input.type,
+          date: input.date,
+        })
+        .returning();
+
+      return achievement!;
+    }),
+
+  /** Remove a best award / achievement (secretary-scoped) */
+  removeAchievement: secretaryProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        achievementId: z.string().uuid(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      await ctx.db
+        .delete(achievements)
+        .where(
+          and(
+            eq(achievements.id, input.achievementId),
+            eq(achievements.showId, input.showId)
+          )
+        );
+
+      return { removed: true };
     }),
 });

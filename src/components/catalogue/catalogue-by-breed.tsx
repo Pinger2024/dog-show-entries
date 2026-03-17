@@ -1,6 +1,6 @@
 import { Document, Page, View, Text } from '@react-pdf/renderer';
 import { styles } from './catalogue-styles';
-import { CoverPage, JudgesListPage, ClassDefinitionsPage } from './catalogue-front-matter';
+import { CoverPage, JudgesListPage, ClassDefinitionsPage, TrophiesPage } from './catalogue-front-matter';
 import { formatDobKC, formatPedigreeKC, formatOwnerKC, uppercaseName } from './catalogue-utils';
 import type { CatalogueEntry, CatalogueShowInfo } from './catalogue-standard';
 
@@ -154,6 +154,7 @@ export function CatalogueByBreed({ show, entries }: Props) {
       <CoverPage show={show} />
       <JudgesListPage show={show} />
       <ClassDefinitionsPage show={show} />
+      <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />
 
       {/* One <Page> per breed — resets coordinate system */}
       {breedPages.map(({ groupName, breedName, judge, breedBucket }) => (
