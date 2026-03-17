@@ -186,6 +186,7 @@ export async function GET(
     classDefinitions,
     showScope: show.showScope ?? undefined,
     classSponsorships: classSponsorships.length > 0 ? classSponsorships : undefined,
+    customStatements: show.scheduleData?.customStatements,
   };
 
   // Check if JSON format was explicitly requested (for data export)

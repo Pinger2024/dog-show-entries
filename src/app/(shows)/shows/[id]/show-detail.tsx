@@ -493,10 +493,25 @@ export function ShowDetailClient() {
     return map;
   }, [dogPhotos]);
 
+  /* For single-breed shows, resolve the breed name from the first breed-specific class
+     or from the organisation name. Classes won't have breedId set because the whole show
+     is for one breed — so "Any Breed" is misleading. */
+  const singleBreedName = useMemo(() => {
+    if (show.showScope !== 'single_breed') return null;
+    // Try to find a breed name from any class that has one
+    const breedClass = (show.showClasses ?? []).find((sc) => sc.breed?.name);
+    if (breedClass?.breed?.name) return breedClass.breed.name;
+    // Try judge assignments — single-breed shows may have breed-level assignments
+    const breedAssignment = (show.judgeAssignments ?? []).find((ja) => ja.breed?.name);
+    if (breedAssignment?.breed?.name) return breedAssignment.breed.name;
+    return null;
+  }, [show.showScope, show.showClasses, show.judgeAssignments]);
+
   /* Group classes by breed */
   const breedMap = new Map<string, { groupSortOrder: number; classes: typeof show.showClasses }>();
   for (const sc of show.showClasses ?? []) {
-    const name = sc.breed?.name ?? 'Any Breed';
+    // For single-breed shows, use the resolved breed name instead of "Any Breed"
+    const name = sc.breed?.name ?? singleBreedName ?? 'Any Breed';
     if (!breedMap.has(name)) {
       breedMap.set(name, { groupSortOrder: sc.breed?.group?.sortOrder ?? 999, classes: [] });
     }

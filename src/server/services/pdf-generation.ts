@@ -140,6 +140,7 @@ export async function generateCataloguePdf(
     judgesByBreedName,
     classDefinitions,
     showScope: show.showScope ?? undefined,
+    customStatements: show.scheduleData?.customStatements,
   };
 
   const isAllBreed = show.showScope !== 'single_breed';

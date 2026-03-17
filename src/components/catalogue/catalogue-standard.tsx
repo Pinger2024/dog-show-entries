@@ -44,6 +44,8 @@ export interface CatalogueShowInfo {
   showScope?: string;
   /** Class sponsorship data for trophies page + inline display */
   classSponsorships?: ClassSponsorshipInfo[];
+  /** Custom statements for cover page (e.g. "OUTSIDE ATTRACTION - KC RULE F(1) 16h") */
+  customStatements?: string[];
 }
 
 interface Props {

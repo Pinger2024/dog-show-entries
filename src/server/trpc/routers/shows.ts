@@ -74,9 +74,10 @@ export const showsRouter = createTRPCRouter({
       if (input.status) {
         conditions.push(eq(shows.status, input.status));
       } else {
-        // Exclude drafts and cancelled from public listings
+        // Default: show entries_open and published only (active/upcoming shows)
+        // Users can filter to see entries_closed, completed, etc. via the status dropdown
         conditions.push(
-          inArray(shows.status, ['published', 'entries_open', 'entries_closed', 'in_progress', 'completed'])
+          inArray(shows.status, ['published', 'entries_open'])
         );
       }
 
@@ -145,11 +146,23 @@ export const showsRouter = createTRPCRouter({
       const where =
         conditions.length > 0 ? and(...conditions) : undefined;
 
-      // Prioritise entries_open shows first, then published, then by date
+      // Prioritise entries_open shows first (sorted by close date — soonest closing first),
+      // then published (sorted by start date), then everything else
       const statusPriority = sql<number>`CASE
         WHEN ${shows.status} = 'entries_open' THEN 0
         WHEN ${shows.status} = 'published' THEN 1
-        ELSE 2
+        WHEN ${shows.status} = 'entries_closed' THEN 2
+        WHEN ${shows.status} = 'in_progress' THEN 3
+        WHEN ${shows.status} = 'completed' THEN 4
+        ELSE 5
+      END`;
+
+      // For entries_open: sort by close date (soonest first), fallback to start date
+      // For others: sort by start date
+      const dateSort = sql`CASE
+        WHEN ${shows.status} = 'entries_open' AND ${shows.entryCloseDate} IS NOT NULL
+          THEN ${shows.entryCloseDate}
+        ELSE ${shows.startDate}::timestamp
       END`;
 
       const items = await ctx.db.query.shows.findMany({
@@ -158,7 +171,7 @@ export const showsRouter = createTRPCRouter({
           organisation: true,
           venue: true,
         },
-        orderBy: [asc(statusPriority), asc(shows.startDate)],
+        orderBy: [asc(statusPriority), asc(dateSort)],
         limit: input.limit,
         offset: input.cursor,
       });

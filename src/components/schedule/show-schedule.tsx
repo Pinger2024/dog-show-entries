@@ -888,6 +888,25 @@ export function ShowSchedule({
           {/* Docking statement — MANDATORY on front cover per F(1)7.c(2) */}
           <Text style={s.coverDocking}>{dockingStatement}</Text>
 
+          {/* Custom statements — prominently on cover page */}
+          {sd?.customStatements && sd.customStatements.length > 0 && (
+            <View style={{ width: '100%', marginTop: 6, marginBottom: 2, paddingHorizontal: 8 }}>
+              {sd.customStatements.map((statement, i) => (
+                <Text key={i} style={{
+                  fontFamily: 'Inter',
+                  fontSize: 7.5,
+                  fontWeight: 'bold',
+                  color: C.textDark,
+                  textAlign: 'center',
+                  textTransform: 'uppercase',
+                  marginTop: i > 0 ? 3 : 0,
+                }}>
+                  {statement}
+                </Text>
+              ))}
+            </View>
+          )}
+
           {/* Wet weather */}
           {sd?.wetWeatherAccommodation === false && (
             <Text style={{ fontFamily: 'Inter', fontSize: 7.5, fontWeight: 'bold', color: C.textDark, textAlign: 'center', marginTop: 4 }}>
@@ -1443,16 +1462,7 @@ export function ShowSchedule({
         <Rule num="19">No modifications will be made to the schedule except by permission of the Board of the Royal Kennel Club, which will be followed by advertisement in the Canine press wherever possible.</Rule>
         <Rule num="20">An exhibitor or competitor should ensure that contact details for any handler are available and must be provided upon request in any investigation of a breach of this regulation by such handler.</Rule>
 
-        {/* Custom statements from show settings */}
-        {sd?.customStatements && sd.customStatements.length > 0 && (
-          <View style={s.warningBox} wrap={false}>
-            {sd.customStatements.map((statement, i) => (
-              <Text key={i} style={{ ...s.warningTitle, ...(i > 0 ? { marginTop: 6 } : {}) }}>
-                {statement}
-              </Text>
-            ))}
-          </View>
-        )}
+        {/* Custom statements now appear on the cover page for prominence */}
 
         <Text style={s.footer} render={footerRender} fixed />
       </Page>

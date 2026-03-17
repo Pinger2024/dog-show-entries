@@ -54,6 +54,12 @@ function InfoCard({ title, children }: { title?: string; children: React.ReactNo
 export function CoverPage({ show }: FrontMatterProps) {
   const showTypeLabel = show.showType ? SHOW_TYPE_LABELS[show.showType] : undefined;
 
+  // For single-breed shows, extract the single judge name from judgesByBreedName
+  const judges = show.judgesByBreedName ?? {};
+  const uniqueJudgeNames = [...new Set(Object.values(judges))];
+  const isSingleBreed = show.showScope === 'single_breed';
+  const coverJudges = isSingleBreed ? uniqueJudgeNames : [];
+
   return (
     <Page size="A5" style={styles.coverPage}>
       {/* Green top band with organisation name */}
@@ -114,6 +120,16 @@ export function CoverPage({ show }: FrontMatterProps) {
               </Text>
             </View>
           )}
+          {coverJudges.length > 0 && (
+            <View style={styles.coverDetailRow}>
+              <Text style={styles.coverDetailLabel}>
+                {coverJudges.length === 1 ? 'Judge' : 'Judges'}
+              </Text>
+              <Text style={styles.coverDetailValue}>
+                {coverJudges.join(', ')}
+              </Text>
+            </View>
+          )}
           {show.kcLicenceNo && (
             <View style={styles.coverDetailRow}>
               <Text style={styles.coverDetailLabel}>Licence</Text>
@@ -121,6 +137,25 @@ export function CoverPage({ show }: FrontMatterProps) {
             </View>
           )}
         </View>
+
+        {/* Custom statements — prominently on cover page */}
+        {show.customStatements && show.customStatements.length > 0 && (
+          <View style={{ width: '100%', marginTop: 4, marginBottom: 2, paddingHorizontal: 8 }}>
+            {show.customStatements.map((statement, i) => (
+              <Text key={i} style={{
+                fontFamily: 'Inter',
+                fontSize: 7.5,
+                fontWeight: 'bold',
+                color: C.textDark,
+                textAlign: 'center',
+                textTransform: 'uppercase',
+                marginTop: i > 0 ? 3 : 0,
+              }}>
+                {statement}
+              </Text>
+            ))}
+          </View>
+        )}
 
         {/* Secretary details — green left border */}
         {show.secretaryEmail && (
