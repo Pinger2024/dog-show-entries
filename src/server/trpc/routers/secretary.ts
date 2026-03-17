@@ -942,6 +942,14 @@ export const secretaryRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
+      // Sort class definition IDs by their canonical sortOrder (RKC standard ordering)
+      const classDefRows = await ctx.db.query.classDefinitions.findMany({
+        where: inArray(classDefinitions.id, input.classDefinitionIds),
+        columns: { id: true, sortOrder: true },
+        orderBy: [asc(classDefinitions.sortOrder)],
+      });
+      const sortedClassDefIds = classDefRows.map((cd) => cd.id);
+
       // Start from max existing sortOrder so we don't collide with existing classes
       const [maxSort] = await ctx.db
         .select({ max: sql<number>`coalesce(max(${showClasses.sortOrder}), -1)` })
@@ -961,7 +969,7 @@ export const secretaryRouter = createTRPCRouter({
 
       if (input.breedIds.length === 0) {
         // Handling classes — no breeds, no sex split
-        for (const classDefId of input.classDefinitionIds) {
+        for (const classDefId of sortedClassDefIds) {
           values.push({
             showId: input.showId,
             breedId: null,
@@ -975,7 +983,7 @@ export const secretaryRouter = createTRPCRouter({
       } else {
         // Fetch class definition types to handle junior_handler correctly
         const classDefs = await ctx.db.query.classDefinitions.findMany({
-          where: inArray(classDefinitions.id, input.classDefinitionIds),
+          where: inArray(classDefinitions.id, sortedClassDefIds),
           columns: { id: true, type: true },
         });
         const classDefTypeMap = new Map(classDefs.map((cd) => [cd.id, cd.type]));
@@ -985,7 +993,7 @@ export const secretaryRouter = createTRPCRouter({
             // All Dog classes first, then all Bitch classes (within each breed)
             // But junior_handler classes are never split by sex
             for (const sex of ['dog', 'bitch'] as const) {
-              for (const classDefId of input.classDefinitionIds) {
+              for (const classDefId of sortedClassDefIds) {
                 const classType = classDefTypeMap.get(classDefId);
                 if (classType === 'junior_handler') {
                   // JH classes only added once (on the 'dog' pass), not split
@@ -1014,7 +1022,7 @@ export const secretaryRouter = createTRPCRouter({
               }
             }
           } else {
-            for (const classDefId of input.classDefinitionIds) {
+            for (const classDefId of sortedClassDefIds) {
               values.push({
                 showId: input.showId,
                 breedId,
