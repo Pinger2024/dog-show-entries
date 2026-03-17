@@ -79,6 +79,7 @@ export interface ScheduleClass {
   classDescription: string | null;
   sex: string | null;
   breedName: string | null;
+  classType?: string | null;
 }
 
 export interface ScheduleJudge {
@@ -720,16 +721,34 @@ export function ShowSchedule({
 }) {
   const showTypeLabel = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
   const showDate = formatDate(show.date);
-  const classCount = classes.length;
+  // classCount is computed after deduplication (below) for accurate display
   const sd = show.scheduleData;
   const dockingStatement = getDockingStatement(sd);
   const estimationDate = getEstimationDate(show.entryCloseDate);
 
+  // Deduplicate Junior Handler classes — they may exist with both sex='dog' and sex='bitch'
+  // in the DB from old bulk-create logic. Keep only one per classDefinitionId, treating as mixed.
+  const seen = new Set<string>();
+  const deduplicatedClasses = classes.reduce<ScheduleClass[]>((acc, cls) => {
+    if (cls.classType === 'junior_handler') {
+      // Use className as dedup key (JH classes share the same name)
+      const key = `jh:${cls.className}`;
+      if (seen.has(key)) return acc;
+      seen.add(key);
+      acc.push({ ...cls, sex: null }); // Force mixed/sex-neutral
+    } else {
+      acc.push(cls);
+    }
+    return acc;
+  }, []);
+
+  const classCount = deduplicatedClasses.length;
+
   // Split classes by sex for single breed two-column layout
   const isSingleBreed = show.showScope === 'single_breed';
-  const dogClasses = classes.filter((c) => c.sex === 'dog');
-  const bitchClasses = classes.filter((c) => c.sex === 'bitch');
-  const mixedClasses = classes.filter((c) => c.sex !== 'dog' && c.sex !== 'bitch');
+  const dogClasses = deduplicatedClasses.filter((c) => c.sex === 'dog');
+  const bitchClasses = deduplicatedClasses.filter((c) => c.sex === 'bitch');
+  const mixedClasses = deduplicatedClasses.filter((c) => c.sex !== 'dog' && c.sex !== 'bitch');
 
   const footerRender = ({ pageNumber, totalPages }: { pageNumber: number; totalPages: number }) =>
     `${show.name}  ·  Schedule  ·  Page ${pageNumber} of ${totalPages}`;
@@ -1254,7 +1273,7 @@ export function ShowSchedule({
               </View>
             </View>
 
-            {classes.map((cls, i) => {
+            {deduplicatedClasses.map((cls, i) => {
               const sexLabel = cls.sex === 'dog' ? 'Dogs' : cls.sex === 'bitch' ? 'Bitches' : 'Mixed';
               return (
                 <View key={i} style={[s.classRow, i % 2 !== 0 && s.classRowAlt]} wrap={false}>

@@ -644,6 +644,9 @@ export const showsRouter = createTRPCRouter({
         classSexArrangement: z.enum(['separate_sex', 'combined_sex']).nullable().optional(),
         bannerImageUrl: z.string().nullable().optional(),
         bannerImageStorageKey: z.string().nullable().optional(),
+        firstEntryFee: z.number().int().min(0).nullable().optional(),
+        subsequentEntryFee: z.number().int().min(0).nullable().optional(),
+        nfcEntryFee: z.number().int().min(0).nullable().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {

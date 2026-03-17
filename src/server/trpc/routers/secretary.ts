@@ -2440,35 +2440,35 @@ export const secretaryRouter = createTRPCRouter({
       if (Number(classCount[0]?.count) === 0) {
         openEntriesBlockers.push({
           key: 'no_classes', label: 'No classes created',
-          detail: 'Set up your show classes before opening entries',
+          detail: 'Add classes on the main show page',
           actionPath: '', severity: 'required',
         });
       }
       if (Number(judgeCount[0]?.count) === 0) {
         openEntriesBlockers.push({
           key: 'no_judge', label: 'No judge assigned',
-          detail: 'Assign at least one judge to the show',
+          detail: 'Assign at least one judge on the People page',
           actionPath: '/people', severity: 'required',
         });
       }
       if (!show.firstEntryFee || show.firstEntryFee <= 0) {
         openEntriesBlockers.push({
           key: 'no_entry_fees', label: 'Entry fees not set',
-          detail: 'Set your first entry fee',
+          detail: 'Click Edit on the main show page to set entry fees',
           actionPath: '', severity: 'required',
         });
       }
       if (!show.entryCloseDate) {
         openEntriesBlockers.push({
           key: 'no_close_date', label: 'Entry close date not set',
-          detail: 'Set when entries should close',
+          detail: 'Click Edit on the main show page to set a close date',
           actionPath: '', severity: 'required',
         });
       }
       if (!show.secretaryName || !show.secretaryEmail) {
         openEntriesBlockers.push({
-          key: 'no_secretary_details', label: 'Secretary contact details missing',
-          detail: 'Add secretary name and email for the schedule',
+          key: 'no_secretary_details', label: 'Secretary name or email missing',
+          detail: 'Click Edit on the main show page to add secretary details',
           actionPath: '', severity: 'required',
         });
       }

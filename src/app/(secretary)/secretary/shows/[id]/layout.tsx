@@ -447,16 +447,27 @@ function StatusChangeDialog({
           </DialogDescription>
         </DialogHeader>
 
+        {/* Loading state for entries_open blocker check */}
+        {isEntriesOpen && blockersLoading && (
+          <div className="flex items-center gap-2 py-2">
+            <Loader2 className="size-4 animate-spin text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Checking prerequisites...</span>
+          </div>
+        )}
+
         {/* Show blocker list for entries_open when there are blockers */}
         {isEntriesOpen && !canOpen && !blockersLoading && openBlockers.length > 0 && (
-          <div className="space-y-1.5 rounded-lg border bg-muted/30 p-3">
+          <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
             {openBlockers.map((blocker) => (
               <div
                 key={blocker.key}
-                className="flex items-center gap-2 text-sm"
+                className="flex items-start gap-2 text-sm"
               >
-                <span className="size-1.5 shrink-0 rounded-full bg-destructive" />
-                <span className="text-muted-foreground">{blocker.label}</span>
+                <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-destructive" />
+                <div className="min-w-0 flex-1">
+                  <span className="font-medium text-foreground">{blocker.label}</span>
+                  <p className="text-xs text-muted-foreground">{blocker.detail}</p>
+                </div>
               </div>
             ))}
           </div>

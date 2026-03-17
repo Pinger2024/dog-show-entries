@@ -444,6 +444,9 @@ function EditShowDetailsDialog({
     description: string | null;
     bannerImageUrl: string | null;
     bannerImageStorageKey: string | null;
+    firstEntryFee: number | null;
+    subsequentEntryFee: number | null;
+    nfcEntryFee: number | null;
   };
   showId: string;
 }) {
@@ -476,6 +479,9 @@ function EditShowDetailsDialog({
   const [bannerUploading, setBannerUploading] = useState(false);
   const [bannerDragOver, setBannerDragOver] = useState(false);
   const bannerFileRef = useRef<HTMLInputElement>(null);
+  const [firstEntryFee, setFirstEntryFee] = useState(show.firstEntryFee != null ? (show.firstEntryFee / 100).toFixed(2) : '');
+  const [subsequentEntryFee, setSubsequentEntryFee] = useState(show.subsequentEntryFee != null ? (show.subsequentEntryFee / 100).toFixed(2) : '');
+  const [nfcEntryFee, setNfcEntryFee] = useState(show.nfcEntryFee != null ? (show.nfcEntryFee / 100).toFixed(2) : '');
 
   const handleBannerUpload = useCallback(async (file: File) => {
     setBannerUploading(true);
@@ -533,6 +539,9 @@ function EditShowDetailsDialog({
       kcLicenceNo: kcLicenceNo || null,
       description: description || null,
       bannerImageUrl: bannerImageUrl || null,
+      firstEntryFee: firstEntryFee ? poundsToPence(Number(firstEntryFee)) : null,
+      subsequentEntryFee: subsequentEntryFee ? poundsToPence(Number(subsequentEntryFee)) : null,
+      nfcEntryFee: nfcEntryFee ? poundsToPence(Number(nfcEntryFee)) : null,
     });
   }
 
@@ -564,6 +573,9 @@ function EditShowDetailsDialog({
     setShowOpenTime(show.showOpenTime ?? '');
     setOnCallVet(show.onCallVet ?? '');
     setBannerImageUrl(show.bannerImageUrl ?? '');
+    setFirstEntryFee(show.firstEntryFee != null ? (show.firstEntryFee / 100).toFixed(2) : '');
+    setSubsequentEntryFee(show.subsequentEntryFee != null ? (show.subsequentEntryFee / 100).toFixed(2) : '');
+    setNfcEntryFee(show.nfcEntryFee != null ? (show.nfcEntryFee / 100).toFixed(2) : '');
   }, [open]); // reads current `show` via closure when dialog opens
 
   return (
@@ -878,6 +890,58 @@ function EditShowDetailsDialog({
                 />
               </div>
             </div>
+            {/* Entry Fees */}
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-first-fee">First Entry Fee</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">£</span>
+                  <Input
+                    id="edit-first-fee"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="pl-7"
+                    value={firstEntryFee}
+                    onChange={(e) => setFirstEntryFee(e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-subsequent-fee">Subsequent Fee</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">£</span>
+                  <Input
+                    id="edit-subsequent-fee"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="pl-7"
+                    value={subsequentEntryFee}
+                    onChange={(e) => setSubsequentEntryFee(e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-nfc-fee">NFC Fee</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">£</span>
+                  <Input
+                    id="edit-nfc-fee"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="pl-7"
+                    value={nfcEntryFee}
+                    onChange={(e) => setNfcEntryFee(e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+            </div>
+
             <div className="space-y-1.5">
               <Label htmlFor="edit-kc">RKC Licence Number</Label>
               <Input

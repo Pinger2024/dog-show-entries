@@ -72,6 +72,7 @@ export async function GET(
     classDescription: sc.classDefinition?.description ?? null,
     sex: sc.sex,
     breedName: sc.breed?.name ?? null,
+    classType: sc.classDefinition?.type ?? null,
   }));
 
   // Build judges data (deduplicated by judge name)
