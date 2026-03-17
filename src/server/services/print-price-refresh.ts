@@ -213,7 +213,7 @@ function processDataRow(
       tradeprintProductName: productName,
       serviceLevel: level.toLowerCase(),
       quantity: qty,
-      totalPricePence: Math.round(totalPrice),
+      totalPricePence: Math.round(totalPrice * 100),
       specs,
       fetchedAt: now,
     });

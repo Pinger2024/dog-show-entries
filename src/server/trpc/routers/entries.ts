@@ -111,13 +111,14 @@ export const entriesRouter = createTRPCRouter({
         }
       }
 
-      // Check for duplicate classes (same dog can enter multiple classes, but not the same class twice)
+      // Check for duplicate classes against confirmed entries only
+      // (pending entries from abandoned checkouts should not block re-entry)
       const existingEntry = await ctx.db.query.entries.findFirst({
         where: and(
           eq(entries.dogId, input.dogId),
           eq(entries.showId, input.showId),
           isNull(entries.deletedAt),
-          sql`${entries.status} NOT IN ('withdrawn', 'cancelled')`
+          eq(entries.status, 'confirmed')
         ),
         with: { entryClasses: true },
       });

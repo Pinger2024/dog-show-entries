@@ -942,12 +942,40 @@ export const secretaryRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
-      // Sort class definition IDs by their canonical sortOrder (RKC standard ordering)
+      // Sort class definition IDs in proper RKC show order:
+      // 1. Age classes (youngest first, Veteran last)
+      // 2. Achievement classes (Maiden through Open)
+      // 3. Special classes
+      // 4. Junior Handler classes
       const classDefRows = await ctx.db.query.classDefinitions.findMany({
         where: inArray(classDefinitions.id, input.classDefinitionIds),
-        columns: { id: true, sortOrder: true },
-        orderBy: [asc(classDefinitions.sortOrder)],
+        columns: { id: true, sortOrder: true, type: true, name: true },
       });
+
+      // RKC type ordering: age first (but Veteran last), then achievement, special, junior_handler
+      const typeOrder: Record<string, number> = {
+        age: 0,
+        achievement: 1,
+        special: 2,
+        junior_handler: 3,
+      };
+
+      classDefRows.sort((a, b) => {
+        const isVeteranA = a.name.toLowerCase().includes('veteran');
+        const isVeteranB = b.name.toLowerCase().includes('veteran');
+
+        // Veteran always sorts after all standard age + achievement classes
+        if (isVeteranA && !isVeteranB) return 1;
+        if (!isVeteranA && isVeteranB) return -1;
+        if (isVeteranA && isVeteranB) return a.sortOrder - b.sortOrder;
+
+        // Sort by type group, then by sortOrder within each type
+        const typeA = typeOrder[a.type] ?? 99;
+        const typeB = typeOrder[b.type] ?? 99;
+        if (typeA !== typeB) return typeA - typeB;
+        return a.sortOrder - b.sortOrder;
+      });
+
       const sortedClassDefIds = classDefRows.map((cd) => cd.id);
 
       // Start from max existing sortOrder so we don't collide with existing classes
@@ -981,23 +1009,24 @@ export const secretaryRouter = createTRPCRouter({
           });
         }
       } else {
-        // Fetch class definition types to handle junior_handler correctly
-        const classDefs = await ctx.db.query.classDefinitions.findMany({
-          where: inArray(classDefinitions.id, sortedClassDefIds),
-          columns: { id: true, type: true },
-        });
-        const classDefTypeMap = new Map(classDefs.map((cd) => [cd.id, cd.type]));
+        // Build a type map from the already-fetched classDefRows
+        const classDefTypeMap = new Map(classDefRows.map((cd) => [cd.id, cd.type]));
+
+        // Track JH class definitions already added (they should only appear once
+        // across all breeds, not once per breed)
+        const addedJhClassDefIds = new Set<string>();
 
         for (const breedId of input.breedIds) {
           if (input.splitBySex) {
             // All Dog classes first, then all Bitch classes (within each breed)
-            // But junior_handler classes are never split by sex
+            // But junior_handler classes are never split by sex and only added once total
             for (const sex of ['dog', 'bitch'] as const) {
               for (const classDefId of sortedClassDefIds) {
                 const classType = classDefTypeMap.get(classDefId);
                 if (classType === 'junior_handler') {
-                  // JH classes only added once (on the 'dog' pass), not split
-                  if (sex === 'dog') {
+                  // JH classes only added once total (not per breed, not per sex)
+                  if (sex === 'dog' && !addedJhClassDefIds.has(classDefId)) {
+                    addedJhClassDefIds.add(classDefId);
                     values.push({
                       showId: input.showId,
                       breedId: null,
@@ -1023,15 +1052,32 @@ export const secretaryRouter = createTRPCRouter({
             }
           } else {
             for (const classDefId of sortedClassDefIds) {
-              values.push({
-                showId: input.showId,
-                breedId,
-                classDefinitionId: classDefId,
-                sex: null,
-                entryFee: input.entryFee,
-                sortOrder: sortOrder++,
-                isBreedSpecific: true,
-              });
+              const classType = classDefTypeMap.get(classDefId);
+              if (classType === 'junior_handler') {
+                // JH classes only added once total, not per breed
+                if (!addedJhClassDefIds.has(classDefId)) {
+                  addedJhClassDefIds.add(classDefId);
+                  values.push({
+                    showId: input.showId,
+                    breedId: null,
+                    classDefinitionId: classDefId,
+                    sex: null,
+                    entryFee: input.entryFee,
+                    sortOrder: sortOrder++,
+                    isBreedSpecific: false,
+                  });
+                }
+              } else {
+                values.push({
+                  showId: input.showId,
+                  breedId,
+                  classDefinitionId: classDefId,
+                  sex: null,
+                  entryFee: input.entryFee,
+                  sortOrder: sortOrder++,
+                  isBreedSpecific: true,
+                });
+              }
             }
           }
         }

@@ -194,7 +194,39 @@ export const ordersRouter = createTRPCRouter({
         }
       }
 
-      // Check for duplicate classes (same dog can enter multiple classes, but not the same class twice)
+      // Clean up stale entries from previous abandoned/failed checkout attempts
+      // so they don't block the current checkout
+      const staleOrders = await ctx.db.query.orders.findMany({
+        where: and(
+          eq(orders.showId, input.showId),
+          eq(orders.exhibitorId, ctx.session.user.id),
+          inArray(orders.status, ['pending_payment', 'failed'])
+        ),
+        columns: { id: true },
+      });
+
+      if (staleOrders.length > 0) {
+        const staleOrderIds = staleOrders.map((o) => o.id);
+        // Soft-delete stale entries so they don't block duplicate checks
+        await ctx.db
+          .update(entries)
+          .set({ deletedAt: new Date(), status: 'cancelled' })
+          .where(
+            and(
+              inArray(entries.orderId, staleOrderIds),
+              eq(entries.status, 'pending'),
+              isNull(entries.deletedAt)
+            )
+          );
+        // Mark stale orders as cancelled
+        await ctx.db
+          .update(orders)
+          .set({ status: 'cancelled' })
+          .where(inArray(orders.id, staleOrderIds));
+      }
+
+      // Check for duplicate classes against confirmed entries only
+      // (pending entries from previous attempts have been cleaned up above)
       for (const entryInput of input.entries) {
         if (entryInput.entryType === 'standard' && entryInput.dogId) {
           const existingEntry = await ctx.db.query.entries.findFirst({
@@ -202,7 +234,7 @@ export const ordersRouter = createTRPCRouter({
               eq(entries.dogId, entryInput.dogId),
               eq(entries.showId, input.showId),
               isNull(entries.deletedAt),
-              sql`${entries.status} NOT IN ('withdrawn', 'cancelled')`
+              eq(entries.status, 'confirmed')
             ),
             with: { entryClasses: true },
           });
