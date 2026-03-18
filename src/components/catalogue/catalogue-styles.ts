@@ -26,6 +26,7 @@ Font.register({
   family: 'Inter',
   fonts: [
     { src: path.join(fontsDir, 'inter-regular.ttf') },
+    { src: path.join(fontsDir, 'inter-regular.ttf'), fontStyle: 'italic' },
     { src: path.join(fontsDir, 'inter-semibold.ttf'), fontWeight: 'bold' },
   ],
 });
