@@ -35,6 +35,7 @@ export interface CatalogueShowInfo {
   venueAddress: string | undefined;
   organisation: string | undefined;
   kcLicenceNo: string | null | undefined;
+  startTime?: string | null;
   logoUrl?: string;
   secretaryEmail?: string;
   judgesByBreedName?: Record<string, string>;

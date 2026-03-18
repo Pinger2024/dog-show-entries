@@ -21,6 +21,16 @@ function formatCoverDate(dateStr: string): string {
   });
 }
 
+function formatTime(timeStr: string): string {
+  if (timeStr.includes(':') && !timeStr.includes(' ')) {
+    const [h, m] = timeStr.split(':').map(Number);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const hour = h % 12 || 12;
+    return `${hour}:${String(m).padStart(2, '0')} ${ampm}`;
+  }
+  return timeStr;
+}
+
 interface FrontMatterProps {
   show: CatalogueShowInfo;
 }
@@ -134,6 +144,12 @@ export function CoverPage({ show }: FrontMatterProps) {
             <View style={styles.coverDetailRow}>
               <Text style={styles.coverDetailLabel}>Licence</Text>
               <Text style={styles.coverDetailValue}>{show.kcLicenceNo}</Text>
+            </View>
+          )}
+          {show.startTime && (
+            <View style={styles.coverDetailRow}>
+              <Text style={styles.coverDetailLabel}>Judging</Text>
+              <Text style={styles.coverDetailValue}>Commences at {formatTime(show.startTime)}</Text>
             </View>
           )}
         </View>

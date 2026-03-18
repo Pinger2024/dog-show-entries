@@ -179,6 +179,7 @@ export async function GET(
     venueAddress: show.venue?.address ?? undefined,
     organisation: show.organisation?.name,
     kcLicenceNo: show.kcLicenceNo,
+    startTime: show.startTime,
     logoUrl: safeLogoUrl ?? undefined,
     secretaryEmail: show.secretaryEmail ?? undefined,
     judgesByBreedName,

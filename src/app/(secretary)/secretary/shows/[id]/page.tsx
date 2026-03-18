@@ -28,6 +28,7 @@ import {
   X,
   Users,
   Clock,
+  ListOrdered,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
@@ -1037,6 +1038,17 @@ function ClassManager({ showId, showType, classes }: ClassManagerProps) {
     onError: () => toast.error('Failed to auto-assign class numbers'),
   });
 
+  const resortMutation = trpc.secretary.resortShowClasses.useMutation({
+    onSuccess: (data) => {
+      utils.shows.getById.invalidate({ id: showId });
+      const parts: string[] = [];
+      if (data.deleted > 0) parts.push(`${data.deleted} duplicate${data.deleted === 1 ? '' : 's'} removed`);
+      parts.push(`${data.resorted} classes re-sorted & numbered`);
+      toast.success(parts.join(', '));
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to fix class order'),
+  });
+
   const reorderMutation = trpc.secretary.reorderClasses.useMutation({
     onSettled: () => {
       setOptimisticOrder(null);
@@ -1313,6 +1325,22 @@ function ClassManager({ showId, showType, classes }: ClassManagerProps) {
                 <Hash className="size-4" />
               )}
               Auto-number
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="min-h-[2.75rem]"
+              title="Removes duplicate JH classes, re-sorts all classes in RKC order (Dog then Bitch, age before achievement, Veteran last), and re-numbers them"
+              onClick={() => resortMutation.mutate({ showId })}
+              disabled={resortMutation.isPending}
+            >
+              {resortMutation.isPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <ListOrdered className="size-4" />
+              )}
+              <span className="hidden sm:inline">Fix Class Order</span>
+              <span className="sm:hidden">Fix</span>
             </Button>
           </div>
         </div>

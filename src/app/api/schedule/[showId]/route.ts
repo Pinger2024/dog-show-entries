@@ -94,21 +94,23 @@ export async function GET(
       breeds: Array.from(breeds).sort(),
     }));
 
-  // Build sponsors data
-  const sponsors: ScheduleSponsor[] = showSponsorData.map((ss) => ({
-    name: ss.sponsor.name,
-    tier: ss.tier,
-    customTitle: ss.customTitle,
-    logoUrl: ss.sponsor.logoUrl,
-    website: ss.sponsor.website,
-    specialPrizes: ss.specialPrizes,
-    classSponsorships: ss.classSponsorships.map((cs) => ({
-      className: cs.showClass?.classDefinition?.name ?? 'Unknown Class',
-      trophyName: cs.trophyName,
-      trophyDonor: cs.trophyDonor,
-      prizeDescription: cs.prizeDescription,
-    })),
-  }));
+  // Build sponsors data (defensive: skip sponsors with missing sponsor record)
+  const sponsors: ScheduleSponsor[] = showSponsorData
+    .filter((ss) => ss.sponsor != null)
+    .map((ss) => ({
+      name: ss.sponsor.name,
+      tier: ss.tier,
+      customTitle: ss.customTitle,
+      logoUrl: ss.sponsor.logoUrl,
+      website: ss.sponsor.website,
+      specialPrizes: ss.specialPrizes,
+      classSponsorships: (ss.classSponsorships ?? []).map((cs) => ({
+        className: cs.showClass?.classDefinition?.name ?? 'Unknown Class',
+        trophyName: cs.trophyName,
+        trophyDonor: cs.trophyDonor,
+        prizeDescription: cs.prizeDescription,
+      })),
+    }));
 
   const showInfo: ScheduleShowInfo = {
     name: show.name,
@@ -116,37 +118,37 @@ export async function GET(
     showScope: show.showScope,
     date: show.startDate,
     endDate: show.endDate,
-    startTime: show.startTime,
+    startTime: show.startTime ?? null,
     entriesOpenDate: show.entriesOpenDate?.toISOString() ?? null,
     entryCloseDate: show.entryCloseDate?.toISOString() ?? null,
     postalCloseDate: show.postalCloseDate?.toISOString() ?? null,
-    kcLicenceNo: show.kcLicenceNo,
-    secretaryEmail: show.secretaryEmail,
-    secretaryName: show.secretaryName,
-    secretaryAddress: show.secretaryAddress,
-    secretaryPhone: show.secretaryPhone,
-    showOpenTime: show.showOpenTime,
-    onCallVet: show.onCallVet,
-    description: show.description,
-    firstEntryFee: show.firstEntryFee,
-    subsequentEntryFee: show.subsequentEntryFee,
-    nfcEntryFee: show.nfcEntryFee,
-    acceptsPostalEntries: show.acceptsPostalEntries,
+    kcLicenceNo: show.kcLicenceNo ?? null,
+    secretaryEmail: show.secretaryEmail ?? null,
+    secretaryName: show.secretaryName ?? null,
+    secretaryAddress: show.secretaryAddress ?? null,
+    secretaryPhone: show.secretaryPhone ?? null,
+    showOpenTime: show.showOpenTime ?? null,
+    onCallVet: show.onCallVet ?? null,
+    description: show.description ?? null,
+    firstEntryFee: show.firstEntryFee ?? null,
+    subsequentEntryFee: show.subsequentEntryFee ?? null,
+    nfcEntryFee: show.nfcEntryFee ?? null,
+    acceptsPostalEntries: show.acceptsPostalEntries ?? false,
     scheduleData: show.scheduleData ?? null,
     organisation: show.organisation
       ? {
           name: show.organisation.name,
-          contactEmail: show.organisation.contactEmail,
-          contactPhone: show.organisation.contactPhone,
-          website: show.organisation.website,
-          logoUrl: show.organisation.logoUrl,
+          contactEmail: show.organisation.contactEmail ?? null,
+          contactPhone: show.organisation.contactPhone ?? null,
+          website: show.organisation.website ?? null,
+          logoUrl: show.organisation.logoUrl ?? null,
         }
       : null,
     venue: show.venue
       ? {
           name: show.venue.name,
-          address: show.venue.address,
-          postcode: show.venue.postcode,
+          address: show.venue.address ?? null,
+          postcode: show.venue.postcode ?? null,
         }
       : null,
   };

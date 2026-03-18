@@ -1300,6 +1300,144 @@ export const secretaryRouter = createTRPCRouter({
       return { assigned: sorted.length };
     }),
 
+  resortShowClasses: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      // Fetch all show classes with their definitions and breeds
+      const allClasses = await ctx.db.query.showClasses.findMany({
+        where: eq(showClasses.showId, input.showId),
+        with: {
+          classDefinition: true,
+          breed: { with: { group: true } },
+          entryClasses: { columns: { id: true }, limit: 1 },
+        },
+        orderBy: [asc(showClasses.sortOrder)],
+      });
+
+      // 1. Identify duplicate JH classes — same classDefinitionId where the class type is junior_handler
+      //    Keep the one with sex=null (or the first one), delete the rest
+      const jhGroups = new Map<string, typeof allClasses>();
+      for (const sc of allClasses) {
+        if (sc.classDefinition?.type === 'junior_handler') {
+          const key = sc.classDefinitionId;
+          if (!jhGroups.has(key)) jhGroups.set(key, []);
+          jhGroups.get(key)!.push(sc);
+        }
+      }
+
+      const toDelete: string[] = [];
+      const toFixSex: string[] = []; // JH classes that should have sex=null, breedId=null
+      for (const [, group] of jhGroups) {
+        if (group.length > 1) {
+          // Prefer the one with sex=null, otherwise keep the first
+          const keeper = group.find((c) => c.sex === null) ?? group[0]!;
+          for (const sc of group) {
+            if (sc.id !== keeper.id) {
+              // Only delete if no entries exist on this class
+              if (sc.entryClasses.length === 0) {
+                toDelete.push(sc.id);
+              }
+            }
+          }
+          toFixSex.push(keeper.id);
+        } else {
+          // Single JH class — ensure sex=null, breedId=null
+          toFixSex.push(group[0]!.id);
+        }
+      }
+
+      // Delete duplicate JH classes
+      let deletedCount = 0;
+      if (toDelete.length > 0) {
+        const deleted = await ctx.db
+          .delete(showClasses)
+          .where(
+            and(
+              inArray(showClasses.id, toDelete),
+              eq(showClasses.showId, input.showId)
+            )
+          )
+          .returning({ id: showClasses.id });
+        deletedCount = deleted.length;
+      }
+
+      // Fix JH classes to have sex=null, breedId=null
+      for (const id of toFixSex) {
+        await ctx.db
+          .update(showClasses)
+          .set({ sex: null, breedId: null })
+          .where(and(eq(showClasses.id, id), eq(showClasses.showId, input.showId)));
+      }
+
+      // 2. Re-fetch surviving classes for sorting
+      const remaining = await ctx.db.query.showClasses.findMany({
+        where: eq(showClasses.showId, input.showId),
+        with: {
+          classDefinition: true,
+          breed: { with: { group: true } },
+        },
+      });
+
+      // 3. Sort using correct RKC order
+      // For single-breed shows: Dog first, then Bitch, then Any Sex
+      //   Within each sex: age classes first (by sortOrder), achievement (by sortOrder),
+      //   Veteran last within age, then special, then junior_handler
+      // For multi-breed: group by breed group → breed → sex → class type → sortOrder
+      const distinctBreeds = new Set(remaining.filter((c) => c.breed).map((c) => c.breed!.name));
+      const isMultiBreed = distinctBreeds.size >= 3;
+
+      const classTypeRank = (type: string | null) => {
+        switch (type) {
+          case 'age': return 0;
+          case 'achievement': return 1;
+          case 'special': return 2;
+          case 'junior_handler': return 3;
+          default: return 4;
+        }
+      };
+
+      const sexRank = (s: string | null) => (s === 'dog' ? 0 : s === 'bitch' ? 1 : 2);
+
+      const sorted = [...remaining].sort((a, b) => {
+        if (isMultiBreed) {
+          // Multi-breed: group → breed → sex → class type → sort order
+          const groupA = a.breed?.group?.sortOrder ?? 999;
+          const groupB = b.breed?.group?.sortOrder ?? 999;
+          if (groupA !== groupB) return groupA - groupB;
+
+          const breedA = a.breed?.name ?? 'ZZZ';
+          const breedB = b.breed?.name ?? 'ZZZ';
+          if (breedA !== breedB) return breedA.localeCompare(breedB);
+        }
+
+        // Sex: Dog first, Bitch second, null (any sex / JH) last
+        const sa = sexRank(a.sex), sb = sexRank(b.sex);
+        if (sa !== sb) return sa - sb;
+
+        // Class type: age → achievement → special → junior_handler
+        const ta = classTypeRank(a.classDefinition?.type ?? null);
+        const tb = classTypeRank(b.classDefinition?.type ?? null);
+        if (ta !== tb) return ta - tb;
+
+        // Within the same type, sort by class definition sortOrder
+        const soA = a.classDefinition?.sortOrder ?? 999;
+        const soB = b.classDefinition?.sortOrder ?? 999;
+        return soA - soB;
+      });
+
+      // 4. Update sortOrder and classNumber sequentially
+      for (let i = 0; i < sorted.length; i++) {
+        await ctx.db
+          .update(showClasses)
+          .set({ sortOrder: i, classNumber: i + 1 })
+          .where(eq(showClasses.id, sorted[i]!.id));
+      }
+
+      return { deleted: deletedCount, resorted: sorted.length };
+    }),
+
   // ── Steward management ───────────────────────────────
 
   getShowStewards: secretaryProcedure
