@@ -1326,22 +1326,6 @@ function ClassManager({ showId, showType, classes }: ClassManagerProps) {
               )}
               Auto-number
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="min-h-[2.75rem]"
-              title="Removes duplicate JH classes, re-sorts all classes in RKC order (Dog then Bitch, age before achievement, Veteran last), and re-numbers them"
-              onClick={() => resortMutation.mutate({ showId })}
-              disabled={resortMutation.isPending}
-            >
-              {resortMutation.isPending ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <ListOrdered className="size-4" />
-              )}
-              <span className="hidden sm:inline">Fix Class Order</span>
-              <span className="sm:hidden">Fix</span>
-            </Button>
           </div>
         </div>
       </CardHeader>
