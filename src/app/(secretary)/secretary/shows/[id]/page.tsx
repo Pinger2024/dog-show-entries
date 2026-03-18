@@ -72,6 +72,7 @@ import { PostcodeLookup, formatAddress } from '@/components/postcode-lookup';
 import { formatDate } from './_lib/show-utils';
 import { useShowId } from './_lib/show-context';
 import { PhaseActionPanel } from './_components/phase-action-panel';
+import { SetupWizard } from './_components/setup-wizard';
 import { ClassManager, BulkClassCreator, AddIndividualClass } from './_components/class-manager';
 
 export default function OverviewPage() {
@@ -81,6 +82,11 @@ export default function OverviewPage() {
   const { data: show } = trpc.shows.getById.useQuery({ id: showId });
 
   if (!show) return null;
+
+  // Show the setup wizard for draft/published shows
+  if (show.status === 'draft' || show.status === 'published') {
+    return <SetupWizard showId={showId} show={show} />;
+  }
 
   // Derived display values
   const dateDisplay = formatDateRange(show.startDate, show.endDate);
