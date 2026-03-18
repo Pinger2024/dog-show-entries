@@ -16,7 +16,6 @@ import {
   Dog,
   Ticket,
   Plus,
-  ArrowRight,
   Loader2,
   Crown,
   Trophy,
@@ -26,9 +25,13 @@ import {
   Gavel,
   Rss,
   Clock,
+  Eye,
+  Star,
+  ChevronRight,
+  Flame,
+  Search,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { trpc } from '@/lib/trpc/client';
 import { getPlacementLabel, placementColors } from '@/lib/placements';
@@ -52,47 +55,34 @@ export default function DashboardPage() {
 
   const hasUpcomingEntry = !!data?.nextShow;
   const hasRecommendedShows = (data?.recommendedShows.length ?? 0) > 0;
-  // Promote recommended shows when user has no upcoming entries
   const promoteRecommended = !hasUpcomingEntry && hasRecommendedShows;
 
   return (
-    <div className="space-y-5 pb-16 md:pb-0">
-      {/* Welcome — warm greeting area */}
-      <div className="rounded-2xl bg-gradient-to-br from-primary/[0.06] via-primary/[0.03] to-transparent px-4 py-4 sm:px-5 sm:py-5">
-        <p className="text-xs font-medium uppercase tracking-widest text-primary/60">
-          {getTimeGreeting()}
-        </p>
-        <h1 className="mt-0.5 font-serif text-xl font-bold tracking-tight sm:text-2xl">
-          {firstName}
-        </h1>
-        {data && !hasUpcomingEntry && data.recommendedShows.length === 0 && data.deadlineAlerts.length === 0 && (
-          <p className="mt-1 text-sm text-muted-foreground">
-            Browse upcoming shows and find your next ring.
-          </p>
-        )}
-        {data && hasUpcomingEntry && (
-          <p className="mt-1 text-sm text-muted-foreground">
-            You have a show coming up. Good luck in the ring!
-          </p>
-        )}
-      </div>
-
+    <div className="space-y-6 pb-20 md:pb-0">
       {/* Onboarding + Secretary CTA — only for new users */}
       <OnboardingChecklist />
       <SecretaryCTA />
 
       {isLoading ? (
-        <div className="flex min-h-[40vh] items-center justify-center">
-          <Loader2 className="size-8 animate-spin text-muted-foreground" />
+        <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3">
+          <div className="relative">
+            <div className="absolute inset-0 animate-ping rounded-full bg-amber-400/20" />
+            <Loader2 className="relative size-8 animate-spin text-amber-600" />
+          </div>
+          <p className="text-sm text-muted-foreground">Loading your dashboard...</p>
         </div>
       ) : !data ? (
         <EmptyDashboard />
       ) : (
         <>
-          {/* Section 1: Next Show Countdown */}
-          {data.nextShow && <NextShowCard show={data.nextShow} />}
+          {/* ─── Hero: Next Show or Find Shows CTA ─── */}
+          {data.nextShow ? (
+            <NextShowHero show={data.nextShow} firstName={firstName} />
+          ) : (
+            <FindShowsHero firstName={firstName} hasRecommended={hasRecommendedShows} />
+          )}
 
-          {/* Section 2: Deadline Alerts */}
+          {/* ─── Deadline Alerts ─── */}
           {data.deadlineAlerts.length > 0 && (
             <div className="space-y-2">
               {data.deadlineAlerts.map((alert, i) => (
@@ -101,24 +91,24 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Promoted Recommended Shows — shown early when no upcoming entries */}
+          {/* ─── Dog Cards Strip ─── */}
+          {data.ccProgress.length > 0 && (
+            <DogCardsStrip dogs={data.ccProgress} />
+          )}
+
+          {/* ─── Promoted Recommended Shows ─── */}
           {promoteRecommended && (
             <section>
-              <div className="mb-3 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="flex size-8 items-center justify-center rounded-lg bg-emerald-100">
-                    <Sparkles className="size-4 text-emerald-700" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-semibold text-foreground">Shows for your breeds</h2>
-                    <p className="text-xs text-muted-foreground">Accepting entries now</p>
-                  </div>
-                </div>
-                <Link href="/browse" className="text-xs font-medium text-primary hover:underline">
-                  Browse all
-                </Link>
-              </div>
-              <div className="space-y-2">
+              <SectionHeader
+                icon={Sparkles}
+                iconBg="bg-emerald-100"
+                iconColor="text-emerald-700"
+                title="Shows for your breeds"
+                subtitle="Accepting entries now"
+                href="/browse"
+                linkText="Browse all"
+              />
+              <div className="space-y-2.5">
                 {data.recommendedShows.map((show) => (
                   <RecommendedShowCard key={show.showId} show={show} />
                 ))}
@@ -126,11 +116,17 @@ export default function DashboardPage() {
             </section>
           )}
 
-          {/* Section 3: Recent Results */}
+          {/* ─── Recent Results with CC Celebration ─── */}
           {data.recentResults.length > 0 && (
             <section>
-              <SectionHeader icon={Trophy} title="Recent Results" />
-              <div className="space-y-2">
+              <SectionHeader
+                icon={Trophy}
+                iconBg="bg-amber-100"
+                iconColor="text-amber-700"
+                title="Recent Results"
+                subtitle="Last 60 days"
+              />
+              <div className="space-y-3">
                 {data.recentResults.map((result, i) => (
                   <ResultCard key={i} result={result} />
                 ))}
@@ -138,11 +134,17 @@ export default function DashboardPage() {
             </section>
           )}
 
-          {/* Section 4: CC Progress */}
+          {/* ─── CC Progress — Road to Champion ─── */}
           {data.ccProgress.length > 0 && (
             <section>
-              <SectionHeader icon={Crown} title="Championship Progress" />
-              <div className="space-y-2">
+              <SectionHeader
+                icon={Crown}
+                iconBg="bg-amber-100"
+                iconColor="text-amber-700"
+                title="Championship Journey"
+                subtitle="Road to Champion"
+              />
+              <div className="space-y-3">
                 {data.ccProgress.map((dog) => (
                   <CCProgressCard key={dog.dogId} dog={dog} />
                 ))}
@@ -150,11 +152,17 @@ export default function DashboardPage() {
             </section>
           )}
 
-          {/* Section 5: Judge Intelligence */}
+          {/* ─── Judge Intelligence ─── */}
           {data.judgeIntel.length > 0 && (
             <section>
-              <SectionHeader icon={Gavel} title="Judges at Upcoming Shows" />
-              <div className="space-y-2">
+              <SectionHeader
+                icon={Eye}
+                iconBg="bg-violet-100"
+                iconColor="text-violet-700"
+                title="Judge Insights"
+                subtitle="Who's judging your breeds"
+              />
+              <div className="space-y-2.5">
                 {data.judgeIntel.map((item, i) => (
                   <JudgeIntelCard key={i} item={item} />
                 ))}
@@ -162,31 +170,37 @@ export default function DashboardPage() {
             </section>
           )}
 
-          {/* Section 6: Feed Digest */}
+          {/* ─── Feed Digest ─── */}
           {data.feedDigest.count > 0 && (
             <Link href="/feed" className="block">
-              <Card className="transition-colors hover:bg-accent/30 active:bg-accent/40">
-                <CardContent className="flex items-center gap-3 py-3">
-                  <div className="flex size-10 items-center justify-center rounded-full bg-primary/10">
-                    <Rss className="size-5 text-primary" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">Your Feed</p>
-                    <p className="text-xs text-muted-foreground">
-                      {data.feedDigest.count} new update{data.feedDigest.count !== 1 ? 's' : ''} from dogs you follow
-                    </p>
-                  </div>
-                  <ArrowRight className="size-4 text-muted-foreground" />
-                </CardContent>
-              </Card>
+              <div className="group flex items-center gap-3 rounded-2xl border border-border/40 bg-gradient-to-r from-primary/[0.04] to-transparent px-4 py-3.5 shadow-sm transition-all active:scale-[0.99]">
+                <div className="flex size-11 items-center justify-center rounded-full bg-primary/10">
+                  <Rss className="size-5 text-primary" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-serif text-sm font-semibold">Activity Feed</p>
+                  <p className="text-xs text-muted-foreground">
+                    {data.feedDigest.count} new update{data.feedDigest.count !== 1 ? 's' : ''} from dogs you follow
+                  </p>
+                </div>
+                <ChevronRight className="size-4 text-muted-foreground transition-transform group-active:translate-x-0.5" />
+              </div>
             </Link>
           )}
 
-          {/* Section 7: Recommended Shows — normal position when not promoted */}
+          {/* ─── Recommended Shows (normal position) ─── */}
           {!promoteRecommended && data.recommendedShows.length > 0 && (
             <section>
-              <SectionHeader icon={Sparkles} title="Shows for Your Breeds" href="/browse" />
-              <div className="space-y-2">
+              <SectionHeader
+                icon={Sparkles}
+                iconBg="bg-emerald-100"
+                iconColor="text-emerald-700"
+                title="Recommended Shows"
+                subtitle="Matching your breeds"
+                href="/browse"
+                linkText="Browse all"
+              />
+              <div className="space-y-2.5">
                 {data.recommendedShows.map((show) => (
                   <RecommendedShowCard key={show.showId} show={show} />
                 ))}
@@ -194,15 +208,15 @@ export default function DashboardPage() {
             </section>
           )}
 
-          {/* Quick actions — always at the bottom */}
-          <div className="flex flex-wrap gap-2 pt-2">
-            <Button className="min-h-[2.75rem] flex-1 sm:flex-none" asChild>
+          {/* ─── Quick Actions ─── */}
+          <div className="flex flex-col gap-2.5 pt-2 sm:flex-row">
+            <Button size="lg" className="min-h-[2.75rem] gap-2 rounded-xl shadow-sm sm:flex-none" asChild>
               <Link href="/browse">
-                <Plus className="size-4" />
-                Enter a Show
+                <Search className="size-4" />
+                Find a Show
               </Link>
             </Button>
-            <Button variant="outline" className="min-h-[2.75rem] flex-1 sm:flex-none" asChild>
+            <Button variant="outline" size="lg" className="min-h-[2.75rem] gap-2 rounded-xl sm:flex-none" asChild>
               <Link href="/dogs/new">
                 <Plus className="size-4" />
                 Add a Dog
@@ -217,16 +231,39 @@ export default function DashboardPage() {
 
 /* ─── Section Header ─── */
 
-function SectionHeader({ icon: Icon, title, href }: { icon: typeof Trophy; title: string; href?: string }) {
+function SectionHeader({
+  icon: Icon,
+  iconBg,
+  iconColor,
+  title,
+  subtitle,
+  href,
+  linkText,
+}: {
+  icon: typeof Trophy;
+  iconBg: string;
+  iconColor: string;
+  title: string;
+  subtitle?: string;
+  href?: string;
+  linkText?: string;
+}) {
   return (
-    <div className="mb-2 flex items-center justify-between">
-      <h2 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        <Icon className="size-3.5" />
-        {title}
-      </h2>
+    <div className="mb-3 flex items-center justify-between">
+      <div className="flex items-center gap-2.5">
+        <div className={`flex size-8 items-center justify-center rounded-lg ${iconBg}`}>
+          <Icon className={`size-4 ${iconColor}`} />
+        </div>
+        <div>
+          <h2 className="font-serif text-sm font-semibold tracking-tight">{title}</h2>
+          {subtitle && (
+            <p className="text-[11px] text-muted-foreground">{subtitle}</p>
+          )}
+        </div>
+      </div>
       {href && (
-        <Link href={href} className="text-xs text-primary hover:underline">
-          View all
+        <Link href={href} className="text-xs font-medium text-primary hover:underline">
+          {linkText ?? 'View all'}
         </Link>
       )}
     </div>
@@ -237,61 +274,62 @@ function SectionHeader({ icon: Icon, title, href }: { icon: typeof Trophy; title
 
 function EmptyDashboard() {
   return (
-    <div className="space-y-6">
-      <Card className="overflow-hidden border-primary/10">
-        <CardContent className="relative flex flex-col items-center justify-center py-12 text-center">
-          {/* Subtle background decoration */}
-          <div className="pointer-events-none absolute inset-0">
-            <div className="absolute -right-16 -top-16 size-48 rounded-full bg-primary/[0.04] blur-2xl" />
-            <div className="absolute -bottom-12 -left-12 size-36 rounded-full bg-amber-500/[0.04] blur-2xl" />
+    <div className="space-y-8">
+      {/* Hero welcome */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-amber-50 via-orange-50/80 to-amber-100/50 px-5 py-10 text-center">
+        {/* Decorative circles */}
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute -right-12 -top-12 size-40 rounded-full bg-amber-200/30 blur-2xl" />
+          <div className="absolute -bottom-8 -left-8 size-32 rounded-full bg-orange-200/30 blur-2xl" />
+          <div className="absolute right-1/4 top-1/3 size-24 rounded-full bg-amber-300/20 blur-xl" />
+        </div>
+        <div className="relative">
+          <div className="mx-auto mb-5 flex size-20 items-center justify-center rounded-2xl bg-white/80 shadow-sm backdrop-blur-sm">
+            <Dog className="size-10 text-amber-700" />
           </div>
-          <div className="relative">
-            <div className="mb-4 flex size-20 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5">
-              <Dog className="size-10 text-primary" />
-            </div>
-            <h2 className="font-serif text-xl font-bold tracking-tight">Welcome to Remi</h2>
-            <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
-              Your dog show companion. Add your first dog to start entering shows,
-              tracking results, and building their career profile.
-            </p>
-            <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
-              <Button className="min-h-[2.75rem] gap-2" asChild>
-                <Link href="/dogs/new">
-                  <Plus className="size-4" />
-                  Add Your First Dog
-                </Link>
-              </Button>
-              <Button variant="outline" className="min-h-[2.75rem] gap-2" asChild>
-                <Link href="/browse">
-                  <CalendarDays className="size-4" />
-                  Browse Shows
-                </Link>
-              </Button>
-            </div>
+          <h1 className="font-serif text-2xl font-bold tracking-tight text-amber-950">
+            Welcome to Remi
+          </h1>
+          <p className="mx-auto mt-2.5 max-w-sm text-sm leading-relaxed text-amber-800/70">
+            Your dog show companion. Add your first dog to get started with entries, results tracking, and championship progress.
+          </p>
+          <div className="mt-7 flex flex-col gap-2.5 sm:flex-row sm:justify-center">
+            <Button size="lg" className="min-h-[2.75rem] gap-2 rounded-xl bg-amber-700 shadow-md hover:bg-amber-800" asChild>
+              <Link href="/dogs/new">
+                <Plus className="size-4" />
+                Add Your First Dog
+              </Link>
+            </Button>
+            <Button variant="outline" size="lg" className="min-h-[2.75rem] gap-2 rounded-xl border-amber-300 bg-white/60 text-amber-900 hover:bg-white/80" asChild>
+              <Link href="/browse">
+                <CalendarDays className="size-4" />
+                Browse Shows
+              </Link>
+            </Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      {/* Helpful hints for new users */}
+      {/* Feature hints */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="flex gap-3 rounded-xl border border-border/60 bg-white p-4">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100">
-            <Ticket className="size-4 text-emerald-700" />
+        <div className="flex gap-3.5 rounded-2xl border border-border/40 bg-white/80 p-4 shadow-sm">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100">
+            <Ticket className="size-5 text-emerald-700" />
           </div>
           <div>
-            <p className="text-sm font-medium">Enter shows online</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Find and enter championship, open, and companion shows across the country.
+            <p className="font-serif text-sm font-semibold">Enter shows online</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+              Find championship, open, and companion shows across the country.
             </p>
           </div>
         </div>
-        <div className="flex gap-3 rounded-xl border border-border/60 bg-white p-4">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-100">
-            <Trophy className="size-4 text-amber-700" />
+        <div className="flex gap-3.5 rounded-2xl border border-border/40 bg-white/80 p-4 shadow-sm">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-100">
+            <Trophy className="size-5 text-amber-700" />
           </div>
           <div>
-            <p className="text-sm font-medium">Track your results</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
+            <p className="font-serif text-sm font-semibold">Track your results</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
               See placements, CCs, and championship progress all in one place.
             </p>
           </div>
@@ -301,48 +339,198 @@ function EmptyDashboard() {
   );
 }
 
-/* ─── Next Show Countdown ─── */
+/* ─── Next Show Hero ─── */
 
-function NextShowCard({ show }: { show: NonNullable<ReturnType<typeof trpc.dashboard.getSummary.useQuery>['data']>['nextShow'] }) {
+function NextShowHero({
+  show,
+  firstName,
+}: {
+  show: NonNullable<ReturnType<typeof trpc.dashboard.getSummary.useQuery>['data']>['nextShow'];
+  firstName: string;
+}) {
   if (!show) return null;
   const days = differenceInDays(toDate(show.showDate), new Date());
-  const daysLabel = days === 0 ? 'Today!' : days === 1 ? 'Tomorrow' : `${days} days to go`;
+  const isToday = days <= 0;
+  const isTomorrow = days === 1;
+  const countdownText = isToday ? 'Show day!' : isTomorrow ? 'Tomorrow' : `${days} days`;
+  const subText = isToday ? 'Good luck in the ring!' : isTomorrow ? 'Almost time!' : 'until show day';
 
   return (
-    <Link href={`/entries/${show.entryId}`}>
-      <Card className="overflow-hidden border-amber-200/60 bg-gradient-to-br from-amber-50/80 via-orange-50/40 to-amber-50/20 transition-colors active:bg-amber-50/60">
-        <CardContent className="py-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium uppercase tracking-wider text-amber-700/70">Next Show</p>
-              <p className="mt-1 font-serif text-lg font-bold tracking-tight text-amber-950">{show.showName}</p>
-              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-amber-800/70">
-                <span className="flex items-center gap-1">
-                  <CalendarDays className="size-3.5" />
-                  {format(toDate(show.showDate), 'EEE d MMM yyyy')}
-                </span>
-                {show.venueName && (
-                  <span className="flex items-center gap-1">
-                    <MapPin className="size-3.5" />
-                    {show.venueName}
-                  </span>
-                )}
-              </div>
-              <div className="mt-2 flex items-center gap-1.5 text-sm text-amber-800/70">
-                <Dog className="size-3.5" />
-                <span className="font-medium">{show.dogName}</span>
-                <span className="text-amber-700/50">&middot;</span>
-                <span>{show.classes.map((c: { className: string; classNumber: number | null }) => c.classNumber ? `${c.classNumber}. ${c.className}` : c.className).join(', ')}</span>
-              </div>
-            </div>
-            <div className="shrink-0 text-right">
-              <p className="font-serif text-3xl font-bold text-amber-800">{days <= 0 ? '!' : days}</p>
-              <p className="text-xs font-medium text-amber-700/70">{daysLabel}</p>
+    <Link href={`/entries/${show.entryId}`} className="block">
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-amber-600 via-amber-700 to-orange-800 px-5 py-5 text-white shadow-lg shadow-amber-900/20 transition-all active:scale-[0.99] sm:py-6">
+        {/* Background decoration */}
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute -right-8 -top-8 size-32 rounded-full bg-white/[0.07] blur-xl" />
+          <div className="absolute -bottom-6 -left-6 size-24 rounded-full bg-amber-400/20 blur-lg" />
+          {isToday && (
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.1),transparent_60%)]" />
+          )}
+        </div>
+
+        <div className="relative">
+          {/* Greeting + label */}
+          <p className="text-xs font-medium uppercase tracking-widest text-amber-200/80">
+            {getTimeGreeting()}, {firstName}
+          </p>
+
+          {/* Show name */}
+          <h1 className="mt-2 font-serif text-xl font-bold leading-tight tracking-tight sm:text-2xl">
+            {show.showName}
+          </h1>
+
+          {/* Show details */}
+          <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-amber-100/80">
+            <span className="flex items-center gap-1.5">
+              <CalendarDays className="size-3.5" />
+              {format(toDate(show.showDate), 'EEE d MMM yyyy')}
+            </span>
+            {show.venueName && (
+              <span className="flex items-center gap-1.5">
+                <MapPin className="size-3.5" />
+                {show.venueName}
+              </span>
+            )}
+          </div>
+
+          {/* Dog + classes */}
+          <div className="mt-2 flex items-center gap-1.5 text-sm text-amber-100/70">
+            <Dog className="size-3.5 shrink-0" />
+            <span className="font-medium text-amber-100/90">{show.dogName}</span>
+            <span className="text-amber-200/40">&middot;</span>
+            <span className="truncate">
+              {show.classes.map((c: { className: string; classNumber: number | null }) =>
+                c.classNumber ? `${c.classNumber}. ${c.className}` : c.className
+              ).join(', ')}
+            </span>
+          </div>
+
+          {/* Countdown pill */}
+          <div className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-white/15 px-4 py-2 backdrop-blur-sm">
+            <span className="font-serif text-2xl font-bold tabular-nums sm:text-3xl">
+              {isToday ? (
+                <Flame className="inline-block size-6 text-amber-300" />
+              ) : (
+                days
+              )}
+            </span>
+            <div className="text-left">
+              <p className="text-xs font-semibold leading-tight text-white/90">{countdownText}</p>
+              <p className="text-[10px] text-amber-200/70">{subText}</p>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </Link>
+  );
+}
+
+/* ─── Find Shows Hero (no upcoming entry) ─── */
+
+function FindShowsHero({ firstName, hasRecommended }: { firstName: string; hasRecommended: boolean }) {
+  return (
+    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950 px-5 py-6 text-white shadow-lg">
+      {/* Background decoration */}
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -right-10 -top-10 size-36 rounded-full bg-amber-500/10 blur-2xl" />
+        <div className="absolute -bottom-6 -left-6 size-24 rounded-full bg-violet-500/10 blur-xl" />
+      </div>
+
+      <div className="relative">
+        <p className="text-xs font-medium uppercase tracking-widest text-slate-400">
+          {getTimeGreeting()}, {firstName}
+        </p>
+        <h1 className="mt-2 font-serif text-xl font-bold tracking-tight sm:text-2xl">
+          {hasRecommended ? 'Ready for the ring?' : 'Find your next show'}
+        </h1>
+        <p className="mt-1.5 text-sm text-slate-300/80">
+          {hasRecommended
+            ? 'We found shows matching your breeds. Take a look below.'
+            : 'Browse upcoming championship and open shows near you.'}
+        </p>
+        <Button
+          size="lg"
+          className="mt-4 min-h-[2.75rem] gap-2 rounded-xl bg-amber-600 text-white shadow-md hover:bg-amber-500"
+          asChild
+        >
+          <Link href="/browse">
+            <Search className="size-4" />
+            Browse Shows
+          </Link>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Dog Cards Strip (horizontal scroll) ─── */
+
+function DogCardsStrip({ dogs }: {
+  dogs: {
+    dogId: string;
+    dogName: string;
+    breedName: string | null;
+    photoUrl: string | null;
+    ccCount: number;
+    isChampion: boolean;
+  }[];
+}) {
+  return (
+    <section>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="font-serif text-sm font-semibold tracking-tight">Your Dogs</h2>
+        <Link href="/dogs" className="text-xs font-medium text-primary hover:underline">
+          View all
+        </Link>
+      </div>
+      <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2 sm:-mx-0 sm:px-0 scrollbar-none">
+        {dogs.map((dog) => (
+          <Link
+            key={dog.dogId}
+            href={`/dogs/${dog.dogId}`}
+            className="flex min-w-[8rem] shrink-0 flex-col items-center rounded-2xl border border-border/40 bg-white/80 px-4 py-4 shadow-sm transition-all active:scale-[0.97] active:bg-accent/30"
+          >
+            {/* Avatar */}
+            {dog.photoUrl ? (
+              <img
+                src={dog.photoUrl}
+                alt=""
+                className={`size-16 rounded-full object-cover shadow-sm ${
+                  dog.isChampion
+                    ? 'ring-2 ring-amber-400 ring-offset-2'
+                    : 'ring-1 ring-border/40'
+                }`}
+              />
+            ) : (
+              <div className={`flex size-16 items-center justify-center rounded-full bg-gradient-to-br from-slate-100 to-slate-200 shadow-sm ${
+                dog.isChampion ? 'ring-2 ring-amber-400 ring-offset-2' : 'ring-1 ring-border/40'
+              }`}>
+                <Dog className="size-7 text-slate-400" />
+              </div>
+            )}
+            {/* Name */}
+            <p className="mt-2.5 max-w-[7rem] truncate text-center font-serif text-xs font-semibold">
+              {dog.isChampion && <span className="text-amber-600">Ch </span>}
+              {dog.dogName}
+            </p>
+            {/* Breed */}
+            {dog.breedName && (
+              <p className="mt-0.5 max-w-[7rem] truncate text-center text-[10px] text-muted-foreground">
+                {dog.breedName}
+              </p>
+            )}
+            {/* Quick stat */}
+            {dog.ccCount > 0 && (
+              <div className="mt-2 flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5">
+                <Crown className="size-2.5 text-amber-700" />
+                <span className="text-[10px] font-semibold text-amber-800">
+                  {dog.ccCount} CC{dog.ccCount !== 1 ? 's' : ''}
+                </span>
+              </div>
+            )}
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -359,138 +547,219 @@ function AlertCard({ alert }: { alert: { type: string; message: string; showId?:
 
   return (
     <Link href={href}>
-      <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50/50 px-3 py-2.5 transition-colors active:bg-amber-50">
-        <AlertTriangle className="size-4 shrink-0 text-amber-600" />
+      <div className="flex items-center gap-3 rounded-xl border border-amber-200/60 bg-gradient-to-r from-amber-50/80 to-transparent px-4 py-3 shadow-sm transition-all active:scale-[0.99]">
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-amber-100">
+          <AlertTriangle className="size-4 text-amber-600" />
+        </div>
         <p className="flex-1 text-sm text-amber-900">{alert.message}</p>
-        <ArrowRight className="size-3.5 shrink-0 text-amber-600/50" />
+        <ChevronRight className="size-4 shrink-0 text-amber-400" />
       </div>
     </Link>
   );
 }
 
-/* ─── Recent Result Card ─── */
+/* ─── Recent Result Card (with CC celebration) ─── */
 
 function ResultCard({ result }: { result: { dogId: string | null; dogName: string | null; dogPhotoUrl: string | null; showName: string; showDate: string; placements: { className: string; placement: number | null; specialAward: string | null }[]; ccAwarded: boolean } }) {
+  if (result.ccAwarded) {
+    return <CCResultCard result={result} />;
+  }
+
   return (
-    <Card className={result.ccAwarded ? 'border-amber-300/60 bg-amber-50/30' : ''}>
-      <CardContent className="py-3">
-        <div className="flex items-start gap-3">
-          {/* Dog photo */}
-          {result.dogPhotoUrl ? (
-            <img src={result.dogPhotoUrl} alt="" className="size-10 shrink-0 rounded-full object-cover ring-1 ring-border/40" />
-          ) : (
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted">
-              <Dog className="size-5 text-muted-foreground" />
-            </div>
-          )}
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <p className="truncate text-sm font-semibold">{result.dogName ?? 'Unknown'}</p>
-              {result.ccAwarded && (
-                <Badge className="shrink-0 bg-amber-100 text-amber-800 border-amber-300 text-[10px]">
-                  <Crown className="mr-0.5 size-3" />
-                  CC
-                </Badge>
-              )}
-            </div>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {result.showName} &middot; {format(toDate(result.showDate), 'd MMM')}
-            </p>
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              {result.placements.map((p, i) => (
-                <span key={i} className="inline-flex items-center gap-1 text-xs">
-                  {p.placement && (
-                    <Badge variant="outline" className={`text-[10px] font-semibold ${placementColors[p.placement] ?? ''}`}>
-                      {getPlacementLabel(p.placement)}
-                    </Badge>
-                  )}
-                  <span className="text-muted-foreground">{p.className}</span>
-                  {p.specialAward && (
-                    <Badge variant="secondary" className="text-[10px] bg-amber-50 text-amber-700">
-                      <Award className="mr-0.5 size-2.5" />
-                      {p.specialAward}
-                    </Badge>
-                  )}
-                </span>
-              ))}
-            </div>
+    <div className="rounded-2xl border border-border/40 bg-white/80 p-4 shadow-sm">
+      <div className="flex items-start gap-3">
+        {/* Dog photo */}
+        {result.dogPhotoUrl ? (
+          <img src={result.dogPhotoUrl} alt="" className="size-11 shrink-0 rounded-full object-cover ring-1 ring-border/40" />
+        ) : (
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-100 to-slate-200">
+            <Dog className="size-5 text-slate-400" />
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="font-serif text-sm font-semibold">{result.dogName ?? 'Unknown'}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {result.showName} &middot; {format(toDate(result.showDate), 'd MMM')}
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {result.placements.map((p, i) => (
+              <span key={i} className="inline-flex items-center gap-1 text-xs">
+                {p.placement && (
+                  <Badge variant="outline" className={`rounded-md text-[10px] font-semibold ${placementColors[p.placement] ?? ''}`}>
+                    {getPlacementLabel(p.placement)}
+                  </Badge>
+                )}
+                <span className="text-muted-foreground">{p.className}</span>
+                {p.specialAward && (
+                  <Badge variant="secondary" className="rounded-md text-[10px] bg-amber-50 text-amber-700">
+                    <Award className="mr-0.5 size-2.5" />
+                    {p.specialAward}
+                  </Badge>
+                )}
+              </span>
+            ))}
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
-/* ─── CC Progress Card ─── */
+/* ─── CC Result Card — Celebration Style ─── */
+
+function CCResultCard({ result }: { result: { dogId: string | null; dogName: string | null; dogPhotoUrl: string | null; showName: string; showDate: string; placements: { className: string; placement: number | null; specialAward: string | null }[] } }) {
+  return (
+    <div className="cc-shimmer relative overflow-hidden rounded-2xl border-2 border-amber-300/60 bg-gradient-to-br from-amber-50 via-yellow-50/50 to-amber-50/30 p-4 shadow-md shadow-amber-200/30">
+      {/* Gold shimmer overlay — animated via globals.css */}
+      <div className="cc-shimmer-bar pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-amber-200/20 to-transparent" />
+
+      <div className="relative flex items-start gap-3">
+        {/* Dog photo with gold ring */}
+        {result.dogPhotoUrl ? (
+          <img src={result.dogPhotoUrl} alt="" className="size-12 shrink-0 rounded-full object-cover ring-2 ring-amber-400 ring-offset-2" />
+        ) : (
+          <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-100 to-amber-200 ring-2 ring-amber-400 ring-offset-2">
+            <Dog className="size-6 text-amber-700" />
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="font-serif text-sm font-bold text-amber-900">{result.dogName ?? 'Unknown'}</p>
+            <div className="flex items-center gap-1 rounded-full bg-amber-500 px-2.5 py-0.5 text-white shadow-sm">
+              <Crown className="size-3" />
+              <span className="text-[10px] font-bold tracking-wide">CC</span>
+            </div>
+          </div>
+          <p className="mt-0.5 text-xs text-amber-700/70">
+            {result.showName} &middot; {format(toDate(result.showDate), 'd MMM')}
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {result.placements.map((p, i) => (
+              <span key={i} className="inline-flex items-center gap-1 text-xs">
+                {p.placement && (
+                  <Badge variant="outline" className={`rounded-md text-[10px] font-semibold ${placementColors[p.placement] ?? ''}`}>
+                    {getPlacementLabel(p.placement)}
+                  </Badge>
+                )}
+                <span className="text-amber-800/60">{p.className}</span>
+                {p.specialAward && (
+                  <Badge className="rounded-md border-amber-300 bg-amber-100 text-[10px] text-amber-800">
+                    <Award className="mr-0.5 size-2.5" />
+                    {p.specialAward}
+                  </Badge>
+                )}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── CC Progress — Road to Champion ─── */
 
 function CCProgressCard({ dog }: { dog: { dogId: string; dogName: string; breedName: string | null; photoUrl: string | null; ccCount: number; rccCount: number; distinctJudgeCount: number; isChampion: boolean } }) {
-  // 3 CCs under 3 different judges = Champion (traditional route)
-  // 2 CCs + 5 RCCs = Champion (alternative route from 2023)
   const traditionalProgress = Math.min(dog.ccCount, 3);
   const alternativeProgress = dog.ccCount >= 2 ? Math.min(dog.rccCount, 5) : 0;
   const isTraditionalCloser = (3 - traditionalProgress) <= (5 - alternativeProgress + (dog.ccCount < 2 ? 2 - dog.ccCount : 0));
-  const targetCCs = isTraditionalCloser ? 3 : 2;
-  const targetRCCs = isTraditionalCloser ? 0 : 5;
-  const progressPercent = dog.isChampion ? 100 : isTraditionalCloser
-    ? Math.round((traditionalProgress / 3) * 100)
-    : Math.round(((Math.min(dog.ccCount, 2) / 2) * 50) + ((Math.min(dog.rccCount, 5) / 5) * 50));
 
-  // Judges needed info
-  const judgesNeeded = dog.isChampion ? 0 : Math.max(0, 3 - dog.distinctJudgeCount);
+  // Circles for the 3-CC journey
+  const ccSlots = [0, 1, 2];
+  const earnedCCs = Math.min(dog.ccCount, 3);
 
   return (
-    <Link href={`/dogs/${dog.dogId}`}>
-      <Card className="transition-colors hover:bg-accent/30 active:bg-accent/40">
-        <CardContent className="py-3">
-          <div className="flex items-center gap-3">
-            {dog.photoUrl ? (
-              <img src={dog.photoUrl} alt="" className="size-10 shrink-0 rounded-full object-cover ring-1 ring-border/40" />
-            ) : (
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted">
-                <Dog className="size-5 text-muted-foreground" />
-              </div>
+    <Link href={`/dogs/${dog.dogId}`} className="block">
+      <div className="rounded-2xl border border-border/40 bg-white/80 p-4 shadow-sm transition-all active:scale-[0.99]">
+        <div className="flex items-center gap-3">
+          {/* Dog photo */}
+          {dog.photoUrl ? (
+            <img
+              src={dog.photoUrl}
+              alt=""
+              className={`size-12 shrink-0 rounded-full object-cover ${
+                dog.isChampion
+                  ? 'ring-2 ring-amber-400 ring-offset-2'
+                  : 'ring-1 ring-border/40'
+              }`}
+            />
+          ) : (
+            <div className={`flex size-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-100 to-slate-200 ${
+              dog.isChampion ? 'ring-2 ring-amber-400 ring-offset-2' : 'ring-1 ring-border/40'
+            }`}>
+              <Dog className="size-6 text-slate-400" />
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="font-serif text-sm font-semibold">
+              {dog.isChampion && <span className="text-amber-600">Ch </span>}
+              {dog.dogName}
+            </p>
+            {dog.breedName && (
+              <p className="text-[11px] text-muted-foreground">{dog.breedName}</p>
             )}
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <p className="truncate text-sm font-semibold">
-                  {dog.isChampion && <span className="text-amber-600">Ch </span>}
-                  {dog.dogName}
-                </p>
-                {dog.breedName && (
-                  <span className="hidden text-xs text-muted-foreground sm:inline">{dog.breedName}</span>
-                )}
-              </div>
-              {dog.isChampion ? (
-                <p className="mt-0.5 flex items-center gap-1 text-xs text-amber-600">
-                  <Sparkles className="size-3" />
-                  Champion — {dog.ccCount} CCs · {dog.rccCount} RCCs
-                </p>
-              ) : (
-                <>
-                  <div className="mt-1.5 flex items-center gap-2">
-                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-500 transition-all"
-                        style={{ width: `${progressPercent}%` }}
-                      />
-                    </div>
-                    <span className="shrink-0 text-xs font-medium text-muted-foreground">
-                      {dog.ccCount === 0 ? 'No CCs yet' : `${dog.ccCount}/${targetCCs} CCs`}
-                    </span>
-                  </div>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">
-                    {dog.rccCount > 0 && `${dog.rccCount} RCC${dog.rccCount !== 1 ? 's' : ''} · `}
-                    {dog.ccCount === 0 && 'Needs 3 CCs under 3 different judges to become Champion'}
-                    {dog.ccCount === 1 && '1 CC · 2 more needed under new judges'}
-                    {dog.ccCount === 2 && '2 CCs · 1 more needed (must be a different judge)'}
-                    {dog.ccCount >= 3 && !dog.isChampion && 'Judges requirement met'}
-                  </p>
-                </>
-              )}
+          </div>
+          <ChevronRight className="size-4 shrink-0 text-muted-foreground/40" />
+        </div>
+
+        {/* Champion celebration */}
+        {dog.isChampion ? (
+          <div className="mt-3 flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-100/80 to-amber-50/50 px-3 py-2.5">
+            <Sparkles className="size-4 text-amber-600" />
+            <div>
+              <p className="text-xs font-semibold text-amber-800">Champion</p>
+              <p className="text-[10px] text-amber-700/70">
+                {dog.ccCount} CC{dog.ccCount !== 1 ? 's' : ''} &middot; {dog.rccCount} RCC{dog.rccCount !== 1 ? 's' : ''}
+              </p>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        ) : (
+          <>
+            {/* CC Journey circles */}
+            <div className="mt-3.5 flex items-center justify-center gap-4">
+              {ccSlots.map((slot) => {
+                const isFilled = slot < earnedCCs;
+                return (
+                  <div key={slot} className="flex flex-col items-center gap-1.5">
+                    <div
+                      className={`flex size-10 items-center justify-center rounded-full border-2 transition-all ${
+                        isFilled
+                          ? 'border-amber-400 bg-gradient-to-br from-amber-400 to-amber-500 shadow-md shadow-amber-300/30'
+                          : 'border-dashed border-slate-300 bg-slate-50'
+                      }`}
+                    >
+                      {isFilled ? (
+                        <Crown className="size-4 text-white" />
+                      ) : (
+                        <span className="text-xs font-medium text-slate-400">{slot + 1}</span>
+                      )}
+                    </div>
+                    <span className={`text-[9px] font-medium ${isFilled ? 'text-amber-700' : 'text-slate-400'}`}>
+                      CC {slot + 1}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Status text */}
+            <p className="mt-3 text-center text-[11px] text-muted-foreground">
+              {dog.ccCount === 0 && 'Needs 3 CCs under 3 different judges'}
+              {dog.ccCount === 1 && '1 CC earned \u2014 2 more needed under new judges'}
+              {dog.ccCount === 2 && '2 CCs earned \u2014 1 more to go!'}
+              {dog.ccCount >= 3 && !dog.isChampion && 'All CCs earned \u2014 confirming championship'}
+            </p>
+
+            {/* RCC note if applicable */}
+            {dog.rccCount > 0 && (
+              <p className="mt-1 text-center text-[10px] text-muted-foreground/70">
+                Also: {dog.rccCount} RCC{dog.rccCount !== 1 ? 's' : ''}
+                {!isTraditionalCloser && dog.ccCount >= 2 && ` (${dog.rccCount}/5 for alternative route)`}
+              </p>
+            )}
+          </>
+        )}
+      </div>
     </Link>
   );
 }
@@ -500,20 +769,23 @@ function CCProgressCard({ dog }: { dog: { dogId: string; dogName: string; breedN
 function JudgeIntelCard({ item }: { item: { showId: string; showName: string; showSlug: string | null; showDate: string; judgeName: string; breedName: string; alreadyEntered: boolean } }) {
   return (
     <Link href={`/shows/${item.showSlug ?? item.showId}`}>
-      <div className="flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors hover:bg-accent/30 active:bg-accent/40">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-violet-100">
+      <div className="flex items-center gap-3 rounded-2xl border border-violet-200/40 bg-gradient-to-r from-violet-50/60 to-transparent px-4 py-3 shadow-sm transition-all active:scale-[0.99]">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-violet-100">
           <Gavel className="size-4 text-violet-700" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{item.judgeName}</p>
-          <p className="truncate text-xs text-muted-foreground">
-            {item.breedName} at {item.showName} &middot; {format(toDate(item.showDate), 'd MMM')}
+          <p className="font-serif text-sm font-semibold text-violet-950">{item.judgeName}</p>
+          <p className="mt-0.5 truncate text-xs text-violet-700/60">
+            {item.breedName} &middot; {item.showName}
+          </p>
+          <p className="text-[10px] text-violet-600/50">
+            {format(toDate(item.showDate), 'EEE d MMM yyyy')}
           </p>
         </div>
         {item.alreadyEntered ? (
-          <Badge variant="secondary" className="shrink-0 text-[10px]">Entered</Badge>
+          <Badge variant="secondary" className="shrink-0 rounded-lg text-[10px]">Entered</Badge>
         ) : (
-          <Badge className="shrink-0 bg-primary text-[10px]">
+          <Badge className="shrink-0 rounded-lg bg-violet-600 text-[10px] hover:bg-violet-700">
             <Ticket className="mr-0.5 size-3" />
             Enter
           </Badge>
@@ -527,35 +799,55 @@ function JudgeIntelCard({ item }: { item: { showId: string; showName: string; sh
 
 function RecommendedShowCard({ show }: { show: { showId: string; showName: string; showSlug: string | null; startDate: string; entryCloseDate: Date | null; venueName: string | null; breedNames: string[] } }) {
   const daysToClose = show.entryCloseDate ? differenceInDays(new Date(show.entryCloseDate), new Date()) : null;
+  const isUrgent = daysToClose !== null && daysToClose >= 0 && daysToClose <= 3;
 
   return (
     <Link href={`/shows/${show.showSlug ?? show.showId}`}>
-      <div className="flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors hover:bg-accent/30 active:bg-accent/40">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100">
-          <CalendarDays className="size-4 text-emerald-700" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{show.showName}</p>
-          <p className="truncate text-xs text-muted-foreground">
-            {format(toDate(show.startDate), 'd MMM yyyy')}
-            {show.venueName && ` · ${show.venueName}`}
-          </p>
-          <div className="mt-0.5 flex flex-wrap gap-1">
-            {show.breedNames.map((b) => (
-              <span key={b} className="text-[10px] text-primary">{b}</span>
-            ))}
+      <div className="rounded-2xl border border-border/40 bg-white/80 p-4 shadow-sm transition-all active:scale-[0.99]">
+        <div className="flex items-start gap-3">
+          <div className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${
+            isUrgent ? 'bg-red-100' : 'bg-emerald-100'
+          }`}>
+            {isUrgent ? (
+              <Clock className="size-4 text-red-600" />
+            ) : (
+              <CalendarDays className="size-4 text-emerald-700" />
+            )}
           </div>
-        </div>
-        <div className="shrink-0 text-right">
-          {daysToClose !== null && daysToClose >= 0 && daysToClose <= 14 && (
-            <p className={`text-[10px] font-medium ${daysToClose <= 3 ? 'text-destructive' : 'text-amber-600'}`}>
-              {daysToClose === 0 ? 'Closes today' : `${daysToClose}d left`}
+          <div className="min-w-0 flex-1">
+            <p className="font-serif text-sm font-semibold">{show.showName}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {format(toDate(show.startDate), 'EEE d MMM yyyy')}
+              {show.venueName && ` \u2014 ${show.venueName}`}
             </p>
-          )}
-          <Badge className="bg-primary text-[10px]">
-            <Ticket className="mr-0.5 size-3" />
-            Enter
-          </Badge>
+            {/* Breed match tags */}
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {show.breedNames.map((b) => (
+                <span
+                  key={b}
+                  className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700"
+                >
+                  <Star className="size-2.5" />
+                  {b}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-col items-end gap-1.5">
+            {daysToClose !== null && daysToClose >= 0 && daysToClose <= 14 && (
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                isUrgent
+                  ? 'bg-red-100 text-red-700'
+                  : 'bg-amber-100 text-amber-700'
+              }`}>
+                {daysToClose === 0 ? 'Closes today' : `${daysToClose}d left`}
+              </span>
+            )}
+            <Badge className="rounded-lg bg-primary text-[10px]">
+              <Ticket className="mr-0.5 size-3" />
+              Enter
+            </Badge>
+          </div>
         </div>
       </div>
     </Link>

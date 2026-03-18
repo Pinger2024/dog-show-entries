@@ -223,3 +223,15 @@
 .scrollbar-none::-webkit-scrollbar {
   display: none;
 }
+
+/* CC celebration shimmer animation */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes cc-shimmer {
+    0% { transform: translateX(-100%); }
+    50% { transform: translateX(100%); }
+    100% { transform: translateX(100%); }
+  }
+  .cc-shimmer-bar {
+    animation: cc-shimmer 3s ease-in-out infinite;
+  }
+}
