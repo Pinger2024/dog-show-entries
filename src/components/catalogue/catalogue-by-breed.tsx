@@ -125,6 +125,53 @@ function classLabel(cls: { className: string; classNumber: number | null | undef
 export function CatalogueByBreed({ show, entries }: Props) {
   const grouped = groupEntriesByBreed(entries);
 
+  // Inject empty classes from allShowClasses that have no entries
+  if (show.allShowClasses && show.allShowClasses.length > 0) {
+    // Collect existing class numbers across all breed/sex groups
+    const existingClassNumbers = new Set<number>();
+    for (const [, groupBucket] of grouped) {
+      for (const [, breedBucket] of groupBucket.breeds) {
+        for (const sex of Object.keys(breedBucket.sexes)) {
+          for (const [, cls] of breedBucket.sexes[sex].classes) {
+            if (cls.classNumber != null) existingClassNumbers.add(cls.classNumber);
+          }
+        }
+      }
+    }
+
+    // Add missing classes as empty entries in the first breed's sex group
+    for (const sc of show.allShowClasses) {
+      if (sc.classNumber != null && !existingClassNumbers.has(sc.classNumber)) {
+        const sex = sc.sex ?? 'unknown';
+
+        // Find the first breed bucket to inject into
+        let targetSexGroup: BreedSexGroup | undefined;
+        for (const [, groupBucket] of grouped) {
+          for (const [, breedBucket] of groupBucket.breeds) {
+            if (!breedBucket.sexes[sex]) {
+              breedBucket.sexes[sex] = { entries: [], classes: new Map() };
+            }
+            targetSexGroup = breedBucket.sexes[sex];
+            break;
+          }
+          if (targetSexGroup) break;
+        }
+
+        if (targetSexGroup) {
+          const classKey = `${sc.classNumber}-${sc.className}`;
+          if (!targetSexGroup.classes.has(classKey)) {
+            targetSexGroup.classes.set(classKey, {
+              className: sc.className,
+              classNumber: sc.classNumber,
+              sortOrder: sc.sortOrder,
+              catalogueNumbers: [],
+            });
+          }
+        }
+      }
+    }
+  }
+
   // Sort groups by sortOrder
   const sortedGroups = [...grouped.entries()].sort(([, a], [, b]) => a.sortOrder - b.sortOrder);
 

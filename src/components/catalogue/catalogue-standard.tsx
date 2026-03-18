@@ -27,6 +27,22 @@ export interface CatalogueEntry {
   entryType: string;
 }
 
+export interface ShowSponsorInfo {
+  name: string;
+  tier: string;
+  logoUrl: string | null;
+  website: string | null;
+  customTitle: string | null;
+}
+
+/** A show class for rendering empty classes in the catalogue */
+export interface ShowClassInfo {
+  className: string;
+  classNumber: number | null;
+  sortOrder: number;
+  sex: string | null;
+}
+
 export interface CatalogueShowInfo {
   name: string;
   showType: string | undefined;
@@ -47,6 +63,10 @@ export interface CatalogueShowInfo {
   classSponsorships?: ClassSponsorshipInfo[];
   /** Custom statements for cover page (e.g. "OUTSIDE ATTRACTION - KC RULE F(1) 16h") */
   customStatements?: string[];
+  /** Show-level sponsors for the cover/front matter */
+  showSponsors?: ShowSponsorInfo[];
+  /** All show classes (for rendering empty classes) */
+  allShowClasses?: ShowClassInfo[];
 }
 
 interface Props {
@@ -158,6 +178,79 @@ function classHeadingLabel(bucket: ClassBucket, sex: string) {
 
 export function CatalogueStandard({ show, entries }: Props) {
   const grouped = groupEntriesKC(entries);
+
+  // Inject empty class buckets for show classes that have no entries
+  if (show.allShowClasses && show.allShowClasses.length > 0) {
+    // Build a set of classNumbers already represented in the grouped data
+    const existingClassNumbers = new Set<number>();
+    for (const [, groupBucket] of grouped) {
+      for (const [, breedBucket] of groupBucket.breeds) {
+        for (const sex of Object.keys(breedBucket.sexes)) {
+          for (const bucket of breedBucket.sexes[sex]) {
+            if (bucket.classNumber != null) existingClassNumbers.add(bucket.classNumber);
+          }
+        }
+      }
+    }
+
+    // Find classes not represented and inject them as empty buckets
+    for (const sc of show.allShowClasses) {
+      if (sc.classNumber != null && !existingClassNumbers.has(sc.classNumber)) {
+        const sex = sc.sex ?? 'unknown';
+
+        // For single-breed shows, pick the first (only) breed bucket
+        // For multi-breed shows, we need a breed — use the first breed in the first group
+        let targetBreedBucket: BreedBucket | undefined;
+        let targetGroupName: string | undefined;
+
+        if (grouped.size > 0) {
+          const firstGroup = [...grouped.entries()][0];
+          targetGroupName = firstGroup[0];
+          const firstBreed = [...firstGroup[1].breeds.entries()][0];
+          if (firstBreed) {
+            targetBreedBucket = firstBreed[1];
+          }
+        }
+
+        if (!targetBreedBucket) {
+          // No entries at all — create a placeholder group/breed
+          const placeholderGroup = 'Show Classes';
+          if (!grouped.has(placeholderGroup)) {
+            grouped.set(placeholderGroup, { sortOrder: 0, breeds: new Map() });
+          }
+          const gb = grouped.get(placeholderGroup)!;
+          const placeholderBreed = 'Classes';
+          if (!gb.breeds.has(placeholderBreed)) {
+            gb.breeds.set(placeholderBreed, { sexes: {} });
+          }
+          targetBreedBucket = gb.breeds.get(placeholderBreed)!;
+        }
+
+        targetBreedBucket.sexes[sex] ??= [];
+        targetBreedBucket.sexes[sex].push({
+          className: sc.className,
+          classNumber: sc.classNumber,
+          sortOrder: sc.sortOrder,
+          sex,
+          entries: [],
+        });
+      }
+    }
+
+    // Re-sort class buckets within each sex after injection
+    for (const [, groupBucket] of grouped) {
+      for (const [, breedBucket] of groupBucket.breeds) {
+        for (const sex of Object.keys(breedBucket.sexes)) {
+          breedBucket.sexes[sex].sort((a, b) => {
+            if (a.classNumber != null && b.classNumber != null) return a.classNumber - b.classNumber;
+            if (a.classNumber != null) return -1;
+            if (b.classNumber != null) return 1;
+            return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+          });
+        }
+      }
+    }
+  }
 
   // Build a lookup: classNumber -> sponsorship info for inline display
   const sponsorByClassNumber = new Map<number, ClassSponsorshipInfo>();

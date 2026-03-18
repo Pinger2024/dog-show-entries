@@ -10,7 +10,7 @@ import { CatalogueByClass } from '@/components/catalogue/catalogue-by-class';
 import { CatalogueByBreed } from '@/components/catalogue/catalogue-by-breed';
 import { CatalogueAlphabetical } from '@/components/catalogue/catalogue-alphabetical';
 import { CatalogueMarked } from '@/components/catalogue/catalogue-marked';
-import type { CatalogueEntry, CatalogueShowInfo } from '@/components/catalogue/catalogue-standard';
+import type { CatalogueEntry, CatalogueShowInfo, ShowSponsorInfo, ShowClassInfo } from '@/components/catalogue/catalogue-standard';
 import type { MarkedResult, MarkedAchievement } from '@/components/catalogue/catalogue-marked';
 import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
@@ -43,7 +43,7 @@ export async function GET(
   if (authResult instanceof NextResponse) return authResult;
 
   // Run independent DB queries and logo validation in parallel
-  const [judgeAssignmentRows, showClassRows, entries, safeLogoUrl] = await Promise.all([
+  const [judgeAssignmentRows, showClassRows, entries, safeLogoUrl, showSponsorRows] = await Promise.all([
     db.query.judgeAssignments.findMany({
       where: eq(schema.judgeAssignments.showId, showId),
       with: { judge: true, breed: true },
@@ -86,6 +86,11 @@ export async function GET(
       orderBy: [asc(schema.entries.catalogueNumber)],
     }),
     validateRasterLogoUrl(show.organisation?.logoUrl),
+    db.query.showSponsors.findMany({
+      where: eq(schema.showSponsors.showId, showId),
+      with: { sponsor: true },
+      orderBy: [asc(schema.showSponsors.displayOrder)],
+    }),
   ]);
 
   const judgesByBreedName: Record<string, string> = {};
@@ -171,6 +176,23 @@ export async function GET(
     entryType: entry.entryType,
   }));
 
+  // Build show-level sponsor info for cover/front matter
+  const showSponsorInfos: ShowSponsorInfo[] = showSponsorRows.map((ss) => ({
+    name: ss.sponsor.name,
+    tier: ss.tier,
+    logoUrl: ss.sponsor.logoUrl,
+    website: ss.sponsor.website,
+    customTitle: ss.customTitle,
+  }));
+
+  // Build all show classes list for rendering empty classes
+  const allShowClasses: ShowClassInfo[] = showClassRows.map((sc) => ({
+    className: sc.classDefinition?.name ?? 'Unknown Class',
+    classNumber: sc.classNumber,
+    sortOrder: sc.sortOrder,
+    sex: sc.sex,
+  }));
+
   const showInfo: CatalogueShowInfo = {
     name: show.name,
     showType: show.showType,
@@ -188,6 +210,8 @@ export async function GET(
     showScope: show.showScope ?? undefined,
     classSponsorships: classSponsorships.length > 0 ? classSponsorships : undefined,
     customStatements: show.scheduleData?.customStatements,
+    showSponsors: showSponsorInfos.length > 0 ? showSponsorInfos : undefined,
+    allShowClasses: allShowClasses.length > 0 ? allShowClasses : undefined,
   };
 
   // Check if JSON format was explicitly requested (for data export)

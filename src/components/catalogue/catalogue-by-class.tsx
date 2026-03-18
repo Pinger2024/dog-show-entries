@@ -43,6 +43,26 @@ function groupByClass(entries: CatalogueEntry[]) {
 
 export function CatalogueByClass({ show, entries }: Props) {
   const grouped = groupByClass(entries);
+
+  // Inject empty classes from allShowClasses that have no entries
+  if (show.allShowClasses) {
+    const existingKeys = new Set(Object.keys(grouped));
+    for (const sc of show.allShowClasses) {
+      const classKey = sc.classNumber != null
+        ? String(sc.classNumber)
+        : `${sc.className}-${sc.sex ?? 'any'}`;
+      if (!existingKeys.has(classKey)) {
+        grouped[classKey] = {
+          className: sc.className,
+          sex: sc.sex,
+          classNumber: sc.classNumber,
+          sortOrder: sc.sortOrder,
+          entries: [],
+        };
+      }
+    }
+  }
+
   // Sort by classNumber if assigned, otherwise by sortOrder, then alphabetically
   const classKeys = Object.keys(grouped).sort((a, b) => {
     const aNum = grouped[a].classNumber;

@@ -84,20 +84,15 @@ export async function generateMetadata({
       type: 'website',
       siteName: 'Remi Show Manager',
       url: canonical,
-      images: [
-        {
-          url: `${canonical}/opengraph-image`,
-          width: 1200,
-          height: 630,
-          alt: title,
-        },
-      ],
+      // Images are automatically set by the opengraph-image.tsx file convention
+      // Do NOT set images explicitly here — it overrides the auto-generated URL
+      // which includes a hash suffix (e.g. opengraph-image-12azfe)
     },
     twitter: {
       card: 'summary_large_image',
       title,
       description,
-      images: [`${canonical}/opengraph-image`],
+      // Twitter images are also set automatically by opengraph-image.tsx
     },
   };
 }
