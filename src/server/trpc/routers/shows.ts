@@ -19,6 +19,7 @@ import {
   dogs,
   breeds,
   dogPhotos,
+  classDefinitions,
 } from '@/server/db/schema';
 import { verifyShowAccess } from '../verify-show-access';
 import { isUuid, generateShowSlug } from '@/lib/slugify';
@@ -522,34 +523,62 @@ export const showsRouter = createTRPCRouter({
 
       // Create show classes from selected class definitions (single-breed flow)
       if (classDefinitionIds && classDefinitionIds.length > 0 && !allBreedClassData) {
+        // Sort class definitions by RKC canonical order
+        const classDefs = await ctx.db.query.classDefinitions.findMany({
+          where: inArray(classDefinitions.id, classDefinitionIds),
+          columns: { id: true, sortOrder: true, type: true, name: true },
+          orderBy: [asc(classDefinitions.sortOrder)],
+        });
+        const sortedIds = classDefs.map((cd) => cd.id);
+        const classDefTypeMap = new Map(classDefs.map((cd) => [cd.id, cd.type]));
+
         const isSeparateSex = showData.classSexArrangement === 'separate_sex';
+        const values: { showId: string; classDefinitionId: string; entryFee: number; sortOrder: number; sex?: 'dog' | 'bitch'; classNumber: number }[] = [];
+        let sortOrder = 0;
+        const addedJhIds = new Set<string>();
 
         if (isSeparateSex) {
-          // All Dog classes first (age then achievement), then all Bitch classes
-          const values: { showId: string; classDefinitionId: string; entryFee: number; sortOrder: number; sex: 'dog' | 'bitch' }[] = [];
-          let sortOrder = 0;
           for (const sex of ['dog', 'bitch'] as const) {
-            for (const classDefId of classDefinitionIds) {
-              values.push({
-                showId: show!.id,
-                classDefinitionId: classDefId,
-                entryFee: entryFee ?? 0,
-                sortOrder: sortOrder++,
-                sex,
-              });
+            for (const classDefId of sortedIds) {
+              const classType = classDefTypeMap.get(classDefId);
+              if (classType === 'junior_handler') {
+                // JH classes only added once, not split by sex
+                if (sex === 'dog' && !addedJhIds.has(classDefId)) {
+                  addedJhIds.add(classDefId);
+                  values.push({
+                    showId: show!.id,
+                    classDefinitionId: classDefId,
+                    entryFee: entryFee ?? 0,
+                    sortOrder: sortOrder++,
+                    classNumber: sortOrder,
+                  });
+                }
+              } else {
+                values.push({
+                  showId: show!.id,
+                  classDefinitionId: classDefId,
+                  entryFee: entryFee ?? 0,
+                  sortOrder: sortOrder++,
+                  sex,
+                  classNumber: sortOrder,
+                });
+              }
             }
           }
-          await ctx.db.insert(showClasses).values(values);
         } else {
-          // Combined: one row per class definition, sex = null
-          await ctx.db.insert(showClasses).values(
-            classDefinitionIds.map((classDefId, idx) => ({
+          for (const classDefId of sortedIds) {
+            values.push({
               showId: show!.id,
               classDefinitionId: classDefId,
               entryFee: entryFee ?? 0,
-              sortOrder: idx,
-            }))
-          );
+              sortOrder: sortOrder++,
+              classNumber: sortOrder,
+            });
+          }
+        }
+
+        if (values.length > 0) {
+          await ctx.db.insert(showClasses).values(values);
         }
       }
 
