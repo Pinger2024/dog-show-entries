@@ -35,6 +35,13 @@ import { getPlacementLabel, placementColors } from '@/lib/placements';
 import { OnboardingChecklist } from '@/components/dashboard/onboarding-checklist';
 import { SecretaryCTA } from '@/components/dashboard/secretary-cta';
 
+function getTimeGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
 export default function DashboardPage() {
   const { data: session } = useSession();
   const firstName = session?.user?.name?.split(' ')[0] ?? 'there';
@@ -43,13 +50,31 @@ export default function DashboardPage() {
     staleTime: 60_000,
   });
 
+  const hasUpcomingEntry = !!data?.nextShow;
+  const hasRecommendedShows = (data?.recommendedShows.length ?? 0) > 0;
+  // Promote recommended shows when user has no upcoming entries
+  const promoteRecommended = !hasUpcomingEntry && hasRecommendedShows;
+
   return (
     <div className="space-y-5 pb-16 md:pb-0">
-      {/* Welcome */}
-      <div>
-        <h1 className="font-serif text-lg font-bold tracking-tight sm:text-xl">
-          Welcome back, {firstName}
+      {/* Welcome — warm greeting area */}
+      <div className="rounded-2xl bg-gradient-to-br from-primary/[0.06] via-primary/[0.03] to-transparent px-4 py-4 sm:px-5 sm:py-5">
+        <p className="text-xs font-medium uppercase tracking-widest text-primary/60">
+          {getTimeGreeting()}
+        </p>
+        <h1 className="mt-0.5 font-serif text-xl font-bold tracking-tight sm:text-2xl">
+          {firstName}
         </h1>
+        {data && !hasUpcomingEntry && data.recommendedShows.length === 0 && data.deadlineAlerts.length === 0 && (
+          <p className="mt-1 text-sm text-muted-foreground">
+            Browse upcoming shows and find your next ring.
+          </p>
+        )}
+        {data && hasUpcomingEntry && (
+          <p className="mt-1 text-sm text-muted-foreground">
+            You have a show coming up. Good luck in the ring!
+          </p>
+        )}
       </div>
 
       {/* Onboarding + Secretary CTA — only for new users */}
@@ -74,6 +99,31 @@ export default function DashboardPage() {
                 <AlertCard key={i} alert={alert} />
               ))}
             </div>
+          )}
+
+          {/* Promoted Recommended Shows — shown early when no upcoming entries */}
+          {promoteRecommended && (
+            <section>
+              <div className="mb-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-emerald-100">
+                    <Sparkles className="size-4 text-emerald-700" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-semibold text-foreground">Shows for your breeds</h2>
+                    <p className="text-xs text-muted-foreground">Accepting entries now</p>
+                  </div>
+                </div>
+                <Link href="/browse" className="text-xs font-medium text-primary hover:underline">
+                  Browse all
+                </Link>
+              </div>
+              <div className="space-y-2">
+                {data.recommendedShows.map((show) => (
+                  <RecommendedShowCard key={show.showId} show={show} />
+                ))}
+              </div>
+            </section>
           )}
 
           {/* Section 3: Recent Results */}
@@ -132,8 +182,8 @@ export default function DashboardPage() {
             </Link>
           )}
 
-          {/* Section 7: Recommended Shows */}
-          {data.recommendedShows.length > 0 && (
+          {/* Section 7: Recommended Shows — normal position when not promoted */}
+          {!promoteRecommended && data.recommendedShows.length > 0 && (
             <section>
               <SectionHeader icon={Sparkles} title="Shows for Your Breeds" href="/browse" />
               <div className="space-y-2">
@@ -187,30 +237,67 @@ function SectionHeader({ icon: Icon, title, href }: { icon: typeof Trophy; title
 
 function EmptyDashboard() {
   return (
-    <Card>
-      <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-        <div className="mb-3 flex size-14 items-center justify-center rounded-full bg-primary/10">
-          <Dog className="size-7 text-primary" />
+    <div className="space-y-6">
+      <Card className="overflow-hidden border-primary/10">
+        <CardContent className="relative flex flex-col items-center justify-center py-12 text-center">
+          {/* Subtle background decoration */}
+          <div className="pointer-events-none absolute inset-0">
+            <div className="absolute -right-16 -top-16 size-48 rounded-full bg-primary/[0.04] blur-2xl" />
+            <div className="absolute -bottom-12 -left-12 size-36 rounded-full bg-amber-500/[0.04] blur-2xl" />
+          </div>
+          <div className="relative">
+            <div className="mb-4 flex size-20 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5">
+              <Dog className="size-10 text-primary" />
+            </div>
+            <h2 className="font-serif text-xl font-bold tracking-tight">Welcome to Remi</h2>
+            <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
+              Your dog show companion. Add your first dog to start entering shows,
+              tracking results, and building their career profile.
+            </p>
+            <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
+              <Button className="min-h-[2.75rem] gap-2" asChild>
+                <Link href="/dogs/new">
+                  <Plus className="size-4" />
+                  Add Your First Dog
+                </Link>
+              </Button>
+              <Button variant="outline" className="min-h-[2.75rem] gap-2" asChild>
+                <Link href="/browse">
+                  <CalendarDays className="size-4" />
+                  Browse Shows
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Helpful hints for new users */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="flex gap-3 rounded-xl border border-border/60 bg-white p-4">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100">
+            <Ticket className="size-4 text-emerald-700" />
+          </div>
+          <div>
+            <p className="text-sm font-medium">Enter shows online</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Find and enter championship, open, and companion shows across the country.
+            </p>
+          </div>
         </div>
-        <h2 className="text-lg font-semibold">Get started with Remi</h2>
-        <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-          Add your first dog to start entering shows, tracking results, and building their career profile.
-        </p>
-        <div className="mt-5 flex flex-wrap gap-2">
-          <Button className="min-h-[2.75rem]" asChild>
-            <Link href="/dogs/new">
-              <Plus className="size-4" />
-              Add a Dog
-            </Link>
-          </Button>
-          <Button variant="outline" className="min-h-[2.75rem]" asChild>
-            <Link href="/browse">
-              Browse Shows
-            </Link>
-          </Button>
+        <div className="flex gap-3 rounded-xl border border-border/60 bg-white p-4">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-100">
+            <Trophy className="size-4 text-amber-700" />
+          </div>
+          <div>
+            <p className="text-sm font-medium">Track your results</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              See placements, CCs, and championship progress all in one place.
+            </p>
+          </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 

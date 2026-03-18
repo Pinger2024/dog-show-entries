@@ -62,6 +62,7 @@ export const showsRouter = createTRPCRouter({
           .optional(),
         search: z.string().max(200).optional(),
         breedId: z.string().uuid().optional(),
+        breedIds: z.array(z.string().uuid()).max(20).optional(),
         startDate: z.string().optional(),
         endDate: z.string().optional(),
         limit: z.number().min(1).max(100).default(20),
@@ -124,7 +125,7 @@ export const showsRouter = createTRPCRouter({
         );
       }
 
-      // Breed filter: only shows with at least one class matching the breed
+      // Breed filter: only shows with at least one class matching the breed(s)
       if (input.breedId) {
         conditions.push(
           exists(
@@ -136,6 +137,24 @@ export const showsRouter = createTRPCRouter({
                   eq(showClasses.showId, shows.id),
                   or(
                     eq(showClasses.breedId, input.breedId),
+                    eq(showClasses.isBreedSpecific, false)
+                  )
+                )
+              )
+          )
+        );
+      } else if (input.breedIds && input.breedIds.length > 0) {
+        // Multi-breed filter: shows with classes for ANY of the specified breeds
+        conditions.push(
+          exists(
+            ctx.db
+              .select({ one: sql`1` })
+              .from(showClasses)
+              .where(
+                and(
+                  eq(showClasses.showId, shows.id),
+                  or(
+                    inArray(showClasses.breedId, input.breedIds),
                     eq(showClasses.isBreedSpecific, false)
                   )
                 )

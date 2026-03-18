@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
 import { format, differenceInDays } from 'date-fns';
 import { formatDateRange } from '@/lib/date-utils';
 import { showTypeLabels } from '@/lib/show-types';
@@ -18,6 +19,7 @@ import {
   Navigation,
   Locate,
   ChevronDown,
+  Sparkles,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
 import { Input } from '@/components/ui/input';
@@ -357,6 +359,7 @@ function NearMeControls({
 const PAGE_SIZE = 24;
 
 export default function ShowsList() {
+  const { data: session } = useSession();
   const [search, setSearch] = useState('');
   const [showType, setShowType] = useState<string>('all');
   const [status, setStatus] = useState<string>('all');
@@ -370,8 +373,20 @@ export default function ShowsList() {
   const [postcode, setPostcode] = useState('');
   const [postcodeError, setPostcodeError] = useState('');
 
+  // Auto-breed filter state
+  const [autoBreedFilter, setAutoBreedFilter] = useState(true); // default to auto-filter
+  const [userBreedIds, setUserBreedIds] = useState<string[]>([]);
+  const [userBreedNames, setUserBreedNames] = useState<string[]>([]);
+  const autoBreedInitRef = useRef(false);
+
   // Fetch breeds for breed filter
   const { data: breeds } = trpc.breeds.list.useQuery();
+
+  // Fetch user's dogs to extract their breeds (only for logged-in users)
+  const { data: userDogs } = trpc.dogs.list.useQuery(undefined, {
+    enabled: !!session?.user,
+  });
+
   const [isLocating, setIsLocating] = useState(false);
 
   // Pagination state — accumulated items + current cursor
@@ -379,8 +394,34 @@ export default function ShowsList() {
   const [allItems, setAllItems] = useState<ShowListItem[]>([]);
   const prevKeyRef = useRef('');
 
+  // Auto-populate breed filter from user's dogs on initial load
+  useEffect(() => {
+    if (autoBreedInitRef.current || !userDogs || !breeds) return;
+    autoBreedInitRef.current = true;
+
+    // Extract unique breed IDs and names from user's dogs
+    const breedMap = new Map<string, string>();
+    for (const dog of userDogs) {
+      if (dog.breedId && dog.breed?.name) {
+        breedMap.set(dog.breedId, dog.breed.name);
+      }
+    }
+
+    if (breedMap.size > 0) {
+      setUserBreedIds([...breedMap.keys()]);
+      setUserBreedNames([...breedMap.values()]);
+      setAutoBreedFilter(true);
+    } else {
+      setAutoBreedFilter(false);
+    }
+  }, [userDogs, breeds]);
+
+  // Determine if we should apply the auto breed filter
+  const isAutoBreedActive = autoBreedFilter && userBreedIds.length > 0 && breedId === 'all';
+
   // Build query key for detecting filter changes
-  const queryKey = `${debouncedSearch}|${showType}|${status}|${breedId}`;
+  const autoBreedKey = isAutoBreedActive ? userBreedIds.join(',') : '';
+  const queryKey = `${debouncedSearch}|${showType}|${status}|${breedId}|${autoBreedKey}`;
 
   // Standard list query (only when near me is not active)
   const { data, isLoading, isFetching } = trpc.shows.list.useQuery(
@@ -408,6 +449,7 @@ export default function ShowsList() {
           : undefined,
       search: debouncedSearch || undefined,
       breedId: breedId !== 'all' ? breedId : undefined,
+      breedIds: isAutoBreedActive ? userBreedIds : undefined,
       limit: PAGE_SIZE,
       cursor,
     },
@@ -624,6 +666,27 @@ export default function ShowsList() {
           onClearStatus={() => setStatus('all')}
           onClearBreed={() => setBreedId('all')}
         />
+      )}
+
+      {/* ─── Auto breed filter banner ──────────── */}
+      {isAutoBreedActive && !isNearMeMode && (
+        <div className="mb-4 flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 px-3 py-3 sm:items-center sm:px-4">
+          <Sparkles className="mt-0.5 size-4 shrink-0 text-primary sm:mt-0" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-foreground">
+              Showing shows for your breeds
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {userBreedNames.join(', ')}
+            </p>
+          </div>
+          <button
+            onClick={() => setAutoBreedFilter(false)}
+            className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-border/60 bg-white px-3 py-1.5 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-accent min-h-[2.75rem] sm:min-h-0"
+          >
+            Show all
+          </button>
+        </div>
       )}
 
       {/* ─── Loading ─────────────────────────────── */}
