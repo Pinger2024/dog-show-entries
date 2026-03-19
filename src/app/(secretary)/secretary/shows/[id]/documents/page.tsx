@@ -7,15 +7,19 @@ import {
   Calendar,
   CheckCircle,
   ClipboardList,
+  Check,
   Download,
+  ExternalLink,
   FileText,
   Hash,
   List,
   Map,
+  Share2,
   SortAsc,
   Trophy,
   UserX,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -54,16 +58,37 @@ interface DocumentLink {
 }
 
 function DocumentLinkCard({ doc }: { doc: DocumentLink }) {
+  const [copied, setCopied] = useState(false);
+
+  const fullUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}${doc.href}`
+    : doc.href;
+
+  async function handleShare(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({ title: doc.label, url: fullUrl });
+        return;
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return;
+      }
+    }
+    // Fallback: copy link
+    await navigator.clipboard.writeText(fullUrl);
+    setCopied(true);
+    toast.success('PDF link copied');
+    setTimeout(() => setCopied(false), 2000);
+  }
+
   return (
-    <a
-      href={doc.href}
-      download
-      className="flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted"
-    >
+    <div className="flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted">
       <div className="mt-0.5 shrink-0 text-muted-foreground">
         {doc.icon}
       </div>
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="font-medium">
           {doc.label}
           {doc.badge && (
@@ -75,8 +100,26 @@ function DocumentLinkCard({ doc }: { doc: DocumentLink }) {
         <p className="text-xs text-muted-foreground">
           {doc.description}
         </p>
+        <div className="mt-2 flex gap-2">
+          <a
+            href={doc.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex min-h-[2.75rem] items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+          >
+            <ExternalLink className="size-3" />
+            Open
+          </a>
+          <button
+            onClick={handleShare}
+            className="inline-flex min-h-[2.75rem] items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            {copied ? <Check className="size-3 text-emerald-600" /> : <Share2 className="size-3" />}
+            {copied ? 'Copied!' : 'Share'}
+          </button>
+        </div>
       </div>
-    </a>
+    </div>
   );
 }
 
@@ -353,9 +396,9 @@ export default function DocumentsPage() {
               </p>
             </div>
             <Button asChild className="w-full sm:w-auto min-h-[2.75rem]">
-              <a href={prizeCardHref} download>
-                <Download className="size-4" />
-                Download
+              <a href={prizeCardHref} target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="size-4" />
+                Open PDF
               </a>
             </Button>
           </div>

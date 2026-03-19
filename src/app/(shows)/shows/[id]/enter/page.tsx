@@ -115,6 +115,28 @@ export default function EnterShowPage() {
     return () => window.removeEventListener('focus', handleFocus);
   }, [utils]);
 
+  // For single-breed shows, determine the allowed breed(s) from show classes or judge assignments
+  const showBreedIds = useMemo(() => {
+    if (!show || show.showScope !== 'single_breed') return null;
+    const ids = new Set<string>();
+    // Collect breed IDs from show classes
+    for (const sc of show.showClasses ?? []) {
+      if (sc.breed?.id) ids.add(sc.breed.id);
+    }
+    // Also collect from judge assignments (some single-breed shows set breed there)
+    for (const ja of show.judgeAssignments ?? []) {
+      if (ja.breed?.id) ids.add(ja.breed.id);
+    }
+    return ids.size > 0 ? ids : null;
+  }, [show]);
+
+  // Filter dogs to only those eligible for this show's breed (single-breed shows)
+  const eligibleDogs = useMemo(() => {
+    if (!dogs) return undefined;
+    if (!showBreedIds) return dogs; // group/general shows: all dogs eligible
+    return dogs.filter((d) => showBreedIds.has(d.breedId));
+  }, [dogs, showBreedIds]);
+
   const selectedDog = dogs?.find((d) => d.id === cart.activeEntry?.dogId);
   const selectedDogSex = selectedDog?.sex as 'dog' | 'bitch' | undefined;
 
@@ -605,17 +627,44 @@ export default function EnterShowPage() {
       )}
 
       {/* Step: Select Dog */}
-      {cart.step === 'select_dog' && (
+      {cart.step === 'select_dog' && (() => {
+        // Determine the show breed name for informational messages
+        const showBreedName = show?.showScope === 'single_breed'
+          ? (show.showClasses ?? []).find((sc) => sc.breed?.name)?.breed?.name
+            ?? (show.judgeAssignments ?? []).find((ja) => ja.breed?.name)?.breed?.name
+            ?? null
+          : null;
+        const filteredOutCount = dogs && eligibleDogs
+          ? dogs.length - eligibleDogs.length
+          : 0;
+
+        return (
         <div className="space-y-4">
           <h2 className="text-base font-semibold sm:text-lg">Which dog are you entering?</h2>
+
+          {/* Single breed show info banner */}
+          {show?.showScope === 'single_breed' && showBreedName && (
+            <div className="flex gap-3 rounded-lg border border-dashed border-primary/30 bg-primary/5 p-3">
+              <Info className="mt-0.5 size-4 shrink-0 text-primary" />
+              <p className="text-sm text-muted-foreground">
+                This is a <span className="font-medium text-foreground">{showBreedName}</span> breed show.
+                Only dogs of this breed can be entered.
+                {filteredOutCount > 0 && (
+                  <span className="block mt-1 text-xs">
+                    {filteredOutCount} of your dog{filteredOutCount !== 1 ? 's are' : ' is'} a different breed and not shown below.
+                  </span>
+                )}
+              </p>
+            </div>
+          )}
 
           {dogsLoading ? (
             <div className="flex justify-center py-12">
               <Loader2 className="size-6 animate-spin text-muted-foreground" />
             </div>
-          ) : dogs && dogs.length > 0 ? (
+          ) : eligibleDogs && eligibleDogs.length > 0 ? (
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
-              {dogs.map((dog) => {
+              {eligibleDogs.map((dog) => {
                 const alreadyInCart = cart.entries.some(
                   (e) => e.dogId === dog.id && e.classIds.length > 0
                 );
@@ -710,6 +759,20 @@ export default function EnterShowPage() {
                 );
               })}
             </div>
+          ) : dogs && dogs.length > 0 && show?.showScope === 'single_breed' ? (
+            // User has dogs but none match the show's breed
+            <Card>
+              <CardContent className="py-8 text-center">
+                <AlertTriangle className="mx-auto mb-3 size-10 text-amber-500" />
+                <p className="font-medium">No eligible dogs</p>
+                <p className="mb-4 text-sm text-muted-foreground">
+                  This is a {showBreedName ?? 'single breed'} show. None of your registered dogs are this breed.
+                </p>
+                <Button asChild variant="outline">
+                  <Link href="/dogs/new">Register a {showBreedName ?? 'new'} dog</Link>
+                </Button>
+              </CardContent>
+            </Card>
           ) : (
             <Card>
               <CardContent className="py-8 text-center">
@@ -725,7 +788,7 @@ export default function EnterShowPage() {
             </Card>
           )}
 
-          {dogs && dogs.length > 0 && (
+          {eligibleDogs && eligibleDogs.length > 0 && (
             <Link
               href="/dogs/new"
               className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
@@ -741,7 +804,8 @@ export default function EnterShowPage() {
             </Button>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Step: Junior Handler Details */}
       {cart.step === 'junior_handler' && (() => {

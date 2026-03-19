@@ -41,6 +41,7 @@ export const entriesRouter = createTRPCRouter({
           eq(dogs.ownerId, ctx.session.user.id),
           isNull(dogs.deletedAt)
         ),
+        with: { breed: true },
       });
 
       if (!dog) {
@@ -75,6 +76,56 @@ export const entriesRouter = createTRPCRouter({
           code: 'BAD_REQUEST',
           message: 'Entry closing date has passed',
         });
+      }
+
+      // Breed validation for single-breed shows
+      if (show.showScope === 'single_breed') {
+        const showClassRows = await ctx.db.query.showClasses.findMany({
+          where: eq(showClasses.showId, input.showId),
+          columns: { breedId: true },
+        });
+        const judgeAssignmentRows = await ctx.db.query.judgeAssignments.findMany({
+          where: eq(judgeAssignments.showId, input.showId),
+          columns: { breedId: true },
+        });
+        const allowedBreedIds = new Set<string>();
+        for (const sc of showClassRows) {
+          if (sc.breedId) allowedBreedIds.add(sc.breedId);
+        }
+        for (const ja of judgeAssignmentRows) {
+          if (ja.breedId) allowedBreedIds.add(ja.breedId);
+        }
+
+        if (allowedBreedIds.size > 0 && !allowedBreedIds.has(dog.breedId)) {
+          const dogName = dog.registeredName ?? 'This dog';
+          const breedName = dog.breed?.name ?? 'its breed';
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `${dogName} (${breedName}) cannot be entered in this single-breed show. Only dogs of the show breed are eligible.`,
+          });
+        }
+      }
+
+      // Breed validation for individual classes (all show types)
+      {
+        const entryClasses = await ctx.db.query.showClasses.findMany({
+          where: and(
+            inArray(showClasses.id, input.classIds),
+            eq(showClasses.showId, input.showId)
+          ),
+          with: { classDefinition: true },
+        });
+        for (const sc of entryClasses) {
+          if (!sc.breedId || sc.classDefinition.type === 'junior_handler') continue;
+          if (sc.breedId !== dog.breedId) {
+            const dogName = dog.registeredName ?? 'This dog';
+            const breedName = dog.breed?.name ?? 'its breed';
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `${dogName} (${breedName}) cannot be entered in the class "${sc.classDefinition.name}" as it is restricted to a different breed.`,
+            });
+          }
+        }
       }
 
       // RKC age validation: dogs must meet minimum age on show day

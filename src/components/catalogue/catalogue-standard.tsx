@@ -111,7 +111,6 @@ function groupEntriesKC(entries: CatalogueEntry[]) {
   for (const entry of entries) {
     const group = entry.group ?? 'Unclassified';
     const breed = entry.breed ?? 'Unknown Breed';
-    const sex = entry.sex ?? 'unknown';
 
     if (!groups.has(group)) {
       groups.set(group, { sortOrder: entry.groupSortOrder ?? 999, breeds: new Map() });
@@ -121,14 +120,18 @@ function groupEntriesKC(entries: CatalogueEntry[]) {
       breedMap.set(breed, { sexes: {} });
     }
     const breedBucket = breedMap.get(breed)!;
-    breedBucket.sexes[sex] ??= [];
 
-    // Place entry into each class it's entered in
+    // Place entry into each class it's entered in.
+    // Use the CLASS sex (not the dog's sex) for grouping so that
+    // sex-neutral classes (e.g. Junior Handling, sex: null) get their
+    // own section between Dogs and Bitches.
     for (const cls of entry.classes) {
       const className = cls.name ?? 'Unknown Class';
       const classKey = `${cls.classNumber ?? ''}-${className}`;
+      const classSex = cls.sex === 'dog' ? 'dog' : cls.sex === 'bitch' ? 'bitch' : 'unknown';
 
-      let classBucket = breedBucket.sexes[sex].find(
+      breedBucket.sexes[classSex] ??= [];
+      let classBucket = breedBucket.sexes[classSex].find(
         (cb) => `${cb.classNumber ?? ''}-${cb.className}` === classKey
       );
       if (!classBucket) {
@@ -139,7 +142,7 @@ function groupEntriesKC(entries: CatalogueEntry[]) {
           sex: cls.sex,
           entries: [],
         };
-        breedBucket.sexes[sex].push(classBucket);
+        breedBucket.sexes[classSex].push(classBucket);
       }
       classBucket.entries.push(entry);
     }
@@ -299,7 +302,7 @@ export function CatalogueStandard({ show, entries }: Props) {
   const firstSeenClass = new Map<string, string>();
   const firstAppearanceBucket = new Map<string, ClassBucket>();
   for (const { breedBucket } of breedPages) {
-    for (const sex of ['dog', 'bitch', 'unknown']) {
+    for (const sex of ['dog', 'unknown', 'bitch']) {
       const classBuckets = breedBucket.sexes[sex];
       if (!classBuckets?.length) continue;
       for (const bucket of classBuckets) {
@@ -333,7 +336,7 @@ export function CatalogueStandard({ show, entries }: Props) {
             <Text style={styles.judgeLabel}>Judge: {judge}</Text>
           )}
 
-          {['dog', 'bitch', 'unknown']
+          {['dog', 'unknown', 'bitch']
             .filter((sex) => breedBucket.sexes[sex]?.length)
             .map((sex) => (
               <View key={sex}>
@@ -374,6 +377,11 @@ export function CatalogueStandard({ show, entries }: Props) {
                     {bucket.entries.map((entry) => {
                       const catNo = entry.catalogueNumber ?? '';
                       const isFirstAppearance = !catNo || firstAppearanceBucket.get(catNo) === bucket;
+                      const isJH = entry.entryType === 'junior_handler';
+                      // For JH entries, show handler/exhibitor name instead of dog name
+                      const displayName = isJH
+                        ? (entry.handler ?? entry.exhibitor ?? 'Unnamed Handler')
+                        : (entry.dogName ?? 'Unnamed');
 
                       if (!isFirstAppearance) {
                         // Abbreviated entry — [see class X]
@@ -389,7 +397,7 @@ export function CatalogueStandard({ show, entries }: Props) {
                                 {catNo || '—'}
                               </Text>
                               <Text style={styles.dogName}>
-                                {entry.dogName ?? 'Unnamed'}
+                                {displayName}
                               </Text>
                               <Text style={styles.seeClassRef}>
                                 {'  '}[see {firstClass}]
@@ -400,6 +408,43 @@ export function CatalogueStandard({ show, entries }: Props) {
                       }
 
                       // Full entry — first appearance
+                      if (isJH) {
+                        // Junior Handling: handler-centric display
+                        return (
+                          <View
+                            key={catNo || displayName}
+                            style={styles.entryRowWrap}
+                            wrap={false}
+                          >
+                            {/* Catalogue number + handler name */}
+                            <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                              <Text style={styles.catalogueNumber}>
+                                {catNo || '—'}
+                              </Text>
+                              <Text style={styles.dogName}>
+                                {displayName}
+                              </Text>
+                            </View>
+                            {/* Dog being handled */}
+                            {entry.dogName && (
+                              <Text style={styles.entryDetail}>
+                                <Text style={styles.entryDetailLabel}>Dog: </Text>
+                                {entry.dogName}
+                              </Text>
+                            )}
+                            {/* Owner(s) */}
+                            {entry.owners.length > 0 && (
+                              <Text style={styles.entryDetail}>
+                                <Text style={styles.entryDetailLabel}>
+                                  Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
+                                </Text>
+                                {formatOwnerKC(entry.owners, entry.exhibitorId)}
+                              </Text>
+                            )}
+                          </View>
+                        );
+                      }
+
                       const pedigree = formatPedigreeKC(entry.sire, entry.dam);
                       return (
                         <View
@@ -413,7 +458,7 @@ export function CatalogueStandard({ show, entries }: Props) {
                               {catNo || '—'}
                             </Text>
                             <Text style={styles.dogName}>
-                              {entry.dogName ?? 'Unnamed'}
+                              {displayName}
                             </Text>
                           </View>
 

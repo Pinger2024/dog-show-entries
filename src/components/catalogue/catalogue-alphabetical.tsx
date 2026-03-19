@@ -9,15 +9,24 @@ interface Props {
   entries: CatalogueEntry[];
 }
 
-// Group entries alphabetically by first letter of dog name
+/** Get the display name for a catalogue entry (handler name for JH, dog name otherwise) */
+function displayName(entry: CatalogueEntry): string {
+  if (entry.entryType === 'junior_handler') {
+    return entry.handler ?? entry.exhibitor ?? 'Unnamed Handler';
+  }
+  return entry.dogName ?? '';
+}
+
+// Group entries alphabetically by first letter of display name
 function groupAlphabetically(entries: CatalogueEntry[]) {
   const sorted = [...entries].sort((a, b) =>
-    (a.dogName ?? '').localeCompare(b.dogName ?? '')
+    displayName(a).localeCompare(displayName(b))
   );
 
   const groups: Record<string, CatalogueEntry[]> = {};
   for (const entry of sorted) {
-    const letter = (entry.dogName ?? '?').charAt(0).toUpperCase();
+    const name = displayName(entry);
+    const letter = (name || '?').charAt(0).toUpperCase();
     groups[letter] ??= [];
     groups[letter].push(entry);
   }
@@ -52,6 +61,47 @@ export function CatalogueAlphabetical({ show, entries }: Props) {
           <Text style={styles.groupHeading}>{letter}</Text>
 
           {grouped[letter].map((entry) => {
+            const isJH = entry.entryType === 'junior_handler';
+
+            if (isJH) {
+              const handlerName = entry.handler ?? entry.exhibitor ?? 'Unnamed Handler';
+              return (
+                <View
+                  key={entry.catalogueNumber}
+                  style={styles.entryRowWrap}
+                  wrap={false}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                    <Text style={styles.catalogueNumber}>
+                      {entry.catalogueNumber ?? '—'}
+                    </Text>
+                    <Text style={styles.dogName}>
+                      {handlerName}
+                    </Text>
+                  </View>
+                  {entry.dogName && (
+                    <Text style={styles.entryDetail}>
+                      <Text style={styles.entryDetailLabel}>Dog: </Text>
+                      {entry.dogName}
+                    </Text>
+                  )}
+                  {entry.owners.length > 0 && (
+                    <Text style={styles.entryDetail}>
+                      <Text style={styles.entryDetailLabel}>
+                        Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
+                      </Text>
+                      {formatOwnerKC(entry.owners, entry.exhibitorId)}
+                    </Text>
+                  )}
+                  {entry.classes.length > 0 && (
+                    <Text style={styles.entryClasses}>
+                      Entered in: {formatClassList(entry.classes)}
+                    </Text>
+                  )}
+                </View>
+              );
+            }
+
             const pedigree = formatPedigreeKC(entry.sire, entry.dam);
             return (
               <View

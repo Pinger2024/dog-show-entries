@@ -840,6 +840,7 @@ export function ShowDetailClient() {
                   showDate={format(parseISO(show.startDate), 'd MMMM yyyy')}
                   organisationName={show.organisation?.name ?? ''}
                   venueName={show.venue?.name}
+                  shareUrl={typeof window !== 'undefined' ? `${window.location.origin}/shows/${showSlug}` : ''}
                   className="h-9 border-stone-600 bg-transparent text-stone-300 shadow-none hover:bg-stone-700/50 hover:text-white"
                 />
               </div>

@@ -163,7 +163,6 @@ function groupEntriesKC(entries: CatalogueEntry[]) {
   for (const entry of entries) {
     const group = entry.group ?? 'Unclassified';
     const breed = entry.breed ?? 'Unknown Breed';
-    const sex = entry.sex ?? 'unknown';
 
     if (!groups.has(group)) {
       groups.set(group, { sortOrder: entry.groupSortOrder ?? 999, breeds: new Map() });
@@ -173,13 +172,16 @@ function groupEntriesKC(entries: CatalogueEntry[]) {
       breedMap.set(breed, { sexes: {} });
     }
     const breedBucket = breedMap.get(breed)!;
-    breedBucket.sexes[sex] ??= [];
 
+    // Use CLASS sex (not dog's sex) for grouping so sex-neutral classes
+    // (e.g. Junior Handling) get their own section between Dogs and Bitches.
     for (const cls of entry.classes) {
       const className = cls.name ?? 'Unknown Class';
       const classKey = `${cls.classNumber ?? ''}-${className}`;
+      const classSex = cls.sex === 'dog' ? 'dog' : cls.sex === 'bitch' ? 'bitch' : 'unknown';
 
-      let classBucket = breedBucket.sexes[sex].find(
+      breedBucket.sexes[classSex] ??= [];
+      let classBucket = breedBucket.sexes[classSex].find(
         (cb) => `${cb.classNumber ?? ''}-${cb.className}` === classKey
       );
       if (!classBucket) {
@@ -191,7 +193,7 @@ function groupEntriesKC(entries: CatalogueEntry[]) {
           showClassId: (cls as { showClassId?: string }).showClassId,
           entries: [],
         };
-        breedBucket.sexes[sex].push(classBucket);
+        breedBucket.sexes[classSex].push(classBucket);
       }
       classBucket.entries.push(entry);
     }
@@ -260,7 +262,7 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
   const firstSeenClass = new Map<string, string>();
   const firstAppearanceBucket = new Map<string, ClassBucket>();
   for (const { breedBucket } of breedPages) {
-    for (const sex of ['dog', 'bitch', 'unknown']) {
+    for (const sex of ['dog', 'unknown', 'bitch']) {
       const classBuckets = breedBucket.sexes[sex];
       if (!classBuckets?.length) continue;
       for (const bucket of classBuckets) {
@@ -347,7 +349,7 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
             <Text style={styles.judgeLabel}>Judge: {judge}</Text>
           )}
 
-          {['dog', 'bitch', 'unknown']
+          {['dog', 'unknown', 'bitch']
             .filter((sex) => breedBucket.sexes[sex]?.length)
             .map((sex) => (
               <View key={sex}>
@@ -367,6 +369,10 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                       const catNo = entry.catalogueNumber ?? '';
                       const isFirstAppearance = !catNo || firstAppearanceBucket.get(catNo) === bucket;
                       const isAbsent = catNo ? absentees.has(catNo) : false;
+                      const isJH = entry.entryType === 'junior_handler';
+                      const displayName = isJH
+                        ? (entry.handler ?? entry.exhibitor ?? 'Unnamed Handler')
+                        : (entry.dogName ?? 'Unnamed');
 
                       // Look up result for this entry in this class
                       const resultKey = catNo && bucket.showClassId
@@ -387,7 +393,7 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                                 {catNo || '\u2014'}
                               </Text>
                               <Text style={styles.dogName}>
-                                {entry.dogName ?? 'Unnamed'}
+                                {displayName}
                               </Text>
                               <Text style={styles.seeClassRef}>
                                 {'  '}[see {firstClass}]
@@ -406,6 +412,53 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                       }
 
                       // Full entry with result annotation
+                      if (isJH) {
+                        // Junior Handling: handler-centric display
+                        return (
+                          <View
+                            key={catNo || displayName}
+                            style={styles.entryRowWrap}
+                            wrap={false}
+                          >
+                            <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                              <Text style={styles.catalogueNumber}>
+                                {catNo || '\u2014'}
+                              </Text>
+                              <Text style={styles.dogName}>
+                                {displayName}
+                              </Text>
+                              {isAbsent && (
+                                <Text style={markedStyles.absentBadge}> Abs.</Text>
+                              )}
+                              {result?.placement && (
+                                <Text style={markedStyles.placementBadge}>
+                                  {' '}{getPlacementLabel(result.placement)}
+                                </Text>
+                              )}
+                            </View>
+                            {entry.dogName && (
+                              <Text style={styles.entryDetail}>
+                                <Text style={styles.entryDetailLabel}>Dog: </Text>
+                                {entry.dogName}
+                              </Text>
+                            )}
+                            {entry.owners.length > 0 && (
+                              <Text style={styles.entryDetail}>
+                                <Text style={styles.entryDetailLabel}>
+                                  Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
+                                </Text>
+                                {formatOwnerKC(entry.owners, entry.exhibitorId)}
+                              </Text>
+                            )}
+                            {result?.specialAward && (
+                              <Text style={markedStyles.specialAwardBadge}>
+                                {result.specialAward}
+                              </Text>
+                            )}
+                          </View>
+                        );
+                      }
+
                       const pedigree = formatPedigreeKC(entry.sire, entry.dam);
                       return (
                         <View
@@ -418,7 +471,7 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                               {catNo || '\u2014'}
                             </Text>
                             <Text style={styles.dogName}>
-                              {entry.dogName ?? 'Unnamed'}
+                              {displayName}
                             </Text>
                             {isAbsent && (
                               <Text style={markedStyles.absentBadge}> Abs.</Text>

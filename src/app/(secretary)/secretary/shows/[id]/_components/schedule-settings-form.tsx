@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Loader2, Save, Eye, Download, Check, AlertTriangle, ChevronsUpDown, Users, X } from 'lucide-react';
+import { Plus, Trash2, Loader2, Save, Eye, ExternalLink, Download, Check, AlertTriangle, ChevronsUpDown, Users, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -217,7 +217,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" asChild>
-            <a href={`/api/schedule/${showId}`} download>
+            <a href={`/api/schedule/${showId}`} target="_blank" rel="noopener noreferrer">
               <Eye className="size-4" />
               Preview PDF
             </a>
@@ -742,9 +742,9 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       {/* Bottom save bar */}
       <div className="flex flex-col gap-2 sm:flex-row sm:justify-end pb-4">
         <Button variant="outline" asChild className="w-full sm:w-auto min-h-[2.75rem]">
-          <a href={`/api/schedule/${showId}`} download>
-            <Download className="size-4" />
-            Download Schedule PDF
+          <a href={`/api/schedule/${showId}`} target="_blank" rel="noopener noreferrer">
+            <ExternalLink className="size-4" />
+            Open Schedule PDF
           </a>
         </Button>
         <Button

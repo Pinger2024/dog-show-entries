@@ -84,9 +84,9 @@ export function RkcSubmissionAction({ showId, onComplete }: ActionPanelProps) {
         className="w-full gap-1.5"
         asChild
       >
-        <a href={`/api/catalogue/${showId}/marked`} download>
+        <a href={`/api/catalogue/${showId}/marked`} target="_blank" rel="noopener noreferrer">
           <Download className="size-3" />
-          Download Marked Catalogue
+          Open Marked Catalogue
         </a>
       </Button>
 

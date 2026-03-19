@@ -207,8 +207,10 @@ export function ClassManager({ showId, showType, classes }: ClassManagerProps) {
         groups.push({ key: `breed-${breedName}`, label: breedName, classes: sorted });
       }
     } else {
+      // Group by sex only (no sub-grouping by type) so classes display
+      // in their correct sortOrder — this avoids Veteran (type: 'age')
+      // appearing before achievement classes.
       const sexOrder = ['dog', 'bitch', null] as const;
-      const typeOrder = ['age', 'achievement', 'special', 'junior_handler', 'other'];
 
       for (const sex of sexOrder) {
         const sexClasses = effectiveClasses.filter((sc) =>
@@ -216,23 +218,13 @@ export function ClassManager({ showId, showType, classes }: ClassManagerProps) {
         );
         if (sexClasses.length === 0) continue;
 
-        for (const type of typeOrder) {
-          const matchingClasses = sexClasses.filter(
-            (sc) => (sc.classDefinition?.type ?? 'other') === type
-          );
-          if (matchingClasses.length === 0) continue;
-          const sexLabel = sex === 'dog' ? 'Dog' : sex === 'bitch' ? 'Bitch' : 'Any Sex';
-          const typeLabel =
-            type === 'age' ? 'Age' :
-            type === 'achievement' ? 'Achievement' :
-            type === 'special' ? 'Special' :
-            type === 'junior_handler' ? 'Junior Handler' : 'Other';
-          groups.push({
-            key: `${sex}-${type}`,
-            label: `${sexLabel} — ${typeLabel} Classes`,
-            classes: matchingClasses,
-          });
-        }
+        const sexLabel = sex === 'dog' ? 'Dog Classes' : sex === 'bitch' ? 'Bitch Classes' : 'Any Sex Classes';
+        const sorted = [...sexClasses].sort((a, b) => a.sortOrder - b.sortOrder);
+        groups.push({
+          key: `${sex}`,
+          label: sexLabel,
+          classes: sorted,
+        });
       }
     }
 

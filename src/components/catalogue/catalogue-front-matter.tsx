@@ -387,7 +387,7 @@ interface TrophiesPageProps {
   sponsorships: ClassSponsorshipInfo[];
 }
 
-/** Trophies & Sponsorships front-matter page */
+/** Trophies & Sponsorships front-matter page — compact table layout */
 export function TrophiesPage({ show, sponsorships }: TrophiesPageProps) {
   if (sponsorships.length === 0) return null;
 
@@ -403,44 +403,58 @@ export function TrophiesPage({ show, sponsorships }: TrophiesPageProps) {
     <Page size="A5" style={styles.frontMatterPage} wrap>
       <SectionBand title="Trophies & Sponsorships" />
 
+      {/* Table header */}
+      <View style={{
+        flexDirection: 'row',
+        borderBottomWidth: 1.5,
+        borderBottomColor: C.primary,
+        paddingBottom: 3,
+        marginBottom: 4,
+      }}>
+        <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '30%', color: C.textDark }}>Class</Text>
+        <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '35%', color: C.textDark }}>Trophy / Sponsor</Text>
+        <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '35%', color: C.textDark }}>Prize</Text>
+      </View>
+
       {sorted.map((sp, idx) => {
         const classLabel = sp.classNumber != null
-          ? `Class ${sp.classNumber}. ${sp.className}`
+          ? `${sp.classNumber}. ${sp.className}`
           : sp.className;
 
-        // Build trophy/sponsor description lines
-        const lines: string[] = [];
+        // Build trophy + sponsor combined text
+        const trophySponsorParts: string[] = [];
         if (sp.trophyName) {
-          let trophyLine = `Trophy: ${sp.trophyName}`;
-          if (sp.trophyDonor) trophyLine += ` — donated by ${sp.trophyDonor}`;
-          lines.push(trophyLine);
+          let part = sp.trophyName;
+          if (sp.trophyDonor) part += ` (${sp.trophyDonor})`;
+          trophySponsorParts.push(part);
         }
         if (sp.sponsorName) {
-          let sponsorLine = `Sponsored by ${sp.sponsorName}`;
-          if (sp.sponsorAffix) sponsorLine += ` (${sp.sponsorAffix})`;
-          lines.push(sponsorLine);
-        }
-        if (sp.prizeDescription) {
-          lines.push(sp.prizeDescription);
+          let part = `Sponsored by ${sp.sponsorName}`;
+          if (sp.sponsorAffix) part += ` (${sp.sponsorAffix})`;
+          trophySponsorParts.push(part);
         }
 
         return (
-          <InfoCard key={`${sp.classNumber}-${sp.className}-${idx}`}>
-            <Text style={{
-              fontFamily: 'Inter',
-              fontSize: 8,
-              fontWeight: 'bold',
-              color: C.textDark,
-              marginBottom: 2,
-            }}>
+          <View
+            key={`${sp.classNumber}-${sp.className}-${idx}`}
+            wrap={false}
+            style={{
+              flexDirection: 'row',
+              paddingVertical: 2.5,
+              borderBottomWidth: 0.5,
+              borderBottomColor: C.ruleLight,
+            }}
+          >
+            <Text style={{ fontFamily: 'Inter', fontSize: 7, fontWeight: 'bold', width: '30%', color: C.textDark }}>
               {classLabel}
             </Text>
-            {lines.map((line, i) => (
-              <Text key={i} style={styles.sponsorLine}>
-                {line}
-              </Text>
-            ))}
-          </InfoCard>
+            <Text style={{ fontFamily: 'Times', fontSize: 6.5, fontStyle: 'italic', width: '35%', color: C.textMedium }}>
+              {trophySponsorParts.join('\n') || '—'}
+            </Text>
+            <Text style={{ fontFamily: 'Inter', fontSize: 6.5, width: '35%', color: C.textMedium }}>
+              {sp.prizeDescription || '—'}
+            </Text>
+          </View>
         );
       })}
 

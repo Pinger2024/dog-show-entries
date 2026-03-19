@@ -30,6 +30,8 @@ interface ShowShareDropdownProps {
   organisationName: string;
   venueName?: string;
   className?: string;
+  /** Explicit canonical URL to share. Falls back to window.location.origin + pathname (no query params or hash). */
+  shareUrl?: string;
 }
 
 export function ShowShareDropdown({
@@ -39,10 +41,13 @@ export function ShowShareDropdown({
   organisationName,
   venueName,
   className,
+  shareUrl: shareUrlProp,
 }: ShowShareDropdownProps) {
   const [copied, setCopied] = useState(false);
 
-  const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
+  // Use explicit prop, or strip query params / hash from current URL to get a clean public URL
+  const shareUrl = shareUrlProp
+    ?? (typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : '');
   const messageText = `Check out ${showName} — a ${showType} by ${organisationName}${venueName ? ` at ${venueName}` : ''} on ${showDate}. Enter online on Remi!`;
   const tweetText = `${showName} — ${showType} by ${organisationName}, ${showDate}. Enter online on Remi!`;
   const hashtags = ['DogShow', 'Remi', showType.replace(/\s+/g, '')];
@@ -102,7 +107,7 @@ export function ShowShareDropdown({
         )}
         <DropdownMenuItem
           onClick={() => {
-            navigator.clipboard.writeText(window.location.href);
+            navigator.clipboard.writeText(shareUrl);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
           }}

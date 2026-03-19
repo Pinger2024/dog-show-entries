@@ -1,6 +1,7 @@
 import { Document, Page, View, Text } from '@react-pdf/renderer';
 import { styles } from './catalogue-styles';
 import { CoverPage, JudgesListPage, ClassDefinitionsPage, TrophiesPage } from './catalogue-front-matter';
+import type { ClassSponsorshipInfo } from './catalogue-front-matter';
 import { formatDobKC, formatPedigreeKC, formatOwnerKC, uppercaseName } from './catalogue-utils';
 import type { CatalogueEntry, CatalogueShowInfo } from './catalogue-standard';
 
@@ -41,7 +42,6 @@ function groupEntriesByBreed(entries: CatalogueEntry[]) {
   for (const entry of entries) {
     const group = entry.group ?? 'Unclassified';
     const breed = entry.breed ?? 'Unknown Breed';
-    const sex = entry.sex ?? 'unknown';
     const catNo = entry.catalogueNumber ?? '';
 
     if (!groups.has(group)) {
@@ -52,18 +52,21 @@ function groupEntriesByBreed(entries: CatalogueEntry[]) {
       breedMap.set(breed, { sexes: {} });
     }
     const breedBucket = breedMap.get(breed)!;
-    if (!breedBucket.sexes[sex]) {
-      breedBucket.sexes[sex] = { entries: [], classes: new Map() };
-    }
-    const sexGroup = breedBucket.sexes[sex];
 
-    // Add entry to listing if not already present (dedup by catalogue number)
-    if (!sexGroup.entries.some((e) => e.catalogueNumber === catNo)) {
-      sexGroup.entries.push(entry);
-    }
-
-    // Map each class → catalogue numbers
+    // Group by CLASS sex (not dog's sex) so sex-neutral classes like
+    // Junior Handling get their own section between Dogs and Bitches.
     for (const cls of entry.classes) {
+      const classSex = cls.sex === 'dog' ? 'dog' : cls.sex === 'bitch' ? 'bitch' : 'unknown';
+      if (!breedBucket.sexes[classSex]) {
+        breedBucket.sexes[classSex] = { entries: [], classes: new Map() };
+      }
+      const sexGroup = breedBucket.sexes[classSex];
+
+      // Add entry to listing if not already present (dedup by catalogue number)
+      if (!sexGroup.entries.some((e) => e.catalogueNumber === catNo)) {
+        sexGroup.entries.push(entry);
+      }
+
       const className = cls.name ?? 'Unknown Class';
       const classKey = `${cls.classNumber ?? ''}-${className}`;
       if (!sexGroup.classes.has(classKey)) {
@@ -123,6 +126,14 @@ function classLabel(cls: { className: string; classNumber: number | null | undef
 }
 
 export function CatalogueByBreed({ show, entries }: Props) {
+  // Build a lookup: classNumber -> sponsorship info for inline display
+  const sponsorByClassNumber = new Map<number, ClassSponsorshipInfo>();
+  for (const sp of show.classSponsorships ?? []) {
+    if (sp.classNumber != null) {
+      sponsorByClassNumber.set(sp.classNumber, sp);
+    }
+  }
+
   const grouped = groupEntriesByBreed(entries);
 
   // Inject empty classes from allShowClasses that have no entries
@@ -212,7 +223,7 @@ export function CatalogueByBreed({ show, entries }: Props) {
             <Text style={styles.judgeLabel}>Judge: {judge}</Text>
           )}
 
-          {['dog', 'bitch', 'unknown']
+          {['dog', 'unknown', 'bitch']
             .filter((sex) => breedBucket.sexes[sex]?.entries.length)
             .map((sex) => {
               const sexGroup = breedBucket.sexes[sex];
@@ -227,6 +238,43 @@ export function CatalogueByBreed({ show, entries }: Props) {
                   {/* ── Full entry listings ── */}
                   {sexGroup.entries.map((entry) => {
                     const catNo = entry.catalogueNumber ?? '';
+                    const isJH = entry.entryType === 'junior_handler';
+
+                    if (isJH) {
+                      // Junior Handling: handler-centric display
+                      const handlerName = entry.handler ?? entry.exhibitor ?? 'Unnamed Handler';
+                      return (
+                        <View
+                          key={catNo || handlerName}
+                          style={styles.entryRowWrap}
+                          wrap={false}
+                        >
+                          <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                            <Text style={styles.catalogueNumber}>
+                              {catNo || '—'}
+                            </Text>
+                            <Text style={styles.dogName}>
+                              {handlerName}
+                            </Text>
+                          </View>
+                          {entry.dogName && (
+                            <Text style={styles.entryDetail}>
+                              <Text style={styles.entryDetailLabel}>Dog: </Text>
+                              {entry.dogName}
+                            </Text>
+                          )}
+                          {entry.owners.length > 0 && (
+                            <Text style={styles.entryDetail}>
+                              <Text style={styles.entryDetailLabel}>
+                                Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
+                              </Text>
+                              {formatOwnerKC(entry.owners, entry.exhibitorId)}
+                            </Text>
+                          )}
+                        </View>
+                      );
+                    }
+
                     const pedigree = formatPedigreeKC(entry.sire, entry.dam);
                     return (
                       <View
@@ -292,14 +340,38 @@ export function CatalogueByBreed({ show, entries }: Props) {
 
                   {/* ── Compact class summaries ── */}
                   <View style={{ marginTop: 4, marginBottom: 6 }}>
-                    {sortedClassSummaries(sexGroup.classes).map((cls) => (
-                      <Text
-                        key={`${cls.classNumber}-${cls.className}`}
-                        style={styles.classListSummary}
-                      >
-                        {classLabel(cls, sex)}
-                      </Text>
-                    ))}
+                    {sortedClassSummaries(sexGroup.classes).map((cls) => {
+                      // Look up sponsorship for this class
+                      const sp = cls.classNumber != null
+                        ? sponsorByClassNumber.get(cls.classNumber)
+                        : undefined;
+                      const sponsorParts: string[] = [];
+                      if (sp?.trophyName) {
+                        let part = `Trophy: ${sp.trophyName}`;
+                        if (sp.sponsorName) {
+                          part += ` — sponsored by ${sp.sponsorName}`;
+                          if (sp.sponsorAffix) part += ` (${sp.sponsorAffix})`;
+                        }
+                        sponsorParts.push(part);
+                      } else if (sp?.sponsorName) {
+                        let part = `Sponsored by ${sp.sponsorName}`;
+                        if (sp.sponsorAffix) part += ` (${sp.sponsorAffix})`;
+                        sponsorParts.push(part);
+                      }
+
+                      return (
+                        <View key={`${cls.classNumber}-${cls.className}`}>
+                          <Text style={styles.classListSummary}>
+                            {classLabel(cls, sex)}
+                          </Text>
+                          {sponsorParts.map((line, i) => (
+                            <Text key={i} style={{ ...styles.sponsorLine, fontSize: 6, marginBottom: 1 }}>
+                              {line}
+                            </Text>
+                          ))}
+                        </View>
+                      );
+                    })}
                   </View>
                 </View>
               );

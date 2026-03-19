@@ -4,6 +4,7 @@ import { CatalogueHeader } from './catalogue-header';
 import type { CatalogueEntry, CatalogueShowInfo } from './catalogue-standard';
 import { formatDobKC, formatPedigreeKC, formatOwnerKC, uppercaseName } from './catalogue-utils';
 import { CoverPage, JudgesListPage, ClassDefinitionsPage, TrophiesPage } from './catalogue-front-matter';
+import type { ClassSponsorshipInfo } from './catalogue-front-matter';
 
 interface Props {
   show: CatalogueShowInfo;
@@ -43,6 +44,14 @@ function groupByClass(entries: CatalogueEntry[]) {
 }
 
 export function CatalogueByClass({ show, entries }: Props) {
+  // Build a lookup: classNumber -> sponsorship info for inline display
+  const sponsorByClassNumber = new Map<number, ClassSponsorshipInfo>();
+  for (const sp of show.classSponsorships ?? []) {
+    if (sp.classNumber != null) {
+      sponsorByClassNumber.set(sp.classNumber, sp);
+    }
+  }
+
   const grouped = groupByClass(entries);
 
   // Inject empty classes from allShowClasses that have no entries
@@ -105,11 +114,68 @@ export function CatalogueByClass({ show, entries }: Props) {
                 </Text>
               )}
             </View>
+            {/* Sponsorship banner if class has a trophy/sponsor */}
+            {classNumber != null && sponsorByClassNumber.has(classNumber) && (() => {
+              const sp = sponsorByClassNumber.get(classNumber)!;
+              const parts: string[] = [];
+              if (sp.trophyName) {
+                let part = `Trophy: ${sp.trophyName}`;
+                if (sp.sponsorName) {
+                  part += ` — sponsored by ${sp.sponsorName}`;
+                  if (sp.sponsorAffix) part += ` (${sp.sponsorAffix})`;
+                }
+                parts.push(part);
+              } else if (sp.sponsorName) {
+                let part = `Sponsored by ${sp.sponsorName}`;
+                if (sp.sponsorAffix) part += ` (${sp.sponsorAffix})`;
+                parts.push(part);
+              }
+              return parts.map((line, i) => (
+                <Text key={i} style={styles.sponsorLine}>{line}</Text>
+              ));
+            })()}
+
             <Text style={styles.classEntryCount}>
               {sorted.length} {sorted.length === 1 ? 'entry' : 'entries'}
             </Text>
 
             {sorted.map((entry) => {
+              const isJH = entry.entryType === 'junior_handler';
+              if (isJH) {
+                // Junior Handling: handler-centric display
+                const handlerName = entry.handler ?? entry.exhibitor ?? 'Unnamed Handler';
+                return (
+                  <View
+                    key={`${className}-${entry.catalogueNumber}`}
+                    style={styles.entryRowWrap}
+                    wrap={false}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                      <Text style={styles.catalogueNumber}>
+                        {entry.catalogueNumber ?? '—'}
+                      </Text>
+                      <Text style={styles.dogName}>
+                        {handlerName}
+                      </Text>
+                    </View>
+                    {entry.dogName && (
+                      <Text style={styles.entryDetail}>
+                        <Text style={styles.entryDetailLabel}>Dog: </Text>
+                        {entry.dogName}
+                      </Text>
+                    )}
+                    {entry.owners.length > 0 && (
+                      <Text style={styles.entryDetail}>
+                        <Text style={styles.entryDetailLabel}>
+                          Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
+                        </Text>
+                        {formatOwnerKC(entry.owners, entry.exhibitorId)}
+                      </Text>
+                    )}
+                  </View>
+                );
+              }
+
               const pedigree = formatPedigreeKC(entry.sire, entry.dam);
               return (
                 <View
