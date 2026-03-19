@@ -35,6 +35,7 @@ import type { RouterOutputs } from '@/server/trpc/router';
 import { ClassManager, BulkClassCreator } from './class-manager';
 import { JudgesSection } from './judge-section';
 import { ScheduleSettingsForm } from './schedule-settings-form';
+import { SundryItemManager } from './sundry-item-manager';
 
 type Show = NonNullable<RouterOutputs['shows']['getById']>;
 
@@ -623,6 +624,15 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
           'Save Details'
         )}
       </Button>
+
+      {/* Sundry Items */}
+      <div className="space-y-3">
+        <h4 className="text-sm font-semibold">Sundry Items</h4>
+        <p className="text-xs text-muted-foreground">
+          Configure add-on items exhibitors can purchase at checkout, such as catalogues, memberships, and donations.
+        </p>
+        <SundryItemManager showId={showId} />
+      </div>
     </div>
   );
 }

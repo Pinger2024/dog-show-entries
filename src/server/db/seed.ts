@@ -91,39 +91,40 @@ async function seed() {
   const classDefs = await db
     .insert(schema.classDefinitions)
     .values([
-      // Age-based (sortOrder: lowest age first)
-      { name: 'Minor Puppy', type: 'age' as const, sortOrder: 1, minAgeMonths: 6, maxAgeMonths: 9, description: 'For dogs of 6 and not exceeding 9 calendar months of age on the first day of the show.' },
-      { name: 'Puppy', type: 'age' as const, sortOrder: 2, minAgeMonths: 6, maxAgeMonths: 12, description: 'For dogs of 6 and not exceeding 12 calendar months of age on the first day of the show.' },
-      { name: 'Junior', type: 'age' as const, sortOrder: 3, minAgeMonths: 6, maxAgeMonths: 18, description: 'For dogs of 6 and not exceeding 18 calendar months of age on the first day of the show.' },
-      { name: 'Yearling', type: 'age' as const, sortOrder: 4, minAgeMonths: 12, maxAgeMonths: 24, description: 'For dogs of 12 and not exceeding 24 calendar months of age on the first day of the show.' },
-      { name: 'Veteran', type: 'age' as const, sortOrder: 99, minAgeMonths: 84, description: 'For dogs of not less than 7 years of age on the first day of the show.' },
-      // Achievement-based (sortOrder: RKC progression order)
-      { name: 'Maiden', type: 'achievement' as const, sortOrder: 1, maxWins: 0, description: 'For dogs which have not won a CC/RCC or a first prize at an Open or Championship Show.' },
-      { name: 'Novice', type: 'achievement' as const, sortOrder: 2, maxWins: 2, description: 'For dogs which have not won a CC or 3 or more first prizes at Open and Championship Shows.' },
-      { name: 'Undergraduate', type: 'achievement' as const, sortOrder: 3, maxWins: 2, description: 'For dogs which have not won a CC or 3 or more first prizes at Championship Shows in Undergraduate, Graduate, Post Graduate, Mid Limit, Limit, or Open.' },
-      { name: 'Graduate', type: 'achievement' as const, sortOrder: 4, maxWins: 3, description: 'For dogs which have not won a CC or 4 or more first prizes at Championship Shows.' },
-      { name: 'Post Graduate', type: 'achievement' as const, sortOrder: 5, maxWins: 4, description: 'For dogs which have not won a CC or 5 or more first prizes at Championship Shows.' },
-      { name: 'Mid Limit', type: 'achievement' as const, sortOrder: 6, maxWins: 4, description: 'For dogs which have not won a CC or 3 or more first prizes in Mid Limit, Limit, or Open at Championship Shows.' },
-      { name: 'Limit', type: 'achievement' as const, sortOrder: 7, maxWins: 6, description: 'For dogs which have not become Show Champions or won 3 or more CCs or 7 or more first prizes at Championship Shows in Limit or Open.' },
-      { name: 'Open', type: 'achievement' as const, sortOrder: 8, description: 'For all dogs of the breed eligible for entry at the show. No restrictions.' },
-      // Special Long Coat GSD varieties (continue numbering after standard classes in their type)
-      { name: 'Special Long Coat Puppy', type: 'age' as const, sortOrder: 6, minAgeMonths: 6, maxAgeMonths: 12, description: 'For Long Coat German Shepherd Dogs of 6 and not exceeding 12 calendar months of age on the first day of the show.' },
-      { name: 'Special Long Coat Junior', type: 'age' as const, sortOrder: 7, minAgeMonths: 6, maxAgeMonths: 18, description: 'For Long Coat dogs aged 6-18 months' },
-      { name: 'Special Long Coat Yearling', type: 'age' as const, sortOrder: 8, minAgeMonths: 12, maxAgeMonths: 24, description: 'For Long Coat dogs aged 12-24 months' },
-      { name: 'Special Long Coat Open', type: 'achievement' as const, sortOrder: 9, description: 'For Long Coat German Shepherd Dogs eligible for entry at the show. No restrictions.' },
+      // Global sortOrder — determines class order within each sex group
+      // SLC variants interleave with their standard counterparts; Veteran is always last breed class
+      { name: 'Minor Puppy', type: 'age' as const, sortOrder: 10, minAgeMonths: 6, maxAgeMonths: 9, description: 'For dogs of 6 and not exceeding 9 calendar months of age on the first day of the show.' },
+      { name: 'Puppy', type: 'age' as const, sortOrder: 20, minAgeMonths: 6, maxAgeMonths: 12, description: 'For dogs of 6 and not exceeding 12 calendar months of age on the first day of the show.' },
+      { name: 'Junior', type: 'age' as const, sortOrder: 30, minAgeMonths: 6, maxAgeMonths: 18, description: 'For dogs of 6 and not exceeding 18 calendar months of age on the first day of the show.' },
+      { name: 'Yearling', type: 'age' as const, sortOrder: 40, minAgeMonths: 12, maxAgeMonths: 24, description: 'For dogs of 12 and not exceeding 24 calendar months of age on the first day of the show.' },
+      { name: 'Maiden', type: 'achievement' as const, sortOrder: 50, maxWins: 0, description: 'For dogs which have not won a CC/RCC or a first prize at an Open or Championship Show.' },
+      { name: 'Novice', type: 'achievement' as const, sortOrder: 60, maxWins: 2, description: 'For dogs which have not won a CC or 3 or more first prizes at Open and Championship Shows.' },
+      { name: 'Undergraduate', type: 'achievement' as const, sortOrder: 70, maxWins: 2, description: 'For dogs which have not won a CC or 3 or more first prizes at Championship Shows in Undergraduate, Graduate, Post Graduate, Mid Limit, Limit, or Open.' },
+      { name: 'Graduate', type: 'achievement' as const, sortOrder: 80, maxWins: 3, description: 'For dogs which have not won a CC or 4 or more first prizes at Championship Shows.' },
+      { name: 'Post Graduate', type: 'achievement' as const, sortOrder: 90, maxWins: 4, description: 'For dogs which have not won a CC or 5 or more first prizes at Championship Shows.' },
+      { name: 'Mid Limit', type: 'achievement' as const, sortOrder: 100, maxWins: 4, description: 'For dogs which have not won a CC or 3 or more first prizes in Mid Limit, Limit, or Open at Championship Shows.' },
+      { name: 'Limit', type: 'achievement' as const, sortOrder: 110, maxWins: 6, description: 'For dogs which have not become Show Champions or won 3 or more CCs or 7 or more first prizes at Championship Shows in Limit or Open.' },
+      { name: 'Open', type: 'achievement' as const, sortOrder: 120, description: 'For all dogs of the breed eligible for entry at the show. No restrictions.' },
+      // Special Long Coat GSD varieties — interleave after their standard counterpart
+      { name: 'Special Long Coat Puppy', type: 'age' as const, sortOrder: 25, minAgeMonths: 6, maxAgeMonths: 12, description: 'For Long Coat German Shepherd Dogs of 6 and not exceeding 12 calendar months of age on the first day of the show.' },
+      { name: 'Special Long Coat Junior', type: 'age' as const, sortOrder: 35, minAgeMonths: 6, maxAgeMonths: 18, description: 'For Long Coat dogs aged 6-18 months' },
+      { name: 'Special Long Coat Yearling', type: 'age' as const, sortOrder: 45, minAgeMonths: 12, maxAgeMonths: 24, description: 'For Long Coat dogs aged 12-24 months' },
+      { name: 'Special Long Coat Open', type: 'achievement' as const, sortOrder: 125, description: 'For Long Coat German Shepherd Dogs eligible for entry at the show. No restrictions.' },
+      // Veteran — always last breed class within each sex
+      { name: 'Veteran', type: 'age' as const, sortOrder: 900, minAgeMonths: 84, description: 'For dogs of not less than 7 years of age on the first day of the show.' },
       // Special
-      { name: 'Good Citizen Dog Scheme', type: 'special' as const, sortOrder: 1, description: 'For dogs that have passed any level of the Royal Kennel Club Good Citizen Dog Scheme.' },
-      { name: 'Special Beginners', type: 'special' as const, sortOrder: 2, description: 'For dogs whose owners/handlers have never won a CC or Reserve CC at Championship Shows.' },
+      { name: 'Good Citizen Dog Scheme', type: 'special' as const, sortOrder: 150, description: 'For dogs that have passed any level of the Royal Kennel Club Good Citizen Dog Scheme.' },
+      { name: 'Special Beginners', type: 'special' as const, sortOrder: 140, description: 'For dogs whose owners/handlers have never won a CC or Reserve CC at Championship Shows.' },
       // Junior Handler classes (legacy — kept for existing entries)
-      { name: 'Junior Handler (6-11)', type: 'junior_handler' as const, sortOrder: 1, minAgeMonths: 72, maxAgeMonths: 143, description: 'For handlers aged 6-11 years on the day of the show. Judged on handling skill, not the dog.' },
-      { name: 'Junior Handler (12-16)', type: 'junior_handler' as const, sortOrder: 2, minAgeMonths: 144, maxAgeMonths: 203, description: 'For handlers aged 12-16 years on the day of the show. Judged on handling skill, not the dog.' },
+      { name: 'Junior Handler (6-11)', type: 'junior_handler' as const, sortOrder: 310, minAgeMonths: 72, maxAgeMonths: 143, description: 'For handlers aged 6-11 years on the day of the show. Judged on handling skill, not the dog.' },
+      { name: 'Junior Handler (12-16)', type: 'junior_handler' as const, sortOrder: 320, minAgeMonths: 144, maxAgeMonths: 203, description: 'For handlers aged 12-16 years on the day of the show. Judged on handling skill, not the dog.' },
       // YKC Handling (official RKC route — 3 age groups, Crufts qualifier)
-      { name: 'YKC Handling (6-11)', type: 'junior_handler' as const, sortOrder: 10, minAgeMonths: 72, maxAgeMonths: 144, description: 'Young Kennel Club handling. YKC membership required. Crufts qualifier.' },
-      { name: 'YKC Handling (12-17)', type: 'junior_handler' as const, sortOrder: 11, minAgeMonths: 144, maxAgeMonths: 216, description: 'Young Kennel Club handling. YKC membership required. Crufts qualifier.' },
-      { name: 'YKC Handling (18-24)', type: 'junior_handler' as const, sortOrder: 12, minAgeMonths: 216, maxAgeMonths: 300, description: 'Young Kennel Club handling. YKC membership required. Crufts qualifier.' },
+      { name: 'YKC Handling (6-11)', type: 'junior_handler' as const, sortOrder: 330, minAgeMonths: 72, maxAgeMonths: 144, description: 'Young Kennel Club handling. YKC membership required. Crufts qualifier.' },
+      { name: 'YKC Handling (12-17)', type: 'junior_handler' as const, sortOrder: 340, minAgeMonths: 144, maxAgeMonths: 216, description: 'Young Kennel Club handling. YKC membership required. Crufts qualifier.' },
+      { name: 'YKC Handling (18-24)', type: 'junior_handler' as const, sortOrder: 350, minAgeMonths: 216, maxAgeMonths: 300, description: 'Young Kennel Club handling. YKC membership required. Crufts qualifier.' },
       // JHA Handling (independent organisation — 2 age groups)
-      { name: 'JHA Handling (6-11)', type: 'junior_handler' as const, sortOrder: 20, minAgeMonths: 72, maxAgeMonths: 144, description: 'Junior Handling Association. JHA membership required.' },
-      { name: 'JHA Handling (12-16)', type: 'junior_handler' as const, sortOrder: 21, minAgeMonths: 144, maxAgeMonths: 204, description: 'Junior Handling Association. JHA membership required.' },
+      { name: 'JHA Handling (6-11)', type: 'junior_handler' as const, sortOrder: 360, minAgeMonths: 72, maxAgeMonths: 144, description: 'Junior Handling Association. JHA membership required.' },
+      { name: 'JHA Handling (12-16)', type: 'junior_handler' as const, sortOrder: 370, minAgeMonths: 144, maxAgeMonths: 204, description: 'Junior Handling Association. JHA membership required.' },
     ])
     .onConflictDoNothing({ target: schema.classDefinitions.name })
     .returning();
