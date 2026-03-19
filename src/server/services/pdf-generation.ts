@@ -127,20 +127,28 @@ export async function generateCataloguePdf(
     entryType: entry.entryType,
   }));
 
+  const scheduleData = show.scheduleData as Record<string, unknown> | null;
+
   const showInfo: CatalogueShowInfo = {
     name: show.name,
     showType: show.showType,
     date: show.startDate,
+    endDate: show.endDate !== show.startDate ? show.endDate : undefined,
     venue: show.venue?.name,
     venueAddress: show.venue?.address ?? undefined,
     organisation: show.organisation?.name,
     kcLicenceNo: show.kcLicenceNo,
     logoUrl: show.organisation?.logoUrl ?? undefined,
+    secretaryName: show.secretaryName ?? undefined,
     secretaryEmail: show.secretaryEmail ?? undefined,
+    secretaryPhone: show.secretaryPhone ?? undefined,
+    onCallVet: show.onCallVet ?? undefined,
+    wetWeatherAccommodation: scheduleData?.wetWeatherAccommodation === true ? true : scheduleData?.wetWeatherAccommodation === false ? false : undefined,
+    judgedOnGroupSystem: scheduleData?.judgedOnGroupSystem === true ? true : undefined,
     judgesByBreedName,
     classDefinitions,
     showScope: show.showScope ?? undefined,
-    customStatements: show.scheduleData?.customStatements,
+    customStatements: (scheduleData?.customStatements as string[] | undefined),
   };
 
   const isAllBreed = show.showScope !== 'single_breed';
@@ -261,37 +269,70 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     breedName: sc.breed?.name ?? null,
   }));
 
+  // Build class sponsorships grouped by show sponsor
+  const classSponsorsByShowSponsor = new Map<string, Array<{
+    className: string;
+    trophyName: string | null;
+    trophyDonor: string | null;
+    prizeDescription: string | null;
+  }>>();
+  for (const cs of classSponsorships) {
+    if (!cs.showSponsorId) continue;
+    const list = classSponsorsByShowSponsor.get(cs.showSponsorId) ?? [];
+    list.push({
+      className: cs.showClass?.classDefinition?.name ?? 'Unknown',
+      trophyName: cs.trophyName,
+      trophyDonor: cs.trophyDonor,
+      prizeDescription: cs.prizeDescription,
+    });
+    classSponsorsByShowSponsor.set(cs.showSponsorId, list);
+  }
+
   const sponsors: ScheduleSponsor[] = showSponsors.map((ss) => ({
     name: ss.sponsor.name,
     tier: ss.tier,
+    customTitle: ss.customTitle,
     logoUrl: ss.sponsor.logoUrl,
     website: ss.sponsor.website,
-    classSponsorship: classSponsorships
-      .filter((cs) => cs.sponsorId === ss.sponsorId)
-      .map((cs) => cs.showClass?.classDefinition?.name)
-      .filter(Boolean) as string[],
-    trophyDescription: ss.trophyDescription,
+    specialPrizes: ss.specialPrizes,
+    classSponsorships: classSponsorsByShowSponsor.get(ss.id) ?? [],
   }));
-
-  const scheduleData = show.scheduleData as Record<string, unknown> | null;
 
   const showInfo: ScheduleShowInfo = {
     name: show.name,
     showType: show.showType,
+    showScope: show.showScope ?? 'single_breed',
     date: show.startDate,
     endDate: show.endDate,
-    venue: show.venue?.name ?? null,
-    venueAddress: show.venue?.address ?? null,
-    organisation: show.organisation?.name ?? null,
-    logoUrl: show.organisation?.logoUrl ?? null,
+    startTime: show.startTime,
+    entriesOpenDate: show.entriesOpenDate,
+    entryCloseDate: show.entryCloseDate,
+    postalCloseDate: show.postalCloseDate,
     kcLicenceNo: show.kcLicenceNo,
-    secretaryName: show.secretaryName,
     secretaryEmail: show.secretaryEmail,
+    secretaryName: show.secretaryName,
+    secretaryAddress: show.secretaryAddress,
     secretaryPhone: show.secretaryPhone,
-    entryFee: show.entryFee,
-    additionalClassFee: show.additionalClassFee,
-    cataloguePreOrderFee: show.cataloguePreOrderFee,
-    scheduleData,
+    showOpenTime: show.showOpenTime,
+    onCallVet: show.onCallVet,
+    description: show.description,
+    firstEntryFee: show.firstEntryFee,
+    subsequentEntryFee: show.subsequentEntryFee,
+    nfcEntryFee: show.nfcEntryFee,
+    acceptsPostalEntries: show.acceptsPostalEntries ?? false,
+    scheduleData: show.scheduleData as ScheduleShowInfo['scheduleData'],
+    organisation: show.organisation ? {
+      name: show.organisation.name,
+      contactEmail: show.organisation.contactEmail,
+      contactPhone: show.organisation.contactPhone,
+      website: show.organisation.website,
+      logoUrl: show.organisation.logoUrl,
+    } : null,
+    venue: show.venue ? {
+      name: show.venue.name,
+      address: show.venue.address,
+      postcode: show.venue.postcode,
+    } : null,
   };
 
   const pdfDocument = React.createElement(ShowSchedule, {
@@ -316,7 +357,7 @@ export async function generateRingBoardPdf(showId: string): Promise<Buffer> {
   const [rings, judgeAssignments, showClasses, entryCountRows] = await Promise.all([
     db.query.rings.findMany({
       where: eq(schema.rings.showId, showId),
-      orderBy: [asc(schema.rings.ringNumber)],
+      orderBy: [asc(schema.rings.number)],
     }),
     db.query.judgeAssignments.findMany({
       where: eq(schema.judgeAssignments.showId, showId),

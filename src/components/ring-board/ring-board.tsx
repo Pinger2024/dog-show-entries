@@ -196,7 +196,7 @@ export function RingBoard({
 
   return (
     <Document title={`Ring Board — ${show.name}`} author="Remi Show Manager">
-      <Page size="A4" style={s.page}>
+      <Page size="A4" style={s.page} wrap>
         {/* Show header */}
         <View style={s.titleBlock}>
           {show.organisation && (

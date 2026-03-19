@@ -47,16 +47,24 @@ export interface CatalogueShowInfo {
   name: string;
   showType: string | undefined;
   date: string;
+  endDate?: string;
   venue: string | undefined;
   venueAddress: string | undefined;
   organisation: string | undefined;
   kcLicenceNo: string | null | undefined;
   startTime?: string | null;
   logoUrl?: string;
+  secretaryName?: string;
   secretaryEmail?: string;
+  secretaryPhone?: string;
+  onCallVet?: string;
+  wetWeatherAccommodation?: boolean;
+  judgedOnGroupSystem?: boolean;
   judgesByBreedName?: Record<string, string>;
   /** Judge name -> bio text */
   judgeBios?: Record<string, string>;
+  /** Breed name -> ring number */
+  judgeRingNumbers?: Record<string, string>;
   classDefinitions?: { name: string; description: string | null }[];
   showScope?: string;
   /** Class sponsorship data for trophies page + inline display */

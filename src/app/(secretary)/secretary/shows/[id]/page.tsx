@@ -108,9 +108,9 @@ export default function OverviewPage() {
       <PhaseActionPanel />
 
       {/* Show Details — compact "boarding pass" style */}
-      <Card className="overflow-hidden">
+      <Card className="overflow-hidden rounded-2xl shadow-sm">
         {/* Hero strip — key info at a glance */}
-        <div className="border-b bg-primary/[0.03] px-4 py-4 sm:px-6">
+        <div className="border-b bg-gradient-to-br from-primary/[0.04] to-transparent px-4 py-4 sm:px-6">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1 space-y-2.5">
               {/* Date — the most important thing */}

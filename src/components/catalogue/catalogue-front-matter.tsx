@@ -64,11 +64,16 @@ function InfoCard({ title, children }: { title?: string; children: React.ReactNo
 export function CoverPage({ show }: FrontMatterProps) {
   const showTypeLabel = show.showType ? SHOW_TYPE_LABELS[show.showType] : undefined;
 
-  // For single-breed shows, extract the single judge name from judgesByBreedName
+  // Show judges on cover for single-breed OR when there's only one unique judge
   const judges = show.judgesByBreedName ?? {};
   const uniqueJudgeNames = [...new Set(Object.values(judges))];
   const isSingleBreed = show.showScope === 'single_breed';
-  const coverJudges = isSingleBreed ? uniqueJudgeNames : [];
+  const coverJudges = (isSingleBreed || uniqueJudgeNames.length === 1) ? uniqueJudgeNames : [];
+
+  // Multi-day date display
+  const dateDisplay = show.endDate
+    ? `${formatCoverDate(show.date)} — ${formatCoverDate(show.endDate)}`
+    : formatCoverDate(show.date);
 
   return (
     <Page size="A5" style={styles.coverPage}>
@@ -120,7 +125,7 @@ export function CoverPage({ show }: FrontMatterProps) {
         <View style={styles.coverDetailCard}>
           <View style={styles.coverDetailRow}>
             <Text style={styles.coverDetailLabel}>Date</Text>
-            <Text style={styles.coverDetailValue}>{formatCoverDate(show.date)}</Text>
+            <Text style={styles.coverDetailValue}>{dateDisplay}</Text>
           </View>
           {show.venue && (
             <View style={styles.coverDetailRow}>
@@ -173,11 +178,53 @@ export function CoverPage({ show }: FrontMatterProps) {
           </View>
         )}
 
+        {/* Regulatory statements — group system + wet weather */}
+        {show.judgedOnGroupSystem && (
+          <Text style={{
+            fontFamily: 'Inter',
+            fontSize: 7.5,
+            fontWeight: 'bold',
+            color: C.textDark,
+            textAlign: 'center',
+            textTransform: 'uppercase',
+            marginTop: 4,
+          }}>
+            Judged on the Group System
+          </Text>
+        )}
+        {show.wetWeatherAccommodation === false && (
+          <Text style={{
+            fontFamily: 'Inter',
+            fontSize: 7,
+            color: C.textMedium,
+            textAlign: 'center',
+            marginTop: 2,
+          }}>
+            Wet weather accommodation is not provided at this venue
+          </Text>
+        )}
+
         {/* Secretary details — green left border */}
-        {show.secretaryEmail && (
+        {(show.secretaryName || show.secretaryEmail || show.secretaryPhone) && (
           <View style={{ ...styles.coverDetailCard, borderLeftColor: C.primary }}>
             <Text style={styles.coverSectionLabel}>Show Secretary</Text>
-            <Text style={styles.coverSectionText}>{show.secretaryEmail}</Text>
+            {show.secretaryName && (
+              <Text style={styles.coverSectionText}>{show.secretaryName}</Text>
+            )}
+            {show.secretaryEmail && (
+              <Text style={styles.coverSectionText}>{show.secretaryEmail}</Text>
+            )}
+            {show.secretaryPhone && (
+              <Text style={styles.coverSectionText}>Tel: {show.secretaryPhone}</Text>
+            )}
+          </View>
+        )}
+
+        {/* On-call vet */}
+        {show.onCallVet && (
+          <View style={{ ...styles.coverDetailCard, borderLeftColor: C.primary }}>
+            <Text style={styles.coverSectionLabel}>Veterinary Surgeon</Text>
+            <Text style={styles.coverSectionText}>{show.onCallVet}</Text>
           </View>
         )}
 
@@ -238,6 +285,8 @@ export function CoverPage({ show }: FrontMatterProps) {
 export function JudgesListPage({ show }: FrontMatterProps) {
   const judges = show.judgesByBreedName ?? {};
   const judgeBios = show.judgeBios ?? {};
+  const ringNumbers = show.judgeRingNumbers ?? {};
+  const hasRings = Object.keys(ringNumbers).length > 0;
   const sortedBreeds = Object.keys(judges).sort();
 
   if (sortedBreeds.length === 0) return null;
@@ -250,16 +299,25 @@ export function JudgesListPage({ show }: FrontMatterProps) {
       <View style={{ ...styles.judgesListRow, borderBottomWidth: 1.5, borderBottomColor: C.primary, marginBottom: 4 }}>
         <Text style={{ ...styles.judgesListBreed, fontWeight: 'bold' }}>Breed</Text>
         <Text style={{ ...styles.judgesListJudge, fontWeight: 'bold' }}>Judge</Text>
+        {hasRings && (
+          <Text style={{ fontFamily: 'Inter', fontSize: 7.5, fontWeight: 'bold', width: 30, textAlign: 'right' }}>Ring</Text>
+        )}
       </View>
 
       {sortedBreeds.map((breed) => {
         const judgeName = judges[breed];
+        const ringNo = ringNumbers[breed];
         const bio = judgeBios[judgeName ?? ''];
         return (
           <View key={breed} wrap={false}>
             <View style={styles.judgesListRow}>
               <Text style={styles.judgesListBreed}>{breed}</Text>
               <Text style={styles.judgesListJudge}>{judgeName}</Text>
+              {hasRings && (
+                <Text style={{ fontFamily: 'Inter', fontSize: 7.5, width: 30, textAlign: 'right', color: ringNo ? C.textDark : C.textLight }}>
+                  {ringNo ?? '—'}
+                </Text>
+              )}
             </View>
             {bio && (
               <Text style={styles.judgeBio}>{bio}</Text>
@@ -285,18 +343,20 @@ export function JudgesListPage({ show }: FrontMatterProps) {
 export function ClassDefinitionsPage({ show }: FrontMatterProps) {
   const defs = show.classDefinitions ?? [];
 
-  // Only render if we have at least one definition with a description
+  // Always render if we have any class definitions (RKC F(1)11 requirement)
+  if (defs.length === 0) return null;
   const defsWithDesc = defs.filter((d) => d.description);
-  if (defsWithDesc.length === 0) return null;
 
   return (
     <Page size="A5" style={styles.frontMatterPage} wrap>
       <SectionBand title="Definitions of Classes" />
 
-      {defsWithDesc.map((def) => (
+      {defs.map((def) => (
         <View key={def.name} wrap={false}>
           <Text style={styles.classDefName}>{def.name}</Text>
-          <Text style={styles.classDefDescription}>{def.description}</Text>
+          {def.description && (
+            <Text style={styles.classDefDescription}>{def.description}</Text>
+          )}
         </View>
       ))}
 

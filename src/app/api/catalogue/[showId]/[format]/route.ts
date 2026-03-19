@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/server/db';
-import { and, eq, isNull, asc } from 'drizzle-orm';
+import { and, eq, isNull, asc, or } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
 import { formatDogName, formatDogNameForCatalogue } from '@/lib/utils';
 import { renderToBuffer } from '@react-pdf/renderer';
@@ -46,7 +46,7 @@ export async function GET(
   const [judgeAssignmentRows, showClassRows, entries, safeLogoUrl, showSponsorRows] = await Promise.all([
     db.query.judgeAssignments.findMany({
       where: eq(schema.judgeAssignments.showId, showId),
-      with: { judge: true, breed: true },
+      with: { judge: true, breed: true, ring: true },
     }),
     db.query.showClasses.findMany({
       where: eq(schema.showClasses.showId, showId),
@@ -62,7 +62,10 @@ export async function GET(
       where: and(
         eq(schema.entries.showId, showId),
         format === 'absentees'
-          ? eq(schema.entries.status, 'withdrawn')
+          ? or(
+              eq(schema.entries.status, 'withdrawn'),
+              and(eq(schema.entries.status, 'confirmed'), eq(schema.entries.absent, true))
+            )
           : eq(schema.entries.status, 'confirmed'),
         isNull(schema.entries.deletedAt)
       ),
@@ -95,12 +98,17 @@ export async function GET(
 
   const judgesByBreedName: Record<string, string> = {};
   const judgeBios: Record<string, string> = {};
+  const judgeRingNumbers: Record<string, string> = {};
   for (const ja of judgeAssignmentRows) {
     if (ja.breed?.name && ja.judge?.name) {
       judgesByBreedName[ja.breed.name] = ja.judge.name;
       // Collect judge bios (keyed by judge name for dedup)
       if (ja.judge.bio && !judgeBios[ja.judge.name]) {
         judgeBios[ja.judge.name] = ja.judge.bio;
+      }
+      // Ring number per breed
+      if (ja.ring?.number) {
+        judgeRingNumbers[ja.breed.name] = String(ja.ring.number);
       }
     }
   }
@@ -193,23 +201,32 @@ export async function GET(
     sex: sc.sex,
   }));
 
+  const scheduleData = show.scheduleData as Record<string, unknown> | null;
+
   const showInfo: CatalogueShowInfo = {
     name: show.name,
     showType: show.showType,
     date: show.startDate,
+    endDate: show.endDate !== show.startDate ? show.endDate : undefined,
     venue: show.venue?.name,
     venueAddress: show.venue?.address ?? undefined,
     organisation: show.organisation?.name,
     kcLicenceNo: show.kcLicenceNo,
     startTime: show.startTime,
     logoUrl: safeLogoUrl ?? undefined,
+    secretaryName: show.secretaryName ?? undefined,
     secretaryEmail: show.secretaryEmail ?? undefined,
+    secretaryPhone: show.secretaryPhone ?? undefined,
+    onCallVet: show.onCallVet ?? undefined,
+    wetWeatherAccommodation: scheduleData?.wetWeatherAccommodation === true ? true : scheduleData?.wetWeatherAccommodation === false ? false : undefined,
+    judgedOnGroupSystem: scheduleData?.judgedOnGroupSystem === true ? true : undefined,
     judgesByBreedName,
     judgeBios: Object.keys(judgeBios).length > 0 ? judgeBios : undefined,
+    judgeRingNumbers: Object.keys(judgeRingNumbers).length > 0 ? judgeRingNumbers : undefined,
     classDefinitions,
     showScope: show.showScope ?? undefined,
     classSponsorships: classSponsorships.length > 0 ? classSponsorships : undefined,
-    customStatements: show.scheduleData?.customStatements,
+    customStatements: (scheduleData?.customStatements as string[] | undefined),
     showSponsors: showSponsorInfos.length > 0 ? showSponsorInfos : undefined,
     allShowClasses: allShowClasses.length > 0 ? allShowClasses : undefined,
   };

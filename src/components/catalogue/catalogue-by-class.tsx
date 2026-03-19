@@ -3,6 +3,7 @@ import { styles } from './catalogue-styles';
 import { CatalogueHeader } from './catalogue-header';
 import type { CatalogueEntry, CatalogueShowInfo } from './catalogue-standard';
 import { formatDobKC, formatPedigreeKC, formatOwnerKC, uppercaseName } from './catalogue-utils';
+import { CoverPage, JudgesListPage, ClassDefinitionsPage, TrophiesPage } from './catalogue-front-matter';
 
 interface Props {
   show: CatalogueShowInfo;
@@ -78,6 +79,14 @@ export function CatalogueByClass({ show, entries }: Props) {
 
   return (
     <Document>
+      {/* Front matter — cover, judges, definitions, trophies */}
+      <CoverPage show={show} />
+      <JudgesListPage show={show} />
+      <ClassDefinitionsPage show={show} />
+      {show.classSponsorships && show.classSponsorships.length > 0 && (
+        <TrophiesPage show={show} sponsorships={show.classSponsorships} />
+      )}
+
       {/* One <Page> per class — avoids @react-pdf coordinate overflow on large shows */}
       {classKeys.map((classKey, idx) => {
         const { className, sex, classNumber, entries: classEntries } = grouped[classKey];
@@ -87,20 +96,6 @@ export function CatalogueByClass({ show, entries }: Props) {
 
         return (
           <Page key={classKey} size="A5" style={styles.page} wrap>
-            {/* Header on first page only */}
-            {idx === 0 && (
-              <CatalogueHeader
-                showName={show.name}
-                showType={show.showType}
-                organisationName={show.organisation}
-                date={show.date}
-                venue={show.venue}
-                venueAddress={show.venueAddress}
-                kcLicenceNo={show.kcLicenceNo ?? undefined}
-                logoUrl={show.logoUrl}
-                subtitle="Catalogue — By Class"
-              />
-            )}
 
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', ...styles.groupHeading }}>
               <Text>{classNumber ? `Class ${classNumber}: ${className}` : className}</Text>

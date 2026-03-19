@@ -720,7 +720,9 @@ export function ShowSchedule({
   sponsors?: ScheduleSponsor[];
 }) {
   const showTypeLabel = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
-  const showDate = formatDate(show.date);
+  const showDate = show.endDate && show.endDate !== show.date
+    ? `${formatDate(show.date)} — ${formatDate(show.endDate)}`
+    : formatDate(show.date);
   // classCount is computed after deduplication (below) for accurate display
   const sd = show.scheduleData;
   const dockingStatement = getDockingStatement(sd);

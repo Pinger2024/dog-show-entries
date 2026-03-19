@@ -2,16 +2,22 @@
 
 import Link from 'next/link';
 import {
+  BookOpen,
   Check,
   CheckCircle,
   ChevronRight,
   CircleDot,
   ClipboardList,
+  ExternalLink,
   FileText,
   Gavel,
   Loader2,
+  Megaphone,
+  Printer,
   Send,
+  Share2,
   Trophy,
+  Users,
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -20,21 +26,12 @@ import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { ScheduleData } from '@/server/db/schema/shows';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
 import type { RouterOutputs } from '@/server/trpc/router';
 import {
   derivePhase,
   formatDaysUntil,
   formatDeadline,
-  PHASE_CONFIG,
-  type ShowPhase,
 } from '../_lib/phase-utils';
-import { formatCompactRevenue } from '../_lib/show-utils';
 import { useShowId } from '../_lib/show-context';
 
 type Show = NonNullable<RouterOutputs['shows']['getById']>;
@@ -58,6 +55,95 @@ export function PhaseActionPanel() {
       {phase === 'cancelled' && <CancelledPanel />}
     </>
   );
+}
+
+// ── Shared action card component ───────────────────────────
+
+function ActionCard({
+  href,
+  icon: Icon,
+  label,
+  description,
+  accent = 'default',
+  badge,
+  external,
+  onClick,
+}: {
+  href?: string;
+  icon: React.ElementType;
+  label: string;
+  description: string;
+  accent?: 'default' | 'emerald' | 'blue' | 'amber' | 'primary' | 'rose';
+  badge?: string;
+  external?: boolean;
+  onClick?: () => void;
+}) {
+  const accentStyles = {
+    default: 'bg-muted/40 hover:bg-muted/60 border-border/60',
+    emerald: 'bg-emerald-50/60 hover:bg-emerald-50 border-emerald-200/60 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/30 dark:border-emerald-800/40',
+    blue: 'bg-blue-50/60 hover:bg-blue-50 border-blue-200/60 dark:bg-blue-950/20 dark:hover:bg-blue-950/30 dark:border-blue-800/40',
+    amber: 'bg-amber-50/60 hover:bg-amber-50 border-amber-200/60 dark:bg-amber-950/20 dark:hover:bg-amber-950/30 dark:border-amber-800/40',
+    primary: 'bg-primary/5 hover:bg-primary/10 border-primary/20',
+    rose: 'bg-rose-50/60 hover:bg-rose-50 border-rose-200/60 dark:bg-rose-950/20 dark:hover:bg-rose-950/30 dark:border-rose-800/40',
+  };
+
+  const iconStyles = {
+    default: 'bg-muted text-muted-foreground',
+    emerald: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400',
+    blue: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400',
+    amber: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400',
+    primary: 'bg-primary/10 text-primary',
+    rose: 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-400',
+  };
+
+  const content = (
+    <div className={cn(
+      'group relative flex items-start gap-3.5 rounded-2xl border p-4 transition-all duration-200',
+      'hover:shadow-sm hover:-translate-y-0.5',
+      accentStyles[accent],
+    )}>
+      <div className={cn(
+        'flex size-10 shrink-0 items-center justify-center rounded-xl transition-transform group-hover:scale-105',
+        iconStyles[accent],
+      )}>
+        <Icon className="size-5" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <p className="font-serif text-sm font-semibold tracking-tight text-foreground">
+            {label}
+          </p>
+          {badge && (
+            <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">
+              {badge}
+            </Badge>
+          )}
+        </div>
+        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+          {description}
+        </p>
+      </div>
+      {external ? (
+        <ExternalLink className="size-3.5 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground" />
+      ) : (
+        <ChevronRight className="size-4 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground" />
+      )}
+    </div>
+  );
+
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className="w-full text-left">
+        {content}
+      </button>
+    );
+  }
+
+  if (external) {
+    return <a href={href} target="_blank" rel="noopener noreferrer">{content}</a>;
+  }
+
+  return <Link href={href!}>{content}</Link>;
 }
 
 // ── Phase 1: Setup ──────────────────────────────────────────
@@ -95,10 +181,9 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
 
   const checklist: ChecklistItem[] = [];
 
-  // Auto-detected complete items
   const isChampionship = show.showType === 'championship';
 
-  const autoKeys: { key: string; label: string; count?: string }[] = [
+  const autoKeys: { key: string; label: string }[] = [
     { key: 'classes_created', label: 'Classes created' },
     ...(isChampionship ? [{ key: 'championship_classes_complete', label: 'Open + Limit classes for each sex' }] : []),
     { key: 'judges_assigned', label: 'Judge assigned' },
@@ -113,7 +198,6 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
   if (autoDetect) {
     for (const ak of autoKeys) {
       const isDone = autoDetect[ak.key] === true;
-      // Find matching blocker for incomplete items
       const matchingBlocker = allBlockers.find((b) => {
         if (ak.key === 'classes_created' && b.key === 'no_classes') return true;
         if (ak.key === 'judges_assigned' && b.key === 'no_judge') return true;
@@ -147,6 +231,10 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
     return 0;
   });
 
+  const completedCount = checklist.filter(c => c.done).length;
+  const totalCount = checklist.length;
+  const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
   const handleOpenEntries = () => {
     updateMutation.mutate({
       id: showId,
@@ -155,27 +243,55 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
   };
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base font-semibold">
-          <ClipboardList className="size-4 text-amber-600" />
-          What you need before opening entries
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <div className="overflow-hidden rounded-2xl border border-amber-200/60 bg-gradient-to-br from-amber-50/80 via-white to-orange-50/40 shadow-sm dark:border-amber-800/30 dark:from-amber-950/20 dark:via-background dark:to-orange-950/10">
+      <div className="px-5 pb-5 pt-5 sm:px-6">
+        {/* Header with progress */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex size-10 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-900/40">
+              <ClipboardList className="size-5 text-amber-700 dark:text-amber-400" />
+            </div>
+            <div>
+              <h3 className="font-serif text-base font-semibold tracking-tight">
+                Getting ready
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                {completedCount} of {totalCount} items complete
+              </p>
+            </div>
+          </div>
+          {totalCount > 0 && (
+            <div className="text-right">
+              <span className="text-2xl font-bold tracking-tight text-amber-700 dark:text-amber-400">
+                {progressPct}%
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Progress bar */}
+        {totalCount > 0 && (
+          <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-amber-100 dark:bg-amber-900/30">
+            <div
+              className="h-full rounded-full bg-amber-500 transition-all duration-500 ease-out"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+        )}
+
+        {/* Checklist */}
         {isLoading ? (
-          <div className="flex items-center gap-2 py-4">
+          <div className="mt-4 flex items-center gap-2 py-4">
             <Loader2 className="size-4 animate-spin text-muted-foreground" />
             <span className="text-sm text-muted-foreground">Checking requirements...</span>
           </div>
         ) : (
-          <div className="space-y-1.5">
+          <div className="mt-4 space-y-1">
             {checklist.map((item) => (
               <div
                 key={item.key}
-                className="flex items-center gap-2.5 min-h-[2.75rem] rounded-md px-2 py-1.5 transition-colors hover:bg-muted/50"
+                className="flex items-center gap-2.5 rounded-lg px-2 py-2 transition-colors hover:bg-white/60 dark:hover:bg-white/5 min-h-[2.75rem]"
               >
-                {/* Status icon */}
                 {item.done ? (
                   <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
                     <Check className="size-3 text-emerald-600" />
@@ -196,7 +312,6 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
                   </div>
                 )}
 
-                {/* Label */}
                 <span className={cn(
                   'flex-1 text-sm',
                   item.done
@@ -208,18 +323,16 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
                   {item.label}
                 </span>
 
-                {/* Auto badge */}
                 {item.auto && item.done && (
-                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 shrink-0">
+                  <Badge variant="secondary" className="h-4 shrink-0 px-1.5 py-0 text-[10px]">
                     Auto
                   </Badge>
                 )}
 
-                {/* Fix link for incomplete items */}
                 {!item.done && item.actionPath && (
                   <Link
                     href={`/secretary/shows/${showId}${item.actionPath}`}
-                    className="flex items-center gap-0.5 text-xs font-medium text-primary hover:underline shrink-0 min-h-[2.75rem] sm:min-h-0 px-1"
+                    className="flex shrink-0 items-center gap-0.5 px-1 text-xs font-medium text-primary hover:underline min-h-[2.75rem] sm:min-h-0"
                   >
                     Fix
                     <ChevronRight className="size-3" />
@@ -231,7 +344,7 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
         )}
 
         {/* Action area */}
-        <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-4 flex flex-col gap-3 border-t border-amber-200/40 pt-4 sm:flex-row sm:items-center sm:justify-between dark:border-amber-800/20">
           <Button
             size="default"
             className="w-full sm:w-auto min-h-[2.75rem]"
@@ -261,294 +374,272 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
             </Link>
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
 // ── Phase 2: Entries Open ───────────────────────────────────
 
 function EntriesOpenPanel({ show, showId }: { show: Show; showId: string }) {
-  const { data: entryStats } = trpc.secretary.getShowEntryStats.useQuery(
-    { showId },
-    { staleTime: 30_000 },
-  );
-
-  const totalEntries = entryStats?.totalEntries ?? 0;
-  const uniqueExhibitors = entryStats?.uniqueExhibitors ?? 0;
-  const totalRevenue = entryStats?.totalRevenue ?? 0;
-
   const closeInfo = show.entryCloseDate
     ? formatDeadline(show.entryCloseDate, 'Entries close')
     : null;
 
+  const showUrl = `https://remishowmanager.co.uk/shows/${show.slug ?? showId}`;
+
+  function handleCopyLink() {
+    navigator.clipboard.writeText(showUrl).then(
+      () => toast.success('Show link copied'),
+      () => toast.error('Failed to copy link'),
+    );
+  }
+
   return (
-    <Card className="border-emerald-200 dark:border-emerald-800">
-      <CardContent className="pt-6 space-y-4">
-        {/* Header with pulsing green dot */}
-        <div className="flex items-center gap-2.5">
-          <span className="relative flex size-3">
-            <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex size-3 rounded-full bg-emerald-500" />
+    <div className="space-y-3">
+      {/* Countdown strip */}
+      {closeInfo && (
+        <div className={cn(
+          'flex items-center gap-2.5 rounded-xl px-4 py-3',
+          closeInfo.overdue
+            ? 'bg-rose-50 border border-rose-200/60 dark:bg-rose-950/20 dark:border-rose-800/40'
+            : closeInfo.urgent
+              ? 'bg-amber-50 border border-amber-200/60 dark:bg-amber-950/20 dark:border-amber-800/40'
+              : 'bg-emerald-50/60 border border-emerald-200/40 dark:bg-emerald-950/10 dark:border-emerald-800/30',
+        )}>
+          <span className="relative flex size-2.5">
+            <span className={cn(
+              'absolute inline-flex size-full animate-ping rounded-full opacity-75',
+              closeInfo.overdue ? 'bg-rose-400' : closeInfo.urgent ? 'bg-amber-400' : 'bg-emerald-400',
+            )} />
+            <span className={cn(
+              'relative inline-flex size-2.5 rounded-full',
+              closeInfo.overdue ? 'bg-rose-500' : closeInfo.urgent ? 'bg-amber-500' : 'bg-emerald-500',
+            )} />
           </span>
-          <h3 className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
-            Entries are open
-          </h3>
-        </div>
-
-        {/* Large stats */}
-        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <span className="text-2xl font-bold tracking-tight">
-            {totalEntries}
-          </span>
-          <span className="text-sm text-muted-foreground">
-            {totalEntries === 1 ? 'entry' : 'entries'}
-          </span>
-          <span className="text-muted-foreground">&middot;</span>
-          <span className="text-2xl font-bold tracking-tight">
-            {uniqueExhibitors}
-          </span>
-          <span className="text-sm text-muted-foreground">
-            {uniqueExhibitors === 1 ? 'exhibitor' : 'exhibitors'}
-          </span>
-          <span className="text-muted-foreground">&middot;</span>
-          <span className="text-2xl font-bold tracking-tight">
-            {formatCompactRevenue(totalRevenue)}
-          </span>
-          <span className="text-sm text-muted-foreground">revenue</span>
-        </div>
-
-        {/* Close date countdown */}
-        {closeInfo && (
-          <p className={cn(
-            'text-sm',
-            closeInfo.urgent
-              ? 'font-medium text-amber-600 dark:text-amber-400'
-              : 'text-muted-foreground',
-            closeInfo.overdue && 'text-destructive',
+          <span className={cn(
+            'text-sm font-medium',
+            closeInfo.overdue
+              ? 'text-rose-700 dark:text-rose-400'
+              : closeInfo.urgent
+                ? 'text-amber-700 dark:text-amber-400'
+                : 'text-emerald-700 dark:text-emerald-400',
           )}>
             {closeInfo.text}
-          </p>
-        )}
-
-        {/* Quick links */}
-        <div className="flex flex-col gap-2 border-t pt-4 sm:flex-row">
-          <Button variant="outline" size="sm" className="min-h-[2.75rem] sm:min-h-0" asChild>
-            <Link href={`/secretary/shows/${showId}/entries`}>
-              View entries
-              <ChevronRight className="size-3" />
-            </Link>
-          </Button>
-          <Button variant="ghost" size="sm" className="min-h-[2.75rem] sm:min-h-0 text-muted-foreground" asChild>
-            <Link href={`/secretary/shows/${showId}/financial`}>
-              Financial summary
-              <ChevronRight className="size-3" />
-            </Link>
-          </Button>
+          </span>
         </div>
-      </CardContent>
-    </Card>
+      )}
+
+      {/* Action cards grid */}
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+        <ActionCard
+          href={`/secretary/shows/${showId}/entries`}
+          icon={ClipboardList}
+          label="View Entries"
+          description="Review incoming entries, check details, and manage exhibitor submissions"
+          accent="emerald"
+        />
+        <ActionCard
+          href={`/secretary/shows/${showId}/financial`}
+          icon={FileText}
+          label="Financial Summary"
+          description="Track payments, revenue, and refund requests"
+          accent="blue"
+        />
+        <ActionCard
+          icon={Share2}
+          label="Share Your Show"
+          description="Copy the show link to share on Facebook, WhatsApp, and breed groups"
+          accent="amber"
+          onClick={handleCopyLink}
+        />
+        <ActionCard
+          href={showUrl}
+          icon={ExternalLink}
+          label="Public Show Page"
+          description="See what exhibitors see when they visit your show"
+          accent="default"
+          external
+        />
+      </div>
+
+      {/* Quick links */}
+      <div className="flex flex-wrap gap-2 pt-1">
+        <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground" asChild>
+          <Link href={`/secretary/shows/${showId}/reports`}>
+            Reports
+            <ChevronRight className="size-3" />
+          </Link>
+        </Button>
+        <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground" asChild>
+          <Link href={`/secretary/shows/${showId}/checklist`}>
+            Checklist
+            <ChevronRight className="size-3" />
+          </Link>
+        </Button>
+        <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground" asChild>
+          <Link href={`/secretary/shows/${showId}/schedule`}>
+            Schedule
+            <ChevronRight className="size-3" />
+          </Link>
+        </Button>
+      </div>
+    </div>
   );
 }
 
 // ── Phase 3: Pre-Show ───────────────────────────────────────
 
 function PreShowPanel({ show, showId }: { show: Show; showId: string }) {
-  const { data: entryStats } = trpc.secretary.getShowEntryStats.useQuery(
-    { showId },
-    { staleTime: 60_000 },
-  );
   const { data: autoDetect } = trpc.secretary.getChecklistAutoDetect.useQuery(
     { showId },
     { staleTime: 60_000 },
   );
-  const { data: blockers } = trpc.secretary.getPhaseBlockers.useQuery(
-    { showId },
-    { staleTime: 60_000 },
-  );
 
-  const confirmedEntries = entryStats?.confirmed ?? entryStats?.totalEntries ?? 0;
-
+  const daysToGo = show.startDate ? formatDaysUntil(show.startDate) : null;
   const showDayInfo = show.startDate
     ? formatDeadline(show.startDate, 'Show day')
     : null;
 
-  const daysToGo = show.startDate ? formatDaysUntil(show.startDate) : null;
-
-  // Pre-show preparation items
   const hasCatalogueNumbers = !!autoDetect?.catalogue_numbers_assigned;
-  const hasRings = !!autoDetect?.rings_created;
   const hasStewards = !!autoDetect?.stewards_assigned;
-  const hasJudgeOffers = !!autoDetect?.judge_offers_sent;
-  const stewardCount = blockers?.startShowBlockers?.find(b => b.key === 'no_stewards') ? 0 : 1;
+  const hasRings = !!autoDetect?.rings_created;
 
   return (
-    <Card className="border-blue-200 dark:border-blue-800">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base font-semibold">
-          <span className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
-            Pre-show preparation
-            {daysToGo && (
-              <Badge variant="secondary" className="w-fit text-xs">
-                {daysToGo} to go
-              </Badge>
-            )}
-          </span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Entry summary */}
-        <p className="text-sm text-muted-foreground">
-          {confirmedEntries} confirmed {confirmedEntries === 1 ? 'entry' : 'entries'}
-        </p>
-
-        {/* Two-column grid on desktop, stacked on mobile */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {/* Documents column */}
-          <div className="space-y-2">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Documents
-            </h4>
-            <PrepItem
-              done={hasCatalogueNumbers}
-              label="Catalogue numbers"
-              href={`/secretary/shows/${showId}/catalogue`}
-            />
-            <PrepItem
-              done={false}
-              label="Print shop"
-              href={`/secretary/shows/${showId}/print-shop`}
-            />
-            <PrepItem
-              done={!!show.scheduleUrl}
-              label="Schedule PDF"
-              href={`/secretary/shows/${showId}/schedule`}
-            />
-          </div>
-
-          {/* People column */}
-          <div className="space-y-2">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              People
-            </h4>
-            <PrepItem
-              done={hasJudgeOffers}
-              label="Judge confirmation"
-              href={`/secretary/shows/${showId}/people`}
-            />
-            <PrepItem
-              done={hasStewards}
-              label="Stewards assigned"
-              href={`/secretary/shows/${showId}/people`}
-            />
-            <PrepItem
-              done={hasRings}
-              label="Rings set up"
-              href={`/secretary/shows/${showId}/people`}
-            />
-          </div>
-        </div>
-
-        {/* Show day countdown */}
-        {showDayInfo && (
-          <p className={cn(
-            'text-sm border-t pt-3',
+    <div className="space-y-3">
+      {/* Countdown strip */}
+      {showDayInfo && (
+        <div className={cn(
+          'flex items-center justify-between gap-3 rounded-xl px-4 py-3',
+          showDayInfo.urgent
+            ? 'bg-amber-50 border border-amber-200/60 dark:bg-amber-950/20 dark:border-amber-800/40'
+            : 'bg-blue-50/60 border border-blue-200/40 dark:bg-blue-950/10 dark:border-blue-800/30',
+        )}>
+          <span className={cn(
+            'text-sm font-medium',
             showDayInfo.urgent
-              ? 'font-medium text-amber-600 dark:text-amber-400'
-              : 'text-muted-foreground',
+              ? 'text-amber-700 dark:text-amber-400'
+              : 'text-blue-700 dark:text-blue-400',
           )}>
             {showDayInfo.text}
-          </p>
-        )}
-
-        {/* Checklist link */}
-        <div className="flex">
-          <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" asChild>
-            <Link href={`/secretary/shows/${showId}/checklist`}>
-              View full checklist
-              <ChevronRight className="size-3" />
-            </Link>
-          </Button>
+          </span>
+          {daysToGo && (
+            <Badge variant="secondary" className="text-xs">
+              {daysToGo}
+            </Badge>
+          )}
         </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-/** A single preparation item row */
-function PrepItem({
-  done,
-  label,
-  href,
-}: {
-  done: boolean;
-  label: string;
-  href: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className="flex items-center gap-2 min-h-[2.75rem] sm:min-h-0 rounded-md px-2 py-1 transition-colors hover:bg-muted/50"
-    >
-      {done ? (
-        <div className="flex size-4 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
-          <Check className="size-2.5 text-emerald-600" />
-        </div>
-      ) : (
-        <CircleDot className="size-4 shrink-0 text-muted-foreground/50" />
       )}
-      <span className={cn(
-        'flex-1 text-sm',
-        done ? 'text-muted-foreground' : 'text-foreground',
-      )}>
-        {label}
-      </span>
-      <ChevronRight className="size-3 shrink-0 text-muted-foreground/50" />
-    </Link>
+
+      {/* Action cards grid */}
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+        <ActionCard
+          href={`/secretary/shows/${showId}/catalogue`}
+          icon={BookOpen}
+          label="Catalogue"
+          description="Assign catalogue numbers and generate the show catalogue"
+          accent="blue"
+          badge={hasCatalogueNumbers ? 'Done' : undefined}
+        />
+        <ActionCard
+          href={`/secretary/shows/${showId}/print-shop`}
+          icon={Printer}
+          label="Print Shop"
+          description="Order catalogues, ring boards, prize cards, and ring numbers"
+          accent="amber"
+        />
+        <ActionCard
+          href={`/secretary/shows/${showId}/people`}
+          icon={Users}
+          label="People & Stewards"
+          description="Confirm stewards, assign rings, and finalise judge details"
+          accent={hasStewards && hasRings ? 'emerald' : 'default'}
+          badge={hasStewards ? 'Stewards set' : undefined}
+        />
+        <ActionCard
+          href={`/secretary/shows/${showId}/checklist`}
+          icon={ClipboardList}
+          label="Show Checklist"
+          description="Track all pre-show preparation tasks and deadlines"
+          accent="default"
+        />
+      </div>
+
+      {/* Quick links */}
+      <div className="flex flex-wrap gap-2 pt-1">
+        <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground" asChild>
+          <Link href={`/secretary/shows/${showId}/entries`}>
+            Entries
+            <ChevronRight className="size-3" />
+          </Link>
+        </Button>
+        <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground" asChild>
+          <Link href={`/secretary/shows/${showId}/reports`}>
+            Reports
+            <ChevronRight className="size-3" />
+          </Link>
+        </Button>
+        <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground" asChild>
+          <Link href={`/secretary/shows/${showId}/documents`}>
+            Documents
+            <ChevronRight className="size-3" />
+          </Link>
+        </Button>
+      </div>
+    </div>
   );
 }
 
 // ── Phase 4: Show Day ───────────────────────────────────────
 
 function ShowDayPanel({ show, showId }: { show: Show; showId: string }) {
-  const { data: entryStats } = trpc.secretary.getShowEntryStats.useQuery(
-    { showId },
-    { staleTime: 30_000 },
-  );
-
-  const totalEntries = entryStats?.totalEntries ?? 0;
-  const totalClasses = show.showClasses?.length ?? 0;
-
   return (
-    <Card className="border-primary/30 bg-primary/[0.03]">
-      <CardContent className="pt-6 space-y-4">
-        {/* Header */}
-        <div className="flex items-center gap-2.5">
-          <Gavel className="size-5 text-primary" />
-          <h3 className="text-base font-semibold text-foreground">
-            Judging is underway
-          </h3>
+    <div className="space-y-3">
+      {/* Hero card for results */}
+      <div className="overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent shadow-sm">
+        <div className="px-5 py-6 sm:px-6">
+          <div className="flex items-center gap-4">
+            <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/15">
+              <Gavel className="size-7 text-primary" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="font-serif text-lg font-bold tracking-tight">
+                Judging is underway
+              </h3>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Record results as each class is judged
+              </p>
+            </div>
+          </div>
+          <div className="mt-5">
+            <Button size="lg" className="w-full sm:w-auto min-h-[2.75rem] gap-2" asChild>
+              <Link href={`/secretary/shows/${showId}/results`}>
+                <Trophy className="size-4" />
+                Record Results
+              </Link>
+            </Button>
+          </div>
         </div>
+      </div>
 
-        {/* Stats */}
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm text-muted-foreground">
-          <span>
-            <strong className="text-foreground">{totalEntries}</strong> entries across{' '}
-            <strong className="text-foreground">{totalClasses}</strong> classes
-          </span>
-        </div>
-
-        {/* Action */}
-        <div className="border-t pt-4">
-          <Button className="w-full sm:w-auto min-h-[2.75rem]" asChild>
-            <Link href={`/secretary/shows/${showId}/results`}>
-              <Trophy className="size-4" />
-              Record Results
-            </Link>
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+      {/* Secondary actions */}
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+        <ActionCard
+          href={`/secretary/shows/${showId}/catalogue`}
+          icon={BookOpen}
+          label="Catalogue"
+          description="Reference catalogue numbers during judging"
+          accent="default"
+        />
+        <ActionCard
+          href={`/secretary/shows/${showId}/entries`}
+          icon={ClipboardList}
+          label="Entries"
+          description="Look up exhibitor and dog details"
+          accent="default"
+        />
+      </div>
+    </div>
   );
 }
 
@@ -570,145 +661,106 @@ function PostShowPanel({ show, showId }: { show: Show; showId: string }) {
     onError: (err) => toast.error(err.message),
   });
 
-  const unmarkRkcSubmitted = trpc.secretary.unmarkRkcSubmitted.useMutation({
-    onSuccess: () => {
-      utils.shows.getById.invalidate({ id: showId });
-      toast.success('RKC submission status cleared');
-    },
-    onError: (err) => toast.error(err.message),
-  });
-
   // RKC deadline: 14 days after show end date
   const rkcDeadline = new Date(show.endDate);
   rkcDeadline.setDate(rkcDeadline.getDate() + 14);
   const rkcInfo = rkcSubmitted
-    ? { text: 'Submitted to RKC', urgent: false, overdue: false }
+    ? { text: `Submitted to RKC on ${new Date(rkcSubmittedAt!).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`, urgent: false, overdue: false }
     : formatDeadline(rkcDeadline, 'RKC submission deadline');
 
-  // Count post-show tasks
+  // Count completed tasks
   const tasks = [
-    { label: 'Publish results', done: resultsPublished, href: `/secretary/shows/${showId}/results` },
-    { label: 'Submit marked catalogue to RKC', done: rkcSubmitted, href: `/secretary/shows/${showId}/documents` },
-    { label: 'Download marked catalogue', done: false, href: `/api/catalogue/${showId}/marked`, isDownload: true },
+    { done: resultsPublished, label: 'Publish results' },
+    { done: rkcSubmitted, label: 'Submit to RKC' },
   ];
-  const completedTasks = tasks.filter(t => t.done).length;
+  const completedCount = tasks.filter(t => t.done).length;
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base font-semibold">
-          <Trophy className="size-4 text-muted-foreground" />
-          Show complete
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Results status */}
-        <div className="flex flex-wrap items-center gap-2">
-          {resultsPublished ? (
-            <Badge variant="default" className="bg-emerald-600">Results published</Badge>
-          ) : (
-            <Badge variant="secondary">Results not yet published</Badge>
-          )}
-          {rkcSubmitted ? (
-            <Badge variant="default" className="bg-emerald-600 gap-1">
-              <CheckCircle className="size-3" />
-              RKC submitted
-            </Badge>
-          ) : null}
+    <div className="space-y-3">
+      {/* Completion progress strip */}
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-muted/30 px-4 py-3">
+        <div className="flex items-center gap-2.5">
+          <CheckCircle className={cn(
+            'size-5',
+            completedCount === tasks.length ? 'text-emerald-600' : 'text-muted-foreground',
+          )} />
+          <span className="text-sm font-medium">
+            {completedCount === tasks.length
+              ? 'All post-show tasks complete'
+              : `${completedCount} of ${tasks.length} tasks complete`}
+          </span>
         </div>
+        {rkcSubmitted ? (
+          <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-0">
+            RKC submitted
+          </Badge>
+        ) : (
+          <span className={cn(
+            'text-xs font-medium',
+            rkcInfo.overdue ? 'text-destructive' : rkcInfo.urgent ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground',
+          )}>
+            {rkcInfo.text}
+          </span>
+        )}
+      </div>
 
-        {/* RKC deadline */}
-        <p className={cn(
-          'text-sm',
-          rkcSubmitted && 'text-emerald-600',
-          !rkcSubmitted && rkcInfo.urgent && !rkcInfo.overdue && 'font-medium text-amber-600 dark:text-amber-400',
-          !rkcSubmitted && rkcInfo.overdue && 'font-medium text-destructive',
-          !rkcSubmitted && !rkcInfo.urgent && !rkcInfo.overdue && 'text-muted-foreground',
-        )}>
-          {rkcSubmitted
-            ? `Submitted to RKC on ${new Date(rkcSubmittedAt!).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
-            : rkcInfo.text}
-        </p>
+      {/* Action cards */}
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+        {!resultsPublished && (
+          <ActionCard
+            href={`/secretary/shows/${showId}/results`}
+            icon={Trophy}
+            label="Publish Results"
+            description="Review and publish results for exhibitors to see"
+            accent="amber"
+          />
+        )}
+        {resultsPublished && (
+          <ActionCard
+            href={`/secretary/shows/${showId}/results`}
+            icon={Trophy}
+            label="Results"
+            description="View and manage published results"
+            accent="emerald"
+            badge="Published"
+          />
+        )}
 
-        {/* Post-show task list */}
-        <div className="space-y-1.5 border-t pt-3">
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Post-show tasks ({completedTasks}/{tasks.length})
-          </h4>
-          {tasks.map((task) => {
-            const isDownload = 'isDownload' in task && task.isDownload;
-            const sharedClassName = "flex items-center gap-2 min-h-[2.75rem] sm:min-h-0 rounded-md px-2 py-1 transition-colors hover:bg-muted/50";
-            const inner = (
-              <>
-                {task.done ? (
-                  <div className="flex size-4 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
-                    <Check className="size-2.5 text-emerald-600" />
-                  </div>
-                ) : (
-                  <CircleDot className="size-4 shrink-0 text-muted-foreground/50" />
-                )}
-                <span className={cn(
-                  'flex-1 text-sm',
-                  task.done ? 'text-muted-foreground line-through' : 'text-foreground',
-                )}>
-                  {task.label}
-                </span>
-                {isDownload ? (
-                  <FileText className="size-3 shrink-0 text-muted-foreground/50" />
-                ) : (
-                  <ChevronRight className="size-3 shrink-0 text-muted-foreground/50" />
-                )}
-              </>
-            );
+        {!rkcSubmitted ? (
+          <ActionCard
+            icon={Send}
+            label="Mark RKC Submitted"
+            description="Record that you've sent the marked catalogue to the RKC"
+            accent="blue"
+            onClick={() => markRkcSubmitted.mutate({ showId })}
+          />
+        ) : (
+          <ActionCard
+            href={`/secretary/shows/${showId}/documents`}
+            icon={FileText}
+            label="Documents"
+            description="Download marked catalogue and other show documents"
+            accent="default"
+            badge="Submitted"
+          />
+        )}
 
-            return isDownload ? (
-              <a key={task.label} href={task.href} download className={sharedClassName}>
-                {inner}
-              </a>
-            ) : (
-              <Link key={task.label} href={task.href} className={sharedClassName}>
-                {inner}
-              </Link>
-            );
-          })}
-        </div>
-
-        {/* RKC submission action */}
-        <div className="border-t pt-3">
-          {rkcSubmitted ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-xs text-muted-foreground"
-              disabled={unmarkRkcSubmitted.isPending}
-              onClick={() => unmarkRkcSubmitted.mutate({ showId })}
-            >
-              {unmarkRkcSubmitted.isPending ? (
-                <Loader2 className="size-3 animate-spin" />
-              ) : (
-                <X className="size-3" />
-              )}
-              Clear RKC submission
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              variant="outline"
-              className="w-full sm:w-auto min-h-[2.75rem] gap-1.5"
-              disabled={markRkcSubmitted.isPending}
-              onClick={() => markRkcSubmitted.mutate({ showId })}
-            >
-              {markRkcSubmitted.isPending ? (
-                <Loader2 className="size-3 animate-spin" />
-              ) : (
-                <Send className="size-3" />
-              )}
-              Mark as submitted to RKC
-            </Button>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+        <ActionCard
+          href={`/secretary/shows/${showId}/reports`}
+          icon={FileText}
+          label="Final Reports"
+          description="Download entry reports, financial summaries, and breed stats"
+          accent="default"
+        />
+        <ActionCard
+          href={`/secretary/shows/${showId}/sponsors`}
+          icon={Megaphone}
+          label="Sponsors & Awards"
+          description="Record best in show, best puppy, and other awards"
+          accent="default"
+        />
+      </div>
+    </div>
   );
 }
 
@@ -716,12 +768,18 @@ function PostShowPanel({ show, showId }: { show: Show; showId: string }) {
 
 function CancelledPanel() {
   return (
-    <Card className="border-destructive/20 bg-destructive/5">
-      <CardContent className="pt-6">
-        <p className="text-sm font-semibold text-foreground">
-          This show has been cancelled
+    <div className="flex items-center gap-3 rounded-2xl border border-destructive/20 bg-destructive/5 px-5 py-4">
+      <div className="flex size-10 items-center justify-center rounded-xl bg-destructive/10">
+        <X className="size-5 text-destructive" />
+      </div>
+      <div>
+        <h3 className="font-serif text-base font-semibold tracking-tight text-foreground">
+          Show cancelled
+        </h3>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          This show has been cancelled and is no longer visible to exhibitors.
         </p>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
