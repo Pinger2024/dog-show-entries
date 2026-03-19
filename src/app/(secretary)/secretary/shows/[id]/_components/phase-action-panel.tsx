@@ -232,6 +232,7 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
   });
 
   const completedCount = checklist.filter(c => c.done).length;
+  const requiredBlockerCount = allBlockers.filter(b => b.severity === 'required').length;
   const totalCount = checklist.length;
   const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
@@ -359,7 +360,7 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
             ) : canOpen ? (
               'Open Entries'
             ) : (
-              `Complete ${allBlockers.filter(b => b.severity === 'required').length} required item${allBlockers.filter(b => b.severity === 'required').length !== 1 ? 's' : ''} to open`
+              `Complete ${requiredBlockerCount} required item${requiredBlockerCount !== 1 ? 's' : ''} to open`
             )}
           </Button>
           <Button

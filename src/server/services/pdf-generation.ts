@@ -22,6 +22,7 @@ import type { ScheduleShowInfo, ScheduleClass, ScheduleJudge, ScheduleSponsor } 
 import { RingBoard } from '@/components/ring-board/ring-board';
 import type { RingBoardShowInfo, RingBoardRing } from '@/components/ring-board/ring-board';
 import React from 'react';
+import { uploadToR2, getPublicUrl } from '@/server/services/storage';
 
 // ── Catalogue PDF ──
 
@@ -231,10 +232,14 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
 
   if (!show) throw new Error(`Show ${showId} not found`);
 
-  const [showClasses, judgeAssignments, showSponsors, classSponsorships] = await Promise.all([
+  const [showClasses, judgeAssignments, showSponsors] = await Promise.all([
     db.query.showClasses.findMany({
       where: eq(schema.showClasses.showId, showId),
-      with: { classDefinition: true, breed: true },
+      with: {
+        classDefinition: true,
+        breed: true,
+        classSponsorships: true,
+      },
       orderBy: [asc(schema.showClasses.sortOrder), asc(schema.showClasses.classNumber)],
     }),
     db.query.judgeAssignments.findMany({
@@ -244,10 +249,6 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     db.query.showSponsors.findMany({
       where: eq(schema.showSponsors.showId, showId),
       with: { sponsor: true },
-    }),
-    db.query.classSponsorships.findMany({
-      where: eq(schema.classSponsorships.showId, showId),
-      with: { sponsor: true, showClass: { with: { classDefinition: true } } },
     }),
   ]);
 
@@ -269,23 +270,25 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     breedName: sc.breed?.name ?? null,
   }));
 
-  // Build class sponsorships grouped by show sponsor
+  // Build class sponsorships grouped by show sponsor (loaded via showClasses relation)
   const classSponsorsByShowSponsor = new Map<string, Array<{
     className: string;
     trophyName: string | null;
     trophyDonor: string | null;
     prizeDescription: string | null;
   }>>();
-  for (const cs of classSponsorships) {
+  for (const sc of showClasses) {
+    for (const cs of sc.classSponsorships ?? []) {
     if (!cs.showSponsorId) continue;
     const list = classSponsorsByShowSponsor.get(cs.showSponsorId) ?? [];
     list.push({
-      className: cs.showClass?.classDefinition?.name ?? 'Unknown',
+      className: sc.classDefinition?.name ?? 'Unknown',
       trophyName: cs.trophyName,
       trophyDonor: cs.trophyDonor,
       prizeDescription: cs.prizeDescription,
     });
     classSponsorsByShowSponsor.set(cs.showSponsorId, list);
+    }
   }
 
   const sponsors: ScheduleSponsor[] = showSponsors.map((ss) => ({
@@ -503,8 +506,6 @@ export async function generateRingNumbersPdf(showId: string): Promise<Buffer> {
 }
 
 // ── Upload helper for print pipeline ──
-
-import { uploadToR2, getPublicUrl } from '@/server/services/storage';
 
 export async function generateAndUploadForPrint(
   showId: string,
