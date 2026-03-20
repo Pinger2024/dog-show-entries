@@ -458,6 +458,7 @@ export const showsRouter = createTRPCRouter({
         secretaryAddress: z.string().optional(),
         secretaryPhone: z.string().optional(),
         showOpenTime: z.string().optional(),
+        startTime: z.string().optional(),
         onCallVet: z.string().optional(),
         acceptsPostalEntries: z.boolean().optional(),
         classSexArrangement: z.enum(['separate_sex', 'combined_sex']).optional(),
@@ -466,6 +467,7 @@ export const showsRouter = createTRPCRouter({
         firstEntryFee: z.number().int().min(0).optional(),
         subsequentEntryFee: z.number().int().min(0).optional(),
         nfcEntryFee: z.number().int().min(0).optional(),
+        juniorHandlerFee: z.number().int().min(0).optional(),
         // All-breed show class data: breed selections + class template applied per breed
         allBreedClassData: z.object({
           breedIds: z.array(z.string().uuid()),
@@ -509,7 +511,7 @@ export const showsRouter = createTRPCRouter({
         });
       }
 
-      const { classDefinitionIds, entryFee, firstEntryFee, subsequentEntryFee, nfcEntryFee, allBreedClassData, ...showData } = input;
+      const { classDefinitionIds, entryFee, firstEntryFee, subsequentEntryFee, nfcEntryFee, juniorHandlerFee, allBreedClassData, ...showData } = input;
 
       // Generate a unique slug
       const baseSlug = generateShowSlug(showData.name, showData.startDate);
@@ -537,6 +539,7 @@ export const showsRouter = createTRPCRouter({
           firstEntryFee: firstEntryFee ?? null,
           subsequentEntryFee: subsequentEntryFee ?? null,
           nfcEntryFee: nfcEntryFee ?? null,
+          juniorHandlerFee: juniorHandlerFee ?? null,
         })
         .returning();
 
@@ -701,6 +704,7 @@ export const showsRouter = createTRPCRouter({
         secretaryAddress: z.string().nullable().optional(),
         secretaryPhone: z.string().nullable().optional(),
         showOpenTime: z.string().nullable().optional(),
+        startTime: z.string().nullable().optional(),
         onCallVet: z.string().nullable().optional(),
         classSexArrangement: z.enum(['separate_sex', 'combined_sex']).nullable().optional(),
         bannerImageUrl: z.string().nullable().optional(),
@@ -708,6 +712,7 @@ export const showsRouter = createTRPCRouter({
         firstEntryFee: z.number().int().min(0).nullable().optional(),
         subsequentEntryFee: z.number().int().min(0).nullable().optional(),
         nfcEntryFee: z.number().int().min(0).nullable().optional(),
+        juniorHandlerFee: z.number().int().min(0).nullable().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {

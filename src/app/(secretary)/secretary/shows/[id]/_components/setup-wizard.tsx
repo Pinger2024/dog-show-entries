@@ -365,6 +365,9 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
   const [nfcEntryFee, setNfcEntryFee] = useState(
     show.nfcEntryFee != null ? penceToPoundsString(show.nfcEntryFee) : '',
   );
+  const [juniorHandlerFee, setJuniorHandlerFee] = useState(
+    show.juniorHandlerFee != null ? penceToPoundsString(show.juniorHandlerFee) : '',
+  );
   const [entryCloseDate, setEntryCloseDate] = useState(
     show.entryCloseDate
       ? new Date(show.entryCloseDate).toISOString().slice(0, 16)
@@ -415,6 +418,7 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
         ? poundsToPence(Number(subsequentEntryFee))
         : null,
       nfcEntryFee: nfcEntryFee ? poundsToPence(Number(nfcEntryFee)) : null,
+      juniorHandlerFee: juniorHandlerFee ? poundsToPence(Number(juniorHandlerFee)) : null,
       entryCloseDate: entryCloseDate
         ? new Date(entryCloseDate).toISOString()
         : null,
@@ -434,7 +438,7 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
       {/* Entry Fees */}
       <div className="space-y-3">
         <h4 className="text-sm font-semibold">Entry Fees</h4>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="wiz-first-fee" className="text-xs">
               First entry fee
@@ -492,6 +496,26 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
                 className="pl-7 min-h-[2.75rem]"
                 value={nfcEntryFee}
                 onChange={(e) => setNfcEntryFee(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="wiz-jh-fee" className="text-xs">
+              Junior handler fee
+            </Label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                &pound;
+              </span>
+              <Input
+                id="wiz-jh-fee"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                className="pl-7 min-h-[2.75rem]"
+                value={juniorHandlerFee}
+                onChange={(e) => setJuniorHandlerFee(e.target.value)}
               />
             </div>
           </div>

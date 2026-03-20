@@ -119,6 +119,7 @@ export const shows = pgTable(
     firstEntryFee: integer('first_entry_fee'),
     subsequentEntryFee: integer('subsequent_entry_fee'),
     nfcEntryFee: integer('nfc_entry_fee'),
+    juniorHandlerFee: integer('junior_handler_fee'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),

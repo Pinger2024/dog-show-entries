@@ -22,6 +22,7 @@ export interface CatalogueEntry {
   exhibitorId: string | undefined;
   handler: string | undefined;
   exhibitor: string | undefined;
+  jhHandlerName: string | null | undefined;
   classes: { name: string | undefined; sex: string | null | undefined; classNumber: number | null | undefined; sortOrder: number | undefined; showClassId?: string | undefined }[];
   status: string;
   entryType: string;

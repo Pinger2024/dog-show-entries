@@ -500,6 +500,7 @@ export const secretaryRouter = createTRPCRouter({
           },
           exhibitor: true,
           handler: true,
+          juniorHandlerDetails: true,
           entryClasses: {
             with: {
               showClass: { with: { classDefinition: true } },

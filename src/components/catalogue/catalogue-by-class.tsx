@@ -143,7 +143,7 @@ export function CatalogueByClass({ show, entries }: Props) {
               const isJH = entry.entryType === 'junior_handler';
               if (isJH) {
                 // Junior Handling: handler-centric display
-                const handlerName = entry.handler ?? entry.exhibitor ?? 'Unnamed Handler';
+                const handlerName = entry.jhHandlerName ?? entry.exhibitor ?? 'Unnamed Handler';
                 return (
                   <View
                     key={`${className}-${entry.catalogueNumber}`}

@@ -64,6 +64,7 @@ export async function generateCataloguePdf(
         },
         exhibitor: true,
         handler: true,
+        juniorHandlerDetails: true,
         entryClasses: {
           with: { showClass: { with: { classDefinition: true } } },
         },
@@ -117,6 +118,7 @@ export async function generateCataloguePdf(
     exhibitorId: entry.exhibitorId,
     handler: entry.handler?.name,
     exhibitor: entry.exhibitor?.name,
+    jhHandlerName: entry.juniorHandlerDetails?.handlerName ?? undefined,
     classes: entry.entryClasses.map((ec) => ({
       name: ec.showClass?.classDefinition?.name,
       sex: ec.showClass?.sex,

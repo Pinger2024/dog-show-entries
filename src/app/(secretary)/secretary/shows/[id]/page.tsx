@@ -421,6 +421,7 @@ function EditShowDetailsDialog({
     secretaryAddress: string | null;
     secretaryPhone: string | null;
     showOpenTime: string | null;
+    startTime: string | null;
     onCallVet: string | null;
     startDate: string;
     endDate: string;
@@ -433,6 +434,7 @@ function EditShowDetailsDialog({
     firstEntryFee: number | null;
     subsequentEntryFee: number | null;
     nfcEntryFee: number | null;
+    juniorHandlerFee: number | null;
   };
   showId: string;
 }) {
@@ -468,6 +470,8 @@ function EditShowDetailsDialog({
   const [firstEntryFee, setFirstEntryFee] = useState(show.firstEntryFee != null ? (show.firstEntryFee / 100).toFixed(2) : '');
   const [subsequentEntryFee, setSubsequentEntryFee] = useState(show.subsequentEntryFee != null ? (show.subsequentEntryFee / 100).toFixed(2) : '');
   const [nfcEntryFee, setNfcEntryFee] = useState(show.nfcEntryFee != null ? (show.nfcEntryFee / 100).toFixed(2) : '');
+  const [juniorHandlerFee, setJuniorHandlerFee] = useState(show.juniorHandlerFee != null ? (show.juniorHandlerFee / 100).toFixed(2) : '');
+  const [startTime, setStartTime] = useState(show.startTime ?? '');
 
   const handleBannerUpload = useCallback(async (file: File) => {
     setBannerUploading(true);
@@ -528,6 +532,8 @@ function EditShowDetailsDialog({
       firstEntryFee: firstEntryFee ? poundsToPence(Number(firstEntryFee)) : null,
       subsequentEntryFee: subsequentEntryFee ? poundsToPence(Number(subsequentEntryFee)) : null,
       nfcEntryFee: nfcEntryFee ? poundsToPence(Number(nfcEntryFee)) : null,
+      juniorHandlerFee: juniorHandlerFee ? poundsToPence(Number(juniorHandlerFee)) : null,
+      startTime: startTime || null,
     });
   }
 
@@ -562,6 +568,8 @@ function EditShowDetailsDialog({
     setFirstEntryFee(show.firstEntryFee != null ? (show.firstEntryFee / 100).toFixed(2) : '');
     setSubsequentEntryFee(show.subsequentEntryFee != null ? (show.subsequentEntryFee / 100).toFixed(2) : '');
     setNfcEntryFee(show.nfcEntryFee != null ? (show.nfcEntryFee / 100).toFixed(2) : '');
+    setJuniorHandlerFee(show.juniorHandlerFee != null ? (show.juniorHandlerFee / 100).toFixed(2) : '');
+    setStartTime(show.startTime ?? '');
   }, [open]); // reads current `show` via closure when dialog opens
 
   return (
@@ -778,6 +786,18 @@ function EditShowDetailsDialog({
                 />
               </div>
               <div className="space-y-1.5">
+                <Label htmlFor="edit-judging-commences">Judging Commences</Label>
+                <Input
+                  id="edit-judging-commences"
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  placeholder="e.g. 10:00"
+                />
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="edit-on-call-vet">On-Call Vet</Label>
                 <Input
                   id="edit-on-call-vet"
@@ -877,7 +897,7 @@ function EditShowDetailsDialog({
               </div>
             </div>
             {/* Entry Fees */}
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="edit-first-fee">First Entry Fee</Label>
                 <div className="relative">
@@ -922,6 +942,22 @@ function EditShowDetailsDialog({
                     className="pl-7"
                     value={nfcEntryFee}
                     onChange={(e) => setNfcEntryFee(e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-jh-fee">Junior Handler Fee</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">£</span>
+                  <Input
+                    id="edit-jh-fee"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="pl-7"
+                    value={juniorHandlerFee}
+                    onChange={(e) => setJuniorHandlerFee(e.target.value)}
                     placeholder="0.00"
                   />
                 </div>
