@@ -54,7 +54,7 @@ function getPreviewUrl(showId: string, documentType: string, documentFormat?: st
     case 'catalogue':
       return `/api/catalogue/${showId}/${documentFormat ?? 'standard'}?preview`;
     case 'schedule':
-      return `/api/schedule/${showId}?preview`;
+      return `/api/schedule/${showId}?preview${documentFormat && documentFormat !== 'standard' ? `&format=${documentFormat}` : ''}`;
     case 'prize_cards':
       return `/api/prize-cards/${showId}?preview`;
     case 'ring_board':
@@ -137,7 +137,7 @@ export default function PrintShopPage() {
         label: p.label,
         quantity: p.suggestedQuantity,
         presetId: 'standard',
-        documentFormat: p.documentType === 'catalogue' ? 'standard' : undefined,
+        documentFormat: (p.documentType === 'catalogue' || p.documentType === 'schedule') ? 'standard' : undefined,
       }))
     );
     setStep('delivery');
@@ -490,6 +490,24 @@ export default function PrintShopPage() {
                               <SelectItem value="standard">Standard</SelectItem>
                               <SelectItem value="by-class">By Class</SelectItem>
                               <SelectItem value="alphabetical">Alphabetical</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                      {product.documentType === 'schedule' && (
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Format</Label>
+                          <Select
+                            value={selectedItem?.documentFormat ?? 'standard'}
+                            onValueChange={(v) => handleUpdateItem(product.documentType, { documentFormat: v })}
+                          >
+                            <SelectTrigger className="h-11">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="compact">Compact (4pp leaflet)</SelectItem>
+                              <SelectItem value="booklet">Booklet (8pp)</SelectItem>
+                              <SelectItem value="standard">Full (all sections)</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>

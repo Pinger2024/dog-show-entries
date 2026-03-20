@@ -523,7 +523,7 @@ export async function generateAndUploadForPrint(
       buffer = await generatePrizeCardsPdf(showId);
       break;
     case 'schedule':
-      buffer = await generateSchedulePdf(showId);
+      buffer = await generateSchedulePdf(showId, (documentFormat as ScheduleFormat) ?? 'standard');
       break;
     case 'ring_board':
       buffer = await generateRingBoardPdf(showId);
