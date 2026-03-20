@@ -708,17 +708,23 @@ function Rule({ num, children }: { num: string; children: React.ReactNode }) {
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 
+export type ScheduleFormat = 'standard' | 'compact' | 'booklet';
+
 export function ShowSchedule({
   show,
   classes,
   judges,
   sponsors = [],
+  format = 'standard',
 }: {
   show: ScheduleShowInfo;
   classes: ScheduleClass[];
   judges: ScheduleJudge[];
   sponsors?: ScheduleSponsor[];
+  format?: ScheduleFormat;
 }) {
+  const isCompact = format === 'compact';
+  const isBooklet = format === 'booklet';
   const showTypeLabel = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
   const showDate = show.endDate && show.endDate !== show.date
     ? `${formatDate(show.date)} — ${formatDate(show.endDate)}`
@@ -754,6 +760,261 @@ export function ShowSchedule({
 
   const footerRender = ({ pageNumber, totalPages }: { pageNumber: number; totalPages: number }) =>
     `${show.name}  ·  Schedule  ·  Page ${pageNumber} of ${totalPages}`;
+
+  /* ── Compact format: 4-page condensed schedule for folded leaflets ── */
+  if (isCompact) {
+    return (
+      <Document title={`Schedule — ${show.name}`} author="Remi Show Manager">
+        {/* PAGE 1: Cover */}
+        <Page size="A5" style={s.coverPage}>
+          {show.organisation && (
+            <View style={s.coverTopBand}>
+              <Text style={s.coverOrgName}>{show.organisation.name}</Text>
+            </View>
+          )}
+          {!show.organisation && <View style={{ height: 12 }} />}
+          <View style={s.coverContent}>
+            {show.organisation?.logoUrl && (
+              <Image src={show.organisation.logoUrl} style={s.coverLogo} />
+            )}
+            <Text style={s.coverShowName}>{show.name}</Text>
+            <View style={s.coverBadge}>
+              <Text style={s.coverBadgeText}>{showTypeLabel}</Text>
+            </View>
+            <Text style={s.coverClassCount}>
+              {classCount} Class{classCount !== 1 ? 'es' : ''}
+            </Text>
+            <Text style={s.coverRegulatory}>
+              Held under Royal Kennel Club Rules &amp; Show Regulations F(1)
+            </Text>
+            <GoldRule />
+            <View style={s.coverDetailCard}>
+              <View style={s.coverDetailRow}>
+                <Text style={s.coverDetailLabel}>Date</Text>
+                <Text style={s.coverDetailValue}>{showDate}</Text>
+              </View>
+              {show.venue && (
+                <View style={s.coverDetailRow}>
+                  <Text style={s.coverDetailLabel}>Venue</Text>
+                  <Text style={s.coverDetailValue}>
+                    {show.venue.name}
+                    {show.venue.address ? `, ${show.venue.address}` : ''}
+                    {show.venue.postcode ? ` ${show.venue.postcode}` : ''}
+                  </Text>
+                </View>
+              )}
+              {judges.length > 0 && (
+                <View style={s.coverDetailRow}>
+                  <Text style={s.coverDetailLabel}>Judge</Text>
+                  <Text style={s.coverDetailValue}>
+                    {judges.map((j) => j.name).join(', ')}
+                  </Text>
+                </View>
+              )}
+              {show.startTime && (
+                <View style={s.coverDetailRow}>
+                  <Text style={s.coverDetailLabel}>Judging</Text>
+                  <Text style={s.coverDetailValue}>{formatTime(show.startTime)}</Text>
+                </View>
+              )}
+              {show.showOpenTime && (
+                <View style={s.coverDetailRow}>
+                  <Text style={s.coverDetailLabel}>Opens</Text>
+                  <Text style={s.coverDetailValue}>{formatTime(show.showOpenTime)}</Text>
+                </View>
+              )}
+              {show.kcLicenceNo && (
+                <View style={s.coverDetailRow}>
+                  <Text style={s.coverDetailLabel}>Licence</Text>
+                  <Text style={s.coverDetailValue}>{show.kcLicenceNo}</Text>
+                </View>
+              )}
+            </View>
+            {(show.secretaryName || show.secretaryEmail) && (
+              <View style={{ ...s.coverDetailCard, borderLeftColor: C.primary }}>
+                <Text style={s.coverSectionLabel}>Show Secretary</Text>
+                {show.secretaryName && <Text style={s.coverSectionText}>{show.secretaryName}</Text>}
+                {show.secretaryPhone && <Text style={s.coverSectionText}>Tel: {show.secretaryPhone}</Text>}
+                {show.secretaryEmail && <Text style={s.coverSectionText}>{show.secretaryEmail}</Text>}
+              </View>
+            )}
+            <GoldRule />
+            <Text style={s.coverDocking}>{dockingStatement}</Text>
+            <Text style={s.coverFooterText}>Enter online at remishowmanager.co.uk</Text>
+          </View>
+          <View style={s.coverBottomBand} />
+        </Page>
+
+        {/* PAGE 2: Entry Fees + Key Info */}
+        <Page size="A5" style={s.page}>
+          <SectionBand title="Entry Information" />
+          {(show.firstEntryFee != null || show.subsequentEntryFee != null) && (
+            <InfoCard title="Entry Fees">
+              {show.firstEntryFee != null && (
+                <View style={s.infoRow}>
+                  <Text style={s.infoLabel}>First entry</Text>
+                  <Text style={s.infoValue}>{formatCurrency(show.firstEntryFee)}</Text>
+                </View>
+              )}
+              {show.subsequentEntryFee != null && (
+                <View style={s.infoRow}>
+                  <Text style={s.infoLabel}>Subsequent (same dog)</Text>
+                  <Text style={s.infoValue}>{formatCurrency(show.subsequentEntryFee)}</Text>
+                </View>
+              )}
+              {show.nfcEntryFee != null && (
+                <View style={s.infoRow}>
+                  <Text style={s.infoLabel}>Not for Competition</Text>
+                  <Text style={s.infoValue}>{formatCurrency(show.nfcEntryFee)}</Text>
+                </View>
+              )}
+            </InfoCard>
+          )}
+          <InfoCard title="Key Dates">
+            {show.entriesOpenDate && (
+              <View style={s.infoRow}>
+                <Text style={s.infoLabel}>Entries open</Text>
+                <Text style={s.infoValue}>{formatShortDate(show.entriesOpenDate)}</Text>
+              </View>
+            )}
+            {show.entryCloseDate && (
+              <View style={s.infoRow}>
+                <Text style={s.infoLabel}>Entries close</Text>
+                <Text style={s.infoValue}>{formatShortDate(show.entryCloseDate)}</Text>
+              </View>
+            )}
+          </InfoCard>
+          {show.onCallVet && (
+            <View style={{ marginBottom: 4 }}>
+              <Text style={{ fontFamily: 'Inter', fontSize: 7, fontWeight: 'bold', color: C.textDark }}>On-Call Vet</Text>
+              <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textMedium }}>{show.onCallVet}</Text>
+            </View>
+          )}
+          {sd?.officers && sd.officers.length > 0 && (
+            <InfoCard title="Officials">
+              {sd.officers.map((o, i) => (
+                <View key={i} style={s.officialRow}>
+                  <Text style={s.officialPosition}>{o.position}</Text>
+                  <Text style={s.officialName}>{o.name}</Text>
+                </View>
+              ))}
+            </InfoCard>
+          )}
+          <Text style={s.footer} render={footerRender} fixed />
+        </Page>
+
+        {/* PAGE 3: Classes */}
+        <Page size="A5" style={s.page}>
+          <SectionBand title={isSingleBreed ? 'Classification' : 'Schedule of Classes'} />
+          {isSingleBreed && judges.length > 0 && (
+            <View style={{ marginBottom: 8 }}>
+              {judges.map((judge, i) => (
+                <Text key={i} style={{ fontFamily: 'Inter', fontSize: 8, fontWeight: 'bold', textAlign: 'center', color: C.textDark }}>
+                  JUDGE: {judge.name}
+                </Text>
+              ))}
+            </View>
+          )}
+          {isSingleBreed ? (
+            <View style={s.twoColContainer}>
+              <View style={[s.twoColHalf, { paddingRight: 4 }]}>
+                <View style={s.twoColHeader}><Text style={s.twoColHeaderText}>Dog</Text></View>
+                {dogClasses.map((cls, i) => (
+                  <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
+                    <Text style={s.twoColNum}>{cls.classNumber ?? ''}</Text>
+                    <Text style={s.twoColName}>{cls.className}</Text>
+                  </View>
+                ))}
+              </View>
+              <View style={[s.twoColHalf, { paddingLeft: 4 }]}>
+                <View style={s.twoColHeader}><Text style={s.twoColHeaderText}>Bitch</Text></View>
+                {bitchClasses.map((cls, i) => (
+                  <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
+                    <Text style={s.twoColNum}>{cls.classNumber ?? ''}</Text>
+                    <Text style={s.twoColName}>{cls.className}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          ) : (
+            <View style={s.classTable}>
+              <View style={s.classHeaderRow}>
+                <Text style={[s.classHeaderCell, { width: 28 }]}>No</Text>
+                <Text style={[s.classHeaderCell, { flex: 1 }]}>Class</Text>
+                <Text style={[s.classHeaderCell, { width: 40 }]}>Sex</Text>
+                <Text style={[s.classHeaderCell, { width: 80 }]}>Breed</Text>
+              </View>
+              {deduplicatedClasses.map((cls, i) => (
+                <View key={i} style={[s.classRow, i % 2 !== 0 && s.classRowAlt]} wrap={false}>
+                  <Text style={[s.classCell, { width: 28 }]}>{cls.classNumber ?? ''}</Text>
+                  <Text style={[s.classCell, { flex: 1 }]}>{cls.className}</Text>
+                  <Text style={[s.classCell, { width: 40 }]}>{cls.sex === 'dog' ? 'Dog' : cls.sex === 'bitch' ? 'Bitch' : ''}</Text>
+                  <Text style={[s.classCell, { width: 80 }]}>{cls.breedName ?? ''}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+          {mixedClasses.length > 0 && isSingleBreed && (
+            <View>
+              <View style={s.twoColMixedHeader}><Text style={s.twoColHeaderText}>Mixed</Text></View>
+              {mixedClasses.map((cls, i) => (
+                <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
+                  <Text style={s.twoColNum}>{cls.classNumber ?? ''}</Text>
+                  <Text style={s.twoColName}>{cls.className}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+          <Text style={s.footer} render={footerRender} fixed />
+        </Page>
+
+        {/* PAGE 4: Condensed Rules + Key Definitions */}
+        <Page size="A5" style={s.page}>
+          <SectionBand title="Rules &amp; Class Definitions" />
+          <Text style={{ fontFamily: 'Inter', fontSize: 6.5, color: C.textMedium, marginBottom: 6, lineHeight: 1.4 }}>
+            This show is held under Royal Kennel Club Rules and Show Regulations F(1).
+            {show.showOpenTime ? ` Show opens at ${formatTime(show.showOpenTime)}.` : ''}
+            {show.startTime ? ` Judging commences at ${formatTime(show.startTime)}.` : ''}
+            {' '}Exhibits may be removed after their judging has been completed. The show will close half an hour after all judging has been completed.
+            {' '}The Committee reserves the right to refuse any entries. No dog under 6 calendar months of age is eligible. The mating of bitches within the precincts of the show is forbidden.
+            {' '}All exhibitors must be familiar with RKC Regulation F (Annex B) Regulations for the Preparation of Dogs for Exhibition.
+            {' '}ONLINE ENTRY at remishowmanager.co.uk
+          </Text>
+
+          <View style={{ borderBottomWidth: 0.5, borderBottomColor: C.ruleLight, marginBottom: 6 }} />
+
+          <Text style={{ fontFamily: 'Inter', fontSize: 7, fontWeight: 'bold', color: C.primary, marginBottom: 4 }}>
+            Class Definitions
+          </Text>
+          {[
+            ['MINOR PUPPY', '6 and not exceeding 9 calendar months of age.'],
+            ['PUPPY', '6 and not exceeding 12 calendar months of age.'],
+            ['JUNIOR', '6 and not exceeding 18 calendar months of age.'],
+            ['NOVICE', 'Not won a CC/CACIB/CAC/Green Star or 3+ first prizes at Open/Championship Shows.'],
+            ['YEARLING', '12 and not exceeding 24 calendar months of age.'],
+            ['GRADUATE', 'Not won a CC or 4+ firsts at Championship Shows in Graduate and above.'],
+            ['POST GRADUATE', 'Not won a CC or 5+ firsts at Championship Shows in Post Graduate and above.'],
+            ['LIMIT', 'Not a Show Champion, or won 3+ CCs, or 7+ firsts in Limit/Open at Championship Shows.'],
+            ['OPEN', 'For all dogs of the breeds for which the class is provided.'],
+            ['VETERAN', 'Not less than 7 years of age.'],
+          ].map(([name, desc], i) => (
+            <View key={i} style={{ flexDirection: 'row', marginBottom: 1.5 }}>
+              <Text style={{ fontFamily: 'Inter', fontSize: 6, fontWeight: 'bold', color: C.textDark, width: 65 }}>{name}:</Text>
+              <Text style={{ fontFamily: 'Inter', fontSize: 6, color: C.textMedium, flex: 1 }}>{desc}</Text>
+            </View>
+          ))}
+
+          <View style={s.warningBox} wrap={false}>
+            <Text style={s.warningTitle}>WARNING</Text>
+            <Text style={s.warningText}>
+              IF YOUR DOG IS FOUND TO BE AT RISK FORCIBLE ENTRY TO YOUR VEHICLE MAY BE NECESSARY WITHOUT LIABILITY FOR ANY DAMAGE CAUSED.
+            </Text>
+          </View>
+          <Text style={s.footer} render={footerRender} fixed />
+        </Page>
+      </Document>
+    );
+  }
 
   return (
     <Document title={`Schedule — ${show.name}`} author="Remi Show Manager">
@@ -1470,9 +1731,9 @@ export function ShowSchedule({
       </Page>
 
       {/* ════════════════════════════════════════════════════════════════════════
-          ADDITIONAL RULES AND REGULATIONS
+          ADDITIONAL RULES AND REGULATIONS (skipped in booklet format)
           ════════════════════════════════════════════════════════════════════ */}
-      <Page size="A5" style={s.page}>
+      {!isBooklet && <Page size="A5" style={s.page}>
         <SectionBand title="Additional Rules" />
 
         <Rule num="i">Should any judge be prevented from fulfilling their engagement, the Committee reserves to themselves the right of appointing other judges to fulfil their duties. Exhibitors are at liberty to withdraw from competition but no entry fees can be refunded.</Rule>
@@ -1506,12 +1767,12 @@ export function ShowSchedule({
         </View>
 
         <Text style={s.footer} render={footerRender} fixed />
-      </Page>
+      </Page>}
 
       {/* ════════════════════════════════════════════════════════════════════════
-          REGULATIONS FOR PREPARATION F(B)
+          REGULATIONS FOR PREPARATION F(B) (skipped in booklet format)
           ════════════════════════════════════════════════════════════════════ */}
-      <Page size="A5" style={s.page}>
+      {!isBooklet && <Page size="A5" style={s.page}>
         <SectionBand title="Regulations for Preparation F(B)" />
 
         <Text style={s.ruleText}>
@@ -1532,7 +1793,7 @@ export function ShowSchedule({
         <Rule num="7">The chalking, powdering or spraying (with the exception of water) of exhibits within the precincts of the show is prohibited.</Rule>
 
         <Text style={s.footer} render={footerRender} fixed />
-      </Page>
+      </Page>}
 
       {/* ════════════════════════════════════════════════════════════════════════
           ADDITIONAL INFORMATION (optional)
@@ -1572,7 +1833,7 @@ export function ShowSchedule({
       {/* ════════════════════════════════════════════════════════════════════════
           ENTRY FORM (postal entries only)
           ════════════════════════════════════════════════════════════════════ */}
-      {show.acceptsPostalEntries && (
+      {show.acceptsPostalEntries && !isBooklet && (
         <Page size="A5" style={s.page}>
           <SectionBand title="Entry Form" />
 
