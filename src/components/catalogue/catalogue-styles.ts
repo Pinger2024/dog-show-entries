@@ -555,9 +555,9 @@ export const styles = StyleSheet.create({
   // ── Sponsor / trophy line under class headings ──
   sponsorLine: {
     fontFamily: 'Times',
-    fontSize: 6.5,
+    fontSize: 8,
     fontStyle: 'italic',
-    color: C.accent,
+    color: C.textDark,
     paddingLeft: 3,
     marginBottom: 2,
   },

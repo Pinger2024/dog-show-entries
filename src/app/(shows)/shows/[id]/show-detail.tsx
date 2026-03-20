@@ -61,7 +61,7 @@ function VenueMap({ lat, lng, name }: { lat: string; lng: string; name: string }
         style={{ border: 0 }}
         loading="lazy"
         referrerPolicy="no-referrer-when-downgrade"
-        src={`https://www.google.com/maps/embed/v1/place?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY ?? ''}&q=${lat},${lng}&zoom=14`}
+        src={`https://www.google.com/maps?q=${lat},${lng}&z=14&output=embed`}
         allowFullScreen
       />
     </div>

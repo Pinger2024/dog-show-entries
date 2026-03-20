@@ -365,7 +365,7 @@ export function CatalogueByBreed({ show, entries }: Props) {
                             {classLabel(cls, sex)}
                           </Text>
                           {sponsorParts.map((line, i) => (
-                            <Text key={i} style={{ ...styles.sponsorLine, fontSize: 6, marginBottom: 1 }}>
+                            <Text key={i} style={{ ...styles.sponsorLine, fontSize: 7, marginBottom: 1 }}>
                               {line}
                             </Text>
                           ))}
