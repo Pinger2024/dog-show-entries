@@ -7,7 +7,6 @@ import {
   Loader2,
   Search,
   UserPlus,
-  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
@@ -46,6 +45,7 @@ interface BreedSexCombo {
   breedName: string | null;
   sex: string | null;
   selected: boolean;
+  notApproved?: boolean;
 }
 
 interface AddJudgeWizardProps {
@@ -57,13 +57,9 @@ interface AddJudgeWizardProps {
   prefillSex?: string | null;
 }
 
-// ── Helpers ─────────────────────────────────────────────
+import { sexLabel } from './utils';
 
-function sexLabel(sex: string | null): string {
-  if (sex === 'dog') return 'Dogs';
-  if (sex === 'bitch') return 'Bitches';
-  return 'All';
-}
+// ── Helpers ─────────────────────────────────────────────
 
 const STEPS: { key: Step; label: string }[] = [
   { key: 'find', label: 'Find Judge' },
@@ -177,8 +173,7 @@ export function AddJudgeWizard({
       // But still show them — just with a visual indicator
       for (const combo of combos) {
         if (combo.breedName && !approvedBreedNames.has(combo.breedName.toLowerCase())) {
-          // Not approved — could still be selected (secretary knows best) but show a warning
-          (combo as BreedSexCombo & { notApproved?: boolean }).notApproved = true;
+          combo.notApproved = true;
         }
       }
     }
@@ -228,7 +223,6 @@ export function AddJudgeWizard({
   function handleConfirm() {
     if (!selectedJudge) return;
 
-    const selectedCombos = breedCombos.filter((c) => c.selected);
     if (selectedCombos.length === 0) {
       toast.error('Select at least one breed/sex combination');
       return;
@@ -262,7 +256,8 @@ export function AddJudgeWizard({
   // ── Render ────────────────────────────────────────────
 
   const currentStepIndex = STEPS.findIndex((s) => s.key === step);
-  const selectedCount = breedCombos.filter((c) => c.selected).length;
+  const selectedCombos = useMemo(() => breedCombos.filter((c) => c.selected), [breedCombos]);
+  const selectedCount = selectedCombos.length;
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) resetAndClose(); else onOpenChange(o); }}>
@@ -285,7 +280,7 @@ export function AddJudgeWizard({
             <div key={s.key} className="flex items-center gap-1">
               <div className={cn(
                 'flex size-6 items-center justify-center rounded-full text-xs font-medium',
-                i < currentStepIndex && 'bg-green-600 text-white',
+                i < currentStepIndex && 'bg-emerald-500 text-white',
                 i === currentStepIndex && 'bg-primary text-primary-foreground',
                 i > currentStepIndex && 'bg-muted text-muted-foreground',
               )}>
@@ -537,7 +532,7 @@ export function AddJudgeWizard({
               ) : (
                 <div className="max-h-48 space-y-1 overflow-y-auto">
                   {breedCombos.map((combo, i) => {
-                    const notApproved = (combo as BreedSexCombo & { notApproved?: boolean }).notApproved;
+                    const notApproved = combo.notApproved;
                     return (
                       <label
                         key={i}
@@ -614,7 +609,7 @@ export function AddJudgeWizard({
                   Judging ({selectedCount} assignment{selectedCount !== 1 ? 's' : ''})
                 </p>
                 <div className="mt-1 flex flex-wrap gap-1">
-                  {breedCombos.filter((c) => c.selected).map((c, i) => (
+                  {selectedCombos.map((c, i) => (
                     <Badge key={i} variant="secondary" className="text-xs">
                       {c.breedName ?? 'All Breeds'}
                       {c.sex && ` — ${sexLabel(c.sex)}`}

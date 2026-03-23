@@ -96,7 +96,7 @@ export function JudgesSection({ showId }: { showId: string }) {
     location: string | null;
     kcJudgeId: string;
   } | null>(null);
-  // Wizard state
+  // Wizard state — undefined = no prefill (generic), null = all breeds, string = specific breed UUID
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardPrefillBreedId, setWizardPrefillBreedId] = useState<string | null | undefined>(undefined);
   const [wizardPrefillSex, setWizardPrefillSex] = useState<string | null | undefined>(undefined);

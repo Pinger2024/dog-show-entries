@@ -13,11 +13,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 
-function sexLabel(sex: string | null): string {
-  if (sex === 'dog') return 'Dogs';
-  if (sex === 'bitch') return 'Bitches';
-  return 'All';
-}
+import { sexLabel } from './utils';
 
 interface JudgeCoverageDashboardProps {
   showId: string;

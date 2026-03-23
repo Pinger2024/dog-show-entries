@@ -1981,7 +1981,7 @@ export const secretaryRouter = createTRPCRouter({
       // Get all unique breed+sex combos from show classes
       const classes = await ctx.db.query.showClasses.findMany({
         where: eq(showClasses.showId, input.showId),
-        with: { breed: true, classDefinition: true },
+        with: { breed: true },
       });
 
       // Get all judge assignments for this show
