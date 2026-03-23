@@ -229,7 +229,6 @@ export default function ApplicationsPage() {
               icon={ClipboardCheck}
               title={`No ${statusFilter !== 'all' ? statusFilter + ' ' : ''}applications`}
               description="No applications to display yet."
-              variant="dashed"
             />
           ) : (
             <div className="space-y-2 sm:space-y-3">

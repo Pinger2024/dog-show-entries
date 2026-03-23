@@ -200,7 +200,6 @@ export default function FeedbackPage() {
               icon={Inbox}
               title="No feedback yet"
               description="When Amanda or users reply to emails from Remi, their responses will appear here."
-              variant="dashed"
             />
           ) : (
             <div className="space-y-3">

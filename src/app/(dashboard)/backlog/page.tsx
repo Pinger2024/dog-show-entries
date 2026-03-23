@@ -207,7 +207,6 @@ export default function BacklogPage() {
               icon={ListTodo}
               title="No backlog items"
               description="Feature requests from the UX review will appear here."
-              variant="dashed"
             />
           ) : (
             <div className="space-y-3">

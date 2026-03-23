@@ -126,7 +126,7 @@ export default function DogsPage() {
           description="Add your first dog to start entering shows. You'll need their Royal Kennel Club registration details."
           variant="card"
           action={
-            <Button className="mt-6" size="lg" asChild>
+            <Button size="lg" asChild>
               <Link href="/dogs/new">
                 <Plus className="size-4" />
                 Add Your First Dog
@@ -232,7 +232,7 @@ export default function DogsPage() {
               icon={Dog}
               title={`No dogs match "${search}"`}
               description="Try a different search term"
-              variant="dashed"
+
             />
           )}
         </>

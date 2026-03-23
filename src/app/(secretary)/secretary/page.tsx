@@ -143,7 +143,7 @@ export default function SecretaryDashboardPage() {
             </CardHeader>
             <CardContent>
               {pastShows.length === 0 ? (
-                <EmptyState icon={Archive} title="No past shows" description="Completed and cancelled shows will appear here." variant="dashed" />
+                <EmptyState icon={Archive} title="No past shows" description="Completed and cancelled shows will appear here." />
               ) : (
                 <ShowList shows={pastShows} emptyMessage="No past shows" />
               )}
@@ -177,7 +177,6 @@ function ShowList({
         icon={CalendarDays}
         title={emptyMessage}
         description="Create your first show to start accepting entries."
-        variant="dashed"
         action={
           <Button size="sm" asChild>
             <Link href="/secretary/shows/new">

@@ -181,7 +181,6 @@ function RingsSection({ showId }: { showId: string }) {
             icon={CircleDot}
             title="No rings defined"
             description="Add rings so judges and stewards can be assigned to specific areas."
-            variant="dashed"
           />
         ) : (
           <>
@@ -407,7 +406,6 @@ function StewardsSection({ showId }: { showId: string }) {
             icon={Eye}
             title="No stewards assigned"
             description="Assign stewards so they can record results from ringside during the show."
-            variant="dashed"
           />
         ) : (
           <div className="space-y-3">

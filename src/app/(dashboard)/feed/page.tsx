@@ -58,7 +58,6 @@ export default function FeedPage() {
               icon={Rss}
               title="Your feed is empty"
               description="Follow dogs to see their updates and show results here. Browse shows to discover dogs, or share your own dogs' moments."
-              variant="dashed"
               action={<Link href="/shows"><Button variant="outline" size="sm">Browse shows</Button></Link>}
             />
           ) : (

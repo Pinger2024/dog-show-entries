@@ -212,7 +212,6 @@ export default function InvitationsPage() {
               icon={UserPlus}
               title="No invitations sent yet"
               description="Send an invitation above to get started."
-              variant="dashed"
             />
           ) : (
             <div className="space-y-2 sm:space-y-3">

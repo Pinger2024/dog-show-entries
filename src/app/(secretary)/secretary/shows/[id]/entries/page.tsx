@@ -203,7 +203,6 @@ export default function EntriesPage() {
                   ? 'Try adjusting your search or filter.'
                   : 'No one has entered this show yet.'
               }
-              variant="dashed"
             />
           ) : (
             <>
