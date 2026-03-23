@@ -1995,11 +1995,6 @@ export const secretaryRouter = createTRPCRouter({
       ]);
       const assignments = assignmentRows;
 
-      // For single-breed shows, derive the breed name from the classes
-      const singleBreedName = show?.showScope === 'single_breed'
-        ? classes.find((c) => c.breed)?.breed?.name ?? null
-        : null;
-
       // Build unique breed+sex requirements from classes
       // Group classes by breedId+sex to get the unique combos that need judges
       const requirementsMap = new Map<string, {
@@ -2016,10 +2011,11 @@ export const secretaryRouter = createTRPCRouter({
         if (existing) {
           existing.classCount++;
         } else {
-          // For breed-less classes: use breed name, or show's breed (single-breed), or class name (JH), or fallback
+          // For breed-less classes: use breed name, class name (JH), or scope-aware fallback
+          const isJuniorHandling = sc.classDefinition?.name?.toLowerCase().includes('handling');
           const label = sc.breed?.name
-            ?? (sc.classDefinition?.name?.toLowerCase().includes('handling') ? 'Junior Handling'
-              : singleBreedName ?? 'All Breeds');
+            ?? (isJuniorHandling ? 'Junior Handling'
+              : show?.showScope === 'single_breed' ? 'Breed Classes' : 'All Breeds');
           requirementsMap.set(key, {
             breedId: sc.breedId,
             breedName: sc.breed?.name ?? null,
