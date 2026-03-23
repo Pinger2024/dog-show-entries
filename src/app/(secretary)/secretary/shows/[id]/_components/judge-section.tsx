@@ -70,6 +70,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { contractStageConfig } from '../_lib/show-utils';
+import { JudgeCoverageDashboard } from '@/components/judges/judge-coverage-dashboard';
+import { AddJudgeWizard } from '@/components/judges/add-judge-wizard';
 
 export function JudgesSection({ showId }: { showId: string }) {
   const [adding, setAdding] = useState(false);
@@ -94,6 +96,10 @@ export function JudgesSection({ showId }: { showId: string }) {
     location: string | null;
     kcJudgeId: string;
   } | null>(null);
+  // Wizard state
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardPrefillBreedId, setWizardPrefillBreedId] = useState<string | null | undefined>(undefined);
+  const [wizardPrefillSex, setWizardPrefillSex] = useState<string | null | undefined>(undefined);
   const utils = trpc.useUtils();
 
   const { data: assignments, isLoading } =
@@ -316,6 +322,25 @@ export function JudgesSection({ showId }: { showId: string }) {
 
   return (
     <div className="space-y-6">
+      {/* Coverage Dashboard */}
+      <JudgeCoverageDashboard
+        showId={showId}
+        onAddJudge={(breedId, sex) => {
+          setWizardPrefillBreedId(breedId);
+          setWizardPrefillSex(sex);
+          setWizardOpen(true);
+        }}
+      />
+
+      {/* Add Judge Wizard */}
+      <AddJudgeWizard
+        showId={showId}
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        prefillBreedId={wizardPrefillBreedId}
+        prefillSex={wizardPrefillSex}
+      />
+
       {/* Create new judge */}
       <Card>
         <CardHeader>
@@ -326,15 +351,13 @@ export function JudgesSection({ showId }: { showId: string }) {
                 Judges
               </CardTitle>
               <CardDescription>
-                Search the RKC database or add judges manually.
+                Add judges via the guided wizard, or manage existing assignments below.
               </CardDescription>
             </div>
-            {!adding && (
-              <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
-                <Plus className="size-4" />
-                New Judge
-              </Button>
-            )}
+            <Button size="sm" onClick={() => { setWizardPrefillBreedId(undefined); setWizardPrefillSex(undefined); setWizardOpen(true); }}>
+              <Plus className="size-4" />
+              Add Judge
+            </Button>
           </div>
         </CardHeader>
         {adding && (

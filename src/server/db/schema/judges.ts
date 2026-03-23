@@ -8,8 +8,10 @@ export const judges = pgTable('judges', {
   name: text('name').notNull(),
   kcNumber: text('kc_number').unique(),
   contactEmail: text('contact_email'),
+  contactPhone: text('contact_phone'),
   jepLevel: integer('jep_level'), // RKC Judges Education Programme level 1-6
   bio: text('bio'), // Optional biography for catalogue display
+  kcJudgeId: text('kc_judge_id'), // RKC internal UUID — cached to avoid repeated Firecrawl scrapes
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),

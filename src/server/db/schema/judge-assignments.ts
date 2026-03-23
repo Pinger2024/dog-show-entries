@@ -1,4 +1,4 @@
-import { index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { index, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { shows } from './shows';
 import { judges } from './judges';
@@ -36,6 +36,12 @@ export const judgeAssignments = pgTable(
     index('judge_assignments_show_id_idx').on(table.showId),
     index('judge_assignments_judge_id_idx').on(table.judgeId),
     index('judge_assignments_approval_token_idx').on(table.approvalToken),
+    unique('judge_assignments_show_judge_breed_sex_key').on(
+      table.showId,
+      table.judgeId,
+      table.breedId,
+      table.sex,
+    ).nullsNotDistinct(),
   ]
 );
 

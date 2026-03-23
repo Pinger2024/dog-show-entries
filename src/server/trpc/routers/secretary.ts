@@ -1855,6 +1855,194 @@ export const secretaryRouter = createTRPCRouter({
       return { removed: true };
     }),
 
+  // ─── Judge Wizard ─────────────────────────────────────
+
+  /** Search local judge pool by name (for autocomplete). */
+  searchJudges: secretaryProcedure
+    .input(z.object({ query: z.string().min(1).max(100), limit: z.number().int().min(1).max(50).default(10) }))
+    .query(async ({ ctx, input }) => {
+      return ctx.db.query.judges.findMany({
+        where: ilike(judges.name, `%${input.query}%`),
+        orderBy: asc(judges.name),
+        limit: input.limit,
+      });
+    }),
+
+  /** Edit a judge's details after creation. */
+  updateJudge: secretaryProcedure
+    .input(z.object({
+      judgeId: z.string().uuid(),
+      name: z.string().min(1).max(255).optional(),
+      kcNumber: z.string().max(50).optional(),
+      contactEmail: z.string().email().optional(),
+      contactPhone: z.string().max(50).optional(),
+      bio: z.string().max(2000).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { judgeId, ...updates } = input;
+      const setValues: Record<string, unknown> = {};
+      if (updates.name !== undefined) setValues.name = updates.name;
+      if (updates.kcNumber !== undefined) setValues.kcNumber = updates.kcNumber || null;
+      if (updates.contactEmail !== undefined) setValues.contactEmail = updates.contactEmail || null;
+      if (updates.contactPhone !== undefined) setValues.contactPhone = updates.contactPhone || null;
+      if (updates.bio !== undefined) setValues.bio = updates.bio || null;
+      if (Object.keys(setValues).length === 0) throw new TRPCError({ code: 'BAD_REQUEST', message: 'No fields to update' });
+
+      const [updated] = await ctx.db.update(judges).set(setValues).where(eq(judges.id, judgeId)).returning();
+      if (!updated) throw new TRPCError({ code: 'NOT_FOUND', message: 'Judge not found' });
+      return updated;
+    }),
+
+  /**
+   * Atomic create-or-find judge + assign to show.
+   * If kcNumber is provided and a judge with that number exists, reuse them.
+   * Creates assignments for each breedId+sex combination.
+   */
+  addAndAssignJudge: secretaryProcedure
+    .input(z.object({
+      showId: z.string().uuid(),
+      // Judge details
+      name: z.string().min(1).max(255),
+      kcNumber: z.string().max(50).optional(),
+      contactEmail: z.string().email(),
+      contactPhone: z.string().max(50).optional(),
+      kcJudgeId: z.string().max(100).optional(),
+      // Assignment details — array of breed+sex combos
+      assignments: z.array(z.object({
+        breedId: z.string().uuid().nullable(),
+        sex: z.enum(['dog', 'bitch']).nullable(),
+      })).min(1),
+      ringId: z.string().uuid().nullable().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      // Find or create judge
+      let judge: typeof judges.$inferSelect | undefined;
+
+      // Try to find by KC number first (most reliable dedup)
+      if (input.kcNumber) {
+        judge = await ctx.db.query.judges.findFirst({
+          where: eq(judges.kcNumber, input.kcNumber),
+        }) ?? undefined;
+      }
+
+      if (!judge) {
+        // Create new judge
+        const [created] = await ctx.db.insert(judges).values({
+          name: input.name,
+          kcNumber: input.kcNumber || null,
+          contactEmail: input.contactEmail,
+          contactPhone: input.contactPhone || null,
+          kcJudgeId: input.kcJudgeId || null,
+        }).returning();
+        judge = created!;
+      } else {
+        // Update email/phone if provided (judge already exists, may have new contact info)
+        await ctx.db.update(judges).set({
+          contactEmail: input.contactEmail,
+          contactPhone: input.contactPhone ?? judge.contactPhone,
+          kcJudgeId: input.kcJudgeId ?? judge.kcJudgeId,
+        }).where(eq(judges.id, judge.id));
+      }
+
+      // Create assignments (skip duplicates via onConflictDoNothing)
+      const assignmentValues = input.assignments.map((a) => ({
+        showId: input.showId,
+        judgeId: judge!.id,
+        breedId: a.breedId,
+        ringId: input.ringId ?? null,
+        sex: a.sex,
+      }));
+
+      const rows = await ctx.db.insert(judgeAssignments)
+        .values(assignmentValues)
+        .onConflictDoNothing({
+          target: [
+            judgeAssignments.showId,
+            judgeAssignments.judgeId,
+            judgeAssignments.breedId,
+            judgeAssignments.sex,
+          ],
+        })
+        .returning();
+
+      return { judge, assignmentCount: rows.length };
+    }),
+
+  /**
+   * Coverage dashboard: which breed+sex combos in this show have judges vs which don't.
+   */
+  getJudgeCoverage: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      // Get all unique breed+sex combos from show classes
+      const classes = await ctx.db.query.showClasses.findMany({
+        where: eq(showClasses.showId, input.showId),
+        with: { breed: true, classDefinition: true },
+      });
+
+      // Get all judge assignments for this show
+      const assignments = await ctx.db.query.judgeAssignments.findMany({
+        where: eq(judgeAssignments.showId, input.showId),
+        with: { judge: true, breed: true },
+      });
+
+      // Build unique breed+sex requirements from classes
+      // Group classes by breedId+sex to get the unique combos that need judges
+      const requirementsMap = new Map<string, {
+        breedId: string | null;
+        breedName: string | null;
+        sex: string | null;
+        classCount: number;
+      }>();
+
+      for (const sc of classes) {
+        const key = `${sc.breedId ?? 'all'}:${sc.sex ?? 'both'}`;
+        const existing = requirementsMap.get(key);
+        if (existing) {
+          existing.classCount++;
+        } else {
+          requirementsMap.set(key, {
+            breedId: sc.breedId,
+            breedName: sc.breed?.name ?? null,
+            sex: sc.sex,
+            classCount: 1,
+          });
+        }
+      }
+
+      // Check which requirements are covered by assignments
+      const coverage = Array.from(requirementsMap.values()).map((req) => {
+        // Find matching assignment: same breed, and sex either matches or assignment covers both
+        const matchingAssignment = assignments.find((a) => {
+          const breedMatch = req.breedId
+            ? a.breedId === req.breedId || a.breedId === null // null breedId on assignment = all breeds
+            : a.breedId === null;
+          const sexMatch = a.sex === null // null = judges both sexes
+            || a.sex === req.sex;
+          return breedMatch && sexMatch;
+        });
+
+        return {
+          breedId: req.breedId,
+          breedName: req.breedName,
+          sex: req.sex,
+          classCount: req.classCount,
+          covered: !!matchingAssignment,
+          judgeName: matchingAssignment?.judge.name ?? null,
+          judgeId: matchingAssignment?.judgeId ?? null,
+        };
+      });
+
+      const coveredCount = coverage.filter((c) => c.covered).length;
+      const totalCount = coverage.length;
+
+      return { coverage, coveredCount, totalCount };
+    }),
+
   // ─── RKC Judge Lookup ────────────────────────────────
 
   kcJudgeSearch: secretaryProcedure
