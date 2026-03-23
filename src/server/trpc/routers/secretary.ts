@@ -1978,17 +1978,27 @@ export const secretaryRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
-      // Get all unique breed+sex combos from show classes
-      const classes = await ctx.db.query.showClasses.findMany({
-        where: eq(showClasses.showId, input.showId),
-        with: { breed: true, classDefinition: true },
-      });
+      // Get the show (for single-breed name) and all classes + assignments in parallel
+      const [show, classes, assignmentRows] = await Promise.all([
+        ctx.db.query.shows.findFirst({
+          where: eq(shows.id, input.showId),
+          columns: { showScope: true },
+        }),
+        ctx.db.query.showClasses.findMany({
+          where: eq(showClasses.showId, input.showId),
+          with: { breed: true, classDefinition: true },
+        }),
+        ctx.db.query.judgeAssignments.findMany({
+          where: eq(judgeAssignments.showId, input.showId),
+          with: { judge: true, breed: true },
+        }),
+      ]);
+      const assignments = assignmentRows;
 
-      // Get all judge assignments for this show
-      const assignments = await ctx.db.query.judgeAssignments.findMany({
-        where: eq(judgeAssignments.showId, input.showId),
-        with: { judge: true, breed: true },
-      });
+      // For single-breed shows, derive the breed name from the classes
+      const singleBreedName = show?.showScope === 'single_breed'
+        ? classes.find((c) => c.breed)?.breed?.name ?? null
+        : null;
 
       // Build unique breed+sex requirements from classes
       // Group classes by breedId+sex to get the unique combos that need judges
@@ -2006,9 +2016,10 @@ export const secretaryRouter = createTRPCRouter({
         if (existing) {
           existing.classCount++;
         } else {
-          // For breed-less classes (like Junior Handling), use the class definition name
+          // For breed-less classes: use breed name, or show's breed (single-breed), or class name (JH), or fallback
           const label = sc.breed?.name
-            ?? (sc.classDefinition?.name?.toLowerCase().includes('handling') ? 'Junior Handling' : 'All Breeds');
+            ?? (sc.classDefinition?.name?.toLowerCase().includes('handling') ? 'Junior Handling'
+              : singleBreedName ?? 'All Breeds');
           requirementsMap.set(key, {
             breedId: sc.breedId,
             breedName: sc.breed?.name ?? null,

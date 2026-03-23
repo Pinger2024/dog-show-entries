@@ -213,6 +213,7 @@ export function JudgesSection({ showId }: { showId: string }) {
     onSuccess: () => {
       toast.success('Judge assignment removed');
       utils.secretary.getShowJudges.invalidate({ showId });
+      utils.secretary.getJudgeCoverage.invalidate({ showId });
     },
     onError: () => toast.error('Failed to remove judge assignment'),
   });
