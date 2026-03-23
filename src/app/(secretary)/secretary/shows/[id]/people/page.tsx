@@ -48,6 +48,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { EmptyState } from '@/components/ui/empty-state';
 import { useShowId } from '../_lib/show-context';
 import { JudgesSection } from '../_components/judge-section';
 
@@ -176,13 +177,12 @@ function RingsSection({ showId }: { showId: string }) {
             <Loader2 className="size-6 animate-spin text-muted-foreground" />
           </div>
         ) : !showRings || showRings.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
-            <CircleDot className="mb-4 size-10 text-muted-foreground/40" />
-            <h3 className="font-semibold">No rings defined</h3>
-            <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-              Add rings so judges and stewards can be assigned to specific areas.
-            </p>
-          </div>
+          <EmptyState
+            icon={CircleDot}
+            title="No rings defined"
+            description="Add rings so judges and stewards can be assigned to specific areas."
+            variant="dashed"
+          />
         ) : (
           <>
           {/* Mobile card view */}
@@ -403,13 +403,12 @@ function StewardsSection({ showId }: { showId: string }) {
             <Loader2 className="size-6 animate-spin text-muted-foreground" />
           </div>
         ) : !stewards || stewards.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
-            <Eye className="mb-4 size-10 text-muted-foreground/40" />
-            <h3 className="font-semibold">No stewards assigned</h3>
-            <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-              Assign stewards so they can record results from ringside during the show.
-            </p>
-          </div>
+          <EmptyState
+            icon={Eye}
+            title="No stewards assigned"
+            description="Assign stewards so they can record results from ringside during the show."
+            variant="dashed"
+          />
         ) : (
           <div className="space-y-3">
             {stewards.map((assignment) => {

@@ -18,6 +18,8 @@ import { getEmbedUrl } from '@/lib/video-utils';
 import { trpc } from '@/lib/trpc/client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { PageHeader, PageTitle, PageDescription } from '@/components/ui/page-header';
+import { EmptyState } from '@/components/ui/empty-state';
 import { getPlacementLabel, placementColors } from '@/lib/placements';
 import { formatRelativeDate } from '@/lib/date-utils';
 
@@ -37,14 +39,12 @@ export default function FeedPage() {
 
   return (
     <div className="space-y-8 pb-16 md:pb-0">
-      <div>
-        <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">
-          My Feed
-        </h1>
-        <p className="mt-1.5 text-muted-foreground">
-          Updates from dogs you follow and your own dogs.
-        </p>
-      </div>
+      <PageHeader>
+        <div>
+          <PageTitle>My Feed</PageTitle>
+          <PageDescription>Updates from dogs you follow and your own dogs.</PageDescription>
+        </div>
+      </PageHeader>
 
       <div className="grid gap-8 lg:grid-cols-[1fr_280px]">
         {/* Main feed */}
@@ -54,23 +54,13 @@ export default function FeedPage() {
               <Loader2 className="size-6 animate-spin text-muted-foreground" />
             </div>
           ) : items.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed py-16 text-center">
-              <div className="flex size-14 items-center justify-center rounded-full bg-primary/10">
-                <Rss className="size-7 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-serif text-lg font-semibold">Your feed is empty</h3>
-                <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
-                  Follow dogs to see their updates and show results here.
-                  Browse shows to discover dogs, or share your own dogs&apos; moments.
-                </p>
-              </div>
-              <Link href="/shows">
-                <Button variant="outline" size="sm">
-                  Browse shows
-                </Button>
-              </Link>
-            </div>
+            <EmptyState
+              icon={Rss}
+              title="Your feed is empty"
+              description="Follow dogs to see their updates and show results here. Browse shows to discover dogs, or share your own dogs' moments."
+              variant="dashed"
+              action={<Link href="/shows"><Button variant="outline" size="sm">Browse shows</Button></Link>}
+            />
           ) : (
             <div className="space-y-4">
               {items.map((item) => (

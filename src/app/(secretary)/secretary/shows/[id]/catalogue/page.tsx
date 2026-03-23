@@ -32,6 +32,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { EmptyState } from '@/components/ui/empty-state';
+import { StatCard } from '@/components/ui/stat-card';
 import { formatDate, type CatalogueEntryItem } from '../_lib/show-utils';
 import { useShowId } from '../_lib/show-context';
 
@@ -144,38 +146,9 @@ export default function CataloguePage() {
 
       {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription className="text-sm font-medium">
-              Catalogue Entries
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{entries.length}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription className="text-sm font-medium">
-              Absentees
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{absentees?.length ?? 0}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription className="text-sm font-medium">
-              Numbers Assigned
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">
-              {hasNumbers ? 'Yes' : 'Not yet'}
-            </p>
-          </CardContent>
-        </Card>
+        <StatCard label="Catalogue Entries" value={entries.length} icon={BookOpen} />
+        <StatCard label="Absentees" value={absentees?.length ?? 0} icon={ClipboardList} />
+        <StatCard label="Numbers Assigned" value={hasNumbers ? 'Yes' : 'Not yet'} icon={Hash} />
       </div>
 
       {/* Catalogue Preview */}
@@ -186,15 +159,12 @@ export default function CataloguePage() {
           </CardContent>
         </Card>
       ) : entries.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <BookOpen className="mx-auto mb-4 size-10 text-muted-foreground" />
-            <p className="font-semibold">No confirmed entries yet</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Entries will appear here once exhibitors have paid.
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={BookOpen}
+          title="No confirmed entries yet"
+          description="Entries will appear here once exhibitors have paid."
+          variant="card"
+        />
       ) : (
         <Card>
           <CardHeader>

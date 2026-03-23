@@ -2,8 +2,8 @@
 
 import { useState, useMemo } from 'react';
 import {
-  ArrowRight,
   ArrowLeftRight,
+  ArrowRight,
   Download,
   Edit3,
   Loader2,
@@ -52,6 +52,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { isGsdOnlyClass, isGsdBreed } from '@/lib/class-templates';
+import { EmptyState } from '@/components/ui/empty-state';
 import { EntryItem, entryStatusConfig, formatDate } from '../_lib/show-utils';
 import { useShowId } from '../_lib/show-context';
 
@@ -194,17 +195,16 @@ export default function EntriesPage() {
               <p className="text-sm text-muted-foreground">Loading entries...</p>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
-              <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-primary/10">
-                <Ticket className="size-6 text-primary" />
-              </div>
-              <h3 className="font-semibold">No entries found</h3>
-              <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                {search || statusFilter !== 'all'
+            <EmptyState
+              icon={Ticket}
+              title="No entries found"
+              description={
+                search || statusFilter !== 'all'
                   ? 'Try adjusting your search or filter.'
-                  : 'No one has entered this show yet.'}
-              </p>
-            </div>
+                  : 'No one has entered this show yet.'
+              }
+              variant="dashed"
+            />
           ) : (
             <>
               {/* Mobile card view */}

@@ -46,6 +46,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { EmptyState } from '@/components/ui/empty-state';
 import { useShowId } from '../_lib/show-context';
 
 const SPONSOR_CATEGORIES: Record<string, string> = {
@@ -277,15 +278,12 @@ function SponsorDirectory({
       </div>
 
       {!sponsors?.length ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-            <Handshake className="size-10 text-muted-foreground/40" />
-            <p className="mt-3 text-sm font-medium">No sponsors yet</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Add your first sponsor to get started. They&apos;ll appear here and can be assigned to any show.
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={Handshake}
+          title="No sponsors yet"
+          description="Add your first sponsor to get started. They'll appear here and can be assigned to any show."
+          variant="card"
+        />
       ) : (
         <div className="space-y-2">
           {sponsors.map((s) => (
@@ -587,32 +585,29 @@ function ShowSponsorAssignments({
       </div>
 
       {!showSponsorList?.length ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-            <Handshake className="size-10 text-muted-foreground/40" />
-            <p className="mt-3 text-sm font-medium">No sponsors assigned yet</p>
-            {hasDirectorySponsors ? (
-              <p className="mt-1 text-sm text-muted-foreground">
-                Use the &quot;Assign Sponsor&quot; button above to add sponsors from your directory.
-              </p>
-            ) : (
-              <>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  You need to add sponsors to your directory first, then assign them here.
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-4 min-h-[2.75rem]"
-                  onClick={onSwitchToDirectory}
-                >
-                  Go to Sponsor Directory
-                  <ArrowRight className="size-4" />
-                </Button>
-              </>
-            )}
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={Handshake}
+          title="No sponsors assigned yet"
+          description={
+            hasDirectorySponsors
+              ? 'Use the "Assign Sponsor" button above to add sponsors from your directory.'
+              : 'You need to add sponsors to your directory first, then assign them here.'
+          }
+          variant="card"
+          action={
+            !hasDirectorySponsors ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="min-h-[2.75rem]"
+                onClick={onSwitchToDirectory}
+              >
+                Go to Sponsor Directory
+                <ArrowRight className="size-4" />
+              </Button>
+            ) : undefined
+          }
+        />
       ) : (
         <div className="space-y-3">
           {showSponsorList.map((ss) => (

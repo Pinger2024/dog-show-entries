@@ -28,6 +28,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { PageHeader, PageTitle, PageDescription } from '@/components/ui/page-header';
+import { EmptyState } from '@/components/ui/empty-state';
 import {
   Select,
   SelectContent,
@@ -102,14 +104,14 @@ export default function InvitationsPage() {
 
   return (
     <div className="space-y-6 sm:space-y-8 pb-16 md:pb-0">
-      <div>
-        <h1 className="font-serif text-lg sm:text-xl lg:text-2xl font-bold tracking-tight">
-          Invitations
-        </h1>
-        <p className="mt-1 sm:mt-1.5 text-sm sm:text-base text-muted-foreground">
-          Invite people to join Remi with a specific role.
-        </p>
-      </div>
+      <PageHeader>
+        <div>
+          <PageTitle>Invitations</PageTitle>
+          <PageDescription>
+            Invite people to join Remi with a specific role.
+          </PageDescription>
+        </div>
+      </PageHeader>
 
       {/* Send invitation form */}
       <Card>
@@ -206,12 +208,12 @@ export default function InvitationsPage() {
               <Loader2 className="size-6 animate-spin text-muted-foreground" />
             </div>
           ) : !invitationList || invitationList.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-10 text-center">
-              <UserPlus className="size-8 text-muted-foreground/50" />
-              <p className="mt-3 text-sm text-muted-foreground">
-                No invitations sent yet.
-              </p>
-            </div>
+            <EmptyState
+              icon={UserPlus}
+              title="No invitations sent yet"
+              description="Send an invitation above to get started."
+              variant="dashed"
+            />
           ) : (
             <div className="space-y-2 sm:space-y-3">
               {invitationList.map((inv) => {

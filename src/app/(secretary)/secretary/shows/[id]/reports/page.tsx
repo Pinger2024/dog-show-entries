@@ -25,6 +25,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { StatCard } from '@/components/ui/stat-card';
 import {
   Table,
   TableBody,
@@ -194,30 +195,13 @@ function EntryReportContent({ showId }: { showId: string }) {
       {/* Summary stats */}
       {stats && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Card>
-            <CardContent className="pt-4 pb-3">
-              <p className="text-xs font-medium text-muted-foreground">Total Entries</p>
-              <p className="text-2xl font-bold">{stats.total}</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-4 pb-3">
-              <p className="text-xs font-medium text-muted-foreground">Confirmed</p>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.confirmed}</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-4 pb-3">
-              <p className="text-xs font-medium text-muted-foreground">Exhibitors</p>
-              <p className="text-2xl font-bold">{stats.uniqueExhibitors}</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-4 pb-3">
-              <p className="text-xs font-medium text-muted-foreground">Total Fees</p>
-              <p className="text-2xl font-bold">{formatCurrency(stats.totalRevenue)}</p>
-            </CardContent>
-          </Card>
+          <StatCard label="Total Entries" value={stats.total} />
+          <StatCard
+            label="Confirmed"
+            value={<span className="text-green-600 dark:text-green-400">{stats.confirmed}</span>}
+          />
+          <StatCard label="Exhibitors" value={stats.uniqueExhibitors} />
+          <StatCard label="Total Fees" value={formatCurrency(stats.totalRevenue)} />
         </div>
       )}
 

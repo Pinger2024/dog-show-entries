@@ -28,6 +28,8 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { trpc } from '@/lib/trpc/client';
 import { cn } from '@/lib/utils';
+import { PageHeader, PageTitle, PageDescription } from '@/components/ui/page-header';
+import { EmptyState } from '@/components/ui/empty-state';
 
 type BacklogStatus = 'awaiting_feedback' | 'planned' | 'in_progress' | 'completed' | 'dismissed';
 
@@ -128,14 +130,12 @@ export default function BacklogPage() {
 
   return (
     <div className="space-y-8 pb-16 md:pb-0">
-      <div>
-        <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">
-          Feature Backlog
-        </h1>
-        <p className="mt-1.5 text-muted-foreground">
-          Track feature requests from the UX review. Reference by # number in emails.
-        </p>
-      </div>
+      <PageHeader>
+        <div>
+          <PageTitle>Feature Backlog</PageTitle>
+          <PageDescription>Track feature requests from the UX review. Reference by # number in emails.</PageDescription>
+        </div>
+      </PageHeader>
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
@@ -203,15 +203,12 @@ export default function BacklogPage() {
               <Loader2 className="size-6 animate-spin text-muted-foreground" />
             </div>
           ) : !items || items.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-14 text-center">
-              <div className="mb-4 flex size-14 items-center justify-center rounded-full bg-primary/10">
-                <ListTodo className="size-7 text-primary" />
-              </div>
-              <h3 className="text-lg font-semibold">No backlog items</h3>
-              <p className="mx-auto mt-2 max-w-sm text-muted-foreground">
-                Feature requests from the UX review will appear here.
-              </p>
-            </div>
+            <EmptyState
+              icon={ListTodo}
+              title="No backlog items"
+              description="Feature requests from the UX review will appear here."
+              variant="dashed"
+            />
           ) : (
             <div className="space-y-3">
               {items.map((item) => {

@@ -11,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
 
 interface PrintOrder {
   id: string;
@@ -39,15 +40,12 @@ export function PrintOrderList({
 }) {
   if (!orders.length) {
     return (
-      <Card>
-        <CardContent className="flex flex-col items-center justify-center py-8 text-center">
-          <Package className="mb-3 size-8 text-muted-foreground" />
-          <p className="font-medium">No print orders yet</p>
-          <p className="text-sm text-muted-foreground">
-            Order professional printing for your show documents
-          </p>
-        </CardContent>
-      </Card>
+      <EmptyState
+        icon={Package}
+        title="No print orders yet"
+        description="Order professional printing for your show documents."
+        variant="card"
+      />
     );
   }
 

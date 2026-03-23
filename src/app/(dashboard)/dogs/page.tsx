@@ -25,6 +25,8 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { PageHeader, PageTitle, PageDescription, PageActions } from '@/components/ui/page-header';
+import { EmptyState } from '@/components/ui/empty-state';
 
 function formatAge(dateOfBirth: string): string {
   const dob = parseISO(dateOfBirth);
@@ -98,46 +100,40 @@ export default function DogsPage() {
   return (
     <div className="space-y-6 pb-16 md:pb-0">
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <PageHeader>
         <div>
-          <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">
-            My Dogs
-          </h1>
-          <p className="mt-1.5 text-muted-foreground">
+          <PageTitle>My Dogs</PageTitle>
+          <PageDescription>
             {dogs?.length ?? 0} dog{(dogs?.length ?? 0) !== 1 ? 's' : ''} registered
-          </p>
+          </PageDescription>
         </div>
-        <Button className="h-12 px-6 text-[0.9375rem]" asChild>
-          <Link href="/dogs/new">
-            <Plus className="size-4" />
-            Add Dog
-          </Link>
-        </Button>
-      </div>
+        <PageActions>
+          <Button className="h-12 px-6 text-[0.9375rem]" asChild>
+            <Link href="/dogs/new">
+              <Plus className="size-4" />
+              Add Dog
+            </Link>
+          </Button>
+        </PageActions>
+      </PageHeader>
 
       {/* Content */}
       {!dogs || dogs.length === 0 ? (
         /* Empty state */
-        <Card>
-          <CardContent className="py-16">
-            <div className="flex flex-col items-center justify-center text-center">
-              <div className="mb-4 flex size-16 items-center justify-center rounded-full bg-primary/10">
-                <Dog className="size-8 text-primary" />
-              </div>
-              <h2 className="text-xl font-semibold">No dogs yet</h2>
-              <p className="mx-auto mt-2 max-w-md text-muted-foreground">
-                Add your first dog to start entering shows. You&apos;ll need
-                their Royal Kennel Club registration details.
-              </p>
-              <Button className="mt-6" size="lg" asChild>
-                <Link href="/dogs/new">
-                  <Plus className="size-4" />
-                  Add Your First Dog
-                </Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={Dog}
+          title="No dogs yet"
+          description="Add your first dog to start entering shows. You'll need their Royal Kennel Club registration details."
+          variant="card"
+          action={
+            <Button className="mt-6" size="lg" asChild>
+              <Link href="/dogs/new">
+                <Plus className="size-4" />
+                Add Your First Dog
+              </Link>
+            </Button>
+          }
+        />
       ) : (
         <>
           {/* Search */}
@@ -232,13 +228,12 @@ export default function DogsPage() {
               })}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <Dog className="mb-3 size-10 text-muted-foreground/40" />
-              <p className="font-medium">No dogs match &ldquo;{search}&rdquo;</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Try a different search term
-              </p>
-            </div>
+            <EmptyState
+              icon={Dog}
+              title={`No dogs match "${search}"`}
+              description="Try a different search term"
+              variant="dashed"
+            />
           )}
         </>
       )}

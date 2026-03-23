@@ -21,6 +21,9 @@ import {
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { PageHeader, PageTitle, PageDescription, PageActions } from '@/components/ui/page-header';
+import { EmptyState } from '@/components/ui/empty-state';
+import { StatCard } from '@/components/ui/stat-card';
 
 const statusConfig: Record<
   string,
@@ -73,58 +76,26 @@ export default function SecretaryDashboardPage() {
   return (
     <div className="space-y-8 pb-16 md:pb-0">
       {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <PageHeader>
         <div>
-          <h1 className="text-lg font-bold tracking-tight sm:text-xl lg:text-3xl">
-            Secretary Dashboard
-          </h1>
-          <p className="mt-1 text-muted-foreground">
-            Manage your shows, entries, and organisation details.
-          </p>
+          <PageTitle>Secretary Dashboard</PageTitle>
+          <PageDescription>Manage your shows, entries, and organisation details.</PageDescription>
         </div>
-        <Button asChild>
-          <Link href="/secretary/shows/new">
-            <Plus className="size-4" />
-            Create Show
-          </Link>
-        </Button>
-      </div>
+        <PageActions>
+          <Button asChild>
+            <Link href="/secretary/shows/new">
+              <Plus className="size-4" />
+              Create Show
+            </Link>
+          </Button>
+        </PageActions>
+      </PageHeader>
 
       {/* Stats — scoped to active shows */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardDescription className="text-sm font-medium">
-              Active Shows
-            </CardDescription>
-            <CalendarDays className="size-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold sm:text-3xl">{activeShowsCount}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardDescription className="text-sm font-medium">
-              Total Entries
-            </CardDescription>
-            <Ticket className="size-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold sm:text-3xl">{totalEntries}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardDescription className="text-sm font-medium">
-              Active Revenue
-            </CardDescription>
-            <PoundSterling className="size-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold sm:text-3xl">{formatCurrency(activeRevenue)}</p>
-          </CardContent>
-        </Card>
+        <StatCard label="Active Shows" value={activeShowsCount} icon={CalendarDays} />
+        <StatCard label="Total Entries" value={totalEntries} icon={Ticket} />
+        <StatCard label="Active Revenue" value={formatCurrency(activeRevenue)} icon={PoundSterling} />
       </div>
 
       {/* Shows list with tabs */}
@@ -172,15 +143,7 @@ export default function SecretaryDashboardPage() {
             </CardHeader>
             <CardContent>
               {pastShows.length === 0 ? (
-                <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
-                  <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-muted">
-                    <Archive className="size-6 text-muted-foreground" />
-                  </div>
-                  <h3 className="font-semibold">No past shows</h3>
-                  <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                    Completed and cancelled shows will appear here.
-                  </p>
-                </div>
+                <EmptyState icon={Archive} title="No past shows" description="Completed and cancelled shows will appear here." variant="dashed" />
               ) : (
                 <ShowList shows={pastShows} emptyMessage="No past shows" />
               )}
@@ -210,21 +173,20 @@ function ShowList({
 }) {
   if (shows.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
-        <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-primary/10">
-          <CalendarDays className="size-6 text-primary" />
-        </div>
-        <h3 className="font-semibold">{emptyMessage}</h3>
-        <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-          Create your first show to start accepting entries.
-        </p>
-        <Button className="mt-4" size="sm" asChild>
-          <Link href="/secretary/shows/new">
-            Create Show
-            <ArrowRight className="ml-1 size-3.5" />
-          </Link>
-        </Button>
-      </div>
+      <EmptyState
+        icon={CalendarDays}
+        title={emptyMessage}
+        description="Create your first show to start accepting entries."
+        variant="dashed"
+        action={
+          <Button size="sm" asChild>
+            <Link href="/secretary/shows/new">
+              Create Show
+              <ArrowRight className="ml-1 size-3.5" />
+            </Link>
+          </Button>
+        }
+      />
     );
   }
 

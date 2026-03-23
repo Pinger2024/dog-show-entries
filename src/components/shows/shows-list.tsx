@@ -25,6 +25,7 @@ import { trpc } from '@/lib/trpc/client';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 import {
   Select,
   SelectContent,
@@ -702,17 +703,12 @@ export default function ShowsList() {
       ) : isNearMeMode ? (
         /* ─── Near Me Results ────────────────────── */
         nearbyShows.length === 0 ? (
-          <div className="flex min-h-[45vh] flex-col items-center justify-center gap-4 text-center">
-            <div className="flex size-20 items-center justify-center rounded-2xl bg-muted">
-              <MapPin className="size-10 text-muted-foreground/40" />
-            </div>
-            <div>
-              <p className="text-lg font-semibold">No shows nearby</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Try increasing the search radius or check back later
-              </p>
-            </div>
-          </div>
+          <EmptyState
+            icon={MapPin}
+            title="No shows nearby"
+            description="Try increasing the search radius or check back later"
+            variant="centered"
+          />
         ) : (
           <>
             <p className="mb-6 text-sm text-muted-foreground">
@@ -742,19 +738,16 @@ export default function ShowsList() {
         )
       ) : filteredShows.length === 0 ? (
         /* ─── Empty state ──────────────────────── */
-        <div className="flex min-h-[45vh] flex-col items-center justify-center gap-4 text-center">
-          <div className="flex size-20 items-center justify-center rounded-2xl bg-muted">
-            <Dog className="size-10 text-muted-foreground/40" />
-          </div>
-          <div>
-            <p className="text-lg font-semibold">No shows found</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {search || showType !== 'all' || status !== 'all'
-                ? 'Try adjusting your filters'
-                : 'Check back soon for upcoming shows'}
-            </p>
-          </div>
-        </div>
+        <EmptyState
+          icon={Dog}
+          title="No shows found"
+          description={
+            search || showType !== 'all' || status !== 'all'
+              ? 'Try adjusting your filters'
+              : 'Check back soon for upcoming shows'
+          }
+          variant="centered"
+        />
       ) : (
         <>
           {/* ─── Results count ───────────────────── */}

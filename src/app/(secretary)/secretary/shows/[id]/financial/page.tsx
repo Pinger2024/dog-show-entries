@@ -15,6 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { StatCard } from '@/components/ui/stat-card';
 import { Badge } from '@/components/ui/badge';
 import {
   Table,
@@ -152,66 +153,26 @@ export default function FinancialPage() {
     <div className="space-y-6">
       {/* Summary cards */}
       <div className="grid gap-4 grid-cols-2 sm:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription className="text-sm font-medium">
-              Total Fees
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-bold sm:text-2xl">
-              {formatCurrency(stats?.totalRevenue ?? 0)}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              from {stats?.totalEntries ?? 0} entries
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription className="text-sm font-medium">
-              Confirmed
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-              {formatCurrency(confirmedRevenue)}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {stats?.confirmedEntries ?? 0} entries
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription className="text-sm font-medium">
-              Pending
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
-              {formatCurrency(pendingRevenue)}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {stats?.pendingEntries ?? 0} entries
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription className="text-sm font-medium">
-              Catalogues
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-bold sm:text-2xl">
-              {catalogueOrders?.length ?? 0}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              requested
-            </p>
-          </CardContent>
-        </Card>
+        <StatCard
+          label="Total Fees"
+          value={formatCurrency(stats?.totalRevenue ?? 0)}
+          subtext={`from ${stats?.totalEntries ?? 0} entries`}
+        />
+        <StatCard
+          label="Confirmed"
+          value={<span className="text-green-600 dark:text-green-400">{formatCurrency(confirmedRevenue)}</span>}
+          subtext={`${stats?.confirmedEntries ?? 0} entries`}
+        />
+        <StatCard
+          label="Pending"
+          value={<span className="text-amber-600 dark:text-amber-400">{formatCurrency(pendingRevenue)}</span>}
+          subtext={`${stats?.pendingEntries ?? 0} entries`}
+        />
+        <StatCard
+          label="Catalogues"
+          value={catalogueOrders?.length ?? 0}
+          subtext="requested"
+        />
       </div>
 
       {/* Export */}

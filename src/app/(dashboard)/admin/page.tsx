@@ -42,6 +42,8 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { PageHeader, PageTitle, PageDescription } from '@/components/ui/page-header';
+import { StatCard } from '@/components/ui/stat-card';
 import { PRINT_ORDER_STATUS_CONFIG } from '@/lib/print-products';
 import { cn } from '@/lib/utils';
 
@@ -327,94 +329,45 @@ export default function AdminDashboardPage() {
   return (
     <div className="space-y-6 sm:space-y-8 pb-16 md:pb-0">
       {/* ── Header ────────────────────────────────────────────── */}
-      <div>
-        <h1 className="font-serif text-lg sm:text-xl lg:text-2xl font-bold tracking-tight">
-          {getGreeting()}, {firstName}
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Here&apos;s what&apos;s happening across Remi today.
-        </p>
-      </div>
+      <PageHeader>
+        <div>
+          <PageTitle>
+            {getGreeting()}, {firstName}
+          </PageTitle>
+          <PageDescription>
+            {`Here's what's happening across Remi today.`}
+          </PageDescription>
+        </div>
+      </PageHeader>
 
       {/* ── KPI Cards ─────────────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {/* Users */}
-        <Card className="transition-all hover:shadow-md hover:shadow-primary/5">
-          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-4">
-            <CardDescription className="text-xs sm:text-sm font-medium">
-              Users
-            </CardDescription>
-            <div className="flex size-8 sm:size-9 items-center justify-center rounded-lg bg-blue-100">
-              <Users className="size-4 sm:size-4.5 text-blue-600" />
-            </div>
-          </CardHeader>
-          <CardContent className="px-3 pb-3 sm:px-4 sm:pb-4 pt-0">
-            <p className="text-2xl sm:text-3xl font-bold">
-              {stats.totalUsers.toLocaleString()}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {stats.newUsersThisWeek > 0
-                ? `+${stats.newUsersThisWeek} this week`
-                : 'No new signups this week'}
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Active Shows */}
-        <Card className="transition-all hover:shadow-md hover:shadow-primary/5">
-          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-4">
-            <CardDescription className="text-xs sm:text-sm font-medium">
-              Active Shows
-            </CardDescription>
-            <div className="flex size-8 sm:size-9 items-center justify-center rounded-lg bg-primary/10">
-              <CalendarDays className="size-4 sm:size-4.5 text-primary" />
-            </div>
-          </CardHeader>
-          <CardContent className="px-3 pb-3 sm:px-4 sm:pb-4 pt-0">
-            <p className="text-2xl sm:text-3xl font-bold">
-              {stats.activeShows}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              of {stats.totalShows} total
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Entries This Month */}
-        <Card className="transition-all hover:shadow-md hover:shadow-primary/5">
-          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-4">
-            <CardDescription className="text-xs sm:text-sm font-medium">
-              Entries
-            </CardDescription>
-            <div className="flex size-8 sm:size-9 items-center justify-center rounded-lg bg-primary/10">
-              <Ticket className="size-4 sm:size-4.5 text-primary" />
-            </div>
-          </CardHeader>
-          <CardContent className="px-3 pb-3 sm:px-4 sm:pb-4 pt-0">
-            <p className="text-2xl sm:text-3xl font-bold">
-              {stats.entriesThisMonth.toLocaleString()}
-            </p>
-            <DeltaBadge delta={stats.entryDelta} />
-          </CardContent>
-        </Card>
-
-        {/* Revenue This Month */}
-        <Card className="transition-all hover:shadow-md hover:shadow-primary/5">
-          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-4">
-            <CardDescription className="text-xs sm:text-sm font-medium">
-              Revenue
-            </CardDescription>
-            <div className="flex size-8 sm:size-9 items-center justify-center rounded-lg bg-emerald-100">
-              <PoundSterling className="size-4 sm:size-4.5 text-emerald-600" />
-            </div>
-          </CardHeader>
-          <CardContent className="px-3 pb-3 sm:px-4 sm:pb-4 pt-0">
-            <p className="text-2xl sm:text-3xl font-bold">
-              {formatCurrency(stats.revenueThisMonth)}
-            </p>
-            <DeltaBadge delta={stats.revenueDelta} />
-          </CardContent>
-        </Card>
+        <StatCard
+          label="Users"
+          value={stats.totalUsers.toLocaleString()}
+          icon={Users}
+          iconColor={{ bg: 'bg-blue-100', fg: 'text-blue-600' }}
+          subtext={stats.newUsersThisWeek > 0 ? `+${stats.newUsersThisWeek} this week` : 'No new signups this week'}
+        />
+        <StatCard
+          label="Active Shows"
+          value={stats.activeShows}
+          icon={CalendarDays}
+          subtext={`of ${stats.totalShows} total`}
+        />
+        <StatCard
+          label="Entries"
+          value={stats.entriesThisMonth.toLocaleString()}
+          icon={Ticket}
+          subtext={<DeltaBadge delta={stats.entryDelta} />}
+        />
+        <StatCard
+          label="Revenue"
+          value={formatCurrency(stats.revenueThisMonth)}
+          icon={PoundSterling}
+          iconColor={{ bg: 'bg-emerald-100', fg: 'text-emerald-600' }}
+          subtext={<DeltaBadge delta={stats.revenueDelta} />}
+        />
 
         {/* Pending Actions */}
         <Card

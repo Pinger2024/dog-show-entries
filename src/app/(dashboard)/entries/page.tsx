@@ -21,6 +21,8 @@ import {
   CardContent,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { PageHeader, PageTitle, PageDescription } from '@/components/ui/page-header';
+import { EmptyState } from '@/components/ui/empty-state';
 
 const statusConfig: Record<
   string,
@@ -124,34 +126,35 @@ export default function EntriesPage() {
   if (allEntries.length === 0) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold">My Entries</h1>
-        <Card>
-          <CardContent className="py-12 text-center">
-            <Ticket className="mx-auto mb-3 size-10 text-muted-foreground" />
-            <h2 className="font-semibold">No entries yet</h2>
-            <p className="mb-4 text-sm text-muted-foreground">
-              Browse upcoming shows and enter your dog.
-            </p>
-            <Button asChild className="min-h-[2.75rem]">
-              <Link href="/browse">Find Shows</Link>
-            </Button>
-          </CardContent>
-        </Card>
+        <PageHeader>
+          <div>
+            <PageTitle>My Entries</PageTitle>
+          </div>
+        </PageHeader>
+        <EmptyState
+          icon={Ticket}
+          title="No entries yet"
+          description="Browse upcoming shows and enter your dog."
+          variant="card"
+          action={<Button asChild className="min-h-[2.75rem]"><Link href="/browse">Find Shows</Link></Button>}
+        />
       </div>
     );
   }
 
   return (
     <div className="space-y-6 pb-16 md:pb-0">
-      <div>
-        <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">My Entries</h1>
-        <p className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-sm text-muted-foreground">
-          {confirmedCount > 0 && <span className="font-medium text-emerald-600">{confirmedCount} confirmed</span>}
-          {pendingCount > 0 && <span className="font-medium text-amber-600">{pendingCount} pending</span>}
-          {withdrawnCount > 0 && <span>{withdrawnCount} withdrawn</span>}
-          {totalFees > 0 && <span className="font-medium text-foreground">{formatCurrency(totalFees)} total</span>}
-        </p>
-      </div>
+      <PageHeader>
+        <div>
+          <PageTitle>My Entries</PageTitle>
+          <PageDescription className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-sm">
+            {confirmedCount > 0 && <span className="font-medium text-emerald-600">{confirmedCount} confirmed</span>}
+            {pendingCount > 0 && <span className="font-medium text-amber-600">{pendingCount} pending</span>}
+            {withdrawnCount > 0 && <span>{withdrawnCount} withdrawn</span>}
+            {totalFees > 0 && <span className="font-medium text-foreground">{formatCurrency(totalFees)} total</span>}
+          </PageDescription>
+        </div>
+      </PageHeader>
 
       {/* Status filter pills */}
       <div className="flex flex-wrap gap-2">

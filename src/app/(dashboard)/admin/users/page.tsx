@@ -5,9 +5,11 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { Eye, Search, Loader2 } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
+import { PageHeader, PageTitle, PageDescription } from '@/components/ui/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
+import { StatCard } from '@/components/ui/stat-card';
 import {
   Table,
   TableBody,
@@ -91,10 +93,12 @@ export default function AdminUsersPage() {
     <div className="min-h-screen bg-background">
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
         <div className="mb-6">
-          <h1 className="font-serif text-2xl font-bold">Users</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage users and impersonate to see their view
-          </p>
+          <PageHeader>
+            <div>
+              <PageTitle>Users</PageTitle>
+              <PageDescription>Manage users and impersonate to see their view</PageDescription>
+            </div>
+          </PageHeader>
         </div>
 
         {/* Stats */}
@@ -103,12 +107,7 @@ export default function AdminUsersPage() {
             const count = users?.filter((u) => u.role === role).length ?? 0;
             const style = ROLE_STYLES[role]!;
             return (
-              <Card key={role}>
-                <CardContent className="pt-4 pb-4">
-                  <p className="text-2xl font-bold">{count}</p>
-                  <p className="text-xs text-muted-foreground">{style.plural}</p>
-                </CardContent>
-              </Card>
+              <StatCard key={role} label={style.plural} value={count} />
             );
           })}
         </div>

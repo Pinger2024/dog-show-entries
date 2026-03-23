@@ -6,6 +6,7 @@ import { CalendarDays, MapPin, Eye, Loader2, ChevronRight } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
 
 const statusConfig: Record<string, { label: string; className: string }> = {
   entries_closed: { label: 'Entries Closed', className: 'bg-amber-100 text-amber-800' },
@@ -26,14 +27,12 @@ export default function StewardDashboard() {
 
   if (!shows || shows.length === 0) {
     return (
-      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-2 sm:gap-3 text-center px-3 sm:px-4">
-        <Eye className="size-10 sm:size-12 text-muted-foreground/40" />
-        <h2 className="font-serif text-lg sm:text-xl font-semibold">No Shows Assigned</h2>
-        <p className="max-w-sm text-xs sm:text-sm text-muted-foreground">
-          You haven&apos;t been assigned as a steward for any shows yet. A show
-          secretary will assign you when needed.
-        </p>
-      </div>
+      <EmptyState
+        icon={Eye}
+        title="No Shows Assigned"
+        description="You haven't been assigned as a steward for any shows yet. A show secretary will assign you when needed."
+        variant="centered"
+      />
     );
   }
 

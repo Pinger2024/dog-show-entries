@@ -30,6 +30,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { PageHeader, PageTitle, PageDescription } from '@/components/ui/page-header';
+import { EmptyState } from '@/components/ui/empty-state';
 
 type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected';
 
@@ -148,14 +150,14 @@ export default function ApplicationsPage() {
 
   return (
     <div className="space-y-6 sm:space-y-8 pb-16 md:pb-0">
-      <div>
-        <h1 className="font-serif text-lg sm:text-xl lg:text-2xl font-bold tracking-tight">
-          Secretary Applications
-        </h1>
-        <p className="mt-1 sm:mt-1.5 text-sm sm:text-base text-muted-foreground">
-          Review and manage secretary access requests.
-        </p>
-      </div>
+      <PageHeader>
+        <div>
+          <PageTitle>Secretary Applications</PageTitle>
+          <PageDescription>
+            Review and manage secretary access requests.
+          </PageDescription>
+        </div>
+      </PageHeader>
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-4">
@@ -223,13 +225,12 @@ export default function ApplicationsPage() {
               <Loader2 className="size-6 animate-spin text-muted-foreground" />
             </div>
           ) : filteredApplications.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-10 text-center">
-              <ClipboardCheck className="size-8 text-muted-foreground/50" />
-              <p className="mt-3 text-sm text-muted-foreground">
-                No {statusFilter !== 'all' ? statusFilter : ''} applications
-                yet.
-              </p>
-            </div>
+            <EmptyState
+              icon={ClipboardCheck}
+              title={`No ${statusFilter !== 'all' ? statusFilter + ' ' : ''}applications`}
+              description="No applications to display yet."
+              variant="dashed"
+            />
           ) : (
             <div className="space-y-2 sm:space-y-3">
               {filteredApplications.map((app) => {
