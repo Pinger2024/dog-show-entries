@@ -74,10 +74,22 @@ export async function generateCataloguePdf(
   ]);
 
   const judgesByBreedName: Record<string, string> = {};
+  const judgeDisplayList: string[] = []; // Sex-annotated: "Dogs — Mr A Winfrow"
   for (const ja of judgeAssignmentRows) {
     if (ja.breed?.name && ja.judge?.name) {
       judgesByBreedName[ja.breed.name] = ja.judge.name;
     }
+  }
+  // Build sex-annotated display labels for catalogue front matter
+  const seenJudgeKeys = new Set<string>();
+  for (const ja of judgeAssignmentRows) {
+    if (!ja.judge?.name) continue;
+    const key = `${ja.judge.name}::${ja.sex ?? 'all'}`;
+    if (seenJudgeKeys.has(key)) continue;
+    seenJudgeKeys.add(key);
+    const isJH = !ja.breed && ja.sex === null;
+    const prefix = isJH ? 'Junior Handling' : ja.sex === 'dog' ? 'Dogs' : ja.sex === 'bitch' ? 'Bitches' : null;
+    judgeDisplayList.push(prefix ? `${prefix} — ${ja.judge.name}` : ja.judge.name);
   }
 
   const seenDefIds = new Set<string>();
@@ -149,6 +161,7 @@ export async function generateCataloguePdf(
     wetWeatherAccommodation: scheduleData?.wetWeatherAccommodation === true ? true : scheduleData?.wetWeatherAccommodation === false ? false : undefined,
     judgedOnGroupSystem: scheduleData?.judgedOnGroupSystem === true ? true : undefined,
     judgesByBreedName,
+    judgeDisplayList,
     classDefinitions,
     showScope: show.showScope ?? undefined,
     customStatements: (scheduleData?.customStatements as string[] | undefined),
@@ -254,15 +267,45 @@ export async function generateSchedulePdf(showId: string, format: 'standard' | '
     }),
   ]);
 
-  // Build judge→breeds map in O(N) instead of O(N²)
-  const breedsByJudge = new Map<string, string[]>();
+  // Build judges with sex-annotated display labels
+  // Group by (name + sex) to preserve sex-split assignments
+  const judgeKey = (name: string, sex: string | null) => `${name}::${sex ?? 'all'}`;
+  const judgeEntries = new Map<string, { name: string; sex: string | null; breeds: string[]; isJH: boolean }>();
   for (const ja of judgeAssignments) {
     if (!ja.judge?.name) continue;
-    const list = breedsByJudge.get(ja.judge.name) ?? [];
-    if (ja.breed?.name) list.push(ja.breed.name);
-    breedsByJudge.set(ja.judge.name, list);
+    const key = judgeKey(ja.judge.name, ja.sex);
+    const existing = judgeEntries.get(key);
+    // Detect Junior Handling: no breed, sex=null, and class names contain "handling"
+    const isJH = !ja.breed && ja.sex === null;
+    if (existing) {
+      if (ja.breed?.name) existing.breeds.push(ja.breed.name);
+    } else {
+      judgeEntries.set(key, {
+        name: ja.judge.name,
+        sex: ja.sex,
+        breeds: ja.breed?.name ? [ja.breed.name] : [],
+        isJH,
+      });
+    }
   }
-  const judges: ScheduleJudge[] = [...breedsByJudge.entries()].map(([name, breeds]) => ({ name, breeds }));
+
+  // Build display labels: "Dogs — Mr A Winfrow" or "Junior Handling — Mandy McAteer"
+  function sexPrefix(sex: string | null, isJH: boolean): string | null {
+    if (isJH) return 'Junior Handling';
+    if (sex === 'dog') return 'Dogs';
+    if (sex === 'bitch') return 'Bitches';
+    return null; // both sexes — no prefix needed
+  }
+
+  const judges: ScheduleJudge[] = [...judgeEntries.values()].map((j) => {
+    const prefix = sexPrefix(j.sex, j.isJH);
+    return {
+      name: j.name,
+      breeds: j.breeds,
+      sex: j.sex,
+      displayLabel: prefix ? `${prefix} — ${j.name}` : j.name,
+    };
+  });
 
   const classes: ScheduleClass[] = showClasses.map((sc) => ({
     classNumber: sc.classNumber,

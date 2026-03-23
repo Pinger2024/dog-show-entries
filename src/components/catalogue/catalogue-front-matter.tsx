@@ -65,10 +65,13 @@ export function CoverPage({ show }: FrontMatterProps) {
   const showTypeLabel = show.showType ? SHOW_TYPE_LABELS[show.showType] : undefined;
 
   // Show judges on cover for single-breed OR when there's only one unique judge
+  // Prefer sex-annotated display list (e.g. "Dogs — Mr A Winfrow") when available
   const judges = show.judgesByBreedName ?? {};
   const uniqueJudgeNames = [...new Set(Object.values(judges))];
   const isSingleBreed = show.showScope === 'single_breed';
-  const coverJudges = (isSingleBreed || uniqueJudgeNames.length === 1) ? uniqueJudgeNames : [];
+  const coverJudges = (show.judgeDisplayList && show.judgeDisplayList.length > 0)
+    ? show.judgeDisplayList
+    : (isSingleBreed || uniqueJudgeNames.length === 1) ? uniqueJudgeNames : [];
 
   // Multi-day date display
   const dateDisplay = show.endDate
@@ -288,6 +291,20 @@ export function JudgesListPage({ show }: FrontMatterProps) {
   const ringNumbers = show.judgeRingNumbers ?? {};
   const hasRings = Object.keys(ringNumbers).length > 0;
   const sortedBreeds = Object.keys(judges).sort();
+
+  // For single-breed shows where judgesByBreedName is empty, show the display list instead
+  if (sortedBreeds.length === 0 && show.judgeDisplayList && show.judgeDisplayList.length > 0) {
+    return (
+      <Page size="A5" style={styles.frontMatterPage} wrap>
+        <SectionBand title="List of Judges" />
+        {show.judgeDisplayList.map((label, i) => (
+          <Text key={i} style={{ fontFamily: 'Inter', fontSize: 9, textAlign: 'center', marginBottom: 4, color: C.textDark }}>
+            {label}
+          </Text>
+        ))}
+      </Page>
+    );
+  }
 
   if (sortedBreeds.length === 0) return null;
 

@@ -85,6 +85,9 @@ export interface ScheduleClass {
 export interface ScheduleJudge {
   name: string;
   breeds: string[];
+  sex?: string | null; // 'dog' | 'bitch' | null (both)
+  /** Pre-formatted label for display, e.g. "Dogs — Mr A Winfrow" */
+  displayLabel?: string;
 }
 
 export interface ScheduleSponsor {
@@ -805,9 +808,9 @@ export function ShowSchedule({
               )}
               {judges.length > 0 && (
                 <View style={s.coverDetailRow}>
-                  <Text style={s.coverDetailLabel}>Judge</Text>
+                  <Text style={s.coverDetailLabel}>{judges.length === 1 ? 'Judge' : 'Judges'}</Text>
                   <Text style={s.coverDetailValue}>
-                    {judges.map((j) => j.name).join(', ')}
+                    {judges.map((j) => j.displayLabel ?? j.name).join(', ')}
                   </Text>
                 </View>
               )}
@@ -910,7 +913,7 @@ export function ShowSchedule({
             <View style={{ marginBottom: 8 }}>
               {judges.map((judge, i) => (
                 <Text key={i} style={{ fontFamily: 'Inter', fontSize: 8, fontWeight: 'bold', textAlign: 'center', color: C.textDark }}>
-                  JUDGE: {judge.name}
+                  JUDGE: {judge.displayLabel ?? judge.name}
                 </Text>
               ))}
             </View>

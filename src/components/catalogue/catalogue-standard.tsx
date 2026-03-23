@@ -62,6 +62,8 @@ export interface CatalogueShowInfo {
   wetWeatherAccommodation?: boolean;
   judgedOnGroupSystem?: boolean;
   judgesByBreedName?: Record<string, string>;
+  /** Sex-annotated judge labels: ["Dogs — Mr A Winfrow", "Bitches — Ms A Swift"] */
+  judgeDisplayList?: string[];
   /** Judge name -> bio text */
   judgeBios?: Record<string, string>;
   /** Breed name -> ring number */
