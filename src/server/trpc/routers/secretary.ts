@@ -1981,7 +1981,7 @@ export const secretaryRouter = createTRPCRouter({
       // Get all unique breed+sex combos from show classes
       const classes = await ctx.db.query.showClasses.findMany({
         where: eq(showClasses.showId, input.showId),
-        with: { breed: true },
+        with: { breed: true, classDefinition: true },
       });
 
       // Get all judge assignments for this show
@@ -1995,6 +1995,7 @@ export const secretaryRouter = createTRPCRouter({
       const requirementsMap = new Map<string, {
         breedId: string | null;
         breedName: string | null;
+        label: string; // Display label — breed name or class definition name (e.g. "Junior Handling")
         sex: string | null;
         classCount: number;
       }>();
@@ -2005,9 +2006,13 @@ export const secretaryRouter = createTRPCRouter({
         if (existing) {
           existing.classCount++;
         } else {
+          // For breed-less classes (like Junior Handling), use the class definition name
+          const label = sc.breed?.name
+            ?? (sc.classDefinition?.name?.toLowerCase().includes('handling') ? 'Junior Handling' : 'All Breeds');
           requirementsMap.set(key, {
             breedId: sc.breedId,
             breedName: sc.breed?.name ?? null,
+            label,
             sex: sc.sex,
             classCount: 1,
           });
@@ -2029,6 +2034,7 @@ export const secretaryRouter = createTRPCRouter({
         return {
           breedId: req.breedId,
           breedName: req.breedName,
+          label: req.label,
           sex: req.sex,
           classCount: req.classCount,
           covered: !!matchingAssignment,

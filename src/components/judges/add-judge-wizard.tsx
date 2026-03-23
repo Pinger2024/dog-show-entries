@@ -46,6 +46,7 @@ interface BreedSexCombo {
   sex: string | null;
   selected: boolean;
   notApproved?: boolean;
+  alreadyAssigned?: string; // judge name if already assigned
 }
 
 interface AddJudgeWizardProps {
@@ -94,6 +95,7 @@ export function AddJudgeWizard({
   // ── Queries ──
   const utils = trpc.useUtils();
   const { data: showData } = trpc.shows.getById.useQuery({ id: showId });
+  const { data: existingAssignments } = trpc.secretary.getShowJudges.useQuery({ showId });
 
   const localSearchQuery = trpc.secretary.searchJudges.useQuery(
     { query: searchQuery, limit: 10 },
@@ -151,10 +153,27 @@ export function AddJudgeWizard({
   function goToAssign(judge: FoundJudge) {
     setSelectedJudge(judge);
 
-    // Build breed combos, pre-selecting based on prefill or RKC approvals
+    // Build a set of already-assigned breed+sex combos from existing assignments
+    const assignedMap = new Map<string, string>(); // key -> judge name
+    for (const a of existingAssignments ?? []) {
+      // An assignment with sex=null covers both sexes
+      if (a.sex === null) {
+        assignedMap.set(`${a.breedId ?? 'all'}:both`, a.judge.name);
+        assignedMap.set(`${a.breedId ?? 'all'}:dog`, a.judge.name);
+        assignedMap.set(`${a.breedId ?? 'all'}:bitch`, a.judge.name);
+      } else {
+        assignedMap.set(`${a.breedId ?? 'all'}:${a.sex}`, a.judge.name);
+      }
+    }
+
+    // Build breed combos, marking already-assigned ones
     const combos: BreedSexCombo[] = showBreedSexCombos.map((c) => {
+      const key = `${c.breedId ?? 'all'}:${c.sex ?? 'both'}`;
+      const assignedTo = assignedMap.get(key);
+
       // If triggered from coverage dashboard with a specific breed/sex, pre-select that
-      const isPrefilled = prefillBreedId !== undefined
+      const isPrefilled = !assignedTo
+        && prefillBreedId !== undefined
         && c.breedId === prefillBreedId
         && (prefillSex === undefined || c.sex === prefillSex);
 
@@ -163,14 +182,13 @@ export function AddJudgeWizard({
         breedName: c.breedName,
         sex: c.sex,
         selected: isPrefilled,
+        alreadyAssigned: assignedTo,
       };
     });
 
-    // If judge has RKC approvals, filter to only show breeds they can judge
+    // If judge has RKC approvals, mark unapproved breeds
     if (judge.rkcApprovals && judge.rkcApprovals.length > 0) {
       const approvedBreedNames = new Set(judge.rkcApprovals.map((a) => a.breed.toLowerCase()));
-      // Mark combos as not selectable if the judge isn't approved for that breed
-      // But still show them — just with a visual indicator
       for (const combo of combos) {
         if (combo.breedName && !approvedBreedNames.has(combo.breedName.toLowerCase())) {
           combo.notApproved = true;
@@ -533,18 +551,21 @@ export function AddJudgeWizard({
                 <div className="max-h-48 space-y-1 overflow-y-auto">
                   {breedCombos.map((combo, i) => {
                     const notApproved = combo.notApproved;
+                    const disabled = !!combo.alreadyAssigned;
                     return (
                       <label
                         key={i}
                         className={cn(
-                          'flex items-center gap-3 rounded-md border px-3 py-2.5 cursor-pointer transition-colors hover:bg-accent',
-                          combo.selected && 'border-primary bg-primary/5',
-                          notApproved && 'opacity-60',
+                          'flex items-center gap-3 rounded-md border px-3 py-2.5 transition-colors',
+                          disabled ? 'opacity-50 cursor-not-allowed bg-muted/30' : 'cursor-pointer hover:bg-accent',
+                          combo.selected && !disabled && 'border-primary bg-primary/5',
+                          notApproved && !disabled && 'opacity-60',
                         )}
                       >
                         <Checkbox
                           checked={combo.selected}
-                          onCheckedChange={() => toggleBreedCombo(i)}
+                          onCheckedChange={() => !disabled && toggleBreedCombo(i)}
+                          disabled={disabled}
                         />
                         <div className="flex-1 min-w-0">
                           <span className="text-sm font-medium">
@@ -556,7 +577,12 @@ export function AddJudgeWizard({
                             </span>
                           )}
                         </div>
-                        {notApproved && (
+                        {disabled && (
+                          <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                            {combo.alreadyAssigned}
+                          </Badge>
+                        )}
+                        {notApproved && !disabled && (
                           <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300">
                             Not on RKC approvals
                           </Badge>

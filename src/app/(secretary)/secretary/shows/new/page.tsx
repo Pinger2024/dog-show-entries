@@ -140,6 +140,7 @@ const createShowSchema = z.object({
   firstEntryFee: z.coerce.number().min(0, 'Fee must be 0 or more').default(0),
   subsequentEntryFee: z.coerce.number().min(0).default(0),
   nfcEntryFee: z.coerce.number().min(0).default(0),
+  juniorHandlerFee: z.coerce.number().min(0).default(0),
 
   // Step 4 - Classes
   selectedClassIds: z.array(z.string().uuid()).default([]),
@@ -240,6 +241,7 @@ export default function NewShowPage() {
       firstEntryFee: '' as unknown as number,
       subsequentEntryFee: '' as unknown as number,
       nfcEntryFee: '' as unknown as number,
+      juniorHandlerFee: '' as unknown as number,
       selectedClassIds: [],
     },
   });
@@ -380,6 +382,9 @@ export default function NewShowPage() {
           : undefined,
         nfcEntryFee: Number(values.nfcEntryFee) > 0
           ? poundsToPence(Number(values.nfcEntryFee))
+          : undefined,
+        juniorHandlerFee: Number(values.juniorHandlerFee) > 0
+          ? poundsToPence(Number(values.juniorHandlerFee))
           : undefined,
         // All-breed: pass breed + class data
         allBreedClassData: (values.showScope === 'general' && allBreedData.selectedBreedIds.length > 0 && allBreedData.classDefinitionIds.length > 0)
@@ -1153,7 +1158,7 @@ export default function NewShowPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
                   <FormField
                     control={form.control}
                     name="firstEntryFee"
@@ -1228,6 +1233,32 @@ export default function NewShowPage() {
                           </div>
                         </FormControl>
                         <p className="text-[10px] text-muted-foreground">NFC entries (exhibition only)</p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="juniorHandlerFee"
+                    render={({ field }) => (
+                      <FormItem className="rounded-lg border bg-muted/20 p-4">
+                        <FormLabel className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Junior Handling</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">£</span>
+                            <Input
+                              type="number"
+                              min={0}
+                              step={0.01}
+                              placeholder="0.00"
+                              className="pl-7 text-lg font-semibold h-12"
+                              {...field}
+                              value={field.value === 0 || field.value ? field.value : ''}
+                              onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
+                            />
+                          </div>
+                        </FormControl>
+                        <p className="text-[10px] text-muted-foreground">Fee for junior handling classes</p>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -1681,7 +1712,7 @@ function ReviewStep({
               <Pencil className="size-3" /> Edit
             </Button>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="text-center">
               <p className="text-lg font-bold">£{Number(values.firstEntryFee).toFixed(2)}</p>
               <p className="text-[10px] text-muted-foreground">First</p>
@@ -1693,6 +1724,10 @@ function ReviewStep({
             <div className="text-center">
               <p className="text-lg font-bold">£{Number(values.nfcEntryFee).toFixed(2)}</p>
               <p className="text-[10px] text-muted-foreground">NFC</p>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-bold">£{Number(values.juniorHandlerFee).toFixed(2)}</p>
+              <p className="text-[10px] text-muted-foreground">Junior Handler</p>
             </div>
           </div>
         </div>

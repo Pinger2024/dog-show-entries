@@ -80,7 +80,7 @@ export function JudgeCoverageDashboard({ showId, onAddJudge }: JudgeCoverageDash
               )}
               <div className="min-w-0">
                 <span className="text-sm font-medium">
-                  {item.breedName ?? 'All Breeds'}
+                  {item.label ?? item.breedName ?? 'All Breeds'}
                 </span>
                 {item.sex && (
                   <span className="ml-1.5 text-xs text-muted-foreground">
