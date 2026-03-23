@@ -522,7 +522,7 @@ export function AddJudgeWizard({
               )}
             </div>
 
-            {/* Email if not yet provided (required) */}
+            {/* Email if not yet provided (required) — use manualEmail as sole source of truth */}
             {!selectedJudge.contactEmail && (
               <div>
                 <Label className="text-xs text-muted-foreground">Email * (required for sending offers)</Label>
@@ -531,10 +531,7 @@ export function AddJudgeWizard({
                   inputMode="email"
                   placeholder="judge@example.com"
                   value={manualEmail}
-                  onChange={(e) => {
-                    setManualEmail(e.target.value);
-                    setSelectedJudge((prev) => prev ? { ...prev, contactEmail: e.target.value } : null);
-                  }}
+                  onChange={(e) => setManualEmail(e.target.value)}
                   className="h-11"
                 />
               </div>
