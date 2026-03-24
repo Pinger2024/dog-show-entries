@@ -635,6 +635,7 @@ export const stewardRouter = createTRPCRouter({
                   deletedAt: true,
                   dogId: true,
                   absent: true,
+                  entryType: true,
                 },
                 with: {
                   dog: {
@@ -642,6 +643,7 @@ export const stewardRouter = createTRPCRouter({
                     with: { breed: true },
                   },
                   exhibitor: { columns: { name: true } },
+                  juniorHandlerDetails: true,
                 },
               },
               result: true,
@@ -710,7 +712,9 @@ export const stewardRouter = createTRPCRouter({
             winnerPhotoUrl: ec.result!.winnerPhotoUrl,
             catalogueNumber: ec.entry.catalogueNumber,
             dogId: ec.entry.dog?.id ?? null,
-            dogName: ec.entry.dog?.registeredName ?? 'Unknown',
+            dogName: ec.entry.entryType === 'junior_handler'
+              ? (ec.entry.juniorHandlerDetails?.handlerName ?? ec.entry.exhibitor?.name ?? 'Unknown Handler')
+              : (ec.entry.dog?.registeredName ?? 'Unknown'),
             dogSex: ec.entry.dog?.sex ?? null,
             exhibitorName: ec.entry.exhibitor?.name ?? '',
           }))

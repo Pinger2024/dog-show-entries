@@ -5266,11 +5266,12 @@ export const secretaryRouter = createTRPCRouter({
             columns: { id: true, registeredName: true, sex: true },
             with: { breed: true },
           },
+          juniorHandlerDetails: true,
         },
-        columns: { id: true, catalogueNumber: true, dogId: true },
+        columns: { id: true, catalogueNumber: true, dogId: true, entryType: true },
       });
 
-      // Deduplicate by dogId
+      // Deduplicate by dogId (or entryId for JH entries which may not have a dog)
       const dogMap = new Map<string, {
         dogId: string;
         registeredName: string;
@@ -5280,7 +5281,17 @@ export const secretaryRouter = createTRPCRouter({
       }>();
 
       for (const entry of showEntries) {
-        if (entry.dog && !dogMap.has(entry.dog.id)) {
+        if (entry.entryType === 'junior_handler') {
+          // JH entries: use entry ID as key, handler name as "registeredName"
+          const handlerName = entry.juniorHandlerDetails?.handlerName ?? 'Unknown Handler';
+          dogMap.set(entry.id, {
+            dogId: entry.id, // use entry ID since there may be no dog
+            registeredName: handlerName,
+            sex: null,
+            breedName: null,
+            catalogueNumber: entry.catalogueNumber,
+          });
+        } else if (entry.dog && !dogMap.has(entry.dog.id)) {
           dogMap.set(entry.dog.id, {
             dogId: entry.dog.id,
             registeredName: entry.dog.registeredName,
