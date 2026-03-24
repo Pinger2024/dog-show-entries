@@ -381,7 +381,9 @@ export const ordersRouter = createTRPCRouter({
       for (const entry of input.entries) {
         const classCount = entry.classIds.length;
 
-        if (entry.isNfc && show.nfcEntryFee != null) {
+        if (entry.entryType === 'junior_handler' && show.juniorHandlerFee != null) {
+          totalAmount += show.juniorHandlerFee;
+        } else if (entry.isNfc && show.nfcEntryFee != null) {
           totalAmount += classCount > 0 ? show.nfcEntryFee * classCount : show.nfcEntryFee;
         } else if (show.firstEntryFee != null) {
           const subsequentRate = show.subsequentEntryFee ?? show.firstEntryFee;
