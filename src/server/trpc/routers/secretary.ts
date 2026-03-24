@@ -4552,6 +4552,10 @@ export const secretaryRouter = createTRPCRouter({
     .input(
       z.object({
         showId: z.string().uuid(),
+        // Show-level timing fields (saved directly to shows table, not JSONB)
+        showOpenTime: z.string().optional(),
+        judgingStartTime: z.string().optional(),
+        onCallVet: z.string().optional(),
         scheduleData: z.object({
           country: z.enum(['england', 'wales', 'scotland', 'northern_ireland']).optional(),
           publicAdmission: z.boolean().optional(),
@@ -4584,6 +4588,7 @@ export const secretaryRouter = createTRPCRouter({
           })).optional(),
           bestAwards: z.array(z.string()).optional(),
           customStatements: z.array(z.string()).optional(),
+          what3words: z.string().optional(),
           directions: z.string().optional(),
           catering: z.string().optional(),
           futureShowDates: z.string().optional(),
@@ -4593,9 +4598,16 @@ export const secretaryRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      // Save show-level fields alongside scheduleData JSONB
+      const showUpdates: Record<string, unknown> = { scheduleData: input.scheduleData };
+      if (input.showOpenTime !== undefined) showUpdates.showOpenTime = input.showOpenTime || null;
+      if (input.judgingStartTime !== undefined) showUpdates.startTime = input.judgingStartTime || null;
+      if (input.onCallVet !== undefined) showUpdates.onCallVet = input.onCallVet || null;
+
       await ctx.db
         .update(shows)
-        .set({ scheduleData: input.scheduleData })
+        .set(showUpdates)
         .where(eq(shows.id, input.showId));
 
       // Sync new officers into organisation_people so they're available for future shows

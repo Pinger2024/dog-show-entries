@@ -72,13 +72,17 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
 
   // ── Form state ──
   const [country, setCountry] = useState<string>('england');
-  const [publicAdmission, setPublicAdmission] = useState(true);
+  const [publicAdmission, setPublicAdmission] = useState(false);
   const [wetWeather, setWetWeather] = useState(false);
   const [isBenched, setIsBenched] = useState(false);
   const [benchingRemovalTime, setBenchingRemovalTime] = useState('');
   const [acceptsNfc, setAcceptsNfc] = useState(true);
   const [judgedOnGroupSystem, setJudgedOnGroupSystem] = useState(false);
   const [latestArrivalTime, setLatestArrivalTime] = useState('');
+  const [showOpenTime, setShowOpenTime] = useState('');
+  const [judgingStartTime, setJudgingStartTime] = useState('');
+  const [onCallVet, setOnCallVet] = useState('');
+  const [what3words, setWhat3words] = useState('');
   const [showManager, setShowManager] = useState('');
   const [officers, setOfficers] = useState<OfficerWithGuarantor[]>([]);
   const [awardsDescription, setAwardsDescription] = useState('');
@@ -92,15 +96,19 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
 
   // Populate from existing data
   useEffect(() => {
-    if (existing && !hasLoaded) {
+    if (existing && showData && !hasLoaded) {
       setCountry(existing.country ?? 'england');
-      setPublicAdmission(existing.publicAdmission ?? true);
+      setPublicAdmission(existing.publicAdmission ?? false);
       setWetWeather(existing.wetWeatherAccommodation ?? false);
       setIsBenched(existing.isBenched ?? false);
       setBenchingRemovalTime(existing.benchingRemovalTime ?? '');
       setAcceptsNfc(existing.acceptsNfc ?? true);
       setJudgedOnGroupSystem(existing.judgedOnGroupSystem ?? false);
       setLatestArrivalTime(existing.latestArrivalTime ?? '');
+      setShowOpenTime(showData?.showOpenTime ?? '');
+      setJudgingStartTime(showData?.startTime ?? '');
+      setOnCallVet(showData?.onCallVet ?? '');
+      setWhat3words(existing.what3words ?? '');
       setShowManager(existing.showManager ?? '');
       // Merge officers with guarantor info
       const existingOfficers = existing.officers ?? [];
@@ -126,7 +134,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       setCustomStatements(existing.customStatements ?? []);
       setHasLoaded(true);
     }
-  }, [existing, hasLoaded]);
+  }, [existing, showData, hasLoaded]);
 
   async function handleSave() {
     const data: ScheduleData = {
@@ -149,6 +157,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
         .map((o) => ({ name: o.name, address: o.address || undefined })),
       awardsDescription: awardsDescription || undefined,
       prizeMoney: prizeMoney || undefined,
+      what3words: what3words || undefined,
       directions: directions || undefined,
       catering: catering || undefined,
       futureShowDates: futureShowDates || undefined,
@@ -159,7 +168,13 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     };
 
     try {
-      await updateMutation.mutateAsync({ showId, scheduleData: data });
+      await updateMutation.mutateAsync({
+        showId,
+        showOpenTime: showOpenTime || undefined,
+        judgingStartTime: judgingStartTime || undefined,
+        onCallVet: onCallVet || undefined,
+        scheduleData: data,
+      });
       await Promise.all([
         utils.secretary.getScheduleData.invalidate({ showId }),
         // Invalidate club people cache in case new officers were synced to the roster
@@ -390,16 +405,45 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
                 </div>
               </div>
 
-              {/* Latest arrival time */}
+              {/* Show timing — all three times */}
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="showOpenTime">Show opens at</Label>
+                  <Input
+                    id="showOpenTime"
+                    value={showOpenTime}
+                    onChange={(e) => setShowOpenTime(e.target.value)}
+                    placeholder="e.g. 8:30 AM"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="latestArrival">Latest time dogs received</Label>
+                  <Input
+                    id="latestArrival"
+                    value={latestArrivalTime}
+                    onChange={(e) => setLatestArrivalTime(e.target.value)}
+                    placeholder="e.g. 9:00"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="judgingStart">Judging commences</Label>
+                  <Input
+                    id="judgingStart"
+                    value={judgingStartTime}
+                    onChange={(e) => setJudgingStartTime(e.target.value)}
+                    placeholder="e.g. 9:30 AM"
+                  />
+                </div>
+              </div>
+
+              {/* Vet on call */}
               <div className="space-y-1.5">
-                <Label htmlFor="latestArrival">
-                  Latest time dogs will be received
-                </Label>
+                <Label htmlFor="onCallVet">Veterinary surgeon on call</Label>
                 <Input
-                  id="latestArrival"
-                  value={latestArrivalTime}
-                  onChange={(e) => setLatestArrivalTime(e.target.value)}
-                  placeholder="e.g. 9:30 AM"
+                  id="onCallVet"
+                  value={onCallVet}
+                  onChange={(e) => setOnCallVet(e.target.value)}
+                  placeholder="e.g. Westport Vets, Unit 42, Mill Road, Linlithgow EH49 7SF"
                 />
               </div>
             </div>
@@ -438,22 +482,19 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
                   </p>
                 </div>
 
-                {/* Select from Club Roster — prominent, shown first */}
+                {/* Select from Club Roster */}
                 {clubPeople && clubPeople.length > 0 && (
-                  <div className="rounded-lg border-2 border-primary/30 bg-primary/5 p-3 space-y-2">
-                    <p className="text-xs font-medium text-primary">
-                      Quick add from your club roster ({clubPeople.length} {clubPeople.length === 1 ? 'person' : 'people'} saved)
-                    </p>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <Popover open={clubPickerOpen} onOpenChange={setClubPickerOpen}>
                       <PopoverTrigger asChild>
                         <Button
-                          variant="default"
+                          variant="outline"
                           size="sm"
-                          className="w-full justify-between min-h-[2.75rem]"
+                          className="justify-between min-h-[2.75rem]"
                         >
                           <span className="flex items-center gap-2">
                             <Users className="size-4" />
-                            Select from Club Roster
+                            Add from Club Roster ({clubPeople.length})
                           </span>
                           <ChevronsUpDown className="size-3.5 opacity-70" />
                         </Button>
@@ -505,16 +546,23 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
                         </Command>
                       </PopoverContent>
                     </Popover>
+                    <Button variant="outline" size="sm" onClick={addOfficer} className="min-h-[2.75rem]">
+                      <Plus className="size-3.5" />
+                      Add Manually
+                    </Button>
                   </div>
                 )}
-
-                <div className="flex items-center justify-end">
-                  <Button variant="outline" size="sm" onClick={addOfficer}>
-                    <Plus className="size-3.5" />
-                    Add Manually
-                  </Button>
-                </div>
+                {/* Show Add Manually alone if no club roster */}
+                {(!clubPeople || clubPeople.length === 0) && (
+                  <div className="flex items-center justify-end">
+                    <Button variant="outline" size="sm" onClick={addOfficer} className="min-h-[2.75rem]">
+                      <Plus className="size-3.5" />
+                      Add Manually
+                    </Button>
+                  </div>
+                )}
               </div>
+              <div className="grid gap-3 grid-cols-1 lg:grid-cols-2">
               {officers.map((officer, idx) => (
                 <div key={idx} className="space-y-2 rounded-lg border p-3">
                   <div className="flex items-start gap-2">
@@ -581,6 +629,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
                   )}
                 </div>
               ))}
+              </div>
               {(() => {
                 const count = officers.filter((o) => o.isGuarantor).length;
                 const isChampionship = showData?.showType === 'championship';
@@ -661,6 +710,18 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
                 placeholder="Directions, parking information, etc."
                 rows={2}
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="what3words">What3Words</Label>
+              <Input
+                id="what3words"
+                value={what3words}
+                onChange={(e) => setWhat3words(e.target.value)}
+                placeholder="e.g. ///filled.count.soap"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Find your venue&apos;s what3words address at what3words.com
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="catering">Catering</Label>

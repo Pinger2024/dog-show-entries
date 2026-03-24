@@ -58,6 +58,9 @@ export interface ScheduleData {
   // Custom statements (e.g. "OUTSIDE ATTRACTION - KC RULE F(1) 16h WILL BE STRICTLY ENFORCED")
   customStatements?: string[];
 
+  // Venue
+  what3words?: string;
+
   // Optional text sections
   directions?: string;
   catering?: string;
