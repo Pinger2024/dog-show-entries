@@ -42,6 +42,7 @@ import {
   CommandList,
 } from '@/components/ui/command';
 import type { ScheduleData } from '@/server/db/schema/shows';
+import { RKC_STATEMENTS, RKC_STATEMENT_CATEGORIES } from '@/lib/rkc-statements';
 
 interface OfficerWithGuarantor {
   name: string;
@@ -752,49 +753,100 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
               />
             </div>
 
-            {/* Custom statements — shown as warning boxes in the rules section */}
-            <div className="space-y-1.5">
-              <Label>Custom Statements</Label>
-              <p className="text-xs text-muted-foreground">
-                Bold statements shown in the Rules section of the schedule (e.g. &quot;PLEASE NOTE: OUTSIDE ATTRACTION - KC RULE F(1) 16h WILL BE STRICTLY ENFORCED&quot;).
-              </p>
-              <div className="space-y-2">
-                {customStatements.map((stmt, i) => (
-                  <div key={i} className="flex gap-2">
-                    <Input
-                      value={stmt}
-                      onChange={(e) => {
-                        const updated = [...customStatements];
-                        updated[i] = e.target.value;
-                        setCustomStatements(updated);
-                      }}
-                      placeholder="Enter statement..."
-                      className="flex-1"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="shrink-0 size-10 text-destructive hover:text-destructive"
-                      onClick={() => {
-                        setCustomStatements(customStatements.filter((_, idx) => idx !== i));
-                      }}
-                    >
-                      <X className="size-4" />
-                    </Button>
-                  </div>
-                ))}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="min-h-[2.75rem]"
-                  onClick={() => setCustomStatements([...customStatements, ''])}
-                >
-                  <Plus className="size-4" />
-                  Add Statement
-                </Button>
+            {/* Custom statements — RKC presets + free text */}
+            <div className="space-y-3">
+              <div>
+                <Label>Schedule Statements</Label>
+                <p className="text-xs text-muted-foreground">
+                  Select standard RKC statements or add your own. These appear as bold notices on the schedule.
+                </p>
               </div>
+
+              {/* RKC preset statements — grouped by category */}
+              <div className="space-y-3 max-h-64 overflow-y-auto rounded-lg border p-3">
+                {RKC_STATEMENT_CATEGORIES.map((category) => {
+                  const statementsInCategory = RKC_STATEMENTS.filter((s) => s.category === category);
+                  return (
+                    <div key={category}>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                        {category}
+                      </p>
+                      <div className="space-y-1">
+                        {statementsInCategory.map((stmt) => {
+                          const isSelected = customStatements.includes(stmt.text);
+                          return (
+                            <label
+                              key={stmt.id}
+                              className="flex items-start gap-2 rounded-md px-2 py-1.5 cursor-pointer hover:bg-accent text-xs"
+                            >
+                              <Checkbox
+                                checked={isSelected}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setCustomStatements([...customStatements, stmt.text]);
+                                  } else {
+                                    setCustomStatements(customStatements.filter((s) => s !== stmt.text));
+                                  }
+                                }}
+                                className="mt-0.5"
+                              />
+                              <span className="leading-snug">
+                                {stmt.text}
+                                {stmt.regulation && (
+                                  <span className="ml-1 text-muted-foreground">({stmt.regulation})</span>
+                                )}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Custom free-text statements */}
+              {customStatements.filter((s) => !RKC_STATEMENTS.some((r) => r.text === s)).length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Custom statements</p>
+                  {customStatements
+                    .map((stmt, i) => ({ stmt, i }))
+                    .filter(({ stmt }) => !RKC_STATEMENTS.some((r) => r.text === stmt))
+                    .map(({ stmt, i }) => (
+                      <div key={i} className="flex gap-2">
+                        <Input
+                          value={stmt}
+                          onChange={(e) => {
+                            const updated = [...customStatements];
+                            updated[i] = e.target.value;
+                            setCustomStatements(updated);
+                          }}
+                          placeholder="Enter statement..."
+                          className="flex-1 text-xs"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="shrink-0 size-10 text-destructive hover:text-destructive"
+                          onClick={() => setCustomStatements(customStatements.filter((_, idx) => idx !== i))}
+                        >
+                          <X className="size-4" />
+                        </Button>
+                      </div>
+                    ))}
+                </div>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-[2.75rem]"
+                onClick={() => setCustomStatements([...customStatements, ''])}
+              >
+                <Plus className="size-4" />
+                Add Custom Statement
+              </Button>
             </div>
           </AccordionContent>
         </AccordionItem>
