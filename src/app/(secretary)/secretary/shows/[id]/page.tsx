@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { fireDogConfetti } from '@/lib/confetti';
 import {
   CalendarDays,
   Camera,
@@ -70,8 +72,18 @@ import { SundryItemManager } from './_components/sundry-item-manager';
 export default function OverviewPage() {
   const showId = useShowId();
   const [detailsExpanded, setDetailsExpanded] = useState(false);
+  const searchParams = useSearchParams();
 
   const { data: show } = trpc.shows.getById.useQuery({ id: showId });
+
+  // Fire confetti when arriving from show creation
+  useEffect(() => {
+    if (searchParams.get('created') === 'true') {
+      fireDogConfetti();
+      // Clean up the URL param without a navigation
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [searchParams]);
 
   if (!show) return null;
 
