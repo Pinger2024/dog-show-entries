@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import { useShowId } from '../_lib/show-context';
 import Link from 'next/link';
 import {
@@ -96,6 +96,30 @@ function requiredSexForAward(type: AchievementType): 'dog' | 'bitch' | null {
   if (['dog_cc', 'reserve_dog_cc', 'best_puppy_dog', 'best_long_coat_dog'].includes(type)) return 'dog';
   if (['bitch_cc', 'reserve_bitch_cc', 'best_puppy_bitch', 'best_long_coat_bitch'].includes(type)) return 'bitch';
   return null;
+}
+
+/**
+ * Show-level awards cascade from breed-level awards:
+ * - Best in Show → Dog CC + Bitch CC winners
+ * - Reserve Best in Show → Dog CC + Reserve Dog CC + Bitch CC + Reserve Bitch CC
+ * - Best Puppy in Show → Best Puppy Dog + Best Puppy Bitch
+ * - Best Long Coat in Show → Best Long Coat Dog + Best Long Coat Bitch
+ */
+function getShowAwardCandidateIds(
+  type: AchievementType,
+  achievements: { type: string; dogId: string | null }[],
+): string[] {
+  const sourceTypes: Record<string, string[]> = {
+    best_in_show: ['dog_cc', 'bitch_cc', 'best_of_breed'],
+    reserve_best_in_show: ['dog_cc', 'reserve_dog_cc', 'bitch_cc', 'reserve_bitch_cc', 'best_of_breed'],
+    best_puppy_in_show: ['best_puppy_dog', 'best_puppy_bitch', 'best_puppy_in_breed'],
+    best_long_coat_in_show: ['best_long_coat_dog', 'best_long_coat_bitch'],
+  };
+  const sources = sourceTypes[type];
+  if (!sources) return [];
+  return achievements
+    .filter((a) => sources.includes(a.type) && a.dogId)
+    .map((a) => a.dogId!);
 }
 
 // ── Sub-components ────────────────────────────────────────
@@ -236,10 +260,12 @@ function BestAwardsSection({
   showType,
   confirmedDogs,
   existingAchievements,
+  classResults,
 }: {
   showId: string;
   showDate: string;
   showType: string;
+  classResults?: { breedName: string; classes: { className: string; sex: string | null; results: { dogId: string | null; placement: number | null }[] }[] }[];
   confirmedDogs: {
     dogId: string;
     registeredName: string;
@@ -262,6 +288,24 @@ function BestAwardsSection({
   const [expanded, setExpanded] = useState(true);
   const utils = trpc.useUtils();
   const isChampionship = showType === 'championship';
+
+  // Derive puppy/veteran class winner dogIds from live results for filtering
+  const puppyClassWinnerIds = useMemo(() => {
+    if (!classResults) return new Set<string>();
+    const ids = new Set<string>();
+    for (const group of classResults) {
+      for (const cls of group.classes) {
+        const name = cls.className.toLowerCase();
+        const isPuppy = (name.includes('puppy') || name.includes('minor')) && !name.includes('post');
+        if (isPuppy) {
+          for (const r of cls.results) {
+            if (r.dogId) ids.add(r.dogId);
+          }
+        }
+      }
+    }
+    return ids;
+  }, [classResults]);
 
   const recordMut = trpc.secretary.recordAchievement.useMutation({
     onSuccess: () => {
@@ -330,24 +374,31 @@ function BestAwardsSection({
 
       {expanded && (
         <div className="space-y-4 border-t border-amber-200 p-3 sm:p-4">
-          {/* Show-level awards */}
+          {/* Show-level awards — candidates cascade from breed-level achievements */}
           <div className="space-y-2">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-amber-700">
               Show Awards
             </h4>
             {SHOW_LEVEL_AWARDS
               .filter((award) => award.type !== 'best_long_coat_in_show' || isChampionship)
-              .map((award) => (
-                <AwardRow
-                  key={award.type}
-                  label={award.label}
-                  type={award.type}
-                  existing={getExisting(award.type)}
-                  candidates={confirmedDogs}
-                  isPending={isPending}
-                  onSelect={(dogId) => handleAwardChange(award.type, dogId)}
-                />
-              ))}
+              .map((award) => {
+                // Cascade: show awards only from relevant breed-level award winners
+                const sourceDogIds = getShowAwardCandidateIds(award.type, existingAchievements);
+                const candidates = sourceDogIds.length > 0
+                  ? confirmedDogs.filter((d) => sourceDogIds.includes(d.dogId))
+                  : confirmedDogs; // fallback to all if no breed awards recorded yet
+                return (
+                  <AwardRow
+                    key={award.type}
+                    label={award.label}
+                    type={award.type}
+                    existing={getExisting(award.type)}
+                    candidates={candidates}
+                    isPending={isPending}
+                    onSelect={(dogId) => handleAwardChange(award.type, dogId)}
+                  />
+                );
+              })}
           </div>
 
           {/* Breed-level awards per breed */}
@@ -382,9 +433,14 @@ function BestAwardsSection({
                   <>
                     {CHAMPIONSHIP_AWARDS.map((award) => {
                       const sexFilter = requiredSexForAward(award.type);
-                      const filtered = sexFilter
+                      let filtered = sexFilter
                         ? breedDogs.filter((d) => d.sex === sexFilter)
                         : breedDogs;
+                      // Best Puppy awards: only show dogs from puppy-age classes
+                      if (award.type === 'best_puppy_dog' || award.type === 'best_puppy_bitch') {
+                        const puppyFiltered = filtered.filter((d) => puppyClassWinnerIds.has(d.dogId));
+                        if (puppyFiltered.length > 0) filtered = puppyFiltered;
+                      }
                       const existing = breedAchievements.find((a) => a.type === award.type);
                       return (
                         <AwardRow
@@ -772,6 +828,7 @@ export default function SecretaryResultsPage() {
           showType={showData.showType}
           confirmedDogs={confirmedDogs}
           existingAchievements={secAchievements ?? []}
+          classResults={breedGroups}
         />
       )}
 
