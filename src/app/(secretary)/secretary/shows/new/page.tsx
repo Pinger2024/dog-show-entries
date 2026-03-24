@@ -7,6 +7,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
+import { fireDogConfetti } from '@/lib/confetti';
 import {
   ArrowLeft,
   ArrowRight,
@@ -399,8 +400,9 @@ export default function NewShowPage() {
       // Prefetch the show data so the detail page doesn't 404
       await utils.shows.getById.prefetch({ id: show.id });
 
+      if (!asDraft) fireDogConfetti();
       toast.success(
-        asDraft ? 'Show saved as draft' : 'Show created successfully'
+        asDraft ? 'Show saved as draft' : 'Show created successfully! 🎉'
       );
       router.push(`/secretary/shows/${show.slug ?? show.id}`);
     } catch (error) {
