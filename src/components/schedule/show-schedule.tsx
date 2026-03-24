@@ -1311,14 +1311,18 @@ export function ShowSchedule({
         {/* Judges */}
         {judges.length > 0 && (
           <InfoCard title="Judges">
-            {judges.map((judge, i) => (
-              <View key={i} style={s.judgeRow}>
-                <Text style={s.judgeName}>{judge.name}</Text>
-                <Text style={s.judgeBreeds}>
-                  {judge.breeds.length > 0 ? judge.breeds.join(', ') : 'All breeds'}
-                </Text>
-              </View>
-            ))}
+            {judges.map((judge, i) => {
+              // Use sex label (Dogs/Bitches/Junior Handling) when no breeds assigned
+              const roleLabel = judge.breeds.length > 0
+                ? judge.breeds.join(', ')
+                : (judge.sex === 'dog' ? 'Dogs' : judge.sex === 'bitch' ? 'Bitches' : judge.displayLabel?.startsWith('Junior') ? 'Junior Handling' : 'All breeds');
+              return (
+                <View key={i} style={s.judgeRow}>
+                  <Text style={s.judgeName}>{judge.name}</Text>
+                  <Text style={s.judgeBreeds}>{roleLabel}</Text>
+                </View>
+              );
+            })}
           </InfoCard>
         )}
 
