@@ -566,7 +566,7 @@ export function AddJudgeWizard({
                         />
                         <div className="flex-1 min-w-0">
                           <span className="text-sm font-medium">
-                            {combo.breedName ?? 'All Breeds'}
+                            {combo.breedName ?? (showData?.showScope === 'single_breed' ? 'Breed Classes' : 'All Breeds')}
                           </span>
                           {combo.sex && (
                             <span className="ml-1.5 text-xs text-muted-foreground">

@@ -4955,15 +4955,20 @@ export const secretaryRouter = createTRPCRouter({
         .where(eq(shows.id, input.showId));
 
       // Also publish all individual results
-      await ctx.db.execute(sql`
-        UPDATE results r
-        SET published_at = ${now}
-        FROM entry_classes ec
-        JOIN entries e ON ec.entry_id = e.id
-        WHERE r.entry_class_id = ec.id
-          AND e.show_id = ${input.showId}
-          AND r.published_at IS NULL
-      `);
+      try {
+        await ctx.db.execute(sql`
+          UPDATE results r
+          SET published_at = ${now.toISOString()}::timestamptz
+          FROM entry_classes ec
+          JOIN entries e ON ec.entry_id = e.id
+          WHERE r.entry_class_id = ec.id
+            AND e.show_id = ${input.showId}
+            AND r.published_at IS NULL
+        `);
+      } catch (error) {
+        console.error('[publishResults] SQL error:', error);
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to publish results. Please try again.' });
+      }
 
       // Fire downstream notifications async (Phase 4)
       if (input.sendNotifications) {
@@ -5024,16 +5029,21 @@ export const secretaryRouter = createTRPCRouter({
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
 
       const now = new Date();
-      await ctx.db.execute(sql`
-        UPDATE results r
-        SET published_at = ${now}
-        FROM entry_classes ec
-        JOIN entries e ON ec.entry_id = e.id
-        WHERE r.entry_class_id = ec.id
-          AND e.show_id = ${input.showId}
-          AND ec.show_class_id = ${input.showClassId}
-          AND r.published_at IS NULL
-      `);
+      try {
+        await ctx.db.execute(sql`
+          UPDATE results r
+          SET published_at = ${now.toISOString()}::timestamptz
+          FROM entry_classes ec
+          JOIN entries e ON ec.entry_id = e.id
+          WHERE r.entry_class_id = ec.id
+            AND e.show_id = ${input.showId}
+            AND ec.show_class_id = ${input.showClassId}
+            AND r.published_at IS NULL
+        `);
+      } catch (error) {
+        console.error('[publishClassResults] SQL error:', error);
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to publish class results. Please try again.' });
+      }
 
       return { published: true, classId: input.showClassId };
     }),
@@ -5047,15 +5057,20 @@ export const secretaryRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
 
-      await ctx.db.execute(sql`
-        UPDATE results r
-        SET published_at = NULL
-        FROM entry_classes ec
-        JOIN entries e ON ec.entry_id = e.id
-        WHERE r.entry_class_id = ec.id
-          AND e.show_id = ${input.showId}
-          AND ec.show_class_id = ${input.showClassId}
-      `);
+      try {
+        await ctx.db.execute(sql`
+          UPDATE results r
+          SET published_at = NULL
+          FROM entry_classes ec
+          JOIN entries e ON ec.entry_id = e.id
+          WHERE r.entry_class_id = ec.id
+            AND e.show_id = ${input.showId}
+            AND ec.show_class_id = ${input.showClassId}
+        `);
+      } catch (error) {
+        console.error('[unpublishClassResults] SQL error:', error);
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to unpublish results. Please try again.' });
+      }
 
       return { unpublished: true, classId: input.showClassId };
     }),
