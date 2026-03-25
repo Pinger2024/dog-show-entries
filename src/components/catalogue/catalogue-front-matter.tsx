@@ -134,7 +134,7 @@ export function CoverPage({ show }: FrontMatterProps) {
             <View style={styles.coverDetailRow}>
               <Text style={styles.coverDetailLabel}>Venue</Text>
               <Text style={styles.coverDetailValue}>
-                {show.venue}{show.venueAddress ? `, ${show.venueAddress}` : ''}
+                {[show.venue, show.venueAddress].filter(Boolean).join(', ').replace(/,\s*,/g, ',').trim()}
               </Text>
             </View>
           )}

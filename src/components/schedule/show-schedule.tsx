@@ -140,6 +140,12 @@ const SHOW_TYPE_LABELS: Record<string, string> = {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
+/** Join venue parts, cleaning up double commas and extra spaces */
+function formatVenue(name: string, address?: string | null, postcode?: string | null): string {
+  const parts = [name, address, postcode].filter(Boolean);
+  return parts.join(', ').replace(/,\s*,/g, ',').replace(/\s+/g, ' ').trim();
+}
+
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr);
   return d.toLocaleDateString('en-GB', {
@@ -800,9 +806,7 @@ export function ShowSchedule({
                 <View style={s.coverDetailRow}>
                   <Text style={s.coverDetailLabel}>Venue</Text>
                   <Text style={s.coverDetailValue}>
-                    {show.venue.name}
-                    {show.venue.address ? `, ${show.venue.address}` : ''}
-                    {show.venue.postcode ? ` ${show.venue.postcode}` : ''}
+                    {formatVenue(show.venue.name, show.venue.address, show.venue.postcode)}
                   </Text>
                 </View>
               )}
@@ -1074,9 +1078,7 @@ export function ShowSchedule({
               <View style={s.coverDetailRow}>
                 <Text style={s.coverDetailLabel}>Venue</Text>
                 <Text style={s.coverDetailValue}>
-                  {show.venue.name}
-                  {show.venue.address ? `, ${show.venue.address}` : ''}
-                  {show.venue.postcode ? ` ${show.venue.postcode}` : ''}
+                  {formatVenue(show.venue.name, show.venue.address, show.venue.postcode)}
                 </Text>
               </View>
             )}
