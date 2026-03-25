@@ -57,6 +57,7 @@ export interface ScheduleShowInfo {
   firstEntryFee: number | null;
   subsequentEntryFee: number | null;
   nfcEntryFee: number | null;
+  juniorHandlerFee: number | null;
   acceptsPostalEntries: boolean;
   scheduleData: ScheduleData | null;
   organisation: {
@@ -875,6 +876,12 @@ export function ShowSchedule({
                   <Text style={s.infoValue}>{formatCurrency(show.nfcEntryFee)}</Text>
                 </View>
               )}
+              {show.juniorHandlerFee != null && (
+                <View style={s.infoRow}>
+                  <Text style={s.infoLabel}>Junior Handler</Text>
+                  <Text style={s.infoValue}>{formatCurrency(show.juniorHandlerFee)}</Text>
+                </View>
+              )}
             </InfoCard>
           )}
           <InfoCard title="Key Dates">
@@ -1219,9 +1226,15 @@ export function ShowSchedule({
               </View>
             )}
             {show.nfcEntryFee != null && (
-              <View style={[s.infoRow, s.infoRowNoBorder]}>
+              <View style={s.infoRow}>
                 <Text style={s.infoLabel}>Not for Competition</Text>
                 <Text style={s.infoValue}>{formatCurrency(show.nfcEntryFee)}</Text>
+              </View>
+            )}
+            {show.juniorHandlerFee != null && (
+              <View style={[s.infoRow, s.infoRowNoBorder]}>
+                <Text style={s.infoLabel}>Junior Handler</Text>
+                <Text style={s.infoValue}>{formatCurrency(show.juniorHandlerFee)}</Text>
               </View>
             )}
           </InfoCard>
@@ -1702,7 +1715,8 @@ export function ShowSchedule({
           <Rule num="5">
             ENTRY FEES: {show.firstEntryFee != null ? `${formatCurrency(show.firstEntryFee)} first entry` : ''}
             {show.subsequentEntryFee != null ? `, subsequent entries same dog ${formatCurrency(show.subsequentEntryFee)}` : ''}
-            {show.nfcEntryFee != null ? `. NFC ${formatCurrency(show.nfcEntryFee)}` : ''}.
+            {show.nfcEntryFee != null ? `. NFC ${formatCurrency(show.nfcEntryFee)}` : ''}
+            {show.juniorHandlerFee != null ? `. Junior Handler ${formatCurrency(show.juniorHandlerFee)}` : ''}.
           </Rule>
         )}
         <Rule num="6">ONLINE ENTRY can be found at remishowmanager.co.uk</Rule>

@@ -134,6 +134,7 @@ export async function GET(
     firstEntryFee: show.firstEntryFee ?? null,
     subsequentEntryFee: show.subsequentEntryFee ?? null,
     nfcEntryFee: show.nfcEntryFee ?? null,
+    juniorHandlerFee: show.juniorHandlerFee ?? null,
     acceptsPostalEntries: show.acceptsPostalEntries ?? false,
     scheduleData: show.scheduleData ?? null,
     organisation: show.organisation

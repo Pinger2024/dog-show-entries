@@ -367,6 +367,7 @@ export async function generateSchedulePdf(showId: string, format: 'standard' | '
     firstEntryFee: show.firstEntryFee,
     subsequentEntryFee: show.subsequentEntryFee,
     nfcEntryFee: show.nfcEntryFee,
+    juniorHandlerFee: show.juniorHandlerFee ?? null,
     acceptsPostalEntries: show.acceptsPostalEntries ?? false,
     scheduleData: show.scheduleData as ScheduleShowInfo['scheduleData'],
     organisation: show.organisation ? {
