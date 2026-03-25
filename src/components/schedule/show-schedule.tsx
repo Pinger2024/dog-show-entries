@@ -1320,6 +1320,9 @@ export function ShowSchedule({
             <Text style={s.infoText}>{show.venue.name}</Text>
             {show.venue.address && <Text style={s.infoText}>{show.venue.address}</Text>}
             {show.venue.postcode && <Text style={s.infoText}>{show.venue.postcode}</Text>}
+            {sd?.what3words && (
+              <Text style={{ ...s.infoText, marginTop: 4 }}>what3words: ///{sd.what3words.replace(/^\/+/, '')}</Text>
+            )}
           </InfoCard>
         )}
 
