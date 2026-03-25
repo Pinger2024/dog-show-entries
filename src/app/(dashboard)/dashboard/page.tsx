@@ -21,6 +21,8 @@ import {
   Trophy,
   Award,
   AlertTriangle,
+  CreditCard,
+  Timer,
   Sparkles,
   Gavel,
   Rss,
@@ -82,13 +84,9 @@ export default function DashboardPage() {
             <FindShowsHero firstName={firstName} hasRecommended={hasRecommendedShows} />
           )}
 
-          {/* ─── Deadline Alerts ─── */}
+          {/* ─── Action Items (grouped by show) ─── */}
           {data.deadlineAlerts.length > 0 && (
-            <div className="space-y-2">
-              {data.deadlineAlerts.map((alert, i) => (
-                <AlertCard key={i} alert={alert} />
-              ))}
-            </div>
+            <ActionItems alerts={data.deadlineAlerts} />
           )}
 
           {/* ─── Dog Cards Strip ─── */}
@@ -536,25 +534,118 @@ function DogCardsStrip({ dogs }: {
 
 /* ─── Deadline Alert ─── */
 
-function AlertCard({ alert }: { alert: { type: string; message: string; showId?: string; showSlug?: string; entryId?: string } }) {
-  const href = alert.entryId
-    ? `/entries/${alert.entryId}`
-    : alert.showSlug
-      ? `/shows/${alert.showSlug}`
-      : alert.showId
-        ? `/shows/${alert.showId}`
-        : '/browse';
+/* ─── Action Items — grouped by show, with inline actions ─── */
+
+type Alert = { type: 'closing_soon' | 'pending_payment'; message: string; showId: string; showName: string; showSlug: string | null; entryId?: string; entryCloseDate?: Date | null };
+
+function ActionItems({ alerts }: { alerts: Alert[] }) {
+  // Group alerts by show + type
+  const groups = new Map<string, { type: string; showName: string; showSlug: string | null; showId: string; entryIds: string[]; entryCloseDate?: Date | null; count: number }>();
+
+  for (const alert of alerts) {
+    const key = `${alert.showId ?? 'unknown'}:${alert.type}`;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.count++;
+      if (alert.entryId) existing.entryIds.push(alert.entryId);
+    } else {
+      groups.set(key, {
+        type: alert.type,
+        showName: alert.showName ?? 'Unknown Show',
+        showSlug: alert.showSlug ?? null,
+        showId: alert.showId ?? '',
+        entryIds: alert.entryId ? [alert.entryId] : [],
+        entryCloseDate: alert.entryCloseDate ? toDate(alert.entryCloseDate) : null,
+        count: 1,
+      });
+    }
+  }
+
+  const groupList = Array.from(groups.values());
+  const paymentGroups = groupList.filter((g) => g.type === 'pending_payment');
+  const closingGroups = groupList.filter((g) => g.type === 'closing_soon');
 
   return (
-    <Link href={href}>
-      <div className="flex items-center gap-3 rounded-xl border border-amber-200/60 bg-gradient-to-r from-amber-50/80 to-transparent px-4 py-3 shadow-sm transition-all active:scale-[0.99]">
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-amber-100">
-          <AlertTriangle className="size-4 text-amber-600" />
+    <div className="space-y-3">
+      {/* Payment needed */}
+      {paymentGroups.length > 0 && (
+        <div className="rounded-2xl border border-rose-200/60 bg-gradient-to-br from-rose-50/80 to-white p-4 shadow-sm">
+          <div className="mb-3 flex items-center gap-2">
+            <div className="flex size-7 items-center justify-center rounded-lg bg-rose-100">
+              <CreditCard className="size-3.5 text-rose-600" />
+            </div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-rose-700">
+              Payment needed
+            </p>
+          </div>
+          <div className="space-y-2">
+            {paymentGroups.map((group) => {
+              const href = group.entryIds.length === 1
+                ? `/entries/${group.entryIds[0]}`
+                : group.showSlug ? `/shows/${group.showSlug}` : `/shows/${group.showId}`;
+              return (
+                <Link key={`pay-${group.showId}`} href={href}>
+                  <div className="flex items-center justify-between rounded-xl bg-white/80 px-3 py-2.5 ring-1 ring-rose-100 transition-all active:scale-[0.99]">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-serif text-sm font-medium text-rose-900">{group.showName}</p>
+                      <p className="text-[11px] text-rose-600/70">
+                        {group.count} {group.count === 1 ? 'entry' : 'entries'} unpaid
+                      </p>
+                    </div>
+                    <div className="ml-2 flex shrink-0 items-center gap-1.5">
+                      <span className="rounded-full bg-rose-600 px-3 py-1 text-[11px] font-semibold text-white">
+                        Pay
+                      </span>
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
         </div>
-        <p className="flex-1 text-sm text-amber-900">{alert.message}</p>
-        <ChevronRight className="size-4 shrink-0 text-amber-400" />
-      </div>
-    </Link>
+      )}
+
+      {/* Closing soon */}
+      {closingGroups.length > 0 && (
+        <div className="rounded-2xl border border-blue-200/60 bg-gradient-to-br from-blue-50/80 to-white p-4 shadow-sm">
+          <div className="mb-3 flex items-center gap-2">
+            <div className="flex size-7 items-center justify-center rounded-lg bg-blue-100">
+              <Timer className="size-3.5 text-blue-600" />
+            </div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-blue-700">
+              Closing soon
+            </p>
+          </div>
+          <div className="space-y-2">
+            {closingGroups.map((group) => {
+              const href = group.showSlug ? `/shows/${group.showSlug}` : `/shows/${group.showId}`;
+              const daysLeft = group.entryCloseDate
+                ? differenceInDays(group.entryCloseDate, new Date())
+                : null;
+              return (
+                <Link key={`close-${group.showId}`} href={href}>
+                  <div className="flex items-center justify-between rounded-xl bg-white/80 px-3 py-2.5 ring-1 ring-blue-100 transition-all active:scale-[0.99]">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-serif text-sm font-medium text-blue-900">{group.showName}</p>
+                      {daysLeft != null && (
+                        <p className="text-[11px] text-blue-600/70">
+                          {daysLeft <= 0 ? 'Closes today!' : daysLeft === 1 ? 'Closes tomorrow' : `${daysLeft} days left`}
+                        </p>
+                      )}
+                    </div>
+                    <div className="ml-2 flex shrink-0 items-center gap-1.5">
+                      <span className="rounded-full bg-blue-600 px-3 py-1 text-[11px] font-semibold text-white">
+                        Enter
+                      </span>
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
