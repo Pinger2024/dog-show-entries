@@ -634,7 +634,7 @@ export function AddJudgeWizard({
                 <div className="mt-1 flex flex-wrap gap-1">
                   {selectedCombos.map((c, i) => (
                     <Badge key={i} variant="secondary" className="text-xs">
-                      {c.breedName ?? 'All Breeds'}
+                      {c.breedName ?? (showData?.showScope === 'single_breed' ? 'Breed Classes' : 'All Breeds')}
                       {c.sex && ` — ${sexLabel(c.sex)}`}
                     </Badge>
                   ))}
