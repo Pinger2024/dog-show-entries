@@ -5,7 +5,7 @@ import confetti from 'canvas-confetti';
  * Uses paw prints, bones, trophies, rosettes, and dogs as shapes.
  */
 export function fireDogConfetti() {
-  const duration = 3000;
+  const duration = 1500;
   const end = Date.now() + duration;
 
   const dogEmojis = ['🐾', '🦴', '🏆', '🎀', '🐕'];
@@ -24,7 +24,7 @@ export function fireDogConfetti() {
       origin: { x: 0, y: 0.6 },
       shapes,
       scalar: 1.5,
-      ticks: 200,
+      ticks: 120,
       gravity: 0.8,
       drift: 0.5,
     });
@@ -36,7 +36,7 @@ export function fireDogConfetti() {
       origin: { x: 1, y: 0.6 },
       shapes,
       scalar: 1.5,
-      ticks: 200,
+      ticks: 120,
       gravity: 0.8,
       drift: -0.5,
     });
@@ -46,13 +46,13 @@ export function fireDogConfetti() {
 
   // Initial big burst from the centre
   confetti({
-    particleCount: 40,
+    particleCount: 30,
     spread: 100,
     origin: { x: 0.5, y: 0.4 },
     shapes,
     scalar: 2,
-    ticks: 300,
-    gravity: 0.6,
+    ticks: 150,
+    gravity: 1.0,
   });
 
   frame();
