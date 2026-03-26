@@ -2904,7 +2904,8 @@ export const secretaryRouter = createTRPCRouter({
       }
 
       // Championship shows: every breed with classes must have Open + Limit for each sex
-      if (show.showType === 'championship' && Number(classCount[0]?.count) > 0) {
+      // Skip for single-breed shows — their classes are breed-less by design
+      if (show.showType === 'championship' && show.showScope !== 'single_breed' && Number(classCount[0]?.count) > 0) {
         const showClassRows = await ctx.db.query.showClasses.findMany({
           where: eq(showClasses.showId, input.showId),
           with: { classDefinition: true },
