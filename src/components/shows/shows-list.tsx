@@ -638,6 +638,25 @@ export default function ShowsList() {
         </div>
       </div>
 
+      {/* Clear filters */}
+      {(search || showType !== 'all' || status !== 'all' || breedId !== 'all') && !nearMeActive && (
+        <div className="mb-2 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setSearch('');
+              setShowType('all');
+              setStatus('all');
+              setBreedId('all');
+            }}
+            className="flex items-center gap-1 rounded-full border border-dashed px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+          >
+            <X className="size-3" />
+            Clear all filters
+          </button>
+        </div>
+      )}
+
       {/* ─── Near Me Controls ────────────────────── */}
       {nearMeActive && (
         <NearMeControls
