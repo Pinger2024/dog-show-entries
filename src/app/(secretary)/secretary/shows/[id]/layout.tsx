@@ -169,6 +169,7 @@ export default function ShowManagementLayout({
             {show.venue && ` — ${show.venue.name}`}
           </p>
         </div>
+        <div className="space-y-1">
         <Select onValueChange={handleStatusChange} value={show.status}>
           <SelectTrigger className="w-full sm:w-44">
             <SelectValue placeholder="Change status" />
@@ -183,6 +184,10 @@ export default function ShowManagementLayout({
             <SelectItem value="cancelled">Cancelled</SelectItem>
           </SelectContent>
         </Select>
+        {show.status === 'draft' && (
+          <p className="text-[10px] text-muted-foreground text-right">Complete setup to open entries</p>
+        )}
+        </div>
       </div>
 
       {/* Status change confirmation dialog */}
