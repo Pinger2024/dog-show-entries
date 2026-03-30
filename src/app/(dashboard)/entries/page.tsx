@@ -285,7 +285,11 @@ function DogEntryRow({ entry }: { entry: Entry }) {
       href={`/entries/${entry.id}`}
       className={`flex items-center gap-3 px-3 py-3 transition-colors hover:bg-accent/30 active:bg-accent/40 sm:px-4 ${isInactive ? 'opacity-50' : ''}`}
     >
-      <Dog className="size-4 shrink-0 text-muted-foreground" />
+      {(entry as { dogPhotoUrl?: string | null }).dogPhotoUrl ? (
+        <img src={(entry as { dogPhotoUrl?: string | null }).dogPhotoUrl!} alt="" className="size-8 shrink-0 rounded-full object-cover" />
+      ) : (
+        <Dog className="size-4 shrink-0 text-muted-foreground" />
+      )}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="truncate text-sm font-medium">

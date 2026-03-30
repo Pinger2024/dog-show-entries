@@ -12,6 +12,7 @@ import {
   entries,
   entryClasses,
   dogs,
+  dogPhotos,
   shows,
   showClasses,
   payments,
@@ -326,6 +327,19 @@ export const entriesRouter = createTRPCRouter({
         offset: input.cursor,
       });
 
+      // Batch-fetch primary photos for all dogs in results
+      const dogIds = items.map((e) => e.dogId).filter((id): id is string => !!id);
+      const primaryPhotos = dogIds.length > 0
+        ? await ctx.db.query.dogPhotos.findMany({
+            where: and(
+              inArray(dogPhotos.dogId, dogIds),
+              eq(dogPhotos.isPrimary, true),
+            ),
+            columns: { dogId: true, url: true },
+          })
+        : [];
+      const photoMap = new Map(primaryPhotos.map((p) => [p.dogId, p.url]));
+
       const countResult = await ctx.db
         .select({ count: sql<number>`count(*)` })
         .from(entries)
@@ -334,7 +348,10 @@ export const entriesRouter = createTRPCRouter({
       const total = Number(countResult[0]?.count ?? 0);
 
       return {
-        items,
+        items: items.map((item) => ({
+          ...item,
+          dogPhotoUrl: item.dogId ? photoMap.get(item.dogId) ?? null : null,
+        })),
         total,
         nextCursor:
           input.cursor + input.limit < total
