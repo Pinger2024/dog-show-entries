@@ -23,7 +23,7 @@ import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { formatCurrency, penceToPoundsString, poundsToPence } from '@/lib/date-utils';
 import { cn } from '@/lib/utils';
-import { CLASS_TEMPLATES } from '@/lib/class-templates';
+import { CLASS_TEMPLATES, getRelevantTemplates } from '@/lib/class-templates';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -687,6 +687,7 @@ export function BulkClassCreator({ showId }: { showId: string }) {
   const [splitBySex, setSplitBySex] = useState(false);
   const [feeInput, setFeeInput] = useState('');
 
+  const { data: showData } = trpc.shows.getById.useQuery({ id: showId });
   const { data: breeds } = trpc.breeds.list.useQuery();
   const { data: classDefs } = trpc.secretary.listClassDefinitions.useQuery();
   const utils = trpc.useUtils();
@@ -773,7 +774,7 @@ export function BulkClassCreator({ showId }: { showId: string }) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {CLASS_TEMPLATES.map((t) => (
+          {getRelevantTemplates(showData?.showType ?? undefined).map((t) => (
             <button
               key={t.id}
               type="button"

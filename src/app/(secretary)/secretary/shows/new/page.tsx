@@ -33,7 +33,7 @@ import Link from 'next/link';
 import { format, addDays } from 'date-fns';
 import { trpc } from '@/lib/trpc';
 import { poundsToPence, formatCurrency } from '@/lib/date-utils';
-import { CLASS_TEMPLATES } from '@/lib/class-templates';
+import { CLASS_TEMPLATES, getRelevantTemplates } from '@/lib/class-templates';
 import { AllBreedClassSetup, type AllBreedClassData } from '@/components/shows/all-breed-class-setup';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -1339,7 +1339,7 @@ export default function NewShowPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {CLASS_TEMPLATES.map((t) => {
+                  {getRelevantTemplates(watchedShowType).map((t) => {
                     const isActive = selectedTemplates.includes(t.id);
                     return (
                       <button

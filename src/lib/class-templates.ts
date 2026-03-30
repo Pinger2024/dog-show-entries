@@ -18,6 +18,24 @@ export interface ClassTemplate {
   defaultFeePence: number;
   splitBySex: boolean;
   isHandling?: boolean;
+  /** Show types this template is relevant for. If undefined, shown for all types. */
+  showTypes?: string[];
+  /** If true, only shown for GSD single-breed shows. */
+  gsdOnly?: boolean;
+}
+
+/** Filter templates to those relevant for a given show type. GSD-only templates
+ *  are excluded unless the show is known to be a GSD breed show. */
+export function getRelevantTemplates(showType?: string): ClassTemplate[] {
+  return CLASS_TEMPLATES.filter((t) => {
+    // Handling templates always shown (they're add-ons)
+    if (t.isHandling) return true;
+    // GSD-only templates: hide for now (would need breed context to show)
+    if (t.gsdOnly) return false;
+    // If template has showTypes restriction, check it
+    if (t.showTypes && showType && !t.showTypes.includes(showType)) return false;
+    return true;
+  });
 }
 
 export const CLASS_TEMPLATES: ClassTemplate[] = [
@@ -25,6 +43,7 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
     id: 'championship_standard',
     name: 'Championship Standard',
     description: 'Full RKC championship class schedule with all standard classes, split by sex.',
+    showTypes: ['championship'],
     classNames: [
       'Minor Puppy',
       'Puppy',
@@ -45,6 +64,7 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
     id: 'open_standard',
     name: 'Open Standard',
     description: 'Standard open show class schedule with popular classes.',
+    showTypes: ['open', 'premier_open'],
     classNames: [
       'Minor Puppy',
       'Puppy',
@@ -62,6 +82,7 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
     id: 'limited_basic',
     name: 'Limited Basic',
     description: 'Basic limited show schedule with core classes.',
+    showTypes: ['limited', 'primary'],
     classNames: [
       'Puppy',
       'Junior',
@@ -76,6 +97,8 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
     id: 'gsd_championship_single_breed',
     name: 'GSD Championship (Single Breed)',
     description: 'Full class schedule for GSD single-breed championship shows, including Long Coat varieties.',
+    showTypes: ['championship'],
+    gsdOnly: true,
     classNames: [
       'Minor Puppy',
       'Puppy',
@@ -102,6 +125,8 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
     id: 'gsd_open_single_breed',
     name: 'GSD Open (Single Breed)',
     description: 'Standard open show schedule for GSD single-breed shows, including Long Coat varieties.',
+    showTypes: ['open', 'premier_open'],
+    gsdOnly: true,
     classNames: [
       'Minor Puppy',
       'Puppy',
@@ -125,6 +150,7 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
     id: 'companion',
     name: 'Companion',
     description: 'Companion show schedule for fun and social events.',
+    showTypes: ['companion'],
     classNames: [
       'Puppy',
       'Open',
