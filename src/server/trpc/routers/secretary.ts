@@ -1741,9 +1741,29 @@ export const secretaryRouter = createTRPCRouter({
   // ─── Judge Management ─────────────────────────────────
   getJudges: secretaryProcedure
     .query(async ({ ctx }) => {
-      return ctx.db.query.judges.findMany({
+      const allJudges = await ctx.db.query.judges.findMany({
         orderBy: asc(judges.name),
       });
+
+      // Deduplicate: prefer judges with a kcNumber, then by most recently updated
+      const seen = new Map<string, typeof allJudges[number]>();
+      for (const judge of allJudges) {
+        // Key by kcNumber if available, otherwise by lowercased name
+        const key = judge.kcNumber?.trim() || judge.name.toLowerCase().trim();
+        const existing = seen.get(key);
+        if (!existing) {
+          seen.set(key, judge);
+        } else {
+          // Keep the one with more data (has kcNumber, has email, newer)
+          const existingScore = (existing.kcNumber ? 2 : 0) + (existing.contactEmail ? 1 : 0);
+          const newScore = (judge.kcNumber ? 2 : 0) + (judge.contactEmail ? 1 : 0);
+          if (newScore > existingScore) {
+            seen.set(key, judge);
+          }
+        }
+      }
+
+      return Array.from(seen.values()).sort((a, b) => a.name.localeCompare(b.name));
     }),
 
   addJudge: secretaryProcedure
