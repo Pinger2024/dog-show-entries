@@ -1757,6 +1757,29 @@ function ReviewStep({
           </div>
         </div>
 
+        {/* Entry Dates */}
+        {(values.entriesOpenDate || values.entryCloseDate) && (
+          <div className="rounded-lg border bg-muted/20 p-4">
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">
+              Important Dates
+            </h3>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              {values.entriesOpenDate && (
+                <div>
+                  <p className="text-[10px] text-muted-foreground">Entries Open</p>
+                  <p className="font-medium">{new Date(values.entriesOpenDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                </div>
+              )}
+              {values.entryCloseDate && (
+                <div>
+                  <p className="text-[10px] text-muted-foreground">Entries Close</p>
+                  <p className="font-medium">{new Date(values.entryCloseDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Classes */}
         <div className="rounded-lg border bg-muted/20 p-4">
           <div className="flex items-center justify-between mb-3">
