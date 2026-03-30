@@ -759,7 +759,32 @@ export default function NewShowPage() {
                 {/* Entry dates */}
                 <div className="grid gap-4 sm:grid-cols-2">
                   <DatePickerField control={form.control} name="entriesOpenDate" label="Entries Open" placeholder="Optional" />
-                  <DatePickerField control={form.control} name="entryCloseDate" label="Entries Close" placeholder="Optional" disableBefore={watchedEntriesOpen ? parseLocalDate(watchedEntriesOpen) : undefined} disableAfter={watchedStartDate ? parseLocalDate(watchedStartDate) : undefined} />
+                  <div>
+                    <DatePickerField control={form.control} name="entryCloseDate" label="Entries Close" placeholder="Optional" disableBefore={watchedEntriesOpen ? parseLocalDate(watchedEntriesOpen) : undefined} disableAfter={watchedStartDate ? parseLocalDate(watchedStartDate) : undefined} />
+                    {watchedStartDate && (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {[
+                          { label: '1 week before', days: 7 },
+                          { label: '2 weeks before', days: 14 },
+                          { label: '1 month before', days: 30 },
+                        ].map((opt) => {
+                          const closeDate = new Date(parseLocalDate(watchedStartDate));
+                          closeDate.setDate(closeDate.getDate() - opt.days);
+                          const dateStr = closeDate.toISOString().split('T')[0]!;
+                          return (
+                            <button
+                              key={opt.days}
+                              type="button"
+                              onClick={() => form.setValue('entryCloseDate', dateStr)}
+                              className="rounded-full border px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+                            >
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Postal entries toggle */}
