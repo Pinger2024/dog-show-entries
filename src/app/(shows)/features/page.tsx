@@ -453,46 +453,20 @@ export default function FeaturesPage() {
               Whether you&apos;re an exhibitor looking for your next entry or a
               secretary ready to take your club online, Remi is here for you.
             </p>
-            <div className="mt-10 grid gap-6 sm:grid-cols-2">
-              {/* Secretary CTA */}
-              <div className="rounded-2xl border bg-card p-6 sm:p-8 text-center">
-                <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-                  <LayoutDashboard className="size-6" />
-                </div>
-                <h3 className="font-serif text-lg font-bold">
-                  Show Secretaries
-                </h3>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                  Apply to manage your club&apos;s shows on Remi. We&apos;ll get
-                  you set up and running in no time.
-                </p>
-                <Link
-                  href="/apply"
-                  className="mt-5 inline-flex items-center gap-2 rounded-full bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:bg-primary/90"
-                >
-                  Apply as Secretary
-                  <ArrowRight className="size-4" />
+            <div className="mt-10 flex flex-col items-center gap-4">
+              <Link
+                href="/register"
+                className="inline-flex items-center gap-2 rounded-full bg-primary px-8 py-3 text-base font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:bg-primary/90"
+              >
+                Get Started Free
+                <ArrowRight className="size-4" />
+              </Link>
+              <p className="text-sm text-muted-foreground">
+                Are you a show secretary?{' '}
+                <Link href="/apply" className="font-medium text-primary underline hover:no-underline">
+                  Apply to run shows
                 </Link>
-              </div>
-
-              {/* Exhibitor CTA */}
-              <div className="rounded-2xl border bg-card p-6 sm:p-8 text-center">
-                <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                  <PawPrint className="size-6" />
-                </div>
-                <h3 className="font-serif text-lg font-bold">Exhibitors</h3>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                  Create your free account, add your dogs, and start entering
-                  shows today. No fees to register.
-                </p>
-                <Link
-                  href="/register"
-                  className="mt-5 inline-flex items-center gap-2 rounded-full border border-primary px-6 py-2.5 text-sm font-semibold text-primary transition-all hover:bg-primary hover:text-primary-foreground"
-                >
-                  Create Free Account
-                  <ArrowRight className="size-4" />
-                </Link>
-              </div>
+              </p>
             </div>
             <p className="mt-8 text-sm text-muted-foreground">
               Questions?{' '}
