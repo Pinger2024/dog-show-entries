@@ -158,6 +158,13 @@ export default function EnterShowPage() {
     (sc) => sc.classDefinition.type === 'junior_handler'
   ) ?? false;
 
+  // Auto-skip entry type step when there's only one option (standard)
+  useEffect(() => {
+    if (cart.step === 'entry_type' && allShowClasses && !hasJhClasses) {
+      cart.setEntryType('standard');
+    }
+  }, [cart.step, allShowClasses, hasJhClasses]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const addDogsButtons = (
     <div className="flex flex-col gap-2 sm:flex-row">
       <Button variant="outline" className="flex-1 min-h-[2.75rem]" onClick={handleAddAnother}>
