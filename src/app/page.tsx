@@ -311,7 +311,7 @@ export default async function HomePage() {
                         </Link>
                       </Button>
                       <Button variant="outline" className="h-11 sm:h-12 px-5 sm:px-6 text-sm sm:text-[0.9375rem]" asChild>
-                        <Link href="/about">Learn More</Link>
+                        <Link href="/register">Get Started Free</Link>
                       </Button>
                     </div>
                   </div>
