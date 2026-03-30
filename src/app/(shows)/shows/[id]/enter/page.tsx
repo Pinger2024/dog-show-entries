@@ -405,6 +405,14 @@ export default function EnterShowPage() {
           quantity: s.quantity,
         })),
       });
+
+      // Free entries (£0) — skip payment, go straight to success
+      if (result.totalAmount === 0 || !result.clientSecret) {
+        setOrderId(result.orderId);
+        cart.checkoutSuccess();
+        return;
+      }
+
       setClientSecret(result.clientSecret);
       setOrderId(result.orderId);
       setPaymentAmount(result.totalAmount);
@@ -1387,7 +1395,9 @@ export default function EnterShowPage() {
               </>
             ) : (
               <>
-                Proceed to Payment &middot; {formatCurrency(cart.grandTotal)}
+                {cart.grandTotal === 0
+                  ? 'Confirm Entry — Free'
+                  : <>Proceed to Payment &middot; {formatCurrency(cart.grandTotal)}</>}
               </>
             )}
           </Button>

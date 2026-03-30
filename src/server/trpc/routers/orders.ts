@@ -546,6 +546,30 @@ export const ordersRouter = createTRPCRouter({
         );
       }
 
+      // Free entries (£0) — skip Stripe, auto-confirm
+      if (totalAmount === 0) {
+        await ctx.db
+          .update(orders)
+          .set({ status: 'paid' })
+          .where(eq(orders.id, order!.id));
+
+        // Confirm all entries immediately
+        for (const entry of createdEntries) {
+          await ctx.db
+            .update(entries)
+            .set({ status: 'confirmed' })
+            .where(eq(entries.id, entry.id));
+        }
+
+        return {
+          clientSecret: null,
+          orderId: order!.id,
+          totalAmount: 0,
+          entryCount: createdEntries.length,
+          freeEntry: true,
+        };
+      }
+
       // Create Stripe PaymentIntent
       const paymentIntent = await createPaymentIntent(totalAmount, {
         orderId: order!.id,
@@ -574,6 +598,7 @@ export const ordersRouter = createTRPCRouter({
         orderId: order!.id,
         totalAmount,
         entryCount: createdEntries.length,
+        freeEntry: false,
       };
     }),
 
