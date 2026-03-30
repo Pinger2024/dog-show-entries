@@ -1359,7 +1359,7 @@ export default function EnterShowPage() {
               <span className="text-sm leading-relaxed">
                 I agree to abide by the{' '}
                 <a
-                  href="https://www.thekennelclub.org.uk/media/2876/f-regulations.pdf"
+                  href="https://www.royalkennelclub.com/media/2876/f-regulations.pdf"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-primary underline hover:no-underline"
