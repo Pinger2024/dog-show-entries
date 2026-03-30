@@ -124,6 +124,18 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
 
   return (
     <div className="space-y-4">
+      {/* Intro banner — only shown when not all steps are complete */}
+      {completedCount < STEPS.length && (
+        <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
+          <p className="text-sm font-medium text-primary">
+            Let&apos;s get your show ready!
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Complete these {STEPS.length} steps to open entries. You can do them in any order.
+          </p>
+        </div>
+      )}
+
       {/* Mobile: text + progress bar */}
       <div className="sm:hidden">
         <div className="flex items-center justify-between text-sm">

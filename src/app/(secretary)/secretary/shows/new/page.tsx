@@ -1653,7 +1653,7 @@ function ReviewStep({
           Review & Create
         </CardTitle>
         <CardDescription>
-          Check everything looks right before creating your show.
+          Check everything looks right before creating your show. Don&apos;t worry — everything can be edited after creation.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-1">
