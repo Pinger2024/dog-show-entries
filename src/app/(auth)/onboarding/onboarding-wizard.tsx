@@ -462,7 +462,7 @@ function ProfileStep({
                     />
                   </FormControl>
                   <FormDescription>
-                    Use the postcode finder above, or type your address manually
+                    Your address appears in show catalogues as required by RKC regulations. Use the postcode finder above, or type it manually.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -754,6 +754,9 @@ function DogStep({
                   <p className="mt-0.5 text-sm text-muted-foreground">
                     Enter a RKC number or registered name above, then click
                     lookup.
+                  </p>
+                  <p className="mt-1 text-[10px] text-muted-foreground/70">
+                    Tip: type the name exactly as it appears on your RKC registration certificate, including affixes (e.g. &quot;Dorabella Dancing Queen At Hundark&quot;).
                   </p>
                   <Button
                     type="button"
