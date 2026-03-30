@@ -161,7 +161,7 @@ export function PricingCards({
         <Card className="relative flex flex-col border-primary/30 shadow-lg shadow-primary/10 transition-all hover:shadow-xl hover:shadow-primary/15">
           {/* Recommended badge */}
           <div className="absolute -top-3 right-6">
-            <Badge className="border-gold/30 bg-gold/15 px-3 py-1 text-gold">
+            <Badge className="border-gold/30 bg-[#fdf8ef] px-3 py-1 text-gold shadow-sm">
               <Crown className="mr-1 size-3" />
               Recommended
             </Badge>
