@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { signOut } from 'next-auth/react';
-import { Menu, Dog, Ticket, LayoutDashboard, LogOut, Eye, ClipboardList, Settings, Sparkles, Megaphone } from 'lucide-react';
+import { Menu, Dog, Ticket, LayoutDashboard, LogOut, Eye, ClipboardList, Settings, Sparkles, Megaphone, PoundSterling, HelpCircle, LogIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Sheet,
@@ -58,6 +58,42 @@ export function MobileNav({ user, isSecretary, isSteward }: MobileNavProps) {
             <Sparkles className="size-5" />
             Features
           </Link>
+          {!user && (
+            <>
+              <Link
+                href="/pricing"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <PoundSterling className="size-5" />
+                Pricing
+              </Link>
+              <Link
+                href="/help"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <HelpCircle className="size-5" />
+                Help
+              </Link>
+              <Separator className="my-1" />
+              <Link
+                href="/login"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-3 rounded-lg px-3 py-3 text-[0.9375rem] font-semibold text-primary transition-colors hover:bg-accent"
+              >
+                <LogIn className="size-5" />
+                Sign In
+              </Link>
+              <Link
+                href="/register"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-3 rounded-lg bg-primary px-3 py-3 text-[0.9375rem] font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+              >
+                Get Started
+              </Link>
+            </>
+          )}
           {user && (
             <>
               <Link

@@ -39,6 +39,22 @@ export async function Header() {
           >
             Features
           </Link>
+          {!user && (
+            <>
+              <Link
+                href="/pricing"
+                className="rounded-lg px-4 py-2.5 text-[0.9375rem] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                Pricing
+              </Link>
+              <Link
+                href="/help"
+                className="rounded-lg px-4 py-2.5 text-[0.9375rem] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                Help
+              </Link>
+            </>
+          )}
           {user && (
             <>
               <Link
