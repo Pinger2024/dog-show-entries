@@ -715,7 +715,7 @@ export default function EnterShowPage() {
                     )}
                   >
                     <div className={cn(
-                      'flex size-10 shrink-0 items-center justify-center rounded-full',
+                      'flex size-10 shrink-0 items-center justify-center rounded-full overflow-hidden',
                       tooYoungForAll
                         ? 'bg-destructive/10'
                         : tooYoungForCompetition
@@ -724,6 +724,12 @@ export default function EnterShowPage() {
                     )}>
                       {tooYoungForAll ? (
                         <AlertTriangle className="size-5 text-destructive" />
+                      ) : (dog as { primaryPhotoUrl?: string | null }).primaryPhotoUrl ? (
+                        <img
+                          src={(dog as { primaryPhotoUrl?: string | null }).primaryPhotoUrl!}
+                          alt={formatDogName(dog)}
+                          className="size-10 object-cover"
+                        />
                       ) : (
                         <Dog className={cn(
                           'size-5',

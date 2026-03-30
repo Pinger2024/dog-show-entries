@@ -222,7 +222,7 @@ export const dogsRouter = createTRPCRouter({
     }),
 
   list: protectedProcedure.query(async ({ ctx }) => {
-    return ctx.db.query.dogs.findMany({
+    const dogList = await ctx.db.query.dogs.findMany({
       where: and(
         eq(dogs.ownerId, ctx.session.user.id),
         isNull(dogs.deletedAt)
@@ -236,6 +236,24 @@ export const dogsRouter = createTRPCRouter({
         titles: true,
       },
     });
+
+    // Fetch primary photos for all dogs in one query
+    const dogIds = dogList.map((d) => d.id);
+    const primaryPhotos = dogIds.length > 0
+      ? await ctx.db.query.dogPhotos.findMany({
+          where: and(
+            inArray(dogPhotos.dogId, dogIds),
+            eq(dogPhotos.isPrimary, true),
+          ),
+          columns: { dogId: true, url: true },
+        })
+      : [];
+    const photoMap = new Map(primaryPhotos.map((p) => [p.dogId, p.url]));
+
+    return dogList.map((dog) => ({
+      ...dog,
+      primaryPhotoUrl: photoMap.get(dog.id) ?? null,
+    }));
   }),
 
   getById: protectedProcedure
