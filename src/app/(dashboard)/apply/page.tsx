@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import {
   ClipboardCheck,
@@ -22,6 +23,7 @@ import { trpc } from '@/lib/trpc/client';
 
 export default function ApplyPage() {
   const { data: session, status: sessionStatus } = useSession();
+  const router = useRouter();
   const utils = trpc.useUtils();
   const userRole = session?.user?.role;
 
@@ -152,7 +154,10 @@ export default function ApplyPage() {
         <CardContent>
           <ClubApplicationForm
             defaultContactEmail={session?.user?.email ?? ''}
-            onSuccess={() => utils.applications.myApplication.invalidate()}
+            onSuccess={() => {
+              utils.applications.myApplication.invalidate();
+              router.push('/secretary');
+            }}
           />
         </CardContent>
       </Card>
