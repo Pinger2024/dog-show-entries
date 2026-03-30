@@ -22,6 +22,9 @@ import {
   Pencil,
   Trash2,
   Users,
+  CalendarDays,
+  MapPin,
+  Ticket,
 } from 'lucide-react';
 import { differenceInMonths, differenceInWeeks, format, parseISO } from 'date-fns';
 import { isWithinAgeRange, handlerAgeYearsOnDate, formatCurrency } from '@/lib/date-utils';
@@ -1128,16 +1131,35 @@ export default function EnterShowPage() {
         <div className="space-y-6">
           <h2 className="text-base font-semibold sm:text-lg">Review your entries</h2>
 
-          {/* Show info */}
+          {/* Show info — rich summary */}
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Show</CardTitle>
+            <CardHeader className="pb-2">
+              <div className="flex items-start justify-between">
+                <div>
+                  <CardTitle className="font-serif text-base">{show.name}</CardTitle>
+                  {show.showType && (
+                    <Badge variant="outline" className="mt-1 text-[10px] capitalize">{show.showType.replace('_', ' ')}</Badge>
+                  )}
+                </div>
+              </div>
             </CardHeader>
-            <CardContent className="space-y-1 text-sm">
-              <p className="font-medium">{show.name}</p>
-              <p className="text-muted-foreground">
-                {format(parseISO(show.startDate), 'd MMMM yyyy')} &middot; {show.venue?.name ?? 'TBC'}
-              </p>
+            <CardContent className="space-y-1.5 text-sm">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <CalendarDays className="size-3.5 shrink-0" />
+                {format(parseISO(show.startDate), 'EEEE d MMMM yyyy')}
+              </div>
+              {show.venue && (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <MapPin className="size-3.5 shrink-0" />
+                  {show.venue.name}{show.venue.postcode ? `, ${show.venue.postcode}` : ''}
+                </div>
+              )}
+              {show.organisation && (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Ticket className="size-3.5 shrink-0" />
+                  {(show.organisation as { name?: string }).name}
+                </div>
+              )}
             </CardContent>
           </Card>
 
