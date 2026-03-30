@@ -411,6 +411,34 @@ export function ShowDetailClient() {
     });
   }, [show]);
 
+  // All hooks must be above early returns (React Rules of Hooks)
+  const breedEntryMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const stat of breedEntryStats ?? []) {
+      map.set(stat.breedName, stat.dogCount);
+    }
+    return map;
+  }, [breedEntryStats]);
+
+  const breedPhotoMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const photo of dogPhotos ?? []) {
+      if (!map.has(photo.breedName)) {
+        map.set(photo.breedName, photo.photoUrl);
+      }
+    }
+    return map;
+  }, [dogPhotos]);
+
+  const singleBreedName = useMemo(() => {
+    if (!show || show.showScope !== 'single_breed') return null;
+    const breedClass = (show.showClasses ?? []).find((sc: { breed?: { name?: string } | null }) => sc.breed?.name);
+    if (breedClass?.breed?.name) return breedClass.breed.name;
+    const breedAssignment = (show.judgeAssignments ?? []).find((ja: { breed?: { name?: string } | null }) => ja.breed?.name);
+    if (breedAssignment?.breed?.name) return breedAssignment.breed.name;
+    return null;
+  }, [show]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen" role="status">
@@ -473,39 +501,7 @@ export function ShowDetailClient() {
   };
   const scheduleData = showAny.scheduleData;
 
-  // Build breed → entry count lookup (memoized — avoids rebuild on scroll-driven re-renders)
-  const breedEntryMap = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const stat of breedEntryStats ?? []) {
-      map.set(stat.breedName, stat.dogCount);
-    }
-    return map;
-  }, [breedEntryStats]);
-
-  // Breed → representative photo URL lookup
-  const breedPhotoMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const photo of dogPhotos ?? []) {
-      if (!map.has(photo.breedName)) {
-        map.set(photo.breedName, photo.photoUrl);
-      }
-    }
-    return map;
-  }, [dogPhotos]);
-
-  /* For single-breed shows, resolve the breed name from the first breed-specific class
-     or from the organisation name. Classes won't have breedId set because the whole show
-     is for one breed — so "Any Breed" is misleading. */
-  const singleBreedName = useMemo(() => {
-    if (show.showScope !== 'single_breed') return null;
-    // Try to find a breed name from any class that has one
-    const breedClass = (show.showClasses ?? []).find((sc) => sc.breed?.name);
-    if (breedClass?.breed?.name) return breedClass.breed.name;
-    // Try judge assignments — single-breed shows may have breed-level assignments
-    const breedAssignment = (show.judgeAssignments ?? []).find((ja) => ja.breed?.name);
-    if (breedAssignment?.breed?.name) return breedAssignment.breed.name;
-    return null;
-  }, [show.showScope, show.showClasses, show.judgeAssignments]);
+  // breedEntryMap, breedPhotoMap, singleBreedName moved above early returns (Rules of Hooks)
 
   /* Group classes by breed */
   const breedMap = new Map<string, { groupSortOrder: number; classes: typeof show.showClasses }>();
