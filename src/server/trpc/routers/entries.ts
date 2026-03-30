@@ -410,7 +410,20 @@ export const entriesRouter = createTRPCRouter({
         });
       }
 
-      return entry;
+      // Fetch primary photo for the dog
+      let dogPhotoUrl: string | null = null;
+      if (entry.dogId) {
+        const photo = await ctx.db.query.dogPhotos.findFirst({
+          where: and(
+            eq(dogPhotos.dogId, entry.dogId),
+            eq(dogPhotos.isPrimary, true),
+          ),
+          columns: { url: true },
+        });
+        dogPhotoUrl = photo?.url ?? null;
+      }
+
+      return { ...entry, dogPhotoUrl };
     }),
 
   getForShow: secretaryProcedure

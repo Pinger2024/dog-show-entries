@@ -174,7 +174,11 @@ export default function EntryDetailPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <Dog className="size-4" />
+            {(entry as { dogPhotoUrl?: string | null }).dogPhotoUrl ? (
+              <img src={(entry as { dogPhotoUrl?: string | null }).dogPhotoUrl!} alt="" className="size-8 rounded-full object-cover" />
+            ) : (
+              <Dog className="size-4" />
+            )}
             Dog
           </CardTitle>
         </CardHeader>
