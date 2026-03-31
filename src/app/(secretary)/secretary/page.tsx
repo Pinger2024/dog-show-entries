@@ -75,6 +75,26 @@ export default function SecretaryDashboardPage() {
 
   return (
     <div className="space-y-8 pb-16 md:pb-0">
+      {/* Club setup prompt — shown when no shows exist yet */}
+      {activeShows.length === 0 && pastShows.length === 0 && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="flex flex-col items-center gap-3 py-6 text-center sm:flex-row sm:text-left">
+            <div className="flex-1">
+              <p className="font-serif text-base font-semibold">Set up your club first</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Add your officers, committee members, and contact details before creating your first show. This information flows into your schedule and official documents.
+              </p>
+            </div>
+            <Button variant="outline" className="min-h-[2.75rem] shrink-0" asChild>
+              <Link href="/secretary/club">
+                Complete Club Profile
+                <ArrowRight className="size-4" />
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Header */}
       <PageHeader>
         <div>
