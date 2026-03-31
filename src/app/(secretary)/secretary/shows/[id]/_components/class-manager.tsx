@@ -958,7 +958,7 @@ export function BulkClassCreator({ showId }: { showId: string }) {
 
             <div className="grid gap-4 sm:grid-cols-3">
               <div>
-                <Label className="text-sm font-medium">Entry Fee (&pound;)</Label>
+                <Label className="text-sm font-medium">Per-Class Fee (&pound;)</Label>
                 <Input
                   type="number"
                   min={0}
@@ -969,7 +969,7 @@ export function BulkClassCreator({ showId }: { showId: string }) {
                   className="mt-1"
                 />
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {feeInput ? formatCurrency(poundsToPence(parseFloat(feeInput)) || 0) : '£0.00'}
+                  Pre-filled from template &middot; {feeInput ? formatCurrency(poundsToPence(parseFloat(feeInput)) || 0) : '£0.00'}
                 </p>
               </div>
               {!template.isHandling && (
@@ -1170,7 +1170,7 @@ export function AddIndividualClass({ showId }: { showId: string }) {
           </div>
 
           <div>
-            <Label className="text-sm font-medium">Entry Fee (&pound;)</Label>
+            <Label className="text-sm font-medium">Per-Class Fee (&pound;)</Label>
             <Input
               type="number"
               min={0}
