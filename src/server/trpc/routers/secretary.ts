@@ -264,9 +264,31 @@ export const secretaryRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
+
+      // Auto-geocode from postcode for "Near Me" feature
+      let lat: string | null = null;
+      let lng: string | null = null;
+      if (input.postcode) {
+        try {
+          const cleaned = input.postcode.trim().replace(/\s+/g, '');
+          const res = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(cleaned)}`, {
+            signal: AbortSignal.timeout(3000),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.status === 200 && data.result) {
+              lat = String(data.result.latitude);
+              lng = String(data.result.longitude);
+            }
+          }
+        } catch {
+          // Geocoding failed — venue will work without coordinates
+        }
+      }
+
       const [venue] = await ctx.db
         .insert(venues)
-        .values(input)
+        .values({ ...input, lat, lng })
         .returning();
       return venue!;
     }),
