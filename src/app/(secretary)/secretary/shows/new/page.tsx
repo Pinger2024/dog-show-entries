@@ -273,9 +273,11 @@ export default function NewShowPage() {
 
   // Auto-select the organisation if there's only one
   const currentOrgId = form.watch('organisationId');
-  if (organisations.length === 1 && !currentOrgId) {
-    form.setValue('organisationId', organisations[0].id);
-  }
+  useEffect(() => {
+    if (organisations.length === 1 && !form.getValues('organisationId')) {
+      form.setValue('organisationId', organisations[0].id, { shouldDirty: true });
+    }
+  }, [organisations, form]);
 
   // Fetch venues for this org
   const { data: venues } = trpc.secretary.listVenues.useQuery(
