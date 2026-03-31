@@ -823,10 +823,19 @@ export default function EnterShowPage() {
           )}
 
           <div className="flex justify-start pt-4">
-            <Button variant="outline" onClick={() => cart.setStep('entry_type')}>
-              <ChevronLeft className="size-4" />
-              Back
-            </Button>
+            {hasJhClasses ? (
+              <Button variant="outline" onClick={() => cart.setStep('entry_type')}>
+                <ChevronLeft className="size-4" />
+                Back
+              </Button>
+            ) : (
+              <Button variant="outline" asChild>
+                <Link href={`/shows/${idOrSlug}`}>
+                  <ChevronLeft className="size-4" />
+                  Back to Show
+                </Link>
+              </Button>
+            )}
           </div>
         </div>
         );
