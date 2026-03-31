@@ -438,6 +438,18 @@ export default function NewShowPage() {
     }
   }, [watchedStartDate, showDays, form]);
 
+  function getMissingFields(): string[] {
+    if (step !== 0) return [];
+    const missing: string[] = [];
+    if (!watchedName) missing.push('Show Name');
+    if (!watchedShowType) missing.push('Show Type');
+    if (!watchedShowScope) missing.push('Show Scope');
+    if (!currentOrgId) missing.push('Club');
+    if (!watchedStartDate) missing.push('Show Date');
+    if (!watchedEndDate) missing.push('End Date');
+    return missing;
+  }
+
   function canProceed(): boolean {
     switch (step) {
       case 0:
@@ -1488,12 +1500,13 @@ export default function NewShowPage() {
                         return;
                       }
                     }
-                    if (canProceed()) {
+                    const missing = getMissingFields();
+                    if (missing.length === 0) {
                       setStep(step + 1);
                       window.scrollTo({ top: 0, behavior: 'smooth' });
                     } else {
                       setOpenSections(['classification', 'schedule', 'secretary']);
-                      toast.error('Please fill in all required fields before continuing');
+                      toast.error(`Missing: ${missing.join(', ')}`);
                     }
                   }}
                 >
