@@ -114,6 +114,24 @@ export default function DashboardPage() {
             </section>
           )}
 
+          {/* ─── Judge Intelligence (actionable — who's judging upcoming shows) ─── */}
+          {data.judgeIntel.length > 0 && (
+            <section>
+              <SectionHeader
+                icon={Eye}
+                iconBg="bg-violet-100"
+                iconColor="text-violet-700"
+                title="Judge Insights"
+                subtitle="Who's judging your breeds"
+              />
+              <div className="space-y-2.5">
+                {data.judgeIntel.map((item, i) => (
+                  <JudgeIntelCard key={i} item={item} />
+                ))}
+              </div>
+            </section>
+          )}
+
           {/* ─── Recent Results with CC Celebration ─── */}
           {data.recentResults.length > 0 && (
             <section>
@@ -150,23 +168,7 @@ export default function DashboardPage() {
             </section>
           )}
 
-          {/* ─── Judge Intelligence ─── */}
-          {data.judgeIntel.length > 0 && (
-            <section>
-              <SectionHeader
-                icon={Eye}
-                iconBg="bg-violet-100"
-                iconColor="text-violet-700"
-                title="Judge Insights"
-                subtitle="Who's judging your breeds"
-              />
-              <div className="space-y-2.5">
-                {data.judgeIntel.map((item, i) => (
-                  <JudgeIntelCard key={i} item={item} />
-                ))}
-              </div>
-            </section>
-          )}
+          {/* Judge Intelligence moved above results (it's actionable) */}
 
           {/* ─── Feed Digest ─── */}
           {data.feedDigest.count > 0 && (
@@ -186,7 +188,23 @@ export default function DashboardPage() {
             </Link>
           )}
 
-          {/* ─── Recommended Shows (normal position) ─── */}
+          {/* ─── Dog Profile Nudge ─── */}
+          {data.ccProgress.length > 0 && data.ccProgress.some((d) => !d.photoUrl) && (
+            <Link href="/dogs" className="block">
+              <div className="flex items-center gap-3 rounded-2xl border border-amber-200/60 bg-gradient-to-r from-amber-50/80 to-transparent px-4 py-3 transition-all active:scale-[0.99]">
+                <div className="flex size-9 items-center justify-center rounded-full bg-amber-100">
+                  <Star className="size-4 text-amber-600" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-amber-900">Complete your dog profiles</p>
+                  <p className="text-xs text-amber-700/70">Add photos to make your dogs stand out in entries and catalogues</p>
+                </div>
+                <ChevronRight className="size-4 shrink-0 text-amber-400" />
+              </div>
+            </Link>
+          )}
+
+          {/* ─── Recommended Shows (normal position — before results since they're actionable) ─── */}
           {!promoteRecommended && data.recommendedShows.length > 0 && (
             <section>
               <SectionHeader
@@ -205,22 +223,6 @@ export default function DashboardPage() {
               </div>
             </section>
           )}
-
-          {/* ─── Quick Actions ─── */}
-          <div className="flex flex-col gap-2.5 pt-2 sm:flex-row">
-            <Button size="lg" className="min-h-[2.75rem] gap-2 rounded-xl shadow-sm sm:flex-none" asChild>
-              <Link href="/browse">
-                <Search className="size-4" />
-                Find a Show
-              </Link>
-            </Button>
-            <Button variant="outline" size="lg" className="min-h-[2.75rem] gap-2 rounded-xl sm:flex-none" asChild>
-              <Link href="/dogs/new">
-                <Plus className="size-4" />
-                Add a Dog
-              </Link>
-            </Button>
-          </div>
         </>
       )}
     </div>
