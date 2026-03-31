@@ -1130,12 +1130,20 @@ export default function DogDetailPage({
                 <div key={owner.id} className="flex items-start justify-between gap-4 rounded-lg border p-3">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">{owner.ownerName}</span>
+                      <span className="text-sm font-medium">
+                        {owner.ownerName && !owner.ownerName.includes('@')
+                          ? owner.ownerName
+                          : owner.ownerEmail
+                            ? owner.ownerEmail.split('@')[0]
+                            : 'Owner'}
+                      </span>
                       {owner.isPrimary && (
                         <Badge variant="secondary" className="text-xs">Primary</Badge>
                       )}
                     </div>
-                    <p className="text-sm text-muted-foreground">{owner.ownerEmail}</p>
+                    {owner.ownerEmail && (
+                      <p className="text-sm text-muted-foreground">{owner.ownerEmail}</p>
+                    )}
                     {owner.ownerAddress && (
                       <p className="text-sm text-muted-foreground">{owner.ownerAddress}</p>
                     )}
