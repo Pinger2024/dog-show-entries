@@ -318,14 +318,17 @@ export default function NewShowPage() {
   // Auto-select "myself" as secretary when session/members load
   const sessionUserId = session?.user?.id;
   useEffect(() => {
-    if (sessionUserId && !form.getValues('secretaryUserId')) {
+    if (!sessionUserId || !orgMembers) return;
+    const me = orgMembers.find((m) => m.id === sessionUserId);
+    if (!me) return;
+    const currentSecretary = form.getValues('secretaryUserId');
+    if (!currentSecretary) {
+      // First load — auto-select self
       form.setValue('secretaryUserId', sessionUserId);
-      const me = orgMembers?.find((m) => m.id === sessionUserId);
-      if (me) {
-        applySecretaryMember(me);
-      } else if (session?.user) {
-        applySecretaryMember(session.user);
-      }
+    }
+    if (!currentSecretary || currentSecretary === sessionUserId) {
+      // Apply full member data (fixes race where session.user lacked name)
+      applySecretaryMember(me);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionUserId, orgMembers]);
