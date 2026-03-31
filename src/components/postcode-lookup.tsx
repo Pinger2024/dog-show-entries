@@ -100,6 +100,9 @@ export function PostcodeLookup({ onSelect, compact }: PostcodeLookupProps) {
         sessionTokenRef.current = new lib.AutocompleteSessionToken();
       } catch (err) {
         console.error('[PostcodeLookup] Failed to load Google Places:', err);
+        if (!cancelled) {
+          setError('Address search unavailable — please type your address manually below.');
+        }
       }
     }
     load();
