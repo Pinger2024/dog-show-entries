@@ -34,7 +34,6 @@ import { showTypeLabels } from '@/lib/show-types';
 import { formatCurrency } from '@/lib/date-utils';
 import { LiveEntryStats } from '@/components/show/live-entry-stats';
 import { ShowShareDropdown } from '@/components/show/show-share-dropdown';
-import { sanitizeFilename } from '@/lib/slugify';
 import { toast } from 'sonner';
 import type { ScheduleData } from '@/server/db/schema/shows';
 
@@ -358,7 +357,7 @@ export function ShowDetailClient() {
 
   const [showStickyBar, setShowStickyBar] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
-  const [generatingSchedule, setGeneratingSchedule] = useState(false);
+
 
   const { data: show, isLoading } = trpc.shows.getById.useQuery({
     id: idOrSlug,
@@ -798,37 +797,12 @@ export function ShowDetailClient() {
                   <Button
                     variant="outline"
                     className="border-stone-600 bg-transparent text-stone-300 shadow-none hover:bg-stone-700/50 hover:text-white"
-                    disabled={generatingSchedule}
-                    onClick={async () => {
-                      setGeneratingSchedule(true);
-                      try {
-                        const res = await fetch(`/api/schedule/${show.id}`, {
-                          signal: AbortSignal.timeout(30000),
-                        });
-                        if (!res.ok) {
-                          const data = await res.json().catch(() => null);
-                          throw new Error(data?.error ?? 'Failed to generate schedule');
-                        }
-                        const blob = await res.blob();
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `${sanitizeFilename(show.name)}-Schedule.pdf`;
-                        a.click();
-                        setTimeout(() => URL.revokeObjectURL(url), 1000);
-                      } catch (err) {
-                        toast.error(err instanceof Error ? err.message : 'Unable to generate schedule. Please try again.');
-                      } finally {
-                        setGeneratingSchedule(false);
-                      }
-                    }}
+                    asChild
                   >
-                    {generatingSchedule ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
+                    <Link href={`/shows/${show.slug ?? show.id}/schedule`}>
                       <FileText className="size-4" />
-                    )}
-                    {generatingSchedule ? 'Generating...' : 'Schedule'}
+                      Schedule
+                    </Link>
                   </Button>
                 )}
                 {show.status !== 'draft' && show.status !== 'cancelled' && (
