@@ -153,7 +153,7 @@ export default function ShowManagementLayout({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" asChild className="-ml-2 hidden sm:inline-flex">
-              <Link href="/secretary">
+              <Link href="/secretary/shows">
                 <ArrowLeft className="size-4" />
               </Link>
             </Button>

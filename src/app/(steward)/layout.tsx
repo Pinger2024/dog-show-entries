@@ -6,7 +6,7 @@ export default async function StewardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const user = await requireAnyRole(['steward', 'secretary']);
+  const user = await requireAnyRole(['steward', 'secretary', 'admin']);
 
   return <StewardShell user={user}>{children}</StewardShell>;
 }

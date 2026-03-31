@@ -27,6 +27,7 @@ interface SecretaryShellProps {
     name?: string | null;
     email?: string | null;
     image?: string | null;
+    role?: string;
   };
   children: React.ReactNode;
 }
@@ -42,10 +43,10 @@ const sidebarNavItems = [
 
 const mobileNavItems = [
   { href: '/secretary', label: 'Home', icon: LayoutDashboard },
-  { href: '/secretary/club', label: 'Club', icon: Building2 },
+  { href: '/secretary/shows', label: 'Shows', icon: CalendarDays },
   { href: '/secretary/shows/new', label: 'New', icon: PlusCircle },
+  { href: '/secretary/club', label: 'Club', icon: Building2 },
   { href: '/secretary/billing', label: 'Billing', icon: CreditCard },
-  { href: '/secretary/settings', label: 'Settings', icon: Settings },
 ];
 
 const rootPaths = new Set(['/secretary', '/secretary/shows', '/secretary/club', '/secretary/shows/new', '/secretary/billing', '/secretary/settings']);
@@ -97,7 +98,7 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
               <p className="truncate text-sm text-muted-foreground">{user.email}</p>
             </div>
           </div>
-          <RoleSwitcher activeView="secretary" />
+          <RoleSwitcher activeView="secretary" showSteward={user.role === 'secretary' || user.role === 'admin'} />
         </div>
 
         <nav className="flex-1 space-y-1 p-3">
@@ -182,7 +183,7 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
             )}
           </div>
           <div className="flex items-center gap-1.5">
-            <RoleSwitcherCompact activeView="secretary" />
+            <RoleSwitcherCompact activeView="secretary" showSteward={user.role === 'secretary' || user.role === 'admin'} />
             <Button
               variant="ghost"
               size="sm"

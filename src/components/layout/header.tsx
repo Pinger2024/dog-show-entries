@@ -69,6 +69,12 @@ export async function Header() {
               >
                 My Entries
               </Link>
+              <Link
+                href="/feed"
+                className="rounded-lg px-4 py-2.5 text-[0.9375rem] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                Feed
+              </Link>
               {isExhibitor && (
                 <Link
                   href="/apply"

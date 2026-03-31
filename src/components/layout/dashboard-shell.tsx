@@ -59,14 +59,8 @@ const adminNavItems = [
   { href: '/admin/reference-data', label: 'Reference Data', mobileLabel: 'Ref Data', icon: Database },
 ];
 
-/** Mobile bottom bar: admin gets admin-focused tabs, others get personal tabs */
-const adminMobileItems = [
-  { href: '/admin', label: 'Overview', mobileLabel: 'Overview', icon: Activity },
-  { href: '/feedback', label: 'Feedback', mobileLabel: 'Feedback', icon: Inbox },
-  { href: '/backlog', label: 'Backlog', mobileLabel: 'Backlog', icon: ListTodo },
-  { href: '/admin/users', label: 'Users', mobileLabel: 'Users', icon: Users },
-  { href: '/admin/applications', label: 'Applications', mobileLabel: 'Apps', icon: ClipboardCheck },
-];
+/** Mobile bottom bar: admin uses same items as sidebar (scrollable if needed) */
+const adminMobileItems = adminNavItems;
 
 // Paths that are "top-level" — no back button shown
 const rootPaths = new Set([
@@ -123,8 +117,8 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
               <p className="truncate text-sm text-muted-foreground">{user.email}</p>
             </div>
           </div>
-          {(user.role === 'secretary' || user.role === 'admin') && (
-            <RoleSwitcher activeView="exhibitor" />
+          {(user.role === 'secretary' || user.role === 'admin' || user.role === 'steward') && (
+            <RoleSwitcher activeView="exhibitor" showSteward={user.role === 'steward' || user.role === 'secretary' || user.role === 'admin'} />
           )}
         </div>
 
@@ -268,8 +262,8 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
             )}
           </div>
           <div className="flex items-center gap-1.5">
-            {(user.role === 'secretary' || user.role === 'admin') && (
-              <RoleSwitcherCompact activeView="exhibitor" />
+            {(user.role === 'secretary' || user.role === 'admin' || user.role === 'steward') && (
+              <RoleSwitcherCompact activeView="exhibitor" showSteward={user.role === 'steward' || user.role === 'secretary' || user.role === 'admin'} />
             )}
             <Button variant="ghost" size="sm" className="size-11" asChild>
               <Link href="/settings">
