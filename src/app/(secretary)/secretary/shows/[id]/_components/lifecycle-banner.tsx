@@ -156,7 +156,7 @@ function SetupContent({
                 {blocker.actionPath && (
                   <Link
                     href={`/secretary/shows/${show.id}${blocker.actionPath}`}
-                    className="ml-auto flex items-center gap-0.5 text-xs font-medium text-primary hover:underline shrink-0"
+                    className="ml-auto flex items-center gap-1 rounded-full border border-primary/30 bg-primary/5 px-2.5 py-0.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 shrink-0 min-h-[1.75rem]"
                   >
                     Fix
                     <ChevronRight className="size-3" />
