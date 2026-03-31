@@ -94,7 +94,10 @@ export function AddJudgeWizard({
 
   // ── Queries ──
   const utils = trpc.useUtils();
-  const { data: showData } = trpc.shows.getById.useQuery({ id: showId });
+  const { data: showData } = trpc.shows.getById.useQuery(
+    { id: showId },
+    { refetchOnMount: 'always' }, // Ensure fresh class data after classes are added
+  );
   const { data: existingAssignments } = trpc.secretary.getShowJudges.useQuery({ showId });
 
   const localSearchQuery = trpc.secretary.searchJudges.useQuery(
