@@ -721,7 +721,7 @@ export default function NewShowPage() {
                   <div className="space-y-2">
                     <Label>Number of Days</Label>
                     <Select value={String(showDays)} onValueChange={(v) => setShowDays(Number(v))}>
-                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-11 w-full"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {[1, 2, 3, 4, 5, 6].map((n) => (
                           <SelectItem key={n} value={String(n)}>{n} {n === 1 ? 'day' : 'days'}</SelectItem>
