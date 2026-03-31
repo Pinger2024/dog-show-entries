@@ -112,6 +112,8 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
     const nextIndex = currentStepIndex + 1;
     if (nextIndex < STEPS.length) {
       setActiveStep(STEPS[nextIndex].id);
+      // Scroll to top of wizard so the new step is visible
+      requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
     }
   }
 
@@ -119,6 +121,7 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
     const prevIndex = currentStepIndex - 1;
     if (prevIndex >= 0) {
       setActiveStep(STEPS[prevIndex].id);
+      requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
     }
   }
 
