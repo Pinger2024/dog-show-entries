@@ -74,6 +74,12 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 
 const showTypes = [
   { value: 'championship', label: 'Championship' },
@@ -632,12 +638,12 @@ export default function NewShowPage() {
                   />
                 )}
 
-                {/* ── Classification ── */}
-                <div className="flex items-center gap-3">
-                  <div className="h-px flex-1 bg-border" />
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Classification</span>
-                  <div className="h-px flex-1 bg-border" />
-                </div>
+                <Accordion type="multiple" defaultValue={['classification', 'schedule', 'secretary']}>
+                  <AccordionItem value="classification">
+                    <AccordionTrigger className="py-3 hover:no-underline">
+                      <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Classification</span>
+                    </AccordionTrigger>
+                    <AccordionContent className="space-y-6 pb-2">
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <FormField
@@ -709,12 +715,13 @@ export default function NewShowPage() {
                   )}
                 />
 
-                {/* ── Schedule ── */}
-                <div className="flex items-center gap-3">
-                  <div className="h-px flex-1 bg-border" />
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Schedule</span>
-                  <div className="h-px flex-1 bg-border" />
-                </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                  <AccordionItem value="schedule">
+                    <AccordionTrigger className="py-3 hover:no-underline">
+                      <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Schedule</span>
+                    </AccordionTrigger>
+                    <AccordionContent className="space-y-6 pb-2">
 
                 <div className="grid gap-4 sm:grid-cols-3">
                   <DatePickerField control={form.control} name="startDate" label="Show Date *" placeholder="Pick a date" disablePast />
@@ -808,12 +815,13 @@ export default function NewShowPage() {
                   <DatePickerField control={form.control} name="postalCloseDate" label="Postal Close Date" placeholder="Pick a date" disableBefore={watchedEntriesOpen ? parseLocalDate(watchedEntriesOpen) : undefined} disableAfter={watchedStartDate ? parseLocalDate(watchedStartDate) : undefined} />
                 )}
 
-                {/* ── Secretary ── */}
-                <div className="flex items-center gap-3">
-                  <div className="h-px flex-1 bg-border" />
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Secretary</span>
-                  <div className="h-px flex-1 bg-border" />
-                </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                  <AccordionItem value="secretary" className="border-none">
+                    <AccordionTrigger className="py-3 hover:no-underline">
+                      <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Secretary</span>
+                    </AccordionTrigger>
+                    <AccordionContent className="pb-2">
 
                 <div className="space-y-4 rounded-lg border bg-muted/20 p-4">
                   <FormField
@@ -924,6 +932,9 @@ export default function NewShowPage() {
                     </div>
                   )}
                 </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
 
                 {/* Add member modal */}
                 <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
