@@ -23,6 +23,7 @@ import {
   Trash2,
   Users,
   CalendarDays,
+  Mail,
   MapPin,
   Ticket,
 } from 'lucide-react';
@@ -1159,6 +1160,15 @@ export default function EnterShowPage() {
                   <Ticket className="size-3.5 shrink-0" />
                   {(show.organisation as { name?: string }).name}
                 </div>
+              )}
+              {show.secretaryEmail && (
+                <a
+                  href={`mailto:${show.secretaryEmail}?subject=Entry query — ${show.name}`}
+                  className="mt-2 inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                >
+                  <Mail className="size-3" />
+                  Contact show secretary
+                </a>
               )}
             </CardContent>
           </Card>
