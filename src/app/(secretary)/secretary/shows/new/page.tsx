@@ -776,8 +776,8 @@ export default function NewShowPage() {
                             <button
                               key={opt.days}
                               type="button"
-                              onClick={() => form.setValue('entryCloseDate', dateStr)}
-                              className="rounded-full border px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+                              onClick={() => form.setValue('entryCloseDate', dateStr, { shouldValidate: true, shouldDirty: true })}
+                              className="min-h-[2.75rem] rounded-full border px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary active:bg-primary/10 active:border-primary active:text-primary"
                             >
                               {opt.label}
                             </button>
