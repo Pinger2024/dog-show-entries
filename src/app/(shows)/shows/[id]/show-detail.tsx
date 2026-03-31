@@ -635,13 +635,26 @@ export function ShowDetailClient() {
                   </span>
                 )}
                 {isOpen && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-2.5 py-0.5 text-[11px] font-semibold text-white">
-                    <span className="relative flex size-1.5">
-                      <span className="absolute inline-flex size-full animate-ping rounded-full bg-white opacity-75" />
-                      <span className="relative inline-flex size-1.5 rounded-full bg-white" />
+                  <>
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-2.5 py-0.5 text-[11px] font-semibold text-white">
+                      <span className="relative flex size-1.5">
+                        <span className="absolute inline-flex size-full animate-ping rounded-full bg-white opacity-75" />
+                        <span className="relative inline-flex size-1.5 rounded-full bg-white" />
+                      </span>
+                      Entries Open
                     </span>
-                    Entries Open
-                  </span>
+                    {show.entryCloseDate && (() => {
+                      const daysLeft = Math.ceil((new Date(show.entryCloseDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                      if (daysLeft <= 0) return null;
+                      const isUrgent = daysLeft <= 3;
+                      return (
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${isUrgent ? 'bg-red-600 text-white' : 'bg-stone-700 text-stone-300'}`}>
+                          <Clock className="size-3" />
+                          {daysLeft === 1 ? 'Closes tomorrow!' : `${daysLeft} days left`}
+                        </span>
+                      );
+                    })()}
+                  </>
                 )}
                 {!isOpen && (
                   <Badge variant="outline" className="border-stone-600 text-[11px] capitalize text-stone-300">
@@ -888,6 +901,38 @@ export function ShowDetailClient() {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Quick Facts Strip ─────────────────── */}
+      {(show.firstEntryFee != null || showAny.showOpenTime || showAny.startTime) && (
+        <div className="border-b bg-gradient-to-b from-stone-50 to-white">
+          <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-center gap-6 px-3 py-5 sm:gap-10 sm:px-4 sm:py-6">
+            {show.firstEntryFee != null && show.firstEntryFee > 0 && (
+              <div className="text-center">
+                <p className="font-serif text-2xl font-bold text-primary sm:text-3xl">{formatCurrency(show.firstEntryFee)}</p>
+                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Entry Fee</p>
+              </div>
+            )}
+            {showAny.showOpenTime && (
+              <div className="text-center">
+                <p className="font-serif text-2xl font-bold sm:text-3xl">{showAny.showOpenTime}</p>
+                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Doors Open</p>
+              </div>
+            )}
+            {showAny.startTime && (
+              <div className="text-center">
+                <p className="font-serif text-2xl font-bold sm:text-3xl">{showAny.startTime}</p>
+                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Judging Starts</p>
+              </div>
+            )}
+            {show.showClasses && show.showClasses.length > 0 && (
+              <div className="text-center">
+                <p className="font-serif text-2xl font-bold sm:text-3xl">{show.showClasses.length}</p>
+                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Classes</p>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1299,9 +1344,16 @@ export function ShowDetailClient() {
             <Link href={`/shows/${showSlug}/enter`}>
               <Ticket className="size-5" />
               Enter This Show
-              {publicStats && publicStats.totalExhibitors > 5 && (
-                <span className="ml-1 text-xs opacity-70">· {publicStats.totalExhibitors} entered</span>
-              )}
+              {show.entryCloseDate && (() => {
+                const daysLeft = Math.ceil((new Date(show.entryCloseDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                if (daysLeft > 0 && daysLeft <= 7) {
+                  return <span className="ml-1 text-xs opacity-80">· {daysLeft === 1 ? 'Closes tomorrow!' : `${daysLeft} days left`}</span>;
+                }
+                if (publicStats && publicStats.totalExhibitors > 5) {
+                  return <span className="ml-1 text-xs opacity-70">· {publicStats.totalExhibitors} entered</span>;
+                }
+                return null;
+              })()}
             </Link>
           </Button>
         </div>
