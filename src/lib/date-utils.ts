@@ -1,5 +1,11 @@
 import { format, parseISO, formatDistanceToNow, differenceInMonths, isToday, isYesterday } from 'date-fns';
 
+/** Parse a YYYY-MM-DD date string as local (not UTC) — avoids off-by-one from ISO parsing */
+export function parseLocalDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
 /**
  * Formats a date range for display.
  * - Same day: "15 May 2025"

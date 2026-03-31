@@ -32,7 +32,7 @@ import {
 import Link from 'next/link';
 import { format, addDays } from 'date-fns';
 import { trpc } from '@/lib/trpc';
-import { poundsToPence, formatCurrency } from '@/lib/date-utils';
+import { poundsToPence, formatCurrency, parseLocalDate } from '@/lib/date-utils';
 import { CLASS_TEMPLATES, getRelevantTemplates } from '@/lib/class-templates';
 import { AllBreedClassSetup, type AllBreedClassData } from '@/components/shows/all-breed-class-setup';
 import { Button } from '@/components/ui/button';
@@ -193,12 +193,6 @@ const STEPS = [
   'Classes',
   'Review',
 ] as const;
-
-/** Parse a YYYY-MM-DD string as local midnight (not UTC). */
-function parseLocalDate(dateStr: string): Date {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  return new Date(y, m - 1, d);
-}
 
 function formatDateDisplay(dateStr: string) {
   if (!dateStr) return '';

@@ -16,17 +16,11 @@ import {
   Users,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
-import { formatCurrency } from '@/lib/date-utils';
+import { formatCurrency, parseLocalDate } from '@/lib/date-utils';
 import { showTypeLabels } from '@/lib/show-types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { ScheduleData } from '@/server/db/schema/shows';
-
-/** Parse a date string as local (not UTC) — avoids off-by-one from ISO parsing */
-function parseLocalDate(dateStr: string): Date {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  return new Date(y, m - 1, d);
-}
 
 const showScopeLabels: Record<string, string> = {
   general: 'All-Breed',
@@ -396,7 +390,7 @@ function ClassList({ label, classes }: { label?: string; classes: { id: string; 
       )}
       <div className="space-y-1">
         {classes
-          .sort((a, b) => (a.classNumber ?? 999) - (b.classNumber ?? 999))
+          .toSorted((a, b) => (a.classNumber ?? 999) - (b.classNumber ?? 999))
           .map((cls) => (
             <div key={cls.id} className="flex items-baseline gap-2 py-1 text-sm">
               {cls.classNumber != null && (

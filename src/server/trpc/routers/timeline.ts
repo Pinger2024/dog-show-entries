@@ -227,11 +227,12 @@ export const timelineRouter = createTRPCRouter({
       })
     )
     .query(async ({ ctx, input }) => {
-      // Get followed dog IDs and own dogs in parallel
+      // Get followed dog IDs (with privacy flag) and own dogs in parallel
       const [followedDogs, ownDogs] = await Promise.all([
         ctx.db
-          .select({ dogId: dogFollows.dogId })
+          .select({ dogId: dogFollows.dogId, feedPrivate: dogs.feedPrivate })
           .from(dogFollows)
+          .leftJoin(dogs, eq(dogFollows.dogId, dogs.id))
           .where(eq(dogFollows.userId, ctx.session.user.id)),
         ctx.db
           .select({ id: dogs.id })
@@ -242,16 +243,9 @@ export const timelineRouter = createTRPCRouter({
       const ownDogIds = new Set(ownDogs.map((d) => d.id));
 
       // Filter out followed dogs that have feedPrivate enabled (own dogs always visible)
-      const followedDogIds = followedDogs.map((f) => f.dogId).filter((id) => !ownDogIds.has(id));
-      let visibleFollowedIds = followedDogIds;
-      if (followedDogIds.length > 0) {
-        const privateDogs = await ctx.db
-          .select({ id: dogs.id })
-          .from(dogs)
-          .where(and(inArray(dogs.id, followedDogIds), eq(dogs.feedPrivate, true)));
-        const privateSet = new Set(privateDogs.map((d) => d.id));
-        visibleFollowedIds = followedDogIds.filter((id) => !privateSet.has(id));
-      }
+      const visibleFollowedIds = followedDogs
+        .filter((f) => !ownDogIds.has(f.dogId) && !f.feedPrivate)
+        .map((f) => f.dogId);
 
       const allDogIds = [
         ...new Set([
