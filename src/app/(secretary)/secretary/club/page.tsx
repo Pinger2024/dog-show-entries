@@ -448,20 +448,7 @@ export default function MyClubPage() {
           </DialogHeader>
 
           <div className="grid gap-4 py-2">
-            {/* Name */}
-            <div className="space-y-1.5">
-              <Label htmlFor="person-name">
-                Name <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="person-name"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="Full name"
-              />
-            </div>
-
-            {/* Position */}
+            {/* Position first — "I need to add a Chairman" is the mental model */}
             <div className="space-y-1.5">
               <Label htmlFor="person-position">Position</Label>
               <Select
@@ -479,6 +466,19 @@ export default function MyClubPage() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Name */}
+            <div className="space-y-1.5">
+              <Label htmlFor="person-name">
+                Name <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="person-name"
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="Full name"
+              />
             </div>
 
             {/* Email & Phone */}
