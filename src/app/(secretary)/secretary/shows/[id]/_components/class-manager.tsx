@@ -868,7 +868,7 @@ export function BulkClassCreator({ showId }: { showId: string }) {
             ) : (
               <div>
                 <p className="mb-2 text-xs text-muted-foreground">
-                  All breeds are selected by default. Untick any you don&apos;t need.
+                  Select the breeds for your show, or use &quot;Select All&quot; for an all-breed show.
                 </p>
                 <div className="flex items-center justify-between">
                   <Label className="text-sm font-medium">
