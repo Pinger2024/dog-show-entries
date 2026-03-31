@@ -45,17 +45,9 @@ export function RolePickerBanner() {
 
   if (!visible) return null;
 
-  // Admin and secretary can see all views; steward sees secretary if applicable
-  const availableViews = role === 'admin'
-    ? roleViews
-    : role === 'secretary'
-      ? roleViews
-      : roleViews.filter((v) => v.id === 'secretary'); // steward role doesn't have steward separate
-
-  // For steward role, show steward view
   const views = role === 'steward'
     ? roleViews.filter((v) => v.id === 'steward')
-    : availableViews;
+    : roleViews;
 
   if (views.length === 0) return null;
 

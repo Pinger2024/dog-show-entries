@@ -16,26 +16,17 @@ import {
   Users,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
-import { isUuid } from '@/lib/slugify';
 import { formatCurrency } from '@/lib/date-utils';
+import { showTypeLabels } from '@/lib/show-types';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import type { ScheduleData } from '@/server/db/schema/shows';
 
 /** Parse a date string as local (not UTC) — avoids off-by-one from ISO parsing */
 function parseLocalDate(dateStr: string): Date {
   const [y, m, d] = dateStr.split('-').map(Number);
   return new Date(y, m - 1, d);
 }
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import type { ScheduleData } from '@/server/db/schema/shows';
-
-const showTypeLabels: Record<string, string> = {
-  companion: 'Companion Show',
-  primary: 'Primary Show',
-  limited: 'Limited Show',
-  open: 'Open Show',
-  premier_open: 'Premier Open Show',
-  championship: 'Championship Show',
-};
 
 const showScopeLabels: Record<string, string> = {
   general: 'All-Breed',
@@ -50,7 +41,6 @@ export default function SchedulePage({
   const { id } = use(params);
   const { data: show, isLoading } = trpc.shows.getById.useQuery({ id });
 
-  // Group classes by breed — must be above early returns (Rules of Hooks)
   const breedGroups = useMemo(() => {
     if (!show?.showClasses) return [];
     const map = new Map<string, {

@@ -25,7 +25,6 @@ const LABEL_MAP: Record<string, string> = {
   documents: 'Documents',
   steward: 'Steward',
   enter: 'Enter',
-  schedule: 'Schedule',
   'print-shop': 'Print Shop',
   'reference-data': 'Reference Data',
   applications: 'Applications',
