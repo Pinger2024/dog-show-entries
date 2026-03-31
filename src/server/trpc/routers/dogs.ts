@@ -466,6 +466,23 @@ export const dogsRouter = createTRPCRouter({
       return deleted!;
     }),
 
+  toggleFeedPrivacy: protectedProcedure
+    .input(z.object({ id: z.string().uuid(), feedPrivate: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.dogs.findFirst({
+        where: and(eq(dogs.id, input.id), isNull(dogs.deletedAt)),
+      });
+      if (!existing || existing.ownerId !== ctx.session.user.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
+      }
+      const [updated] = await ctx.db
+        .update(dogs)
+        .set({ feedPrivate: input.feedPrivate })
+        .where(eq(dogs.id, input.id))
+        .returning();
+      return updated!;
+    }),
+
   // ── Owner management ─────────────────────────────────────
 
   addOwner: protectedProcedure

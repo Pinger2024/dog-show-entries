@@ -26,6 +26,7 @@ import {
   Sparkles,
   Plus,
   ExternalLink,
+  Rss,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
@@ -43,6 +44,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -957,6 +959,13 @@ export default function DogDetailPage({
     },
   });
 
+  const togglePrivacy = trpc.dogs.toggleFeedPrivacy.useMutation({
+    onSuccess: (updated) => {
+      utils.dogs.getById.invalidate({ id });
+      toast.success(updated.feedPrivate ? 'Results hidden from feeds' : 'Results visible in feeds');
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -1047,6 +1056,22 @@ export default function DogDetailPage({
             </Button>
           </div>
         </div>
+      </div>
+
+      {/* Feed privacy toggle */}
+      <div className="flex items-center justify-between rounded-lg border p-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Rss className="size-4 text-muted-foreground shrink-0" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium">Show in feeds</p>
+            <p className="text-xs text-muted-foreground">Let followers see results in their feed</p>
+          </div>
+        </div>
+        <Switch
+          checked={!dog.feedPrivate}
+          onCheckedChange={(checked) => togglePrivacy.mutate({ id, feedPrivate: !checked })}
+          disabled={togglePrivacy.isPending}
+        />
       </div>
 
       {/* Details cards */}

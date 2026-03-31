@@ -239,9 +239,23 @@ export const timelineRouter = createTRPCRouter({
           .where(and(eq(dogs.ownerId, ctx.session.user.id), isNull(dogs.deletedAt))),
       ]);
 
+      const ownDogIds = new Set(ownDogs.map((d) => d.id));
+
+      // Filter out followed dogs that have feedPrivate enabled (own dogs always visible)
+      const followedDogIds = followedDogs.map((f) => f.dogId).filter((id) => !ownDogIds.has(id));
+      let visibleFollowedIds = followedDogIds;
+      if (followedDogIds.length > 0) {
+        const privateDogs = await ctx.db
+          .select({ id: dogs.id })
+          .from(dogs)
+          .where(and(inArray(dogs.id, followedDogIds), eq(dogs.feedPrivate, true)));
+        const privateSet = new Set(privateDogs.map((d) => d.id));
+        visibleFollowedIds = followedDogIds.filter((id) => !privateSet.has(id));
+      }
+
       const allDogIds = [
         ...new Set([
-          ...followedDogs.map((f) => f.dogId),
+          ...visibleFollowedIds,
           ...ownDogs.map((d) => d.id),
         ]),
       ];

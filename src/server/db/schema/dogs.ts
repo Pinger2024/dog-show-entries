@@ -1,4 +1,5 @@
 import {
+  boolean,
   date,
   index,
   pgTable,
@@ -33,6 +34,7 @@ export const dogs = pgTable(
     colour: text('colour'),
     registrationStatus: text('registration_status'), // null=registered, 'naf', 'taf', 'cnaf'
     bio: text('bio'),
+    feedPrivate: boolean('feed_private').default(false).notNull(),
     ownerId: uuid('owner_id')
       .notNull()
       .references(() => users.id),
