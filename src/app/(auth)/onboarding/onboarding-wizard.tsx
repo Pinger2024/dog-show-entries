@@ -157,6 +157,11 @@ const profileSchema = z.object({
   phone: z.string().optional(),
 });
 
+/** Whether address fields have values (from lookup or pre-existing) */
+function hasAddress(address: string | undefined, postcode: string | undefined) {
+  return !!(address && postcode);
+}
+
 type ProfileValues = z.infer<typeof profileSchema>;
 
 const dogSchema = z.object({
@@ -407,6 +412,12 @@ function ProfileStep({
     },
   });
 
+  // Show compact summary when address is already populated; expand for editing
+  const watchedAddress = form.watch('address');
+  const watchedPostcode = form.watch('postcode');
+  const addressFilled = hasAddress(watchedAddress, watchedPostcode);
+  const [editingAddress, setEditingAddress] = useState(!addressFilled);
+
   return (
     <Card>
       <CardHeader>
@@ -442,49 +453,76 @@ function ProfileStep({
                 </FormItem>
               )}
             />
-            <PostcodeLookup
-              onSelect={(result) => {
-                form.setValue('address', formatAddress(result));
-                form.setValue('postcode', result.postcode);
-              }}
-            />
-            <FormField
-              control={form.control}
-              name="address"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Address</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="Your postal address"
-                      className="h-11 sm:h-12"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Your address appears in show catalogues as required by RKC regulations. Use the postcode finder above, or type it manually.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="postcode"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Postcode</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="e.g. G1 1AA"
-                      className="h-11 sm:h-12"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* Address — compact summary when filled, postcode lookup + fields when editing */}
+            {addressFilled && !editingAddress ? (
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-muted-foreground">Address</p>
+                    <p className="mt-0.5 text-sm">{watchedAddress}</p>
+                    <p className="text-sm font-medium">{watchedPostcode}</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0 text-xs text-muted-foreground"
+                    onClick={() => setEditingAddress(true)}
+                  >
+                    Edit
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <PostcodeLookup
+                  onSelect={(result) => {
+                    form.setValue('address', formatAddress(result));
+                    form.setValue('postcode', result.postcode);
+                    setEditingAddress(false);
+                  }}
+                />
+                <div className="grid gap-3 grid-cols-1 sm:grid-cols-[1fr_auto]">
+                  <FormField
+                    control={form.control}
+                    name="address"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Address</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Your postal address"
+                            className="h-11 sm:h-12"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="postcode"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Postcode</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="G1 1AA"
+                            className="h-11 sm:h-12 sm:w-28"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Your address appears in show catalogues as required by RKC regulations.
+                </p>
+              </>
+            )}
             <FormField
               control={form.control}
               name="phone"
