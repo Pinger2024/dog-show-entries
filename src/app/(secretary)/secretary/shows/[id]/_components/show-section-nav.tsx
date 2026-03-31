@@ -202,46 +202,59 @@ export function ShowSectionNav({ showId }: { showId: string }) {
         </Sheet>
       </div>
 
-      {/* ─── Desktop: wrapping pill nav ─── */}
-      <nav className="hidden gap-1 md:flex md:flex-wrap">
-        {sections.map((section) => {
-          const href = `${basePath}${section.path}`;
-          const active = isActive(section, pathname, basePath);
-          const Icon = section.icon;
-          const showBadge = section.hasBadge && pendingActions > 0 && !active;
+      {/* ─── Desktop: vertical sidebar nav ─── */}
+      <nav className="hidden w-48 shrink-0 md:block">
+        <div className="sticky top-24 space-y-4">
+          {sectionGroups.map((group) => (
+            <div key={group.label}>
+              <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                {group.label}
+              </p>
+              <div className="space-y-0.5">
+                {group.items.map((path) => {
+                  const section = sectionMap.get(path);
+                  if (!section) return null;
+                  const href = `${basePath}${path}`;
+                  const active = isActive(section, pathname, basePath);
+                  const Icon = section.icon;
+                  const showBadge = section.hasBadge && pendingActions > 0 && !active;
 
-          return (
-            <Link
-              key={section.path}
-              href={href}
-              className={cn(
-                'relative inline-flex items-center gap-1.5 rounded-full px-3 py-2 min-h-[2.75rem] text-sm font-medium whitespace-nowrap transition-colors',
-                active
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-              )}
-            >
-              <Icon className="size-3.5" />
-              {section.label}
-              {(() => {
-                const phaseBadge = getSectionBadge(section.path);
-                if (phaseBadge && !active) {
                   return (
-                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${phaseBadge.color}`}>
-                      {phaseBadge.label}
-                    </span>
+                    <Link
+                      key={path}
+                      href={href}
+                      className={cn(
+                        'relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                        active
+                          ? 'bg-primary/10 text-primary'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                      )}
+                    >
+                      <Icon className="size-4 shrink-0" />
+                      <span className="truncate">{section.label}</span>
+                      {(() => {
+                        const phaseBadge = getSectionBadge(path);
+                        if (phaseBadge && !active) {
+                          return (
+                            <span className={`ml-auto shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${phaseBadge.color}`}>
+                              {phaseBadge.label}
+                            </span>
+                          );
+                        }
+                        return null;
+                      })()}
+                      {showBadge && (
+                        <span className="absolute -top-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white">
+                          {pendingActions > 9 ? '9+' : pendingActions}
+                        </span>
+                      )}
+                    </Link>
                   );
-                }
-                return null;
-              })()}
-              {showBadge && (
-                <span className="absolute -top-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white">
-                  {pendingActions > 9 ? '9+' : pendingActions}
-                </span>
-              )}
-            </Link>
-          );
-        })}
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
       </nav>
     </>
   );

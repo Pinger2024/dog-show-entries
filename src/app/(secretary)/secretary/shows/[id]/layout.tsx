@@ -397,11 +397,13 @@ export default function ShowManagementLayout({
         </div>
       )}
 
-      {/* Section navigation */}
-      <ShowSectionNav showId={show.id} />
-
-      {/* Active section content */}
-      <ShowIdProvider showId={show.id}>{children}</ShowIdProvider>
+      {/* Section navigation + content */}
+      <div className="md:flex md:gap-6">
+        <ShowSectionNav showId={show.id} />
+        <div className="min-w-0 flex-1">
+          <ShowIdProvider showId={show.id}>{children}</ShowIdProvider>
+        </div>
+      </div>
     </div>
   );
 }
