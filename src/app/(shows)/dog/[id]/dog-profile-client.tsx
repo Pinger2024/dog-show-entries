@@ -424,7 +424,7 @@ export function DogProfileClient({ id }: { id: string }) {
             </div>
           ) : canEdit ? (
             <Link
-              href={`/dogs/${id}`}
+              href={`/dogs/${id}#photos`}
               className="group flex aspect-[4/5] w-full max-w-xs flex-col items-center justify-center gap-3 rounded-sm border-2 border-dashed border-stone-200 bg-stone-50 transition-colors hover:border-stone-300 hover:bg-stone-100 sm:max-w-sm"
             >
               <Camera className="size-10 text-stone-300 transition-colors group-hover:text-stone-400" />
