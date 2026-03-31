@@ -57,8 +57,13 @@ export default function FeedPage() {
             <EmptyState
               icon={Rss}
               title="Your feed is empty"
-              description="Follow dogs to see their updates and show results here. Browse shows to discover dogs, or share your own dogs' moments."
-              action={<Link href="/shows"><Button variant="outline" size="sm">Browse shows</Button></Link>}
+              description="Follow dogs to see their show results and updates here. Visit any dog's public profile to follow them — you'll find dogs on show results pages and breed listings."
+              action={
+                <div className="flex flex-wrap gap-2 justify-center">
+                  <Link href="/shows"><Button variant="outline" size="sm">Browse Shows</Button></Link>
+                  <Link href="/dogs"><Button variant="ghost" size="sm">My Dogs</Button></Link>
+                </div>
+              }
             />
           ) : (
             <div className="space-y-4">
