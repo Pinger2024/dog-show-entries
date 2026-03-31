@@ -560,9 +560,9 @@ export default function ShowsList() {
   const totalShows = data?.total ?? 0;
   const hasMore = data?.nextCursor != null;
 
-  /* Split into entries-open vs others for visual grouping */
-  const openShows = filteredShows.filter((s) => s.status === 'entries_open');
-  const otherShows = filteredShows.filter((s) => s.status !== 'entries_open');
+  /* Split into actually-accepting-entries vs others for visual grouping */
+  const openShows = filteredShows.filter((s) => s.status === 'entries_open' && !isEntryCloseDatePast(s.entryCloseDate));
+  const otherShows = filteredShows.filter((s) => s.status !== 'entries_open' || isEntryCloseDatePast(s.entryCloseDate));
 
   // Nearby shows
   const nearbyShows = nearbyData ?? [];
