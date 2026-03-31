@@ -382,7 +382,16 @@ export function AddJudgeWizard({
                   Search RKC Database
                 </Button>
                 {kcSearchMutation.isPending && (
-                  <span className="text-xs text-muted-foreground">This takes a few seconds...</span>
+                  <>
+                    <span className="text-xs text-muted-foreground">This takes a few seconds...</span>
+                    <button
+                      type="button"
+                      onClick={() => kcSearchMutation.reset()}
+                      className="text-xs text-muted-foreground hover:text-destructive"
+                    >
+                      Cancel
+                    </button>
+                  </>
                 )}
               </div>
             )}
