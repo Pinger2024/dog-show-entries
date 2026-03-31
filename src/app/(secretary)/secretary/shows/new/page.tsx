@@ -204,6 +204,7 @@ export default function NewShowPage() {
   const router = useRouter();
   const { data: session } = useSession();
   const [step, setStep] = useState(0);
+  const [openSections, setOpenSections] = useState<string[]>(['classification', 'schedule', 'secretary']);
   const [createVenue, setCreateVenue] = useState(false);
   const [selectedTemplates, setSelectedTemplates] = useState<string[]>([]);
   const [allBreedData, setAllBreedData] = useState<AllBreedClassData>({
@@ -304,7 +305,12 @@ export default function NewShowPage() {
 
   // Populate secretary contact fields from a member record
   function applySecretaryMember(member: { name?: string | null; email?: string | null; phone?: string | null }) {
-    form.setValue('secretaryName', member.name ?? '');
+    // If name is missing or looks like an email, derive a display name from the email
+    let name = member.name ?? '';
+    if (!name || name.includes('@')) {
+      name = member.email?.split('@')[0]?.replace(/[._-]/g, ' ') ?? '';
+    }
+    form.setValue('secretaryName', name);
     form.setValue('secretaryEmail', member.email ?? '');
     form.setValue('secretaryPhone', member.phone ?? '');
   }
@@ -632,7 +638,7 @@ export default function NewShowPage() {
                   />
                 )}
 
-                <Accordion type="multiple" defaultValue={['classification', 'schedule', 'secretary']}>
+                <Accordion type="multiple" value={openSections} onValueChange={setOpenSections}>
                   <AccordionItem value="classification">
                     <AccordionTrigger className="py-3 hover:no-underline">
                       <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Classification</span>
@@ -1476,11 +1482,18 @@ export default function NewShowPage() {
                   onClick={async () => {
                     if (step === 0) {
                       const valid = await form.trigger(['name', 'showType', 'showScope', 'startDate']);
-                      if (!valid) return;
+                      if (!valid) {
+                        setOpenSections(['classification', 'schedule', 'secretary']);
+                        toast.error('Please fill in the required fields marked with *');
+                        return;
+                      }
                     }
                     if (canProceed()) {
                       setStep(step + 1);
                       window.scrollTo({ top: 0, behavior: 'smooth' });
+                    } else {
+                      setOpenSections(['classification', 'schedule', 'secretary']);
+                      toast.error('Please fill in all required fields before continuing');
                     }
                   }}
                 >
