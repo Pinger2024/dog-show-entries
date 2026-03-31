@@ -195,30 +195,24 @@ export default function DogsPage() {
                         </p>
                       )}
 
-                      {/* Actions */}
+                      {/* Actions — Enter is the primary CTA */}
                       <div className="flex flex-wrap gap-1.5 sm:gap-2 pt-1">
+                        <Button size="sm" className="min-h-[2.75rem] sm:min-h-0" asChild>
+                          <Link href="/shows">
+                            <Ticket className="size-3.5" />
+                            Enter a Show
+                          </Link>
+                        </Button>
                         <Button variant="outline" size="sm" className="min-h-[2.75rem] sm:min-h-0" asChild>
                           <Link href={`/dogs/${dog.id}`}>
                             <Eye className="size-3.5" />
                             View
                           </Link>
                         </Button>
-                        <Button variant="outline" size="sm" className="min-h-[2.75rem] sm:min-h-0" asChild>
+                        <Button variant="ghost" size="sm" className="min-h-[2.75rem] sm:min-h-0" asChild>
                           <Link href={`/dogs/${dog.id}/edit`}>
                             <Pencil className="size-3.5" />
                             Edit
-                          </Link>
-                        </Button>
-                        <Button variant="outline" size="sm" className="min-h-[2.75rem] sm:min-h-0" asChild>
-                          <Link href="/shows">
-                            <Ticket className="size-3.5" />
-                            Enter
-                          </Link>
-                        </Button>
-                        <Button variant="outline" size="sm" className="min-h-[2.75rem] sm:min-h-0" asChild>
-                          <Link href={`/dog/${dog.id}`}>
-                            <Globe className="size-3.5" />
-                            Profile
                           </Link>
                         </Button>
                       </div>
