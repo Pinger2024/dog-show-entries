@@ -32,6 +32,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { AnimateIn } from '@/components/animate-in';
+import { FeatureTabs } from '@/components/features/feature-tabs';
 
 export const metadata: Metadata = {
   title: 'Features — Remi Dog Show Management Platform',
@@ -352,35 +353,35 @@ export default function FeaturesPage() {
       </section>
 
       {/* ── Exhibitor Features ─────────────────── */}
-      <FeatureSection
-        badge="For Exhibitors"
-        badgeColour="bg-blue-50 text-blue-700"
-        badgeIcon={PawPrint}
-        title="Enter shows in minutes, not days"
-        subtitle="Everything you need to find a show, enter your dogs, and follow results — from your phone or desktop. No paper, no delays, no guesswork."
-        features={EXHIBITOR_FEATURES}
-      />
-
-      {/* ── Secretary Features ─────────────────── */}
-      <FeatureSection
-        badge="For Show Secretaries"
-        badgeColour="bg-amber-50 text-amber-700"
-        badgeIcon={LayoutDashboard}
-        title="Run your show from one dashboard"
-        subtitle="Create shows, manage entries, generate every document you need for show day, and track finances — all without touching a spreadsheet."
-        features={SECRETARY_FEATURES}
-        backgroundClass="bg-card"
-      />
-
-      {/* ── Club Features ──────────────────────── */}
-      <FeatureSection
-        badge="For Clubs"
-        badgeColour="bg-green-50 text-green-700"
-        badgeIcon={Building2}
-        title="Secure, compliant, and always on"
-        subtitle="Your club&apos;s data is protected, payments are handled professionally, and your show is open for entries around the clock."
-        features={CLUB_FEATURES}
-      />
+      <FeatureTabs tabs={[
+        {
+          id: 'exhibitors',
+          label: 'Exhibitors',
+          icon: PawPrint,
+          badgeColour: 'bg-blue-50 text-blue-700',
+          title: 'Enter shows in minutes, not days',
+          subtitle: 'Everything you need to find a show, enter your dogs, and follow results — from your phone or desktop.',
+          features: EXHIBITOR_FEATURES,
+        },
+        {
+          id: 'secretaries',
+          label: 'Secretaries',
+          icon: LayoutDashboard,
+          badgeColour: 'bg-amber-50 text-amber-700',
+          title: 'Run your show from one dashboard',
+          subtitle: 'Create shows, manage entries, generate every document you need for show day, and track finances.',
+          features: SECRETARY_FEATURES,
+        },
+        {
+          id: 'clubs',
+          label: 'Clubs',
+          icon: Building2,
+          badgeColour: 'bg-green-50 text-green-700',
+          title: 'Secure, compliant, and always on',
+          subtitle: 'Your club\'s data is protected, payments are handled professionally, and entries are accepted 24/7.',
+          features: CLUB_FEATURES,
+        },
+      ]} />
 
       {/* ── Comparison section ─────────────────── */}
       <section className="border-b bg-card">
