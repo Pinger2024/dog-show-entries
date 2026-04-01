@@ -605,7 +605,7 @@ function PhotoGalleryCard({ dogId }: { dogId: string }) {
             {photos.map((photo) => (
               <div
                 key={photo.id}
-                className="group relative aspect-square overflow-hidden rounded-lg border bg-muted"
+                className="group relative aspect-[4/3] overflow-hidden rounded-lg border bg-muted"
               >
                 <Image
                   src={photo.url}
