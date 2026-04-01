@@ -496,16 +496,34 @@ export default function NewShowPage() {
     setSelectedTemplates(newTemplates);
 
     if (classDefinitions) {
-      // Combine class IDs from all selected templates
-      const allClassNames = new Set<string>();
-      for (const tid of newTemplates) {
-        const template = CLASS_TEMPLATES.find((t) => t.id === tid);
-        if (template) template.classNames.forEach((n) => allClassNames.add(n));
+      const currentIds = new Set(form.getValues('selectedClassIds'));
+
+      if (isSelected) {
+        // Template REMOVED — remove only classes exclusive to this template
+        const otherClassNames = new Set<string>();
+        for (const tid of newTemplates) {
+          const t = CLASS_TEMPLATES.find((x) => x.id === tid);
+          if (t) t.classNames.forEach((n) => otherClassNames.add(n));
+        }
+        const removed = CLASS_TEMPLATES.find((t) => t.id === templateId);
+        if (removed) {
+          for (const cd of classDefinitions) {
+            if (removed.classNames.includes(cd.name) && !otherClassNames.has(cd.name)) {
+              currentIds.delete(cd.id);
+            }
+          }
+        }
+      } else {
+        // Template ADDED — add its classes without resetting manual removals from other templates
+        const added = CLASS_TEMPLATES.find((t) => t.id === templateId);
+        if (added) {
+          for (const cd of classDefinitions) {
+            if (added.classNames.includes(cd.name)) currentIds.add(cd.id);
+          }
+        }
       }
-      const ids = classDefinitions
-        .filter((cd) => allClassNames.has(cd.name))
-        .map((cd) => cd.id);
-      form.setValue('selectedClassIds', ids);
+
+      form.setValue('selectedClassIds', Array.from(currentIds));
 
       // Auto-set class sex arrangement if any template uses split by sex
       const anySplitBySex = newTemplates.some((tid) => CLASS_TEMPLATES.find((t) => t.id === tid)?.splitBySex);
