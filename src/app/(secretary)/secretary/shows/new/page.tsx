@@ -394,7 +394,7 @@ export default function NewShowPage() {
         nfcEntryFee: Number(values.nfcEntryFee) > 0
           ? poundsToPence(Number(values.nfcEntryFee))
           : undefined,
-        juniorHandlerFee: Number(values.juniorHandlerFee) > 0
+        juniorHandlerFee: values.juniorHandlerFee != null && values.juniorHandlerFee !== ''
           ? poundsToPence(Number(values.juniorHandlerFee))
           : undefined,
         // All-breed: pass breed + class data
@@ -1367,7 +1367,7 @@ export default function NewShowPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {getRelevantTemplates(watchedShowType).map((t) => {
+                  {getRelevantTemplates(watchedShowType, watchedShowScope).map((t) => {
                     const isActive = selectedTemplates.includes(t.id);
                     return (
                       <button

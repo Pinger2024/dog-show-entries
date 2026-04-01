@@ -24,14 +24,14 @@ export interface ClassTemplate {
   gsdOnly?: boolean;
 }
 
-/** Filter templates to those relevant for a given show type. GSD-only templates
- *  are excluded unless the show is known to be a GSD breed show. */
-export function getRelevantTemplates(showType?: string): ClassTemplate[] {
+/** Filter templates to those relevant for a given show type and scope.
+ *  GSD-only templates are shown for single-breed shows (user picks if relevant). */
+export function getRelevantTemplates(showType?: string, showScope?: string): ClassTemplate[] {
   return CLASS_TEMPLATES.filter((t) => {
     // Handling templates always shown (they're add-ons)
     if (t.isHandling) return true;
-    // GSD-only templates: hide for now (would need breed context to show)
-    if (t.gsdOnly) return false;
+    // GSD-only templates: show for single-breed shows, hide for all-breed
+    if (t.gsdOnly && showScope !== 'single_breed') return false;
     // If template has showTypes restriction, check it
     if (t.showTypes && showType && !t.showTypes.includes(showType)) return false;
     return true;

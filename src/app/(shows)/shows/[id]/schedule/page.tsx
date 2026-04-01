@@ -221,10 +221,10 @@ export default function SchedulePage({
             {showAny.subsequentEntryFee != null && (
               <InfoCard label="Subsequent" value={formatCurrency(showAny.subsequentEntryFee)} />
             )}
-            {showAny.nfcEntryFee != null && showAny.nfcEntryFee > 0 && (
+            {showAny.nfcEntryFee != null && (
               <InfoCard label="NFC" value={formatCurrency(showAny.nfcEntryFee)} />
             )}
-            {showAny.juniorHandlerFee != null && showAny.juniorHandlerFee > 0 && (
+            {showAny.juniorHandlerFee != null && (
               <InfoCard label="Junior Handler" value={formatCurrency(showAny.juniorHandlerFee)} />
             )}
           </div>

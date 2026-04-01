@@ -1335,7 +1335,7 @@ export function ShowSchedule({
               // Use sex label (Dogs/Bitches/Junior Handling) when no breeds assigned
               const roleLabel = judge.breeds.length > 0
                 ? judge.breeds.join(', ')
-                : (judge.sex === 'dog' ? 'Dogs' : judge.sex === 'bitch' ? 'Bitches' : judge.displayLabel?.startsWith('Junior') ? 'Junior Handling' : 'All breeds');
+                : (judge.sex === 'dog' ? 'Dogs' : judge.sex === 'bitch' ? 'Bitches' : judge.displayLabel?.startsWith('Junior') ? 'Junior Handling' : show.showScope === 'single_breed' ? 'Breed Classes' : 'All breeds');
               return (
                 <View key={i} style={s.judgeRow}>
                   <Text style={s.judgeName}>{judge.name}</Text>
