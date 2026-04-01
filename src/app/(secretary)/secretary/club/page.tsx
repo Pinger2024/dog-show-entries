@@ -218,8 +218,11 @@ export default function MyClubPage() {
           <CardContent className="py-12 text-center">
             <Building2 className="mx-auto size-10 text-muted-foreground/40" />
             <p className="mt-3 text-muted-foreground">
-              No organisation found. Create a show first to set up your club.
+              No club registered yet. Register your club to start creating shows.
             </p>
+            <Link href="/apply" className="mt-4 inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-md transition-colors hover:bg-primary/90">
+              Register Your Club
+            </Link>
           </CardContent>
         </Card>
       </div>
