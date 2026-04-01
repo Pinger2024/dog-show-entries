@@ -27,6 +27,18 @@ const showScopeLabels: Record<string, string> = {
   single_breed: 'Single Breed',
 };
 
+/** Normalise times like "9.30" or "8:30" → "9:30 AM" / "8:30 AM" */
+function formatTime(timeStr: string): string {
+  const normalised = timeStr.replace('.', ':');
+  if (normalised.includes(':') && !normalised.includes(' ')) {
+    const [h, m] = normalised.split(':').map(Number);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const hour = h % 12 || 12;
+    return `${hour}:${String(m).padStart(2, '0')} ${ampm}`;
+  }
+  return timeStr;
+}
+
 export default function SchedulePage({
   params,
 }: {
@@ -186,13 +198,13 @@ export default function SchedulePage({
           <SectionHeading icon={Clock} title="Timing" />
           <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
             {showAny.showOpenTime && (
-              <InfoCard label="Show Opens" value={showAny.showOpenTime} />
+              <InfoCard label="Show Opens" value={formatTime(showAny.showOpenTime)} />
             )}
             {sd?.latestArrivalTime && (
-              <InfoCard label="Dogs Received By" value={sd.latestArrivalTime} />
+              <InfoCard label="Dogs Received By" value={formatTime(sd.latestArrivalTime)} />
             )}
             {showAny.startTime && (
-              <InfoCard label="Judging Commences" value={showAny.startTime} />
+              <InfoCard label="Judging Commences" value={formatTime(showAny.startTime)} />
             )}
           </div>
         </section>

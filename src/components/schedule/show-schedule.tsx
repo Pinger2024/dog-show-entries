@@ -167,8 +167,10 @@ function formatShortDate(dateStr: string): string {
 }
 
 function formatTime(timeStr: string): string {
-  if (timeStr.includes(':') && !timeStr.includes(' ')) {
-    const [h, m] = timeStr.split(':').map(Number);
+  // Handle both "8:30" and "9.30" formats — normalise to colon then format
+  const normalised = timeStr.replace('.', ':');
+  if (normalised.includes(':') && !normalised.includes(' ')) {
+    const [h, m] = normalised.split(':').map(Number);
     const ampm = h >= 12 ? 'PM' : 'AM';
     const hour = h % 12 || 12;
     return `${hour}:${String(m).padStart(2, '0')} ${ampm}`;
