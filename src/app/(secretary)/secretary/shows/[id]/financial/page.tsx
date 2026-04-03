@@ -555,6 +555,33 @@ export default function FinancialPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            {/* Full Refund shortcut */}
+            <Button
+              variant="destructive"
+              className="w-full min-h-[2.75rem]"
+              disabled={refundMutation.isPending}
+              onClick={() => {
+                if (!refundEntry) return;
+                refundMutation.mutate({
+                  entryId: refundEntry.id,
+                  amount: refundEntry.totalFee,
+                  reason: 'Full refund',
+                });
+              }}
+            >
+              {refundMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+              Full Refund — {formatCurrency(refundEntry?.totalFee ?? 0)}
+            </Button>
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">or partial refund</span>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <label className="text-sm font-medium">Amount (GBP)</label>
               <Input
@@ -567,9 +594,6 @@ export default function FinancialPage() {
                 onChange={(e) => setRefundAmount(e.target.value)}
                 placeholder="e.g. 5.00"
               />
-              <p className="text-xs text-muted-foreground">
-                Max refundable: {formatCurrency(refundEntry?.totalFee ?? 0)}
-              </p>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Reason (optional)</label>
@@ -598,7 +622,7 @@ export default function FinancialPage() {
               }}
             >
               {refundMutation.isPending && <Loader2 className="size-4 animate-spin" />}
-              Confirm Refund
+              Partial Refund
             </Button>
           </DialogFooter>
         </DialogContent>

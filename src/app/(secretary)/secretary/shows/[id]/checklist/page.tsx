@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   AlertTriangle,
   ChevronDown,
@@ -176,30 +176,27 @@ export default function ShowChecklistPage() {
     );
   }
 
-  if (!items || items.length === 0) {
+  // Auto-generate checklist on first visit
+  const isEmpty = !items || items.length === 0;
+  const [autoSeeded, setAutoSeeded] = useState(false);
+  useEffect(() => {
+    if (isEmpty && !seedMutation.isPending && !autoSeeded) {
+      setAutoSeeded(true);
+      seedMutation.mutate({ showId });
+    }
+  }, [isEmpty, autoSeeded, seedMutation, showId]);
+
+  if (isEmpty) {
     return (
       <Card>
         <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
-          <ListChecks className="size-12 text-muted-foreground" />
+          <Loader2 className="size-8 animate-spin text-primary/40" />
           <div>
-            <h3 className="text-lg font-semibold">Show Checklist</h3>
+            <h3 className="text-lg font-semibold">Setting up your checklist</h3>
             <p className="mt-1 text-sm text-muted-foreground max-w-md">
-              Track everything you need to do for this show — from RKC licence
-              applications through to post-show reporting. Deadlines are
-              auto-calculated from your show date.
+              Creating your RKC-compliant show checklist with deadlines based on your show date...
             </p>
           </div>
-          <Button
-            onClick={() => seedMutation.mutate({ showId })}
-            disabled={seedMutation.isPending}
-          >
-            {seedMutation.isPending ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Sparkles className="size-4" />
-            )}
-            Generate RKC Checklist
-          </Button>
         </CardContent>
       </Card>
     );
