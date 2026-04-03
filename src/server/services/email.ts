@@ -218,6 +218,18 @@ export async function sendEntryConfirmationEmail(orderId: string) {
         </p>
       </div>
 
+      <!-- Share -->
+      <div style="padding: 16px 24px; text-align: center; border-top: 1px solid #e5e5e5; background: #f4f9f6;">
+        <p style="margin: 0 0 10px; font-size: 13px; font-weight: 600; color: #444;">Tell your breed group!</p>
+        <div style="display: inline-block;">
+          <!--[if mso]><table><tr><td><![endif]-->
+          <a href="https://wa.me/?text=${encodeURIComponent(`I've just entered ${show.name}! 🐕 ${APP_URL}/shows/${show.slug ?? show.id}`)}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 8px 16px; background: #25D366; color: #fff; font-size: 13px; font-weight: 600; text-decoration: none; border-radius: 6px; margin: 0 4px;">WhatsApp</a>
+          <!--[if mso]></td><td><![endif]-->
+          <a href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(`${APP_URL}/shows/${show.slug ?? show.id}`)}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 8px 16px; background: #1877F2; color: #fff; font-size: 13px; font-weight: 600; text-decoration: none; border-radius: 6px; margin: 0 4px;">Facebook</a>
+          <!--[if mso]></td></tr></table><![endif]-->
+        </div>
+      </div>
+
       <!-- Exhibitor -->
       <div style="padding: 16px 24px; border-top: 1px solid #e5e5e5; font-size: 13px; color: #666;">
         <strong style="color: #444;">Exhibitor:</strong> ${exhibitor.name ?? exhibitor.email}
