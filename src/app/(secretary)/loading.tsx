@@ -55,7 +55,7 @@ export default function SecretaryLoading() {
 
         {/* Content skeleton */}
         <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-6xl px-2 py-4 pb-28 sm:px-4 sm:py-6 sm:pb-28 md:pb-8 lg:px-8">
+          <div className="mx-auto max-w-6xl px-2 py-4 pb-28 sm:px-4 sm:py-6 md:pb-8 lg:px-8">
             {/* Page title */}
             <div className="h-8 w-48 animate-pulse rounded bg-muted" />
             {/* Content blocks */}

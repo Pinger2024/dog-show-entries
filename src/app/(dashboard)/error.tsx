@@ -33,7 +33,7 @@ export default function DashboardError({
     } catch {
       // Best-effort reporting
     }
-  }, [error]);
+  }, [error.message, error.digest]);
 
   return (
     <div className="flex min-h-screen overflow-x-hidden">

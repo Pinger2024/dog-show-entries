@@ -30,7 +30,7 @@ export default function AuthError({
     } catch {
       // Best-effort reporting
     }
-  }, [error]);
+  }, [error.message, error.digest]);
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4">

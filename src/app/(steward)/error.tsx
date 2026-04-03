@@ -33,7 +33,7 @@ export default function StewardError({
     } catch {
       // Best-effort reporting
     }
-  }, [error]);
+  }, [error.message, error.digest]);
 
   return (
     <div className="flex min-h-screen flex-col overflow-x-hidden">
