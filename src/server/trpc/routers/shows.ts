@@ -248,19 +248,6 @@ export const showsRouter = createTRPCRouter({
         });
       }
 
-      // Auto-close entries if close date has passed
-      if (
-        show.status === 'entries_open' &&
-        show.entryCloseDate &&
-        new Date(show.entryCloseDate).getTime() < Date.now()
-      ) {
-        await ctx.db
-          .update(shows)
-          .set({ status: 'entries_closed', updatedAt: new Date() })
-          .where(eq(shows.id, show.id));
-        show.status = 'entries_closed';
-      }
-
       // Hide draft/cancelled shows from non-secretary/admin users
       const userRole = ctx.session?.user?.role;
       const isPrivileged = userRole === 'secretary' || userRole === 'admin';

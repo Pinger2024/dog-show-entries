@@ -15,6 +15,21 @@ export default function AuthError({
 }) {
   useEffect(() => {
     console.error('[Auth Error Boundary]', error);
+    try {
+      fetch('/api/client-error', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          boundary: '(auth)/error.tsx',
+          message: error.message,
+          stack: error.stack?.slice(0, 2000),
+          digest: error.digest,
+          url: window.location.href,
+        }),
+      }).catch(() => {});
+    } catch {
+      // Best-effort reporting
+    }
   }, [error]);
 
   return (

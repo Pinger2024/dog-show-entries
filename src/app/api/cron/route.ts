@@ -21,32 +21,23 @@ export async function GET(request: Request) {
 
   const now = new Date();
 
-  // Find shows that are entries_open with a close date in the past
-  const overdueShows = await db
-    .select({ id: shows.id, name: shows.name, entryCloseDate: shows.entryCloseDate })
-    .from(shows)
+  // Single bulk update — no N+1
+  const closedShows = await db
+    .update(shows)
+    .set({ status: 'entries_closed', updatedAt: now })
     .where(
       and(
         eq(shows.status, 'entries_open'),
         isNotNull(shows.entryCloseDate),
         lte(shows.entryCloseDate, now),
       ),
-    );
-
-  const closed: string[] = [];
-
-  for (const show of overdueShows) {
-    await db
-      .update(shows)
-      .set({ status: 'entries_closed', updatedAt: now })
-      .where(eq(shows.id, show.id));
-    closed.push(show.name);
-  }
+    )
+    .returning({ id: shows.id, name: shows.name });
 
   return NextResponse.json({
     ok: true,
-    closed: closed.length,
-    shows: closed,
+    closed: closedShows.length,
+    shows: closedShows.map((s) => s.name),
     checkedAt: now.toISOString(),
   });
 }

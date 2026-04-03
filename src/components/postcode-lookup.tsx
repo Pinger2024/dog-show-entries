@@ -41,6 +41,7 @@ export function PostcodeLookup({ onSelect, compact }: PostcodeLookupProps) {
   const [error, setError] = useState<string | null>(null);
   const [showResults, setShowResults] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const lookup = useCallback(async (postcode: string) => {
     const cleaned = postcode.trim().replace(/\s+/g, '');
@@ -49,12 +50,18 @@ export function PostcodeLookup({ onSelect, compact }: PostcodeLookupProps) {
       return;
     }
 
+    // Cancel any in-flight request to prevent race conditions
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const { signal } = controller;
+
     setLoading(true);
     setError(null);
 
     try {
       // Try exact postcode first
-      const exactRes = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(cleaned)}`);
+      const exactRes = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(cleaned)}`, { signal });
       if (exactRes.ok) {
         const data = await exactRes.json();
         if (data.status === 200 && data.result) {
@@ -66,7 +73,7 @@ export function PostcodeLookup({ onSelect, compact }: PostcodeLookupProps) {
       }
 
       // Fall back to autocomplete
-      const autoRes = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(cleaned)}/autocomplete`);
+      const autoRes = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(cleaned)}/autocomplete`, { signal });
       if (autoRes.ok) {
         const data = await autoRes.json();
         if (data.status === 200 && data.result?.length > 0) {
@@ -76,6 +83,7 @@ export function PostcodeLookup({ onSelect, compact }: PostcodeLookupProps) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ postcodes }),
+            signal,
           });
           if (bulkRes.ok) {
             const bulkData = await bulkRes.json();
@@ -92,7 +100,8 @@ export function PostcodeLookup({ onSelect, compact }: PostcodeLookupProps) {
 
       setResults([]);
       setError('No addresses found. Try a different postcode.');
-    } catch {
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
       setError('Could not search postcodes. Please type your address manually.');
       setResults([]);
     } finally {
