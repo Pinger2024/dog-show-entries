@@ -85,6 +85,7 @@ export async function sendExhibitorResultsEmails(showId: string) {
     byExhibitor.get(key)!.entries.push(entry);
   }
 
+  const resultsUrl = `${APP_URL}/shows/${show.slug ?? show.id}/results`;
   const emailPayloads: { from: string; to: string; replyTo: string; subject: string; html: string }[] = [];
 
   for (const [, exhibitor] of byExhibitor) {
@@ -145,7 +146,18 @@ export async function sendExhibitorResultsEmails(showId: string) {
         </p>
         ${dogSections}
         <div style="text-align: center; margin: 24px 0;">
-          ${btn(`${APP_URL}/shows/${show.slug ?? show.id}/results`, 'View Full Results')}
+          ${btn(resultsUrl, 'View Full Results')}
+        </div>
+        <!-- Share -->
+        <div style="padding: 16px; text-align: center; background: #f4f9f6; border-radius: 8px; margin: 0 0 16px;">
+          <p style="margin: 0 0 10px; font-size: 13px; font-weight: 600; color: #444;">Share your results!</p>
+          <div style="display: inline-block;">
+            <!--[if mso]><table><tr><td><![endif]-->
+            <a href="https://wa.me/?text=${encodeURIComponent(`Check out my results from ${show.name}! 🏆 ${resultsUrl}`)}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 8px 16px; background: #25D366; color: #fff; font-size: 13px; font-weight: 600; text-decoration: none; border-radius: 6px; margin: 0 4px;">WhatsApp</a>
+            <!--[if mso]></td><td><![endif]-->
+            <a href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(resultsUrl)}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 8px 16px; background: #1877F2; color: #fff; font-size: 13px; font-weight: 600; text-decoration: none; border-radius: 6px; margin: 0 4px;">Facebook</a>
+            <!--[if mso]></td></tr></table><![endif]-->
+          </div>
         </div>
       </div>
     </div>
@@ -156,11 +168,29 @@ export async function sendExhibitorResultsEmails(showId: string) {
 </body>
 </html>`;
 
+    // Build a celebratory subject line based on best result
+    const allPlacements = exhibitor.entries.flatMap((e) =>
+      e.entryClasses.filter((ec) => ec.result?.placement).map((ec) => ec.result!.placement!)
+    );
+    const allAwards = exhibitor.entries.flatMap((e) =>
+      showAchievements.filter((a) => a.dogId === e.dogId).map((a) => achievementLabels[a.type] ?? a.type)
+    );
+    const bestDogName = exhibitor.entries[0]?.dog?.registeredName ?? '';
+
+    let subject: string;
+    if (allAwards.length > 0) {
+      subject = `${bestDogName} — ${allAwards[0]}! 🏆 ${show.name}`;
+    } else if (allPlacements.length > 0 && Math.min(...allPlacements) <= 3) {
+      subject = `${bestDogName} placed ${getPlacementLabel(Math.min(...allPlacements))}! 🏆 ${show.name}`;
+    } else {
+      subject = `Your Results — ${show.name}`;
+    }
+
     emailPayloads.push({
       from: FROM,
       to: exhibitor.email,
       replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
-      subject: `Your Results — ${show.name}`,
+      subject,
       html,
     });
   }
