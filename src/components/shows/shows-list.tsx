@@ -913,6 +913,13 @@ function ShowCard({ show, distance }: { show: ShowListItem; distance?: number })
             </div>
           </div>
 
+          {/* Entry fee */}
+          {(show as { firstEntryFee?: number | null }).firstEntryFee != null && (show as { firstEntryFee?: number | null }).firstEntryFee! > 0 && (
+            <p className="mt-2 text-xs font-medium text-muted-foreground">
+              From £{((show as { firstEntryFee?: number | null }).firstEntryFee! / 100).toFixed(2)} per entry
+            </p>
+          )}
+
           {/* Footer action indicator */}
           <div className="mt-4">
             {isOpen ? (
