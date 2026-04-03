@@ -317,7 +317,7 @@ function CatalogueEntryRow({ entry }: { entry: CatalogueEntryItem }) {
       {entry.entryClasses.length > 0 && (
         <div className="mt-1 flex flex-wrap gap-1">
           {entry.entryClasses.map((ec, i) => (
-            <Badge key={i} variant="secondary" className="text-[10px]">
+            <Badge key={i} variant="secondary" className="text-xs">
               {ec.showClass?.classDefinition?.name ?? '?'}
             </Badge>
           ))}

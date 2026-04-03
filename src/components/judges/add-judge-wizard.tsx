@@ -360,7 +360,7 @@ export function AddJudgeWizard({
                         <span className="font-medium">{j.name}</span>
                         {j.kcNumber && <span className="ml-2 text-xs text-muted-foreground">KC# {j.kcNumber}</span>}
                       </div>
-                      <Badge variant="outline" className="text-[10px]">Select</Badge>
+                      <Badge variant="outline" className="text-xs">Select</Badge>
                     </button>
                   ))}
                 </div>
@@ -421,7 +421,7 @@ export function AddJudgeWizard({
                         <span className="font-medium">{j.name}</span>
                         {j.location && <span className="ml-2 text-xs text-muted-foreground">{j.location}</span>}
                       </div>
-                      <Badge variant="outline" className="text-[10px]">Select</Badge>
+                      <Badge variant="outline" className="text-xs">Select</Badge>
                     </button>
                   ))}
                 </div>
@@ -521,12 +521,12 @@ export function AddJudgeWizard({
               {selectedJudge.rkcApprovals && selectedJudge.rkcApprovals.length > 0 && (
                 <div className="mt-1.5 flex flex-wrap gap-1">
                   {selectedJudge.rkcApprovals.slice(0, 8).map((a, i) => (
-                    <Badge key={i} variant="outline" className="text-[10px]">
+                    <Badge key={i} variant="outline" className="text-xs">
                       {a.breed} (L{a.level})
                     </Badge>
                   ))}
                   {selectedJudge.rkcApprovals.length > 8 && (
-                    <Badge variant="outline" className="text-[10px]">
+                    <Badge variant="outline" className="text-xs">
                       +{selectedJudge.rkcApprovals.length - 8} more
                     </Badge>
                   )}
@@ -587,12 +587,12 @@ export function AddJudgeWizard({
                           )}
                         </div>
                         {disabled && (
-                          <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                          <Badge variant="outline" className="text-xs text-muted-foreground">
                             {combo.alreadyAssigned}
                           </Badge>
                         )}
                         {notApproved && !disabled && (
-                          <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300">
+                          <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
                             Not on RKC approvals
                           </Badge>
                         )}

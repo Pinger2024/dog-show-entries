@@ -473,7 +473,7 @@ export function JudgesSection({ showId }: { showId: string }) {
                       <Badge
                         key={i}
                         variant="outline"
-                        className="text-[10px]"
+                        className="text-xs"
                       >
                         {b.breed} (L{b.level})
                       </Badge>
@@ -683,7 +683,7 @@ export function JudgesSection({ showId }: { showId: string }) {
                                 >
                                   <Check className={cn('mr-2 size-4', isSelected ? 'opacity-100' : 'opacity-0')} />
                                   {b.name}
-                                  {isAssigned && <span className="ml-auto text-[10px] text-muted-foreground">assigned</span>}
+                                  {isAssigned && <span className="ml-auto text-xs text-muted-foreground">assigned</span>}
                                 </CommandItem>
                               );
                             })}

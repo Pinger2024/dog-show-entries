@@ -54,7 +54,7 @@ export function ChampionshipProgress({ dogId, isPro }: ChampionshipProgressProps
               Championship Progress
             </h3>
             {(championship.classic.complete || championship.alternative.complete) && (
-              <Badge className="ml-auto bg-amber-500 text-[10px] text-white">
+              <Badge className="ml-auto bg-amber-500 text-xs text-white">
                 Qualified
               </Badge>
             )}
@@ -207,7 +207,7 @@ export function ChampionshipProgress({ dogId, isPro }: ChampionshipProgressProps
                         <p className="mt-0.5 font-serif text-lg font-semibold">
                           {st.count}
                         </p>
-                        <p className="text-[10px] text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                           {st.firsts} × 1st
                         </p>
                       </div>
@@ -301,7 +301,7 @@ function RouteCard({
           <p className="font-serif text-[0.8125rem] font-semibold text-stone-800">
             {title}
           </p>
-          <p className="text-[10px] text-stone-400">{subtitle}</p>
+          <p className="text-xs text-stone-400">{subtitle}</p>
         </div>
         {isRecommended && !complete && (
           <Badge variant="outline" className="text-[9px] border-amber-300 text-amber-700">

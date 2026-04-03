@@ -2,9 +2,11 @@
 
 import Link from 'next/link';
 import {
+  AlertTriangle,
   CheckCircle,
   ChevronRight,
   Gavel,
+  Loader2,
   Package,
   Settings,
   TrendingUp,
@@ -12,6 +14,7 @@ import {
   Check,
   X,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { trpc } from '@/lib/trpc';
 import type { ScheduleData } from '@/server/db/schema/shows';
@@ -45,21 +48,28 @@ const phaseIcons: Record<ShowPhase, React.ElementType> = {
 export function LifecycleBanner({ show, entryStats, onOpenEntries }: LifecycleBannerProps) {
   const phase = derivePhase(show.status);
   const config = PHASE_CONFIG[phase];
-  const Icon = phaseIcons[phase];
+
+  // Detect overdue entries: status is entries_open but close date has passed
+  const entriesOverdue = phase === 'entries_open'
+    && !!show.entryCloseDate
+    && new Date(show.entryCloseDate).getTime() < Date.now();
+
+  const Icon = entriesOverdue ? AlertTriangle : phaseIcons[phase];
 
   return (
     <div
       className={cn(
         'rounded-lg border-l-4 p-3 sm:p-4',
-        config.bgColor,
-        config.borderColor,
+        entriesOverdue
+          ? 'bg-rose-50 border-rose-400 dark:bg-rose-950/20 dark:border-rose-600'
+          : cn(config.bgColor, config.borderColor),
         // Show day gets a more prominent treatment
-        phase === 'show_day' && 'bg-primary/10 border-primary',
+        phase === 'show_day' && !entriesOverdue && 'bg-primary/10 border-primary',
       )}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div className="flex items-start gap-3 min-w-0">
-          <div className={cn('mt-0.5 shrink-0', config.color)}>
+          <div className={cn('mt-0.5 shrink-0', entriesOverdue ? 'text-rose-600 dark:text-rose-400' : config.color)}>
             <Icon className="size-5" />
           </div>
           <div className="min-w-0 flex-1">
@@ -208,27 +218,75 @@ function EntriesOpenContent({
     ? formatDeadline(show.entryCloseDate, 'Entries close')
     : null;
 
+  const utils = trpc.useUtils();
+  const closeEntriesMutation = trpc.shows.update.useMutation({
+    onSuccess: () => {
+      utils.shows.getById.invalidate({ id: show.id });
+      toast.success('Entries closed');
+    },
+    onError: (err: { message: string }) => toast.error(err.message),
+  });
+
   return (
     <div className="space-y-2">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
-        <h3 className="text-sm font-semibold text-foreground">
-          {totalEntries} {totalEntries === 1 ? 'entry' : 'entries'} from {uniqueExhibitors}{' '}
-          {uniqueExhibitors === 1 ? 'exhibitor' : 'exhibitors'}
-        </h3>
-        {closeInfo && (
-          <span className={cn(
-            'text-xs',
-            closeInfo.urgent ? 'text-amber-600 font-medium' : 'text-muted-foreground',
-          )}>
-            {closeInfo.text}
-          </span>
-        )}
-      </div>
-      <Button size="sm" variant="outline" className="w-full sm:w-auto" asChild>
-        <Link href={`/secretary/shows/${show.id}/entries`}>
-          View Entries
-        </Link>
-      </Button>
+      {closeInfo?.overdue ? (
+        <>
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-rose-600" />
+            <div>
+              <h3 className="text-sm font-semibold text-rose-800 dark:text-rose-300">
+                Entries were scheduled to close on{' '}
+                {new Date(show.entryCloseDate!).toLocaleDateString('en-GB', {
+                  day: 'numeric',
+                  month: 'long',
+                })}
+              </h3>
+              <p className="text-xs text-rose-700/80 dark:text-rose-400/80">
+                {totalEntries} {totalEntries === 1 ? 'entry' : 'entries'} from{' '}
+                {uniqueExhibitors} {uniqueExhibitors === 1 ? 'exhibitor' : 'exhibitors'} — entries are still being accepted
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="destructive"
+            className="w-full sm:w-auto min-h-[2.75rem]"
+            disabled={closeEntriesMutation.isPending}
+            onClick={() => closeEntriesMutation.mutate({ id: show.id, status: 'entries_closed' })}
+          >
+            {closeEntriesMutation.isPending ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Closing...
+              </>
+            ) : (
+              'Close Entries Now'
+            )}
+          </Button>
+        </>
+      ) : (
+        <>
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+            <h3 className="text-sm font-semibold text-foreground">
+              {totalEntries} {totalEntries === 1 ? 'entry' : 'entries'} from {uniqueExhibitors}{' '}
+              {uniqueExhibitors === 1 ? 'exhibitor' : 'exhibitors'}
+            </h3>
+            {closeInfo && (
+              <span className={cn(
+                'text-xs',
+                closeInfo.urgent ? 'text-amber-600 font-medium' : 'text-muted-foreground',
+              )}>
+                {closeInfo.text}
+              </span>
+            )}
+          </div>
+          <Button size="sm" variant="outline" className="w-full sm:w-auto" asChild>
+            <Link href={`/secretary/shows/${show.id}/entries`}>
+              View Entries
+            </Link>
+          </Button>
+        </>
+      )}
     </div>
   );
 }

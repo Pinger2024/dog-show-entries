@@ -54,15 +54,27 @@ export default function StewardShowPage({
   if (isLoading) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
-        <Loader2 className="size-8 animate-spin text-blue-400" />
+        <Loader2 className="size-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   if (!classes) {
     return (
-      <div className="text-center text-muted-foreground">
-        Show not found or not accessible.
+      <div className="rounded-xl border bg-card p-6 text-center sm:p-8">
+        <div className="text-4xl font-bold text-muted-foreground/30">?</div>
+        <h2 className="mt-3 text-lg font-semibold">Show not found</h2>
+        <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
+          This show may have been removed, or you may not be assigned as a steward.
+        </p>
+        <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
+          <Link href="/steward">
+            <Button variant="default" className="min-h-[2.75rem]">
+              <ArrowLeft className="size-4" />
+              Back to My Shows
+            </Button>
+          </Link>
+        </div>
       </div>
     );
   }
@@ -138,7 +150,7 @@ export default function StewardShowPage({
                       {sc.sex && (
                         <Badge
                           variant="outline"
-                          className="text-[10px] capitalize"
+                          className="text-xs capitalize"
                         >
                           {sc.sex}
                         </Badge>

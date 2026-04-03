@@ -9,6 +9,8 @@ import {
   CheckCircle2,
   ChevronRight,
   ChevronLeft,
+  Copy,
+  Check,
   CreditCard,
   Info,
   Loader2,
@@ -17,6 +19,7 @@ import {
   ListChecks,
   ClipboardCheck,
   PartyPopper,
+  Share2,
   ShoppingCart,
   Plus,
   Pencil,
@@ -28,6 +31,7 @@ import {
   Ticket,
 } from 'lucide-react';
 import { differenceInMonths, differenceInWeeks, format, parseISO } from 'date-fns';
+import { toast } from 'sonner';
 import { isWithinAgeRange, handlerAgeYearsOnDate, formatCurrency } from '@/lib/date-utils';
 import { trpc } from '@/lib/trpc/client';
 import { formatDogName } from '@/lib/utils';
@@ -44,6 +48,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 import { StripeProvider } from '@/components/providers/stripe-provider';
 import { PaymentForm } from './payment-form';
 import { cn } from '@/lib/utils';
@@ -78,6 +88,7 @@ export default function EnterShowPage() {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState(0);
+  const [shareCopied, setShareCopied] = useState(false);
 
   // JH form state
   const [jhName, setJhName] = useState('');
@@ -570,7 +581,7 @@ export default function EnterShowPage() {
                   ) : (
                     <s.icon className="size-3.5" />
                   )}
-                  <span className="hidden sm:inline">{s.label}</span>
+                  <span className="text-[10px] leading-tight sm:text-xs">{s.label}</span>
                 </div>
               </li>
             );
@@ -745,7 +756,7 @@ export default function EnterShowPage() {
                       <div className="flex flex-wrap items-center gap-1.5">
                         <p className="font-medium">{formatDogName(dog)}</p>
                         {alreadyInCart && (
-                          <Badge variant="secondary" className="text-[10px] shrink-0">
+                          <Badge variant="secondary" className="text-xs shrink-0">
                             In cart
                           </Badge>
                         )}
@@ -1148,7 +1159,7 @@ export default function EnterShowPage() {
                 <div>
                   <CardTitle className="font-serif text-base">{show.name}</CardTitle>
                   {show.showType && (
-                    <Badge variant="outline" className="mt-1 text-[10px] capitalize">{show.showType.replace('_', ' ')}</Badge>
+                    <Badge variant="outline" className="mt-1 text-xs capitalize">{show.showType.replace('_', ' ')}</Badge>
                   )}
                 </div>
               </div>
@@ -1518,13 +1529,22 @@ export default function EnterShowPage() {
               {cart.entries
                 .filter((e) => e.classIds.length > 0)
                 .map((entry) => (
-                  <div key={entry.id} className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">
-                      {entry.entryType === 'standard'
-                        ? entry.dogName
-                        : `JH: ${entry.handlerName}`}
-                    </span>
-                    <span>{entry.classIds.length} classes</span>
+                  <div key={entry.id} className="space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span className="font-medium">
+                        {entry.entryType === 'standard'
+                          ? entry.dogName
+                          : `JH: ${entry.handlerName}`}
+                      </span>
+                      <span className="text-muted-foreground">{entry.classIds.length} classes</span>
+                    </div>
+                    {entry.classNames.length > 0 && (
+                      <ul className="ml-1 space-y-0.5 text-xs text-muted-foreground">
+                        {entry.classNames.map((name, i) => (
+                          <li key={i}>{name}</li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 ))}
               <Separator />
@@ -1532,6 +1552,61 @@ export default function EnterShowPage() {
                 <span>Paid</span>
                 <span>{formatCurrency(paymentAmount)}</span>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Share prompt */}
+          <Card className="mx-auto w-full max-w-md border-dashed">
+            <CardContent className="py-4 text-center">
+              <p className="mb-3 text-sm font-medium text-muted-foreground">
+                Tell your breed group!
+              </p>
+              <Button
+                variant="outline"
+                className="min-h-[2.75rem] gap-2"
+                onClick={async () => {
+                  const standardEntries = cart.entries.filter(
+                    (e) => e.classIds.length > 0 && e.entryType === 'standard'
+                  );
+                  const dogLabel =
+                    standardEntries.length === 1
+                      ? standardEntries[0]!.dogName ?? 'my dog'
+                      : standardEntries.length > 1
+                        ? 'my dogs'
+                        : 'my entry';
+                  const showUrl = `https://remishowmanager.co.uk/shows/${show?.slug ?? idOrSlug}`;
+                  const text = `I've just entered ${dogLabel} into ${show?.name ?? 'a show'}! \u{1F415} ${showUrl}`;
+
+                  if (typeof navigator !== 'undefined' && navigator.share) {
+                    try {
+                      await navigator.share({
+                        title: show?.name ?? 'Dog Show Entry',
+                        text: `I've just entered ${dogLabel} into ${show?.name ?? 'a show'}! \u{1F415}`,
+                        url: showUrl,
+                      });
+                      return;
+                    } catch (e) {
+                      if ((e as Error).name === 'AbortError') return;
+                    }
+                  }
+                  // Fallback: copy to clipboard
+                  try {
+                    await navigator.clipboard.writeText(text);
+                    setShareCopied(true);
+                    toast.success('Copied to clipboard \u2014 paste into WhatsApp, Facebook, etc.');
+                    setTimeout(() => setShareCopied(false), 2000);
+                  } catch {
+                    toast.error('Could not copy to clipboard');
+                  }
+                }}
+              >
+                {shareCopied ? (
+                  <Check className="size-4 text-green-600" />
+                ) : (
+                  <Share2 className="size-4" />
+                )}
+                {shareCopied ? 'Copied!' : 'Share'}
+              </Button>
             </CardContent>
           </Card>
 
@@ -1553,6 +1628,20 @@ export default function EnterShowPage() {
               Enter More Dogs
             </Button>
           </div>
+
+          <Accordion type="single" collapsible className="mx-auto w-full max-w-md text-left">
+            <AccordionItem value="what-next">
+              <AccordionTrigger className="justify-center gap-2 text-sm font-medium text-muted-foreground">
+                <Info className="size-4 shrink-0" />
+                What happens next?
+              </AccordionTrigger>
+              <AccordionContent className="space-y-2 text-sm text-muted-foreground">
+                <p>You&apos;ll receive a confirmation email shortly with your entry details.</p>
+                <p>Ring numbers and catalogue details will be emailed to you before the show.</p>
+                <p>Bring your entry confirmation on show day.</p>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </div>
       )}
     </div>
@@ -1646,12 +1735,12 @@ function ClassGroup({
                     )}
                   </span>
                   {isSuggested && (
-                    <Badge variant="secondary" className="bg-blue-100 text-blue-800 text-[10px] px-1.5 py-0 dark:bg-blue-900 dark:text-blue-200">
+                    <Badge variant="secondary" className="bg-blue-100 text-blue-800 text-xs px-1.5 py-0 dark:bg-blue-900 dark:text-blue-200">
                       Recommended
                     </Badge>
                   )}
                   {isIneligible && (
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
+                    <Badge variant="outline" className="text-xs px-1.5 py-0 text-muted-foreground">
                       May not be eligible
                     </Badge>
                   )}

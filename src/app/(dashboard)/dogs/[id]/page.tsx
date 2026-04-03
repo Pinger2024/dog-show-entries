@@ -228,7 +228,7 @@ function TitleProgressCard({ dogId }: { dogId: string }) {
               <Trophy className="size-4" />
               RKC Title Progress
               {isPro && (
-                <Badge className="bg-gradient-to-r from-amber-500 to-yellow-500 text-white text-[10px] gap-0.5">
+                <Badge className="bg-gradient-to-r from-amber-500 to-yellow-500 text-white text-xs gap-0.5">
                   <Crown className="size-3" />
                   PRO
                 </Badge>
@@ -296,7 +296,7 @@ function TitleProgressCard({ dogId }: { dogId: string }) {
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-medium">{route.name}</span>
                           {route.met && (
-                            <Badge className="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0">
+                            <Badge className="bg-emerald-100 text-emerald-800 text-xs px-1.5 py-0">
                               Met
                             </Badge>
                           )}

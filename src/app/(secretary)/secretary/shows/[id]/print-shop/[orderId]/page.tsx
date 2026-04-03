@@ -187,7 +187,7 @@ export default function PrintOrderDetailPage({
                     >
                       <StepIcon className="size-4" />
                     </div>
-                    <span className={`text-[10px] text-center ${isComplete ? 'font-medium' : 'text-muted-foreground'}`}>
+                    <span className={`text-xs text-center ${isComplete ? 'font-medium' : 'text-muted-foreground'}`}>
                       {step.label}
                     </span>
                   </div>

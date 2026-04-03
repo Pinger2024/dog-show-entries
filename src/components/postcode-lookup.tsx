@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { Loader2, MapPin } from 'lucide-react';
+import { useState, useRef, useCallback } from 'react';
+import { Loader2, MapPin, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 
 export type AddressResult = {
   address: string;
@@ -24,121 +25,78 @@ interface PostcodeLookupProps {
   compact?: boolean;
 }
 
-type Suggestion = {
-  placeId: string;
-  mainText: string;
-  secondaryText: string;
-  fullText: string;
+type PostcodeResult = {
+  postcode: string;
+  admin_district: string | null;
+  admin_ward: string | null;
+  parish: string | null;
+  parliamentary_constituency: string | null;
+  region: string | null;
 };
-
-/** Extract structured address fields from Google Places addressComponents */
-function parseAddressComponents(
-  components: google.maps.places.AddressComponent[],
-  formattedAddress: string | null,
-): AddressResult {
-  let streetNumber = '';
-  let route = '';
-  let subpremise = '';
-  let premise = '';
-  let locality = '';
-  let postalTown = '';
-  let postcode = '';
-
-  for (const c of components) {
-    const type = c.types[0];
-    switch (type) {
-      case 'street_number': streetNumber = c.longText ?? ''; break;
-      case 'route': route = c.longText ?? ''; break;
-      case 'subpremise': subpremise = c.longText ?? ''; break;
-      case 'premise': premise = c.longText ?? ''; break;
-      case 'locality': locality = c.longText ?? ''; break;
-      case 'postal_town': postalTown = c.longText ?? ''; break;
-      case 'postal_code': postcode = c.longText ?? ''; break;
-    }
-  }
-
-  // Build street address
-  const parts: string[] = [];
-  if (subpremise) parts.push(subpremise);
-  if (premise) parts.push(premise);
-  const street = [streetNumber, route].filter(Boolean).join(' ');
-  if (street) parts.push(street);
-
-  return {
-    address: parts.join(', ') || formattedAddress?.split(',')[0] || '',
-    town: postalTown || locality,
-    postcode,
-    fullAddress: formattedAddress ?? [parts.join(', '), postalTown || locality, postcode].filter(Boolean).join(', '),
-  };
-}
 
 export function PostcodeLookup({ onSelect, compact }: PostcodeLookupProps) {
   const [query, setQuery] = useState('');
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [results, setResults] = useState<PostcodeResult[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selecting, setSelecting] = useState(false);
-  const [focused, setFocused] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const placesLibRef = useRef<google.maps.PlacesLibrary | null>(null);
-  const sessionTokenRef = useRef<google.maps.places.AutocompleteSessionToken | null>(null);
+  const [showResults, setShowResults] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load the Places library once
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const { setOptions, importLibrary } = await import('@googlemaps/js-api-loader');
-        setOptions({
-          apiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY ?? '',
-          version: 'weekly',
-        });
-        const lib = await importLibrary('places');
-        if (cancelled) return;
-        placesLibRef.current = lib;
-        sessionTokenRef.current = new lib.AutocompleteSessionToken();
-      } catch (err) {
-        console.error('[PostcodeLookup] Failed to load Google Places:', err);
-        if (!cancelled) {
-          setError('Address search unavailable — please type your address manually below.');
-        }
-      }
-    }
-    load();
-    return () => { cancelled = true; };
-  }, []);
-
-  const fetchSuggestions = useCallback(async (input: string) => {
-    const lib = placesLibRef.current;
-    if (!lib || !input || input.length < 3) {
-      setSuggestions([]);
+  const lookup = useCallback(async (postcode: string) => {
+    const cleaned = postcode.trim().replace(/\s+/g, '');
+    if (cleaned.length < 3) {
+      setResults([]);
       return;
     }
 
+    setLoading(true);
+    setError(null);
+
     try {
-      const response = await lib.AutocompleteSuggestion.fetchAutocompleteSuggestions({
-        input,
-        sessionToken: sessionTokenRef.current!,
-        includedRegionCodes: ['gb'],
-        language: 'en-GB',
-      });
+      // Try exact postcode first
+      const exactRes = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(cleaned)}`);
+      if (exactRes.ok) {
+        const data = await exactRes.json();
+        if (data.status === 200 && data.result) {
+          setResults([data.result]);
+          setShowResults(true);
+          setLoading(false);
+          return;
+        }
+      }
 
-      const mapped: Suggestion[] = response.suggestions
-        .map((s) => s.placePrediction)
-        .filter(Boolean)
-        .map((p) => ({
-          placeId: p!.placeId,
-          mainText: p!.mainText?.text ?? '',
-          secondaryText: p!.secondaryText?.text ?? '',
-          fullText: p!.text?.text ?? '',
-        }));
+      // Fall back to autocomplete
+      const autoRes = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(cleaned)}/autocomplete`);
+      if (autoRes.ok) {
+        const data = await autoRes.json();
+        if (data.status === 200 && data.result?.length > 0) {
+          // Fetch details for top results (max 5)
+          const postcodes = data.result.slice(0, 5);
+          const bulkRes = await fetch('https://api.postcodes.io/postcodes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ postcodes }),
+          });
+          if (bulkRes.ok) {
+            const bulkData = await bulkRes.json();
+            const resolved = bulkData.result
+              ?.filter((r: { result: PostcodeResult | null }) => r.result)
+              .map((r: { result: PostcodeResult }) => r.result) ?? [];
+            setResults(resolved);
+            setShowResults(true);
+            setLoading(false);
+            return;
+          }
+        }
+      }
 
-      setSuggestions(mapped);
-    } catch (err) {
-      console.error('[PostcodeLookup] Autocomplete error:', err);
-      setSuggestions([]);
-      setError('Address search unavailable. Please type your address manually.');
+      setResults([]);
+      setError('No addresses found. Try a different postcode.');
+    } catch {
+      setError('Could not search postcodes. Please type your address manually.');
+      setResults([]);
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -146,103 +104,93 @@ export function PostcodeLookup({ onSelect, compact }: PostcodeLookupProps) {
     setQuery(value);
     setError(null);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (value.length < 3) {
-      setSuggestions([]);
-      setLoading(false);
+    if (value.trim().length < 3) {
+      setResults([]);
+      setShowResults(false);
       return;
     }
-    debounceRef.current = setTimeout(async () => {
-      setLoading(true);
-      await fetchSuggestions(value);
-      setLoading(false);
-    }, 300);
+    debounceRef.current = setTimeout(() => lookup(value), 400);
   }
 
-  async function handleSelect(suggestion: Suggestion) {
-    const lib = placesLibRef.current;
-    if (!lib) return;
+  function handleSelect(result: PostcodeResult) {
+    const town = result.admin_district ?? result.admin_ward ?? '';
+    const area = result.parish ?? result.admin_ward ?? '';
 
-    setSelecting(true);
-    setSuggestions([]);
+    onSelect({
+      address: area !== town ? area : '',
+      town,
+      postcode: result.postcode,
+      fullAddress: [area !== town ? area : '', town, result.postcode].filter(Boolean).join(', '),
+    });
+    setQuery('');
+    setResults([]);
+    setShowResults(false);
+  }
 
-    try {
-      setError(null);
-      const place = new lib.Place({ id: suggestion.placeId });
-      await place.fetchFields({
-        fields: ['formattedAddress', 'addressComponents'],
-      });
-
-      const result = parseAddressComponents(
-        place.addressComponents ?? [],
-        place.formattedAddress,
-      );
-
-      onSelect(result);
-      setQuery('');
-
-      // Reset session token for next search
-      sessionTokenRef.current = new lib.AutocompleteSessionToken();
-    } catch {
-      // If place details fail, use the suggestion text as a fallback
-      // Try to extract a UK postcode from the suggestion text
-      const postcodeMatch = suggestion.fullText.match(/\b([A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2})\b/i);
-      const normalizedPostcode = postcodeMatch?.[1]?.toUpperCase().replace(/\s+/, ' ').trim() ?? '';
-      onSelect({
-        address: suggestion.mainText,
-        town: suggestion.secondaryText.replace(/, UK$/, ''),
-        postcode: normalizedPostcode,
-        fullAddress: suggestion.fullText,
-      });
-      setQuery('');
-      if (!postcodeMatch) {
-        setError('Address found but postcode could not be determined. Please enter it manually.');
-      }
-    } finally {
-      setSelecting(false);
+  function handleSearch() {
+    if (query.trim().length >= 3) {
+      lookup(query);
     }
   }
 
   return (
     <div className="relative space-y-2">
       {!compact && (
-        <p className="text-sm font-medium">Find address</p>
+        <p className="text-sm font-medium">Find address by postcode</p>
       )}
-      <div className="relative">
-        <Input
-          placeholder="Start typing your address..."
-          value={query}
-          onChange={(e) => handleInputChange(e.target.value)}
-          onFocus={() => setFocused(true)}
-          onBlur={() => {
-            // Delay hiding so click on suggestion registers
-            setTimeout(() => setFocused(false), 200);
-          }}
-          className={compact ? 'h-9 text-sm' : 'h-11 sm:h-12 text-sm sm:text-[0.9375rem]'}
-          autoComplete="off"
-        />
-        {(loading || selecting) && (
-          <div className="absolute right-3 top-1/2 -translate-y-1/2">
-            <Loader2 className="size-4 animate-spin text-muted-foreground" />
-          </div>
-        )}
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Input
+            placeholder="Enter postcode e.g. G41 3QU"
+            value={query}
+            onChange={(e) => handleInputChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSearch();
+              }
+            }}
+            onFocus={() => results.length > 0 && setShowResults(true)}
+            onBlur={() => {
+              setTimeout(() => setShowResults(false), 200);
+            }}
+            className={compact ? 'h-9 text-sm' : 'min-h-[2.75rem] text-sm'}
+            autoComplete="off"
+          />
+          {loading && (
+            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+              <Loader2 className="size-4 animate-spin text-muted-foreground" />
+            </div>
+          )}
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={compact ? 'h-9 px-3' : 'min-h-[2.75rem] px-3'}
+          onClick={handleSearch}
+          disabled={loading || query.trim().length < 3}
+        >
+          <Search className="size-4" />
+        </Button>
       </div>
 
-      {focused && suggestions.length > 0 && (
+      {showResults && results.length > 0 && (
         <div className="absolute left-0 right-0 z-50 max-h-48 overflow-y-auto overscroll-contain rounded-md border bg-background shadow-md">
-          {suggestions.map((s) => (
+          {results.map((r) => (
             <button
-              key={s.placeId}
+              key={r.postcode}
               type="button"
               className="flex w-full items-start gap-2 px-3 py-2.5 text-left text-sm hover:bg-accent transition-colors border-b last:border-b-0"
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => handleSelect(s)}
+              onClick={() => handleSelect(r)}
             >
               <MapPin className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
               <span className="min-w-0">
-                <span className="font-medium">{s.mainText}</span>
-                {s.secondaryText && (
-                  <span className="text-muted-foreground"> {s.secondaryText}</span>
-                )}
+                <span className="font-medium">{r.postcode}</span>
+                <span className="text-muted-foreground">
+                  {' '}{[r.admin_ward, r.admin_district].filter(Boolean).join(', ')}
+                </span>
               </span>
             </button>
           ))}

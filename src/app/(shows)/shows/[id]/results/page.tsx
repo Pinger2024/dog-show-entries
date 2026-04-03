@@ -399,12 +399,12 @@ export default function LiveResultsPage({
                           {cls.sex && (
                             <Badge
                               variant="outline"
-                              className="text-[10px] capitalize"
+                              className="text-xs capitalize"
                             >
                               {cls.sex}
                             </Badge>
                           )}
-                          <span className="text-[10px] text-muted-foreground">
+                          <span className="text-xs text-muted-foreground">
                             ({cls.dogsForward} forward)
                           </span>
                         </div>
@@ -438,7 +438,7 @@ export default function LiveResultsPage({
                                 {result.specialAward && (
                                   <Badge
                                     variant="secondary"
-                                    className="shrink-0 text-[10px] bg-amber-50 text-amber-700"
+                                    className="shrink-0 text-xs bg-amber-50 text-amber-700"
                                   >
                                     <Award className="mr-0.5 size-3" />
                                     {result.specialAward}

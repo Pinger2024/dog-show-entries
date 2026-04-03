@@ -20,7 +20,7 @@ export default function StewardDashboard() {
   if (isLoading) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
-        <Loader2 className="size-8 animate-spin text-blue-400" />
+        <Loader2 className="size-8 animate-spin text-muted-foreground" />
       </div>
     );
   }

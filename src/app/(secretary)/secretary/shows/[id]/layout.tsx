@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import {
   ArrowLeft,
+  Ban,
   ClipboardList,
   Clock,
   Database,
@@ -17,14 +18,6 @@ import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card } from '@/components/ui/card';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -74,6 +67,7 @@ export default function ShowManagementLayout({
   const utils = trpc.useUtils();
 
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [showTestDataDialog, setShowTestDataDialog] = useState(false);
   const [showClearDialog, setShowClearDialog] = useState(false);
 
@@ -89,13 +83,28 @@ export default function ShowManagementLayout({
   if (!show) {
     return (
       <div className="space-y-4 sm:space-y-6 pb-16 md:pb-0">
-        <p className="text-muted-foreground">Show not found.</p>
-        <Button variant="outline" asChild>
-          <Link href="/secretary">
-            <ArrowLeft className="size-4" />
-            Back to Dashboard
-          </Link>
-        </Button>
+        <div className="rounded-xl border bg-card p-6 text-center sm:p-8">
+          <div className="text-4xl font-bold text-muted-foreground/30">?</div>
+          <h2 className="mt-3 text-lg font-semibold">Show not found</h2>
+          <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
+            We couldn&apos;t load this show. It may have been deleted, or you may
+            not have access.
+          </p>
+          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
+            <Button
+              variant="default"
+              onClick={() => window.location.reload()}
+            >
+              Try Again
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/secretary">
+                <ArrowLeft className="size-4" />
+                Back to Dashboard
+              </Link>
+            </Button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -106,8 +115,6 @@ export default function ShowManagementLayout({
   };
 
   const riskyTransitions: Record<string, string> = {
-    cancelled:
-      'This will mark the show as cancelled. Exhibitors will no longer be able to view or manage their entries.',
     entries_open:
       'This will open entries to the public. Make sure all classes and pricing are set up correctly before proceeding.',
     completed:
@@ -160,7 +167,7 @@ export default function ShowManagementLayout({
             <h1 className="truncate text-lg font-bold tracking-tight sm:text-2xl">
               {show.name}
             </h1>
-            <Badge variant={showStatus.variant} className="shrink-0 hidden sm:inline-flex">
+            <Badge variant={showStatus.variant} className="shrink-0">
               {showStatus.label}
             </Badge>
           </div>
@@ -169,26 +176,42 @@ export default function ShowManagementLayout({
             {show.venue && ` — ${show.venue.name}`}
           </p>
         </div>
-        <div className="space-y-1">
-        <Select onValueChange={handleStatusChange} value={show.status}>
-          <SelectTrigger className="w-full sm:w-44">
-            <SelectValue placeholder="Change status" />
-          </SelectTrigger>
-          <SelectContent position="popper" className="max-h-60">
-            <SelectItem value="draft">Draft</SelectItem>
-            <SelectItem value="published">Published</SelectItem>
-            <SelectItem value="entries_open">Entries Open</SelectItem>
-            <SelectItem value="entries_closed">Entries Closed</SelectItem>
-            <SelectItem value="in_progress">In Progress</SelectItem>
-            <SelectItem value="completed">Completed</SelectItem>
-            <SelectItem value="cancelled">Cancelled</SelectItem>
-          </SelectContent>
-        </Select>
-        {show.status === 'draft' && (
-          <p className="text-[10px] text-muted-foreground text-right">Complete setup to open entries</p>
+        {/* Cancel show — only when show is still active (not already cancelled/completed) */}
+        {show.status !== 'cancelled' && show.status !== 'completed' && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
+            onClick={() => setShowCancelDialog(true)}
+          >
+            <Ban className="size-3.5" />
+            Cancel Show
+          </Button>
         )}
-        </div>
       </div>
+
+      {/* Cancel show confirmation */}
+      <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel this show?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You are about to cancel <span className="font-semibold text-foreground">{show.name}</span>.
+              This will mark the show as cancelled. Exhibitors will no longer be able to view or manage their entries.
+              This action should only be used if the show is genuinely being cancelled.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep Show Active</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => applyStatusChange('cancelled')}
+            >
+              Yes, Cancel Show
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Status change confirmation dialog */}
       <StatusChangeDialog
@@ -358,7 +381,7 @@ export default function ShowManagementLayout({
           <div className="rounded-lg border bg-card p-3">
             <div className="flex items-center gap-1.5 text-muted-foreground">
               <ClipboardList className="size-3.5" />
-              <span className="text-[10px] font-medium uppercase tracking-wider">Entries</span>
+              <span className="text-xs font-medium uppercase tracking-wider">Entries</span>
             </div>
             <p className="mt-1 text-lg font-bold">{entryStats.totalEntries}</p>
             <p className="text-[11px] text-muted-foreground">
@@ -369,7 +392,7 @@ export default function ShowManagementLayout({
           <div className="rounded-lg border bg-card p-3">
             <div className="flex items-center gap-1.5 text-muted-foreground">
               <PoundSterling className="size-3.5" />
-              <span className="text-[10px] font-medium uppercase tracking-wider">Revenue</span>
+              <span className="text-xs font-medium uppercase tracking-wider">Revenue</span>
             </div>
             <p className="mt-1 text-lg font-bold text-emerald-700">
               {formatCompactRevenue(entryStats.totalRevenue)}
@@ -379,7 +402,7 @@ export default function ShowManagementLayout({
           <div className="rounded-lg border bg-card p-3">
             <div className="flex items-center gap-1.5 text-muted-foreground">
               <Users className="size-3.5" />
-              <span className="text-[10px] font-medium uppercase tracking-wider">Exhibitors</span>
+              <span className="text-xs font-medium uppercase tracking-wider">Exhibitors</span>
             </div>
             <p className="mt-1 text-lg font-bold">{entryStats.uniqueExhibitors}</p>
             <p className="text-[11px] text-muted-foreground">unique</p>
@@ -387,7 +410,7 @@ export default function ShowManagementLayout({
           <div className="rounded-lg border bg-card p-3">
             <div className="flex items-center gap-1.5 text-muted-foreground">
               <Clock className="size-3.5" />
-              <span className="text-[10px] font-medium uppercase tracking-wider">Latest</span>
+              <span className="text-xs font-medium uppercase tracking-wider">Latest</span>
             </div>
             <p className="mt-1 text-lg font-bold">
               {entryStats.lastEntryAt ? formatRelativeTime(new Date(entryStats.lastEntryAt)) : '—'}

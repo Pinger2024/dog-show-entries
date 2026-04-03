@@ -268,11 +268,11 @@ function EntryReportContent({ showId }: { showId: string }) {
                               {entry.dog?.registeredName ?? 'Junior Handler'}
                             </p>
                             {entry.isNfc && (
-                              <Badge variant="outline" className="text-[10px]">NFC</Badge>
+                              <Badge variant="outline" className="text-xs">NFC</Badge>
                             )}
                             <Badge
                               variant={entryStatusConfig[entry.status]?.variant ?? 'outline'}
-                              className="text-[10px]"
+                              className="text-xs"
                             >
                               {entryStatusConfig[entry.status]?.label ?? entry.status}
                             </Badge>
@@ -283,7 +283,7 @@ function EntryReportContent({ showId }: { showId: string }) {
                           </p>
                           <div className="mt-1 flex flex-wrap gap-1">
                             {entry.entryClasses.map((ec, i) => (
-                              <Badge key={i} variant="secondary" className="text-[10px]">
+                              <Badge key={i} variant="secondary" className="text-xs">
                                 {ec.showClass?.classDefinition?.name ?? '?'}
                               </Badge>
                             ))}
@@ -323,7 +323,7 @@ function EntryReportContent({ showId }: { showId: string }) {
                     </div>
                     <div className="flex flex-wrap gap-1">
                       {entry.entryClasses.map((ec, i) => (
-                        <Badge key={i} variant="secondary" className="text-[10px]">
+                        <Badge key={i} variant="secondary" className="text-xs">
                           {ec.showClass?.classDefinition?.name ?? '?'}
                         </Badge>
                       ))}
@@ -365,7 +365,7 @@ function EntryReportContent({ showId }: { showId: string }) {
                         <TableCell>
                           {entry.dog?.registeredName ?? 'Junior Handler'}
                           {entry.isNfc && (
-                            <Badge variant="outline" className="ml-1.5 text-[10px]">NFC</Badge>
+                            <Badge variant="outline" className="ml-1.5 text-xs">NFC</Badge>
                           )}
                         </TableCell>
                         <TableCell className="hidden md:table-cell">{entry.dog?.breed?.name ?? '—'}</TableCell>
@@ -373,7 +373,7 @@ function EntryReportContent({ showId }: { showId: string }) {
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
                             {entry.entryClasses.map((ec, i) => (
-                              <Badge key={i} variant="secondary" className="text-[10px]">
+                              <Badge key={i} variant="secondary" className="text-xs">
                                 {ec.showClass?.classDefinition?.name ?? '?'}
                               </Badge>
                             ))}
@@ -538,7 +538,7 @@ function PaymentReportContent({ showId }: { showId: string }) {
                             <Badge
                               key={i}
                               variant={p.status === 'succeeded' ? 'default' : 'outline'}
-                              className="text-[10px]"
+                              className="text-xs"
                             >
                               £{(p.amount / 100).toFixed(2)} ({p.status})
                             </Badge>
@@ -597,7 +597,7 @@ function PaymentReportContent({ showId }: { showId: string }) {
                                 <Badge
                                   key={i}
                                   variant={p.status === 'succeeded' ? 'default' : 'outline'}
-                                  className="text-[10px]"
+                                  className="text-xs"
                                 >
                                   £{(p.amount / 100).toFixed(2)} ({p.status})
                                 </Badge>
@@ -901,7 +901,7 @@ function AbsenteeReportContent({ showId }: { showId: string }) {
                     </div>
                     <div className="flex flex-wrap gap-1">
                       {(entry.entryClasses ?? []).map((ec, i) => (
-                        <Badge key={i} variant="outline" className="text-[10px]">
+                        <Badge key={i} variant="outline" className="text-xs">
                           {ec.showClass?.classNumber != null ? `${ec.showClass.classNumber}. ` : ''}
                           {ec.showClass?.classDefinition?.name ?? '?'}
                         </Badge>
@@ -944,7 +944,7 @@ function AbsenteeReportContent({ showId }: { showId: string }) {
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
                             {(entry.entryClasses ?? []).map((ec, i) => (
-                              <Badge key={i} variant="outline" className="text-[10px]">
+                              <Badge key={i} variant="outline" className="text-xs">
                                 {ec.showClass?.classNumber != null ? `${ec.showClass.classNumber}. ` : ''}
                                 {ec.showClass?.classDefinition?.name ?? '?'}
                               </Badge>

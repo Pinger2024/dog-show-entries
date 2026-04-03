@@ -59,6 +59,18 @@ Rules:
 - Touch targets must be at least 44px (`min-h-[2.75rem]`)
 - Test inline action panels (checklist command center) at narrow widths — they render inside cards that are already indented
 
+## Target Users & UX Philosophy (IMPORTANT)
+
+**Our primary users are typically 60+ year old women who love dogs and are not confident with computers.** Think Amanda — she's brilliant at running dog shows but technology is not her comfort zone. Every screen, every form, every interaction must pass the test: "Would this intimidate someone who didn't grow up with computers?"
+
+Rules:
+- **Simple over clever** — if a feature looks complex, it IS too complex. Reduce visible options, use progressive disclosure (basics first, advanced behind expandable sections)
+- **Less text on screen** — every word competes for attention. Cut ruthlessly. Use short, plain English labels. No jargon, no technical terms
+- **Visual calm** — generous whitespace, clear hierarchy, one primary action per screen. Cluttered = scary
+- **Every screen should say "I can do this"** — if a user's first reaction is "this looks complicated", we've failed regardless of how powerful the feature is
+- **Guide, don't overwhelm** — step-by-step flows, clear next actions, helpful descriptions. Hand-hold without being patronising
+- **Functionality stays, complexity goes** — never remove features to simplify. Instead, present them progressively and design the UI so power is accessible without being intimidating
+
 ## Project Structure
 
 ```

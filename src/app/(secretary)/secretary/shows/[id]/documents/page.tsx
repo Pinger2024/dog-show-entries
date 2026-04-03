@@ -92,7 +92,7 @@ function DocumentLinkCard({ doc }: { doc: DocumentLink }) {
         <p className="font-medium">
           {doc.label}
           {doc.badge && (
-            <Badge variant="secondary" className="ml-2 text-[10px]">
+            <Badge variant="secondary" className="ml-2 text-xs">
               {doc.badge}
             </Badge>
           )}

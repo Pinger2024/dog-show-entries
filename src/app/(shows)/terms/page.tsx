@@ -113,10 +113,10 @@ export default function TermsPage() {
           <p className="mt-2">
             For questions about these terms, contact us at{' '}
             <a
-              href="mailto:hello@remishow.co.uk"
+              href="mailto:hello@remishowmanager.co.uk"
               className="text-primary hover:underline"
             >
-              hello@remishow.co.uk
+              hello@remishowmanager.co.uk
             </a>
           </p>
         </section>

@@ -134,7 +134,7 @@ export function ShowSectionNav({ showId }: { showId: string }) {
           </div>
           <ChevronDown className="size-4 text-muted-foreground" />
           {currentSection.path !== '/checklist' && pendingActions > 0 && (
-            <span className="flex size-5 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white">
+            <span className="flex size-5 items-center justify-center rounded-full bg-amber-500 text-xs font-bold text-white">
               {pendingActions > 9 ? '9+' : pendingActions}
             </span>
           )}
@@ -179,7 +179,7 @@ export function ShowSectionNav({ showId }: { showId: string }) {
                             const phaseBadge = getSectionBadge(path);
                             if (phaseBadge && !active) {
                               return (
-                                <span className={`ml-auto shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${phaseBadge.color}`}>
+                                <span className={`ml-auto shrink-0 rounded-full px-1.5 py-0.5 text-xs font-medium ${phaseBadge.color}`}>
                                   {phaseBadge.label}
                                 </span>
                               );
@@ -187,7 +187,7 @@ export function ShowSectionNav({ showId }: { showId: string }) {
                             return null;
                           })()}
                           {showBadge && (
-                            <span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white">
+                            <span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-amber-500 text-xs font-bold text-white">
                               {pendingActions > 9 ? '9+' : pendingActions}
                             </span>
                           )}
@@ -207,7 +207,7 @@ export function ShowSectionNav({ showId }: { showId: string }) {
         <div className="sticky top-24 space-y-4">
           {sectionGroups.map((group) => (
             <div key={group.label}>
-              <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+              <p className="mb-1 px-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                 {group.label}
               </p>
               <div className="space-y-0.5">
@@ -236,7 +236,7 @@ export function ShowSectionNav({ showId }: { showId: string }) {
                         const phaseBadge = getSectionBadge(path);
                         if (phaseBadge && !active) {
                           return (
-                            <span className={`ml-auto shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${phaseBadge.color}`}>
+                            <span className={`ml-auto shrink-0 rounded-full px-1.5 py-0.5 text-xs font-medium ${phaseBadge.color}`}>
                               {phaseBadge.label}
                             </span>
                           );
@@ -244,7 +244,7 @@ export function ShowSectionNav({ showId }: { showId: string }) {
                         return null;
                       })()}
                       {showBadge && (
-                        <span className="absolute -top-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white">
+                        <span className="absolute -top-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-amber-500 text-xs font-bold text-white">
                           {pendingActions > 9 ? '9+' : pendingActions}
                         </span>
                       )}

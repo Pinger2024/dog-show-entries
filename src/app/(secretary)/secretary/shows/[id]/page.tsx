@@ -175,11 +175,11 @@ export default function OverviewPage() {
         {(show.entryCloseDate || show.postalCloseDate) && (
           <div className="grid grid-cols-2 divide-x border-b text-center">
             <div className="px-3 py-2.5">
-              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Entries Close</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Entries Close</p>
               <p className="mt-0.5 text-xs font-semibold">{formatDate(show.entryCloseDate)}</p>
             </div>
             <div className="px-3 py-2.5">
-              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Postal Close</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Postal Close</p>
               <p className="mt-0.5 text-xs font-semibold">{formatDate(show.postalCloseDate)}</p>
             </div>
           </div>

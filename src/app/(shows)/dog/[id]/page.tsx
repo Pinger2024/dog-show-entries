@@ -58,9 +58,8 @@ export async function generateMetadata({
   if ((titles ?? []).length > 0) parts.push(`${titles!.length} title${titles!.length === 1 ? '' : 's'} held`);
   const description = parts.join(' · ') + ' — View full profile on Remi.';
 
-  const ogImages = primaryPhoto?.url
-    ? [{ url: primaryPhoto.url, width: 1200, height: 630 }]
-    : [];
+  // Let opengraph-image.tsx generate the branded card with name, breed & stats
+  // rather than overriding with a raw photo URL
 
   return {
     title: displayName,
@@ -71,13 +70,11 @@ export async function generateMetadata({
       type: 'profile',
       siteName: 'Remi Show Manager',
       url: `${BASE_URL}/dog/${id}`,
-      ...(ogImages.length > 0 && { images: ogImages }),
     },
     twitter: {
       card: 'summary_large_image',
       title: displayName,
       description,
-      ...(ogImages.length > 0 && { images: [primaryPhoto!.url] }),
     },
   };
 }

@@ -322,7 +322,7 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
               </p>
               <div className="flex flex-wrap gap-1">
                 {kcProfileMutation.data.breeds.map((b, i) => (
-                  <Badge key={i} variant="outline" className="text-[10px]">
+                  <Badge key={i} variant="outline" className="text-xs">
                     {b.breed} (L{b.level})
                   </Badge>
                 ))}
@@ -498,7 +498,7 @@ export function JudgeOffersAction({ showId }: ActionPanelProps) {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-medium truncate">{j.name}</span>
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 hidden sm:inline-flex">
+                      <Badge variant="outline" className="text-xs px-1.5 py-0 h-4 hidden sm:inline-flex">
                         {config.label}
                       </Badge>
                     </div>

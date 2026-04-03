@@ -1201,7 +1201,7 @@ function ClassDefinitionRow({
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <p className="font-medium">{cls.name}</p>
-          <Badge className={cn('text-[10px]', CLASS_TYPE_COLORS[type])}>
+          <Badge className={cn('text-xs', CLASS_TYPE_COLORS[type])}>
             {CLASS_TYPE_LABELS[type]}
           </Badge>
         </div>

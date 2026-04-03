@@ -652,7 +652,7 @@ export function DogProfileClient({ id }: { id: string }) {
                     </Link>
                     <Badge
                       variant="outline"
-                      className={`text-[10px] font-normal ${showTypeColors[show.showType] ?? ''}`}
+                      className={`text-xs font-normal ${showTypeColors[show.showType] ?? ''}`}
                     >
                       {showTypeLabels[show.showType] ?? show.showType}
                     </Badge>
@@ -683,7 +683,7 @@ export function DogProfileClient({ id }: { id: string }) {
                             </Badge>
                           )}
                           {cls.specialAward && (
-                            <span className="inline-flex items-center gap-0.5 rounded-sm bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 ring-1 ring-inset ring-amber-200/50">
+                            <span className="inline-flex items-center gap-0.5 rounded-sm bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-200/50">
                               <Award className="size-2.5" />
                               {cls.specialAward}
                             </span>

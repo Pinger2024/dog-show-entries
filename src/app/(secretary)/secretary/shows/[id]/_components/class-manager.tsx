@@ -447,7 +447,7 @@ export function ClassManager({ showId, showType, classes }: ClassManagerProps) {
                           <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                             {groupHeader.name}
                           </span>
-                          <Badge variant="outline" className="text-[10px] font-normal tabular-nums">
+                          <Badge variant="outline" className="text-xs font-normal tabular-nums">
                             {groupHeader.breedCount} {groupHeader.breedCount === 1 ? 'breed' : 'breeds'}
                           </Badge>
                           <div className="h-px flex-1 bg-border" />
@@ -494,7 +494,7 @@ export function ClassManager({ showId, showType, classes }: ClassManagerProps) {
                               </span>
                             </div>
 
-                            <Badge variant="secondary" className="shrink-0 gap-1 text-[10px] font-medium tabular-nums">
+                            <Badge variant="secondary" className="shrink-0 gap-1 text-xs font-medium tabular-nums">
                               {group.classes.length} {group.classes.length === 1 ? 'class' : 'classes'}
                               {classRange && <span className="text-muted-foreground">{classRange}</span>}
                             </Badge>
@@ -570,14 +570,14 @@ export function ClassManager({ showId, showType, classes }: ClassManagerProps) {
                                             </div>
                                             <div className="mt-0.5 flex items-center gap-2">
                                               {sc.sex ? (
-                                                <Badge variant="outline" className="text-[10px]">
+                                                <Badge variant="outline" className="text-xs">
                                                   {sc.sex === 'dog' ? 'Dog' : 'Bitch'}
                                                 </Badge>
                                               ) : (
-                                                <span className="text-[10px] text-muted-foreground">Any sex</span>
+                                                <span className="text-xs text-muted-foreground">Any sex</span>
                                               )}
                                               {!isMultiBreed && sc.breed && (
-                                                <span className="truncate text-[10px] text-muted-foreground">{sc.breed.name}</span>
+                                                <span className="truncate text-xs text-muted-foreground">{sc.breed.name}</span>
                                               )}
                                             </div>
                                           </div>

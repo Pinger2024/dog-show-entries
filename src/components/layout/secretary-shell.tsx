@@ -44,9 +44,9 @@ const sidebarNavItems = [
 const mobileNavItems = [
   { href: '/secretary', label: 'Home', icon: LayoutDashboard },
   { href: '/secretary/shows', label: 'Shows', icon: CalendarDays },
-  { href: '/secretary/shows/new', label: 'New', icon: PlusCircle },
   { href: '/secretary/club', label: 'Club', icon: Building2 },
   { href: '/secretary/billing', label: 'Billing', icon: CreditCard },
+  { href: '/secretary/settings', label: 'Settings', icon: Settings },
 ];
 
 const rootPaths = new Set(['/secretary', '/secretary/shows', '/secretary/club', '/secretary/shows/new', '/secretary/billing', '/secretary/settings']);
@@ -166,6 +166,7 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
               <>
                 <Link
                   href={parentPath}
+                  aria-label="Go back"
                   className="flex size-10 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground"
                 >
                   <ChevronLeft className="size-5" />
@@ -197,7 +198,7 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
         </header>
 
         <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-6xl px-2 py-4 pb-28 sm:px-4 sm:py-6 sm:pb-28 md:pb-8 lg:px-8">
+          <div className="mx-auto max-w-7xl px-2 py-4 pb-28 sm:px-4 sm:py-6 sm:pb-28 md:pb-8 lg:px-8">
             {children}
           </div>
         </main>
@@ -214,7 +215,7 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'flex flex-1 flex-col items-center justify-center gap-0.5 min-h-[48px] py-2 text-[10px] sm:text-xs font-medium transition-colors',
+                  'flex flex-1 flex-col items-center justify-center gap-0.5 min-h-[48px] py-2 text-xs sm:text-xs font-medium transition-colors',
                   isActive
                     ? 'text-primary'
                     : 'text-muted-foreground hover:text-foreground'

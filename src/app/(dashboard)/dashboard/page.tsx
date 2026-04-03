@@ -417,7 +417,7 @@ function NextShowHero({
             </span>
             <div className="text-left">
               <p className="text-xs font-semibold leading-tight text-white/90">{countdownText}</p>
-              <p className="text-[10px] text-amber-200/70">{subText}</p>
+              <p className="text-xs text-amber-200/70">{subText}</p>
             </div>
           </div>
         </div>
@@ -516,7 +516,7 @@ function DogCardsStrip({ dogs }: {
             </p>
             {/* Breed */}
             {dog.breedName && (
-              <p className="mt-0.5 max-w-[7rem] truncate text-center text-[10px] text-muted-foreground">
+              <p className="mt-0.5 max-w-[7rem] truncate text-center text-xs text-muted-foreground">
                 {dog.breedName}
               </p>
             )}
@@ -524,7 +524,7 @@ function DogCardsStrip({ dogs }: {
             {dog.ccCount > 0 && (
               <div className="mt-2 flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5">
                 <Crown className="size-2.5 text-amber-700" />
-                <span className="text-[10px] font-semibold text-amber-800">
+                <span className="text-xs font-semibold text-amber-800">
                   {dog.ccCount} CC{dog.ccCount !== 1 ? 's' : ''}
                 </span>
               </div>
@@ -680,13 +680,13 @@ function ResultCard({ result }: { result: { dogId: string | null; dogName: strin
             {result.placements.map((p, i) => (
               <span key={i} className="inline-flex items-center gap-1 text-xs">
                 {p.placement && (
-                  <Badge variant="outline" className={`rounded-md text-[10px] font-semibold ${placementColors[p.placement] ?? ''}`}>
+                  <Badge variant="outline" className={`rounded-md text-xs font-semibold ${placementColors[p.placement] ?? ''}`}>
                     {getPlacementLabel(p.placement)}
                   </Badge>
                 )}
                 <span className="text-muted-foreground">{p.className}</span>
                 {p.specialAward && (
-                  <Badge variant="secondary" className="rounded-md text-[10px] bg-amber-50 text-amber-700">
+                  <Badge variant="secondary" className="rounded-md text-xs bg-amber-50 text-amber-700">
                     <Award className="mr-0.5 size-2.5" />
                     {p.specialAward}
                   </Badge>
@@ -722,7 +722,7 @@ function CCResultCard({ result }: { result: { dogId: string | null; dogName: str
             <p className="font-serif text-sm font-bold text-amber-900">{result.dogName ?? 'Unknown'}</p>
             <div className="flex items-center gap-1 rounded-full bg-amber-500 px-2.5 py-0.5 text-white shadow-sm">
               <Crown className="size-3" />
-              <span className="text-[10px] font-bold tracking-wide">CC</span>
+              <span className="text-xs font-bold tracking-wide">CC</span>
             </div>
           </div>
           <p className="mt-0.5 text-xs text-amber-700/70">
@@ -732,13 +732,13 @@ function CCResultCard({ result }: { result: { dogId: string | null; dogName: str
             {result.placements.map((p, i) => (
               <span key={i} className="inline-flex items-center gap-1 text-xs">
                 {p.placement && (
-                  <Badge variant="outline" className={`rounded-md text-[10px] font-semibold ${placementColors[p.placement] ?? ''}`}>
+                  <Badge variant="outline" className={`rounded-md text-xs font-semibold ${placementColors[p.placement] ?? ''}`}>
                     {getPlacementLabel(p.placement)}
                   </Badge>
                 )}
                 <span className="text-amber-800/60">{p.className}</span>
                 {p.specialAward && (
-                  <Badge className="rounded-md border-amber-300 bg-amber-100 text-[10px] text-amber-800">
+                  <Badge className="rounded-md border-amber-300 bg-amber-100 text-xs text-amber-800">
                     <Award className="mr-0.5 size-2.5" />
                     {p.specialAward}
                   </Badge>
@@ -803,7 +803,7 @@ function CCProgressCard({ dog }: { dog: { dogId: string; dogName: string; breedN
             <Sparkles className="size-4 text-amber-600" />
             <div>
               <p className="text-xs font-semibold text-amber-800">Champion</p>
-              <p className="text-[10px] text-amber-700/70">
+              <p className="text-xs text-amber-700/70">
                 {dog.ccCount} CC{dog.ccCount !== 1 ? 's' : ''} &middot; {dog.rccCount} RCC{dog.rccCount !== 1 ? 's' : ''}
               </p>
             </div>
@@ -847,7 +847,7 @@ function CCProgressCard({ dog }: { dog: { dogId: string; dogName: string; breedN
 
             {/* RCC note if applicable */}
             {dog.rccCount > 0 && (
-              <p className="mt-1 text-center text-[10px] text-muted-foreground/70">
+              <p className="mt-1 text-center text-xs text-muted-foreground/70">
                 Also: {dog.rccCount} RCC{dog.rccCount !== 1 ? 's' : ''}
                 {!isTraditionalCloser && dog.ccCount >= 2 && ` (${dog.rccCount}/5 for alternative route)`}
               </p>
@@ -873,14 +873,14 @@ function JudgeIntelCard({ item }: { item: { showId: string; showName: string; sh
           <p className="mt-0.5 truncate text-xs text-violet-700/60">
             {item.breedName} &middot; {item.showName}
           </p>
-          <p className="text-[10px] text-violet-600/50">
+          <p className="text-xs text-violet-600/50">
             {format(toDate(item.showDate), 'EEE d MMM yyyy')}
           </p>
         </div>
         {item.alreadyEntered ? (
-          <Badge variant="secondary" className="shrink-0 rounded-lg text-[10px]">Entered</Badge>
+          <Badge variant="secondary" className="shrink-0 rounded-lg text-xs">Entered</Badge>
         ) : (
-          <Badge className="shrink-0 rounded-lg bg-violet-600 text-[10px] hover:bg-violet-700">
+          <Badge className="shrink-0 rounded-lg bg-violet-600 text-xs hover:bg-violet-700">
             <Ticket className="mr-0.5 size-3" />
             Enter
           </Badge>
@@ -920,7 +920,7 @@ function RecommendedShowCard({ show }: { show: { showId: string; showName: strin
               {show.breedNames.map((b) => (
                 <span
                   key={b}
-                  className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700"
+                  className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700"
                 >
                   <Star className="size-2.5" />
                   {b}
@@ -930,7 +930,7 @@ function RecommendedShowCard({ show }: { show: { showId: string; showName: strin
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1.5">
             {daysToClose !== null && daysToClose >= 0 && daysToClose <= 14 && (
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+              <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
                 isUrgent
                   ? 'bg-red-100 text-red-700'
                   : 'bg-amber-100 text-amber-700'
@@ -938,7 +938,7 @@ function RecommendedShowCard({ show }: { show: { showId: string; showName: strin
                 {daysToClose === 0 ? 'Closes today' : `${daysToClose}d left`}
               </span>
             )}
-            <Badge className="rounded-lg bg-primary text-[10px]">
+            <Badge className="rounded-lg bg-primary text-xs">
               <Ticket className="mr-0.5 size-3" />
               Enter
             </Badge>

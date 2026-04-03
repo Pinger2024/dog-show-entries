@@ -305,7 +305,7 @@ export function AllBreedClassSetup({
             >
               <span
                 className={cn(
-                  'flex size-4 items-center justify-center rounded-full text-[10px]',
+                  'flex size-4 items-center justify-center rounded-full text-xs',
                   isCurrent
                     ? 'bg-primary-foreground text-primary'
                     : isPast

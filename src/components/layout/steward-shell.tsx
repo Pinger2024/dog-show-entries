@@ -143,7 +143,7 @@ export function StewardShell({ user, children }: StewardShellProps) {
               key={item.href}
               href={item.href}
               className={cn(
-                'flex flex-1 flex-col items-center justify-center gap-0.5 min-h-[48px] py-2 text-[10px] sm:text-xs font-medium transition-colors',
+                'flex flex-1 flex-col items-center justify-center gap-0.5 min-h-[48px] py-2 text-xs sm:text-xs font-medium transition-colors',
                 isActive
                   ? 'text-blue-600'
                   : 'text-muted-foreground hover:text-foreground'

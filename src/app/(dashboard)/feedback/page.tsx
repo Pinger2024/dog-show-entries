@@ -225,12 +225,12 @@ export default function FeedbackPage() {
                             {item.subject || '(No subject)'}
                           </p>
                           {item.source === 'widget' && (
-                            <Badge variant="outline" className="text-[10px] border-violet-300 text-violet-700 bg-violet-50">
+                            <Badge variant="outline" className="text-xs border-violet-300 text-violet-700 bg-violet-50">
                               Widget
                             </Badge>
                           )}
                           {item.feedbackType && item.feedbackType !== 'general' && (
-                            <Badge variant="outline" className="text-[10px] capitalize">
+                            <Badge variant="outline" className="text-xs capitalize">
                               {item.feedbackType}
                             </Badge>
                           )}

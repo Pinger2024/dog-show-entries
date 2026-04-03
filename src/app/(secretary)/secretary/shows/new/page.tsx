@@ -597,7 +597,7 @@ export default function NewShowPage() {
                     )}
                   </div>
                   <span className={cn(
-                    'hidden text-[10px] font-medium sm:block',
+                    'hidden text-xs font-medium sm:block',
                     isCurrent && 'text-primary',
                     isCompleted && 'text-foreground',
                     isFuture && 'text-muted-foreground/40'
@@ -673,13 +673,6 @@ export default function NewShowPage() {
                   />
                 )}
 
-                <Accordion type="multiple" value={openSections} onValueChange={setOpenSections}>
-                  <AccordionItem value="classification">
-                    <AccordionTrigger className="py-3 hover:no-underline">
-                      <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Classification</span>
-                    </AccordionTrigger>
-                    <AccordionContent className="space-y-6 pb-2">
-
                 <div className="grid gap-4 sm:grid-cols-2">
                   <FormField
                     control={form.control}
@@ -727,6 +720,13 @@ export default function NewShowPage() {
                   />
                 </div>
 
+                <Accordion type="multiple" value={openSections} onValueChange={setOpenSections}>
+                  <AccordionItem value="classification">
+                    <AccordionTrigger className="py-3 hover:no-underline">
+                      <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Class Options</span>
+                    </AccordionTrigger>
+                    <AccordionContent className="space-y-6 pb-2">
+
                 <FormField
                   control={form.control}
                   name="classSexArrangement"
@@ -754,7 +754,7 @@ export default function NewShowPage() {
                   </AccordionItem>
                   <AccordionItem value="schedule">
                     <AccordionTrigger className="py-3 hover:no-underline">
-                      <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Schedule</span>
+                      <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Schedule</span>
                     </AccordionTrigger>
                     <AccordionContent className="space-y-6 pb-2">
 
@@ -854,7 +854,7 @@ export default function NewShowPage() {
                   </AccordionItem>
                   <AccordionItem value="secretary" className="border-none">
                     <AccordionTrigger className="py-3 hover:no-underline">
-                      <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Secretary</span>
+                      <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Secretary</span>
                     </AccordionTrigger>
                     <AccordionContent className="pb-2">
 
@@ -953,15 +953,15 @@ export default function NewShowPage() {
                   {form.watch('secretaryUserId') && (
                     <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
                       <div className="rounded-md bg-background p-2.5">
-                        <Label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Name</Label>
+                        <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Name</Label>
                         <p className="mt-0.5 text-sm font-medium">{form.watch('secretaryName') || '—'}</p>
                       </div>
                       <div className="rounded-md bg-background p-2.5">
-                        <Label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Email</Label>
+                        <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Email</Label>
                         <p className="mt-0.5 text-sm font-medium truncate">{form.watch('secretaryEmail') || '—'}</p>
                       </div>
                       <div className="rounded-md bg-background p-2.5">
-                        <Label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Phone</Label>
+                        <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Phone</Label>
                         <p className="mt-0.5 text-sm font-medium">{form.watch('secretaryPhone') || '—'}</p>
                       </div>
                     </div>
@@ -1235,7 +1235,7 @@ export default function NewShowPage() {
                     name="firstEntryFee"
                     render={({ field }) => (
                       <FormItem className="rounded-lg border bg-muted/20 p-4">
-                        <FormLabel className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">First Entry</FormLabel>
+                        <FormLabel className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">First Entry</FormLabel>
                         <FormControl>
                           <div className="relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">£</span>
@@ -1251,7 +1251,7 @@ export default function NewShowPage() {
                             />
                           </div>
                         </FormControl>
-                        <p className="text-[10px] text-muted-foreground">The fee for the first dog entered</p>
+                        <p className="text-xs text-muted-foreground">The fee for the first dog entered</p>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -1261,7 +1261,7 @@ export default function NewShowPage() {
                     name="subsequentEntryFee"
                     render={({ field }) => (
                       <FormItem className="rounded-lg border bg-muted/20 p-4">
-                        <FormLabel className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Subsequent</FormLabel>
+                        <FormLabel className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Subsequent</FormLabel>
                         <FormControl>
                           <div className="relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">£</span>
@@ -1277,7 +1277,7 @@ export default function NewShowPage() {
                             />
                           </div>
                         </FormControl>
-                        <p className="text-[10px] text-muted-foreground">Each additional entry after the first</p>
+                        <p className="text-xs text-muted-foreground">Each additional entry after the first</p>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -1287,7 +1287,7 @@ export default function NewShowPage() {
                     name="nfcEntryFee"
                     render={({ field }) => (
                       <FormItem className="rounded-lg border bg-muted/20 p-4">
-                        <FormLabel className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Not for Competition</FormLabel>
+                        <FormLabel className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Not for Competition</FormLabel>
                         <FormControl>
                           <div className="relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">£</span>
@@ -1303,7 +1303,7 @@ export default function NewShowPage() {
                             />
                           </div>
                         </FormControl>
-                        <p className="text-[10px] text-muted-foreground">NFC entries (exhibition only)</p>
+                        <p className="text-xs text-muted-foreground">NFC entries (exhibition only)</p>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -1313,7 +1313,7 @@ export default function NewShowPage() {
                     name="juniorHandlerFee"
                     render={({ field }) => (
                       <FormItem className="rounded-lg border bg-muted/20 p-4">
-                        <FormLabel className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Junior Handling</FormLabel>
+                        <FormLabel className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Junior Handling</FormLabel>
                         <FormControl>
                           <div className="relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">£</span>
@@ -1329,7 +1329,7 @@ export default function NewShowPage() {
                             />
                           </div>
                         </FormControl>
-                        <p className="text-[10px] text-muted-foreground">Fee for junior handling classes</p>
+                        <p className="text-xs text-muted-foreground">Fee for junior handling classes</p>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -1731,11 +1731,11 @@ function ReviewStep({
           </div>
           <div className="mt-4 grid gap-3 grid-cols-1 sm:grid-cols-2">
             <div>
-              <dt className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Club</dt>
+              <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Club</dt>
               <dd className="mt-0.5 text-sm font-medium">{org?.name ?? 'Not set'}</dd>
             </div>
             <div>
-              <dt className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Dates</dt>
+              <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Dates</dt>
               <dd className="mt-0.5 text-sm font-medium">
                 {values.startDate ? formatDateDisplay(values.startDate) : 'Not set'}
                 {values.startDate !== values.endDate && values.endDate && ` — ${formatDateDisplay(values.endDate)}`}
@@ -1743,13 +1743,13 @@ function ReviewStep({
             </div>
             {values.showOpenTime && (
               <div>
-                <dt className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Opens At</dt>
+                <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Opens At</dt>
                 <dd className="mt-0.5 text-sm font-medium">{values.showOpenTime}</dd>
               </div>
             )}
             {values.secretaryName && (
               <div>
-                <dt className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Secretary</dt>
+                <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Secretary</dt>
                 <dd className="mt-0.5 text-sm font-medium">{values.secretaryName}</dd>
               </div>
             )}
@@ -1768,7 +1768,7 @@ function ReviewStep({
           </div>
           {createVenue && values.newVenueName ? (
             <div>
-              <p className="text-sm font-medium">{values.newVenueName} <Badge variant="outline" className="text-[10px]">New</Badge></p>
+              <p className="text-sm font-medium">{values.newVenueName} <Badge variant="outline" className="text-xs">New</Badge></p>
               {values.newVenuePostcode && <p className="text-xs text-muted-foreground mt-0.5">{values.newVenuePostcode}</p>}
             </div>
           ) : venue ? (
@@ -1794,19 +1794,19 @@ function ReviewStep({
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="text-center">
               <p className="text-lg font-bold">£{Number(values.firstEntryFee).toFixed(2)}</p>
-              <p className="text-[10px] text-muted-foreground">First</p>
+              <p className="text-xs text-muted-foreground">First</p>
             </div>
             <div className="text-center">
               <p className="text-lg font-bold">£{Number(values.subsequentEntryFee).toFixed(2)}</p>
-              <p className="text-[10px] text-muted-foreground">Subsequent</p>
+              <p className="text-xs text-muted-foreground">Subsequent</p>
             </div>
             <div className="text-center">
               <p className="text-lg font-bold">£{Number(values.nfcEntryFee).toFixed(2)}</p>
-              <p className="text-[10px] text-muted-foreground">NFC</p>
+              <p className="text-xs text-muted-foreground">NFC</p>
             </div>
             <div className="text-center">
               <p className="text-lg font-bold">£{Number(values.juniorHandlerFee).toFixed(2)}</p>
-              <p className="text-[10px] text-muted-foreground">Junior Handler</p>
+              <p className="text-xs text-muted-foreground">Junior Handler</p>
             </div>
           </div>
         </div>
@@ -1820,13 +1820,13 @@ function ReviewStep({
             <div className="grid grid-cols-2 gap-3 text-sm">
               {values.entriesOpenDate && (
                 <div>
-                  <p className="text-[10px] text-muted-foreground">Entries Open</p>
+                  <p className="text-xs text-muted-foreground">Entries Open</p>
                   <p className="font-medium">{new Date(values.entriesOpenDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
                 </div>
               )}
               {values.entryCloseDate && (
                 <div>
-                  <p className="text-[10px] text-muted-foreground">Entries Close</p>
+                  <p className="text-xs text-muted-foreground">Entries Close</p>
                   <p className="font-medium">{new Date(values.entryCloseDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
                 </div>
               )}
@@ -1850,17 +1850,17 @@ function ReviewStep({
                 <div className="grid grid-cols-3 gap-3">
                   <div className="rounded-md bg-background p-2.5 text-center">
                     <p className="text-lg font-bold">{allBreedData.selectedBreedIds.length}</p>
-                    <p className="text-[10px] text-muted-foreground">Breeds</p>
+                    <p className="text-xs text-muted-foreground">Breeds</p>
                   </div>
                   <div className="rounded-md bg-background p-2.5 text-center">
                     <p className="text-lg font-bold">{allBreedClasses.length}</p>
-                    <p className="text-[10px] text-muted-foreground">Classes/breed</p>
+                    <p className="text-xs text-muted-foreground">Classes/breed</p>
                   </div>
                   <div className="rounded-md bg-background p-2.5 text-center">
                     <p className="text-lg font-bold">
                       {allBreedData.selectedBreedIds.length * allBreedClasses.length}
                     </p>
-                    <p className="text-[10px] text-muted-foreground">Total</p>
+                    <p className="text-xs text-muted-foreground">Total</p>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-1.5">

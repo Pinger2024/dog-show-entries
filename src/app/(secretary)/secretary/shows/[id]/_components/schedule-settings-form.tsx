@@ -278,7 +278,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
           <AccordionTrigger className="px-5 py-4 hover:no-underline">
             <div className="flex items-center gap-2">
               <span className="font-semibold">Regulatory & Compliance</span>
-              <Badge variant="outline" className="text-[10px]">
+              <Badge variant="outline" className="text-xs">
                 Required
               </Badge>
             </div>
@@ -456,7 +456,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
           <AccordionTrigger className="px-5 py-4 hover:no-underline">
             <div className="flex items-center gap-2">
               <span className="font-semibold">People & Officials</span>
-              <Badge variant="outline" className="text-[10px]">
+              <Badge variant="outline" className="text-xs">
                 Show Manager Required
               </Badge>
             </div>
@@ -654,7 +654,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
           <AccordionTrigger className="px-5 py-4 hover:no-underline">
             <div className="flex items-center gap-2">
               <span className="font-semibold">Awards</span>
-              <Badge variant="outline" className="text-[10px]">
+              <Badge variant="outline" className="text-xs">
                 Required
               </Badge>
             </div>
@@ -696,7 +696,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
           <AccordionTrigger className="px-5 py-4 hover:no-underline">
             <div className="flex items-center gap-2">
               <span className="font-semibold">Additional Information</span>
-              <Badge variant="secondary" className="text-[10px]">
+              <Badge variant="secondary" className="text-xs">
                 Optional
               </Badge>
             </div>
@@ -720,7 +720,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
                 onChange={(e) => setWhat3words(e.target.value)}
                 placeholder="e.g. ///filled.count.soap"
               />
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Find your venue&apos;s what3words address at what3words.com
               </p>
             </div>
@@ -768,7 +768,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
                   const statementsInCategory = RKC_STATEMENTS.filter((s) => s.category === category);
                   return (
                     <div key={category}>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
                         {category}
                       </p>
                       <div className="space-y-1">

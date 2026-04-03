@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/card';
 
 export const metadata = {
-  title: 'Help Centre - Remi',
+  title: 'Help Centre',
   description: 'Frequently asked questions and help for using Remi.',
 };
 
@@ -94,10 +94,10 @@ export default function HelpPage() {
         <p className="mt-2 text-muted-foreground">
           Drop us an email at{' '}
           <a
-            href="mailto:support@remishow.co.uk"
+            href="mailto:hello@remishowmanager.co.uk"
             className="text-primary hover:underline"
           >
-            support@remishow.co.uk
+            hello@remishowmanager.co.uk
           </a>{' '}
           and we&apos;ll get back to you as soon as possible.
         </p>

@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import {
+  AlertTriangle,
   BookOpen,
   Check,
   CheckCircle,
@@ -114,7 +115,7 @@ function ActionCard({
             {label}
           </p>
           {badge && (
-            <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">
+            <Badge variant="secondary" className="h-4 px-1.5 text-xs">
               {badge}
             </Badge>
           )}
@@ -325,7 +326,7 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
                 </span>
 
                 {item.auto && item.done && (
-                  <Badge variant="secondary" className="h-4 shrink-0 px-1.5 py-0 text-[10px]">
+                  <Badge variant="secondary" className="h-4 shrink-0 px-1.5 py-0 text-xs">
                     Auto
                   </Badge>
                 )}
@@ -389,6 +390,19 @@ function EntriesOpenPanel({ show, showId }: { show: Show; showId: string }) {
 
   const showUrl = `https://remishowmanager.co.uk/shows/${show.slug ?? showId}`;
 
+  const utils = trpc.useUtils();
+  const closeEntriesMutation = trpc.shows.update.useMutation({
+    onSuccess: () => {
+      utils.shows.getById.invalidate({ id: showId });
+      toast.success('Entries closed');
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  function handleCloseEntries() {
+    closeEntriesMutation.mutate({ id: showId, status: 'entries_closed' });
+  }
+
   function handleCopyLink() {
     navigator.clipboard.writeText(showUrl).then(
       () => toast.success('Show link copied'),
@@ -398,33 +412,69 @@ function EntriesOpenPanel({ show, showId }: { show: Show; showId: string }) {
 
   return (
     <div className="space-y-3">
-      {/* Countdown strip */}
-      {closeInfo && (
+      {/* Overdue warning banner — entries should have closed but haven't been */}
+      {closeInfo?.overdue && (
+        <div className="overflow-hidden rounded-xl border border-rose-300 bg-rose-50 dark:border-rose-800/60 dark:bg-rose-950/30">
+          <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle className="mt-0.5 size-5 shrink-0 text-rose-600 dark:text-rose-400" />
+              <div>
+                <p className="text-sm font-semibold text-rose-800 dark:text-rose-300">
+                  Entries were scheduled to close on{' '}
+                  {new Date(show.entryCloseDate!).toLocaleDateString('en-GB', {
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric',
+                  })}
+                </p>
+                <p className="mt-0.5 text-xs text-rose-700/80 dark:text-rose-400/80">
+                  Entries are still being accepted. Close them now or they will remain open.
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="destructive"
+              className="w-full shrink-0 sm:w-auto min-h-[2.75rem]"
+              disabled={closeEntriesMutation.isPending}
+              onClick={handleCloseEntries}
+            >
+              {closeEntriesMutation.isPending ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Closing...
+                </>
+              ) : (
+                'Close Entries Now'
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Countdown strip — shown when not overdue */}
+      {closeInfo && !closeInfo.overdue && (
         <div className={cn(
           'flex items-center gap-2.5 rounded-xl px-4 py-3',
-          closeInfo.overdue
-            ? 'bg-rose-50 border border-rose-200/60 dark:bg-rose-950/20 dark:border-rose-800/40'
-            : closeInfo.urgent
-              ? 'bg-amber-50 border border-amber-200/60 dark:bg-amber-950/20 dark:border-amber-800/40'
-              : 'bg-emerald-50/60 border border-emerald-200/40 dark:bg-emerald-950/10 dark:border-emerald-800/30',
+          closeInfo.urgent
+            ? 'bg-amber-50 border border-amber-200/60 dark:bg-amber-950/20 dark:border-amber-800/40'
+            : 'bg-emerald-50/60 border border-emerald-200/40 dark:bg-emerald-950/10 dark:border-emerald-800/30',
         )}>
           <span className="relative flex size-2.5">
             <span className={cn(
               'absolute inline-flex size-full animate-ping rounded-full opacity-75',
-              closeInfo.overdue ? 'bg-rose-400' : closeInfo.urgent ? 'bg-amber-400' : 'bg-emerald-400',
+              closeInfo.urgent ? 'bg-amber-400' : 'bg-emerald-400',
             )} />
             <span className={cn(
               'relative inline-flex size-2.5 rounded-full',
-              closeInfo.overdue ? 'bg-rose-500' : closeInfo.urgent ? 'bg-amber-500' : 'bg-emerald-500',
+              closeInfo.urgent ? 'bg-amber-500' : 'bg-emerald-500',
             )} />
           </span>
           <span className={cn(
             'text-sm font-medium',
-            closeInfo.overdue
-              ? 'text-rose-700 dark:text-rose-400'
-              : closeInfo.urgent
-                ? 'text-amber-700 dark:text-amber-400'
-                : 'text-emerald-700 dark:text-emerald-400',
+            closeInfo.urgent
+              ? 'text-amber-700 dark:text-amber-400'
+              : 'text-emerald-700 dark:text-emerald-400',
           )}>
             {closeInfo.text}
           </span>

@@ -236,7 +236,7 @@ function ClassPublishButton({
     <Button
       variant="outline"
       size="sm"
-      className="ml-auto h-7 gap-1 px-2 text-[10px]"
+      className="ml-auto h-7 gap-1 px-2 text-xs"
       disabled={isPending}
       onClick={() => {
         publishMut.mutate({ showId, showClassId });
@@ -911,11 +911,11 @@ export default function SecretaryResultsPage() {
                         {cls.className}
                       </h4>
                       {cls.sex && (
-                        <Badge variant="outline" className="text-[10px] capitalize">
+                        <Badge variant="outline" className="text-xs capitalize">
                           {cls.sex}
                         </Badge>
                       )}
-                      <span className="text-[10px] text-muted-foreground">
+                      <span className="text-xs text-muted-foreground">
                         {cls.entriesCount} entered · {cls.dogsForward} forward
                       </span>
                       {cls.results.length > 0 && (
@@ -947,7 +947,7 @@ export default function SecretaryResultsPage() {
                               {result.specialAward && (
                                 <Badge
                                   variant="secondary"
-                                  className="shrink-0 text-[10px] bg-amber-50 text-amber-700"
+                                  className="shrink-0 text-xs bg-amber-50 text-amber-700"
                                 >
                                   <Award className="mr-0.5 size-3" />
                                   {result.specialAward}

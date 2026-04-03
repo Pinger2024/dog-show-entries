@@ -793,7 +793,7 @@ function DogStep({
                     Enter a RKC number or registered name above, then click
                     lookup.
                   </p>
-                  <p className="mt-1 text-[10px] text-muted-foreground/70">
+                  <p className="mt-1 text-xs text-muted-foreground/70">
                     Tip: type the name exactly as it appears on your RKC registration certificate, including affixes (e.g. &quot;Dorabella Dancing Queen At Hundark&quot;).
                   </p>
                   <Button

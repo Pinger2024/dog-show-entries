@@ -295,7 +295,7 @@ function DogEntryRow({ entry }: { entry: Entry }) {
           <span className="truncate text-sm font-medium">
             {entry.dog?.registeredName ?? 'Junior Handler'}
           </span>
-          <Badge variant={status.variant} className="shrink-0 text-[10px]">
+          <Badge variant={status.variant} className="shrink-0 text-xs">
             {status.label}
           </Badge>
         </div>

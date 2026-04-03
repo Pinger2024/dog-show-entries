@@ -421,18 +421,18 @@ export default function ShowChecklistPage() {
                 {item.title}
               </span>
               {item.isAutoDetected && (
-                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                <Badge variant="secondary" className="text-xs px-1.5 py-0 h-4">
                   <Sparkles className="size-2.5 mr-0.5" />
                   Auto
                 </Badge>
               )}
               {item.assignedToName && (
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                <Badge variant="outline" className="text-xs px-1.5 py-0 h-4">
                   {item.assignedToName}
                 </Badge>
               )}
               {actionEntry && (
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-blue-200 text-blue-600">
+                <Badge variant="outline" className="text-xs px-1.5 py-0 h-4 border-blue-200 text-blue-600">
                   Action
                 </Badge>
               )}
@@ -854,12 +854,12 @@ export default function ShowChecklistPage() {
                     {phase.label}
                   </h3>
                   {isCurrent && (
-                    <span className="shrink-0 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">
+                    <span className="shrink-0 rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">
                       Now
                     </span>
                   )}
                   {isPast && phasePercent === 100 && (
-                    <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                    <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
                       Done
                     </span>
                   )}
@@ -913,7 +913,7 @@ export default function ShowChecklistPage() {
                         <span className="text-sm font-medium flex-1">
                           {group.baseTitle}
                         </span>
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 shrink-0">
+                        <Badge variant="outline" className="text-xs px-1.5 py-0 h-4 shrink-0">
                           {doneCount}/{group.items.length} done
                         </Badge>
                       </button>

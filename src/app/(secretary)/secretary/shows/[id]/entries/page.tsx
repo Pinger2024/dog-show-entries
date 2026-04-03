@@ -223,7 +223,7 @@ export default function EntriesPage() {
                           <p className="font-medium truncate">
                             {entry.dog?.registeredName ?? '\u2014'}
                             {entry.isNfc && (
-                              <Badge variant="outline" className="ml-1.5 text-[10px] align-middle">
+                              <Badge variant="outline" className="ml-1.5 text-xs align-middle">
                                 NFC
                               </Badge>
                             )}
@@ -260,7 +260,7 @@ export default function EntriesPage() {
                             <Badge
                               key={i}
                               variant="secondary"
-                              className="text-[10px]"
+                              className="text-xs"
                             >
                               {ec.showClass?.classDefinition?.name ?? '?'}
                             </Badge>
@@ -311,7 +311,7 @@ export default function EntriesPage() {
                         <TableCell>
                           {entry.dog?.registeredName ?? '\u2014'}
                           {entry.isNfc && (
-                            <Badge variant="outline" className="ml-1.5 text-[10px]">
+                            <Badge variant="outline" className="ml-1.5 text-xs">
                               NFC
                             </Badge>
                           )}
@@ -323,7 +323,7 @@ export default function EntriesPage() {
                               <Badge
                                 key={i}
                                 variant="secondary"
-                                className="text-[10px]"
+                                className="text-xs"
                               >
                                 {ec.showClass?.classDefinition?.name ?? '?'}
                               </Badge>

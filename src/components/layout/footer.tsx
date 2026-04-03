@@ -60,10 +60,10 @@ export function Footer() {
             <p className="text-xs sm:text-sm text-muted-foreground">
               Questions?{' '}
               <a
-                href="mailto:hello@remishow.co.uk"
+                href="mailto:hello@remishowmanager.co.uk"
                 className="text-primary hover:underline"
               >
-                hello@remishow.co.uk
+                hello@remishowmanager.co.uk
               </a>
             </p>
           </div>

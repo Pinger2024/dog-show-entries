@@ -681,7 +681,7 @@ export default function AdminDashboardPage() {
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           {badge && (
-                            <Badge variant={badge.variant} className="text-[10px] px-1.5 py-0">
+                            <Badge variant={badge.variant} className="text-xs px-1.5 py-0">
                               {badge.label}
                             </Badge>
                           )}

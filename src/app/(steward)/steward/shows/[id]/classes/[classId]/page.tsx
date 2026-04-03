@@ -90,7 +90,7 @@ export default function StewardClassResultsPage({
   if (isLoading) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
-        <Loader2 className="size-8 animate-spin text-blue-400" />
+        <Loader2 className="size-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -239,7 +239,7 @@ export default function StewardClassResultsPage({
                         {entry.dogName}
                       </p>
                       {entry.absent && (
-                        <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300 shrink-0">
+                        <Badge variant="outline" className="text-xs text-amber-600 border-amber-300 shrink-0">
                           Absent
                         </Badge>
                       )}
@@ -249,7 +249,7 @@ export default function StewardClassResultsPage({
                       {!entry.absent && entry.catalogueNumber && ` · #${entry.catalogueNumber}`}
                     </p>
                     {entry.result?.specialAward && (
-                      <Badge variant="secondary" className="mt-1 text-[10px] bg-amber-50 text-amber-700">
+                      <Badge variant="secondary" className="mt-1 text-xs bg-amber-50 text-amber-700">
                         <Award className="mr-0.5 size-3" />
                         {entry.result.specialAward}
                       </Badge>

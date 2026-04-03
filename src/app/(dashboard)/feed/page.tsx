@@ -150,7 +150,7 @@ export default function FeedPage() {
                         <p className="truncate text-xs font-medium">
                           {dog.registeredName}
                         </p>
-                        <p className="truncate text-[10px] text-muted-foreground">
+                        <p className="truncate text-xs text-muted-foreground">
                           {dog.breed}
                         </p>
                       </div>
@@ -198,7 +198,7 @@ export default function FeedPage() {
                       <p className="truncate text-xs font-medium">
                         {dog.registeredName}
                       </p>
-                      <p className="truncate text-[10px] text-muted-foreground">
+                      <p className="truncate text-xs text-muted-foreground">
                         {dog.breed}
                       </p>
                     </div>
@@ -276,10 +276,10 @@ function FeedItem({ item }: { item: FeedItemData }) {
               {dog.registeredName}
             </p>
             {dog.breed && (
-              <p className="text-[10px] text-muted-foreground">{dog.breed}</p>
+              <p className="text-xs text-muted-foreground">{dog.breed}</p>
             )}
           </div>
-          <span className="ml-auto text-[10px] text-muted-foreground">
+          <span className="ml-auto text-xs text-muted-foreground">
             {formatRelativeDate(new Date(item.createdAt))}
           </span>
         </Link>
@@ -299,7 +299,7 @@ function FeedItem({ item }: { item: FeedItemData }) {
               >
                 {item.show.name}
               </Link>
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {format(new Date(item.show.date), 'd MMMM yyyy')}
               </p>
               {item.classes && (

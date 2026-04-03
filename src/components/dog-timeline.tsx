@@ -417,13 +417,13 @@ function ShowResultCard({ item }: { item: ShowResultItem }) {
                 {cls.placement && (
                   <Badge
                     variant="outline"
-                    className={`text-[10px] font-semibold ${placementColors[cls.placement] ?? ''}`}
+                    className={`text-xs font-semibold ${placementColors[cls.placement] ?? ''}`}
                   >
                     {getPlacementLabel(cls.placement)}
                   </Badge>
                 )}
                 {cls.specialAward && (
-                  <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-700">
+                  <span className="inline-flex items-center gap-0.5 text-xs font-medium text-amber-700">
                     <Award className="size-2.5" />
                     {cls.specialAward}
                   </span>

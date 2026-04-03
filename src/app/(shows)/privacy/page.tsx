@@ -71,10 +71,10 @@ export default function PrivacyPage() {
             your personal data. You can manage most of your data directly
             through your Remi account. For any data requests, contact us at{' '}
             <a
-              href="mailto:privacy@remishow.co.uk"
+              href="mailto:privacy@remishowmanager.co.uk"
               className="text-primary hover:underline"
             >
-              privacy@remishow.co.uk
+              privacy@remishowmanager.co.uk
             </a>
           </p>
         </section>
@@ -96,10 +96,10 @@ export default function PrivacyPage() {
           <p className="mt-2">
             If you have questions about this privacy policy, contact us at{' '}
             <a
-              href="mailto:privacy@remishow.co.uk"
+              href="mailto:privacy@remishowmanager.co.uk"
               className="text-primary hover:underline"
             >
-              privacy@remishow.co.uk
+              privacy@remishowmanager.co.uk
             </a>
           </p>
         </section>

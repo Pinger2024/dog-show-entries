@@ -419,7 +419,7 @@ export default function PrintShopPage() {
                       <div className="flex items-center gap-2">
                         <CardTitle className="text-sm">{product.label}</CardTitle>
                         {isSelected && activePreset && (
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                          <Badge variant="outline" className="text-xs px-1.5 py-0">
                             {activePreset.label}
                           </Badge>
                         )}
@@ -821,7 +821,7 @@ export default function PrintShopPage() {
                       <p className="font-medium">
                         {item.label}
                         {item.presetId && item.presetId !== 'standard' && (
-                          <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0">
+                          <Badge variant="outline" className="ml-2 text-xs px-1.5 py-0">
                             {item.presetId}
                           </Badge>
                         )}
@@ -1073,7 +1073,7 @@ function SpecConfigurator({
               <Label className="text-xs text-muted-foreground">
                 {spec.label}
                 {spec.description && (
-                  <span className="ml-1 text-[10px] text-muted-foreground/70">
+                  <span className="ml-1 text-xs text-muted-foreground/70">
                     — {spec.description}
                   </span>
                 )}

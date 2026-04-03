@@ -886,25 +886,25 @@ export function ShowDetailClient() {
             {show.firstEntryFee != null && show.firstEntryFee > 0 && (
               <div className="text-center">
                 <p className="font-serif text-2xl font-bold text-primary sm:text-3xl">{formatCurrency(show.firstEntryFee)}</p>
-                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Entry Fee</p>
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Entry Fee</p>
               </div>
             )}
             {showAny.showOpenTime && (
               <div className="text-center">
                 <p className="font-serif text-2xl font-bold sm:text-3xl">{showAny.showOpenTime}</p>
-                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Doors Open</p>
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Doors Open</p>
               </div>
             )}
             {showAny.startTime && (
               <div className="text-center">
                 <p className="font-serif text-2xl font-bold sm:text-3xl">{showAny.startTime}</p>
-                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Judging Starts</p>
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Judging Starts</p>
               </div>
             )}
             {show.showClasses && show.showClasses.length > 0 && (
               <div className="text-center">
                 <p className="font-serif text-2xl font-bold sm:text-3xl">{show.showClasses.length}</p>
-                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Classes</p>
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Classes</p>
               </div>
             )}
           </div>

@@ -100,7 +100,7 @@ export function AccountSwitcher() {
               <h3 className="text-sm font-bold text-neutral-900">
                 Account Switcher
               </h3>
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-amber-700">
                 Dev Tool
               </span>
             </div>
@@ -111,7 +111,7 @@ export function AccountSwitcher() {
 
           {/* Current user */}
           <div className="border-b bg-neutral-50 px-4 py-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
+            <p className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
               Signed in as
             </p>
             <div className="mt-1 flex items-center gap-2">
@@ -120,7 +120,7 @@ export function AccountSwitcher() {
               </span>
               <span
                 className={cn(
-                  'rounded-full px-2 py-0.5 text-[10px] font-bold',
+                  'rounded-full px-2 py-0.5 text-xs font-bold',
                   currentRoleConfig.colour
                 )}
               >
@@ -156,7 +156,7 @@ export function AccountSwitcher() {
                         </span>
                         <span
                           className={cn(
-                            'rounded-full px-1.5 py-0.5 text-[10px] font-bold',
+                            'rounded-full px-1.5 py-0.5 text-xs font-bold',
                             roleConf.colour
                           )}
                         >
@@ -195,7 +195,7 @@ export function AccountSwitcher() {
                           onClick={() => !isActive && changeRole(u.id, role)}
                           disabled={isActive || changingRole !== null}
                           className={cn(
-                            'rounded-full px-2 py-0.5 text-[10px] font-semibold transition-all',
+                            'rounded-full px-2 py-0.5 text-xs font-semibold transition-all',
                             isActive
                               ? cn(rc.colour, 'ring-1 ring-current')
                               : 'bg-neutral-100 text-neutral-400 hover:bg-neutral-200 hover:text-neutral-600',
@@ -224,7 +224,7 @@ export function AccountSwitcher() {
 
           {/* Footer hint */}
           <div className="border-t px-4 py-2">
-            <p className="text-[10px] text-neutral-400">
+            <p className="text-xs text-neutral-400">
               Changing role updates the database. Switching account refreshes
               your session with the new role.
             </p>
@@ -248,7 +248,7 @@ export function AccountSwitcher() {
         </span>
         <span
           className={cn(
-            'rounded-full px-1.5 py-0.5 text-[10px] font-bold',
+            'rounded-full px-1.5 py-0.5 text-xs font-bold',
             currentRoleConfig.colour
           )}
         >

@@ -57,6 +57,11 @@ describe('mobile overflow protection', () => {
     'src/components/ui/command.tsx',
     'src/components/ui/select.tsx',
     'src/components/ui/dropdown-menu.tsx',
+    // Admin page — small -mx-2 with matching px-2 for hover effect, admin-only page
+    'src/app/(dashboard)/admin/page.tsx',
+    // Dashboard + feature-tabs — full-bleed horizontal scroll pattern with sm:-mx-0 reset
+    'src/app/(dashboard)/dashboard/page.tsx',
+    'src/components/features/feature-tabs.tsx',
   ];
 
   it('should not have unprotected negative horizontal margins', () => {
@@ -164,6 +169,12 @@ describe('mobile overflow protection', () => {
   // ─── Test 4: No overflow-x-auto combined with negative margins ────
 
   it('should not combine overflow-x-auto with negative margins on the same element', () => {
+    // Full-bleed scroll patterns with sm:-mx-0 reset are safe
+    const OVERFLOW_COMBO_ALLOWLIST = [
+      'src/app/(dashboard)/dashboard/page.tsx',
+      'src/components/features/feature-tabs.tsx',
+    ];
+
     const matches = scanFiles(
       ['src/app', 'src/components'],
       ['.tsx'],
@@ -172,6 +183,7 @@ describe('mobile overflow protection', () => {
 
     // For each line with overflow-x-auto, check if the same line also has -mx-
     const violations = matches.filter((m) => {
+      if (OVERFLOW_COMBO_ALLOWLIST.some((a) => m.file.includes(a))) return false;
       if (/-mx-/.test(m.content)) {
         // Allow if desktop-only
         if (/hidden\s+(sm|md|lg):block/.test(m.content)) return false;

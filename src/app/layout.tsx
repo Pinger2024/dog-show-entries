@@ -22,6 +22,7 @@ const libreBaskerville = Libre_Baskerville({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://remishowmanager.co.uk'),
   title: {
     default: 'Remi — Enter Dog Shows with Confidence',
     template: '%s | Remi',

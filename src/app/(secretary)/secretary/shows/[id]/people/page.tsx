@@ -446,13 +446,13 @@ function StewardsSection({ showId }: { showId: string }) {
                   {uniqueBreedNames.length > 0 ? (
                     <div className="mt-2 flex flex-wrap gap-1">
                       {uniqueBreedNames.map((name) => (
-                        <Badge key={name} variant="secondary" className="text-[10px]">
+                        <Badge key={name} variant="secondary" className="text-xs">
                           {name}
                         </Badge>
                       ))}
                     </div>
                   ) : (
-                    <p className="mt-1 text-[10px] text-muted-foreground">All breeds (no filter)</p>
+                    <p className="mt-1 text-xs text-muted-foreground">All breeds (no filter)</p>
                   )}
                 </div>
               );
@@ -596,7 +596,7 @@ function BreedAssignmentDialog({
                     />
                     <span className="text-sm font-medium">{breed.name}</span>
                     {isMultiDay && (
-                      <span className="ml-auto text-[10px] text-muted-foreground">
+                      <span className="ml-auto text-xs text-muted-foreground">
                         {allChecked ? 'All days' : someChecked ? 'Some days' : ''}
                       </span>
                     )}

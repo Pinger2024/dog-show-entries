@@ -991,7 +991,7 @@ function SponsorshipRow({
         <div className="flex items-start gap-2 rounded-md border bg-card p-3">
           <div className="min-w-0 flex-1 space-y-2">
             <div>
-              <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Sponsor</label>
+              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Sponsor</label>
               <AutocompleteInput
                 value={name}
                 onChange={(v) => {
@@ -1007,7 +1007,7 @@ function SponsorshipRow({
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Affix</label>
+                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Affix</label>
                 <input
                   type="text"
                   value={affix}
@@ -1021,7 +1021,7 @@ function SponsorshipRow({
                 />
               </div>
               <div>
-                <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Trophy</label>
+                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Trophy</label>
                 <input
                   type="text"
                   value={trophy}
@@ -1227,7 +1227,7 @@ function NewSponsorshipRow({
         <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50/30 p-3">
           <div className="min-w-0 flex-1 space-y-2">
             <div>
-              <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Sponsor</label>
+              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Sponsor</label>
               <AutocompleteInput
                 value={name}
                 onChange={(v) => setName(v)}
@@ -1240,7 +1240,7 @@ function NewSponsorshipRow({
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Affix</label>
+                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Affix</label>
                 <input
                   type="text"
                   value={affix}
@@ -1251,7 +1251,7 @@ function NewSponsorshipRow({
                 />
               </div>
               <div>
-                <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Trophy</label>
+                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Trophy</label>
                 <input
                   type="text"
                   value={trophy}
@@ -1617,7 +1617,7 @@ function AwardSponsorshipRow({
         <div className="flex items-start gap-2 rounded-md border bg-card p-3">
           <div className="min-w-0 flex-1 space-y-2">
             <div>
-              <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Sponsor</label>
+              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Sponsor</label>
               <AutocompleteInput
                 value={name}
                 onChange={(v) => {
@@ -1633,7 +1633,7 @@ function AwardSponsorshipRow({
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Affix</label>
+                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Affix</label>
                 <input
                   type="text"
                   value={affix}
@@ -1647,7 +1647,7 @@ function AwardSponsorshipRow({
                 />
               </div>
               <div>
-                <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Trophy</label>
+                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Trophy</label>
                 <input
                   type="text"
                   value={trophy}
@@ -1847,7 +1847,7 @@ function NewAwardSponsorshipRow({
         <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50/30 p-3">
           <div className="min-w-0 flex-1 space-y-2">
             <div>
-              <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Sponsor</label>
+              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Sponsor</label>
               <AutocompleteInput
                 value={name}
                 onChange={(v) => setName(v)}
@@ -1860,7 +1860,7 @@ function NewAwardSponsorshipRow({
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Affix</label>
+                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Affix</label>
                 <input
                   type="text"
                   value={affix}
@@ -1871,7 +1871,7 @@ function NewAwardSponsorshipRow({
                 />
               </div>
               <div>
-                <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Trophy</label>
+                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Trophy</label>
                 <input
                   type="text"
                   value={trophy}

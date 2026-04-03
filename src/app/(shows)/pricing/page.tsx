@@ -310,7 +310,7 @@ export default async function PricingPage() {
                   className="h-13 px-8 text-base text-primary-foreground hover:bg-white/10 hover:text-primary-foreground"
                   asChild
                 >
-                  <Link href="mailto:hello@remishow.co.uk">
+                  <Link href="mailto:hello@remishowmanager.co.uk">
                     <Mail className="mr-1 size-4" />
                     Contact Us
                   </Link>

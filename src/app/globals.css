@@ -215,7 +215,7 @@
   margin-inline: auto;
 }
 
-/* Hide scrollbar but keep functionality */
+/* scrollbar-none is an alias for scrollbar-hide */
 .scrollbar-none {
   -ms-overflow-style: none;
   scrollbar-width: none;

@@ -221,12 +221,12 @@ export default function EditEntryPage({
                                 {sc.classDefinition.name}
                               </span>
                               {isSelected && !wasOriginal && (
-                                <Badge className="bg-green-100 text-green-700 text-[10px]">
+                                <Badge className="bg-green-100 text-green-700 text-xs">
                                   Adding
                                 </Badge>
                               )}
                               {!isSelected && wasOriginal && (
-                                <Badge className="bg-red-100 text-red-700 text-[10px]">
+                                <Badge className="bg-red-100 text-red-700 text-xs">
                                   Removing
                                 </Badge>
                               )}

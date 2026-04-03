@@ -383,12 +383,12 @@ export default function MyClubPage() {
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="text-[0.9375rem] font-medium">{person.name}</span>
                       {person.position && (
-                        <Badge variant="secondary" className="text-[10px]">
+                        <Badge variant="secondary" className="text-xs">
                           {person.position}
                         </Badge>
                       )}
                       {person.isGuarantor && (
-                        <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">
+                        <Badge variant="outline" className="text-xs border-primary/30 text-primary">
                           <Shield className="mr-0.5 size-2.5" />
                           Guarantor
                         </Badge>

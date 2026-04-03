@@ -274,7 +274,7 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
               {isComplete && (
                 <Badge
                   variant="secondary"
-                  className="bg-emerald-50 text-emerald-700 text-[10px] dark:bg-emerald-900/20 dark:text-emerald-400"
+                  className="bg-emerald-50 text-emerald-700 text-xs dark:bg-emerald-900/20 dark:text-emerald-400"
                 >
                   Complete
                 </Badge>
@@ -785,7 +785,7 @@ function StepOpenEntries({ showId }: { showId: string }) {
               {/* Severity badge */}
               <Badge
                 variant={blocker.severity === 'required' ? 'destructive' : 'secondary'}
-                className="text-[10px] shrink-0"
+                className="text-xs shrink-0"
               >
                 {blocker.severity === 'required' ? 'Required' : 'Recommended'}
               </Badge>

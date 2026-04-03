@@ -40,7 +40,7 @@ export function RoleSwitcher({ activeView, showSteward }: RoleSwitcherProps) {
             )} />
             <span className="text-xs font-semibold leading-none">{view.label}</span>
             <span className={cn(
-              'text-[10px] leading-none',
+              'text-xs leading-none',
               activeView === view.id ? 'text-primary-foreground/70' : 'text-muted-foreground'
             )}>
               {view.subtitle}
