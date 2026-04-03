@@ -256,15 +256,19 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
     }
   }
 
+  // Local Remi search results
+  const [remiResults, setRemiResults] = useState<
+    { id: string; registeredName: string; kcRegNumber: string | null; breed: string | null; sex: string | null; dateOfBirth: string | null; source: 'remi' }[]
+  >([]);
+  const [searchingRemi, setSearchingRemi] = useState(false);
+
   const kcLookup = trpc.dogs.kcLookup.useMutation({
     onSuccess: (results) => {
       if (results.length === 1) {
-        // Single result — auto-fill immediately
         applyKcResult(results[0]);
       } else {
-        // Multiple results — show picker
         setKcResults(results);
-        toast.info(`Found ${results.length} dogs — please select the right one.`);
+        toast.info(`Found ${results.length} dogs on RKC — please select the right one.`);
       }
     },
     onError: (error) => {
@@ -421,47 +425,54 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                 <Search className="mt-0.5 size-5 shrink-0 text-primary" />
                 <div className="flex-1">
                   <p className="text-sm font-medium">
-                    Auto-fill from Royal Kennel Club
+                    Find your dog
                   </p>
                   <p className="mt-0.5 text-sm text-muted-foreground">
-                    Enter the RKC registration number (e.g. BC28843204) or registered
-                    name above, then click the button below. This will look up the
-                    dog on the RKC website and auto-fill the breed, sex, date of
-                    birth, colour, sire, dam, and breeder.
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    A registration number gives an exact match. Searching by name can
-                    return hundreds of results — use the full registered name (e.g.
-                    &quot;Hundark Phantom&quot; not just &quot;Hundark&quot;) to narrow it
-                    down. You can find your registration number on your RKC certificate or
-                    at{' '}
-                    <a
-                      href="https://www.royalkennelclub.com/search/health-test-results-finder/"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-medium text-primary underline underline-offset-2"
-                    >
-                      royalkennelclub.com
-                    </a>
-                    .
+                    Enter the registered name or RKC registration number above, then
+                    click the button. We&apos;ll search Remi first — if your dog has been
+                    entered in a show before, we&apos;ll find them instantly. Otherwise
+                    we&apos;ll look them up on the RKC website.
                   </p>
                   <Button
                     type="button"
                     variant="default"
                     size="sm"
                     className="mt-3"
-                    disabled={kcLookup.isPending}
-                    onClick={() => {
+                    disabled={kcLookup.isPending || searchingRemi}
+                    onClick={async () => {
                       setKcResults([]);
+                      setRemiResults([]);
                       const query = form.getValues('kcRegNumber') || form.getValues('registeredName');
                       if (!query || query.trim().length < 2) {
                         toast.error('Enter a RKC registration number or registered name first');
                         return;
                       }
+
+                      // Search Remi first
+                      setSearchingRemi(true);
+                      try {
+                        const local = await utils.dogs.search.fetch({ query: query.trim() });
+                        if (local.length > 0) {
+                          setRemiResults(local);
+                          setSearchingRemi(false);
+                          toast.success(`Found ${local.length} dog${local.length !== 1 ? 's' : ''} already in Remi`);
+                          return;
+                        }
+                      } catch {
+                        // Remi search failed — fall through to RKC
+                      }
+                      setSearchingRemi(false);
+
+                      // Fall back to RKC
                       kcLookup.mutate({ query: query.trim() });
                     }}
                   >
-                    {kcLookup.isPending ? (
+                    {searchingRemi ? (
+                      <>
+                        <Loader2 className="size-4 animate-spin" />
+                        Searching Remi...
+                      </>
+                    ) : kcLookup.isPending ? (
                       <>
                         <Loader2 className="size-4 animate-spin" />
                         Searching RKC website...
@@ -469,10 +480,52 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                     ) : (
                       <>
                         <Search className="size-4" />
-                        Lookup on RKC Website
+                        Find My Dog
                       </>
                     )}
                   </Button>
+
+                  {/* Remi local results */}
+                  {remiResults.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-sm font-medium text-emerald-700">
+                        Found in Remi — is this your dog?
+                      </p>
+                      <div className="space-y-1">
+                        {remiResults.map((dog) => (
+                          <a
+                            key={dog.id}
+                            href={`/dogs/${dog.id}`}
+                            className="flex w-full flex-col gap-0.5 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-left text-sm transition-colors hover:bg-emerald-100 sm:flex-row sm:items-center sm:justify-between sm:gap-2 sm:py-2"
+                          >
+                            <div className="min-w-0">
+                              <span className="font-medium">{dog.registeredName}</span>
+                              {dog.breed && (
+                                <span className="ml-2 text-muted-foreground">{dog.breed}</span>
+                              )}
+                            </div>
+                            <span className="shrink-0 text-xs text-muted-foreground">
+                              {dog.sex === 'bitch' ? 'Bitch' : dog.sex === 'dog' ? 'Dog' : ''}
+                              {dog.kcRegNumber ? ` · ${dog.kcRegNumber}` : ''}
+                            </span>
+                          </a>
+                        ))}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs text-muted-foreground"
+                        onClick={() => {
+                          setRemiResults([]);
+                          const query = form.getValues('kcRegNumber') || form.getValues('registeredName');
+                          if (query) kcLookup.mutate({ query: query.trim() });
+                        }}
+                      >
+                        Not here? Search RKC website instead
+                      </Button>
+                    </div>
+                  )}
 
                   {/* Multiple results picker */}
                   {kcResults.length > 1 && (

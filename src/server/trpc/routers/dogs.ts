@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, inArray, isNull, asc, desc, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, or, asc, desc, sql } from 'drizzle-orm';
 import { protectedProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { dogs, dogOwners, dogTitles, dogPhotos, users, entries, entryClasses, showClasses, shows, results, classDefinitions, achievements, judgeAssignments, judges } from '@/server/db/schema';
@@ -628,6 +628,34 @@ export const dogsRouter = createTRPCRouter({
 
       await ctx.db.delete(dogTitles).where(eq(dogTitles.id, input.id));
       return { success: true };
+    }),
+
+  // ── Local Search ───────────────────────────────────────────
+
+  search: protectedProcedure
+    .input(z.object({ query: z.string().min(2).max(255) }))
+    .query(async ({ ctx, input }) => {
+      const term = `%${input.query.trim()}%`;
+      const matches = await ctx.db.query.dogs.findMany({
+        where: and(
+          or(
+            sql`${dogs.registeredName} ILIKE ${term}`,
+            sql`${dogs.kcRegNumber} ILIKE ${term}`,
+          ),
+          isNull(dogs.deletedAt),
+        ),
+        with: { breed: true },
+        limit: 10,
+      });
+      return matches.map((d) => ({
+        id: d.id,
+        registeredName: d.registeredName,
+        kcRegNumber: d.kcRegNumber,
+        breed: d.breed?.name ?? null,
+        sex: d.sex,
+        dateOfBirth: d.dateOfBirth,
+        source: 'remi' as const,
+      }));
     }),
 
   // ── RKC Lookup ──────────────────────────────────────────────
