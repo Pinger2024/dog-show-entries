@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { fireDogConfetti } from '@/lib/confetti';
 import {
   AlertTriangle,
   BookOpen,
@@ -164,6 +165,7 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
     onSuccess: () => {
       utils.shows.getById.invalidate({ id: showId });
       utils.secretary.getPhaseBlockers.invalidate({ showId });
+      fireDogConfetti();
     },
   });
 

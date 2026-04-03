@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { fireDogConfetti } from '@/lib/confetti';
 import {
   AlertTriangle,
   Check,
@@ -704,6 +705,7 @@ function StepOpenEntries({ showId }: { showId: string }) {
       utils.secretary.getPhaseBlockers.invalidate({ showId });
       utils.secretary.getChecklistAutoDetect.invalidate({ showId });
       toast.success('Entries are now open!');
+      fireDogConfetti();
     },
     onError: (err) => toast.error(err.message ?? 'Failed to open entries'),
   });

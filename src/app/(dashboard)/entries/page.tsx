@@ -295,6 +295,11 @@ function DogEntryRow({ entry }: { entry: Entry }) {
           <span className="truncate text-sm font-medium">
             {entry.dog?.registeredName ?? 'Junior Handler'}
           </span>
+          {entry.catalogueNumber && (
+            <Badge variant="outline" className="shrink-0 text-xs font-mono">
+              #{entry.catalogueNumber}
+            </Badge>
+          )}
           <Badge variant={status.variant} className="shrink-0 text-xs">
             {status.label}
           </Badge>

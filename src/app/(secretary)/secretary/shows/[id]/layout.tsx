@@ -138,6 +138,10 @@ export default function ShowManagementLayout({
       toast.success(
         `Show status updated to ${statusConfig[newStatus]?.label ?? newStatus}`
       );
+      if (newStatus === 'entries_open') {
+        const { fireDogConfetti } = await import('@/lib/confetti');
+        fireDogConfetti();
+      }
     } catch {
       toast.error('Failed to update show status');
     }

@@ -231,26 +231,12 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
             statements are auto-included.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <a href={`/api/schedule/${showId}`} target="_blank" rel="noopener noreferrer">
-              <Eye className="size-4" />
-              Preview PDF
-            </a>
-          </Button>
-          <Button
-            onClick={handleSave}
-            disabled={updateMutation.isPending}
-            size="sm"
-          >
-            {updateMutation.isPending ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Save className="size-4" />
-            )}
-            Save
-          </Button>
-        </div>
+        <Button variant="outline" size="sm" asChild>
+          <a href={`/api/schedule/${showId}`} target="_blank" rel="noopener noreferrer">
+            <Eye className="size-4" />
+            Preview PDF
+          </a>
+        </Button>
       </div>
 
       {/* Auto-included notice */}

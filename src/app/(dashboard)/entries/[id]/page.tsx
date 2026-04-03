@@ -11,6 +11,7 @@ import {
   Loader2,
   AlertTriangle,
   Pencil,
+  Trophy,
 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -155,6 +156,14 @@ export default function EntryDetailPage() {
               {entry.id.slice(0, 8).toUpperCase()}
             </span>
           </div>
+          {entry.catalogueNumber && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Catalogue Number</span>
+              <span className="font-mono font-bold text-primary">
+                #{entry.catalogueNumber}
+              </span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span className="text-muted-foreground">Entry Date</span>
             <span>
@@ -231,6 +240,14 @@ export default function EntryDetailPage() {
         <Button variant="outline" asChild className="w-full sm:w-auto min-h-[2.75rem]">
           <Link href={`/shows/${entry.show.slug ?? entry.showId}`}>View Show</Link>
         </Button>
+        {entry.show.resultsPublishedAt && (
+          <Button asChild className="w-full sm:w-auto min-h-[2.75rem]">
+            <Link href={`/shows/${entry.show.slug ?? entry.showId}/results`}>
+              <Trophy className="size-4" />
+              View Results
+            </Link>
+          </Button>
+        )}
         {(entry.status === 'confirmed' || entry.status === 'pending') && entry.show.status === 'entries_open' && (
           <Button variant="outline" asChild className="w-full sm:w-auto min-h-[2.75rem]">
             <Link href={`/shows/${entry.show.slug ?? entry.showId}/entries/${entry.id}/edit`}>
