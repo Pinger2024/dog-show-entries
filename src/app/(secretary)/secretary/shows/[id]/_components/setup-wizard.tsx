@@ -553,19 +553,20 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
               onChange={(e) => setEntryCloseDate(e.target.value)}
             />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="wiz-postal-close" className="text-xs">
-              Postal close date{' '}
-              <span className="text-muted-foreground">(optional)</span>
-            </Label>
-            <Input
-              id="wiz-postal-close"
-              type="datetime-local"
-              className="min-h-[2.75rem]"
-              value={postalCloseDate}
-              onChange={(e) => setPostalCloseDate(e.target.value)}
-            />
-          </div>
+          {show.acceptsPostalEntries && (
+            <div className="space-y-1.5">
+              <Label htmlFor="wiz-postal-close" className="text-xs">
+                Postal close date
+              </Label>
+              <Input
+                id="wiz-postal-close"
+                type="datetime-local"
+                className="min-h-[2.75rem]"
+                value={postalCloseDate}
+                onChange={(e) => setPostalCloseDate(e.target.value)}
+              />
+            </div>
+          )}
         </div>
       </div>
 

@@ -603,6 +603,12 @@ export function AddJudgeWizard({
               )}
             </div>
 
+            {selectedCount === 0 && breedCombos.length > 0 && (
+              <p className="text-xs text-amber-600">Select at least one breed/sex to assign</p>
+            )}
+            {selectedCount > 0 && !selectedJudge.contactEmail && !manualEmail && (
+              <p className="text-xs text-amber-600">An email address is required — judges need it to receive their offer</p>
+            )}
             <DialogFooter className="flex-col gap-2 sm:flex-row">
               <Button variant="outline" onClick={() => setStep('find')} className="min-h-[2.75rem]">
                 Back

@@ -597,6 +597,22 @@ export default function SecretaryResultsPage() {
   }
 
   const { show, breedGroups } = data;
+
+  // Gate: results only make sense from entries_closed onwards
+  const tooEarly = ['draft', 'published', 'entries_open'].includes(show.status);
+  if (tooEarly) {
+    return (
+      <div className="flex min-h-[40vh] flex-col items-center justify-center gap-3 text-center px-4">
+        <Trophy className="size-12 text-muted-foreground/20" />
+        <h2 className="text-lg font-semibold">Results aren&apos;t available yet</h2>
+        <p className="max-w-sm text-sm text-muted-foreground">
+          Results can be recorded once entries have closed and the show is underway.
+          Close entries first, then come back here on show day.
+        </p>
+      </div>
+    );
+  }
+
   const isLive = show.status === 'in_progress';
   const judged = summary?.judgedClasses ?? 0;
   const total = summary?.totalClasses ?? 0;

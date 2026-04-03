@@ -270,7 +270,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
 
       <Accordion
         type="multiple"
-        defaultValue={['regulatory', 'people', 'awards']}
+        defaultValue={['regulatory', 'people', 'awards', 'optional']}
         className="space-y-3"
       >
         {/* ── Regulatory & Compliance ── */}
