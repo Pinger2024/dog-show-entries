@@ -333,6 +333,7 @@ export default function EnterShowPage() {
   }, [cart.step, cart.activeEntry?.entryType, cart.editingExisting, availableClasses, selectedClassIds.length]);
 
   // Calculate total for current selection using show-level fee tiers
+  const isJuniorHandler = cart.activeEntry?.entryType === 'junior_handler';
   const selectedTotal = useMemo(() => {
     if (!showClasses || !show) return 0;
     const count = selectedClassIds.length;
@@ -341,6 +342,11 @@ export default function EnterShowPage() {
     // NFC entries may have zero classes — charge flat NFC fee
     if (isNfc && nfcFeeAmount != null) {
       return count > 0 ? nfcFeeAmount * count : nfcFeeAmount;
+    }
+
+    // Junior handler entries use a flat fee regardless of class count
+    if (isJuniorHandler && show.juniorHandlerFee != null) {
+      return count > 0 ? show.juniorHandlerFee : 0;
     }
 
     if (count === 0) return 0;
@@ -358,7 +364,7 @@ export default function EnterShowPage() {
     return showClasses
       .filter((sc) => selectedClassIds.includes(sc.id))
       .reduce((sum, sc) => sum + sc.entryFee, 0);
-  }, [showClasses, selectedClassIds, show, isNfc]);
+  }, [showClasses, selectedClassIds, show, isNfc, isJuniorHandler]);
 
   // Age eligibility
   function getAgeEligibility(minMonths: number | null, maxMonths: number | null) {

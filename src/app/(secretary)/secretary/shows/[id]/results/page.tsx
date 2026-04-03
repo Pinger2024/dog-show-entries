@@ -177,7 +177,7 @@ function WinnerPhotoButton({
       />
       {currentPhotoUrl ? (
         <div className="mt-1.5 flex items-center gap-2">
-          <img src={currentPhotoUrl} alt={dogName} className="size-10 rounded object-cover ring-1 ring-border/40" />
+          <img src={currentPhotoUrl} alt={dogName} className="size-10 rounded-full object-cover ring-1 ring-border/40" />
           <button
             onClick={() => fileRef.current?.click()}
             className="text-xs text-primary hover:underline min-h-[2rem] px-2"

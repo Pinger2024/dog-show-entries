@@ -603,7 +603,7 @@ export function DogProfileClient({ id }: { id: string }) {
               {galleryPhotos.map((photo) => (
                 <div
                   key={photo.id}
-                  className="group relative aspect-square cursor-pointer overflow-hidden rounded-sm bg-stone-100"
+                  className="group relative aspect-[4/3] cursor-pointer overflow-hidden rounded-sm bg-stone-100"
                   onClick={() => setLightboxUrl(photo.url)}
                 >
                   <Image
