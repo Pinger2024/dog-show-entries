@@ -411,13 +411,19 @@ export function DogProfileClient({ id }: { id: string }) {
           {primaryPhoto ? (
             <div
               className="relative aspect-[4/5] w-full max-w-xs cursor-pointer overflow-hidden rounded-sm shadow-lg shadow-stone-200/80 sm:max-w-sm"
+              style={primaryPhoto.fitMode === 'contain' ? { backgroundColor: '#f5f5f4' } : undefined}
               onClick={() => setLightboxUrl(primaryPhoto.url)}
             >
               <Image
                 src={primaryPhoto.url}
                 alt={dog.registeredName}
                 fill
-                className="object-cover"
+                style={{
+                  objectFit: (primaryPhoto.fitMode as 'cover' | 'contain') || 'cover',
+                  objectPosition: primaryPhoto.fitMode !== 'contain'
+                    ? `${primaryPhoto.focalX ?? 50}% ${primaryPhoto.focalY ?? 50}%`
+                    : undefined,
+                }}
                 sizes="(min-width: 640px) 384px, 320px"
                 priority
               />
@@ -610,7 +616,13 @@ export function DogProfileClient({ id }: { id: string }) {
                     src={photo.url}
                     alt={photo.caption || 'Photo'}
                     fill
-                    className="object-cover transition-transform duration-300 group-hover:scale-105"
+                    className="transition-transform duration-300 group-hover:scale-105"
+                    style={{
+                      objectFit: (photo.fitMode as 'cover' | 'contain') || 'cover',
+                      objectPosition: photo.fitMode !== 'contain'
+                        ? `${photo.focalX ?? 50}% ${photo.focalY ?? 50}%`
+                        : undefined,
+                    }}
                     sizes="(max-width: 640px) 50vw, 33vw"
                   />
                   {photo.caption && (

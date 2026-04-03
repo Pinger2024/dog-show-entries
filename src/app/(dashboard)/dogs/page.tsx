@@ -51,6 +51,7 @@ function DogAvatar({ dogId }: { dogId: string }) {
           alt=""
           fill
           className="object-cover"
+          style={{ objectPosition: `${primaryPhoto.focalX ?? 50}% ${primaryPhoto.focalY ?? 50}%` }}
           sizes="40px"
         />
       </div>

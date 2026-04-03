@@ -22,6 +22,9 @@ export const dogPhotos = pgTable(
     caption: text('caption'),
     isPrimary: boolean('is_primary').default(false).notNull(),
     sortOrder: integer('sort_order').default(0).notNull(),
+    focalX: integer('focal_x').default(50).notNull(),
+    focalY: integer('focal_y').default(50).notNull(),
+    fitMode: text('fit_mode').default('cover').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),

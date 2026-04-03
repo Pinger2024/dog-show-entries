@@ -245,15 +245,21 @@ export const dogsRouter = createTRPCRouter({
             inArray(dogPhotos.dogId, dogIds),
             eq(dogPhotos.isPrimary, true),
           ),
-          columns: { dogId: true, url: true },
+          columns: { dogId: true, url: true, focalX: true, focalY: true, fitMode: true },
         })
       : [];
-    const photoMap = new Map(primaryPhotos.map((p) => [p.dogId, p.url]));
+    const photoMap = new Map(primaryPhotos.map((p) => [p.dogId, p]));
 
-    return dogList.map((dog) => ({
-      ...dog,
-      primaryPhotoUrl: photoMap.get(dog.id) ?? null,
-    }));
+    return dogList.map((dog) => {
+      const photo = photoMap.get(dog.id);
+      return {
+        ...dog,
+        primaryPhotoUrl: photo?.url ?? null,
+        primaryPhotoFocalX: photo?.focalX ?? 50,
+        primaryPhotoFocalY: photo?.focalY ?? 50,
+        primaryPhotoFitMode: photo?.fitMode ?? 'cover',
+      };
+    });
   }),
 
   getById: protectedProcedure
@@ -1227,6 +1233,28 @@ export const dogsRouter = createTRPCRouter({
       await ctx.db
         .update(dogPhotos)
         .set({ caption: input.caption })
+        .where(eq(dogPhotos.id, input.photoId));
+
+      return { success: true };
+    }),
+
+  updatePhotoCrop: protectedProcedure
+    .input(z.object({
+      photoId: z.string().uuid(),
+      dogId: z.string().uuid(),
+      focalX: z.number().int().min(0).max(100),
+      focalY: z.number().int().min(0).max(100),
+      fitMode: z.enum(['cover', 'contain']),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const dog = await ctx.db.query.dogs.findFirst({
+        where: and(eq(dogs.id, input.dogId), eq(dogs.ownerId, ctx.session.user.id), isNull(dogs.deletedAt)),
+      });
+      if (!dog) throw new TRPCError({ code: 'NOT_FOUND', message: 'Dog not found' });
+
+      await ctx.db
+        .update(dogPhotos)
+        .set({ focalX: input.focalX, focalY: input.focalY, fitMode: input.fitMode })
         .where(eq(dogPhotos.id, input.photoId));
 
       return { success: true };

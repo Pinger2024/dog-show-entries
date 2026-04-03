@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { format, parseISO, differenceInYears, differenceInMonths } from 'date-fns';
 import {
   ChevronLeft,
+  Crop,
   Pencil,
   Trash2,
   Ticket,
@@ -26,6 +27,7 @@ import {
   Sparkles,
   Plus,
   ExternalLink,
+  Maximize,
   Rss,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -489,10 +491,115 @@ function CritiquesCard({ dogId }: { dogId: string }) {
   );
 }
 
+function CropDialog({
+  photo,
+  dogId,
+  onClose,
+}: {
+  photo: { id: string; url: string; focalX: number; focalY: number; fitMode: string };
+  dogId: string;
+  onClose: () => void;
+}) {
+  const [focalX, setFocalX] = useState(photo.focalX);
+  const [focalY, setFocalY] = useState(photo.focalY);
+  const [fitMode, setFitMode] = useState<'cover' | 'contain'>(photo.fitMode as 'cover' | 'contain');
+  const utils = trpc.useUtils();
+
+  const updateCrop = trpc.dogs.updatePhotoCrop.useMutation({
+    onSuccess: () => {
+      utils.dogs.listPhotos.invalidate({ dogId });
+      utils.dogs.getPublicPhotos.invalidate({ dogId });
+      toast.success('Photo crop updated');
+      onClose();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  function handleTap(e: React.MouseEvent<HTMLDivElement>) {
+    if (fitMode === 'contain') return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = Math.round(((e.clientX - rect.left) / rect.width) * 100);
+    const y = Math.round(((e.clientY - rect.top) / rect.height) * 100);
+    setFocalX(Math.max(0, Math.min(100, x)));
+    setFocalY(Math.max(0, Math.min(100, y)));
+  }
+
+  return (
+    <DialogContent className="max-w-lg">
+      <DialogHeader>
+        <DialogTitle>Adjust Photo</DialogTitle>
+        <DialogDescription>
+          {fitMode === 'cover'
+            ? 'Tap the photo where the most important part is'
+            : 'Showing the full photo'}
+        </DialogDescription>
+      </DialogHeader>
+
+      {/* Preview in profile aspect ratio */}
+      <div className="space-y-3">
+        <p className="text-xs font-medium text-muted-foreground">Profile preview</p>
+        <div
+          className="relative mx-auto aspect-[4/5] w-full max-w-[280px] cursor-crosshair overflow-hidden rounded-sm border bg-stone-100"
+          onClick={handleTap}
+        >
+          <Image
+            src={photo.url}
+            alt="Crop preview"
+            fill
+            className="transition-all duration-200"
+            style={{
+              objectFit: fitMode,
+              objectPosition: fitMode === 'cover' ? `${focalX}% ${focalY}%` : undefined,
+            }}
+            sizes="280px"
+          />
+          {fitMode === 'cover' && (
+            <div
+              className="pointer-events-none absolute size-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-md"
+              style={{ left: `${focalX}%`, top: `${focalY}%` }}
+            >
+              <div className="absolute inset-1 rounded-full bg-white/80" />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Fit mode toggle */}
+      <div className="flex items-center justify-between rounded-lg border p-3">
+        <div className="flex items-center gap-2.5">
+          <Maximize className="size-4 text-muted-foreground" />
+          <div>
+            <p className="text-sm font-medium">Show full photo</p>
+            <p className="text-xs text-muted-foreground">No cropping — shows the whole image</p>
+          </div>
+        </div>
+        <Switch
+          checked={fitMode === 'contain'}
+          onCheckedChange={(checked) => setFitMode(checked ? 'contain' : 'cover')}
+        />
+      </div>
+
+      <div className="flex gap-2">
+        <Button variant="outline" className="flex-1 min-h-[2.75rem]" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button
+          className="flex-1 min-h-[2.75rem]"
+          disabled={updateCrop.isPending}
+          onClick={() => updateCrop.mutate({ photoId: photo.id, dogId, focalX, focalY, fitMode })}
+        >
+          {updateCrop.isPending ? <Loader2 className="size-4 animate-spin" /> : 'Save'}
+        </Button>
+      </div>
+    </DialogContent>
+  );
+}
+
 function PhotoGalleryCard({ dogId }: { dogId: string }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [cropPhoto, setCropPhoto] = useState<{ id: string; url: string; focalX: number; focalY: number; fitMode: string } | null>(null);
   const [pendingAction, setPendingAction] = useState<{ message: string; action: () => void } | null>(null);
   const utils = trpc.useUtils();
 
@@ -611,7 +718,13 @@ function PhotoGalleryCard({ dogId }: { dogId: string }) {
                   src={photo.url}
                   alt={photo.caption || 'Dog photo'}
                   fill
-                  className="cursor-pointer object-cover transition-transform group-hover:scale-105"
+                  className="cursor-pointer transition-transform group-hover:scale-105"
+                  style={{
+                    objectFit: (photo.fitMode as 'cover' | 'contain') || 'cover',
+                    objectPosition: photo.fitMode !== 'contain'
+                      ? `${photo.focalX ?? 50}% ${photo.focalY ?? 50}%`
+                      : undefined,
+                  }}
                   sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                   onClick={() => setLightboxUrl(photo.url)}
                 />
@@ -622,20 +735,30 @@ function PhotoGalleryCard({ dogId }: { dogId: string }) {
                 )}
                 {/* Overlay actions — always visible on mobile, hover reveal on desktop */}
                 <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 bg-gradient-to-t from-black/60 to-transparent px-2 pb-2 pt-6 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
-                  {!photo.isPrimary ? (
+                  <div className="flex gap-1">
+                    {!photo.isPrimary && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPrimary.mutate({ photoId: photo.id, dogId });
+                        }}
+                        className="min-h-[44px] min-w-[44px] rounded-full bg-white/90 p-2 shadow active:bg-white sm:min-h-0 sm:min-w-0 sm:p-1.5"
+                        title="Set as profile photo"
+                      >
+                        <Star className="size-4 text-yellow-600 sm:size-3.5" />
+                      </button>
+                    )}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        setPrimary.mutate({ photoId: photo.id, dogId });
+                        setCropPhoto(photo);
                       }}
                       className="min-h-[44px] min-w-[44px] rounded-full bg-white/90 p-2 shadow active:bg-white sm:min-h-0 sm:min-w-0 sm:p-1.5"
-                      title="Set as profile photo"
+                      title="Adjust crop"
                     >
-                      <Star className="size-4 text-yellow-600 sm:size-3.5" />
+                      <Crop className="size-4 text-primary sm:size-3.5" />
                     </button>
-                  ) : (
-                    <span />
-                  )}
+                  </div>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -693,6 +816,11 @@ function PhotoGalleryCard({ dogId }: { dogId: string }) {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+    <Dialog open={!!cropPhoto} onOpenChange={(open) => !open && setCropPhoto(null)}>
+      {cropPhoto && (
+        <CropDialog photo={cropPhoto} dogId={dogId} onClose={() => setCropPhoto(null)} />
+      )}
+    </Dialog>
     </>
   );
 }
@@ -1009,6 +1137,9 @@ export default function DogDetailPage({
                   alt={dog.registeredName}
                   fill
                   className="object-cover"
+                  style={{
+                    objectPosition: `${profilePhoto.focalX ?? 50}% ${profilePhoto.focalY ?? 50}%`,
+                  }}
                   sizes="56px"
                 />
               </div>
