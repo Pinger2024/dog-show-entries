@@ -144,6 +144,16 @@ export default function ShowChecklistPage() {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [pendingAction, setPendingAction] = useState<{ message: string; action: () => void } | null>(null);
 
+  // Auto-generate checklist on first visit
+  const isEmpty = !items || items.length === 0;
+  const [autoSeeded, setAutoSeeded] = useState(false);
+  useEffect(() => {
+    if (isEmpty && !seedMutation.isPending && !autoSeeded) {
+      setAutoSeeded(true);
+      seedMutation.mutate({ showId });
+    }
+  }, [isEmpty, autoSeeded, seedMutation, showId]);
+
   // Build contract lookup by judgeId from judgeSummary (avoids separate query)
   const contractsByJudge = useMemo(() => {
     const map = new Map<string, NonNullable<typeof judgeSummary>['judges'][number]>();
@@ -175,16 +185,6 @@ export default function ShowChecklistPage() {
       </div>
     );
   }
-
-  // Auto-generate checklist on first visit
-  const isEmpty = !items || items.length === 0;
-  const [autoSeeded, setAutoSeeded] = useState(false);
-  useEffect(() => {
-    if (isEmpty && !seedMutation.isPending && !autoSeeded) {
-      setAutoSeeded(true);
-      seedMutation.mutate({ showId });
-    }
-  }, [isEmpty, autoSeeded, seedMutation, showId]);
 
   if (isEmpty) {
     return (

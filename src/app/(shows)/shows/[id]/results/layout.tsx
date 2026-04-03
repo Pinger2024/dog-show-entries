@@ -4,6 +4,8 @@ import { eq } from 'drizzle-orm';
 import { shows } from '@/server/db/schema';
 import { isUuid } from '@/lib/slugify';
 
+export const revalidate = 3600;
+
 const SHOW_TYPE_LABELS: Record<string, string> = {
   companion: 'Companion Show',
   primary: 'Primary Show',

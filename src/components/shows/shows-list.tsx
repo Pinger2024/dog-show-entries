@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { format, differenceInDays } from 'date-fns';
-import { formatDateRange } from '@/lib/date-utils';
+import { formatDateRange, formatCurrency } from '@/lib/date-utils';
 import { showTypeLabels } from '@/lib/show-types';
 import {
   CalendarDays,
@@ -914,9 +914,9 @@ function ShowCard({ show, distance }: { show: ShowListItem; distance?: number })
           </div>
 
           {/* Entry fee */}
-          {(show as { firstEntryFee?: number | null }).firstEntryFee != null && (show as { firstEntryFee?: number | null }).firstEntryFee! > 0 && (
+          {show.firstEntryFee != null && show.firstEntryFee > 0 && (
             <p className="mt-2 text-xs font-medium text-muted-foreground">
-              From £{((show as { firstEntryFee?: number | null }).firstEntryFee! / 100).toFixed(2)} per entry
+              From {formatCurrency(show.firstEntryFee)} per entry
             </p>
           )}
 
