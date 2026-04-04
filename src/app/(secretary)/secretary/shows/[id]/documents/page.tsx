@@ -15,7 +15,6 @@ import {
   List,
   Map,
   Share2,
-  SortAsc,
   Trophy,
   UserX,
 } from 'lucide-react';
@@ -162,12 +161,6 @@ export default function DocumentsPage() {
           href: `/api/catalogue/${showId}/by-class`,
           icon: <List className="size-4" />,
           description: 'Entries grouped by class number',
-        },
-        {
-          label: 'Alphabetical Catalogue',
-          href: `/api/catalogue/${showId}/alphabetical`,
-          icon: <SortAsc className="size-4" />,
-          description: 'All entries sorted A–Z by registered name',
         },
         {
           label: 'Absentee List',

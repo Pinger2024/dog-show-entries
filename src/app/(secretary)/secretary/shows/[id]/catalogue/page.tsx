@@ -9,7 +9,6 @@ import {
   Loader2,
   FileText,
   List,
-  SortAsc,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
@@ -108,16 +107,6 @@ export default function CataloguePage() {
               >
                 <List className="size-4" />
                 By Class
-              </a>
-            </Button>
-            <Button variant="outline" asChild>
-              <a
-                href={`/api/catalogue/${showId}/alphabetical`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <SortAsc className="size-4" />
-                A–Z
               </a>
             </Button>
             <Button variant="outline" asChild>
