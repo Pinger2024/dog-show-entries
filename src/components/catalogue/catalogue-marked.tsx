@@ -240,21 +240,54 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
   const grouped = groupEntriesKC(entries);
   const sortedGroups = [...grouped.entries()].sort(([, a], [, b]) => a.sortOrder - b.sortOrder);
 
+  // Split large breeds by sex to avoid @react-pdf/renderer coordinate overflow
+  // bug (single <Page wrap> with many nodes crashes pdfkit with values like
+  // -9.979e+21). Single-breed shows with 100+ entries all on one page would crash.
+  const PAGE_ENTRY_THRESHOLD = 40;
   const breedPages: {
     groupName: string;
     breedName: string;
     judge: string | undefined;
     breedBucket: BreedBucket;
+    sexLabel?: string;
   }[] = [];
+
+  function countBreedEntries(bucket: BreedBucket): number {
+    let total = 0;
+    for (const sex of ['dog', 'unknown', 'bitch']) {
+      for (const classBucket of bucket.sexes[sex] ?? []) {
+        total += classBucket.entries.length;
+      }
+    }
+    return total;
+  }
 
   for (const [groupName, { breeds }] of sortedGroups) {
     for (const [breedName, breedBucket] of [...breeds.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-      breedPages.push({
-        groupName,
-        breedName,
-        judge: show.judgesByBreedName?.[breedName],
-        breedBucket,
-      });
+      const totalEntries = countBreedEntries(breedBucket);
+      const judge = show.judgesByBreedName?.[breedName];
+
+      if (totalEntries > PAGE_ENTRY_THRESHOLD) {
+        for (const sex of ['dog', 'unknown', 'bitch']) {
+          const classBuckets = breedBucket.sexes[sex];
+          if (!classBuckets?.length) continue;
+          const hasAnyEntries = classBuckets.some((cb) => cb.entries.length > 0);
+          if (!hasAnyEntries) continue;
+          const sexBucket: BreedBucket = {
+            ...breedBucket,
+            sexes: { [sex]: classBuckets },
+          };
+          breedPages.push({
+            groupName,
+            breedName,
+            judge,
+            breedBucket: sexBucket,
+            sexLabel: sex === 'dog' ? 'Dogs' : sex === 'bitch' ? 'Bitches' : undefined,
+          });
+        }
+      } else {
+        breedPages.push({ groupName, breedName, judge, breedBucket });
+      }
     }
   }
 
@@ -340,8 +373,8 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
       )}
 
       {/* One <Page> per breed with result annotations */}
-      {breedPages.map(({ groupName, breedName, judge, breedBucket }) => (
-        <Page key={`${groupName}-${breedName}`} size="A5" style={styles.page} wrap>
+      {breedPages.map(({ groupName, breedName, judge, breedBucket, sexLabel }, pageIdx) => (
+        <Page key={`${groupName}-${breedName}-${sexLabel ?? 'all'}-${pageIdx}`} size="A5" style={styles.page} wrap>
           <Text style={markedStyles.watermark}>MARKED CATALOGUE</Text>
           <Text style={styles.groupHeading}>{groupName}</Text>
           <Text style={styles.breedHeading}>{breedName}</Text>
@@ -365,7 +398,7 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                       {classHeadingLabel(bucket, sex)}
                     </Text>
 
-                    {bucket.entries.map((entry) => {
+                    {bucket.entries.map((entry, entryIdx) => {
                       const catNo = entry.catalogueNumber ?? '';
                       const isFirstAppearance = !catNo || firstAppearanceBucket.get(catNo) === bucket;
                       const isAbsent = catNo ? absentees.has(catNo) : false;
@@ -373,6 +406,7 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                       const displayName = isJH
                         ? (entry.handler ?? entry.exhibitor ?? 'Unnamed Handler')
                         : (entry.dogName ?? 'Unnamed');
+                      const rowKey = `${bucket.classNumber ?? bucket.className}-${catNo || 'nocat'}-${entryIdx}`;
 
                       // Look up result for this entry in this class
                       const resultKey = catNo && bucket.showClassId
@@ -384,7 +418,7 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                         const firstClass = firstSeenClass.get(catNo) ?? '';
                         return (
                           <View
-                            key={`${catNo}-abbrev`}
+                            key={rowKey}
                             style={{ ...styles.entryRowWrap, paddingLeft: 6 }}
                             wrap={false}
                           >
@@ -416,7 +450,7 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                         // Junior Handling: handler-centric display
                         return (
                           <View
-                            key={catNo || displayName}
+                            key={rowKey}
                             style={styles.entryRowWrap}
                             wrap={false}
                           >
@@ -462,7 +496,7 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                       const pedigree = formatPedigreeKC(entry.sire, entry.dam);
                       return (
                         <View
-                          key={catNo || entry.dogName}
+                          key={rowKey}
                           style={styles.entryRowWrap}
                           wrap={false}
                         >

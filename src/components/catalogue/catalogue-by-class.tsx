@@ -86,6 +86,27 @@ export function CatalogueByClass({ show, entries }: Props) {
     return a.localeCompare(b);
   });
 
+  // Chunk classes into page-sized groups to avoid @react-pdf/renderer coordinate
+  // overflow bug (single <Page wrap> with many nodes crashes pdfkit with values
+  // like -9.979e+21). Each chunk gets its own <Page> so coordinates reset.
+  const PAGE_ENTRY_THRESHOLD = 35;
+  const classChunks: string[][] = [];
+  let currentChunk: string[] = [];
+  let currentCount = 0;
+  for (const classKey of classKeys) {
+    const entryCount = grouped[classKey].entries.length;
+    // Start a new chunk if adding this class would exceed the threshold
+    // (but always put at least one class per chunk, even if it's large)
+    if (currentChunk.length > 0 && currentCount + entryCount > PAGE_ENTRY_THRESHOLD) {
+      classChunks.push(currentChunk);
+      currentChunk = [];
+      currentCount = 0;
+    }
+    currentChunk.push(classKey);
+    currentCount += entryCount;
+  }
+  if (currentChunk.length > 0) classChunks.push(currentChunk);
+
   return (
     <Document>
       {/* Front matter — cover, judges, definitions, trophies */}
@@ -96,9 +117,9 @@ export function CatalogueByClass({ show, entries }: Props) {
         <TrophiesPage show={show} sponsorships={show.classSponsorships} />
       )}
 
-      {/* All classes flow continuously — react-pdf breaks pages automatically */}
-      <Page size="A5" style={styles.page} wrap>
-      {classKeys.map((classKey, idx) => {
+      {classChunks.map((chunkKeys, chunkIdx) => (
+      <Page key={`chunk-${chunkIdx}`} size="A5" style={styles.page} wrap>
+      {chunkKeys.map((classKey, idx) => {
         const { className, sex, classNumber, entries: classEntries } = grouped[classKey];
         const sorted = [...classEntries].sort(
           (a, b) => (a.catalogueNumber ?? '').localeCompare(b.catalogueNumber ?? '', undefined, { numeric: true })
@@ -140,14 +161,15 @@ export function CatalogueByClass({ show, entries }: Props) {
               {sorted.length} {sorted.length === 1 ? 'entry' : 'entries'}
             </Text>
 
-            {sorted.map((entry) => {
+            {sorted.map((entry, entryIdx) => {
               const isJH = entry.entryType === 'junior_handler';
+              const rowKey = `${classKey}-${entry.catalogueNumber ?? 'nocat'}-${entryIdx}`;
               if (isJH) {
                 // Junior Handling: handler-centric display
                 const handlerName = entry.jhHandlerName ?? entry.exhibitor ?? 'Unnamed Handler';
                 return (
                   <View
-                    key={`${className}-${entry.catalogueNumber}`}
+                    key={rowKey}
                     style={styles.entryRowWrap}
                     wrap={false}
                   >
@@ -180,7 +202,7 @@ export function CatalogueByClass({ show, entries }: Props) {
               const pedigree = formatPedigreeKC(entry.sire, entry.dam);
               return (
                 <View
-                  key={`${className}-${entry.catalogueNumber}`}
+                  key={rowKey}
                   style={styles.entryRowWrap}
                   wrap={false}
                 >
@@ -237,6 +259,7 @@ export function CatalogueByClass({ show, entries }: Props) {
           fixed
         />
       </Page>
+      ))}
     </Document>
   );
 }

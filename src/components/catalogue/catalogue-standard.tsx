@@ -279,22 +279,55 @@ export function CatalogueStandard({ show, entries }: Props) {
 
   // Flatten all breeds into a list of page-sized chunks to avoid @react-pdf/renderer
   // coordinate overflow bug (single <Page wrap> with many nodes causes layout.top to
-  // exceed pdfkit's number limits). Each breed gets its own <Page>.
+  // exceed pdfkit's number limits producing values like -9.979e+21 that crash pdfkit).
+  // Breeds with many entries are split by sex so a single-breed championship show
+  // with 100+ entries doesn't all land on one page.
+  const PAGE_ENTRY_THRESHOLD = 40;
   const breedPages: {
     groupName: string;
     breedName: string;
     judge: string | undefined;
     breedBucket: BreedBucket;
+    sexLabel?: string;
   }[] = [];
+
+  function countBreedEntries(bucket: BreedBucket): number {
+    let total = 0;
+    for (const sex of ['dog', 'unknown', 'bitch']) {
+      for (const classBucket of bucket.sexes[sex] ?? []) {
+        total += classBucket.entries.length;
+      }
+    }
+    return total;
+  }
 
   for (const [groupName, { breeds }] of sortedGroups) {
     for (const [breedName, breedBucket] of [...breeds.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-      breedPages.push({
-        groupName,
-        breedName,
-        judge: show.judgesByBreedName?.[breedName],
-        breedBucket,
-      });
+      const totalEntries = countBreedEntries(breedBucket);
+      const judge = show.judgesByBreedName?.[breedName];
+
+      if (totalEntries > PAGE_ENTRY_THRESHOLD) {
+        // Split into one page per sex with entries
+        for (const sex of ['dog', 'unknown', 'bitch']) {
+          const classBuckets = breedBucket.sexes[sex];
+          if (!classBuckets?.length) continue;
+          const hasAnyEntries = classBuckets.some((cb) => cb.entries.length > 0);
+          if (!hasAnyEntries) continue;
+          const sexBucket: BreedBucket = {
+            ...breedBucket,
+            sexes: { [sex]: classBuckets },
+          };
+          breedPages.push({
+            groupName,
+            breedName,
+            judge,
+            breedBucket: sexBucket,
+            sexLabel: sex === 'dog' ? 'Dogs' : sex === 'bitch' ? 'Bitches' : undefined,
+          });
+        }
+      } else {
+        breedPages.push({ groupName, breedName, judge, breedBucket });
+      }
     }
   }
 
@@ -330,9 +363,9 @@ export function CatalogueStandard({ show, entries }: Props) {
       <ClassDefinitionsPage show={show} />
       <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />
 
-      {/* One <Page> per breed — resets coordinate system to avoid renderer overflow */}
-      {breedPages.map(({ groupName, breedName, judge, breedBucket }) => (
-        <Page key={`${groupName}-${breedName}`} size="A5" style={styles.page} wrap>
+      {/* One <Page> per breed (or per sex for large breeds) — resets coordinate system */}
+      {breedPages.map(({ groupName, breedName, judge, breedBucket, sexLabel }, pageIdx) => (
+        <Page key={`${groupName}-${breedName}-${sexLabel ?? 'all'}-${pageIdx}`} size="A5" style={styles.page} wrap>
           <Text style={styles.groupHeading}>{groupName}</Text>
           <Text style={styles.breedHeading}>{breedName}</Text>
           {judge && (
@@ -377,10 +410,13 @@ export function CatalogueStandard({ show, entries }: Props) {
                       <Text key={i} style={styles.sponsorLine}>{line}</Text>
                     ))}
 
-                    {bucket.entries.map((entry) => {
+                    {bucket.entries.map((entry, entryIdx) => {
                       const catNo = entry.catalogueNumber ?? '';
                       const isFirstAppearance = !catNo || firstAppearanceBucket.get(catNo) === bucket;
                       const isJH = entry.entryType === 'junior_handler';
+                      // Unique per render: includes bucket + index to survive duplicate
+                      // catalogue numbers and multi-class dogs with 3+ abbreviations.
+                      const rowKey = `${bucket.classNumber ?? bucket.className}-${catNo || 'nocat'}-${entryIdx}`;
                       // For JH entries, show handler/exhibitor name instead of dog name
                       const displayName = isJH
                         ? (entry.handler ?? entry.exhibitor ?? 'Unnamed Handler')
@@ -391,7 +427,7 @@ export function CatalogueStandard({ show, entries }: Props) {
                         const firstClass = firstSeenClass.get(catNo) ?? '';
                         return (
                           <View
-                            key={`${catNo}-abbrev`}
+                            key={rowKey}
                             style={{ ...styles.entryRowWrap, paddingLeft: 6 }}
                             wrap={false}
                           >
@@ -415,7 +451,7 @@ export function CatalogueStandard({ show, entries }: Props) {
                         // Junior Handling: handler-centric display
                         return (
                           <View
-                            key={catNo || displayName}
+                            key={rowKey}
                             style={styles.entryRowWrap}
                             wrap={false}
                           >
@@ -451,7 +487,7 @@ export function CatalogueStandard({ show, entries }: Props) {
                       const pedigree = formatPedigreeKC(entry.sire, entry.dam);
                       return (
                         <View
-                          key={catNo || entry.dogName}
+                          key={rowKey}
                           style={styles.entryRowWrap}
                           wrap={false}
                         >
