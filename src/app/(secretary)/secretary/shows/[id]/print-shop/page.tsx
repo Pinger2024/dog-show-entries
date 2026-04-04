@@ -489,6 +489,7 @@ export default function PrintShopPage() {
                             <SelectContent>
                               <SelectItem value="standard">Standard</SelectItem>
                               <SelectItem value="by-class">By Class</SelectItem>
+                              <SelectItem value="judging">Judging</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>

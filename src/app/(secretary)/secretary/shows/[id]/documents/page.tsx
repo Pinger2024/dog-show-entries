@@ -11,6 +11,7 @@ import {
   Download,
   ExternalLink,
   FileText,
+  Gavel,
   Hash,
   List,
   Map,
@@ -161,6 +162,12 @@ export default function DocumentsPage() {
           href: `/api/catalogue/${showId}/by-class`,
           icon: <List className="size-4" />,
           description: 'Entries grouped by class number',
+        },
+        {
+          label: 'Judging Catalogue',
+          href: `/api/catalogue/${showId}/judging`,
+          icon: <Gavel className="size-4" />,
+          description: 'Condensed two-column format with write-in placements — minimises print cost',
         },
         {
           label: 'Absentee List',

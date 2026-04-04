@@ -5,6 +5,7 @@ import {
   BookOpen,
   ClipboardList,
   Download,
+  Gavel,
   Hash,
   Loader2,
   FileText,
@@ -107,6 +108,16 @@ export default function CataloguePage() {
               >
                 <List className="size-4" />
                 By Class
+              </a>
+            </Button>
+            <Button variant="outline" asChild>
+              <a
+                href={`/api/catalogue/${showId}/judging`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Gavel className="size-4" />
+                Judging
               </a>
             </Button>
             <Button variant="outline" asChild>
