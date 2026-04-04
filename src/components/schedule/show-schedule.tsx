@@ -85,9 +85,12 @@ export interface ScheduleClass {
 
 export interface ScheduleJudge {
   name: string;
+  affix?: string | null;
   breeds: string[];
   sex?: string | null; // 'dog' | 'bitch' | null (both)
-  /** Pre-formatted label for display, e.g. "Dogs — Mr A Winfrow" */
+  /** Role label, e.g. "Dogs & Bitches" or "Junior Handling" */
+  role?: string;
+  /** Pre-formatted label for display, e.g. "Mr A Winfrow (Sadira) — Dogs & Bitches" */
   displayLabel?: string;
 }
 
@@ -384,6 +387,34 @@ const s = StyleSheet.create({
     fontFamily: 'Inter',
     fontSize: 6,
     color: C.textLight,
+  },
+  // Fixed judges ribbon — repeats on every page above the footer so readers
+  // can see who is judging what without flipping back to the cover.
+  judgesRibbon: {
+    position: 'absolute',
+    bottom: 24,
+    left: 25,
+    right: 25,
+    paddingBottom: 3,
+    paddingTop: 3,
+    borderTopWidth: 0.5,
+    borderTopColor: C.ruleLight,
+    flexDirection: 'column',
+  },
+  judgesRibbonLabel: {
+    fontFamily: 'Inter',
+    fontSize: 6,
+    fontWeight: 'bold',
+    color: C.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 1,
+  },
+  judgesRibbonText: {
+    fontFamily: 'Inter',
+    fontSize: 6.5,
+    color: C.textDark,
+    lineHeight: 1.3,
   },
 
   // ── Info cards ──
@@ -773,6 +804,21 @@ export function ShowSchedule({
   const footerRender = ({ pageNumber, totalPages }: { pageNumber: number; totalPages: number }) =>
     `${show.name}  ·  Schedule  ·  Page ${pageNumber} of ${totalPages}`;
 
+  // Fixed judges ribbon — appears at the bottom of every page so readers can
+  // always see who is judging what. Skipped on the cover page (it's already
+  // shown in the cover details card).
+  const judgesRibbon =
+    judges.length > 0 ? (
+      <View style={s.judgesRibbon} fixed>
+        <Text style={s.judgesRibbonLabel}>Judges</Text>
+        {judges.map((j, i) => (
+          <Text key={i} style={s.judgesRibbonText}>
+            {j.displayLabel ?? j.name}
+          </Text>
+        ))}
+      </View>
+    ) : null;
+
   /* ── Compact format: 4-page condensed schedule for folded leaflets ── */
   if (isCompact) {
     return (
@@ -916,6 +962,7 @@ export function ShowSchedule({
               ))}
             </InfoCard>
           )}
+          {judgesRibbon}
           <Text style={s.footer} render={footerRender} fixed />
         </Page>
 
@@ -981,6 +1028,7 @@ export function ShowSchedule({
               ))}
             </View>
           )}
+          {judgesRibbon}
           <Text style={s.footer} render={footerRender} fixed />
         </Page>
 
@@ -1026,6 +1074,7 @@ export function ShowSchedule({
               IF YOUR DOG IS FOUND TO BE AT RISK FORCIBLE ENTRY TO YOUR VEHICLE MAY BE NECESSARY WITHOUT LIABILITY FOR ANY DAMAGE CAUSED.
             </Text>
           </View>
+          {judgesRibbon}
           <Text style={s.footer} render={footerRender} fixed />
         </Page>
       </Document>
@@ -1332,13 +1381,14 @@ export function ShowSchedule({
         {judges.length > 0 && (
           <InfoCard title="Judges">
             {judges.map((judge, i) => {
-              // Use sex label (Dogs/Bitches/Junior Handling) when no breeds assigned
-              const roleLabel = judge.breeds.length > 0
-                ? judge.breeds.join(', ')
-                : (judge.sex === 'dog' ? 'Dogs' : judge.sex === 'bitch' ? 'Bitches' : judge.displayLabel?.startsWith('Junior') ? 'Junior Handling' : show.showScope === 'single_breed' ? 'Breed Classes' : 'All breeds');
+              // Prefer the API-computed role label (includes "Junior Handling",
+              // "Dogs & Bitches" etc.); fall back to breed list for multi-breed shows.
+              const roleLabel = judge.role
+                ?? (judge.breeds.length > 0 ? judge.breeds.join(', ') : 'Breed Classes');
+              const nameWithAffix = judge.affix ? `${judge.name} (${judge.affix})` : judge.name;
               return (
                 <View key={i} style={s.judgeRow}>
-                  <Text style={s.judgeName}>{judge.name}</Text>
+                  <Text style={s.judgeName}>{nameWithAffix}</Text>
                   <Text style={s.judgeBreeds}>{roleLabel}</Text>
                 </View>
               );
@@ -1365,7 +1415,8 @@ export function ShowSchedule({
           </InfoCard>
         )}
 
-        <Text style={s.footer} render={footerRender} fixed />
+        {judgesRibbon}
+          <Text style={s.footer} render={footerRender} fixed />
       </Page>
 
       {/* ════════════════════════════════════════════════════════════════════════
@@ -1409,6 +1460,7 @@ export function ShowSchedule({
             </InfoCard>
           )}
 
+          {judgesRibbon}
           <Text style={s.footer} render={footerRender} fixed />
         </Page>
       )}
@@ -1497,6 +1549,7 @@ export function ShowSchedule({
             </InfoCard>
           )}
 
+          {judgesRibbon}
           <Text style={s.footer} render={footerRender} fixed />
         </Page>
       )}
@@ -1604,7 +1657,8 @@ export function ShowSchedule({
           </>
         )}
 
-        <Text style={s.footer} render={footerRender} fixed />
+        {judgesRibbon}
+          <Text style={s.footer} render={footerRender} fixed />
       </Page>
 
       {/* ════════════════════════════════════════════════════════════════════════
@@ -1695,7 +1749,8 @@ export function ShowSchedule({
           <Text style={s.defDescription}>Dogs may be entered for Not for Competition, such entries must be recorded on the entry form enclosed for the purpose.</Text>
         </View>
 
-        <Text style={s.footer} render={footerRender} fixed />
+        {judgesRibbon}
+          <Text style={s.footer} render={footerRender} fixed />
       </Page>
 
       {/* ════════════════════════════════════════════════════════════════════════
@@ -1755,7 +1810,8 @@ export function ShowSchedule({
 
         {/* Custom statements now appear on the cover page for prominence */}
 
-        <Text style={s.footer} render={footerRender} fixed />
+        {judgesRibbon}
+          <Text style={s.footer} render={footerRender} fixed />
       </Page>
 
       {/* ════════════════════════════════════════════════════════════════════════
@@ -1794,7 +1850,8 @@ export function ShowSchedule({
           </Text>
         </View>
 
-        <Text style={s.footer} render={footerRender} fixed />
+        {judgesRibbon}
+          <Text style={s.footer} render={footerRender} fixed />
       </Page>}
 
       {/* ════════════════════════════════════════════════════════════════════════
@@ -1820,7 +1877,8 @@ export function ShowSchedule({
         <Rule num="6">Any objection by an individual related to an infringement of these regulations must be made in writing to the Show Secretary or his/her office before the close of the Show and the individual must produce evidence of identity at the time of lodging the complaint.</Rule>
         <Rule num="7">The chalking, powdering or spraying (with the exception of water) of exhibits within the precincts of the show is prohibited.</Rule>
 
-        <Text style={s.footer} render={footerRender} fixed />
+        {judgesRibbon}
+          <Text style={s.footer} render={footerRender} fixed />
       </Page>}
 
       {/* ════════════════════════════════════════════════════════════════════════
@@ -1854,6 +1912,7 @@ export function ShowSchedule({
             </InfoCard>
           )}
 
+          {judgesRibbon}
           <Text style={s.footer} render={footerRender} fixed />
         </Page>
       )}
@@ -1989,6 +2048,7 @@ export function ShowSchedule({
             </View>
           </View>
 
+          {judgesRibbon}
           <Text style={s.footer} render={footerRender} fixed />
         </Page>
       )}

@@ -76,24 +76,103 @@ export async function GET(
     classType: sc.classDefinition?.type ?? null,
   }));
 
-  // Build judges data (deduplicated by judge name)
-  const judgeMap = new Map<string, Set<string>>();
-  for (const ja of judgeAssignments) {
-    if (!ja.judge?.name) continue;
-    if (!judgeMap.has(ja.judge.name)) {
-      judgeMap.set(ja.judge.name, new Set());
-    }
-    if (ja.breed?.name) {
-      judgeMap.get(ja.judge.name)!.add(ja.breed.name);
+  // Build judges data (deduplicated by judge id). For each judge we track
+  // their breeds, affix, and which sexes they're assigned to.
+  //
+  // Role detection for single-breed shows (where breedId is usually null on
+  // the assignment): JH classes are the only classes with sex=null in the
+  // schedule, so a judge assignment with sex=null in a show that has JH
+  // classes is implicitly the JH judge. A judge with sex='dog' and/or 'bitch'
+  // judges breed classes.
+  const hasJuniorHandlerClasses = showClasses.some(
+    (sc) => sc.classDefinition?.type === 'junior_handler',
+  );
+  // For multi-breed shows, build the set of breed names that only appear in
+  // JH classes vs breed classes — used when a judge is assigned to a specific
+  // breed rather than by sex.
+  const juniorBreedSet = new Set<string>();
+  const breedBreedSet = new Set<string>();
+  for (const sc of showClasses) {
+    const breedName = sc.breed?.name;
+    if (!breedName) continue;
+    if (sc.classDefinition?.type === 'junior_handler') {
+      juniorBreedSet.add(breedName);
+    } else {
+      breedBreedSet.add(breedName);
     }
   }
 
-  const judges: ScheduleJudge[] = Array.from(judgeMap.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([name, breeds]) => ({
-      name,
-      breeds: Array.from(breeds).sort(),
-    }));
+  type JudgeAggregate = {
+    name: string;
+    affix: string | null;
+    breeds: Set<string>;
+    sexes: Set<string>; // 'dog' | 'bitch'
+    hasNullSexAssignment: boolean; // any assignment with sex=null
+  };
+  const judgeMap = new Map<string, JudgeAggregate>();
+  for (const ja of judgeAssignments) {
+    if (!ja.judge?.id || !ja.judge?.name) continue;
+    const key = ja.judge.id;
+    if (!judgeMap.has(key)) {
+      judgeMap.set(key, {
+        name: ja.judge.name,
+        affix: ja.judge.kennelClubAffix ?? null,
+        breeds: new Set(),
+        sexes: new Set(),
+        hasNullSexAssignment: false,
+      });
+    }
+    const agg = judgeMap.get(key)!;
+    if (ja.breed?.name) agg.breeds.add(ja.breed.name);
+    if (ja.sex) {
+      agg.sexes.add(ja.sex);
+    } else {
+      agg.hasNullSexAssignment = true;
+    }
+  }
+
+  const judges: ScheduleJudge[] = Array.from(judgeMap.values())
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((agg) => {
+      const breedArr = Array.from(agg.breeds).sort();
+      // Is this judge doing junior handling?
+      // Three signals: (1) all their breeds are JH-only, (2) they have a
+      // null-sex assignment in a show with JH classes AND no sex-specific
+      // assignments, (3) single-breed show with JH classes.
+      const onlyJhBreeds =
+        breedArr.length > 0 && breedArr.every((b) => juniorBreedSet.has(b) && !breedBreedSet.has(b));
+      const nullSexInJhShow =
+        hasJuniorHandlerClasses && agg.hasNullSexAssignment && agg.sexes.size === 0;
+      const isJuniorOnly = onlyJhBreeds || nullSexInJhShow;
+
+      // Build the role label for display
+      let role: string;
+      if (isJuniorOnly) {
+        role = 'Junior Handling';
+      } else if (agg.sexes.has('dog') && agg.sexes.has('bitch')) {
+        role = 'Dogs & Bitches';
+      } else if (agg.sexes.has('dog')) {
+        role = 'Dogs';
+      } else if (agg.sexes.has('bitch')) {
+        role = 'Bitches';
+      } else if (breedArr.length > 0) {
+        role = breedArr.join(', ');
+      } else {
+        role = show.showScope === 'single_breed' ? 'Breed Classes' : 'All Breeds';
+      }
+
+      // displayLabel format: "Name (Affix) — Role" or "Name — Role"
+      const namePart = agg.affix ? `${agg.name} (${agg.affix})` : agg.name;
+      const displayLabel = `${namePart} — ${role}`;
+      return {
+        name: agg.name,
+        affix: agg.affix,
+        breeds: breedArr,
+        sex: agg.sexes.size === 1 ? Array.from(agg.sexes)[0] : null,
+        role,
+        displayLabel,
+      };
+    });
 
   // Build sponsors data (defensive: skip sponsors with missing sponsor record)
   const sponsors: ScheduleSponsor[] = showSponsorData

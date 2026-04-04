@@ -35,6 +35,7 @@ interface FoundJudge {
   kcNumber: string | null;
   contactEmail: string | null;
   contactPhone: string | null;
+  kennelClubAffix: string | null;
   kcJudgeId?: string; // RKC UUID for profile lookup
   source: 'local' | 'rkc' | 'manual';
   rkcApprovals?: { breed: string; group: string; level: number }[];
@@ -88,6 +89,7 @@ export function AddJudgeWizard({
   const [manualKc, setManualKc] = useState('');
   const [manualEmail, setManualEmail] = useState('');
   const [manualPhone, setManualPhone] = useState('');
+  const [manualAffix, setManualAffix] = useState('');
 
   // ── Assign step state ──
   const [breedCombos, setBreedCombos] = useState<BreedSexCombo[]>([]);
@@ -147,6 +149,7 @@ export function AddJudgeWizard({
     setManualKc('');
     setManualEmail('');
     setManualPhone('');
+    setManualAffix('');
     setBreedCombos([]);
     onOpenChange(false);
   }, [onOpenChange]);
@@ -210,6 +213,7 @@ export function AddJudgeWizard({
       kcNumber: judge.kcNumber,
       contactEmail: judge.contactEmail,
       contactPhone: judge.contactPhone,
+      kennelClubAffix: judge.kennelClubAffix,
       source: 'local',
     });
   }
@@ -223,6 +227,7 @@ export function AddJudgeWizard({
           kcNumber: null, // RKC search doesn't return the KC number
           contactEmail: null,
           contactPhone: null,
+          kennelClubAffix: null,
           kcJudgeId: result.kcJudgeId,
           source: 'rkc',
           rkcApprovals: profile.breeds,
@@ -237,6 +242,7 @@ export function AddJudgeWizard({
       kcNumber: manualKc.trim() || null,
       contactEmail: manualEmail.trim() || null,
       contactPhone: manualPhone.trim() || null,
+      kennelClubAffix: manualAffix.trim() || null,
       source: 'manual',
     });
   }
@@ -263,6 +269,7 @@ export function AddJudgeWizard({
       contactEmail: email,
       contactPhone: selectedJudge.contactPhone ?? undefined,
       kcJudgeId: selectedJudge.kcJudgeId,
+      kennelClubAffix: selectedJudge.kennelClubAffix ?? undefined,
       assignments: selectedCombos.map((c) => ({
         breedId: c.breedId,
         sex: c.sex as 'dog' | 'bitch' | null,
@@ -493,6 +500,18 @@ export function AddJudgeWizard({
                         className="h-11"
                       />
                     </div>
+                    <div className="sm:col-span-2">
+                      <Label className="text-xs text-muted-foreground">Kennel Club Affix</Label>
+                      <Input
+                        placeholder="e.g. Sadira"
+                        value={manualAffix}
+                        onChange={(e) => setManualAffix(e.target.value)}
+                        className="h-11"
+                      />
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        Shown in brackets after the judge name on the schedule
+                      </p>
+                    </div>
                   </div>
                   <Button
                     size="sm"
@@ -644,6 +663,23 @@ export function AddJudgeWizard({
                     <p className="text-sm">{selectedJudge.kcNumber}</p>
                   </div>
                 )}
+              </div>
+              <div>
+                <Label htmlFor="affix-confirm" className="text-xs text-muted-foreground">
+                  Kennel Club Affix
+                </Label>
+                <Input
+                  id="affix-confirm"
+                  placeholder="e.g. Sadira"
+                  value={selectedJudge.kennelClubAffix ?? ''}
+                  onChange={(e) =>
+                    setSelectedJudge({ ...selectedJudge, kennelClubAffix: e.target.value || null })
+                  }
+                  className="h-10"
+                />
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Shown in brackets after the judge name on the schedule
+                </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">

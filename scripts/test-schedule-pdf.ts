@@ -40,25 +40,85 @@ async function main() {
     breedName: sc.breed?.name ?? null,
   }));
   
-  const judgeMap = new Map<string, Set<string>>();
-  for (const ja of judgeAssignments) {
-    if (ja.judge?.name === undefined && ja.judge?.name === null) continue;
-    if (ja.judge === null) continue;
-    if (ja.judge.name === undefined || ja.judge.name === null) continue;
-    if (judgeMap.has(ja.judge.name) === false) {
-      judgeMap.set(ja.judge.name, new Set());
-    }
-    if (ja.breed?.name) {
-      judgeMap.get(ja.judge.name)?.add(ja.breed.name);
+  const hasJuniorHandlerClasses = showClasses.some((sc) => sc.classDefinition?.type === 'junior_handler');
+  const juniorBreedSet = new Set<string>();
+  const breedBreedSet = new Set<string>();
+  for (const sc of showClasses) {
+    const breedName = sc.breed?.name;
+    if (!breedName) continue;
+    if (sc.classDefinition?.type === 'junior_handler') {
+      juniorBreedSet.add(breedName);
+    } else {
+      breedBreedSet.add(breedName);
     }
   }
-  
-  const judges: ScheduleJudge[] = Array.from(judgeMap.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([name, breeds]) => ({
-      name,
-      breeds: Array.from(breeds).sort(),
-    }));
+
+  type JudgeAggregate = {
+    name: string;
+    affix: string | null;
+    breeds: Set<string>;
+    sexes: Set<string>;
+    hasNullSexAssignment: boolean;
+  };
+  const judgeMap = new Map<string, JudgeAggregate>();
+  for (const ja of judgeAssignments) {
+    if (!ja.judge?.id || !ja.judge?.name) continue;
+    const key = ja.judge.id;
+    if (!judgeMap.has(key)) {
+      judgeMap.set(key, {
+        name: ja.judge.name,
+        affix: ja.judge.kennelClubAffix ?? null,
+        breeds: new Set(),
+        sexes: new Set(),
+        hasNullSexAssignment: false,
+      });
+    }
+    const agg = judgeMap.get(key)!;
+    if (ja.breed?.name) agg.breeds.add(ja.breed.name);
+    if (ja.sex) {
+      agg.sexes.add(ja.sex);
+    } else {
+      agg.hasNullSexAssignment = true;
+    }
+  }
+
+  const judges: ScheduleJudge[] = Array.from(judgeMap.values())
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((agg) => {
+      const breedArr = Array.from(agg.breeds).sort();
+      const onlyJhBreeds =
+        breedArr.length > 0 && breedArr.every((b) => juniorBreedSet.has(b) && !breedBreedSet.has(b));
+      const nullSexInJhShow =
+        hasJuniorHandlerClasses && agg.hasNullSexAssignment && agg.sexes.size === 0;
+      const isJuniorOnly = onlyJhBreeds || nullSexInJhShow;
+
+      let role: string;
+      if (isJuniorOnly) {
+        role = 'Junior Handling';
+      } else if (agg.sexes.has('dog') && agg.sexes.has('bitch')) {
+        role = 'Dogs & Bitches';
+      } else if (agg.sexes.has('dog')) {
+        role = 'Dogs';
+      } else if (agg.sexes.has('bitch')) {
+        role = 'Bitches';
+      } else if (breedArr.length > 0) {
+        role = breedArr.join(', ');
+      } else {
+        role = show.showScope === 'single_breed' ? 'Breed Classes' : 'All Breeds';
+      }
+
+      const namePart = agg.affix ? `${agg.name} (${agg.affix})` : agg.name;
+      return {
+        name: agg.name,
+        affix: agg.affix,
+        breeds: breedArr,
+        sex: agg.sexes.size === 1 ? Array.from(agg.sexes)[0] : null,
+        role,
+        displayLabel: `${namePart} — ${role}`,
+      };
+    });
+
+  console.log('Judge display labels:', judges.map((j) => j.displayLabel));
   
   const showInfo: ScheduleShowInfo = {
     name: show.name,

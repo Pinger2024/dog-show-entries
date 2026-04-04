@@ -1794,6 +1794,7 @@ export const secretaryRouter = createTRPCRouter({
         name: z.string().min(1).max(255),
         kcNumber: z.string().optional(),
         contactEmail: z.string().email().optional(),
+        kennelClubAffix: z.string().max(100).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -1803,6 +1804,7 @@ export const secretaryRouter = createTRPCRouter({
           name: input.name,
           kcNumber: input.kcNumber ?? null,
           contactEmail: input.contactEmail ?? null,
+          kennelClubAffix: input.kennelClubAffix ?? null,
         })
         .returning();
 
@@ -1919,6 +1921,7 @@ export const secretaryRouter = createTRPCRouter({
       contactEmail: z.string().email().optional(),
       contactPhone: z.string().max(50).optional(),
       bio: z.string().max(2000).optional(),
+      kennelClubAffix: z.string().max(100).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const { judgeId, ...updates } = input;
@@ -1928,6 +1931,7 @@ export const secretaryRouter = createTRPCRouter({
       if (updates.contactEmail !== undefined) setValues.contactEmail = updates.contactEmail || null;
       if (updates.contactPhone !== undefined) setValues.contactPhone = updates.contactPhone || null;
       if (updates.bio !== undefined) setValues.bio = updates.bio || null;
+      if (updates.kennelClubAffix !== undefined) setValues.kennelClubAffix = updates.kennelClubAffix || null;
       if (Object.keys(setValues).length === 0) throw new TRPCError({ code: 'BAD_REQUEST', message: 'No fields to update' });
 
       const [updated] = await ctx.db.update(judges).set(setValues).where(eq(judges.id, judgeId)).returning();
@@ -1949,6 +1953,7 @@ export const secretaryRouter = createTRPCRouter({
       contactEmail: z.string().email(),
       contactPhone: z.string().max(50).optional(),
       kcJudgeId: z.string().max(100).optional(),
+      kennelClubAffix: z.string().max(100).optional(),
       // Assignment details — array of breed+sex combos
       assignments: z.array(z.object({
         breedId: z.string().uuid().nullable(),
@@ -1977,14 +1982,16 @@ export const secretaryRouter = createTRPCRouter({
           contactEmail: input.contactEmail,
           contactPhone: input.contactPhone || null,
           kcJudgeId: input.kcJudgeId || null,
+          kennelClubAffix: input.kennelClubAffix || null,
         }).returning();
         judge = created!;
       } else {
-        // Update email/phone if provided (judge already exists, may have new contact info)
+        // Update email/phone/affix if provided (judge already exists, may have new info)
         await ctx.db.update(judges).set({
           contactEmail: input.contactEmail,
           contactPhone: input.contactPhone ?? judge.contactPhone,
           kcJudgeId: input.kcJudgeId ?? judge.kcJudgeId,
+          kennelClubAffix: input.kennelClubAffix ?? judge.kennelClubAffix,
         }).where(eq(judges.id, judge.id));
       }
 
