@@ -266,11 +266,14 @@ export function CatalogueStandard({ show, entries }: Props) {
     }
   }
 
-  // Build a lookup: classNumber -> sponsorship info for inline display
-  const sponsorByClassNumber = new Map<number, ClassSponsorshipInfo>();
+  // Build a lookup: classNumber -> sponsorships[] (a class can have multiple
+  // sponsors — e.g. one for the trophy, another for the class rosettes).
+  const sponsorsByClassNumber = new Map<number, ClassSponsorshipInfo[]>();
   for (const sp of show.classSponsorships ?? []) {
     if (sp.classNumber != null) {
-      sponsorByClassNumber.set(sp.classNumber, sp);
+      const existing = sponsorsByClassNumber.get(sp.classNumber) ?? [];
+      existing.push(sp);
+      sponsorsByClassNumber.set(sp.classNumber, existing);
     }
   }
 
@@ -383,27 +386,38 @@ export function CatalogueStandard({ show, entries }: Props) {
                 )}
 
                 {breedBucket.sexes[sex].map((bucket) => {
-                  // Look up sponsorship for this class
-                  const sp = bucket.classNumber != null
-                    ? sponsorByClassNumber.get(bucket.classNumber)
-                    : undefined;
+                  // Look up sponsorships for this class (may have multiple —
+                  // trophy sponsor + rosette sponsor, etc).
+                  const sps = bucket.classNumber != null
+                    ? sponsorsByClassNumber.get(bucket.classNumber) ?? []
+                    : [];
                   const sponsorParts: string[] = [];
-                  if (sp?.trophyName) {
-                    let part = `Trophy: ${sp.trophyName}`;
-                    if (sp.sponsorName) {
-                      part += ` — sponsored by ${sp.sponsorName}`;
+                  for (const sp of sps) {
+                    if (sp.trophyName) {
+                      let part = `Trophy: ${sp.trophyName}`;
+                      if (sp.sponsorName) {
+                        part += ` — sponsored by ${sp.sponsorName}`;
+                        if (sp.sponsorAffix) part += ` (${sp.sponsorAffix})`;
+                      } else if (sp.trophyDonor) {
+                        part += ` — donated by ${sp.trophyDonor}`;
+                      }
+                      sponsorParts.push(part);
+                    } else if (sp.sponsorName) {
+                      let part = `Sponsored by ${sp.sponsorName}`;
                       if (sp.sponsorAffix) part += ` (${sp.sponsorAffix})`;
+                      if (sp.prizeDescription) part += ` — ${sp.prizeDescription}`;
+                      sponsorParts.push(part);
+                    } else if (sp.prizeDescription) {
+                      sponsorParts.push(sp.prizeDescription);
                     }
-                    sponsorParts.push(part);
-                  } else if (sp?.sponsorName) {
-                    let part = `Sponsored by ${sp.sponsorName}`;
-                    if (sp.sponsorAffix) part += ` (${sp.sponsorAffix})`;
-                    sponsorParts.push(part);
                   }
 
+                  // Small classes (≤ 8 entries) stay atomic — never orphan
+                  // the class heading from its entries on a page break.
+                  const keepTogether = bucket.entries.length <= 8;
                   return (
-                  <View key={`${bucket.classNumber}-${bucket.className}`}>
-                    <Text style={styles.classHeadingInBreed} minPresenceAhead={50}>
+                  <View key={`${bucket.classNumber}-${bucket.className}`} wrap={!keepTogether}>
+                    <Text style={styles.classHeadingInBreed} minPresenceAhead={60}>
                       {classHeadingLabel(bucket, sex)}
                     </Text>
                     {sponsorParts.map((line, i) => (

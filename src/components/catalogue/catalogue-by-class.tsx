@@ -44,11 +44,15 @@ function groupByClass(entries: CatalogueEntry[]) {
 }
 
 export function CatalogueByClass({ show, entries }: Props) {
-  // Build a lookup: classNumber -> sponsorship info for inline display
-  const sponsorByClassNumber = new Map<number, ClassSponsorshipInfo>();
+  // Build a lookup: classNumber -> sponsorship info (array, since one class
+  // can have multiple sponsors — e.g. one for the trophy and another for
+  // the rosettes).
+  const sponsorsByClassNumber = new Map<number, ClassSponsorshipInfo[]>();
   for (const sp of show.classSponsorships ?? []) {
     if (sp.classNumber != null) {
-      sponsorByClassNumber.set(sp.classNumber, sp);
+      const existing = sponsorsByClassNumber.get(sp.classNumber) ?? [];
+      existing.push(sp);
+      sponsorsByClassNumber.set(sp.classNumber, existing);
     }
   }
 
@@ -124,11 +128,23 @@ export function CatalogueByClass({ show, entries }: Props) {
         const sorted = [...classEntries].sort(
           (a, b) => (a.catalogueNumber ?? '').localeCompare(b.catalogueNumber ?? '', undefined, { numeric: true })
         );
+        // Small classes (≤ 8 entries) stay atomic — never split the header
+        // from its entries. Larger classes can break across pages if needed.
+        // Amanda's feedback: "just dont want a class broken up like that
+        // unless its a big class that takes up more than one page".
+        const keepTogether = sorted.length <= 8;
 
         return (
-          <View key={classKey} style={idx > 0 ? { marginTop: 12 } : undefined}>
+          <View
+            key={classKey}
+            wrap={!keepTogether}
+            style={idx > 0 ? { marginTop: 12 } : undefined}
+          >
 
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', ...styles.groupHeading }}>
+            <View
+              minPresenceAhead={60}
+              style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', ...styles.groupHeading }}
+            >
               <Text>{classNumber ? `Class ${classNumber}: ${className}` : className}</Text>
               {sex && (
                 <Text style={{ fontSize: 9, fontStyle: 'italic', color: '#fff' }}>
@@ -136,23 +152,31 @@ export function CatalogueByClass({ show, entries }: Props) {
                 </Text>
               )}
             </View>
-            {/* Sponsorship banner if class has a trophy/sponsor */}
-            {classNumber != null && sponsorByClassNumber.has(classNumber) && (() => {
-              const sp = sponsorByClassNumber.get(classNumber)!;
-              const parts: string[] = [];
-              if (sp.trophyName) {
-                let part = `Trophy: ${sp.trophyName}`;
-                if (sp.sponsorName) {
-                  part += ` — sponsored by ${sp.sponsorName}`;
+            {/* Sponsorship banner — one line per sponsorship (a class may
+                have multiple, e.g. trophy sponsor + rosette sponsor). */}
+            {classNumber != null && sponsorsByClassNumber.has(classNumber) && (() => {
+              const sps = sponsorsByClassNumber.get(classNumber)!;
+              const lines: string[] = [];
+              for (const sp of sps) {
+                if (sp.trophyName) {
+                  let part = `Trophy: ${sp.trophyName}`;
+                  if (sp.sponsorName) {
+                    part += ` — sponsored by ${sp.sponsorName}`;
+                    if (sp.sponsorAffix) part += ` (${sp.sponsorAffix})`;
+                  } else if (sp.trophyDonor) {
+                    part += ` — donated by ${sp.trophyDonor}`;
+                  }
+                  lines.push(part);
+                } else if (sp.sponsorName) {
+                  let part = `Sponsored by ${sp.sponsorName}`;
                   if (sp.sponsorAffix) part += ` (${sp.sponsorAffix})`;
+                  if (sp.prizeDescription) part += ` — ${sp.prizeDescription}`;
+                  lines.push(part);
+                } else if (sp.prizeDescription) {
+                  lines.push(sp.prizeDescription);
                 }
-                parts.push(part);
-              } else if (sp.sponsorName) {
-                let part = `Sponsored by ${sp.sponsorName}`;
-                if (sp.sponsorAffix) part += ` (${sp.sponsorAffix})`;
-                parts.push(part);
               }
-              return parts.map((line, i) => (
+              return lines.map((line, i) => (
                 <Text key={i} style={styles.sponsorLine}>{line}</Text>
               ));
             })()}

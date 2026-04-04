@@ -392,9 +392,12 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                   </Text>
                 )}
 
-                {breedBucket.sexes[sex].map((bucket) => (
-                  <View key={`${bucket.classNumber}-${bucket.className}`}>
-                    <Text style={styles.classHeadingInBreed} minPresenceAhead={50}>
+                {breedBucket.sexes[sex].map((bucket) => {
+                  // Small classes stay atomic — never orphan the heading.
+                  const keepTogether = bucket.entries.length <= 8;
+                  return (
+                  <View key={`${bucket.classNumber}-${bucket.className}`} wrap={!keepTogether}>
+                    <Text style={styles.classHeadingInBreed} minPresenceAhead={60}>
                       {classHeadingLabel(bucket, sex)}
                     </Text>
 
@@ -565,7 +568,8 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                       );
                     })}
                   </View>
-                ))}
+                  );
+                })}
               </View>
             ))}
 
