@@ -24,6 +24,21 @@ import type { RingBoardShowInfo, RingBoardRing } from '@/components/ring-board/r
 import React from 'react';
 import { uploadToR2, getPublicUrl } from '@/server/services/storage';
 
+// ── Docking statement helper (F(1).7.c(2)) ──
+
+function getCatalogueDockingStatement(sd: Record<string, unknown> | null): string {
+  const country = (sd?.country as string) ?? 'england';
+  const publicFee = sd?.publicAdmission !== false;
+
+  if (publicFee && country === 'england') {
+    return 'A dog docked on or after 6 April 2007 may not be entered for exhibition at this show.';
+  }
+  if (publicFee && country === 'wales') {
+    return 'A dog docked on or after 28th March 2007 may not be entered for exhibition at this show.';
+  }
+  return 'Only undocked dogs and legally docked dogs may be entered for exhibition at this show.';
+}
+
 // ── Catalogue PDF ──
 
 export async function generateCataloguePdf(
@@ -165,6 +180,7 @@ export async function generateCataloguePdf(
     classDefinitions,
     showScope: show.showScope ?? undefined,
     customStatements: (scheduleData?.customStatements as string[] | undefined),
+    dockingStatement: getCatalogueDockingStatement(scheduleData),
   };
 
   const isAllBreed = show.showScope !== 'single_breed';

@@ -945,6 +945,12 @@ export function ShowSchedule({
                 <Text style={s.infoValue}>{formatShortDate(show.entryCloseDate)}</Text>
               </View>
             )}
+            {estimationDate && (
+              <View style={s.infoRow}>
+                <Text style={s.infoLabel}>Awards estimated from</Text>
+                <Text style={s.infoValue}>{estimationDate}</Text>
+              </View>
+            )}
           </InfoCard>
           {show.onCallVet && (
             <View style={{ marginBottom: 4 }}>
@@ -1041,8 +1047,12 @@ export function ShowSchedule({
             {show.startTime ? ` Judging commences at ${formatTime(show.startTime)}.` : ''}
             {' '}Exhibits may be removed after their judging has been completed. The show will close half an hour after all judging has been completed.
             {' '}The Committee reserves the right to refuse any entries. No dog under 6 calendar months of age is eligible. The mating of bitches within the precincts of the show is forbidden.
+            {' '}Exhibits will not be admitted to Group or Best in Show competition after a period of 10 minutes has elapsed since the announcement that exhibits are required for judging.
             {' '}All exhibitors must be familiar with RKC Regulation F (Annex B) Regulations for the Preparation of Dogs for Exhibition.
             {' '}ONLINE ENTRY at remishowmanager.co.uk
+          </Text>
+          <Text style={{ fontFamily: 'Inter', fontSize: 6, color: C.textMedium, marginBottom: 6, lineHeight: 1.4 }}>
+            The following paragraphs of the RKC Show F(1) Regulations are applicable to this show and exhibitors should familiarise themselves with these before entering: F(1).8.a, F(1).8.l, F(1).8.m, F(1).13, F(1).18, F(B) Preparation of Dogs for Exhibition.
           </Text>
 
           <View style={{ borderBottomWidth: 0.5, borderBottomColor: C.ruleLight, marginBottom: 6 }} />
@@ -1788,7 +1798,7 @@ export function ShowSchedule({
         </Text>
         <Rule num="11">A Baby Puppy is a dog of four and less than six calendar months of age on the first day of the show. Baby Puppy classes may be scheduled at any breed Club show, Best Baby Puppy in Breed may be declared at each breed from the dogs entered in the Baby Puppy class. There must be no progression to further competitions.</Rule>
         <Rule num="12">In Best in Show the exhibits may be selected from the exhibits declared Best of Sex. If a Reserve Best in Show is to be selected, the eligible dogs are those declared Best of Sex, Opposite Best of Sex of the exhibit declared Best in Show.</Rule>
-        <Rule num="13">Exhibits will not be admitted to Best in Show competition after a period of ten minutes has elapsed since the announcement that exhibits are required for judging, unless they have been unavoidably delayed by previous judging not being completed on time, and then only with the special permission of the Show Management.</Rule>
+        <Rule num="13">Exhibits will not be admitted to Group or Best in Show competition after a period of ten minutes has elapsed since the announcement that exhibits are required for judging, unless they have been unavoidably delayed by previous judging not being completed on time, and then only with the special permission of the Show Management.</Rule>
         <Rule num="14">Exhibitors must not pick up dogs by their tails and leads. When lifting dogs not handle in a rough manner.</Rule>
         <Rule num="15">All exhibitors must be familiar with Royal Kennel Club Regulation F (Annex B) Regulations for the Preparation of Dogs for Exhibition.</Rule>
         <Rule num="16">All dogs resident outside the UK must be issued with a Royal Kennel Club Authority to Compete number before entry to the show/event can be made. All singles must be resident within the UK. A single entry for an overseas exhibit must be accompanied by a copy of the dog&apos;s official export pedigree.</Rule>
@@ -1807,6 +1817,13 @@ export function ShowSchedule({
         </Text>
         <Rule num="19">No modifications will be made to the schedule except by permission of the Board of the Royal Kennel Club, which will be followed by advertisement in the Canine press wherever possible.</Rule>
         <Rule num="20">An exhibitor or competitor should ensure that contact details for any handler are available and must be provided upon request in any investigation of a breach of this regulation by such handler.</Rule>
+
+        {/* F(1) applicable paragraphs notice — RKC compliance */}
+        <View style={{ marginTop: 6, paddingTop: 4, borderTopWidth: 0.5, borderTopColor: C.ruleLight }} wrap={false}>
+          <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textMedium, lineHeight: 1.4 }}>
+            The following paragraphs of the RKC Show F(1) Regulations are applicable to this show and exhibitors should familiarise themselves with these before entering: F(1).8.a, F(1).8.l, F(1).8.m, F(1).13, F(1).18, F(B) Preparation of Dogs for Exhibition.
+          </Text>
+        </View>
 
         {/* Custom statements now appear on the cover page for prominence */}
 

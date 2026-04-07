@@ -1,6 +1,6 @@
 import { Document, Page, View, Text } from '@react-pdf/renderer';
 import { styles } from './catalogue-styles';
-import { CoverPage, JudgesListPage, ClassDefinitionsPage, TrophiesPage } from './catalogue-front-matter';
+import { CoverPage, JudgesListPage, ClassDefinitionsPage, TrophiesPage, ExhibitorIndexPage } from './catalogue-front-matter';
 import type { ClassSponsorshipInfo } from './catalogue-front-matter';
 import { formatDobKC, formatPedigreeKC, formatOwnerKC, uppercaseName } from './catalogue-utils';
 
@@ -88,6 +88,8 @@ export interface CatalogueShowInfo {
   outsideAttraction?: boolean;
   /** Show manager name */
   showManager?: string;
+  /** Docking statement per F(1).7.c(2) — varies by country and public admission */
+  dockingStatement?: string;
 }
 
 interface Props {
@@ -373,6 +375,7 @@ export function CatalogueStandard({ show, entries }: Props) {
       {/* Front matter pages */}
       <CoverPage show={show} />
       <JudgesListPage show={show} />
+      <ExhibitorIndexPage show={show} entries={entries} />
       <ClassDefinitionsPage show={show} />
       {!show.skipTrophiesPage && (
         <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />

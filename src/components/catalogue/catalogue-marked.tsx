@@ -1,6 +1,6 @@
 import { Document, Page, View, Text, StyleSheet } from '@react-pdf/renderer';
 import { styles } from './catalogue-styles';
-import { CoverPage, JudgesListPage, ClassDefinitionsPage, TrophiesPage } from './catalogue-front-matter';
+import { CoverPage, JudgesListPage, ClassDefinitionsPage, TrophiesPage, ExhibitorIndexPage } from './catalogue-front-matter';
 import { formatDobKC, formatPedigreeKC, formatOwnerKC, uppercaseName } from './catalogue-utils';
 import type { CatalogueEntry, CatalogueShowInfo } from './catalogue-standard';
 
@@ -324,6 +324,7 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
       {/* Cover page with MARKED CATALOGUE subtitle */}
       <CoverPage show={{ ...show, name: `${show.name}\nMARKED CATALOGUE` }} />
       <JudgesListPage show={show} />
+      <ExhibitorIndexPage show={show} entries={entries} />
       <ClassDefinitionsPage show={show} />
       {!show.skipTrophiesPage && (
         <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />
