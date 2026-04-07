@@ -1405,39 +1405,46 @@ export default function EnterShowPage() {
           {/* Second add-dog button — easier to find after scrolling through entries */}
           {cart.entries.length >= 2 && addDogsButtons}
 
-          {/* Declarations */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold">Declarations</h3>
+          {/* RKC Declaration — official KC wording required on all entries */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold">RKC Declaration</h3>
+            <div className="max-h-40 overflow-y-auto rounded-md border bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">
+              I/We agree to submit to and be bound by Kennel Club Limited Rules
+              &amp; Regulations in their present form or as they may be amended
+              from time to time in relation to all canine matters with which the
+              Kennel Club is concerned and that this entry is made upon the basis
+              that all current single or joint registered owners of this dog(s)
+              have authorised/consented to this entry. I/We also undertake to
+              abide by the Regulations of this Show and not to bring to the Show
+              any dog which has contracted or been knowingly exposed to any
+              infectious or contagious disease during the 21 days prior to the
+              Show, or which is suffering from a visible condition which adversely
+              affects its health or welfare or to bring any dog which has been
+              prepared for exhibition contrary to Kennel Club Regulations for the
+              Preparation of Dogs for Exhibition F (Annex B). I/We agree without
+              reservation that any Veterinary Surgeon operating on any of my/our
+              dogs in such a way that the operation alters the natural
+              conformation of the dog or part thereof may report such operations
+              to the Kennel Club. I/We declare that where any alteration has been
+              made to the natural conformation of the dog(s) the relevant
+              permission to show has been granted by the Kennel Club. I/We
+              further declare that I believe to the best of my knowledge that the
+              dogs are not liable to disqualification under Kennel Club Show
+              Regulations. I/We also confirm that I/we understand the eligibility
+              of the classes entered.
+            </div>
             <label className="flex cursor-pointer items-start gap-3">
               <Checkbox
-                checked={healthDeclared}
-                onCheckedChange={(checked) => setHealthDeclared(checked === true)}
+                checked={healthDeclared && termsAccepted}
+                onCheckedChange={(checked) => {
+                  const val = checked === true;
+                  setHealthDeclared(val);
+                  setTermsAccepted(val);
+                }}
                 className="mt-0.5"
               />
-              <span className="text-sm leading-relaxed">
-                I declare that at the time of entries closing, to the best of my
-                knowledge, my dog(s) are not suffering from any infectious or
-                contagious disease. Should any such disease be identified within
-                21 days of the show, my entry will be withdrawn.
-              </span>
-            </label>
-            <label className="flex cursor-pointer items-start gap-3">
-              <Checkbox
-                checked={termsAccepted}
-                onCheckedChange={(checked) => setTermsAccepted(checked === true)}
-                className="mt-0.5"
-              />
-              <span className="text-sm leading-relaxed">
-                I agree to abide by the{' '}
-                <a
-                  href="https://www.royalkennelclub.com/media/2876/f-regulations.pdf"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary underline hover:no-underline"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  Royal Kennel Club Rules and Regulations
-                </a>.
+              <span className="text-sm font-medium leading-relaxed">
+                I agree to the above declaration
               </span>
             </label>
           </div>
