@@ -2,6 +2,7 @@ import { Document, Page, Text, View, StyleSheet, Font, Image } from '@react-pdf/
 import path from 'path';
 import type { ScheduleData } from '@/server/db/schema/shows';
 import { formatCurrency } from '@/lib/date-utils';
+import { getDockingStatement as getDockingStatementShared } from '@/lib/rkc-compliance';
 import React from 'react';
 
 // ── Font Registration ──────────────────────────────────────────────────────────
@@ -189,16 +190,7 @@ function getEstimationDate(closeDate: string | null): string | null {
 }
 
 function getDockingStatement(sd: ScheduleData | null): string {
-  const country = sd?.country ?? 'england';
-  const publicFee = sd?.publicAdmission !== false;
-
-  if (publicFee && country === 'england') {
-    return 'A dog docked on or after 6 April 2007 may not be entered for exhibition at this show.';
-  }
-  if (publicFee && country === 'wales') {
-    return 'A dog docked on or after 28th March 2007 may not be entered for exhibition at this show.';
-  }
-  return 'Only undocked dogs and legally docked dogs may be entered for exhibition at this show.';
+  return getDockingStatementShared(sd?.country ?? 'england', sd?.publicAdmission !== false);
 }
 
 // ── Styles ─────────────────────────────────────────────────────────────────────

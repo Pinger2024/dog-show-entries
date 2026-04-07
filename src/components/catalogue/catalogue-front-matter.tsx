@@ -449,7 +449,7 @@ export function ClassDefinitionsPage({ show }: FrontMatterProps) {
 
 interface ExhibitorIndexPageProps {
   show: CatalogueShowInfo;
-  entries: { exhibitor?: string | null; exhibitorId?: string | null; catalogueNumber?: string | null; owners: { name: string; address: string | null }[]; classes: { name?: string; classNumber?: number | null }[] }[];
+  entries: Pick<import('./catalogue-standard').CatalogueEntry, 'exhibitor' | 'exhibitorId' | 'catalogueNumber' | 'owners' | 'classes'>[];
 }
 
 /**
@@ -458,7 +458,7 @@ interface ExhibitorIndexPageProps {
  * and classes entered, sorted alphabetically by exhibitor name.
  */
 export function ExhibitorIndexPage({ show, entries }: ExhibitorIndexPageProps) {
-  if (show.showType !== 'championship' && show.showType !== 'breed_championship') return null;
+  if (show.showType !== 'championship') return null;
 
   const byExhibitor = new Map<string, { name: string; address?: string; catNos: string[]; classes: string[] }>();
   for (const entry of entries) {

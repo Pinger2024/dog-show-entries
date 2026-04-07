@@ -16,20 +16,7 @@ import type { MarkedResult, MarkedAchievement } from '@/components/catalogue/cat
 import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, validateRasterLogoUrl, makePdfResponse } from '@/lib/pdf-utils';
-
-// Docking statement per F(1).7.c(2) — varies by country and public admission
-function getCatalogueDockingStatement(sd: Record<string, unknown> | null): string {
-  const country = (sd?.country as string) ?? 'england';
-  const publicFee = sd?.publicAdmission !== false;
-
-  if (publicFee && country === 'england') {
-    return 'A dog docked on or after 6 April 2007 may not be entered for exhibition at this show.';
-  }
-  if (publicFee && country === 'wales') {
-    return 'A dog docked on or after 28th March 2007 may not be entered for exhibition at this show.';
-  }
-  return 'Only undocked dogs and legally docked dogs may be entered for exhibition at this show.';
-}
+import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
 
 export async function GET(
   request: NextRequest,
@@ -254,7 +241,7 @@ export async function GET(
     welcomeNote: scheduleData?.welcomeNote as string | undefined,
     outsideAttraction: scheduleData?.outsideAttraction === true ? true : undefined,
     showManager: scheduleData?.showManager as string | undefined,
-    dockingStatement: getCatalogueDockingStatement(scheduleData),
+    dockingStatement: getDockingStatementFromScheduleData(scheduleData),
   };
 
   // Check if JSON format was explicitly requested (for data export)

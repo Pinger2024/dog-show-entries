@@ -315,7 +315,7 @@ type Section = {
 
 export function CatalogueJudging({ show, entries }: Props) {
   const allClasses = groupByClass(entries, show);
-  const isChampionship = show.showType === 'championship' || show.showType === 'breed_championship';
+  const isChampionship = show.showType === 'championship';
 
   // Split into sections: Dogs, Bitches, Junior Handling.
   // JH classes have sex=null and class name contains "handling".
