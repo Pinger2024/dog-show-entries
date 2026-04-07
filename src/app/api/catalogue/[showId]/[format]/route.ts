@@ -82,6 +82,7 @@ export async function GET(
         },
         exhibitor: true,
         handler: true,
+        juniorHandlerDetails: true,
         entryClasses: {
           with: {
             showClass: { with: { classDefinition: true } },
@@ -189,6 +190,7 @@ export async function GET(
     })),
     status: entry.status,
     entryType: entry.entryType,
+    jhHandlerName: entry.juniorHandlerDetails?.handlerName ?? undefined,
   }));
 
   // Build show-level sponsor info for cover/front matter
