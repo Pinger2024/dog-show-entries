@@ -197,7 +197,7 @@ export function buildSponsorLines(
   const lines: string[] = [];
   for (const sp of sps) {
     if (sp.trophyName) {
-      let part = `Trophy: ${sp.trophyName}`;
+      let part = sp.trophyName;
       if (sp.sponsorName) {
         part += ` — sponsored by ${sp.sponsorName}`;
         if (sp.sponsorAffix) part += ` (${sp.sponsorAffix})`;
