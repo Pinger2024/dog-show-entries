@@ -1,7 +1,13 @@
 import { Document, Page, View, Text, StyleSheet, Image } from '@react-pdf/renderer';
 import './catalogue-styles'; // side-effect: registers Inter + LibreBaskerville fonts
 import type { CatalogueEntry, CatalogueShowInfo } from './catalogue-standard';
-import { uppercaseName } from './catalogue-utils';
+import {
+  uppercaseName,
+  groupByClass as groupByClassShared,
+  sortEntries,
+  displayEntryName,
+} from './catalogue-utils';
+import type { ClassGroup } from './catalogue-utils';
 
 interface Props {
   show: CatalogueShowInfo;
@@ -236,77 +242,6 @@ const s = StyleSheet.create({
   },
 });
 
-/** Display name — handler name for JH, dog name for regular entries. */
-function displayEntryName(entry: CatalogueEntry): string {
-  if (entry.entryType === 'junior_handler') {
-    return entry.handler ?? entry.exhibitor ?? 'Unnamed Handler';
-  }
-  return uppercaseName(entry.dogName) || 'Unnamed';
-}
-
-type ClassGroup = {
-  classNumber: number | null | undefined;
-  className: string;
-  sex: string | null | undefined;
-  classType: string | null | undefined;
-  entries: CatalogueEntry[];
-};
-
-function groupByClass(entries: CatalogueEntry[], show: CatalogueShowInfo): ClassGroup[] {
-  const byKey = new Map<string, ClassGroup>();
-
-  for (const entry of entries) {
-    for (const cls of entry.classes) {
-      const key = cls.classNumber != null
-        ? `num:${cls.classNumber}`
-        : `name:${cls.name ?? ''}-${cls.sex ?? 'any'}`;
-      if (!byKey.has(key)) {
-        byKey.set(key, {
-          classNumber: cls.classNumber,
-          className: cls.name ?? 'Unknown Class',
-          sex: cls.sex,
-          classType: null,
-          entries: [],
-        });
-      }
-      byKey.get(key)!.entries.push(entry);
-    }
-  }
-
-  // Inject empty classes from the show's class list so all classes appear
-  if (show.allShowClasses) {
-    for (const sc of show.allShowClasses) {
-      const key = sc.classNumber != null
-        ? `num:${sc.classNumber}`
-        : `name:${sc.className}-${sc.sex ?? 'any'}`;
-      if (!byKey.has(key)) {
-        byKey.set(key, {
-          classNumber: sc.classNumber,
-          className: sc.className,
-          sex: sc.sex,
-          classType: null,
-          entries: [],
-        });
-      }
-    }
-  }
-
-  return Array.from(byKey.values()).sort((a, b) => {
-    if (a.classNumber != null && b.classNumber != null) return a.classNumber - b.classNumber;
-    if (a.classNumber != null) return -1;
-    if (b.classNumber != null) return 1;
-    return a.className.localeCompare(b.className);
-  });
-}
-
-function sortEntries(entries: CatalogueEntry[]): CatalogueEntry[] {
-  return [...entries].sort((a, b) => {
-    const an = a.catalogueNumber ?? '';
-    const bn = b.catalogueNumber ?? '';
-    return an.localeCompare(bn, undefined, { numeric: true });
-  });
-}
-
 type Section = {
   key: 'dog' | 'bitch' | 'jh';
   label: string;
@@ -314,7 +249,7 @@ type Section = {
 };
 
 export function CatalogueJudging({ show, entries }: Props) {
-  const allClasses = groupByClass(entries, show);
+  const allClasses = groupByClassShared(entries, show);
   const isChampionship = show.showType === 'championship';
 
   // Split into sections: Dogs, Bitches, Junior Handling.

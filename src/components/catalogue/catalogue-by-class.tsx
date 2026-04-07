@@ -2,7 +2,7 @@ import { Document, Page, View, Text } from '@react-pdf/renderer';
 import { styles } from './catalogue-styles';
 import { CatalogueHeader } from './catalogue-header';
 import type { CatalogueEntry, CatalogueShowInfo } from './catalogue-standard';
-import { formatDobKC, formatPedigreeKC, formatOwnerKC, uppercaseName } from './catalogue-utils';
+import { formatDobKC, formatPedigreeKC, formatOwnerKC, uppercaseName, buildSponsorLines } from './catalogue-utils';
 import { CoverPage, JudgesListPage, ClassDefinitionsPage, TrophiesPage } from './catalogue-front-matter';
 import type { ClassSponsorshipInfo } from './catalogue-front-matter';
 
@@ -152,34 +152,10 @@ export function CatalogueByClass({ show, entries }: Props) {
                 </Text>
               )}
             </View>
-            {/* Sponsorship banner — one line per sponsorship (a class may
-                have multiple, e.g. trophy sponsor + rosette sponsor). */}
-            {classNumber != null && sponsorsByClassNumber.has(classNumber) && (() => {
-              const sps = sponsorsByClassNumber.get(classNumber)!;
-              const lines: string[] = [];
-              for (const sp of sps) {
-                if (sp.trophyName) {
-                  let part = `Trophy: ${sp.trophyName}`;
-                  if (sp.sponsorName) {
-                    part += ` — sponsored by ${sp.sponsorName}`;
-                    if (sp.sponsorAffix) part += ` (${sp.sponsorAffix})`;
-                  } else if (sp.trophyDonor) {
-                    part += ` — donated by ${sp.trophyDonor}`;
-                  }
-                  lines.push(part);
-                } else if (sp.sponsorName) {
-                  let part = `Sponsored by ${sp.sponsorName}`;
-                  if (sp.sponsorAffix) part += ` (${sp.sponsorAffix})`;
-                  if (sp.prizeDescription) part += ` — ${sp.prizeDescription}`;
-                  lines.push(part);
-                } else if (sp.prizeDescription) {
-                  lines.push(sp.prizeDescription);
-                }
-              }
-              return lines.map((line, i) => (
+            {classNumber != null && sponsorsByClassNumber.has(classNumber) &&
+              buildSponsorLines(sponsorsByClassNumber.get(classNumber)!).map((line, i) => (
                 <Text key={i} style={styles.sponsorLine}>{line}</Text>
-              ));
-            })()}
+              ))}
 
             <Text style={styles.classEntryCount}>
               {sorted.length} {sorted.length === 1 ? 'entry' : 'entries'}

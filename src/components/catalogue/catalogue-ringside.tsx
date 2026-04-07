@@ -6,8 +6,12 @@ import {
   uppercaseName,
   formatDobKC,
   formatPedigreeKC,
-  formatOwnerKC,
+  groupByClass,
+  sortEntries,
+  displayEntryName,
+  buildSponsorLines,
 } from './catalogue-utils';
+import type { ClassGroup } from './catalogue-utils';
 import {
   CoverPage,
   JudgesListPage,
@@ -234,118 +238,11 @@ const s = StyleSheet.create({
   },
 });
 
-// ── Helpers ────────────────────────────────────────────────────
-
-/** Display name — handler name for JH, dog name for regular entries. */
-function displayEntryName(entry: CatalogueEntry): string {
-  if (entry.entryType === 'junior_handler') {
-    return entry.jhHandlerName ?? entry.handler ?? entry.exhibitor ?? 'Unnamed Handler';
-  }
-  return uppercaseName(entry.dogName) || 'Unnamed';
-}
-
-type ClassGroup = {
-  classNumber: number | null | undefined;
-  className: string;
-  sex: string | null | undefined;
-  sortOrder: number | undefined;
-  entries: CatalogueEntry[];
-};
-
-function groupByClass(
-  entries: CatalogueEntry[],
-  show: CatalogueShowInfo,
-): ClassGroup[] {
-  const byKey = new Map<string, ClassGroup>();
-
-  for (const entry of entries) {
-    for (const cls of entry.classes) {
-      const key =
-        cls.classNumber != null
-          ? `num:${cls.classNumber}`
-          : `name:${cls.name ?? ''}-${cls.sex ?? 'any'}`;
-      if (!byKey.has(key)) {
-        byKey.set(key, {
-          classNumber: cls.classNumber,
-          className: cls.name ?? 'Unknown Class',
-          sex: cls.sex,
-          sortOrder: cls.sortOrder,
-          entries: [],
-        });
-      }
-      byKey.get(key)!.entries.push(entry);
-    }
-  }
-
-  // Inject empty classes from the show's class list
-  if (show.allShowClasses) {
-    for (const sc of show.allShowClasses) {
-      const key =
-        sc.classNumber != null
-          ? `num:${sc.classNumber}`
-          : `name:${sc.className}-${sc.sex ?? 'any'}`;
-      if (!byKey.has(key)) {
-        byKey.set(key, {
-          classNumber: sc.classNumber,
-          className: sc.className,
-          sex: sc.sex,
-          sortOrder: sc.sortOrder,
-          entries: [],
-        });
-      }
-    }
-  }
-
-  return Array.from(byKey.values()).sort((a, b) => {
-    if (a.classNumber != null && b.classNumber != null)
-      return a.classNumber - b.classNumber;
-    if (a.classNumber != null) return -1;
-    if (b.classNumber != null) return 1;
-    return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
-  });
-}
-
-function sortEntries(entries: CatalogueEntry[]): CatalogueEntry[] {
-  return [...entries].sort((a, b) => {
-    const an = a.catalogueNumber ?? '';
-    const bn = b.catalogueNumber ?? '';
-    return an.localeCompare(bn, undefined, { numeric: true });
-  });
-}
-
 type Section = {
   key: 'dog' | 'bitch' | 'jh';
   label: string;
   classes: ClassGroup[];
 };
-
-// ── Sponsorship formatting ─────────────────────────────────────
-
-function buildSponsorLines(
-  sps: ClassSponsorshipInfo[],
-): string[] {
-  const lines: string[] = [];
-  for (const sp of sps) {
-    if (sp.trophyName) {
-      let part = `Trophy: ${sp.trophyName}`;
-      if (sp.sponsorName) {
-        part += ` — sponsored by ${sp.sponsorName}`;
-        if (sp.sponsorAffix) part += ` (${sp.sponsorAffix})`;
-      } else if (sp.trophyDonor) {
-        part += ` — donated by ${sp.trophyDonor}`;
-      }
-      lines.push(part);
-    } else if (sp.sponsorName) {
-      let part = `Sponsored by ${sp.sponsorName}`;
-      if (sp.sponsorAffix) part += ` (${sp.sponsorAffix})`;
-      if (sp.prizeDescription) part += ` — ${sp.prizeDescription}`;
-      lines.push(part);
-    } else if (sp.prizeDescription) {
-      lines.push(sp.prizeDescription);
-    }
-  }
-  return lines;
-}
 
 // ── Exhibitor Index ────────────────────────────────────────────
 // Full exhibitor details: name, address, then each dog with
@@ -432,6 +329,47 @@ function buildExhibitorIndex(entries: CatalogueEntry[]): ExhibitorInfo[] {
     }));
 }
 
+// ── Page chunking (module-scope to avoid re-creation per render) ──
+
+const PAGE_ENTRY_THRESHOLD = 50;
+const EXHIBITOR_PAGE_THRESHOLD = 20;
+
+function chunkClasses(classes: ClassGroup[]): ClassGroup[][] {
+  const chunks: ClassGroup[][] = [];
+  let currentChunk: ClassGroup[] = [];
+  let currentCount = 0;
+  for (const cls of classes) {
+    const entryCount = cls.entries.length;
+    if (currentChunk.length > 0 && currentCount + entryCount > PAGE_ENTRY_THRESHOLD) {
+      chunks.push(currentChunk);
+      currentChunk = [];
+      currentCount = 0;
+    }
+    currentChunk.push(cls);
+    currentCount += entryCount;
+  }
+  if (currentChunk.length > 0) chunks.push(currentChunk);
+  return chunks;
+}
+
+function chunkExhibitors(exs: ExhibitorInfo[]): ExhibitorInfo[][] {
+  const chunks: ExhibitorInfo[][] = [];
+  let currentChunk: ExhibitorInfo[] = [];
+  let currentCount = 0;
+  for (const ex of exs) {
+    const weight = 1 + ex.dogs.length;
+    if (currentChunk.length > 0 && currentCount + weight > EXHIBITOR_PAGE_THRESHOLD) {
+      chunks.push(currentChunk);
+      currentChunk = [];
+      currentCount = 0;
+    }
+    currentChunk.push(ex);
+    currentCount += weight;
+  }
+  if (currentChunk.length > 0) chunks.push(currentChunk);
+  return chunks;
+}
+
 // ── Main Component ─────────────────────────────────────────────
 
 export function CatalogueRingside({ show, entries }: Props) {
@@ -470,62 +408,24 @@ export function CatalogueRingside({ show, entries }: Props) {
   if (bitchClasses.length > 0) sections.push({ key: 'bitch', label: 'Bitch', classes: bitchClasses });
   if (jhClasses.length > 0) sections.push({ key: 'jh', label: 'Junior Handling', classes: jhClasses });
 
-  // Best-of awards for each sex section
+  // Best-of awards — only include longcoat awards for GSD shows
+  const hasLongcoat = entries.some((e) =>
+    e.classes.some((c) => /long\s*coat/i.test(c.name ?? '')),
+  );
   const bestAwards: Record<string, string[]> = {
-    dog: ['Best Dog', 'Best Longcoat Dog', 'Best Puppy Dog'],
-    bitch: ['Best Bitch', 'Best Longcoat Bitch', 'Best Puppy Bitch'],
+    dog: hasLongcoat
+      ? ['Best Dog', 'Best Longcoat Dog', 'Best Puppy Dog']
+      : ['Best Dog', 'Best Puppy Dog'],
+    bitch: hasLongcoat
+      ? ['Best Bitch', 'Best Longcoat Bitch', 'Best Puppy Bitch']
+      : ['Best Bitch', 'Best Puppy Bitch'],
   };
-  const bisAwards = [
-    'Best Longcoat Puppy',
-    'Best in Show',
-    'Best Longcoat in Show',
-  ];
+  const bisAwards = hasLongcoat
+    ? ['Best Longcoat Puppy', 'Best in Show', 'Best Longcoat in Show']
+    : ['Best in Show'];
 
   // Build exhibitor index
-  const exhibitors = buildExhibitorIndex(entries);
-
-  // Page-chunk classes to avoid react-pdf coordinate overflow.
-  // Each sex section gets its own set of page chunks.
-  const PAGE_ENTRY_THRESHOLD = 50;
-
-  function chunkClasses(classes: ClassGroup[]): ClassGroup[][] {
-    const chunks: ClassGroup[][] = [];
-    let currentChunk: ClassGroup[] = [];
-    let currentCount = 0;
-    for (const cls of classes) {
-      const entryCount = cls.entries.length;
-      if (currentChunk.length > 0 && currentCount + entryCount > PAGE_ENTRY_THRESHOLD) {
-        chunks.push(currentChunk);
-        currentChunk = [];
-        currentCount = 0;
-      }
-      currentChunk.push(cls);
-      currentCount += entryCount;
-    }
-    if (currentChunk.length > 0) chunks.push(currentChunk);
-    return chunks;
-  }
-
-  // Chunk exhibitors for the index pages
-  const EXHIBITOR_PAGE_THRESHOLD = 20;
-  function chunkExhibitors(exs: ExhibitorInfo[]): ExhibitorInfo[][] {
-    const chunks: ExhibitorInfo[][] = [];
-    let currentChunk: ExhibitorInfo[] = [];
-    let currentCount = 0;
-    for (const ex of exs) {
-      const weight = 1 + ex.dogs.length;
-      if (currentChunk.length > 0 && currentCount + weight > EXHIBITOR_PAGE_THRESHOLD) {
-        chunks.push(currentChunk);
-        currentChunk = [];
-        currentCount = 0;
-      }
-      currentChunk.push(ex);
-      currentCount += weight;
-    }
-    if (currentChunk.length > 0) chunks.push(currentChunk);
-    return chunks;
-  }
-
+  const exhibitors = entries.length > 0 ? buildExhibitorIndex(entries) : [];
   const exhibitorChunks = chunkExhibitors(exhibitors);
 
   const footerRender = ({ pageNumber, totalPages }: { pageNumber: number; totalPages: number }) =>

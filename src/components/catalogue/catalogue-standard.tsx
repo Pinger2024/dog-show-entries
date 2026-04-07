@@ -2,7 +2,7 @@ import { Document, Page, View, Text } from '@react-pdf/renderer';
 import { styles } from './catalogue-styles';
 import { CoverPage, JudgesListPage, ClassDefinitionsPage, TrophiesPage, ExhibitorIndexPage } from './catalogue-front-matter';
 import type { ClassSponsorshipInfo } from './catalogue-front-matter';
-import { formatDobKC, formatPedigreeKC, formatOwnerKC, uppercaseName } from './catalogue-utils';
+import { formatDobKC, formatPedigreeKC, formatOwnerKC, uppercaseName, buildSponsorLines } from './catalogue-utils';
 
 export interface CatalogueEntry {
   catalogueNumber: string | null;
@@ -406,26 +406,7 @@ export function CatalogueStandard({ show, entries }: Props) {
                   const sps = bucket.classNumber != null
                     ? sponsorsByClassNumber.get(bucket.classNumber) ?? []
                     : [];
-                  const sponsorParts: string[] = [];
-                  for (const sp of sps) {
-                    if (sp.trophyName) {
-                      let part = `Trophy: ${sp.trophyName}`;
-                      if (sp.sponsorName) {
-                        part += ` — sponsored by ${sp.sponsorName}`;
-                        if (sp.sponsorAffix) part += ` (${sp.sponsorAffix})`;
-                      } else if (sp.trophyDonor) {
-                        part += ` — donated by ${sp.trophyDonor}`;
-                      }
-                      sponsorParts.push(part);
-                    } else if (sp.sponsorName) {
-                      let part = `Sponsored by ${sp.sponsorName}`;
-                      if (sp.sponsorAffix) part += ` (${sp.sponsorAffix})`;
-                      if (sp.prizeDescription) part += ` — ${sp.prizeDescription}`;
-                      sponsorParts.push(part);
-                    } else if (sp.prizeDescription) {
-                      sponsorParts.push(sp.prizeDescription);
-                    }
-                  }
+                  const sponsorParts = buildSponsorLines(sps);
 
                   // Small classes (≤ 8 entries) stay atomic — never orphan
                   // the class heading from its entries on a page break.
