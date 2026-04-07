@@ -112,6 +112,16 @@ export default function CataloguePage() {
             </Button>
             <Button variant="outline" asChild>
               <a
+                href={`/api/catalogue/${showId}/ringside`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <BookOpen className="size-4" />
+                Ringside
+              </a>
+            </Button>
+            <Button variant="outline" asChild>
+              <a
                 href={`/api/catalogue/${showId}/judging`}
                 target="_blank"
                 rel="noopener noreferrer"

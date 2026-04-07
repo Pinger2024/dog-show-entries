@@ -83,21 +83,38 @@ export default function FinancialPage() {
     (e) => e.paymentIntentId || e.payments?.some((p) => p.stripePaymentId)
   );
 
-  // Per-class breakdown from entry report
+  // Per-class breakdown from entry report, grouped by sex
   const classBreakdown = useMemo(() => {
-    if (!entryReport) return [];
-    const classMap = new Map<string, { name: string; entries: number; revenue: number }>();
+    if (!entryReport) return { dogs: [] as { name: string; entries: number; revenue: number }[], bitches: [] as { name: string; entries: number; revenue: number }[], combined: [] as { name: string; entries: number; revenue: number }[] };
+    const dogMap = new Map<string, { name: string; entries: number; revenue: number }>();
+    const bitchMap = new Map<string, { name: string; entries: number; revenue: number }>();
+    const combinedMap = new Map<string, { name: string; entries: number; revenue: number }>();
     for (const entry of entryReport) {
       if (entry.status === 'cancelled' || entry.status === 'withdrawn') continue;
       for (const ec of entry.entryClasses ?? []) {
         const className = ec.showClass?.classDefinition?.name ?? 'Unknown';
-        const existing = classMap.get(className) ?? { name: className, entries: 0, revenue: 0 };
-        existing.entries += 1;
-        existing.revenue += ec.fee;
-        classMap.set(className, existing);
+        const sex = (ec.showClass as { sex?: string | null })?.sex;
+        // Combined totals
+        const combined = combinedMap.get(className) ?? { name: className, entries: 0, revenue: 0 };
+        combined.entries += 1;
+        combined.revenue += ec.fee;
+        combinedMap.set(className, combined);
+        // Sex-specific
+        const targetMap = sex === 'dog' ? dogMap : sex === 'bitch' ? bitchMap : combinedMap;
+        if (targetMap !== combinedMap) {
+          const existing = targetMap.get(className) ?? { name: className, entries: 0, revenue: 0 };
+          existing.entries += 1;
+          existing.revenue += ec.fee;
+          targetMap.set(className, existing);
+        }
       }
     }
-    return Array.from(classMap.values()).sort((a, b) => b.entries - a.entries);
+    const sortByEntries = (a: { entries: number }, b: { entries: number }) => b.entries - a.entries;
+    return {
+      dogs: Array.from(dogMap.values()).sort(sortByEntries),
+      bitches: Array.from(bitchMap.values()).sort(sortByEntries),
+      combined: Array.from(combinedMap.values()).sort(sortByEntries),
+    };
   }, [entryReport]);
 
   // Per-breed breakdown with nested classes (for all-breed shows)
@@ -170,8 +187,8 @@ export default function FinancialPage() {
         />
         <StatCard
           label="Catalogues"
-          value={catalogueOrders?.length ?? 0}
-          subtext="requested"
+          value={(catalogueOrders?.printed?.length ?? 0) + (catalogueOrders?.online?.length ?? 0)}
+          subtext={`${catalogueOrders?.printed?.length ?? 0} printed · ${catalogueOrders?.online?.length ?? 0} online`}
         />
       </div>
 
@@ -183,13 +200,13 @@ export default function FinancialPage() {
         </Button>
       </div>
 
-      {/* Per-class breakdown */}
-      {classBreakdown.length > 0 && (
+      {/* Per-class breakdown by sex */}
+      {classBreakdown.combined.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Entries by Class</CardTitle>
             <CardDescription>
-              Number of entries and revenue per class
+              Number of entries and revenue per class, broken down by sex
             </CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto">
@@ -202,20 +219,66 @@ export default function FinancialPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {classBreakdown.map((c) => (
-                  <TableRow key={c.name}>
-                    <TableCell className="font-medium">{c.name}</TableCell>
-                    <TableCell className="text-right">{c.entries}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(c.revenue)}</TableCell>
-                  </TableRow>
-                ))}
+                {/* Dogs */}
+                {classBreakdown.dogs.length > 0 && (
+                  <>
+                    <TableRow className="bg-primary/10">
+                      <TableCell colSpan={3} className="font-bold uppercase tracking-wider text-xs">
+                        Dogs
+                      </TableCell>
+                    </TableRow>
+                    {classBreakdown.dogs.map((c) => (
+                      <TableRow key={`dog-${c.name}`}>
+                        <TableCell className="font-medium pl-6">{c.name}</TableCell>
+                        <TableCell className="text-right">{c.entries}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(c.revenue)}</TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow className="border-t font-semibold">
+                      <TableCell className="pl-6">Subtotal (Dogs)</TableCell>
+                      <TableCell className="text-right">
+                        {classBreakdown.dogs.reduce((s, c) => s + c.entries, 0)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatCurrency(classBreakdown.dogs.reduce((s, c) => s + c.revenue, 0))}
+                      </TableCell>
+                    </TableRow>
+                  </>
+                )}
+                {/* Bitches */}
+                {classBreakdown.bitches.length > 0 && (
+                  <>
+                    <TableRow className="bg-primary/10">
+                      <TableCell colSpan={3} className="font-bold uppercase tracking-wider text-xs">
+                        Bitches
+                      </TableCell>
+                    </TableRow>
+                    {classBreakdown.bitches.map((c) => (
+                      <TableRow key={`bitch-${c.name}`}>
+                        <TableCell className="font-medium pl-6">{c.name}</TableCell>
+                        <TableCell className="text-right">{c.entries}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(c.revenue)}</TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow className="border-t font-semibold">
+                      <TableCell className="pl-6">Subtotal (Bitches)</TableCell>
+                      <TableCell className="text-right">
+                        {classBreakdown.bitches.reduce((s, c) => s + c.entries, 0)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatCurrency(classBreakdown.bitches.reduce((s, c) => s + c.revenue, 0))}
+                      </TableCell>
+                    </TableRow>
+                  </>
+                )}
+                {/* Grand total */}
                 <TableRow className="font-bold border-t-2">
                   <TableCell>Total (class entries)</TableCell>
                   <TableCell className="text-right">
-                    {classBreakdown.reduce((s, c) => s + c.entries, 0)}
+                    {classBreakdown.combined.reduce((s, c) => s + c.entries, 0)}
                   </TableCell>
                   <TableCell className="text-right">
-                    {formatCurrency(classBreakdown.reduce((s, c) => s + c.revenue, 0))}
+                    {formatCurrency(classBreakdown.combined.reduce((s, c) => s + c.revenue, 0))}
                   </TableCell>
                 </TableRow>
               </TableBody>
@@ -399,57 +462,61 @@ export default function FinancialPage() {
         </CardContent>
       </Card>
 
-      {/* Catalogue requests */}
-      {(catalogueOrders?.length ?? 0) > 0 && (
+      {/* Catalogue requests — split by printed vs online */}
+      {((catalogueOrders?.printed?.length ?? 0) + (catalogueOrders?.online?.length ?? 0)) > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BookOpen className="size-5" />
-              Catalogue Requests
+              Catalogue Orders
             </CardTitle>
             <CardDescription>
-              Exhibitors who requested a printed catalogue
+              Exhibitors who ordered a catalogue (from sundry items)
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            {/* Mobile */}
-            <div className="space-y-2 sm:hidden">
-              {catalogueOrders?.map((entry) => (
-                <div key={entry.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium truncate">
-                      {entry.exhibitor?.name ?? 'Unknown'}
-                    </p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {entry.dog ? formatDogName(entry.dog) : 'Unknown dog'}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-            {/* Desktop */}
-            <div className="hidden sm:block">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Exhibitor</TableHead>
-                    <TableHead>Dog</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {catalogueOrders?.map((entry) => (
-                    <TableRow key={entry.id}>
-                      <TableCell className="font-medium">
-                        {entry.exhibitor?.name ?? 'Unknown'}
-                      </TableCell>
-                      <TableCell>
-                        {entry.dog ? formatDogName(entry.dog) : 'Unknown dog'}
-                      </TableCell>
-                    </TableRow>
+          <CardContent className="space-y-4">
+            {/* Printed catalogues */}
+            {(catalogueOrders?.printed?.length ?? 0) > 0 && (
+              <div>
+                <h4 className="mb-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                  Printed ({catalogueOrders!.printed.length})
+                </h4>
+                <div className="space-y-1">
+                  {catalogueOrders!.printed.map((order, idx) => (
+                    <div key={`printed-${idx}`} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium truncate">{order.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{order.email}</p>
+                      </div>
+                      {order.quantity > 1 && (
+                        <Badge variant="outline">&times;{order.quantity}</Badge>
+                      )}
+                    </div>
                   ))}
-                </TableBody>
-              </Table>
-            </div>
+                </div>
+              </div>
+            )}
+            {/* Online catalogues */}
+            {(catalogueOrders?.online?.length ?? 0) > 0 && (
+              <div>
+                <h4 className="mb-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                  Online ({catalogueOrders!.online.length})
+                </h4>
+                <div className="space-y-1">
+                  {catalogueOrders!.online.map((order, idx) => (
+                    <div key={`online-${idx}`} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium truncate">{order.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{order.email}</p>
+                      </div>
+                      {order.quantity > 1 && (
+                        <Badge variant="outline">&times;{order.quantity}</Badge>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

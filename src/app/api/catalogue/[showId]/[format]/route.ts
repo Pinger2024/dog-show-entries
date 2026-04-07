@@ -11,6 +11,7 @@ import { CatalogueByBreed } from '@/components/catalogue/catalogue-by-breed';
 import { CatalogueAlphabetical } from '@/components/catalogue/catalogue-alphabetical';
 import { CatalogueMarked } from '@/components/catalogue/catalogue-marked';
 import { CatalogueJudging } from '@/components/catalogue/catalogue-judging';
+import { CatalogueRingside } from '@/components/catalogue/catalogue-ringside';
 import type { CatalogueEntry, CatalogueShowInfo, ShowSponsorInfo, ShowClassInfo } from '@/components/catalogue/catalogue-standard';
 import type { MarkedResult, MarkedAchievement } from '@/components/catalogue/catalogue-marked';
 import React from 'react';
@@ -28,8 +29,8 @@ export async function GET(
     return NextResponse.json({ error: 'Database not available' }, { status: 500 });
   }
 
-  if (!['standard', 'absentees', 'by-class', 'alphabetical', 'judging', 'marked'].includes(format)) {
-    return NextResponse.json({ error: 'Invalid format. Use "standard", "by-class", "alphabetical", "judging", "absentees", or "marked".' }, { status: 400 });
+  if (!['standard', 'absentees', 'by-class', 'alphabetical', 'judging', 'marked', 'ringside'].includes(format)) {
+    return NextResponse.json({ error: 'Invalid format. Use "standard", "by-class", "alphabetical", "judging", "ringside", "absentees", or "marked".' }, { status: 400 });
   }
 
   const show = await db.query.shows.findFirst({
@@ -316,6 +317,7 @@ export async function GET(
         'by-class': isAllBreed ? CatalogueByBreed : CatalogueByClass,
         alphabetical: CatalogueAlphabetical,
         judging: CatalogueJudging,
+        ringside: CatalogueRingside,
         absentees: CatalogueAbsentees,
       } as const;
 
@@ -330,6 +332,7 @@ export async function GET(
       'by-class': isAllBreed ? 'Catalogue-By-Breed' : 'Catalogue-By-Class',
       alphabetical: 'Catalogue-Alphabetical',
       judging: 'Judging-Catalogue',
+      ringside: 'Ringside-Catalogue',
       absentees: 'Absentees',
       marked: 'Marked-Catalogue',
     };

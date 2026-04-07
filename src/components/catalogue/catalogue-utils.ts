@@ -52,10 +52,12 @@ export function formatOwnerKC(
   return owners
     .map((o) => {
       const name = uppercaseName(o.name);
-      // RKC convention: if the owner is the exhibitor, show "Exh." instead of address
       const isExhibitor = exhibitorId && o.userId && o.userId === exhibitorId;
-      if (isExhibitor) return `${name}, Exh.`;
-      return o.address ? `${name}, ${o.address}` : name;
+      // Always show the address. Append "Exh." when the owner is also the exhibitor.
+      const parts = [name];
+      if (o.address) parts.push(o.address);
+      if (isExhibitor) parts.push('Exh.');
+      return parts.join(', ');
     })
     .join(' & ');
 }
