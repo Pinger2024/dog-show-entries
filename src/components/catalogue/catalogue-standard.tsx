@@ -78,6 +78,16 @@ export interface CatalogueShowInfo {
   showSponsors?: ShowSponsorInfo[];
   /** All show classes (for rendering empty classes) */
   allShowClasses?: ShowClassInfo[];
+  /** Secretary's welcome note to exhibitors — shown in catalogue front matter */
+  welcomeNote?: string;
+  /** Judge name -> photo URL */
+  judgePhotos?: Record<string, string>;
+  /** Skip the separate trophies page (when sponsorships are shown inline) */
+  skipTrophiesPage?: boolean;
+  /** Whether the show has outside attraction (KC Reg F(1) 16H) — shown prominently on cover */
+  outsideAttraction?: boolean;
+  /** Show manager name */
+  showManager?: string;
 }
 
 interface Props {
@@ -364,7 +374,9 @@ export function CatalogueStandard({ show, entries }: Props) {
       <CoverPage show={show} />
       <JudgesListPage show={show} />
       <ClassDefinitionsPage show={show} />
-      <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />
+      {!show.skipTrophiesPage && (
+        <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />
+      )}
 
       {/* One <Page> per breed (or per sex for large breeds) — resets coordinate system */}
       {breedPages.map(({ groupName, breedName, judge, breedBucket, sexLabel }, pageIdx) => (

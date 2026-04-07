@@ -99,13 +99,17 @@ export async function GET(
 
   const judgesByBreedName: Record<string, string> = {};
   const judgeBios: Record<string, string> = {};
+  const judgePhotos: Record<string, string> = {};
   const judgeRingNumbers: Record<string, string> = {};
   for (const ja of judgeAssignmentRows) {
     if (ja.breed?.name && ja.judge?.name) {
       judgesByBreedName[ja.breed.name] = ja.judge.name;
-      // Collect judge bios (keyed by judge name for dedup)
+      // Collect judge bios and photos (keyed by judge name for dedup)
       if (ja.judge.bio && !judgeBios[ja.judge.name]) {
         judgeBios[ja.judge.name] = ja.judge.bio;
+      }
+      if (ja.judge.photoUrl && !judgePhotos[ja.judge.name]) {
+        judgePhotos[ja.judge.name] = ja.judge.photoUrl;
       }
       // Ring number per breed
       if (ja.ring?.number) {
@@ -223,13 +227,19 @@ export async function GET(
     judgedOnGroupSystem: scheduleData?.judgedOnGroupSystem === true ? true : undefined,
     judgesByBreedName,
     judgeBios: Object.keys(judgeBios).length > 0 ? judgeBios : undefined,
+    judgePhotos: Object.keys(judgePhotos).length > 0 ? judgePhotos : undefined,
     judgeRingNumbers: Object.keys(judgeRingNumbers).length > 0 ? judgeRingNumbers : undefined,
     classDefinitions,
     showScope: show.showScope ?? undefined,
     classSponsorships: classSponsorships.length > 0 ? classSponsorships : undefined,
+    // When sponsorships are shown inline with classes, skip the separate trophies page
+    skipTrophiesPage: classSponsorships.length > 0,
     customStatements: (scheduleData?.customStatements as string[] | undefined),
     showSponsors: showSponsorInfos.length > 0 ? showSponsorInfos : undefined,
     allShowClasses: allShowClasses.length > 0 ? allShowClasses : undefined,
+    welcomeNote: scheduleData?.welcomeNote as string | undefined,
+    outsideAttraction: scheduleData?.outsideAttraction === true ? true : undefined,
+    showManager: scheduleData?.showManager as string | undefined,
   };
 
   // Check if JSON format was explicitly requested (for data export)

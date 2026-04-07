@@ -162,6 +162,30 @@ export function CoverPage({ show }: FrontMatterProps) {
           )}
         </View>
 
+        {/* Outside attraction — mandatory RKC notice, displayed prominently */}
+        {show.outsideAttraction && (
+          <View style={{
+            backgroundColor: '#fef2f2',
+            borderWidth: 1,
+            borderColor: '#dc2626',
+            borderRadius: 4,
+            padding: '6 10',
+            marginTop: 4,
+            marginBottom: 2,
+          }}>
+            <Text style={{
+              fontFamily: 'Inter',
+              fontSize: 8,
+              fontWeight: 'bold',
+              color: '#dc2626',
+              textAlign: 'center',
+              textTransform: 'uppercase',
+            }}>
+              Please Note: Outside Attraction — RKC Regulation F(1) 16H will be strictly enforced
+            </Text>
+          </View>
+        )}
+
         {/* Custom statements — prominently on cover page */}
         {show.customStatements && show.customStatements.length > 0 && (
           <View style={{ width: '100%', marginTop: 4, marginBottom: 2, paddingHorizontal: 8 }}>
@@ -203,8 +227,18 @@ export function CoverPage({ show }: FrontMatterProps) {
             textAlign: 'center',
             marginTop: 2,
           }}>
-            Wet weather accommodation is not provided at this venue
+            No wet weather accommodation is provided
           </Text>
+        )}
+
+        {/* Secretary's welcome note */}
+        {show.welcomeNote && (
+          <View style={{ ...styles.coverDetailCard, borderLeftColor: C.accent, marginTop: 6 }}>
+            <Text style={styles.coverSectionLabel}>Welcome</Text>
+            <Text style={{ fontFamily: 'Times', fontSize: 8, fontStyle: 'italic', color: C.textDark, lineHeight: 1.4 }}>
+              {show.welcomeNote}
+            </Text>
+          </View>
         )}
 
         {/* Secretary details — green left border */}
@@ -325,6 +359,7 @@ export function JudgesListPage({ show }: FrontMatterProps) {
         const judgeName = judges[breed];
         const ringNo = ringNumbers[breed];
         const bio = judgeBios[judgeName ?? ''];
+        const photoUrl = show.judgePhotos?.[judgeName ?? ''];
         return (
           <View key={breed} wrap={false}>
             <View style={styles.judgesListRow}>
@@ -336,8 +371,15 @@ export function JudgesListPage({ show }: FrontMatterProps) {
                 </Text>
               )}
             </View>
-            {bio && (
-              <Text style={styles.judgeBio}>{bio}</Text>
+            {(bio || photoUrl) && (
+              <View style={{ flexDirection: 'row', paddingLeft: 6, paddingTop: 2, paddingBottom: 4, gap: 6 }}>
+                {photoUrl && (
+                  <Image src={photoUrl} style={{ width: 36, height: 36, borderRadius: 18 }} />
+                )}
+                {bio && (
+                  <Text style={{ ...styles.judgeBio, flex: 1, marginBottom: 0 }}>{bio}</Text>
+                )}
+              </View>
             )}
           </View>
         );

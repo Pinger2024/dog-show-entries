@@ -1921,6 +1921,7 @@ export const secretaryRouter = createTRPCRouter({
       contactEmail: z.string().email().optional(),
       contactPhone: z.string().max(50).optional(),
       bio: z.string().max(2000).optional(),
+      photoUrl: z.string().url().max(500).optional(),
       kennelClubAffix: z.string().max(100).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -1931,6 +1932,7 @@ export const secretaryRouter = createTRPCRouter({
       if (updates.contactEmail !== undefined) setValues.contactEmail = updates.contactEmail || null;
       if (updates.contactPhone !== undefined) setValues.contactPhone = updates.contactPhone || null;
       if (updates.bio !== undefined) setValues.bio = updates.bio || null;
+      if (updates.photoUrl !== undefined) setValues.photoUrl = updates.photoUrl || null;
       if (updates.kennelClubAffix !== undefined) setValues.kennelClubAffix = updates.kennelClubAffix || null;
       if (Object.keys(setValues).length === 0) throw new TRPCError({ code: 'BAD_REQUEST', message: 'No fields to update' });
 

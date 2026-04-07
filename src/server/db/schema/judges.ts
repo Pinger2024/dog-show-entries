@@ -11,6 +11,7 @@ export const judges = pgTable('judges', {
   contactPhone: text('contact_phone'),
   jepLevel: integer('jep_level'), // RKC Judges Education Programme level 1-6
   bio: text('bio'), // Optional biography for catalogue display
+  photoUrl: text('photo_url'), // Judge portrait photo URL for catalogue
   kennelClubAffix: text('kennel_club_affix'), // e.g., "Sadira" — displayed on schedule after judge name
   kcJudgeId: text('kc_judge_id'), // RKC internal UUID — cached to avoid repeated Firecrawl scrapes
   createdAt: timestamp('created_at', { withTimezone: true })

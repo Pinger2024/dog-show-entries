@@ -117,7 +117,7 @@ export function CatalogueByClass({ show, entries }: Props) {
       <CoverPage show={show} />
       <JudgesListPage show={show} />
       <ClassDefinitionsPage show={show} />
-      {show.classSponsorships && show.classSponsorships.length > 0 && (
+      {!show.skipTrophiesPage && show.classSponsorships && show.classSponsorships.length > 0 && (
         <TrophiesPage show={show} sponsorships={show.classSponsorships} />
       )}
 

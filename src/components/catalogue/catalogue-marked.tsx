@@ -325,7 +325,9 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
       <CoverPage show={{ ...show, name: `${show.name}\nMARKED CATALOGUE` }} />
       <JudgesListPage show={show} />
       <ClassDefinitionsPage show={show} />
-      <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />
+      {!show.skipTrophiesPage && (
+        <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />
+      )}
 
       {/* Achievements summary page */}
       {achievements.length > 0 && (

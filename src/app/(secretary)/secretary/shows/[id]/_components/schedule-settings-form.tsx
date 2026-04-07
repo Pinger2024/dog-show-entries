@@ -92,6 +92,8 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
   const [catering, setCatering] = useState('');
   const [futureShowDates, setFutureShowDates] = useState('');
   const [additionalNotes, setAdditionalNotes] = useState('');
+  const [welcomeNote, setWelcomeNote] = useState('');
+  const [outsideAttraction, setOutsideAttraction] = useState(false);
   const [customStatements, setCustomStatements] = useState<string[]>([]);
   const [hasLoaded, setHasLoaded] = useState(false);
 
@@ -132,6 +134,8 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       setCatering(existing.catering ?? '');
       setFutureShowDates(existing.futureShowDates ?? '');
       setAdditionalNotes(existing.additionalNotes ?? '');
+      setWelcomeNote(existing.welcomeNote ?? '');
+      setOutsideAttraction(existing.outsideAttraction ?? false);
       setCustomStatements(existing.customStatements ?? []);
       setHasLoaded(true);
     }
@@ -163,6 +167,8 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       catering: catering || undefined,
       futureShowDates: futureShowDates || undefined,
       additionalNotes: additionalNotes || undefined,
+      welcomeNote: welcomeNote || undefined,
+      outsideAttraction: outsideAttraction || undefined,
       customStatements: customStatements.filter((s) => s.trim()).length > 0
         ? customStatements.filter((s) => s.trim())
         : undefined,
@@ -736,6 +742,31 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
                 onChange={(e) => setAdditionalNotes(e.target.value)}
                 placeholder="Any other information to include in the schedule"
                 rows={3}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="welcomeNote">Welcome Note for Catalogue</Label>
+              <Textarea
+                id="welcomeNote"
+                value={welcomeNote}
+                onChange={(e) => setWelcomeNote(e.target.value)}
+                placeholder="Optional welcome message to exhibitors — shown on the catalogue cover page"
+                rows={3}
+              />
+              <p className="text-xs text-muted-foreground">
+                Displayed in the catalogue front matter. Leave blank to skip.
+              </p>
+            </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <Label>Outside Attraction</Label>
+                <p className="text-xs text-muted-foreground">
+                  Displays a prominent notice on schedules and catalogues: &quot;RKC Regulation F(1) 16H will be strictly enforced&quot;
+                </p>
+              </div>
+              <Switch
+                checked={outsideAttraction}
+                onCheckedChange={setOutsideAttraction}
               />
             </div>
 
