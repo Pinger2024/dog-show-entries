@@ -58,6 +58,7 @@ import { StripeProvider } from '@/components/providers/stripe-provider';
 import { PaymentForm } from './payment-form';
 import { cn } from '@/lib/utils';
 import { isGsdOnlyClass, isGsdBreed } from '@/lib/class-templates';
+import { isCatalogueItem } from '@/lib/catalogue-utils';
 import { useEntryCart, type WizardStep } from './use-entry-cart';
 
 const STEPS: { key: WizardStep; label: string; icon: React.ElementType }[] = [
@@ -1675,7 +1676,7 @@ export default function EnterShowPage() {
           </div>
 
           {/* Catalogue purchase note */}
-          {cart.sundryItems.some((s) => s.name.toLowerCase().includes('catalogue')) && (
+          {cart.sundryItems.some((s) => isCatalogueItem(s.name)) && (
             <Card className="mx-auto w-full max-w-md border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-900/20">
               <CardContent className="py-4 text-center">
                 <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">

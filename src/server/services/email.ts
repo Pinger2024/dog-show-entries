@@ -3,6 +3,7 @@ import { db } from '@/server/db';
 import { and, eq, inArray } from 'drizzle-orm';
 import { orders, memberships, users, printOrders, breeds } from '@/server/db/schema';
 import { formatOrderRef } from '@/lib/print-products';
+import { isCatalogueItem } from '@/lib/catalogue-utils';
 
 export const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -218,7 +219,7 @@ export async function sendEntryConfirmationEmail(orderId: string) {
         </p>
       </div>
 
-      ${(order.orderSundryItems ?? []).some((osi) => osi.sundryItem?.name?.toLowerCase().includes('catalogue')) ? `
+      ${(order.orderSundryItems ?? []).some((osi) => osi.sundryItem?.name && isCatalogueItem(osi.sundryItem.name)) ? `
       <!-- Online Catalogue -->
       <div style="padding: 16px 24px; text-align: center; border-top: 1px solid #e5e5e5; background: #f0faf4;">
         <p style="margin: 0 0 8px; font-size: 13px; font-weight: 600; color: #2D5F3F;">Online Catalogue Purchased</p>

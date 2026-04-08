@@ -44,6 +44,7 @@ import { getStripe } from '@/server/services/stripe';
 import { penceToPoundsString } from '@/lib/date-utils';
 import { Resend } from 'resend';
 import { searchKcJudges, fetchKcJudgeProfile } from '@/server/services/kc-judges';
+import { CATALOGUE_NAME_PATTERN } from '@/lib/catalogue-utils';
 
 /** Build human-readable breed text for judge offer emails.
  *  When assignments have breedId=null, falls back to showBreedNames, then showName. */
@@ -708,7 +709,7 @@ export const secretaryRouter = createTRPCRouter({
         .where(
           and(
             eq(sundryItems.showId, input.showId),
-            ilike(sundryItems.name, '%catalogue%')
+            ilike(sundryItems.name, CATALOGUE_NAME_PATTERN)
           )
         );
 

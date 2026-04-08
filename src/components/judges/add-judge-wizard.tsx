@@ -111,20 +111,25 @@ export function AddJudgeWizard({
   const kcSearchMutation = trpc.secretary.kcJudgeSearch.useMutation();
   const kcProfileMutation = trpc.secretary.kcJudgeProfile.useMutation();
 
-  // Auto-search RKC when local DB has no results and query is long enough
+  // Auto-search RKC when local DB has no results and query is long enough (debounced)
   const lastAutoSearchRef = useRef('');
   useEffect(() => {
     if (
-      searchQuery.length >= 2 &&
-      localSearchQuery.isFetched &&
-      localSearchQuery.data?.length === 0 &&
-      !kcSearchMutation.isPending &&
-      lastAutoSearchRef.current !== searchQuery.trim().toLowerCase()
+      searchQuery.length < 2 ||
+      !localSearchQuery.isFetched ||
+      (localSearchQuery.data?.length ?? 0) > 0 ||
+      kcSearchMutation.isPending ||
+      lastAutoSearchRef.current === searchQuery.trim().toLowerCase()
     ) {
+      return;
+    }
+    const timer = setTimeout(() => {
       lastAutoSearchRef.current = searchQuery.trim().toLowerCase();
       kcSearchMutation.mutate({ surname: searchQuery.trim() });
-    }
-  }, [searchQuery, localSearchQuery.isFetched, localSearchQuery.data?.length]);
+    }, 400);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, localSearchQuery.isFetched, localSearchQuery.data?.length, kcSearchMutation.isPending]);
   const addAndAssignMutation = trpc.secretary.addAndAssignJudge.useMutation({
     onSuccess: (data) => {
       toast.success(`${data.judge.name} added — ${data.assignmentCount} assignment${data.assignmentCount !== 1 ? 's' : ''} created`);

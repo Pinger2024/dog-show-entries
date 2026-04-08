@@ -2,12 +2,20 @@ import { and, eq, ilike } from 'drizzle-orm';
 import { orders, orderSundryItems, sundryItems } from '@/server/db/schema';
 import type { Database } from '@/server/db';
 
+/** SQL ILIKE pattern for matching catalogue sundry items by name */
+export const CATALOGUE_NAME_PATTERN = '%catalogue%';
+
+/** Check if a sundry item name refers to a catalogue (client-side equivalent of CATALOGUE_NAME_PATTERN) */
+export function isCatalogueItem(name: string): boolean {
+  return name.toLowerCase().includes('catalogue');
+}
+
 /** Show statuses where the catalogue PDF is available to exhibitors */
-export const CATALOGUE_AVAILABLE_STATUSES = new Set([
+export const CATALOGUE_AVAILABLE_STATUSES: ReadonlySet<string> = new Set([
   'entries_closed',
   'in_progress',
   'completed',
-] as const);
+]);
 
 /** Catalogue formats restricted to secretaries/admins — not available to exhibitors */
 export const SECRETARY_ONLY_FORMATS = new Set([
@@ -34,7 +42,7 @@ export async function hasUserPurchasedCatalogue(
         eq(orders.showId, showId),
         eq(orders.exhibitorId, userId),
         eq(orders.status, 'paid'),
-        ilike(sundryItems.name, '%catalogue%')
+        ilike(sundryItems.name, CATALOGUE_NAME_PATTERN)
       )
     )
     .limit(1);

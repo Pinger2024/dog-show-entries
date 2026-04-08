@@ -25,7 +25,7 @@ import {
 } from '@/server/db/schema';
 import { verifyShowAccess } from '../verify-show-access';
 import { isUuid, generateShowSlug } from '@/lib/slugify';
-import { hasUserPurchasedCatalogue, CATALOGUE_AVAILABLE_STATUSES } from '@/lib/catalogue-utils';
+import { hasUserPurchasedCatalogue, CATALOGUE_AVAILABLE_STATUSES, CATALOGUE_NAME_PATTERN } from '@/lib/catalogue-utils';
 import type { Database } from '@/server/db';
 
 /** Resolve a show slug to its UUID (passthrough if already UUID) */
@@ -951,7 +951,7 @@ export const showsRouter = createTRPCRouter({
           and(
             eq(orders.exhibitorId, ctx.session.user.id),
             eq(orders.status, 'paid'),
-            ilike(sundryItems.name, '%catalogue%')
+            ilike(sundryItems.name, CATALOGUE_NAME_PATTERN)
           )
         )
         .groupBy(orders.showId, shows.status, shows.slug);
