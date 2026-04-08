@@ -74,6 +74,7 @@ export interface ScheduleData {
 import { organisations } from './organisations';
 import { users } from './users';
 import { venues } from './venues';
+import { breeds } from './breeds';
 import { showClasses } from './show-classes';
 import { entries } from './entries';
 import { rings } from './rings';
@@ -96,6 +97,7 @@ export const shows = pgTable(
       .notNull()
       .references(() => organisations.id),
     venueId: uuid('venue_id').references(() => venues.id),
+    breedId: uuid('breed_id').references(() => breeds.id),
     startDate: date('start_date', { mode: 'string' }).notNull(),
     endDate: date('end_date', { mode: 'string' }).notNull(),
     startTime: text('start_time'),
@@ -149,6 +151,10 @@ export const showsRelations = relations(shows, ({ one, many }) => ({
   venue: one(venues, {
     fields: [shows.venueId],
     references: [venues.id],
+  }),
+  breed: one(breeds, {
+    fields: [shows.breedId],
+    references: [breeds.id],
   }),
   secretary: one(users, {
     fields: [shows.secretaryUserId],
