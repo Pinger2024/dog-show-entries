@@ -1,11 +1,10 @@
 /**
- * RKC Judge Lookup via Firecrawl (browser automation).
+ * RKC Judge Lookup via direct HTTP fetch.
  *
- * Unlike the RKC dog search (server-rendered HTML → direct fetch), the RKC
- * "Find a Judge" page uses JavaScript/AJAX rendering. We use the Firecrawl
- * API to fill and submit the search form, then parse the resulting HTML.
+ * The RKC "Find a Judge" page server-renders results when the full set of
+ * form parameters is included in the URL query string. This means we can
+ * skip Firecrawl entirely and use a simple fetch + HTML parse.
  *
- * Firecrawl API: https://api.firecrawl.dev/v1/scrape
  * RKC page: https://www.royalkennelclub.com/search/find-a-judge/
  */
 
@@ -21,84 +20,56 @@ export type KcJudgeProfile = {
   breeds: { breed: string; group: string; level: number }[];
 };
 
-const FIRECRAWL_URL = 'https://api.firecrawl.dev/v1/scrape';
-const KC_JUDGE_URL = 'https://www.royalkennelclub.com/search/find-a-judge/';
+const KC_JUDGE_SEARCH_URL = 'https://www.royalkennelclub.com/search/find-a-judge/';
 const KC_JUDGE_PROFILE_URL = 'https://www.royalkennelclub.com/search/find-a-judge/judge-profile/';
 
 /**
- * Search for RKC judges by surname and optionally filter by breed.
+ * Search for RKC judges by surname.
  *
- * Uses Firecrawl to automate the RKC's JavaScript-rendered search form:
- * 1. Check the "Dog showing" activity checkbox
- * 2. Fill in the surname
- * 3. Optionally set the breed filter
- * 4. Submit the form
- * 5. Parse the resulting judge cards from HTML
+ * Builds the full form-parameter URL that the RKC page expects, fetches the
+ * server-rendered HTML, and parses judge cards from the response.
  */
 export async function searchKcJudges(
   surname: string,
-  breed?: string,
+  _breed?: string,
 ): Promise<KcJudgeResult[]> {
-  const apiKey = process.env.FIRECRAWL_API_KEY;
-  if (!apiKey) {
-    console.error('[kc-judges] FIRECRAWL_API_KEY not set');
-    return [];
-  }
-
   try {
-    console.log(`[kc-judges] Searching for "${surname}"${breed ? ` (breed: ${breed})` : ''}...`);
+    console.log(`[kc-judges] Searching for "${surname}"...`);
 
-    // Build the JS to fill and submit the form
-    const fillScript = [
-      // Check "Dog showing" activity
-      'document.getElementById("datamodel_Filter_SearchOptions_2__Selected").click();',
-      // Fill surname
-      'var input = document.getElementById("datamodel_Filter_KeywordSearch");',
-      'input.value = ' + JSON.stringify(surname) + ';',
-      'input.dispatchEvent(new Event("input", {bubbles: true}));',
-    ];
+    const params = new URLSearchParams({
+      KeywordSearch: surname,
+      SelectedChampionshipActivities: '',
+      SelectedNonChampionshipActivities: '',
+      SelectedPanelAFieldTrials: '',
+      SelectedPanelBFieldTrials: '',
+      SelectedSearchOptions: '',
+      SelectedSearchOptionsNotActivity: '',
+      Championship: 'False',
+      NonChampionship: 'False',
+      PanelA: 'False',
+      PanelB: 'False',
+      Distance: '15',
+      TotalResults: '0',
+      SearchProfile: 'True',
+      SelectedBestInBreedGroups: '',
+      SelectedBestInSubGroups: '',
+    });
 
-    if (breed) {
-      fillScript.push(
-        'var sel = document.getElementById("datamodel_Filter_Breed");',
-        'sel.value = ' + JSON.stringify(breed) + ';',
-        'sel.dispatchEvent(new Event("change", {bubbles: true}));',
-      );
-    }
+    const url = `${KC_JUDGE_SEARCH_URL}?${params.toString()}`;
 
-    const actions = [
-      { type: 'executeJavascript' as const, script: fillScript.join(' ') },
-      { type: 'wait' as const, milliseconds: 1000 },
-      { type: 'executeJavascript' as const, script: 'document.querySelector("button.a-button--primary[type=submit]").click();' },
-      { type: 'wait' as const, milliseconds: 6000 },
-    ];
-
-    const response = await fetch(FIRECRAWL_URL, {
-      method: 'POST',
+    const response = await fetch(url, {
       headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer ' + apiKey,
+        'User-Agent': 'Mozilla/5.0 (compatible; Remi/1.0)',
+        Accept: 'text/html',
       },
-      body: JSON.stringify({
-        url: KC_JUDGE_URL,
-        formats: ['html'],
-        actions,
-        waitFor: 3000,
-      }),
     });
 
     if (!response.ok) {
-      console.error('[kc-judges] Firecrawl returned HTTP ' + response.status);
+      console.error('[kc-judges] RKC returned HTTP ' + response.status);
       return [];
     }
 
-    const data = await response.json();
-    if (!data.success) {
-      console.error('[kc-judges] Firecrawl scrape failed:', data.error);
-      return [];
-    }
-
-    const html: string = data.data?.html ?? '';
+    const html = await response.text();
     return parseJudgeSearchResults(html);
   } catch (error) {
     console.error('[kc-judges] Search failed:', error);
@@ -108,42 +79,28 @@ export async function searchKcJudges(
 
 /**
  * Fetch a judge's profile to get their approved breeds and levels.
+ *
+ * Profile pages are also server-rendered, so we can fetch directly.
  */
 export async function fetchKcJudgeProfile(kcJudgeId: string): Promise<KcJudgeProfile | null> {
-  const apiKey = process.env.FIRECRAWL_API_KEY;
-  if (!apiKey) {
-    console.error('[kc-judges] FIRECRAWL_API_KEY not set');
-    return null;
-  }
-
   try {
     console.log('[kc-judges] Fetching profile for judgeId=' + kcJudgeId + '...');
 
-    const response = await fetch(FIRECRAWL_URL, {
-      method: 'POST',
+    const url = `${KC_JUDGE_PROFILE_URL}?judgeId=${encodeURIComponent(kcJudgeId)}`;
+
+    const response = await fetch(url, {
       headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer ' + apiKey,
+        'User-Agent': 'Mozilla/5.0 (compatible; Remi/1.0)',
+        Accept: 'text/html',
       },
-      body: JSON.stringify({
-        url: KC_JUDGE_PROFILE_URL + '?judgeId=' + encodeURIComponent(kcJudgeId),
-        formats: ['html'],
-        waitFor: 5000,
-      }),
     });
 
     if (!response.ok) {
-      console.error('[kc-judges] Firecrawl returned HTTP ' + response.status);
+      console.error('[kc-judges] RKC returned HTTP ' + response.status);
       return null;
     }
 
-    const data = await response.json();
-    if (!data.success) {
-      console.error('[kc-judges] Firecrawl profile scrape failed:', data.error);
-      return null;
-    }
-
-    const html: string = data.data?.html ?? '';
+    const html = await response.text();
     return parseJudgeProfile(html);
   } catch (error) {
     console.error('[kc-judges] Profile fetch failed:', error);
@@ -163,8 +120,9 @@ export async function fetchKcJudgeProfile(kcJudgeId: string): Promise<KcJudgePro
 function parseJudgeSearchResults(html: string): KcJudgeResult[] {
   const results: KcJudgeResult[] = [];
 
-  // Split by article tags
-  const articles = html.split('<article class="m-judge-card">').slice(1);
+  // Split by article tags (class may include additional modifiers like m-cardResult-BackgroundMedium)
+  const articles = html.split(/<article class="m-judge-card[^"]*">/);
+  articles.shift(); // remove everything before the first match
 
   for (const article of articles) {
     // Extract name from the link text
