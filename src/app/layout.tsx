@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Suspense } from 'react';
-import { Inter, Libre_Baskerville } from 'next/font/google';
+import { Inter } from 'next/font/google';
 import { Toaster } from '@/components/ui/sonner';
 import { Providers } from '@/components/providers';
 import { ImpersonationBannerWrapper } from '@/components/layout/impersonation-banner-wrapper';
@@ -15,11 +15,6 @@ const inter = Inter({
   subsets: ['latin'],
 });
 
-const libreBaskerville = Libre_Baskerville({
-  variable: '--font-libre-baskerville',
-  subsets: ['latin'],
-  weight: ['400', '700'],
-});
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://remishowmanager.co.uk'),
@@ -70,7 +65,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${inter.variable} ${libreBaskerville.variable} antialiased`}
+        className={`${inter.variable} antialiased`}
       >
         <Providers>
           <Suspense fallback={null}>
