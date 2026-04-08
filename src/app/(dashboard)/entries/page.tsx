@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { format, isPast, parseISO, compareAsc, compareDesc } from 'date-fns';
 import {
   Ticket,
+  BookOpen,
   CalendarDays,
   Dog,
   ChevronRight,
@@ -80,6 +81,11 @@ function groupByShow(entries: Entry[]): ShowGroup[] {
 
 export default function EntriesPage() {
   const { data, isLoading } = trpc.entries.list.useQuery({ limit: 100, cursor: 0 });
+  const { data: cataloguePurchases } = trpc.shows.getMyCataloguePurchases.useQuery();
+  const catalogueMap = useMemo(
+    () => new Map(cataloguePurchases?.map((p) => [p.showId, p])),
+    [cataloguePurchases]
+  );
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [collapsedPast, setCollapsedPast] = useState(true);
 
@@ -198,7 +204,7 @@ export default function EntriesPage() {
           </h2>
           <div className="space-y-4">
             {upcoming.map((group) => (
-              <ShowGroupCard key={group.showId} group={group} />
+              <ShowGroupCard key={group.showId} group={group} catalogueMap={catalogueMap} />
             ))}
           </div>
         </section>
@@ -218,7 +224,7 @@ export default function EntriesPage() {
           {!collapsedPast && (
             <div className="space-y-4">
               {past.map((group) => (
-                <ShowGroupCard key={group.showId} group={group} isPast />
+                <ShowGroupCard key={group.showId} group={group} isPast catalogueMap={catalogueMap} />
               ))}
             </div>
           )}
@@ -228,7 +234,11 @@ export default function EntriesPage() {
   );
 }
 
-function ShowGroupCard({ group, isPast }: { group: ShowGroup; isPast?: boolean }) {
+type CataloguePurchase = RouterOutputs['shows']['getMyCataloguePurchases'][number];
+
+function ShowGroupCard({ group, isPast, catalogueMap }: { group: ShowGroup; isPast?: boolean; catalogueMap?: Map<string, CataloguePurchase> }) {
+  const catalogue = catalogueMap?.get(group.showId);
+
   return (
     <Card className={isPast ? 'opacity-70' : ''}>
       {/* Show header */}
@@ -264,6 +274,19 @@ function ShowGroupCard({ group, isPast }: { group: ShowGroup; isPast?: boolean }
           <DogEntryRow key={entry.id} entry={entry} />
         ))}
       </div>
+
+      {/* Catalogue link */}
+      {catalogue && (
+        <div className="border-t bg-emerald-50 px-3 py-2.5 dark:bg-emerald-900/20 sm:px-4">
+          <Link
+            href={`/shows/${catalogue.showSlug ?? group.showId}/catalogue`}
+            className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400"
+          >
+            <BookOpen className="size-4" />
+            {catalogue.isAvailable ? 'View Online Catalogue' : 'Catalogue — available soon'}
+          </Link>
+        </div>
+      )}
     </Card>
   );
 }

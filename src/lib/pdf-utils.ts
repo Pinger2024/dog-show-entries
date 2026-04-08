@@ -4,6 +4,7 @@ import { getCurrentUser } from '@/lib/auth-utils';
 import { db } from '@/server/db';
 import { and, eq } from 'drizzle-orm';
 import { memberships } from '@/server/db/schema';
+import { hasUserPurchasedCatalogue, SECRETARY_ONLY_FORMATS } from '@/lib/catalogue-utils';
 
 /**
  * Validate a logo URL for use in @react-pdf/renderer.
@@ -51,11 +52,13 @@ export function makePdfResponse(buffer: Buffer, filename: string, isPreview: boo
 /**
  * Authenticate + authorise a user for a show's PDF.
  * Admins bypass the membership check (needed for impersonation).
- * Returns { user, isAdmin } on success, or a NextResponse error.
+ * Exhibitors who purchased an online catalogue can access non-secretary formats.
+ * Returns { user, isAdmin, isExhibitorAccess } on success, or a NextResponse error.
  */
 export async function authenticatePdfRequest(
-  organisationId: string
-): Promise<{ user: NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>; isAdmin: boolean } | NextResponse> {
+  organisationId: string,
+  options?: { showId?: string; format?: string }
+): Promise<{ user: NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>; isAdmin: boolean; isExhibitorAccess: boolean } | NextResponse> {
   const user = await getCurrentUser();
   if (!user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -64,7 +67,12 @@ export async function authenticatePdfRequest(
   const session = await auth();
   const isAdmin = session?.user?.role === 'admin';
 
-  if (!isAdmin && db) {
+  if (isAdmin) {
+    return { user, isAdmin, isExhibitorAccess: false };
+  }
+
+  if (db) {
+    // Check org membership (secretary/org member access)
     const membership = await db.query.memberships.findFirst({
       where: and(
         eq(memberships.userId, user.id),
@@ -72,10 +80,24 @@ export async function authenticatePdfRequest(
         eq(memberships.status, 'active')
       ),
     });
-    if (!membership) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (membership) {
+      return { user, isAdmin: false, isExhibitorAccess: false };
     }
+
+    // No org membership — check exhibitor catalogue purchase
+    if (options?.showId) {
+      if (options.format && SECRETARY_ONLY_FORMATS.has(options.format)) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+
+      const purchased = await hasUserPurchasedCatalogue(db, options.showId, user.id);
+      if (purchased) {
+        return { user, isAdmin: false, isExhibitorAccess: true };
+      }
+    }
+
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  return { user, isAdmin };
+  return { user, isAdmin: false, isExhibitorAccess: false };
 }

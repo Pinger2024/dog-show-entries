@@ -42,7 +42,7 @@ export async function GET(
     return NextResponse.json({ error: 'Show not found' }, { status: 404 });
   }
 
-  const authResult = await authenticatePdfRequest(show.organisationId);
+  const authResult = await authenticatePdfRequest(show.organisationId, { showId, format });
   if (authResult instanceof NextResponse) return authResult;
 
   // Run independent DB queries and logo validation in parallel

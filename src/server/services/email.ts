@@ -218,6 +218,14 @@ export async function sendEntryConfirmationEmail(orderId: string) {
         </p>
       </div>
 
+      ${(order.orderSundryItems ?? []).some((osi) => osi.sundryItem?.name?.toLowerCase().includes('catalogue')) ? `
+      <!-- Online Catalogue -->
+      <div style="padding: 16px 24px; text-align: center; border-top: 1px solid #e5e5e5; background: #f0faf4;">
+        <p style="margin: 0 0 8px; font-size: 13px; font-weight: 600; color: #2D5F3F;">Online Catalogue Purchased</p>
+        <p style="margin: 0 0 12px; font-size: 13px; color: #666;">Your catalogue will be available once entries close.</p>
+        ${btn(`${APP_URL}/shows/${show.slug ?? show.id}/catalogue`, 'View Catalogue', '#2D5F3F')}
+      </div>` : ''}
+
       <!-- Share -->
       <div style="padding: 16px 24px; text-align: center; border-top: 1px solid #e5e5e5; background: #f4f9f6;">
         <p style="margin: 0 0 10px; font-size: 13px; font-weight: 600; color: #444;">Tell your breed group!</p>

@@ -1073,6 +1073,7 @@ export default function EnterShowPage() {
                       classes={availableClasses}
                       selectedIds={selectedClassIds}
                       onToggle={toggleClass}
+                      feeOverride={show.juniorHandlerFee ?? undefined}
                     />
                   ) : (
                     <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
@@ -1455,30 +1456,46 @@ export default function EnterShowPage() {
             </div>
           )}
 
-          <Button
-            className="h-11 w-full text-sm sm:text-base"
-            size="lg"
-            onClick={handleProceedToPayment}
-            disabled={
-              !healthDeclared ||
-              !termsAccepted ||
-              checkoutMutation.isPending ||
-              cart.entries.filter((e) => e.classIds.length > 0).length === 0
-            }
-          >
-            {checkoutMutation.isPending ? (
-              <>
-                <Loader2 className="size-4 animate-spin" />
-                Processing...
-              </>
-            ) : (
-              <>
-                {cart.grandTotal === 0
-                  ? 'Confirm Entry — Free'
-                  : <>Proceed to Payment &middot; {formatCurrency(cart.grandTotal)}</>}
-              </>
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="h-11 text-sm sm:text-base"
+              size="lg"
+              onClick={() => {
+                const lastEntry = cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).pop();
+                if (lastEntry) {
+                  cart.editEntry(lastEntry.id);
+                }
+              }}
+            >
+              <ChevronLeft className="size-4" />
+              Back
+            </Button>
+            <Button
+              className="h-11 flex-1 text-sm sm:text-base"
+              size="lg"
+              onClick={handleProceedToPayment}
+              disabled={
+                !healthDeclared ||
+                !termsAccepted ||
+                checkoutMutation.isPending ||
+                cart.entries.filter((e) => e.classIds.length > 0).length === 0
+              }
+            >
+              {checkoutMutation.isPending ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  {cart.grandTotal === 0
+                    ? 'Confirm Entry — Free'
+                    : <>Proceed to Payment &middot; {formatCurrency(cart.grandTotal)}</>}
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       )}
 
@@ -1657,6 +1674,27 @@ export default function EnterShowPage() {
             </Button>
           </div>
 
+          {/* Catalogue purchase note */}
+          {cart.sundryItems.some((s) => s.name.toLowerCase().includes('catalogue')) && (
+            <Card className="mx-auto w-full max-w-md border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-900/20">
+              <CardContent className="py-4 text-center">
+                <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+                  Online Catalogue Purchased
+                </p>
+                <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
+                  Your catalogue will be available at{' '}
+                  <Link
+                    href={`/shows/${show?.slug ?? idOrSlug}/catalogue`}
+                    className="underline font-medium"
+                  >
+                    this link
+                  </Link>{' '}
+                  once entries close.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           <Accordion type="single" collapsible className="mx-auto w-full max-w-md text-left">
             <AccordionItem value="what-next">
               <AccordionTrigger className="justify-center gap-2 text-sm font-medium text-muted-foreground">
@@ -1701,6 +1739,7 @@ function ClassGroup({
   getAgeEligibility,
   eligibleClassNames,
   suggestedClassName,
+  feeOverride,
 }: {
   title: string;
   classes: ShowClassItem[];
@@ -1712,6 +1751,7 @@ function ClassGroup({
   ) => { ageMonths: number; eligible: boolean } | null;
   eligibleClassNames?: string[];
   suggestedClassName?: string | null;
+  feeOverride?: number | null;
 }) {
   // Filter out age-ineligible classes if eligibility info is available
   const visibleClasses = getAgeEligibility
@@ -1780,7 +1820,7 @@ function ClassGroup({
                 )}
               </div>
               <span className="shrink-0 text-sm font-semibold">
-                {formatCurrency(sc.entryFee)}
+                {formatCurrency(feeOverride != null ? feeOverride : sc.entryFee)}
               </span>
             </label>
           );
