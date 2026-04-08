@@ -1,13 +1,16 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import {
   AlertTriangle,
   Check,
   ChevronsUpDown,
+  ChevronRight,
   Clock,
   ExternalLink,
   Eye,
+  Heart,
   Info,
   Loader2,
   MapPin,
@@ -443,6 +446,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
                     <AwardsSection
                       awardsDescription={awardsDescription} setAwardsDescription={setAwardsDescription}
                       prizeMoney={prizeMoney} setPrizeMoney={setPrizeMoney}
+                      showId={showId}
                     />
                   )}
                   {section.id === 'venue' && (
@@ -768,11 +772,15 @@ function PeopleSection({
 // ── Awards Section ───────────────────────────────────
 
 function AwardsSection({
-  awardsDescription, setAwardsDescription, prizeMoney, setPrizeMoney,
+  awardsDescription, setAwardsDescription, prizeMoney, setPrizeMoney, showId,
 }: {
   awardsDescription: string; setAwardsDescription: (v: string) => void;
   prizeMoney: string; setPrizeMoney: (v: string) => void;
+  showId: string;
 }) {
+  const { data: sponsors } = trpc.secretary.listShowSponsors.useQuery({ showId });
+  const sponsorCount = sponsors?.length ?? 0;
+
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
@@ -784,6 +792,25 @@ function AwardsSection({
         <p className="text-xs text-muted-foreground">Leave blank if no prize money is offered</p>
         <Input id="prizeMoney" value={prizeMoney} onChange={(e) => setPrizeMoney(e.target.value)} placeholder="e.g. No prize money offered" className="min-h-[2.75rem]" />
       </div>
+
+      {/* Sponsors link */}
+      <Link
+        href={`/secretary/shows/${showId}/sponsors`}
+        className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-accent/50"
+      >
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-rose-100 dark:bg-rose-900/30">
+          <Heart className="size-4 text-rose-600 dark:text-rose-400" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">Show Sponsors</p>
+          <p className="text-xs text-muted-foreground">
+            {sponsorCount > 0
+              ? `${sponsorCount} sponsor${sponsorCount !== 1 ? 's' : ''} — these will appear in your schedule`
+              : 'Add sponsors so they appear in your schedule'}
+          </p>
+        </div>
+        <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+      </Link>
     </div>
   );
 }

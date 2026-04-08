@@ -1,4 +1,4 @@
-import { Document, Page, Text, View, StyleSheet, Font, Image } from '@react-pdf/renderer';
+import { Document, Page, Text, View, StyleSheet, Font, Image, Link } from '@react-pdf/renderer';
 import path from 'path';
 import type { ScheduleData } from '@/server/db/schema/shows';
 import { formatCurrency } from '@/lib/date-utils';
@@ -737,6 +737,7 @@ export function ShowSchedule({
   const sd = show.scheduleData;
   const dockingStatement = getDockingStatement(sd);
   const estimationDate = getEstimationDate(show.entryCloseDate);
+  const showPageUrl = `https://remishowmanager.co.uk/shows/${show.slug}`;
 
   // Deduplicate Junior Handler classes — they may exist with both sex='dog' and sex='bitch'
   // in the DB from old bulk-create logic. Keep only one per classDefinitionId, treating as mixed.
@@ -789,6 +790,20 @@ export function ShowSchedule({
             <Image src={show.organisation.logoUrl} style={s.coverLogo} />
           )}
 
+          {/* Title sponsor logo — prominent, above the show name */}
+          {(() => {
+            const titleSponsor = sponsors.find((sp) => sp.tier === 'title' && sp.logoUrl);
+            if (!titleSponsor) return null;
+            return (
+              <View style={{ alignItems: 'center', marginBottom: 4 }}>
+                <Text style={{ fontFamily: 'Inter', fontSize: 6, color: C.textLight, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 3 }}>
+                  {titleSponsor.customTitle ?? 'Sponsored by'}
+                </Text>
+                <Image src={titleSponsor.logoUrl!} style={{ maxWidth: 120, maxHeight: 40, objectFit: 'contain' }} />
+              </View>
+            );
+          })()}
+
           {/* Show name */}
           <Text style={s.coverShowName}>{show.name}</Text>
 
@@ -796,6 +811,24 @@ export function ShowSchedule({
           <View style={s.coverBadge}>
             <Text style={s.coverBadgeText}>{showTypeLabel}</Text>
           </View>
+
+          {/* Show-level sponsor logos below badge */}
+          {(() => {
+            const showSponsors = sponsors.filter((sp) => sp.tier === 'show' && sp.logoUrl);
+            if (showSponsors.length === 0) return null;
+            return (
+              <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 4, flexWrap: 'wrap' }}>
+                {showSponsors.map((sp, i) => (
+                  <View key={i} style={{ alignItems: 'center' }}>
+                    <Image src={sp.logoUrl!} style={{ maxWidth: 80, maxHeight: 28, objectFit: 'contain' }} />
+                    <Text style={{ fontFamily: 'Inter', fontSize: 5.5, color: C.textLight, marginTop: 1 }}>
+                      {sp.customTitle ?? sp.name}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            );
+          })()}
 
           {/* Class count */}
           <Text style={s.coverClassCount}>
@@ -919,10 +952,6 @@ export function ShowSchedule({
             </Text>
           )}
 
-          {/* Online entries link */}
-          <Text style={s.coverFooterText}>
-            Enter online at remishowmanager.co.uk/shows/{show.slug}
-          </Text>
         </View>
 
         {/* Green bottom band */}
@@ -1072,7 +1101,12 @@ export function ShowSchedule({
 
         {/* Online entries */}
         <InfoCard title="Online Entries">
-          <Text style={s.infoText}>Enter online at remishowmanager.co.uk/shows/{show.slug}</Text>
+          <Text style={s.infoText}>
+            Enter online at{' '}
+            <Link src={showPageUrl} style={{ color: C.primary, textDecoration: 'none' }}>
+              {showPageUrl}
+            </Link>
+          </Text>
         </InfoCard>
 
         {/* Awards */}
@@ -1122,7 +1156,7 @@ export function ShowSchedule({
       {/* ════════════════════════════════════════════════════════════════════════
           OFFICIALS
           ════════════════════════════════════════════════════════════════════ */}
-      {(sd?.officers?.length || sd?.guarantors?.length) && (
+      {(sd?.officers?.length || sd?.showManager || show.onCallVet) && (
         <Page size="A5" style={s.page}>
           <SectionBand title="Officials" />
 
@@ -1137,16 +1171,11 @@ export function ShowSchedule({
             </InfoCard>
           )}
 
-          {sd?.guarantors && sd.guarantors.length > 0 && (
-            <InfoCard title="Guarantors to the Royal Kennel Club">
-              {sd.guarantors.map((g, i) => (
-                <View key={i} style={s.officialRow}>
-                  <Text style={s.officialPosition}>{g.name}</Text>
-                  {g.address && <Text style={s.officialName}>{g.address}</Text>}
-                </View>
-              ))}
-            </InfoCard>
-          )}
+          <InfoCard title="Jurisdiction and Responsibilities">
+            <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 7.5, lineHeight: 1.4, color: C.textMedium }}>
+              The Officers and Committee members of the society holding the licence are deemed responsible for organising and conducting the show safely and in accordance with the Rules and Regulations of the Royal Kennel Club and agree to abide by and adopt any decision of the Board or any authority to whom the Board may delegate its powers, subject to the conditions of Regulation F16. In so doing those appointed as Officers and Committee members accept that they are jointly and severally responsible for the organisation of the show and that this is a binding undertaking (vide Royal Kennel Club General Show Regulations F4 and F5).
+            </Text>
+          </InfoCard>
 
           {sd?.showManager && (
             <InfoCard title="Show Manager">
@@ -1172,81 +1201,130 @@ export function ShowSchedule({
         <Page size="A5" style={s.page}>
           <SectionBand title="Sponsors &amp; Acknowledgements" />
 
-          <View style={{ marginBottom: 8 }}>
+          <View style={{ marginBottom: 10 }}>
             <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 8, color: C.textMedium, textAlign: 'center' }}>
-              The committee gratefully acknowledges the support of the following sponsors.
+              The committee gratefully acknowledges the generous support of the following sponsors.
+            </Text>
+            <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 7, color: C.textLight, textAlign: 'center', marginTop: 2 }}>
+              Their contribution helps make this show possible.
             </Text>
           </View>
 
-          {sponsors.filter((sp) => sp.tier === 'title' || sp.tier === 'show').length > 0 && (
-            <InfoCard title="Show Sponsors">
-              {sponsors
-                .filter((sp) => sp.tier === 'title' || sp.tier === 'show')
-                .map((sp, i) => (
-                  <View key={i} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontFamily: 'Inter', fontWeight: 'bold', fontSize: 9, color: C.textDark }}>
-                        {sp.name}
-                      </Text>
-                      {sp.customTitle && (
-                        <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textMedium }}>
-                          {sp.customTitle}
-                        </Text>
-                      )}
-                      {sp.website && (
-                        <Text style={{ fontFamily: 'Inter', fontSize: 6.5, color: C.textLight }}>
-                          {sp.website}
-                        </Text>
-                      )}
-                    </View>
-                  </View>
-                ))}
-            </InfoCard>
-          )}
+          {/* ── Title & Show sponsors — featured prominently with logos ── */}
+          {sponsors.filter((sp) => sp.tier === 'title' || sp.tier === 'show').map((sp, i) => (
+            <View key={i} style={{
+              backgroundColor: sp.tier === 'title' ? '#FDFAF3' : C.cardBg,
+              borderWidth: 1,
+              borderColor: sp.tier === 'title' ? C.accent : C.cardBorder,
+              borderRadius: 6,
+              padding: '10 14',
+              marginBottom: 8,
+              alignItems: 'center',
+            }}>
+              {/* Tier label */}
+              <Text style={{
+                fontFamily: 'Inter', fontSize: 6, fontWeight: 'bold', color: C.accent,
+                letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: sp.logoUrl ? 6 : 3,
+              }}>
+                {sp.customTitle ?? (sp.tier === 'title' ? 'Title Sponsor' : 'Show Sponsor')}
+              </Text>
+              {/* Logo — large and proud */}
+              {sp.logoUrl && (
+                <Image src={sp.logoUrl} style={{
+                  maxWidth: sp.tier === 'title' ? 160 : 120,
+                  maxHeight: sp.tier === 'title' ? 50 : 36,
+                  objectFit: 'contain',
+                  marginBottom: 6,
+                }} />
+              )}
+              {/* Name */}
+              <Text style={{ fontFamily: 'Inter', fontWeight: 'bold', fontSize: sp.tier === 'title' ? 11 : 9.5, color: C.textDark }}>
+                {sp.name}
+              </Text>
+              {/* Website — clickable */}
+              {sp.website && (
+                <Link src={sp.website.startsWith('http') ? sp.website : `https://${sp.website}`} style={{ textDecoration: 'none', marginTop: 2 }}>
+                  <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.primary }}>
+                    {sp.website.replace(/^https?:\/\//, '')}
+                  </Text>
+                </Link>
+              )}
+            </View>
+          ))}
 
+          {/* ── Class Sponsors & Trophies ── */}
           {sponsors.filter((sp) => sp.classSponsorships.length > 0).length > 0 && (
-            <InfoCard title="Class Sponsors &amp; Trophies">
+            <View style={{
+              backgroundColor: C.cardBg, borderWidth: 1, borderColor: C.cardBorder,
+              borderRadius: 6, padding: '8 12', marginBottom: 8,
+            }}>
+              <Text style={{
+                fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', color: C.accent,
+                letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6,
+              }}>
+                Class Sponsors &amp; Trophies
+              </Text>
               {sponsors
                 .filter((sp) => sp.classSponsorships.length > 0)
                 .flatMap((sp) =>
                   sp.classSponsorships.map((cs, j) => (
-                    <View key={`${sp.name}-${j}`} style={{ marginBottom: 4 }}>
-                      <Text style={{ fontFamily: 'Inter', fontSize: 8, color: C.textDark }}>
-                        <Text style={{ fontWeight: 'bold' }}>{cs.className}</Text>
-                        {' — sponsored by '}
-                        {sp.name}
-                      </Text>
-                      {cs.trophyName && (
-                        <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 7.5, color: C.accent, marginLeft: 8 }}>
-                          {cs.trophyName}
-                          {cs.trophyDonor ? ` (donated by ${cs.trophyDonor})` : ''}
+                    <View key={`${sp.name}-${j}`} style={{
+                      flexDirection: 'row', marginBottom: 4,
+                      paddingBottom: 4, borderBottomWidth: 0.5, borderBottomColor: C.ruleLight,
+                    }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontFamily: 'Inter', fontSize: 8, fontWeight: 'bold', color: C.textDark }}>
+                          {cs.className}
                         </Text>
-                      )}
-                      {cs.prizeDescription && (
-                        <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textLight, marginLeft: 8 }}>
-                          {cs.prizeDescription}
+                        <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textMedium, marginTop: 1 }}>
+                          Sponsored by {sp.name}
                         </Text>
+                      </View>
+                      {(cs.trophyName || cs.prizeDescription) && (
+                        <View style={{ alignItems: 'flex-end', justifyContent: 'center' }}>
+                          {cs.trophyName && (
+                            <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 7, color: C.accent }}>
+                              {cs.trophyName}
+                            </Text>
+                          )}
+                          {cs.trophyDonor && (
+                            <Text style={{ fontFamily: 'Inter', fontSize: 6, color: C.textLight }}>
+                              Donated by {cs.trophyDonor}
+                            </Text>
+                          )}
+                        </View>
                       )}
                     </View>
                   ))
                 )}
-            </InfoCard>
+            </View>
           )}
 
+          {/* ── Special Prizes ── */}
           {sponsors.filter((sp) => sp.specialPrizes).length > 0 && (
-            <InfoCard title="Special Prizes">
+            <View style={{
+              backgroundColor: C.cardBg, borderWidth: 1, borderColor: C.cardBorder,
+              borderRadius: 6, padding: '8 12', marginBottom: 8,
+            }}>
+              <Text style={{
+                fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', color: C.accent,
+                letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6,
+              }}>
+                Special Prizes
+              </Text>
               {sponsors
                 .filter((sp) => sp.specialPrizes)
                 .map((sp, i) => (
-                  <View key={i} style={{ marginBottom: 3 }}>
-                    <Text style={{ fontFamily: 'Inter', fontSize: 8, color: C.textDark }}>
-                      <Text style={{ fontWeight: 'bold' }}>{sp.name}</Text>
-                      {' — '}
+                  <View key={i} style={{ marginBottom: 4 }}>
+                    <Text style={{ fontFamily: 'Inter', fontWeight: 'bold', fontSize: 8, color: C.textDark }}>
+                      {sp.name}
+                    </Text>
+                    <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 7.5, color: C.textMedium, marginTop: 1 }}>
                       {sp.specialPrizes}
                     </Text>
                   </View>
                 ))}
-            </InfoCard>
+            </View>
           )}
 
   
@@ -1265,7 +1343,7 @@ export function ShowSchedule({
           <View style={{ marginBottom: 10 }}>
             {judges.map((judge, i) => (
               <Text key={i} style={{ fontFamily: 'Inter', fontSize: 9, fontWeight: 'bold', textAlign: 'center', color: C.textDark, marginBottom: 2 }}>
-                JUDGE: {judge.name}
+                {judge.displayLabel ?? judge.name}
               </Text>
             ))}
           </View>
@@ -1302,11 +1380,13 @@ export function ShowSchedule({
               </View>
             </View>
 
-            {/* Mixed classes below (e.g. Junior Handler) */}
+            {/* Non-sex-specific classes below (e.g. Junior Handling) */}
             {mixedClasses.length > 0 && (
               <View>
                 <View style={s.twoColMixedHeader}>
-                  <Text style={s.twoColHeaderText}>Mixed</Text>
+                  <Text style={s.twoColHeaderText}>
+                    {mixedClasses.every((c) => c.classType === 'junior_handler') ? 'Junior Handling' : 'Mixed'}
+                  </Text>
                 </View>
                 {mixedClasses.map((cls, i) => (
                   <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
@@ -1630,7 +1710,11 @@ export function ShowSchedule({
           <SectionBand title="Entry Form" />
 
           <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textLight, marginBottom: 8, textAlign: 'center' }}>
-            Enter online at remishowmanager.co.uk/shows/{show.slug} — or complete this form and post to the show secretary
+            Enter online at{' '}
+            <Link src={showPageUrl} style={{ color: C.primary, textDecoration: 'none' }}>
+              {showPageUrl}
+            </Link>
+            {' '}— or complete this form and post to the show secretary
           </Text>
 
           <Text style={{ fontFamily: 'Inter', fontSize: 8.5, fontWeight: 'bold', marginBottom: 8, color: C.primary }}>
