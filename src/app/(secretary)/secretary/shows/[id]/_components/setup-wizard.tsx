@@ -439,6 +439,14 @@ function SecretaryDetails({
 
   // No details at all — show the edit form directly
   if (!hasDetails || editing) {
+    // In edit mode, use local edit buffer; when no details exist, write directly to parent
+    const val = editing
+      ? { name: editName, email: editEmail, phone: editPhone, address: editAddress }
+      : { name: secretaryName, email: secretaryEmail, phone: secretaryPhone, address: secretaryAddress };
+    const set = editing
+      ? { name: setEditName, email: setEditEmail, phone: setEditPhone, address: setEditAddress }
+      : { name: (v: string) => onChange({ name: v }), email: (v: string) => onChange({ email: v }), phone: (v: string) => onChange({ phone: v }), address: (v: string) => onChange({ address: v }) };
+
     return (
       <div className="space-y-3">
         <div className="flex items-center justify-between">
@@ -452,53 +460,24 @@ function SecretaryDetails({
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="wiz-sec-name" className="text-xs">Name</Label>
-            <Input
-              id="wiz-sec-name"
-              placeholder="Secretary name"
-              className="min-h-[2.75rem]"
-              value={editing ? editName : secretaryName}
-              onChange={(e) => editing ? setEditName(e.target.value) : onChange({ name: e.target.value })}
-            />
+            <Input id="wiz-sec-name" placeholder="Secretary name" className="min-h-[2.75rem]" value={val.name} onChange={(e) => set.name(e.target.value)} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="wiz-sec-email" className="text-xs">Email</Label>
-            <Input
-              id="wiz-sec-email"
-              type="email"
-              placeholder="secretary@example.com"
-              className="min-h-[2.75rem]"
-              value={editing ? editEmail : secretaryEmail}
-              onChange={(e) => editing ? setEditEmail(e.target.value) : onChange({ email: e.target.value })}
-            />
+            <Input id="wiz-sec-email" type="email" placeholder="secretary@example.com" className="min-h-[2.75rem]" value={val.email} onChange={(e) => set.email(e.target.value)} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="wiz-sec-phone" className="text-xs">Phone</Label>
-            <Input
-              id="wiz-sec-phone"
-              type="tel"
-              placeholder="Phone number"
-              className="min-h-[2.75rem]"
-              value={editing ? editPhone : secretaryPhone}
-              onChange={(e) => editing ? setEditPhone(e.target.value) : onChange({ phone: e.target.value })}
-            />
+            <Input id="wiz-sec-phone" type="tel" placeholder="Phone number" className="min-h-[2.75rem]" value={val.phone} onChange={(e) => set.phone(e.target.value)} />
           </div>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="wiz-sec-address" className="text-xs">Address</Label>
           <PostcodeLookup
             compact
-            onSelect={(result) => {
-              const addr = `${formatAddress(result)}, ${result.postcode}`;
-              editing ? setEditAddress(addr) : onChange({ address: addr });
-            }}
+            onSelect={(result) => set.address(`${formatAddress(result)}, ${result.postcode}`)}
           />
-          <Input
-            id="wiz-sec-address"
-            placeholder="Full address"
-            className="min-h-[2.75rem]"
-            value={editing ? editAddress : secretaryAddress}
-            onChange={(e) => editing ? setEditAddress(e.target.value) : onChange({ address: e.target.value })}
-          />
+          <Input id="wiz-sec-address" placeholder="Full address" className="min-h-[2.75rem]" value={val.address} onChange={(e) => set.address(e.target.value)} />
         </div>
         {editing && (
           <Button size="sm" className="min-h-[2.75rem]" onClick={saveEdits}>

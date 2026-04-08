@@ -53,6 +53,7 @@ import {
 } from '@/components/ui/command';
 import type { ScheduleData } from '@/server/db/schema/shows';
 import { RKC_STATEMENTS, RKC_STATEMENT_CATEGORIES } from '@/lib/rkc-statements';
+import { SHOW_TIMES } from '@/lib/show-times';
 
 interface OfficerWithGuarantor {
   name: string;
@@ -84,14 +85,6 @@ const OFFICER_POSITIONS = [
   'Chief Steward', 'Ring Steward', 'Veterinary Surgeon',
   'Health & Safety Officer', 'First Aid Officer', 'Trophy Steward', 'Field Officer',
 ];
-
-const SHOW_TIMES = Array.from({ length: 23 }, (_, i) => {
-  const hour = 7 + Math.floor(i / 2);
-  const min = i % 2 === 0 ? '00' : '30';
-  const value = `${String(hour).padStart(2, '0')}:${min}`;
-  const label = `${hour}:${min}`;
-  return { value, label };
-});
 
 const COUNTRY_LABELS: Record<string, string> = {
   england: 'England',
@@ -163,25 +156,25 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     if (effectiveExisting === null && previousData === undefined) return;
 
     // Source: this show's saved data, or previous show as defaults
-    const source = effectiveExisting ?? previousData?.scheduleData;
+    const sd = (effectiveExisting ?? previousData?.scheduleData) as ScheduleData | null | undefined;
 
-    setCountry((source as ScheduleData)?.country ?? 'england');
-    setPublicAdmission((source as ScheduleData)?.publicAdmission ?? false);
-    setWetWeather((source as ScheduleData)?.wetWeatherAccommodation ?? false);
-    setIsBenched((source as ScheduleData)?.isBenched ?? false);
-    setBenchingRemovalTime((source as ScheduleData)?.benchingRemovalTime ?? '');
-    setAcceptsNfc((source as ScheduleData)?.acceptsNfc ?? true);
-    setJudgedOnGroupSystem((source as ScheduleData)?.judgedOnGroupSystem ?? false);
-    setLatestArrivalTime((source as ScheduleData)?.latestArrivalTime ?? '');
+    setCountry(sd?.country ?? 'england');
+    setPublicAdmission(sd?.publicAdmission ?? false);
+    setWetWeather(sd?.wetWeatherAccommodation ?? false);
+    setIsBenched(sd?.isBenched ?? false);
+    setBenchingRemovalTime(sd?.benchingRemovalTime ?? '');
+    setAcceptsNfc(sd?.acceptsNfc ?? true);
+    setJudgedOnGroupSystem(sd?.judgedOnGroupSystem ?? false);
+    setLatestArrivalTime(sd?.latestArrivalTime ?? '');
     // Show-level fields: always prefer current show's data, fall back to previous show
     setShowOpenTime(showData?.showOpenTime ?? previousData?.showOpenTime ?? '');
     setJudgingStartTime(showData?.startTime ?? previousData?.startTime ?? '');
     setOnCallVet(showData?.onCallVet ?? previousData?.onCallVet ?? '');
-    setWhat3words((source as ScheduleData)?.what3words ?? '');
-    setShowManager((source as ScheduleData)?.showManager ?? '');
+    setWhat3words(sd?.what3words ?? '');
+    setShowManager(sd?.showManager ?? '');
 
-    const existingOfficers = (source as ScheduleData)?.officers ?? [];
-    const existingGuarantors = (source as ScheduleData)?.guarantors ?? [];
+    const existingOfficers = sd?.officers ?? [];
+    const existingGuarantors = sd?.guarantors ?? [];
     const guarantorNames = new Set(existingGuarantors.map((g) => g.name));
     const guarantorAddresses = new Map(
       existingGuarantors.map((g) => [g.name, g.address ?? ''])
@@ -195,15 +188,15 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       }))
     );
 
-    setAwardsDescription((source as ScheduleData)?.awardsDescription ?? '');
-    setPrizeMoney((source as ScheduleData)?.prizeMoney ?? '');
-    setDirections((source as ScheduleData)?.directions ?? '');
-    setCatering((source as ScheduleData)?.catering ?? '');
-    setFutureShowDates((source as ScheduleData)?.futureShowDates ?? '');
-    setAdditionalNotes((source as ScheduleData)?.additionalNotes ?? '');
-    setWelcomeNote((source as ScheduleData)?.welcomeNote ?? '');
-    setOutsideAttraction((source as ScheduleData)?.outsideAttraction ?? false);
-    setCustomStatements((source as ScheduleData)?.customStatements ?? []);
+    setAwardsDescription(sd?.awardsDescription ?? '');
+    setPrizeMoney(sd?.prizeMoney ?? '');
+    setDirections(sd?.directions ?? '');
+    setCatering(sd?.catering ?? '');
+    setFutureShowDates(sd?.futureShowDates ?? '');
+    setAdditionalNotes(sd?.additionalNotes ?? '');
+    setWelcomeNote(sd?.welcomeNote ?? '');
+    setOutsideAttraction(sd?.outsideAttraction ?? false);
+    setCustomStatements(sd?.customStatements ?? []);
 
     if (!effectiveExisting && previousData) {
       setAppliedDefaults(true);
@@ -221,12 +214,12 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       return { showday: false, people: false, awards: false, venue: false, regulations: false };
     }
     const showday = !!(showOpenTime && judgingStartTime);
-    const people = !!(showManager && officers.filter((o) => o.name).length > 0);
+    const people = !!(showManager && officerCount > 0);
     const awards = !!awardsDescription;
     const venue = !!(directions || what3words || catering);
-    const regulations = !!country; // Saved at least once with a country
+    const regulations = !!country;
     return { showday, people, awards, venue, regulations };
-  }, [hasBeenSaved, showOpenTime, judgingStartTime, showManager, officers, awardsDescription, directions, what3words, catering, country]);
+  }, [hasBeenSaved, showOpenTime, judgingStartTime, showManager, officerCount, awardsDescription, directions, what3words, catering, country]);
 
   async function handleSave() {
     if (!showOpenTime) {
@@ -324,6 +317,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     );
   }
 
+  const officerCount = officers.filter((o) => o.name).length;
   const guarantorCount = officers.filter((o) => o.isGuarantor).length;
   const requiredGuarantors = showData?.showType === 'championship' ? 6 : 3;
 

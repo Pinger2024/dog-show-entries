@@ -56,7 +56,6 @@ const COMMON_SUNDRY_PRESETS = [
 function PresetPicker({
   presets,
   selections,
-  existingNames,
   onToggle,
   onPriceChange,
   onAdd,
@@ -65,17 +64,14 @@ function PresetPicker({
 }: {
   presets: typeof COMMON_SUNDRY_PRESETS;
   selections: Record<string, { selected: boolean; price: string }>;
-  existingNames: Set<string>;
   onToggle: (name: string) => void;
   onPriceChange: (name: string, price: string) => void;
   onAdd: () => void;
   onSkip: () => void;
   isPending: boolean;
 }) {
-  const available = presets.filter((p) => !existingNames.has(p.name));
+  const available = presets;
   const selectedCount = available.filter((p) => selections[p.name]?.selected).length;
-
-  if (available.length === 0) return null;
 
   return (
     <div className="space-y-4">
@@ -359,7 +355,6 @@ export function SundryItemManager({ showId }: { showId: string }) {
             <PresetPicker
               presets={COMMON_SUNDRY_PRESETS}
               selections={presetSelections}
-              existingNames={new Set((items ?? []).map((i) => i.name))}
               onToggle={togglePreset}
               onPriceChange={setPresetPrice}
               onAdd={handleAddSelectedPresets}

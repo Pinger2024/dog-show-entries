@@ -100,13 +100,7 @@ const classSexArrangements = [
   { value: 'combined_sex', label: 'Combined Dog & Bitch' },
 ] as const;
 
-const showTimes = Array.from({ length: 23 }, (_, i) => {
-  const hour = 7 + Math.floor(i / 2);
-  const min = i % 2 === 0 ? '00' : '30';
-  const value = `${String(hour).padStart(2, '0')}:${min}`;
-  const label = `${hour}:${min}`;
-  return { value, label };
-});
+import { SHOW_TIMES } from '@/lib/show-times';
 
 const createShowSchema = z.object({
   // Step 1 - Basic Info
@@ -821,7 +815,7 @@ export default function NewShowPage() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {showTimes.map((t) => (
+                            {SHOW_TIMES.map((t) => (
                               <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
                             ))}
                           </SelectContent>
