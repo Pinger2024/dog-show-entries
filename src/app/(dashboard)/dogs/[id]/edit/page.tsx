@@ -48,7 +48,7 @@ export default function EditDogPage({
             Back to {dog.registeredName}
           </Link>
         </Button>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+        <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">
           Edit Dog
         </h1>
         <p className="mt-1 text-muted-foreground">

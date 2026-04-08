@@ -1149,7 +1149,7 @@ export default function DogDetailPage({
               </div>
             )}
             <div>
-              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+              <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">
                 {formatDogName(dog)}
               </h1>
               <div className="mt-1 flex flex-wrap items-center gap-2">
