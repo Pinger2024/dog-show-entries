@@ -848,7 +848,7 @@ export function ShowSchedule({
             {sd?.latestArrivalTime && (
               <View style={s.coverDetailRow}>
                 <Text style={s.coverDetailLabel}>Dogs by</Text>
-                <Text style={s.coverDetailValue}>{sd.latestArrivalTime}</Text>
+                <Text style={s.coverDetailValue}>{formatTime(sd.latestArrivalTime)}</Text>
               </View>
             )}
             {show.kcLicenceNo && (
@@ -1007,7 +1007,7 @@ export function ShowSchedule({
           {sd?.latestArrivalTime && (
             <View style={s.infoRow}>
               <Text style={s.infoLabel}>Latest time dogs will be received</Text>
-              <Text style={s.infoValue}>{sd.latestArrivalTime}</Text>
+              <Text style={s.infoValue}>{formatTime(sd.latestArrivalTime)}</Text>
             </View>
           )}
           {show.startTime && (
