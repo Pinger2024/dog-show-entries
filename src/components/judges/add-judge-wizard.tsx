@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   Check,
   ChevronRight,
@@ -48,6 +48,7 @@ interface BreedSexCombo {
   selected: boolean;
   notApproved?: boolean;
   alreadyAssigned?: string; // judge name if already assigned
+  isJuniorHandling?: boolean;
 }
 
 interface AddJudgeWizardProps {
@@ -109,6 +110,21 @@ export function AddJudgeWizard({
 
   const kcSearchMutation = trpc.secretary.kcJudgeSearch.useMutation();
   const kcProfileMutation = trpc.secretary.kcJudgeProfile.useMutation();
+
+  // Auto-search RKC when local DB has no results and query is long enough
+  const lastAutoSearchRef = useRef('');
+  useEffect(() => {
+    if (
+      searchQuery.length >= 2 &&
+      localSearchQuery.isFetched &&
+      localSearchQuery.data?.length === 0 &&
+      !kcSearchMutation.isPending &&
+      lastAutoSearchRef.current !== searchQuery.trim().toLowerCase()
+    ) {
+      lastAutoSearchRef.current = searchQuery.trim().toLowerCase();
+      kcSearchMutation.mutate({ surname: searchQuery.trim() });
+    }
+  }, [searchQuery, localSearchQuery.isFetched, localSearchQuery.data?.length]);
   const addAndAssignMutation = trpc.secretary.addAndAssignJudge.useMutation({
     onSuccess: (data) => {
       toast.success(`${data.judge.name} added — ${data.assignmentCount} assignment${data.assignmentCount !== 1 ? 's' : ''} created`);
@@ -125,14 +141,18 @@ export function AddJudgeWizard({
   // ── Derive show breed+sex combos for the assign step ──
   const showBreedSexCombos = useMemo(() => {
     if (!showData?.showClasses) return [];
-    const combos = new Map<string, { breedId: string | null; breedName: string | null; sex: string | null }>();
+    const combos = new Map<string, { breedId: string | null; breedName: string | null; sex: string | null; isJuniorHandling: boolean }>();
     for (const sc of showData.showClasses) {
-      const key = `${sc.breed?.id ?? 'all'}:${sc.sex ?? 'both'}`;
+      const isJH = sc.classDefinition?.type === 'junior_handler';
+      // Junior Handling gets its own combo, separate from breed classes
+      const prefix = isJH ? 'jh' : 'breed';
+      const key = `${prefix}:${sc.breed?.id ?? 'all'}:${sc.sex ?? 'both'}`;
       if (!combos.has(key)) {
         combos.set(key, {
           breedId: sc.breed?.id ?? null,
-          breedName: sc.breed?.name ?? null,
+          breedName: isJH ? 'Junior Handling' : (sc.breed?.name ?? null),
           sex: sc.sex,
+          isJuniorHandling: isJH,
         });
       }
     }
@@ -189,14 +209,15 @@ export function AddJudgeWizard({
         sex: c.sex,
         selected: isPrefilled,
         alreadyAssigned: assignedTo,
+        isJuniorHandling: c.isJuniorHandling,
       };
     });
 
-    // If judge has RKC approvals, mark unapproved breeds
+    // If judge has RKC approvals, mark unapproved breeds (skip Junior Handling — not a breed)
     if (judge.rkcApprovals && judge.rkcApprovals.length > 0) {
       const approvedBreedNames = new Set(judge.rkcApprovals.map((a) => a.breed.toLowerCase()));
       for (const combo of combos) {
-        if (combo.breedName && !approvedBreedNames.has(combo.breedName.toLowerCase())) {
+        if (combo.breedName && !combo.isJuniorHandling && !approvedBreedNames.has(combo.breedName.toLowerCase())) {
           combo.notApproved = true;
         }
       }
@@ -337,7 +358,7 @@ export function AddJudgeWizard({
                   id="judge-search"
                   placeholder="Type to search..."
                   value={searchQuery}
-                  onChange={(e) => { setSearchQuery(e.target.value); setManualMode(false); }}
+                  onChange={(e) => { setSearchQuery(e.target.value); setManualMode(false); kcSearchMutation.reset(); }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && searchQuery.trim().length >= 2) {
                       kcSearchMutation.mutate({ surname: searchQuery.trim() });
@@ -599,6 +620,9 @@ export function AddJudgeWizard({
                           <span className="text-sm font-medium">
                             {combo.breedName ?? (showData?.showScope === 'single_breed' ? 'Breed Classes' : 'All Breeds')}
                           </span>
+                          {combo.isJuniorHandling && (
+                            <Badge variant="secondary" className="ml-1.5 text-xs">JH</Badge>
+                          )}
                           {combo.sex && (
                             <span className="ml-1.5 text-xs text-muted-foreground">
                               — {sexLabel(combo.sex)}

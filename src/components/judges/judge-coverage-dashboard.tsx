@@ -1,6 +1,6 @@
 'use client';
 
-import { CheckCircle2, AlertCircle, Plus, Loader2 } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Plus, Loader2, Pencil } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -92,9 +92,23 @@ export function JudgeCoverageDashboard({ showId, onAddJudge }: JudgeCoverageDash
                 </span>
               </div>
             </div>
-            <div className="shrink-0 ml-2">
+            <div className="shrink-0 ml-2 flex items-center gap-2">
               {item.covered ? (
-                <span className="text-sm text-green-700 dark:text-green-400">{item.judgeName}</span>
+                <>
+                  <span className="text-sm text-green-700 dark:text-green-400">
+                    {(item.judges?.length ?? 0) > 0
+                      ? item.judges!.map((j: { judgeName: string }) => j.judgeName).join(', ')
+                      : item.judgeName}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onAddJudge?.(item.breedId, item.sex)}
+                    className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                    title="Change judge"
+                  >
+                    <Pencil className="size-3.5" />
+                  </button>
+                </>
               ) : (
                 <Button
                   size="sm"
