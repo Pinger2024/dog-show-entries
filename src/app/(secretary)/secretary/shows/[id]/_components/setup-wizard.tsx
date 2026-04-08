@@ -7,6 +7,10 @@ import {
   Check,
   ChevronRight,
   Loader2,
+  Mail,
+  MapPin,
+  Pencil,
+  Phone,
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -45,7 +49,7 @@ type Show = NonNullable<RouterOutputs['shows']['getById']>;
 const STEPS = [
   { id: 'classes', label: 'Classes & Breeds', shortLabel: 'Classes' },
   { id: 'judge', label: 'Judge', shortLabel: 'Judge' },
-  { id: 'details', label: 'Show Details', shortLabel: 'Details' },
+  { id: 'details', label: 'Fees & Setup', shortLabel: 'Setup' },
   { id: 'schedule', label: 'Schedule', shortLabel: 'Schedule' },
   { id: 'open', label: 'Open Entries', shortLabel: 'Open' },
 ] as const;
@@ -76,7 +80,7 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
         case 'classes':
           return autoDetect.classes_created === true;
         case 'judge':
-          return autoDetect.judges_assigned === true;
+          return autoDetect.judges_assigned === true && autoDetect.judge_offers_sent === true;
         case 'details':
           return (
             autoDetect.entry_fees_set === true &&
@@ -367,6 +371,181 @@ function StepJudge({ showId }: { showId: string }) {
   return <JudgesSection showId={showId} />;
 }
 
+// ── Secretary Details (read-only with edit toggle) ────────
+
+function SecretaryDetails({
+  secretaryName,
+  secretaryEmail,
+  secretaryPhone,
+  secretaryAddress,
+  secretaryUserId,
+  onChange,
+}: {
+  secretaryName: string;
+  secretaryEmail: string;
+  secretaryPhone: string;
+  secretaryAddress: string;
+  secretaryUserId: string | null;
+  onChange: (fields: { name?: string; email?: string; phone?: string; address?: string }) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState(secretaryName);
+  const [editEmail, setEditEmail] = useState(secretaryEmail);
+  const [editPhone, setEditPhone] = useState(secretaryPhone);
+  const [editAddress, setEditAddress] = useState(secretaryAddress);
+
+  const hasDetails = !!(secretaryName || secretaryEmail || secretaryPhone || secretaryAddress);
+
+  const updateUserMutation = trpc.secretary.updateSecretaryUser.useMutation({
+    onError: (err) => toast.error(err.message ?? 'Failed to update secretary record'),
+  });
+
+  function startEditing() {
+    setEditName(secretaryName);
+    setEditEmail(secretaryEmail);
+    setEditPhone(secretaryPhone);
+    setEditAddress(secretaryAddress);
+    setEditing(true);
+  }
+
+  function saveEdits() {
+    onChange({
+      name: editName,
+      email: editEmail,
+      phone: editPhone,
+      address: editAddress,
+    });
+
+    // Also update the underlying user record so future shows get the correct data
+    if (secretaryUserId) {
+      // Split combined address back into address + postcode for user record
+      const postcodeMatch = editAddress.match(/,\s*([A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2})\s*$/i);
+      const postcode = postcodeMatch?.[1]?.trim() ?? null;
+      const address = postcodeMatch
+        ? editAddress.slice(0, postcodeMatch.index).replace(/,\s*$/, '').trim()
+        : editAddress.trim();
+
+      updateUserMutation.mutate({
+        userId: secretaryUserId,
+        name: editName || null,
+        phone: editPhone || null,
+        address: address || null,
+        postcode,
+      });
+    }
+
+    setEditing(false);
+  }
+
+  // No details at all — show the edit form directly
+  if (!hasDetails || editing) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h4 className="text-sm font-semibold">Secretary Details</h4>
+          {hasDetails && (
+            <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => setEditing(false)}>
+              Cancel
+            </Button>
+          )}
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="wiz-sec-name" className="text-xs">Name</Label>
+            <Input
+              id="wiz-sec-name"
+              placeholder="Secretary name"
+              className="min-h-[2.75rem]"
+              value={editing ? editName : secretaryName}
+              onChange={(e) => editing ? setEditName(e.target.value) : onChange({ name: e.target.value })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="wiz-sec-email" className="text-xs">Email</Label>
+            <Input
+              id="wiz-sec-email"
+              type="email"
+              placeholder="secretary@example.com"
+              className="min-h-[2.75rem]"
+              value={editing ? editEmail : secretaryEmail}
+              onChange={(e) => editing ? setEditEmail(e.target.value) : onChange({ email: e.target.value })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="wiz-sec-phone" className="text-xs">Phone</Label>
+            <Input
+              id="wiz-sec-phone"
+              type="tel"
+              placeholder="Phone number"
+              className="min-h-[2.75rem]"
+              value={editing ? editPhone : secretaryPhone}
+              onChange={(e) => editing ? setEditPhone(e.target.value) : onChange({ phone: e.target.value })}
+            />
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="wiz-sec-address" className="text-xs">Address</Label>
+          <PostcodeLookup
+            compact
+            onSelect={(result) => {
+              const addr = `${formatAddress(result)}, ${result.postcode}`;
+              editing ? setEditAddress(addr) : onChange({ address: addr });
+            }}
+          />
+          <Input
+            id="wiz-sec-address"
+            placeholder="Full address"
+            className="min-h-[2.75rem]"
+            value={editing ? editAddress : secretaryAddress}
+            onChange={(e) => editing ? setEditAddress(e.target.value) : onChange({ address: e.target.value })}
+          />
+        </div>
+        {editing && (
+          <Button size="sm" className="min-h-[2.75rem]" onClick={saveEdits}>
+            Save Changes
+          </Button>
+        )}
+      </div>
+    );
+  }
+
+  // Read-only display
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-semibold">Secretary Details</h4>
+        <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" onClick={startEditing}>
+          <Pencil className="size-3" />
+          Edit
+        </Button>
+      </div>
+      <div className="rounded-lg border bg-muted/30 px-4 py-3 space-y-1.5">
+        {secretaryName && (
+          <p className="font-medium text-sm">{secretaryName}</p>
+        )}
+        {secretaryEmail && (
+          <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <Mail className="size-3.5 shrink-0" />
+            {secretaryEmail}
+          </p>
+        )}
+        {secretaryPhone && (
+          <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <Phone className="size-3.5 shrink-0" />
+            {secretaryPhone}
+          </p>
+        )}
+        {secretaryAddress && (
+          <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <MapPin className="size-3.5 shrink-0" />
+            {secretaryAddress}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Step 3: Show Details ──────────────────────────────────
 
 function StepDetails({ showId, show }: { showId: string; show: Show }) {
@@ -572,69 +751,19 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
       </div>
 
       {/* Secretary Details */}
-      <div className="space-y-3">
-        <h4 className="text-sm font-semibold">Secretary Details</h4>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="wiz-sec-name" className="text-xs">
-              Name
-            </Label>
-            <Input
-              id="wiz-sec-name"
-              placeholder="Secretary name"
-              className="min-h-[2.75rem]"
-              value={secretaryName}
-              onChange={(e) => setSecretaryName(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="wiz-sec-email" className="text-xs">
-              Email
-            </Label>
-            <Input
-              id="wiz-sec-email"
-              type="email"
-              placeholder="secretary@example.com"
-              className="min-h-[2.75rem]"
-              value={secretaryEmail}
-              onChange={(e) => setSecretaryEmail(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="wiz-sec-phone" className="text-xs">
-              Phone
-            </Label>
-            <Input
-              id="wiz-sec-phone"
-              type="tel"
-              placeholder="Phone number"
-              className="min-h-[2.75rem]"
-              value={secretaryPhone}
-              onChange={(e) => setSecretaryPhone(e.target.value)}
-            />
-          </div>
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="wiz-sec-address" className="text-xs">
-            Address
-          </Label>
-          <PostcodeLookup
-            compact
-            onSelect={(result) => {
-              setSecretaryAddress(
-                `${formatAddress(result)}, ${result.postcode}`,
-              );
-            }}
-          />
-          <Input
-            id="wiz-sec-address"
-            placeholder="Full address"
-            className="min-h-[2.75rem]"
-            value={secretaryAddress}
-            onChange={(e) => setSecretaryAddress(e.target.value)}
-          />
-        </div>
-      </div>
+      <SecretaryDetails
+        secretaryName={secretaryName}
+        secretaryEmail={secretaryEmail}
+        secretaryPhone={secretaryPhone}
+        secretaryAddress={secretaryAddress}
+        secretaryUserId={show.secretaryUserId}
+        onChange={(fields) => {
+          if (fields.name !== undefined) setSecretaryName(fields.name);
+          if (fields.email !== undefined) setSecretaryEmail(fields.email);
+          if (fields.phone !== undefined) setSecretaryPhone(fields.phone);
+          if (fields.address !== undefined) setSecretaryAddress(fields.address);
+        }}
+      />
 
       {/* RKC Licence */}
       <div className="space-y-1.5">

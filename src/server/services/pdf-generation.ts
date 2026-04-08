@@ -18,7 +18,7 @@ import type { CatalogueEntry, CatalogueShowInfo } from '@/components/catalogue/c
 import { PrizeCards } from '@/components/prize-cards/prize-cards';
 import type { PrizeCardShowInfo, PrizeCardClass } from '@/components/prize-cards/prize-cards';
 import { ShowSchedule } from '@/components/schedule/show-schedule';
-import type { ScheduleShowInfo, ScheduleClass, ScheduleJudge, ScheduleSponsor, ScheduleFormat } from '@/components/schedule/show-schedule';
+import type { ScheduleShowInfo, ScheduleClass, ScheduleJudge, ScheduleSponsor } from '@/components/schedule/show-schedule';
 import { RingBoard } from '@/components/ring-board/ring-board';
 import type { RingBoardShowInfo, RingBoardRing } from '@/components/ring-board/ring-board';
 import React from 'react';
@@ -241,7 +241,7 @@ export async function generatePrizeCardsPdf(
 
 // ── Schedule PDF ──
 
-export async function generateSchedulePdf(showId: string, format: 'standard' | 'compact' | 'booklet' = 'standard'): Promise<Buffer> {
+export async function generateSchedulePdf(showId: string): Promise<Buffer> {
   const show = await db.query.shows.findFirst({
     where: eq(schema.shows.id, showId),
     with: { organisation: true, venue: true },
@@ -391,7 +391,6 @@ export async function generateSchedulePdf(showId: string, format: 'standard' | '
     classes,
     judges,
     sponsors,
-    format,
   });
   return Buffer.from(await renderToBuffer(pdfDocument));
 }
@@ -571,7 +570,7 @@ export async function generateAndUploadForPrint(
       buffer = await generatePrizeCardsPdf(showId);
       break;
     case 'schedule':
-      buffer = await generateSchedulePdf(showId, (documentFormat as ScheduleFormat) ?? 'standard');
+      buffer = await generateSchedulePdf(showId);
       break;
     case 'ring_board':
       buffer = await generateRingBoardPdf(showId);

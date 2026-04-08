@@ -45,6 +45,25 @@ import { penceToPoundsString } from '@/lib/date-utils';
 import { Resend } from 'resend';
 import { searchKcJudges, fetchKcJudgeProfile } from '@/server/services/kc-judges';
 
+/** Build human-readable breed text for judge offer emails.
+ *  When assignments have breedId=null, falls back to showBreedNames, then showName. */
+function buildJudgeBreedText(
+  assignments: { breed?: { name: string } | null; sex: string | null }[],
+  showBreedNames: string[],
+  showName?: string,
+): string {
+  const fallbackName = showBreedNames.length > 0
+    ? showBreedNames.join(', ')
+    : (showName ?? 'All breeds');
+  const parts: string[] = [];
+  for (const a of assignments) {
+    const name = a.breed?.name ?? fallbackName;
+    const suffix = a.sex === 'dog' ? ' (Dogs)' : a.sex === 'bitch' ? ' (Bitches)' : '';
+    parts.push(name + suffix);
+  }
+  return [...new Set(parts)].join(', ') || 'All breeds';
+}
+
 export const secretaryRouter = createTRPCRouter({
   getDashboard: secretaryProcedure.query(async ({ ctx }) => {
     // Get organisations the user is a member of
@@ -206,6 +225,31 @@ export const secretaryRouter = createTRPCRouter({
       }
 
       return members.map((m) => m.user);
+    }),
+
+  /** Update a secretary user's contact details (syncs back to their user record) */
+  updateSecretaryUser: secretaryProcedure
+    .input(z.object({
+      userId: z.string().uuid(),
+      name: z.string().nullable().optional(),
+      email: z.string().email().nullable().optional(),
+      phone: z.string().nullable().optional(),
+      address: z.string().nullable().optional(),
+      postcode: z.string().nullable().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { userId, ...updates } = input;
+      const setData: Record<string, string | null> = {};
+      if (updates.name !== undefined) setData.name = updates.name;
+      if (updates.phone !== undefined) setData.phone = updates.phone;
+      if (updates.address !== undefined) setData.address = updates.address;
+      if (updates.postcode !== undefined) setData.postcode = updates.postcode;
+
+      if (Object.keys(setData).length > 0) {
+        await ctx.db.update(users).set(setData).where(eq(users.id, userId));
+      }
+
+      return { success: true };
     }),
 
   getShowStats: secretaryProcedure
@@ -1905,11 +1949,31 @@ export const secretaryRouter = createTRPCRouter({
   searchJudges: secretaryProcedure
     .input(z.object({ query: z.string().min(1).max(100), limit: z.number().int().min(1).max(50).default(10) }))
     .query(async ({ ctx, input }) => {
-      return ctx.db.query.judges.findMany({
-        where: ilike(judges.name, `%${input.query}%`),
-        orderBy: asc(judges.name),
-        limit: input.limit,
-      });
+      // Use DISTINCT ON to deduplicate judges with the same name,
+      // preferring the row with a KC number (most complete record)
+      const rows = await ctx.db
+        .select()
+        .from(judges)
+        .where(ilike(judges.name, `%${input.query}%`))
+        .orderBy(
+          asc(judges.name),
+          // Within each name, prefer rows that have a kcNumber (non-null sorts first with DESC)
+          desc(judges.kcNumber),
+          desc(judges.updatedAt),
+        )
+        .limit(input.limit * 3); // fetch extra to account for duplicates
+
+      // Deduplicate by normalised name, keeping the first (best) row per name
+      const seen = new Set<string>();
+      const unique: typeof rows = [];
+      for (const row of rows) {
+        const key = row.name.trim().toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        unique.push(row);
+        if (unique.length >= input.limit) break;
+      }
+      return unique;
     }),
 
   /** Edit a judge's details after creation. */
@@ -1973,6 +2037,16 @@ export const secretaryRouter = createTRPCRouter({
       if (input.kcNumber) {
         judge = await ctx.db.query.judges.findFirst({
           where: eq(judges.kcNumber, input.kcNumber),
+        }) ?? undefined;
+      }
+
+      // Fallback: match by name + email to avoid creating duplicates
+      if (!judge && input.contactEmail) {
+        judge = await ctx.db.query.judges.findFirst({
+          where: and(
+            ilike(judges.name, input.name.trim()),
+            eq(judges.contactEmail, input.contactEmail),
+          ),
         }) ?? undefined;
       }
 
@@ -2079,15 +2153,30 @@ export const secretaryRouter = createTRPCRouter({
 
       // Check which requirements are covered by assignments
       const coverage = Array.from(requirementsMap.values()).map((req) => {
-        // Find matching assignment: same breed, and sex either matches or assignment covers both
-        const matchingAssignment = assignments.find((a) => {
+        // Find ALL matching assignments, preferring sex-specific over catch-all
+        const matching = assignments.filter((a) => {
           const breedMatch = req.breedId
-            ? a.breedId === req.breedId || a.breedId === null // null breedId on assignment = all breeds
+            ? a.breedId === req.breedId || a.breedId === null
             : a.breedId === null;
-          const sexMatch = a.sex === null // null = judges both sexes
-            || a.sex === req.sex;
+          const sexMatch = req.sex === null
+            ? a.sex === null
+            : (a.sex === null || a.sex === req.sex);
           return breedMatch && sexMatch;
         });
+
+        // Prefer exact sex match over catch-all (sex: null)
+        const exact = matching.filter((a) => a.sex === req.sex);
+        const best = exact.length > 0 ? exact : matching;
+
+        // Deduplicate by judge
+        const seen = new Set<string>();
+        const judges: { judgeId: string; judgeName: string; assignmentId: string }[] = [];
+        for (const a of best) {
+          if (!seen.has(a.judgeId)) {
+            seen.add(a.judgeId);
+            judges.push({ judgeId: a.judgeId, judgeName: a.judge.name, assignmentId: a.id });
+          }
+        }
 
         return {
           breedId: req.breedId,
@@ -2095,9 +2184,11 @@ export const secretaryRouter = createTRPCRouter({
           label: req.label,
           sex: req.sex,
           classCount: req.classCount,
-          covered: !!matchingAssignment,
-          judgeName: matchingAssignment?.judge.name ?? null,
-          judgeId: matchingAssignment?.judgeId ?? null,
+          covered: judges.length > 0,
+          judges,
+          // Keep flat fields for backwards compat
+          judgeName: judges[0]?.judgeName ?? null,
+          judgeId: judges[0]?.judgeId ?? null,
         };
       });
 
@@ -2759,20 +2850,44 @@ export const secretaryRouter = createTRPCRouter({
         .from(showClasses)
         .where(eq(showClasses.showId, input.showId));
 
-      const [judgeCount] = await ctx.db
-        .select({ count: sql<number>`count(*)` })
-        .from(judgeAssignments)
-        .where(eq(judgeAssignments.showId, input.showId));
+      // Use the same coverage logic as getJudgeCoverage — query classes + assignments
+      const [showClassRows, assignmentRows, stewardCountRow, ringCountRow] = await Promise.all([
+        ctx.db.query.showClasses.findMany({
+          where: eq(showClasses.showId, input.showId),
+          columns: { breedId: true, sex: true },
+        }),
+        ctx.db.query.judgeAssignments.findMany({
+          where: eq(judgeAssignments.showId, input.showId),
+          columns: { judgeId: true, breedId: true, sex: true },
+        }),
+        ctx.db
+          .select({ count: sql<number>`count(*)` })
+          .from(stewardAssignments)
+          .where(eq(stewardAssignments.showId, input.showId)),
+        ctx.db
+          .select({ count: sql<number>`count(*)` })
+          .from(rings)
+          .where(eq(rings.showId, input.showId)),
+      ]);
 
-      const [stewardCount] = await ctx.db
-        .select({ count: sql<number>`count(*)` })
-        .from(stewardAssignments)
-        .where(eq(stewardAssignments.showId, input.showId));
+      const [stewardCount] = stewardCountRow;
+      const [ringCount] = ringCountRow;
 
-      const [ringCount] = await ctx.db
-        .select({ count: sql<number>`count(*)` })
-        .from(rings)
-        .where(eq(rings.showId, input.showId));
+      // Full judge coverage: every unique breed+sex combo from classes must have a matching assignment
+      const requiredCombos = new Map<string, { breedId: string | null; sex: string | null }>();
+      for (const sc of showClassRows) {
+        const key = `${sc.breedId ?? 'all'}:${sc.sex ?? 'null'}`;
+        if (!requiredCombos.has(key)) requiredCombos.set(key, { breedId: sc.breedId, sex: sc.sex });
+      }
+      let allJudgesCovered = requiredCombos.size > 0;
+      for (const req of requiredCombos.values()) {
+        const covered = assignmentRows.some((a) => {
+          const breedMatch = req.breedId === null ? a.breedId === null : (a.breedId === req.breedId || a.breedId === null);
+          const sexMatch = req.sex === null ? a.sex === null : (a.sex === null || a.sex === req.sex);
+          return breedMatch && sexMatch;
+        });
+        if (!covered) { allJudgesCovered = false; break; }
+      }
 
       const detected: Record<string, boolean> = {
         venue_set: !!show.venueId,
@@ -2781,17 +2896,14 @@ export const secretaryRouter = createTRPCRouter({
         show_published: ['published', 'entries_open', 'entries_closed', 'in_progress', 'completed'].includes(show.status),
         entries_opened: ['entries_open', 'entries_closed', 'in_progress', 'completed'].includes(show.status),
         entries_closed: ['entries_closed', 'in_progress', 'completed'].includes(show.status),
-        judges_assigned: Number(judgeCount?.count) > 0,
+        judges_assigned: allJudgesCovered,
         stewards_assigned: Number(stewardCount?.count) > 0,
         rings_created: Number(ringCount?.count) > 0,
       };
 
       // Check if all assigned judges have been sent offer letters
-      if (Number(judgeCount?.count) > 0) {
-        const uniqueJudgeIds = await ctx.db
-          .selectDistinct({ judgeId: judgeAssignments.judgeId })
-          .from(judgeAssignments)
-          .where(eq(judgeAssignments.showId, input.showId));
+      if (assignmentRows.length > 0) {
+        const uniqueJudgeIds = new Set(assignmentRows.map((a) => a.judgeId));
 
         const [contractCount] = await ctx.db
           .select({ count: sql<number>`count(distinct ${judgeContracts.judgeId})` })
@@ -2799,7 +2911,7 @@ export const secretaryRouter = createTRPCRouter({
           .where(eq(judgeContracts.showId, input.showId));
 
         detected.judge_offers_sent =
-          Number(contractCount?.count) >= uniqueJudgeIds.length && uniqueJudgeIds.length > 0;
+          Number(contractCount?.count) >= uniqueJudgeIds.size && uniqueJudgeIds.size > 0;
       } else {
         detected.judge_offers_sent = false;
       }
@@ -3108,6 +3220,10 @@ export const secretaryRouter = createTRPCRouter({
         judgeId: z.string().uuid(),
         judgeEmail: z.string().email(),
         notes: z.string().max(2000).optional(),
+        hotelCost: z.number().int().min(0).optional(),
+        travelCost: z.number().int().min(0).optional(),
+        otherExpenses: z.number().int().min(0).optional(),
+        expenseNotes: z.string().max(500).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -3129,10 +3245,10 @@ export const secretaryRouter = createTRPCRouter({
           .where(eq(judges.id, input.judgeId));
       }
 
-      // Fetch show with venue and org
+      // Fetch show with venue, org, breed, and classes
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
-        with: { venue: true, organisation: true },
+        with: { venue: true, organisation: true, breed: true, showClasses: { with: { breed: true } } },
       });
       if (!show) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
@@ -3147,10 +3263,11 @@ export const secretaryRouter = createTRPCRouter({
         with: { breed: true, ring: true },
       });
 
-      const breedNames = assignments
-        .filter((a) => a.breed)
-        .map((a) => a.breed!.name);
-      const breedsText = breedNames.length > 0 ? breedNames.join(', ') : 'All breeds';
+      // Derive breed text: show.breed (single-breed), class breeds, or show name
+      const showBreedNames = show.breed
+        ? [show.breed.name]
+        : [...new Set(show.showClasses.filter((sc) => sc.breed).map((sc) => sc.breed!.name))];
+      const breedsText = buildJudgeBreedText(assignments, showBreedNames, show.name);
 
       // Token expires in 30 days
       const tokenExpiresAt = new Date();
@@ -3168,6 +3285,10 @@ export const secretaryRouter = createTRPCRouter({
           offerSentAt: new Date(),
           tokenExpiresAt,
           notes: input.notes ?? null,
+          hotelCost: input.hotelCost ?? null,
+          travelCost: input.travelCost ?? null,
+          otherExpenses: input.otherExpenses ?? null,
+          expenseNotes: input.expenseNotes ?? null,
         })
         .returning();
 
@@ -3249,6 +3370,18 @@ export const secretaryRouter = createTRPCRouter({
             <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Show Type</td>
             <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${show.showType.replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}</td>
           </tr>` : ''}
+          ${(() => {
+            const parts: string[] = [];
+            if (input.hotelCost && input.hotelCost > 0) parts.push(`Hotel: £${(input.hotelCost / 100).toFixed(2)}`);
+            if (input.travelCost && input.travelCost > 0) parts.push(`Travel: £${(input.travelCost / 100).toFixed(2)}`);
+            if (input.otherExpenses && input.otherExpenses > 0) parts.push(`Other: £${(input.otherExpenses / 100).toFixed(2)}`);
+            if (parts.length === 0) return '';
+            const expText = parts.join(', ') + (input.expenseNotes ? ` (${input.expenseNotes})` : '');
+            return `<tr>
+              <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Expenses</td>
+              <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${expText}</td>
+            </tr>`;
+          })()}
         </table>
 
         ${input.notes ? `<p style="font-size: 14px; color: #555; line-height: 1.6; padding: 12px; background: #f9f8f6; border-radius: 8px;">${input.notes}</p>` : ''}
@@ -3317,7 +3450,7 @@ export const secretaryRouter = createTRPCRouter({
       const contract = await ctx.db.query.judgeContracts.findFirst({
         where: eq(judgeContracts.id, input.contractId),
         with: {
-          show: { with: { venue: true, organisation: true } },
+          show: { with: { venue: true, organisation: true, breed: true, showClasses: { with: { breed: true } } } },
           judge: true,
         },
       });
@@ -3353,10 +3486,10 @@ export const secretaryRouter = createTRPCRouter({
         with: { breed: true },
       });
 
-      const breedNames = assignments
-        .filter((a) => a.breed)
-        .map((a) => a.breed!.name);
-      const breedsText = breedNames.length > 0 ? breedNames.join(', ') : 'All breeds';
+      const showBreedNames = contract.show.breed
+        ? [contract.show.breed.name]
+        : [...new Set(contract.show.showClasses.filter((sc) => sc.breed).map((sc) => sc.breed!.name))];
+      const breedsText = buildJudgeBreedText(assignments, showBreedNames, contract.show.name);
 
       const baseUrl = process.env.RENDER_EXTERNAL_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
       const acceptUrl = `${baseUrl}/api/judge-contract/${contract.offerToken}`;
@@ -4600,6 +4733,42 @@ export const secretaryRouter = createTRPCRouter({
       return show.scheduleData ?? null;
     }),
 
+  /** Get schedule data from the most recent other show in the same org (for smart defaults) */
+  getPreviousScheduleData: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const currentShow = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+        columns: { id: true, organisationId: true },
+      });
+      if (!currentShow) return null;
+
+      // Find the most recent OTHER show from the same org that has schedule data
+      const previous = await ctx.db.query.shows.findFirst({
+        where: and(
+          eq(shows.organisationId, currentShow.organisationId),
+          sql`${shows.id} != ${input.showId}`,
+          sql`${shows.scheduleData} is not null`,
+        ),
+        columns: {
+          scheduleData: true,
+          showOpenTime: true,
+          startTime: true,
+          onCallVet: true,
+        },
+        orderBy: [desc(shows.createdAt)],
+      });
+
+      if (!previous?.scheduleData) return null;
+
+      return {
+        scheduleData: previous.scheduleData,
+        showOpenTime: previous.showOpenTime,
+        startTime: previous.startTime,
+        onCallVet: previous.onCallVet,
+      };
+    }),
+
   updateScheduleData: secretaryProcedure
     .input(
       z.object({
@@ -4645,6 +4814,8 @@ export const secretaryRouter = createTRPCRouter({
           catering: z.string().optional(),
           futureShowDates: z.string().optional(),
           additionalNotes: z.string().optional(),
+          welcomeNote: z.string().optional(),
+          outsideAttraction: z.boolean().optional(),
         }),
       })
     )

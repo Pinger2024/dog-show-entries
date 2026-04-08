@@ -1,18 +1,35 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Plus, Trash2, Loader2, Save, Eye, ExternalLink, Download, Check, AlertTriangle, ChevronsUpDown, Users, X } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import {
+  AlertTriangle,
+  Check,
+  ChevronsUpDown,
+  Clock,
+  ExternalLink,
+  Eye,
+  Info,
+  Loader2,
+  MapPin,
+  Pencil,
+  Plus,
+  Save,
+  Shield,
+  Stethoscope,
+  Trophy,
+  Trash2,
+  Users,
+  X,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Card,
-  CardContent,
-} from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -21,13 +38,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion';
-import { Badge } from '@/components/ui/badge';
 import {
   Popover,
   PopoverContent,
@@ -56,20 +66,65 @@ interface ScheduleSettingsFormProps {
   onSaved?: () => void;
 }
 
+// ── Section type ─────────────────────────────────────
+type SectionId = 'showday' | 'people' | 'awards' | 'venue' | 'regulations';
+
+const SECTIONS: { id: SectionId; label: string; icon: React.ElementType }[] = [
+  { id: 'showday', label: 'Show Day', icon: Clock },
+  { id: 'people', label: 'People', icon: Users },
+  { id: 'awards', label: 'Awards', icon: Trophy },
+  { id: 'venue', label: 'Venue & Info', icon: MapPin },
+  { id: 'regulations', label: 'Regulations', icon: Shield },
+];
+
+const OFFICER_POSITIONS = [
+  'President', 'Vice President', 'Chairman', 'Vice Chairman',
+  'Honorary Secretary', 'Honorary Treasurer', 'Committee Member',
+  'Show Manager', 'Show Secretary', 'Assistant Secretary',
+  'Chief Steward', 'Ring Steward', 'Veterinary Surgeon',
+  'Health & Safety Officer', 'First Aid Officer', 'Trophy Steward', 'Field Officer',
+];
+
+const SHOW_TIMES = Array.from({ length: 23 }, (_, i) => {
+  const hour = 7 + Math.floor(i / 2);
+  const min = i % 2 === 0 ? '00' : '30';
+  const value = `${String(hour).padStart(2, '0')}:${min}`;
+  const label = `${hour}:${min}`;
+  return { value, label };
+});
+
+const COUNTRY_LABELS: Record<string, string> = {
+  england: 'England',
+  wales: 'Wales',
+  scotland: 'Scotland',
+  northern_ireland: 'Northern Ireland',
+};
+
 export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormProps) {
-  const { data: existing, isLoading } =
-    trpc.secretary.getScheduleData.useQuery({ showId });
+  const { data: existing, isLoading, isError: existingError } =
+    trpc.secretary.getScheduleData.useQuery({ showId }, { retry: 2 });
   const { data: showData } = trpc.shows.getById.useQuery({ id: showId });
+
+  // Derive existing schedule data from showData as fallback if getScheduleData fails
+  const effectiveExisting = existing ?? (existingError ? (showData?.scheduleData as typeof existing ?? null) : undefined);
+
+  const { data: previousData } = trpc.secretary.getPreviousScheduleData.useQuery(
+    { showId },
+    { enabled: effectiveExisting === null }  // Only fetch if this show definitively has no schedule data
+  );
   const updateMutation = trpc.secretary.updateScheduleData.useMutation();
   const utils = trpc.useUtils();
 
-  // Club people for "Select from Club" picker
+  // Club people for roster picker
   const orgId = showData?.organisationId;
   const { data: clubPeople } = trpc.secretary.listOrgPeople.useQuery(
     { organisationId: orgId ?? '' },
     { enabled: !!orgId }
   );
   const [clubPickerOpen, setClubPickerOpen] = useState(false);
+
+  // Which section is currently being edited (null = all summaries)
+  const [editingSection, setEditingSection] = useState<SectionId | null>(null);
 
   // ── Form state ──
   const [country, setCountry] = useState<string>('england');
@@ -96,55 +151,97 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
   const [outsideAttraction, setOutsideAttraction] = useState(false);
   const [customStatements, setCustomStatements] = useState<string[]>([]);
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [appliedDefaults, setAppliedDefaults] = useState(false);
 
-  // Populate from existing data
+  // Load existing data OR smart defaults from previous show
   useEffect(() => {
-    if (existing && showData && !hasLoaded) {
-      setCountry(existing.country ?? 'england');
-      setPublicAdmission(existing.publicAdmission ?? false);
-      setWetWeather(existing.wetWeatherAccommodation ?? false);
-      setIsBenched(existing.isBenched ?? false);
-      setBenchingRemovalTime(existing.benchingRemovalTime ?? '');
-      setAcceptsNfc(existing.acceptsNfc ?? true);
-      setJudgedOnGroupSystem(existing.judgedOnGroupSystem ?? false);
-      setLatestArrivalTime(existing.latestArrivalTime ?? '');
-      setShowOpenTime(showData?.showOpenTime ?? '');
-      setJudgingStartTime(showData?.startTime ?? '');
-      setOnCallVet(showData?.onCallVet ?? '');
-      setWhat3words(existing.what3words ?? '');
-      setShowManager(existing.showManager ?? '');
-      // Merge officers with guarantor info
-      const existingOfficers = existing.officers ?? [];
-      const existingGuarantors = existing.guarantors ?? [];
-      const guarantorNames = new Set(existingGuarantors.map((g) => g.name));
-      const guarantorAddresses = new Map(
-        existingGuarantors.map((g) => [g.name, g.address ?? ''])
-      );
-      setOfficers(
-        existingOfficers.map((o) => ({
-          name: o.name,
-          position: o.position,
-          isGuarantor: guarantorNames.has(o.name),
-          address: guarantorAddresses.get(o.name) ?? '',
-        }))
-      );
-      setAwardsDescription(existing.awardsDescription ?? '');
-      setPrizeMoney(existing.prizeMoney ?? '');
-      setDirections(existing.directions ?? '');
-      setCatering(existing.catering ?? '');
-      setFutureShowDates(existing.futureShowDates ?? '');
-      setAdditionalNotes(existing.additionalNotes ?? '');
-      setWelcomeNote(existing.welcomeNote ?? '');
-      setOutsideAttraction(existing.outsideAttraction ?? false);
-      setCustomStatements(existing.customStatements ?? []);
-      setHasLoaded(true);
+    if (hasLoaded) return;
+    if (!showData) return;
+    // Wait for existing to resolve (undefined = still loading, null = no data)
+    if (effectiveExisting === undefined) return;
+    // If no saved data, wait for previous show defaults to load before proceeding
+    if (effectiveExisting === null && previousData === undefined) return;
+
+    // Source: this show's saved data, or previous show as defaults
+    const source = effectiveExisting ?? previousData?.scheduleData;
+
+    setCountry((source as ScheduleData)?.country ?? 'england');
+    setPublicAdmission((source as ScheduleData)?.publicAdmission ?? false);
+    setWetWeather((source as ScheduleData)?.wetWeatherAccommodation ?? false);
+    setIsBenched((source as ScheduleData)?.isBenched ?? false);
+    setBenchingRemovalTime((source as ScheduleData)?.benchingRemovalTime ?? '');
+    setAcceptsNfc((source as ScheduleData)?.acceptsNfc ?? true);
+    setJudgedOnGroupSystem((source as ScheduleData)?.judgedOnGroupSystem ?? false);
+    setLatestArrivalTime((source as ScheduleData)?.latestArrivalTime ?? '');
+    // Show-level fields: always prefer current show's data, fall back to previous show
+    setShowOpenTime(showData?.showOpenTime ?? previousData?.showOpenTime ?? '');
+    setJudgingStartTime(showData?.startTime ?? previousData?.startTime ?? '');
+    setOnCallVet(showData?.onCallVet ?? previousData?.onCallVet ?? '');
+    setWhat3words((source as ScheduleData)?.what3words ?? '');
+    setShowManager((source as ScheduleData)?.showManager ?? '');
+
+    const existingOfficers = (source as ScheduleData)?.officers ?? [];
+    const existingGuarantors = (source as ScheduleData)?.guarantors ?? [];
+    const guarantorNames = new Set(existingGuarantors.map((g) => g.name));
+    const guarantorAddresses = new Map(
+      existingGuarantors.map((g) => [g.name, g.address ?? ''])
+    );
+    setOfficers(
+      existingOfficers.map((o) => ({
+        name: o.name,
+        position: o.position,
+        isGuarantor: guarantorNames.has(o.name),
+        address: guarantorAddresses.get(o.name) ?? '',
+      }))
+    );
+
+    setAwardsDescription((source as ScheduleData)?.awardsDescription ?? '');
+    setPrizeMoney((source as ScheduleData)?.prizeMoney ?? '');
+    setDirections((source as ScheduleData)?.directions ?? '');
+    setCatering((source as ScheduleData)?.catering ?? '');
+    setFutureShowDates((source as ScheduleData)?.futureShowDates ?? '');
+    setAdditionalNotes((source as ScheduleData)?.additionalNotes ?? '');
+    setWelcomeNote((source as ScheduleData)?.welcomeNote ?? '');
+    setOutsideAttraction((source as ScheduleData)?.outsideAttraction ?? false);
+    setCustomStatements((source as ScheduleData)?.customStatements ?? []);
+
+    if (!effectiveExisting && previousData) {
+      setAppliedDefaults(true);
     }
-  }, [existing, showData, hasLoaded]);
+
+    setHasLoaded(true);
+  }, [effectiveExisting, showData, previousData, hasLoaded]);
+
+  // ── Section completion checks ──
+  // Only mark complete when the section has been meaningfully filled in
+  const hasBeenSaved = !!effectiveExisting;
+  const sectionStatus = useMemo(() => {
+    if (!hasBeenSaved) {
+      // Nothing saved yet — nothing is complete
+      return { showday: false, people: false, awards: false, venue: false, regulations: false };
+    }
+    const showday = !!(showOpenTime && judgingStartTime);
+    const people = !!(showManager && officers.filter((o) => o.name).length > 0);
+    const awards = !!awardsDescription;
+    const venue = !!(directions || what3words || catering);
+    const regulations = !!country; // Saved at least once with a country
+    return { showday, people, awards, venue, regulations };
+  }, [hasBeenSaved, showOpenTime, judgingStartTime, showManager, officers, awardsDescription, directions, what3words, catering, country]);
 
   async function handleSave() {
+    if (!showOpenTime) {
+      toast.error('Show opens at time is required');
+      setEditingSection('showday');
+      return;
+    }
+    if (!judgingStartTime) {
+      toast.error('Judging commences time is required');
+      setEditingSection('showday');
+      return;
+    }
+
     const data: ScheduleData = {
-      // Preserve fields managed by other pages (e.g. sponsors page saves awardSponsors)
-      ...existing,
+      ...effectiveExisting,
       country: country as ScheduleData['country'],
       publicAdmission,
       wetWeatherAccommodation: wetWeather,
@@ -184,17 +281,18 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       });
       await Promise.all([
         utils.secretary.getScheduleData.invalidate({ showId }),
-        // Invalidate club people cache in case new officers were synced to the roster
+        utils.shows.getById.invalidate({ id: showId }),
         orgId ? utils.secretary.listOrgPeople.invalidate({ organisationId: orgId }) : Promise.resolve(),
       ]);
       toast.success('Schedule settings saved');
+      setEditingSection(null);
       onSaved?.();
     } catch {
       toast.error('Failed to save schedule settings');
     }
   }
 
-  // ── Officer list helpers ──
+  // ── Officer helpers ──
   function addOfficer() {
     setOfficers([...officers, { name: '', position: '', isGuarantor: false, address: '' }]);
   }
@@ -204,7 +302,6 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
   function updateOfficer(idx: number, field: keyof OfficerWithGuarantor, value: string | boolean) {
     setOfficers(officers.map((o, i) => (i === idx ? { ...o, [field]: value } : o)));
   }
-
   function addFromClub(person: NonNullable<typeof clubPeople>[number]) {
     setOfficers([
       ...officers,
@@ -227,14 +324,18 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     );
   }
 
+  const guarantorCount = officers.filter((o) => o.isGuarantor).length;
+  const requiredGuarantors = showData?.showType === 'championship' ? 6 : 3;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-lg font-bold tracking-tight">Schedule Settings</h2>
           <p className="text-sm text-muted-foreground">
-            Configure details for the RKC-compliant show schedule PDF. Mandatory RKC
-            statements are auto-included.
+            Configure your show schedule PDF.
+            <span className="hidden sm:inline"> Mandatory RKC statements are auto-included.</span>
           </p>
         </div>
         <Button variant="outline" size="sm" asChild>
@@ -245,631 +346,139 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
         </Button>
       </div>
 
-      {/* Auto-included notice */}
-      <Card className="border-primary/20 bg-primary/5">
-        <CardContent className="py-4">
-          <p className="text-sm font-medium text-primary">
-            Mandatory RKC statements are automatically included
+      {/* Smart defaults notice */}
+      {appliedDefaults && (
+        <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50/50 px-3 py-2.5 text-sm dark:border-blue-800 dark:bg-blue-950/20">
+          <Info className="mt-0.5 size-4 shrink-0 text-blue-600 dark:text-blue-400" />
+          <p className="text-blue-800 dark:text-blue-300">
+            Pre-filled from your last show. Review each section and save when ready.
           </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Judges assessment, jurisdiction, collar/welfare, dogs in vehicles warning,
-            children supervision, fouling, GDPR, 10-minute BIS rule, and all
-            Regulation F notices are pre-filled in every schedule. You only need to
-            configure the show-specific details below.
-          </p>
-        </CardContent>
-      </Card>
+        </div>
+      )}
 
-      <Accordion
-        type="multiple"
-        defaultValue={['regulatory', 'people', 'awards', 'optional']}
-        className="space-y-3"
-      >
-        {/* ── Regulatory & Compliance ── */}
-        <AccordionItem value="regulatory" className="rounded-xl border bg-card">
-          <AccordionTrigger className="px-5 py-4 hover:no-underline">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold">Regulatory & Compliance</span>
-              <Badge variant="outline" className="text-xs">
-                Required
-              </Badge>
-            </div>
-          </AccordionTrigger>
-          <AccordionContent className="px-5 pb-5">
-            <div className="grid gap-5 sm:grid-cols-2">
-              {/* Country */}
-              <div className="space-y-1.5">
-                <Label htmlFor="country">Country</Label>
-                <p className="text-xs text-muted-foreground">
-                  Determines the docking statement wording
-                </p>
-                <Select value={country} onValueChange={setCountry}>
-                  <SelectTrigger id="country">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent position="popper">
-                    <SelectItem value="england">England</SelectItem>
-                    <SelectItem value="wales">Wales</SelectItem>
-                    <SelectItem value="scotland">Scotland</SelectItem>
-                    <SelectItem value="northern_ireland">
-                      Northern Ireland
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+      {/* Sections */}
+      <div className="space-y-2">
+        {SECTIONS.map((section) => {
+          const isEditing = editingSection === section.id;
+          const isComplete = sectionStatus[section.id];
+          const Icon = section.icon;
 
-              {/* Public admission */}
-              <div className="space-y-1.5">
-                <Label>Public admission fee</Label>
-                <p className="text-xs text-muted-foreground">
-                  Affects which docking statement is used
-                </p>
-                <div className="flex items-center gap-2 pt-1">
-                  <Switch
-                    checked={publicAdmission}
-                    onCheckedChange={setPublicAdmission}
-                  />
-                  <span className="text-sm">
-                    {publicAdmission ? 'Yes — public pay entry fee' : 'No — free entry'}
-                  </span>
+          return (
+            <div key={section.id} className="rounded-xl border bg-card">
+              {/* Section header — always visible */}
+              <button
+                type="button"
+                className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-muted/50"
+                onClick={() => setEditingSection(isEditing ? null : section.id)}
+              >
+                <div className={cn(
+                  'flex size-8 items-center justify-center rounded-full',
+                  isComplete && !isEditing
+                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                    : 'bg-muted text-muted-foreground',
+                )}>
+                  {isComplete && !isEditing ? (
+                    <Check className="size-4" />
+                  ) : (
+                    <Icon className="size-4" />
+                  )}
                 </div>
-              </div>
-
-              {/* Wet weather */}
-              <div className="space-y-1.5">
-                <Label>Wet weather accommodation</Label>
-                <p className="text-xs text-muted-foreground">
-                  If not provided, a prominent notice is added to the schedule
-                </p>
-                <div className="flex items-center gap-2 pt-1">
-                  <Switch
-                    checked={wetWeather}
-                    onCheckedChange={setWetWeather}
-                  />
-                  <span className="text-sm">
-                    {wetWeather ? 'Provided' : 'Not provided'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Benched */}
-              <div className="space-y-1.5">
-                <Label>Benching</Label>
-                <p className="text-xs text-muted-foreground">
-                  Required for all-breed shows, optional for single breed
-                </p>
-                <div className="flex items-center gap-2 pt-1">
-                  <Switch
-                    checked={isBenched}
-                    onCheckedChange={setIsBenched}
-                  />
-                  <span className="text-sm">
-                    {isBenched ? 'Benched show' : 'Unbenched show'}
-                  </span>
-                </div>
-                {isBenched && (
-                  <div className="mt-2 space-y-1.5">
-                    <Label htmlFor="benchingRemoval">
-                      Benching removal time
-                    </Label>
-                    <Input
-                      id="benchingRemoval"
-                      value={benchingRemovalTime}
-                      onChange={(e) => setBenchingRemovalTime(e.target.value)}
-                      placeholder="e.g. Dogs may be removed after Best in Show"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* NFC */}
-              <div className="space-y-1.5">
-                <Label>Not For Competition entries</Label>
-                <p className="text-xs text-muted-foreground">
-                  NFC dogs must be RKC registered and aged 3 months+
-                </p>
-                <div className="flex items-center gap-2 pt-1">
-                  <Switch
-                    checked={acceptsNfc}
-                    onCheckedChange={setAcceptsNfc}
-                  />
-                  <span className="text-sm">
-                    {acceptsNfc ? 'NFC entries accepted' : 'NFC not accepted'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Group system */}
-              <div className="space-y-1.5">
-                <Label>Group system judging</Label>
-                <p className="text-xs text-muted-foreground">
-                  Required if scheduling breeds from more than one RKC group
-                </p>
-                <div className="flex items-center gap-2 pt-1">
-                  <Switch
-                    checked={judgedOnGroupSystem}
-                    onCheckedChange={setJudgedOnGroupSystem}
-                  />
-                  <span className="text-sm">
-                    {judgedOnGroupSystem
-                      ? 'Judged on group system'
-                      : 'Not on group system'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Show timing — all three times */}
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="showOpenTime">Show opens at</Label>
-                  <Input
-                    id="showOpenTime"
-                    value={showOpenTime}
-                    onChange={(e) => setShowOpenTime(e.target.value)}
-                    placeholder="e.g. 8:30 AM"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="latestArrival">Latest time dogs received</Label>
-                  <Input
-                    id="latestArrival"
-                    value={latestArrivalTime}
-                    onChange={(e) => setLatestArrivalTime(e.target.value)}
-                    placeholder="e.g. 9:00"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="judgingStart">Judging commences</Label>
-                  <Input
-                    id="judgingStart"
-                    value={judgingStartTime}
-                    onChange={(e) => setJudgingStartTime(e.target.value)}
-                    placeholder="e.g. 9:30 AM"
-                  />
-                </div>
-              </div>
-
-              {/* Vet on call */}
-              <div className="space-y-1.5">
-                <Label htmlFor="onCallVet">Veterinary surgeon on call</Label>
-                <Input
-                  id="onCallVet"
-                  value={onCallVet}
-                  onChange={(e) => setOnCallVet(e.target.value)}
-                  placeholder="e.g. Westport Vets, Unit 42, Mill Road, Linlithgow EH49 7SF"
-                />
-              </div>
-            </div>
-          </AccordionContent>
-        </AccordionItem>
-
-        {/* ── People ── */}
-        <AccordionItem value="people" className="rounded-xl border bg-card">
-          <AccordionTrigger className="px-5 py-4 hover:no-underline">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold">People & Officials</span>
-              <Badge variant="outline" className="text-xs">
-                Show Manager Required
-              </Badge>
-            </div>
-          </AccordionTrigger>
-          <AccordionContent className="px-5 pb-5 space-y-6">
-            {/* Show Manager */}
-            <div className="space-y-1.5">
-              <Label htmlFor="showManager">Show Manager</Label>
-              <Input
-                id="showManager"
-                value={showManager}
-                onChange={(e) => setShowManager(e.target.value)}
-                placeholder="Full name"
-              />
-            </div>
-
-            {/* Officers & Committee */}
-            <div className="space-y-3">
-              <div className="space-y-2">
-                <div>
-                  <Label>Officers & Committee</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Add officers then tick the ones who are guarantors to the RKC
-                  </p>
-                </div>
-
-                {/* Select from Club Roster */}
-                {clubPeople && clubPeople.length > 0 && (
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <Popover open={clubPickerOpen} onOpenChange={setClubPickerOpen}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="justify-between min-h-[2.75rem]"
-                        >
-                          <span className="flex items-center gap-2">
-                            <Users className="size-4" />
-                            Add from Club Roster ({clubPeople.length})
-                          </span>
-                          <ChevronsUpDown className="size-3.5 opacity-70" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[--radix-popover-trigger-width] max-w-[calc(100vw-2rem)] p-0" align="start">
-                        <Command>
-                          <CommandInput placeholder="Search club people..." />
-                          <CommandList className="max-h-[40vh] sm:max-h-[300px]">
-                            <CommandEmpty>No people found.</CommandEmpty>
-                            <CommandGroup>
-                              {clubPeople.map((person) => {
-                                const alreadyAdded = officers.some(
-                                  (o) => o.name.toLowerCase() === person.name.toLowerCase()
-                                );
-                                return (
-                                  <CommandItem
-                                    key={person.id}
-                                    value={person.name}
-                                    disabled={alreadyAdded}
-                                    onSelect={() => {
-                                      if (!alreadyAdded) addFromClub(person);
-                                    }}
-                                    className={alreadyAdded ? 'opacity-40' : ''}
-                                  >
-                                    <div className="flex flex-col gap-0.5 min-w-0">
-                                      <span className="truncate font-medium">
-                                        {person.name}
-                                        {alreadyAdded && (
-                                          <span className="ml-1.5 text-xs font-normal text-muted-foreground">
-                                            (already added)
-                                          </span>
-                                        )}
-                                      </span>
-                                      {person.position && (
-                                        <span className="text-xs text-muted-foreground truncate">
-                                          {person.position}
-                                          {person.isGuarantor ? ' · Guarantor' : ''}
-                                        </span>
-                                      )}
-                                    </div>
-                                    {alreadyAdded && (
-                                      <Check className="ml-auto size-3.5 shrink-0 text-muted-foreground" />
-                                    )}
-                                  </CommandItem>
-                                );
-                              })}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
-                    <Button variant="outline" size="sm" onClick={addOfficer} className="min-h-[2.75rem]">
-                      <Plus className="size-3.5" />
-                      Add Manually
-                    </Button>
-                  </div>
-                )}
-                {/* Show Add Manually alone if no club roster */}
-                {(!clubPeople || clubPeople.length === 0) && (
-                  <div className="flex items-center justify-end">
-                    <Button variant="outline" size="sm" onClick={addOfficer} className="min-h-[2.75rem]">
-                      <Plus className="size-3.5" />
-                      Add Manually
-                    </Button>
-                  </div>
-                )}
-              </div>
-              <div className="grid gap-3 grid-cols-1 lg:grid-cols-2">
-              {officers.map((officer, idx) => (
-                <div key={idx} className="space-y-2 rounded-lg border p-3">
-                  <div className="flex items-start gap-2">
-                    <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-2">
-                      <Input
-                        placeholder="Name"
-                        value={officer.name}
-                        onChange={(e) => updateOfficer(idx, 'name', e.target.value)}
-                      />
-                      <Select value={officer.position} onValueChange={(v) => updateOfficer(idx, 'position', v)}>
-                        <SelectTrigger className="h-10"><SelectValue placeholder="Position" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="President">President</SelectItem>
-                          <SelectItem value="Vice President">Vice President</SelectItem>
-                          <SelectItem value="Chairman">Chairman</SelectItem>
-                          <SelectItem value="Vice Chairman">Vice Chairman</SelectItem>
-                          <SelectItem value="Honorary Secretary">Honorary Secretary</SelectItem>
-                          <SelectItem value="Honorary Treasurer">Honorary Treasurer</SelectItem>
-                          <SelectItem value="Committee Member">Committee Member</SelectItem>
-                          <SelectItem value="Show Manager">Show Manager</SelectItem>
-                          <SelectItem value="Show Secretary">Show Secretary</SelectItem>
-                          <SelectItem value="Assistant Secretary">Assistant Secretary</SelectItem>
-                          <SelectItem value="Chief Steward">Chief Steward</SelectItem>
-                          <SelectItem value="Ring Steward">Ring Steward</SelectItem>
-                          <SelectItem value="Veterinary Surgeon">Veterinary Surgeon</SelectItem>
-                          <SelectItem value="Health & Safety Officer">Health & Safety Officer</SelectItem>
-                          <SelectItem value="First Aid Officer">First Aid Officer</SelectItem>
-                          <SelectItem value="Trophy Steward">Trophy Steward</SelectItem>
-                          <SelectItem value="Field Officer">Field Officer</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="shrink-0 min-h-[2.75rem] min-w-[2.75rem]"
-                      onClick={() => removeOfficer(idx)}
-                    >
-                      <Trash2 className="size-4 text-muted-foreground" />
-                    </Button>
-                  </div>
-                  <div className="flex items-center gap-2 pl-1">
-                    <Checkbox
-                      id={`guarantor-${idx}`}
-                      checked={officer.isGuarantor}
-                      onCheckedChange={(checked) =>
-                        updateOfficer(idx, 'isGuarantor', !!checked)
-                      }
-                    />
-                    <Label
-                      htmlFor={`guarantor-${idx}`}
-                      className="text-sm font-normal text-muted-foreground cursor-pointer"
-                    >
-                      Guarantor to the RKC
-                    </Label>
-                  </div>
-                  {officer.isGuarantor && (
-                    <Input
-                      placeholder="Address (optional)"
-                      value={officer.address ?? ''}
-                      onChange={(e) => updateOfficer(idx, 'address', e.target.value)}
-                      className="ml-6"
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold">{section.label}</p>
+                  {!isEditing && (
+                    <SectionSummary
+                      section={section.id}
+                      showOpenTime={showOpenTime}
+                      judgingStartTime={judgingStartTime}
+                      latestArrivalTime={latestArrivalTime}
+                      onCallVet={onCallVet}
+                      showManager={showManager}
+                      officers={officers}
+                      guarantorCount={guarantorCount}
+                      requiredGuarantors={requiredGuarantors}
+                      awardsDescription={awardsDescription}
+                      prizeMoney={prizeMoney}
+                      directions={directions}
+                      what3words={what3words}
+                      catering={catering}
+                      country={country}
+                      acceptsNfc={acceptsNfc}
+                      isBenched={isBenched}
+                      wetWeather={wetWeather}
                     />
                   )}
                 </div>
-              ))}
-              </div>
-              {(() => {
-                const count = officers.filter((o) => o.isGuarantor).length;
-                const isChampionship = showData?.showType === 'championship';
-                const required = isChampionship ? 6 : 3;
-                const met = count >= required;
-                return (
-                  <p className={`text-xs flex items-center gap-1 ${met ? 'text-emerald-600' : 'text-amber-600'}`}>
-                    {met ? <Check className="size-3" /> : <AlertTriangle className="size-3" />}
-                    {count} of {required} guarantors {met ? 'added' : 'required'}
-                    {isChampionship ? ' (championship)' : ' (open/limited)'}
-                    {!met && ' — must include Chairman, Secretary & Treasurer'}
-                  </p>
-                );
-              })()}
-            </div>
-          </AccordionContent>
-        </AccordionItem>
+                {isEditing ? (
+                  <Badge variant="secondary" className="shrink-0 text-xs">Editing</Badge>
+                ) : (
+                  <Pencil className="size-3.5 shrink-0 text-muted-foreground" />
+                )}
+              </button>
 
-        {/* ── Awards ── */}
-        <AccordionItem value="awards" className="rounded-xl border bg-card">
-          <AccordionTrigger className="px-5 py-4 hover:no-underline">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold">Awards</span>
-              <Badge variant="outline" className="text-xs">
-                Required
-              </Badge>
-            </div>
-          </AccordionTrigger>
-          <AccordionContent className="px-5 pb-5 space-y-6">
-            {/* Awards */}
-            <div className="space-y-1.5">
-              <Label htmlFor="awards">Awards / Rosettes / Trophies</Label>
-              <p className="text-xs text-muted-foreground">
-                Describe what awards are on offer
-              </p>
-              <Textarea
-                id="awards"
-                value={awardsDescription}
-                onChange={(e) => setAwardsDescription(e.target.value)}
-                placeholder="e.g. Rosettes to VHC in all classes. Trophies for Best in Show, Reserve Best in Show, Best Puppy in Show."
-                rows={3}
-              />
-            </div>
-
-            {/* Prize money */}
-            <div className="space-y-1.5">
-              <Label htmlFor="prizeMoney">Prize Money</Label>
-              <p className="text-xs text-muted-foreground">
-                Leave blank if no prize money is offered
-              </p>
-              <Input
-                id="prizeMoney"
-                value={prizeMoney}
-                onChange={(e) => setPrizeMoney(e.target.value)}
-                placeholder="e.g. No prize money offered"
-              />
-            </div>
-          </AccordionContent>
-        </AccordionItem>
-
-        {/* ── Optional Information ── */}
-        <AccordionItem value="optional" className="rounded-xl border bg-card">
-          <AccordionTrigger className="px-5 py-4 hover:no-underline">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold">Additional Information</span>
-              <Badge variant="secondary" className="text-xs">
-                Optional
-              </Badge>
-            </div>
-          </AccordionTrigger>
-          <AccordionContent className="px-5 pb-5 space-y-5">
-            <div className="space-y-1.5">
-              <Label htmlFor="directions">Directions to Venue</Label>
-              <Textarea
-                id="directions"
-                value={directions}
-                onChange={(e) => setDirections(e.target.value)}
-                placeholder="Directions, parking information, etc."
-                rows={2}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="what3words">What3Words</Label>
-              <Input
-                id="what3words"
-                value={what3words}
-                onChange={(e) => setWhat3words(e.target.value)}
-                placeholder="e.g. ///filled.count.soap"
-              />
-              <p className="text-xs text-muted-foreground">
-                Find your venue&apos;s what3words address at what3words.com
-              </p>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="catering">Catering</Label>
-              <Input
-                id="catering"
-                value={catering}
-                onChange={(e) => setCatering(e.target.value)}
-                placeholder="e.g. Light refreshments available"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="futureShows">Future Show Dates</Label>
-              <Input
-                id="futureShows"
-                value={futureShowDates}
-                onChange={(e) => setFutureShowDates(e.target.value)}
-                placeholder="e.g. Next show: 15th September 2026"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="additionalNotes">Additional Notes</Label>
-              <Textarea
-                id="additionalNotes"
-                value={additionalNotes}
-                onChange={(e) => setAdditionalNotes(e.target.value)}
-                placeholder="Any other information to include in the schedule"
-                rows={3}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="welcomeNote">Welcome Note for Catalogue</Label>
-              <Textarea
-                id="welcomeNote"
-                value={welcomeNote}
-                onChange={(e) => setWelcomeNote(e.target.value)}
-                placeholder="Optional welcome message to exhibitors — shown on the catalogue cover page"
-                rows={3}
-              />
-              <p className="text-xs text-muted-foreground">
-                Displayed in the catalogue front matter. Leave blank to skip.
-              </p>
-            </div>
-            <div className="flex items-center justify-between rounded-lg border p-3">
-              <div>
-                <Label>Outside Attraction</Label>
-                <p className="text-xs text-muted-foreground">
-                  Displays a prominent notice on schedules and catalogues: &quot;RKC Regulation F(1) 16H will be strictly enforced&quot;
-                </p>
-              </div>
-              <Switch
-                checked={outsideAttraction}
-                onCheckedChange={setOutsideAttraction}
-              />
-            </div>
-
-            {/* Custom statements — RKC presets + free text */}
-            <div className="space-y-3">
-              <div>
-                <Label>Schedule Statements</Label>
-                <p className="text-xs text-muted-foreground">
-                  Select standard RKC statements or add your own. These appear as bold notices on the schedule.
-                </p>
-              </div>
-
-              {/* RKC preset statements — grouped by category */}
-              <div className="space-y-3 max-h-64 overflow-y-auto rounded-lg border p-3">
-                {RKC_STATEMENT_CATEGORIES.map((category) => {
-                  const statementsInCategory = RKC_STATEMENTS.filter((s) => s.category === category);
-                  return (
-                    <div key={category}>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-                        {category}
-                      </p>
-                      <div className="space-y-1">
-                        {statementsInCategory.map((stmt) => {
-                          const isSelected = customStatements.includes(stmt.text);
-                          return (
-                            <label
-                              key={stmt.id}
-                              className="flex items-start gap-2 rounded-md px-2 py-1.5 cursor-pointer hover:bg-accent text-xs"
-                            >
-                              <Checkbox
-                                checked={isSelected}
-                                onCheckedChange={(checked) => {
-                                  if (checked) {
-                                    setCustomStatements([...customStatements, stmt.text]);
-                                  } else {
-                                    setCustomStatements(customStatements.filter((s) => s !== stmt.text));
-                                  }
-                                }}
-                                className="mt-0.5"
-                              />
-                              <span className="leading-snug">
-                                {stmt.text}
-                                {stmt.regulation && (
-                                  <span className="ml-1 text-muted-foreground">({stmt.regulation})</span>
-                                )}
-                              </span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Custom free-text statements */}
-              {customStatements.filter((s) => !RKC_STATEMENTS.some((r) => r.text === s)).length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">Custom statements</p>
-                  {customStatements
-                    .map((stmt, i) => ({ stmt, i }))
-                    .filter(({ stmt }) => !RKC_STATEMENTS.some((r) => r.text === stmt))
-                    .map(({ stmt, i }) => (
-                      <div key={i} className="flex gap-2">
-                        <Input
-                          value={stmt}
-                          onChange={(e) => {
-                            const updated = [...customStatements];
-                            updated[i] = e.target.value;
-                            setCustomStatements(updated);
-                          }}
-                          placeholder="Enter statement..."
-                          className="flex-1 text-xs"
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="shrink-0 size-10 text-destructive hover:text-destructive"
-                          onClick={() => setCustomStatements(customStatements.filter((_, idx) => idx !== i))}
-                        >
-                          <X className="size-4" />
-                        </Button>
-                      </div>
-                    ))}
+              {/* Section content — only when editing */}
+              {isEditing && (
+                <div className="border-t px-4 pb-4 pt-4">
+                  {section.id === 'showday' && (
+                    <ShowDaySection
+                      showOpenTime={showOpenTime} setShowOpenTime={setShowOpenTime}
+                      latestArrivalTime={latestArrivalTime} setLatestArrivalTime={setLatestArrivalTime}
+                      judgingStartTime={judgingStartTime} setJudgingStartTime={setJudgingStartTime}
+                      onCallVet={onCallVet} setOnCallVet={setOnCallVet}
+                    />
+                  )}
+                  {section.id === 'people' && (
+                    <PeopleSection
+                      showManager={showManager} setShowManager={setShowManager}
+                      officers={officers}
+                      addOfficer={addOfficer}
+                      removeOfficer={removeOfficer}
+                      updateOfficer={updateOfficer}
+                      clubPeople={clubPeople ?? null}
+                      clubPickerOpen={clubPickerOpen}
+                      setClubPickerOpen={setClubPickerOpen}
+                      addFromClub={addFromClub}
+                      guarantorCount={guarantorCount}
+                      requiredGuarantors={requiredGuarantors}
+                      showType={showData?.showType ?? 'open'}
+                    />
+                  )}
+                  {section.id === 'awards' && (
+                    <AwardsSection
+                      awardsDescription={awardsDescription} setAwardsDescription={setAwardsDescription}
+                      prizeMoney={prizeMoney} setPrizeMoney={setPrizeMoney}
+                    />
+                  )}
+                  {section.id === 'venue' && (
+                    <VenueSection
+                      directions={directions} setDirections={setDirections}
+                      what3words={what3words} setWhat3words={setWhat3words}
+                      catering={catering} setCatering={setCatering}
+                      futureShowDates={futureShowDates} setFutureShowDates={setFutureShowDates}
+                      additionalNotes={additionalNotes} setAdditionalNotes={setAdditionalNotes}
+                      welcomeNote={welcomeNote} setWelcomeNote={setWelcomeNote}
+                      outsideAttraction={outsideAttraction} setOutsideAttraction={setOutsideAttraction}
+                    />
+                  )}
+                  {section.id === 'regulations' && (
+                    <RegulationsSection
+                      country={country} setCountry={setCountry}
+                      publicAdmission={publicAdmission} setPublicAdmission={setPublicAdmission}
+                      wetWeather={wetWeather} setWetWeather={setWetWeather}
+                      isBenched={isBenched} setIsBenched={setIsBenched}
+                      benchingRemovalTime={benchingRemovalTime} setBenchingRemovalTime={setBenchingRemovalTime}
+                      acceptsNfc={acceptsNfc} setAcceptsNfc={setAcceptsNfc}
+                      judgedOnGroupSystem={judgedOnGroupSystem} setJudgedOnGroupSystem={setJudgedOnGroupSystem}
+                      customStatements={customStatements} setCustomStatements={setCustomStatements}
+                    />
+                  )}
                 </div>
               )}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="min-h-[2.75rem]"
-                onClick={() => setCustomStatements([...customStatements, ''])}
-              >
-                <Plus className="size-4" />
-                Add Custom Statement
-              </Button>
             </div>
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
+          );
+        })}
+      </div>
 
-      {/* Bottom save bar */}
+      {/* Save bar */}
       <div className="flex flex-col gap-2 sm:flex-row sm:justify-end pb-4">
         <Button variant="outline" asChild className="w-full sm:w-auto min-h-[2.75rem]">
           <a href={`/api/schedule/${showId}`} target="_blank" rel="noopener noreferrer">
@@ -888,6 +497,481 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
             <Save className="size-4" />
           )}
           Save Settings
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ── Section Summaries ────────────────────────────────
+
+function SectionSummary({
+  section, showOpenTime, judgingStartTime, latestArrivalTime, onCallVet,
+  showManager, officers, guarantorCount, requiredGuarantors,
+  awardsDescription, prizeMoney, directions, what3words, catering,
+  country, acceptsNfc, isBenched, wetWeather,
+}: {
+  section: SectionId;
+  showOpenTime: string; judgingStartTime: string; latestArrivalTime: string; onCallVet: string;
+  showManager: string; officers: OfficerWithGuarantor[]; guarantorCount: number; requiredGuarantors: number;
+  awardsDescription: string; prizeMoney: string;
+  directions: string; what3words: string; catering: string;
+  country: string; acceptsNfc: boolean; isBenched: boolean; wetWeather: boolean;
+}) {
+  switch (section) {
+    case 'showday': {
+      const parts: string[] = [];
+      if (showOpenTime) parts.push(`Opens ${showOpenTime}`);
+      if (judgingStartTime) parts.push(`Judging ${judgingStartTime}`);
+      if (onCallVet) parts.push('Vet confirmed');
+      return parts.length > 0 ? (
+        <p className="text-xs text-muted-foreground truncate">{parts.join(' · ')}</p>
+      ) : (
+        <p className="text-xs text-amber-600 dark:text-amber-400">Set show times</p>
+      );
+    }
+    case 'people': {
+      const parts: string[] = [];
+      if (showManager) parts.push(showManager);
+      if (officers.length > 0) parts.push(`${officers.length} officer${officers.length !== 1 ? 's' : ''}`);
+      if (guarantorCount > 0) parts.push(`${guarantorCount}/${requiredGuarantors} guarantors`);
+      return parts.length > 0 ? (
+        <p className="text-xs text-muted-foreground truncate">{parts.join(' · ')}</p>
+      ) : (
+        <p className="text-xs text-amber-600 dark:text-amber-400">Add show manager & officers</p>
+      );
+    }
+    case 'awards':
+      return awardsDescription ? (
+        <p className="text-xs text-muted-foreground truncate">
+          {awardsDescription.slice(0, 80)}{awardsDescription.length > 80 ? '...' : ''}
+          {prizeMoney ? ` · ${prizeMoney}` : ''}
+        </p>
+      ) : (
+        <p className="text-xs text-amber-600 dark:text-amber-400">Describe awards & rosettes</p>
+      );
+    case 'venue': {
+      const parts: string[] = [];
+      if (directions) parts.push('Directions set');
+      if (what3words) parts.push(what3words);
+      if (catering) parts.push('Catering info');
+      return parts.length > 0 ? (
+        <p className="text-xs text-muted-foreground truncate">{parts.join(' · ')}</p>
+      ) : (
+        <p className="text-xs text-muted-foreground">Optional — directions, catering, etc.</p>
+      );
+    }
+    case 'regulations': {
+      const tags: string[] = [COUNTRY_LABELS[country] ?? country];
+      if (acceptsNfc) tags.push('NFC');
+      if (isBenched) tags.push('Benched');
+      if (wetWeather) tags.push('Wet weather');
+      return <p className="text-xs text-muted-foreground truncate">{tags.join(' · ')}</p>;
+    }
+    default:
+      return null;
+  }
+}
+
+// ── Show Day Section ─────────────────────────────────
+
+function ShowDaySection({
+  showOpenTime, setShowOpenTime,
+  latestArrivalTime, setLatestArrivalTime,
+  judgingStartTime, setJudgingStartTime,
+  onCallVet, setOnCallVet,
+}: {
+  showOpenTime: string; setShowOpenTime: (v: string) => void;
+  latestArrivalTime: string; setLatestArrivalTime: (v: string) => void;
+  judgingStartTime: string; setJudgingStartTime: (v: string) => void;
+  onCallVet: string; setOnCallVet: (v: string) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
+        <div className="space-y-1.5">
+          <Label className="text-xs">Show opens at <span className="text-destructive">*</span></Label>
+          <Select value={showOpenTime} onValueChange={setShowOpenTime}>
+            <SelectTrigger className={cn('min-h-[2.75rem]', !showOpenTime && 'border-destructive/50')}><SelectValue placeholder="Select time" /></SelectTrigger>
+            <SelectContent>
+              {SHOW_TIMES.map((t) => (
+                <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Latest time dogs received</Label>
+          <Select value={latestArrivalTime} onValueChange={setLatestArrivalTime}>
+            <SelectTrigger className="min-h-[2.75rem]"><SelectValue placeholder="Select time" /></SelectTrigger>
+            <SelectContent>
+              {SHOW_TIMES.map((t) => (
+                <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Judging commences <span className="text-destructive">*</span></Label>
+          <Select value={judgingStartTime} onValueChange={setJudgingStartTime}>
+            <SelectTrigger className={cn('min-h-[2.75rem]', !judgingStartTime && 'border-destructive/50')}><SelectValue placeholder="Select time" /></SelectTrigger>
+            <SelectContent>
+              {SHOW_TIMES.map((t) => (
+                <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="onCallVet" className="text-xs">Veterinary surgeon on call</Label>
+        <Input id="onCallVet" value={onCallVet} onChange={(e) => setOnCallVet(e.target.value)} placeholder="e.g. Westport Vets, Unit 42, Mill Road, Linlithgow EH49 7SF" className="min-h-[2.75rem]" />
+      </div>
+    </div>
+  );
+}
+
+// ── People Section ───────────────────────────────────
+
+function PeopleSection({
+  showManager, setShowManager, officers,
+  addOfficer, removeOfficer, updateOfficer,
+  clubPeople, clubPickerOpen, setClubPickerOpen, addFromClub,
+  guarantorCount, requiredGuarantors, showType,
+}: {
+  showManager: string; setShowManager: (v: string) => void;
+  officers: OfficerWithGuarantor[];
+  addOfficer: () => void;
+  removeOfficer: (idx: number) => void;
+  updateOfficer: (idx: number, field: keyof OfficerWithGuarantor, value: string | boolean) => void;
+  clubPeople: NonNullable<ReturnType<typeof trpc.secretary.listOrgPeople.useQuery>['data']> | null;
+  clubPickerOpen: boolean; setClubPickerOpen: (v: boolean) => void;
+  addFromClub: (person: NonNullable<typeof clubPeople>[number]) => void;
+  guarantorCount: number; requiredGuarantors: number; showType: string;
+}) {
+  const met = guarantorCount >= requiredGuarantors;
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-1.5">
+        <Label htmlFor="showManager" className="text-xs">Show Manager <span className="text-destructive">*</span></Label>
+        <Input id="showManager" value={showManager} onChange={(e) => setShowManager(e.target.value)} placeholder="Full name" className="min-h-[2.75rem]" />
+      </div>
+
+      {/* Officers */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <Label className="text-xs">Officers & Guarantors</Label>
+          <div className="flex gap-1.5">
+            {clubPeople && clubPeople.length > 0 && (
+              <Popover open={clubPickerOpen} onOpenChange={setClubPickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 text-xs">
+                    <Users className="size-3" />
+                    Club Roster
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] max-w-[calc(100vw-2rem)] p-0" align="end">
+                  <Command>
+                    <CommandInput placeholder="Search..." />
+                    <CommandList className="max-h-[40vh] sm:max-h-[300px]">
+                      <CommandEmpty>No people found.</CommandEmpty>
+                      <CommandGroup>
+                        {clubPeople.map((person) => {
+                          const alreadyAdded = officers.some(
+                            (o) => o.name.toLowerCase() === person.name.toLowerCase()
+                          );
+                          return (
+                            <CommandItem
+                              key={person.id}
+                              value={person.name}
+                              disabled={alreadyAdded}
+                              onSelect={() => { if (!alreadyAdded) addFromClub(person); }}
+                              className={alreadyAdded ? 'opacity-40' : ''}
+                            >
+                              <span className="truncate font-medium">
+                                {person.name}
+                              </span>
+                              <span className="ml-auto text-xs text-muted-foreground truncate">
+                                {person.position ?? ''}
+                                {alreadyAdded ? ' ✓' : ''}
+                              </span>
+                            </CommandItem>
+                          );
+                        })}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            )}
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={addOfficer}>
+              <Plus className="size-3" />
+              Add
+            </Button>
+          </div>
+        </div>
+
+        {officers.length > 0 && (
+          <div className="rounded-lg border divide-y">
+            {officers.map((officer, idx) => (
+              <div key={idx} className="flex items-center gap-2 px-3 py-2">
+                {/* Guarantor toggle */}
+                <button
+                  type="button"
+                  title={officer.isGuarantor ? 'Remove as guarantor' : 'Mark as guarantor'}
+                  className={cn(
+                    'flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors',
+                    officer.isGuarantor
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80',
+                  )}
+                  onClick={() => updateOfficer(idx, 'isGuarantor', !officer.isGuarantor)}
+                >
+                  G
+                </button>
+
+                {/* Name + Position */}
+                <div className="grid flex-1 grid-cols-1 gap-1.5 sm:grid-cols-2 min-w-0">
+                  <Input
+                    placeholder="Name"
+                    value={officer.name}
+                    onChange={(e) => updateOfficer(idx, 'name', e.target.value)}
+                    className="h-9 text-sm"
+                  />
+                  <Select value={officer.position} onValueChange={(v) => updateOfficer(idx, 'position', v)}>
+                    <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Position" /></SelectTrigger>
+                    <SelectContent>
+                      {OFFICER_POSITIONS.map((pos) => (
+                        <SelectItem key={pos} value={pos}>{pos}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <Button variant="ghost" size="icon" className="shrink-0 size-8" onClick={() => removeOfficer(idx)}>
+                  <X className="size-3.5 text-muted-foreground" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <p className={cn('text-xs flex items-center gap-1', met ? 'text-emerald-600' : 'text-amber-600')}>
+          {met ? <Check className="size-3" /> : <AlertTriangle className="size-3" />}
+          {guarantorCount}/{requiredGuarantors} guarantors
+          {!met && ' — tap G to mark guarantors'}
+        </p>
+      </div>
+
+    </div>
+  );
+}
+
+// ── Awards Section ───────────────────────────────────
+
+function AwardsSection({
+  awardsDescription, setAwardsDescription, prizeMoney, setPrizeMoney,
+}: {
+  awardsDescription: string; setAwardsDescription: (v: string) => void;
+  prizeMoney: string; setPrizeMoney: (v: string) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-1.5">
+        <Label htmlFor="awards" className="text-xs">Awards / Rosettes / Trophies</Label>
+        <Textarea id="awards" value={awardsDescription} onChange={(e) => setAwardsDescription(e.target.value)} placeholder="e.g. Rosettes to VHC in all classes. Trophies for Best in Show, Reserve Best in Show, Best Puppy in Show." rows={3} />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="prizeMoney" className="text-xs">Prize Money</Label>
+        <p className="text-xs text-muted-foreground">Leave blank if no prize money is offered</p>
+        <Input id="prizeMoney" value={prizeMoney} onChange={(e) => setPrizeMoney(e.target.value)} placeholder="e.g. No prize money offered" className="min-h-[2.75rem]" />
+      </div>
+    </div>
+  );
+}
+
+// ── Venue & Info Section ─────────────────────────────
+
+function VenueSection({
+  directions, setDirections, what3words, setWhat3words,
+  catering, setCatering, futureShowDates, setFutureShowDates,
+  additionalNotes, setAdditionalNotes, welcomeNote, setWelcomeNote,
+  outsideAttraction, setOutsideAttraction,
+}: {
+  directions: string; setDirections: (v: string) => void;
+  what3words: string; setWhat3words: (v: string) => void;
+  catering: string; setCatering: (v: string) => void;
+  futureShowDates: string; setFutureShowDates: (v: string) => void;
+  additionalNotes: string; setAdditionalNotes: (v: string) => void;
+  welcomeNote: string; setWelcomeNote: (v: string) => void;
+  outsideAttraction: boolean; setOutsideAttraction: (v: boolean) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-1.5">
+        <Label htmlFor="directions" className="text-xs">Directions to Venue</Label>
+        <Textarea id="directions" value={directions} onChange={(e) => setDirections(e.target.value)} placeholder="Directions, parking information, etc." rows={2} />
+      </div>
+      <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="what3words" className="text-xs">What3Words</Label>
+          <Input id="what3words" value={what3words} onChange={(e) => setWhat3words(e.target.value)} placeholder="e.g. ///filled.count.soap" className="min-h-[2.75rem]" />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="catering" className="text-xs">Catering</Label>
+          <Input id="catering" value={catering} onChange={(e) => setCatering(e.target.value)} placeholder="e.g. Light refreshments available" className="min-h-[2.75rem]" />
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="futureShows" className="text-xs">Future Show Dates</Label>
+        <Input id="futureShows" value={futureShowDates} onChange={(e) => setFutureShowDates(e.target.value)} placeholder="e.g. Next show: 15th September 2026" className="min-h-[2.75rem]" />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="additionalNotes" className="text-xs">Additional Notes</Label>
+        <Textarea id="additionalNotes" value={additionalNotes} onChange={(e) => setAdditionalNotes(e.target.value)} placeholder="Any other information to include in the schedule" rows={2} />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="welcomeNote" className="text-xs">Welcome Note for Catalogue</Label>
+        <Textarea id="welcomeNote" value={welcomeNote} onChange={(e) => setWelcomeNote(e.target.value)} placeholder="Optional welcome message — shown on the catalogue cover page" rows={2} />
+      </div>
+      <div className="flex items-center justify-between rounded-lg border p-3">
+        <div>
+          <Label className="text-xs">Outside Attraction</Label>
+          <p className="text-xs text-muted-foreground">
+            Displays notice: &quot;RKC Regulation F(1) 16H will be strictly enforced&quot;
+          </p>
+        </div>
+        <Switch checked={outsideAttraction} onCheckedChange={setOutsideAttraction} />
+      </div>
+    </div>
+  );
+}
+
+// ── Regulations Section ──────────────────────────────
+
+function RegulationsSection({
+  country, setCountry, publicAdmission, setPublicAdmission,
+  wetWeather, setWetWeather, isBenched, setIsBenched,
+  benchingRemovalTime, setBenchingRemovalTime,
+  acceptsNfc, setAcceptsNfc, judgedOnGroupSystem, setJudgedOnGroupSystem,
+  customStatements, setCustomStatements,
+}: {
+  country: string; setCountry: (v: string) => void;
+  publicAdmission: boolean; setPublicAdmission: (v: boolean) => void;
+  wetWeather: boolean; setWetWeather: (v: boolean) => void;
+  isBenched: boolean; setIsBenched: (v: boolean) => void;
+  benchingRemovalTime: string; setBenchingRemovalTime: (v: string) => void;
+  acceptsNfc: boolean; setAcceptsNfc: (v: boolean) => void;
+  judgedOnGroupSystem: boolean; setJudgedOnGroupSystem: (v: boolean) => void;
+  customStatements: string[]; setCustomStatements: (v: string[]) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-muted-foreground">
+        Mandatory RKC statements are auto-included. These settings control show-specific regulations.
+      </p>
+
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="country" className="text-xs">Country</Label>
+          <Select value={country} onValueChange={setCountry}>
+            <SelectTrigger id="country" className="min-h-[2.75rem]"><SelectValue /></SelectTrigger>
+            <SelectContent position="popper">
+              <SelectItem value="england">England</SelectItem>
+              <SelectItem value="wales">Wales</SelectItem>
+              <SelectItem value="scotland">Scotland</SelectItem>
+              <SelectItem value="northern_ireland">Northern Ireland</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex items-center justify-between rounded-lg border p-3">
+          <Label className="text-xs">Public admission fee</Label>
+          <Switch checked={publicAdmission} onCheckedChange={setPublicAdmission} />
+        </div>
+
+        <div className="flex items-center justify-between rounded-lg border p-3">
+          <Label className="text-xs">Wet weather accommodation</Label>
+          <Switch checked={wetWeather} onCheckedChange={setWetWeather} />
+        </div>
+
+        <div className="flex items-center justify-between rounded-lg border p-3">
+          <Label className="text-xs">NFC entries accepted</Label>
+          <Switch checked={acceptsNfc} onCheckedChange={setAcceptsNfc} />
+        </div>
+
+        <div className="flex items-center justify-between rounded-lg border p-3">
+          <Label className="text-xs">Group system judging</Label>
+          <Switch checked={judgedOnGroupSystem} onCheckedChange={setJudgedOnGroupSystem} />
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <Label className="text-xs">Benched show</Label>
+            <Switch checked={isBenched} onCheckedChange={setIsBenched} />
+          </div>
+          {isBenched && (
+            <Input value={benchingRemovalTime} onChange={(e) => setBenchingRemovalTime(e.target.value)} placeholder="e.g. Dogs may be removed after Best in Show" className="min-h-[2.75rem]" />
+          )}
+        </div>
+      </div>
+
+      {/* Optional extra statements */}
+      <div className="space-y-3">
+        <Label className="text-xs">Additional Schedule Statements</Label>
+
+        <div className="space-y-2 max-h-48 overflow-y-auto rounded-lg border p-3">
+          {RKC_STATEMENT_CATEGORIES.map((category) => {
+            const statementsInCategory = RKC_STATEMENTS.filter((s) => s.category === category);
+            return (
+              <div key={category}>
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">{category}</p>
+                <div className="space-y-0.5">
+                  {statementsInCategory.map((stmt) => {
+                    const isSelected = customStatements.includes(stmt.text);
+                    return (
+                      <label key={stmt.id} className="flex items-start gap-2 rounded-md px-2 py-1 cursor-pointer hover:bg-accent text-xs">
+                        <Checkbox checked={isSelected} onCheckedChange={(checked) => {
+                          if (checked) setCustomStatements([...customStatements, stmt.text]);
+                          else setCustomStatements(customStatements.filter((s) => s !== stmt.text));
+                        }} className="mt-0.5" />
+                        <span className="leading-snug">
+                          {stmt.text}
+                          {stmt.regulation && <span className="ml-1 text-muted-foreground">({stmt.regulation})</span>}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {customStatements.filter((s) => !RKC_STATEMENTS.some((r) => r.text === s)).length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">Custom statements</p>
+            {customStatements
+              .map((stmt, i) => ({ stmt, i }))
+              .filter(({ stmt }) => !RKC_STATEMENTS.some((r) => r.text === stmt))
+              .map(({ stmt, i }) => (
+                <div key={i} className="flex gap-2">
+                  <Input value={stmt} onChange={(e) => {
+                    const updated = [...customStatements];
+                    updated[i] = e.target.value;
+                    setCustomStatements(updated);
+                  }} placeholder="Enter statement..." className="flex-1 text-xs min-h-[2.75rem]" />
+                  <Button type="button" variant="ghost" size="icon" className="shrink-0 size-10 text-destructive hover:text-destructive" onClick={() => setCustomStatements(customStatements.filter((_, idx) => idx !== i))}>
+                    <X className="size-4" />
+                  </Button>
+                </div>
+              ))}
+          </div>
+        )}
+        <Button type="button" variant="outline" size="sm" className="min-h-[2.75rem]" onClick={() => setCustomStatements([...customStatements, ''])}>
+          <Plus className="size-4" />
+          Add Custom Statement
         </Button>
       </div>
     </div>

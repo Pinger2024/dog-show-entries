@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
-import { Edit3, Loader2, Plus, Trash2 } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { AlertCircle, Check, Edit3, EyeOff, Loader2, Plus, Trash2, Undo2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
+import { cn } from '@/lib/utils';
 import { formatCurrency, penceToPoundsString, poundsToPence } from '@/lib/date-utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -44,13 +45,121 @@ import {
 } from '@/components/ui/alert-dialog';
 
 const COMMON_SUNDRY_PRESETS = [
-  { name: 'Printed Catalogue', description: 'Receive a printed show catalogue on the day', priceInPence: 500, maxPerOrder: 1 },
-  { name: 'Online Catalogue', description: 'Access to the digital show catalogue', priceInPence: 300, maxPerOrder: 1 },
-  { name: 'Donation', description: 'Support the club with a voluntary donation', priceInPence: 200 },
-  { name: 'Club Membership — Sole', description: 'Annual single membership', priceInPence: 800, maxPerOrder: 1 },
-  { name: 'Club Membership — Joint', description: 'Annual joint membership', priceInPence: 1200, maxPerOrder: 1 },
-  { name: 'Club Membership — Family', description: 'Annual family membership', priceInPence: 1500, maxPerOrder: 1 },
+  { name: 'Printed Catalogue', description: 'Receive a printed show catalogue on the day', maxPerOrder: 1 },
+  { name: 'Online Catalogue', description: 'Access to the digital show catalogue', maxPerOrder: 1 },
+  { name: 'Donation', description: 'Support the club with a voluntary donation' },
+  { name: 'Club Membership — Sole', description: 'Annual single membership', maxPerOrder: 1 },
+  { name: 'Club Membership — Joint', description: 'Annual joint membership', maxPerOrder: 1 },
+  { name: 'Club Membership — Family', description: 'Annual family membership', maxPerOrder: 1 },
 ];
+
+function PresetPicker({
+  presets,
+  selections,
+  existingNames,
+  onToggle,
+  onPriceChange,
+  onAdd,
+  onSkip,
+  isPending,
+}: {
+  presets: typeof COMMON_SUNDRY_PRESETS;
+  selections: Record<string, { selected: boolean; price: string }>;
+  existingNames: Set<string>;
+  onToggle: (name: string) => void;
+  onPriceChange: (name: string, price: string) => void;
+  onAdd: () => void;
+  onSkip: () => void;
+  isPending: boolean;
+}) {
+  const available = presets.filter((p) => !existingNames.has(p.name));
+  const selectedCount = available.filter((p) => selections[p.name]?.selected).length;
+
+  if (available.length === 0) return null;
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Select the items you&apos;d like to offer and set a price for each.
+      </p>
+      <div className="space-y-2">
+        {available.map((preset) => {
+          const sel = selections[preset.name];
+          const isSelected = sel?.selected ?? false;
+
+          return (
+            <div
+              key={preset.name}
+              className={cn(
+                'rounded-lg border p-3 transition-colors cursor-pointer',
+                isSelected
+                  ? 'border-primary/40 bg-primary/5'
+                  : 'hover:bg-muted/50',
+              )}
+              onClick={() => onToggle(preset.name)}
+            >
+              <div className="flex items-start gap-3">
+                <div className={cn(
+                  'mt-0.5 flex size-5 shrink-0 items-center justify-center rounded border transition-colors',
+                  isSelected
+                    ? 'border-primary bg-primary text-primary-foreground'
+                    : 'border-muted-foreground/30',
+                )}>
+                  {isSelected && <Check className="size-3" />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">{preset.name}</p>
+                  <p className="text-xs text-muted-foreground">{preset.description}</p>
+                  {isSelected && (
+                    <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+                      <div className="relative max-w-[10rem]">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                          &pound;
+                        </span>
+                        <Input
+                          type="number"
+                          inputMode="decimal"
+                          step="0.01"
+                          min="0"
+                          placeholder="0.00"
+                          className="h-10 pl-7"
+                          value={sel?.price ?? ''}
+                          onChange={(e) => onPriceChange(preset.name, e.target.value)}
+                          autoFocus
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Button
+          className="min-h-[2.75rem] flex-1 sm:flex-none"
+          onClick={onAdd}
+          disabled={selectedCount === 0 || isPending}
+        >
+          {isPending ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            `Add ${selectedCount} Item${selectedCount !== 1 ? 's' : ''}`
+          )}
+        </Button>
+        <Button
+          variant="ghost"
+          className="min-h-[2.75rem] text-muted-foreground"
+          onClick={onSkip}
+        >
+          <Plus className="size-3.5" />
+          Create custom item instead
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export function SundryItemManager({ showId }: { showId: string }) {
   const { data: items, isLoading } = trpc.secretary.getSundryItems.useQuery({ showId });
@@ -66,6 +175,29 @@ export function SundryItemManager({ showId }: { showId: string }) {
     enabled: boolean;
   } | null>(null);
   const [pendingAction, setPendingAction] = useState<{ message: string; action: () => void } | null>(null);
+
+  // Preset picker state — tracks which presets are selected and their prices
+  const [presetSelections, setPresetSelections] = useState<Record<string, { selected: boolean; price: string }>>(() => {
+    const initial: Record<string, { selected: boolean; price: string }> = {};
+    for (const p of COMMON_SUNDRY_PRESETS) {
+      initial[p.name] = { selected: false, price: '' };
+    }
+    return initial;
+  });
+
+  const togglePreset = useCallback((name: string) => {
+    setPresetSelections((prev) => ({
+      ...prev,
+      [name]: { ...prev[name]!, selected: !prev[name]!.selected },
+    }));
+  }, []);
+
+  const setPresetPrice = useCallback((name: string, price: string) => {
+    setPresetSelections((prev) => ({
+      ...prev,
+      [name]: { ...prev[name]!, price },
+    }));
+  }, []);
 
   // Form state
   const [formName, setFormName] = useState('');
@@ -110,8 +242,16 @@ export function SundryItemManager({ showId }: { showId: string }) {
 
   const bulkCreateMutation = trpc.secretary.bulkCreateSundryItems.useMutation({
     onSuccess: (data) => {
-      toast.success(`Added ${data.created} common items`);
+      toast.success(`${data.created} item${data.created !== 1 ? 's' : ''} added`);
       utils.secretary.getSundryItems.invalidate({ showId });
+      // Reset preset selections
+      setPresetSelections((prev) => {
+        const reset: Record<string, { selected: boolean; price: string }> = {};
+        for (const key of Object.keys(prev)) {
+          reset[key] = { selected: false, price: '' };
+        }
+        return reset;
+      });
     },
     onError: (err) => toast.error(err.message),
   });
@@ -155,15 +295,30 @@ export function SundryItemManager({ showId }: { showId: string }) {
     setFormMaxPerOrder(item.maxPerOrder?.toString() ?? '');
   }
 
-  function handleAddCommon() {
-    // Filter out items that already exist (by name)
-    const existingNames = new Set((items ?? []).map((i) => i.name));
-    const newItems = COMMON_SUNDRY_PRESETS.filter((p) => !existingNames.has(p.name));
-    if (newItems.length === 0) {
-      toast.info('All common items already added');
+  function handleAddSelectedPresets() {
+    const selected = COMMON_SUNDRY_PRESETS.filter((p) => presetSelections[p.name]?.selected);
+    if (selected.length === 0) {
+      toast.error('Select at least one item');
       return;
     }
-    bulkCreateMutation.mutate({ showId, items: newItems });
+    // Validate all selected items have a price
+    const missing = selected.filter((p) => {
+      const price = parseFloat(presetSelections[p.name]?.price ?? '');
+      return !price || price <= 0;
+    });
+    if (missing.length > 0) {
+      toast.error(`Set a price for: ${missing.map((m) => m.name).join(', ')}`);
+      return;
+    }
+    bulkCreateMutation.mutate({
+      showId,
+      items: selected.map((p) => ({
+        name: p.name,
+        description: p.description,
+        priceInPence: poundsToPence(parseFloat(presetSelections[p.name]!.price)),
+        maxPerOrder: p.maxPerOrder,
+      })),
+    });
   }
 
   const enabledItems = (items ?? []).filter((i) => i.enabled);
@@ -180,17 +335,7 @@ export function SundryItemManager({ showId }: { showId: string }) {
                 Add-on items exhibitors can purchase at checkout — catalogues, memberships, donations, etc.
               </CardDescription>
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="min-h-[2.75rem]"
-                onClick={handleAddCommon}
-                disabled={bulkCreateMutation.isPending}
-              >
-                {bulkCreateMutation.isPending && <Loader2 className="size-3.5 animate-spin" />}
-                Add Common Items
-              </Button>
+            {(items ?? []).length > 0 && (
               <Button
                 size="sm"
                 className="min-h-[2.75rem]"
@@ -202,7 +347,7 @@ export function SundryItemManager({ showId }: { showId: string }) {
                 <Plus className="size-3.5" />
                 Add Item
               </Button>
-            </div>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -211,39 +356,87 @@ export function SundryItemManager({ showId }: { showId: string }) {
               <Loader2 className="size-6 animate-spin text-muted-foreground" />
             </div>
           ) : (items ?? []).length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              No sundry items configured yet. Add items that exhibitors can purchase alongside their entries.
-            </p>
+            <PresetPicker
+              presets={COMMON_SUNDRY_PRESETS}
+              selections={presetSelections}
+              existingNames={new Set((items ?? []).map((i) => i.name))}
+              onToggle={togglePreset}
+              onPriceChange={setPresetPrice}
+              onAdd={handleAddSelectedPresets}
+              onSkip={() => {
+                resetForm();
+                setShowAddDialog(true);
+              }}
+              isPending={bulkCreateMutation.isPending}
+            />
           ) : (
             <div className="space-y-4">
               {/* Mobile view */}
               <div className="space-y-2 sm:hidden">
-                {enabledItems.map((item) => (
-                  <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+                {enabledItems.map((item) => {
+                  const needsPrice = item.priceInPence === 0;
+                  return (
+                    <div key={item.id} className={cn(
+                      'flex items-center justify-between gap-3 rounded-lg border p-3',
+                      needsPrice && 'border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-950/20',
+                    )}>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium truncate">{item.name}</p>
+                        {needsPrice ? (
+                          <p className="flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+                            <AlertCircle className="size-3" />
+                            Set a price
+                          </p>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            {formatCurrency(item.priceInPence)}
+                            {item.maxPerOrder === 1 ? ' · max 1' : item.maxPerOrder ? ` · max ${item.maxPerOrder}` : ''}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex gap-1">
+                        <Button variant={needsPrice ? 'default' : 'outline'} size="sm" className="min-h-[2.75rem] px-2.5" onClick={() => openEditDialog(item)}>
+                          <Edit3 className="size-3.5" />
+                          {needsPrice ? 'Set Price' : 'Edit'}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="min-h-[2.75rem] px-2.5"
+                          onClick={() => toggleMutation.mutate({ id: item.id, showId, enabled: false })}
+                        >
+                          <EyeOff className="size-3.5" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="min-h-[2.75rem] px-2.5 text-destructive hover:bg-destructive/10"
+                          onClick={() => setPendingAction({
+                            message: 'Delete this sundry item?',
+                            action: () => deleteMutation.mutate({ id: item.id, showId }),
+                          })}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {disabledItems.map((item) => (
+                  <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg border border-dashed p-3 opacity-60">
                     <div className="min-w-0 flex-1">
                       <p className="font-medium truncate">{item.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatCurrency(item.priceInPence)}
-                        {item.maxPerOrder === 1 ? ' · max 1' : item.maxPerOrder ? ` · max ${item.maxPerOrder}` : ''}
-                      </p>
+                      <p className="text-xs text-muted-foreground">Disabled</p>
                     </div>
-                    <div className="flex gap-1">
-                      <Button variant="outline" size="sm" className="min-h-[2.75rem] px-2.5" onClick={() => openEditDialog(item)}>
-                        <Edit3 className="size-3.5" />
-                        Edit
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="min-h-[2.75rem] px-2.5 text-destructive hover:bg-destructive/10"
-                        onClick={() => setPendingAction({
-                          message: 'Delete this sundry item?',
-                          action: () => deleteMutation.mutate({ id: item.id, showId }),
-                        })}
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="min-h-[2.75rem] px-2.5"
+                      onClick={() => toggleMutation.mutate({ id: item.id, showId, enabled: true })}
+                    >
+                      <Undo2 className="size-3.5" />
+                      Re-enable
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -256,66 +449,84 @@ export function SundryItemManager({ showId }: { showId: string }) {
                       <TableHead>Item</TableHead>
                       <TableHead>Price</TableHead>
                       <TableHead>Limit</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="w-24" />
+                      <TableHead className="w-32" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {enabledItems.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium">{item.name}</p>
-                            {item.description && (
-                              <p className="text-xs text-muted-foreground">{item.description}</p>
+                    {enabledItems.map((item) => {
+                      const needsPrice = item.priceInPence === 0;
+                      return (
+                        <TableRow key={item.id} className={needsPrice ? 'bg-amber-50/50 dark:bg-amber-950/20' : undefined}>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{item.name}</p>
+                              {item.description && (
+                                <p className="text-xs text-muted-foreground">{item.description}</p>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {needsPrice ? (
+                              <span className="flex items-center gap-1 text-sm font-medium text-amber-600 dark:text-amber-400">
+                                <AlertCircle className="size-3.5" />
+                                Set price
+                              </span>
+                            ) : (
+                              formatCurrency(item.priceInPence)
                             )}
-                          </div>
-                        </TableCell>
-                        <TableCell>{formatCurrency(item.priceInPence)}</TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {item.maxPerOrder === 1 ? 'One per order' : item.maxPerOrder ? `Max ${item.maxPerOrder}` : 'Unlimited'}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="default">Active</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            <Button variant="outline" size="sm" className="h-8 px-2" onClick={() => openEditDialog(item)}>
-                              <Edit3 className="size-3.5" />
-                              Edit
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8 px-2 text-destructive hover:bg-destructive/10"
-                              onClick={() => deleteMutation.mutate({ id: item.id, showId })}
-                            >
-                              <Trash2 className="size-3.5" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {item.maxPerOrder === 1 ? 'One per order' : item.maxPerOrder ? `Max ${item.maxPerOrder}` : 'Unlimited'}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button variant={needsPrice ? 'default' : 'outline'} size="sm" className="h-8 px-2" onClick={() => openEditDialog(item)}>
+                                <Edit3 className="size-3.5" />
+                                {needsPrice ? 'Set Price' : 'Edit'}
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 px-2"
+                                title="Disable item"
+                                onClick={() => toggleMutation.mutate({ id: item.id, showId, enabled: false })}
+                              >
+                                <EyeOff className="size-3.5" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 px-2 text-destructive hover:bg-destructive/10"
+                                onClick={() => setPendingAction({
+                                  message: 'Delete this sundry item?',
+                                  action: () => deleteMutation.mutate({ id: item.id, showId }),
+                                })}
+                              >
+                                <Trash2 className="size-3.5" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                     {disabledItems.map((item) => (
                       <TableRow key={item.id} className="opacity-50">
                         <TableCell>
                           <div>
                             <p className="font-medium">{item.name}</p>
+                            <p className="text-xs text-muted-foreground">Disabled</p>
                           </div>
                         </TableCell>
                         <TableCell>{formatCurrency(item.priceInPence)}</TableCell>
                         <TableCell />
                         <TableCell>
-                          <Badge variant="outline">Disabled</Badge>
-                        </TableCell>
-                        <TableCell>
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() =>
-                              toggleMutation.mutate({ id: item.id, showId, enabled: true })
-                            }
+                            className="h-8 gap-1"
+                            onClick={() => toggleMutation.mutate({ id: item.id, showId, enabled: true })}
                           >
+                            <Undo2 className="size-3.5" />
                             Re-enable
                           </Button>
                         </TableCell>
@@ -335,10 +546,44 @@ export function SundryItemManager({ showId }: { showId: string }) {
           <DialogHeader>
             <DialogTitle>Add Sundry Item</DialogTitle>
             <DialogDescription>
-              Create a new add-on item that exhibitors can purchase at checkout.
+              Pick a common item or create your own.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            {/* Quick-select presets that aren't already on the show */}
+            {(() => {
+              const existingNames = new Set((items ?? []).map((i) => i.name));
+              const available = COMMON_SUNDRY_PRESETS.filter((p) => !existingNames.has(p.name));
+              if (available.length === 0) return null;
+              return (
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Quick add</Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {available.map((preset) => (
+                      <button
+                        key={preset.name}
+                        type="button"
+                        className={cn(
+                          'rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
+                          formName === preset.name
+                            ? 'border-primary bg-primary/10 text-primary'
+                            : 'hover:bg-muted',
+                        )}
+                        onClick={() => {
+                          setFormName(preset.name);
+                          setFormDescription(preset.description);
+                          setFormMaxPerOrder(preset.maxPerOrder?.toString() ?? '');
+                          // Don't set price — that's what the secretary needs to decide
+                        }}
+                      >
+                        {preset.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
             <div className="space-y-2">
               <Label htmlFor="sundry-name">Item Name</Label>
               <Input
@@ -366,9 +611,10 @@ export function SundryItemManager({ showId }: { showId: string }) {
                   inputMode="decimal"
                   step="0.01"
                   min="0"
-                  placeholder="5.00"
+                  placeholder="0.00"
                   value={formPrice}
                   onChange={(e) => setFormPrice(e.target.value)}
+                  autoFocus={!!formName}
                 />
               </div>
               <div className="space-y-2">

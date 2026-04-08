@@ -9,7 +9,6 @@ import type {
   ScheduleClass,
   ScheduleJudge,
   ScheduleSponsor,
-  ScheduleFormat,
 } from '@/components/schedule/show-schedule';
 import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
@@ -243,19 +242,14 @@ export async function GET(
   }
 
   try {
-    const formatParam = request.nextUrl.searchParams.get('format');
-    const format: ScheduleFormat = (formatParam === 'compact' || formatParam === 'booklet') ? formatParam : 'standard';
-
     const pdfDocument = React.createElement(ShowSchedule, {
       show: showInfo,
       classes,
       judges,
       sponsors,
-      format,
     });
     const buffer = await renderToBuffer(pdfDocument);
-    const formatSuffix = format === 'compact' ? '-Compact' : format === 'booklet' ? '-Booklet' : '';
-    const filename = `${sanitizeFilename(show.name)}-Schedule${formatSuffix}.pdf`;
+    const filename = `${sanitizeFilename(show.name)}-Schedule.pdf`;
     const isPreview = request.nextUrl.searchParams.has('preview');
     return makePdfResponse(buffer, filename, isPreview);
   } catch (err) {

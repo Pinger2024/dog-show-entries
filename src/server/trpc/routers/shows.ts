@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, gte, lte, sql, desc, asc, isNull, or, inArray, isNotNull, exists } from 'drizzle-orm';
+import { and, eq, gte, lte, sql, desc, asc, isNull, or, inArray, isNotNull, exists, ilike, count } from 'drizzle-orm';
 import {
   publicProcedure,
   protectedProcedure,
@@ -20,9 +20,12 @@ import {
   breeds,
   dogPhotos,
   classDefinitions,
+  orders,
+  orderSundryItems,
 } from '@/server/db/schema';
 import { verifyShowAccess } from '../verify-show-access';
 import { isUuid, generateShowSlug } from '@/lib/slugify';
+import { hasUserPurchasedCatalogue, CATALOGUE_AVAILABLE_STATUSES } from '@/lib/catalogue-utils';
 import type { Database } from '@/server/db';
 
 /** Resolve a show slug to its UUID (passthrough if already UUID) */
@@ -223,6 +226,7 @@ export const showsRouter = createTRPCRouter({
         with: {
           organisation: true,
           venue: true,
+          breed: true,
           showClasses: {
             with: {
               classDefinition: true,
@@ -443,6 +447,7 @@ export const showsRouter = createTRPCRouter({
           'championship',
         ]),
         showScope: z.enum(['single_breed', 'group', 'general']),
+        breedId: z.string().uuid().optional(),
         organisationId: z.string().uuid(),
         venueId: z.string().uuid().optional(),
         startDate: z.string(),
@@ -679,6 +684,7 @@ export const showsRouter = createTRPCRouter({
           ])
           .optional(),
         showScope: z.enum(['single_breed', 'group', 'general']).optional(),
+        breedId: z.string().uuid().nullable().optional(),
         venueId: z.string().uuid().nullable().optional(),
         startDate: z.string().optional(),
         endDate: z.string().optional(),
@@ -874,6 +880,33 @@ export const showsRouter = createTRPCRouter({
       }));
     }),
 
+  getCatalogueAccess: protectedProcedure
+    .input(z.object({ showId: z.string().min(1) }))
+    .query(async ({ ctx, input }) => {
+      const showId = isUuid(input.showId) ? input.showId : await resolveShowId(ctx.db, input.showId);
+
+      const [show, hasPurchased] = await Promise.all([
+        ctx.db.query.shows.findFirst({
+          where: eq(shows.id, showId),
+          columns: { id: true, name: true, status: true, startDate: true, slug: true },
+        }),
+        hasUserPurchasedCatalogue(ctx.db, showId, ctx.session.user.id),
+      ]);
+
+      if (!show) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
+      }
+
+      return {
+        showId: show.id,
+        showName: show.name,
+        showSlug: show.slug,
+        startDate: show.startDate,
+        hasPurchased,
+        isAvailable: CATALOGUE_AVAILABLE_STATUSES.has(show.status),
+      };
+    }),
+
   getShowDogPhotos: publicProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
@@ -900,5 +933,33 @@ export const showsRouter = createTRPCRouter({
         .limit(24);
 
       return photos;
+    }),
+
+  getMyCataloguePurchases: protectedProcedure
+    .query(async ({ ctx }) => {
+      const rows = await ctx.db
+        .select({
+          showId: orders.showId,
+          showStatus: shows.status,
+          showSlug: shows.slug,
+        })
+        .from(orderSundryItems)
+        .innerJoin(sundryItems, eq(orderSundryItems.sundryItemId, sundryItems.id))
+        .innerJoin(orders, eq(orderSundryItems.orderId, orders.id))
+        .innerJoin(shows, eq(orders.showId, shows.id))
+        .where(
+          and(
+            eq(orders.exhibitorId, ctx.session.user.id),
+            eq(orders.status, 'paid'),
+            ilike(sundryItems.name, '%catalogue%')
+          )
+        )
+        .groupBy(orders.showId, shows.status, shows.slug);
+
+      return rows.map((r) => ({
+        showId: r.showId,
+        showSlug: r.showSlug,
+        isAvailable: CATALOGUE_AVAILABLE_STATUSES.has(r.showStatus),
+      }));
     }),
 });

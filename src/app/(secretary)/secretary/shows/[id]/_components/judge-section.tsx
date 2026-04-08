@@ -88,6 +88,10 @@ export function JudgesSection({ showId }: { showId: string }) {
   const [offerJudgeId, setOfferJudgeId] = useState('');
   const [offerEmail, setOfferEmail] = useState('');
   const [offerNotes, setOfferNotes] = useState('');
+  const [offerHotel, setOfferHotel] = useState('');
+  const [offerTravel, setOfferTravel] = useState('');
+  const [offerOther, setOfferOther] = useState('');
+  const [offerExpenseNotes, setOfferExpenseNotes] = useState('');
   // RKC judge search state
   const [kcSearchSurname, setKcSearchSurname] = useState('');
   const [kcSearchBreed, setKcSearchBreed] = useState('');
@@ -318,6 +322,10 @@ export function JudgesSection({ showId }: { showId: string }) {
     setOfferJudgeId(judgeId);
     setOfferEmail(email);
     setOfferNotes('');
+    setOfferHotel('');
+    setOfferTravel('');
+    setOfferOther('');
+    setOfferExpenseNotes('');
     setOfferDialogOpen(true);
   }
 
@@ -341,419 +349,6 @@ export function JudgesSection({ showId }: { showId: string }) {
         prefillBreedId={wizardPrefillBreedId}
         prefillSex={wizardPrefillSex}
       />
-
-      {/* Create new judge */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-start justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Gavel className="size-5" />
-                Judges
-              </CardTitle>
-              <CardDescription>
-                Add judges via the guided wizard, or manage existing assignments below.
-              </CardDescription>
-            </div>
-            <Button size="sm" onClick={() => { setWizardPrefillBreedId(undefined); setWizardPrefillSex(undefined); setWizardOpen(true); }}>
-              <Plus className="size-4" />
-              Add Judge
-            </Button>
-          </div>
-        </CardHeader>
-        {adding && (
-          <CardContent className="space-y-4">
-            {/* RKC Judge Search */}
-            <div className="rounded-lg border bg-blue-50/50 p-4 dark:bg-blue-950/20">
-              <p className="mb-3 text-sm font-medium">Search RKC Judge Database</p>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div>
-                  <Label htmlFor="kc-surname" className="text-xs text-muted-foreground">Surname *</Label>
-                  <Input
-                    id="kc-surname"
-                    placeholder="e.g. Smith"
-                    value={kcSearchSurname}
-                    onChange={(e) => setKcSearchSurname(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && kcSearchSurname.trim().length >= 2) {
-                        kcSearchMutation.mutate({
-                          surname: kcSearchSurname.trim(),
-                          breed: kcSearchBreed.trim() || undefined,
-                        });
-                      }
-                    }}
-                    className="h-11"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="kc-breed" className="text-xs text-muted-foreground">Breed (optional)</Label>
-                  <Input
-                    id="kc-breed"
-                    placeholder="e.g. German Shepherd Dog"
-                    value={kcSearchBreed}
-                    onChange={(e) => setKcSearchBreed(e.target.value)}
-                    className="h-11"
-                  />
-                </div>
-                <div className="flex items-end">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() =>
-                      kcSearchMutation.mutate({
-                        surname: kcSearchSurname.trim(),
-                        breed: kcSearchBreed.trim() || undefined,
-                      })
-                    }
-                    disabled={kcSearchSurname.trim().length < 2 || kcSearchMutation.isPending}
-                  >
-                    {kcSearchMutation.isPending && <Loader2 className="size-4 animate-spin" />}
-                    Search RKC
-                  </Button>
-                </div>
-              </div>
-
-              {/* RKC Search Results */}
-              {kcSearchMutation.isPending && (
-                <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="size-4 animate-spin" />
-                  Searching RKC database (this takes a few seconds)...
-                </div>
-              )}
-
-              {kcSearchMutation.isError && (
-                <p className="mt-3 text-sm text-destructive">{kcSearchMutation.error.message}</p>
-              )}
-
-              {kcSearchMutation.data && (
-                <div className="mt-3 space-y-2">
-                  <p className="text-xs text-muted-foreground">
-                    {kcSearchMutation.data.length} judge{kcSearchMutation.data.length !== 1 ? 's' : ''} found — select one to auto-fill
-                  </p>
-                  <div className="max-h-48 space-y-1 overflow-y-auto">
-                    {kcSearchMutation.data.map((j) => (
-                      <button
-                        key={j.kcJudgeId}
-                        type="button"
-                        onClick={() => {
-                          setKcSelectedJudge(j);
-                          setJudgeName(j.name);
-                          // Fetch profile for breed/level details
-                          kcProfileMutation.mutate({ kcJudgeId: j.kcJudgeId });
-                        }}
-                        className={cn(
-                          'flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition-colors hover:bg-accent',
-                          kcSelectedJudge?.kcJudgeId === j.kcJudgeId && 'border-primary bg-primary/5'
-                        )}
-                      >
-                        <span className="font-medium">{j.name}</span>
-                        {j.location && (
-                          <span className="text-xs text-muted-foreground">{j.location}</span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Selected judge's breed approvals */}
-              {kcSelectedJudge && kcProfileMutation.isPending && (
-                <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="size-4 animate-spin" />
-                  Loading judge approvals...
-                </div>
-              )}
-              {kcSelectedJudge && kcProfileMutation.data && (
-                <div className="mt-3">
-                  <p className="mb-1 text-xs font-medium text-muted-foreground">
-                    Approved breeds for {kcSelectedJudge.name}
-                  </p>
-                  <div className="flex flex-wrap gap-1">
-                    {kcProfileMutation.data.breeds.map((b, i) => (
-                      <Badge
-                        key={i}
-                        variant="outline"
-                        className="text-xs"
-                      >
-                        {b.breed} (L{b.level})
-                      </Badge>
-                    ))}
-                    {kcProfileMutation.data.breeds.length === 0 && (
-                      <span className="text-xs text-muted-foreground">No breed approvals found</span>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Manual judge entry */}
-            <div className="rounded-lg border bg-muted/30 p-4">
-              <p className="mb-3 text-sm font-medium">
-                {kcSelectedJudge ? 'Confirm Judge Details' : 'Or Enter Manually'}
-              </p>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <Input
-                  placeholder="Name *"
-                  value={judgeName}
-                  onChange={(e) => setJudgeName(e.target.value)}
-                  className="h-11"
-                />
-                <Input
-                  placeholder="RKC Number"
-                  value={judgeKc}
-                  onChange={(e) => setJudgeKc(e.target.value)}
-                  className="h-11"
-                />
-                <Input
-                  type="email"
-                  inputMode="email"
-                  autoComplete="email"
-                  placeholder="Email"
-                  value={judgeEmail}
-                  onChange={(e) => setJudgeEmail(e.target.value)}
-                  className="h-11"
-                />
-              </div>
-              <div className="mt-3 flex gap-2">
-                <Button
-                  size="sm"
-                  onClick={() =>
-                    addJudgeMutation.mutate({
-                      name: judgeName.trim(),
-                      kcNumber: judgeKc.trim() || undefined,
-                      contactEmail: judgeEmail.trim() || undefined,
-                    })
-                  }
-                  disabled={!judgeName.trim() || addJudgeMutation.isPending}
-                >
-                  {addJudgeMutation.isPending && <Loader2 className="size-4 animate-spin" />}
-                  Create Judge
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setAdding(false);
-                    setKcSearchSurname('');
-                    setKcSearchBreed('');
-                    setKcSelectedJudge(null);
-                    kcSearchMutation.reset();
-                    kcProfileMutation.reset();
-                  }}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        )}
-      </Card>
-
-      {/* Assign judge to show */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Assign Judge to Show</CardTitle>
-          <CardDescription>
-            Select a judge, pick one or more breeds, then assign. Already-assigned breeds are marked.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {/* Row 1: Judge + Ring + Sex */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <Popover open={judgePopoverOpen} onOpenChange={setJudgePopoverOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={judgePopoverOpen}
-                    className={cn(
-                      'w-full justify-between font-normal h-11',
-                      !selectedJudgeId && 'text-muted-foreground'
-                    )}
-                  >
-                    {selectedJudgeId
-                      ? (() => {
-                          const j = (allJudges ?? []).find((j) => j.id === selectedJudgeId);
-                          return j ? `${j.name}${j.kcNumber ? ` (${j.kcNumber})` : ''}` : 'Select judge...';
-                        })()
-                      : 'Select judge...'}
-                    <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="max-w-[calc(100vw-2rem)] w-[400px] p-0" align="start">
-                  <Command>
-                    <CommandInput placeholder="Search judges..." />
-                    <CommandList className="max-h-[300px]">
-                      <CommandEmpty>No judges found.</CommandEmpty>
-                      <CommandGroup>
-                        {(allJudges ?? []).map((j) => (
-                          <CommandItem
-                            key={j.id}
-                            value={j.name}
-                            onSelect={() => {
-                              setSelectedJudgeId(j.id);
-                              setJudgePopoverOpen(false);
-                              // Auto-select breed for single-breed shows
-                              if (singleBreedId && selectedBreedIds.length === 0) {
-                                setSelectedBreedIds([singleBreedId]);
-                              }
-                            }}
-                          >
-                            <Check
-                              className={cn(
-                                'mr-2 size-4',
-                                j.id === selectedJudgeId ? 'opacity-100' : 'opacity-0'
-                              )}
-                            />
-                            {j.name} {j.kcNumber ? `(${j.kcNumber})` : ''}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-              <Select value={selectedRingId} onValueChange={setSelectedRingId}>
-                <SelectTrigger className="h-11">
-                  <SelectValue placeholder="Ring (optional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No ring</SelectItem>
-                  {(showRings ?? []).map((r) => (
-                    <SelectItem key={r.id} value={r.id}>
-                      Ring {r.number}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={selectedSexFilter} onValueChange={setSelectedSexFilter}>
-                <SelectTrigger className="h-11">
-                  <SelectValue placeholder="Both sexes" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="both">Both sexes</SelectItem>
-                  <SelectItem value="dog">Dogs only</SelectItem>
-                  <SelectItem value="bitch">Bitches only</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Row 2: Multi-breed selection */}
-            {selectedJudgeId && (
-              <>
-                <Popover open={breedPopoverOpen} onOpenChange={setBreedPopoverOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={breedPopoverOpen}
-                      className="w-full justify-between font-normal h-11 text-muted-foreground"
-                    >
-                      {selectedBreedIds.length > 0
-                        ? `${selectedBreedIds.length} breed${selectedBreedIds.length !== 1 ? 's' : ''} selected`
-                        : 'Select breeds to assign...'}
-                      <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="max-w-[calc(100vw-2rem)] w-80 p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
-                    <Command shouldFilter={true}>
-                      <CommandInput placeholder="Search breeds..." />
-                      <CommandList className="max-h-[300px]">
-                        <CommandEmpty>No breeds found.</CommandEmpty>
-                        {breedsByGroup && Object.entries(breedsByGroup).map(([groupName, groupBreeds]) => (
-                          <CommandGroup key={groupName} heading={groupName}>
-                            {groupBreeds.map((b) => {
-                              const isSelected = selectedBreedIds.includes(b.id);
-                              const isAssigned = assignedBreedIds.has(b.id);
-                              return (
-                                <CommandItem
-                                  key={b.id}
-                                  value={b.name}
-                                  onSelect={() => {
-                                    setSelectedBreedIds((prev) =>
-                                      isSelected
-                                        ? prev.filter((id) => id !== b.id)
-                                        : [...prev, b.id]
-                                    );
-                                    // Keep popover open for multi-select
-                                  }}
-                                  onPointerDown={(e) => e.preventDefault()}
-                                  className={isAssigned ? 'opacity-50' : ''}
-                                >
-                                  <Check className={cn('mr-2 size-4', isSelected ? 'opacity-100' : 'opacity-0')} />
-                                  {b.name}
-                                  {isAssigned && <span className="ml-auto text-xs text-muted-foreground">assigned</span>}
-                                </CommandItem>
-                              );
-                            })}
-                          </CommandGroup>
-                        ))}
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-
-                {/* Selected breed chips */}
-                {selectedBreedIds.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {selectedBreedIds.map((id) => {
-                      const breed = (breeds ?? []).find((b) => b.id === id);
-                      return breed ? (
-                        <Badge
-                          key={id}
-                          variant="secondary"
-                          className="cursor-pointer gap-1 text-xs hover:bg-destructive/10"
-                          onClick={() => setSelectedBreedIds((prev) => prev.filter((bid) => bid !== id))}
-                        >
-                          {breed.name}
-                          <X className="size-3" />
-                        </Badge>
-                      ) : null;
-                    })}
-                    <button
-                      onClick={() => setSelectedBreedIds([])}
-                      className="text-xs text-muted-foreground hover:text-foreground"
-                    >
-                      Clear all
-                    </button>
-                  </div>
-                )}
-
-                {/* Assign button */}
-                <Button
-                  onClick={() => {
-                    if (selectedBreedIds.length > 0) {
-                      bulkAssignMutation.mutate({
-                        showId,
-                        judgeId: selectedJudgeId,
-                        breedIds: selectedBreedIds,
-                        ringId: selectedRingId && selectedRingId !== 'none' ? selectedRingId : null,
-                        sex: selectedSexFilter === 'both' ? null : selectedSexFilter as 'dog' | 'bitch',
-                      });
-                    } else {
-                      assignMutation.mutate({
-                        showId,
-                        judgeId: selectedJudgeId,
-                        breedId: null,
-                        ringId: selectedRingId && selectedRingId !== 'none' ? selectedRingId : null,
-                        sex: selectedSexFilter === 'both' ? null : selectedSexFilter as 'dog' | 'bitch',
-                      });
-                    }
-                  }}
-                  disabled={assignMutation.isPending || bulkAssignMutation.isPending}
-                  className="w-full min-h-[2.75rem] sm:w-auto"
-                >
-                  {(assignMutation.isPending || bulkAssignMutation.isPending) && <Loader2 className="size-4 animate-spin" />}
-                  {selectedBreedIds.length > 0
-                    ? `Assign ${selectedBreedIds.length} breed${selectedBreedIds.length !== 1 ? 's' : ''}`
-                    : 'Assign to all breeds'}
-                </Button>
-              </>
-            )}
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Current judge assignments with contract status */}
       <Card>
@@ -1011,14 +606,86 @@ export function JudgesSection({ showId }: { showId: string }) {
 
       {/* Send Offer Dialog */}
       <Dialog open={offerDialogOpen} onOpenChange={setOfferDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Send Judging Offer</DialogTitle>
             <DialogDescription>
-              Send a formal written offer to this judge. This is Stage 1 of the RKC three-part contract process.
+              Stage 1 of the RKC three-part contract process. Review the email preview below.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+
+          {/* Email preview */}
+          {(() => {
+            const judge = uniqueJudges.find((j) => j.judgeId === offerJudgeId);
+            // Derive breed names: judge's assigned breeds → show breed → class breeds → show name
+            const showBreedName = showData?.breed?.name;
+            const classBreedNames = [...new Set(
+              (showData?.showClasses ?? []).filter((sc) => sc.breed).map((sc) => sc.breed!.name)
+            )];
+            const fallbackBreed = showBreedName ?? (classBreedNames.length > 0 ? classBreedNames.join(', ') : (showData?.name ?? 'All breeds'));
+            const breedsText = judge?.breeds.length
+              ? judge.breeds.join(', ')
+              : fallbackBreed;
+            const showDate = showData?.startDate
+              ? new Date(showData.startDate).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+              : 'TBC';
+            const venue = showData?.venue
+              ? `${showData.venue.name}${showData.venue.postcode ? `, ${showData.venue.postcode}` : ''}`
+              : 'Venue TBC';
+            const orgName = showData?.organisation?.name ?? 'the Show Society';
+
+            return (
+              <div className="rounded-lg border bg-muted/30 p-4 space-y-3 text-sm">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Email preview</p>
+                <div className="rounded-md bg-[#2D5F3F] px-4 py-3 text-center">
+                  <p className="font-semibold text-white">Judging Appointment Offer</p>
+                  <p className="text-xs text-white/70">from {orgName}</p>
+                </div>
+                <p className="text-muted-foreground">Dear {judge?.name ?? 'Judge'},</p>
+                <p className="text-muted-foreground">On behalf of {orgName}, I have much pleasure in inviting you to judge at our forthcoming show...</p>
+                <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+                  <span className="font-medium">Show</span>
+                  <span>{showData?.name ?? '—'}</span>
+                  <span className="font-medium">Date</span>
+                  <span>{showDate}</span>
+                  <span className="font-medium">Venue</span>
+                  <span>{venue}</span>
+                  <span className="font-medium">Breeds</span>
+                  <span>{breedsText}</span>
+                  {showData?.showType && (
+                    <>
+                      <span className="font-medium">Type</span>
+                      <span className="capitalize">{showData.showType.replace('_', ' ')}</span>
+                    </>
+                  )}
+                </div>
+                {(parseFloat(offerHotel) > 0 || parseFloat(offerTravel) > 0 || parseFloat(offerOther) > 0) && (
+                  <>
+                    <span className="font-medium">Expenses</span>
+                    <span>
+                      {[
+                        parseFloat(offerHotel) > 0 && `Hotel: £${parseFloat(offerHotel).toFixed(2)}`,
+                        parseFloat(offerTravel) > 0 && `Travel: £${parseFloat(offerTravel).toFixed(2)}`,
+                        parseFloat(offerOther) > 0 && `Other: £${parseFloat(offerOther).toFixed(2)}`,
+                      ].filter(Boolean).join(', ')}
+                      {offerExpenseNotes.trim() ? ` (${offerExpenseNotes.trim()})` : ''}
+                    </span>
+                  </>
+                )}
+                {offerNotes.trim() && (
+                  <div className="col-span-2 rounded-md bg-background px-3 py-2 text-muted-foreground italic">
+                    {offerNotes}
+                  </div>
+                )}
+                <div className="col-span-2 flex justify-center gap-4 pt-1">
+                  <span className="rounded-md bg-[#2D5F3F] px-4 py-1.5 text-xs font-medium text-white">Accept Appointment</span>
+                  <span className="text-xs text-muted-foreground underline">Decline</span>
+                </div>
+              </div>
+            );
+          })()}
+
+          <div className="space-y-4">
             <div>
               <Label className="text-sm font-medium">Judge Email</Label>
               <Input
@@ -1029,6 +696,55 @@ export function JudgesSection({ showId }: { showId: string }) {
                 className="mt-1 h-11"
               />
             </div>
+            {/* Expenses */}
+            <div>
+              <Label className="text-sm font-medium">Expenses Offered (optional)</Label>
+              <div className="grid grid-cols-3 gap-2 mt-1">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Hotel (£)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    value={offerHotel}
+                    onChange={(e) => setOfferHotel(e.target.value)}
+                    className="h-11"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Travel (£)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    value={offerTravel}
+                    onChange={(e) => setOfferTravel(e.target.value)}
+                    className="h-11"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Other (£)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    value={offerOther}
+                    onChange={(e) => setOfferOther(e.target.value)}
+                    className="h-11"
+                  />
+                </div>
+              </div>
+              <Input
+                placeholder="e.g. 2 nights at Premier Inn"
+                value={offerExpenseNotes}
+                onChange={(e) => setOfferExpenseNotes(e.target.value)}
+                className="mt-2 h-11"
+              />
+            </div>
+
             <div>
               <Label className="text-sm font-medium">Additional Notes (optional)</Label>
               <Input
@@ -1037,9 +753,6 @@ export function JudgesSection({ showId }: { showId: string }) {
                 onChange={(e) => setOfferNotes(e.target.value)}
                 className="mt-1 h-11"
               />
-              <p className="text-xs text-muted-foreground mt-1">
-                These notes will appear in the offer email sent to the judge.
-              </p>
             </div>
           </div>
           <DialogFooter>
@@ -1053,6 +766,10 @@ export function JudgesSection({ showId }: { showId: string }) {
                   judgeId: offerJudgeId,
                   judgeEmail: offerEmail.trim(),
                   notes: offerNotes.trim() || undefined,
+                  hotelCost: offerHotel ? Math.round(parseFloat(offerHotel) * 100) : undefined,
+                  travelCost: offerTravel ? Math.round(parseFloat(offerTravel) * 100) : undefined,
+                  otherExpenses: offerOther ? Math.round(parseFloat(offerOther) * 100) : undefined,
+                  expenseNotes: offerExpenseNotes.trim() || undefined,
                 })
               }
               disabled={!offerEmail.trim() || sendOfferMutation.isPending}

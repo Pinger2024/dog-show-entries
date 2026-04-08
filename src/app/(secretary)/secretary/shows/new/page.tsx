@@ -120,11 +120,13 @@ const createShowSchema = z.object({
     'championship',
   ], { required_error: 'Please select a show type' }),
   showScope: z.enum(['single_breed', 'general'], { required_error: 'Please select a show scope' }),
+  breedId: z.string().uuid().optional(),
   classSexArrangement: z.enum(['separate_sex', 'combined_sex']).optional(),
   secretaryUserId: z.string().uuid().optional(),
   secretaryEmail: z.string().email('Enter a valid email').optional().or(z.literal('')),
   secretaryName: z.string().optional(),
   secretaryPhone: z.string().optional(),
+  secretaryAddress: z.string().optional(),
   showOpenTime: z.string().optional(),
   acceptsPostalEntries: z.boolean().default(false),
   organisationId: z.string().uuid('Please select an organisation'),
@@ -249,6 +251,7 @@ export default function NewShowPage() {
 
   const { data: dashboardData } = trpc.secretary.getDashboard.useQuery();
   const { data: classDefinitions } = trpc.secretary.listClassDefinitions.useQuery();
+  const { data: allBreeds } = trpc.breeds.list.useQuery();
 
   const utils = trpc.useUtils();
   const createVenueMutation = trpc.secretary.createVenue.useMutation();
@@ -306,7 +309,7 @@ export default function NewShowPage() {
   }, [orgMembersData, session?.user]);
 
   // Populate secretary contact fields from a member record
-  function applySecretaryMember(member: { name?: string | null; email?: string | null; phone?: string | null }) {
+  function applySecretaryMember(member: { name?: string | null; email?: string | null; phone?: string | null; address?: string | null; postcode?: string | null }) {
     // If name is missing or looks like an email, derive a display name from the email
     let name = member.name ?? '';
     if (!name || name.includes('@')) {
@@ -315,6 +318,9 @@ export default function NewShowPage() {
     form.setValue('secretaryName', name);
     form.setValue('secretaryEmail', member.email ?? '');
     form.setValue('secretaryPhone', member.phone ?? '');
+    // Build full address from address + postcode
+    const addressParts = [member.address, member.postcode].filter(Boolean);
+    form.setValue('secretaryAddress', addressParts.join(', '));
   }
 
   // Auto-select "myself" as secretary when session/members load
@@ -358,11 +364,13 @@ export default function NewShowPage() {
         name: values.name,
         showType: values.showType,
         showScope: values.showScope,
+        breedId: values.breedId || undefined,
         classSexArrangement: values.classSexArrangement || undefined,
         secretaryUserId: values.secretaryUserId || undefined,
         secretaryEmail: values.secretaryEmail || undefined,
         secretaryName: values.secretaryName || undefined,
         secretaryPhone: values.secretaryPhone || undefined,
+        secretaryAddress: values.secretaryAddress || undefined,
         showOpenTime: values.showOpenTime || undefined,
         organisationId: values.organisationId,
         venueId: venueId || undefined,
@@ -719,6 +727,32 @@ export default function NewShowPage() {
                     )}
                   />
                 </div>
+
+                {/* Breed selector for single-breed shows */}
+                {watchedShowScope === 'single_breed' && (
+                  <FormField
+                    control={form.control}
+                    name="breedId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Breed <span className="text-destructive">*</span></FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value ?? ''}>
+                          <FormControl>
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select breed for this show" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {(allBreeds ?? []).map((b) => (
+                              <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
 
                 <Accordion type="multiple" value={openSections} onValueChange={setOpenSections}>
                   <AccordionItem value="classification">
