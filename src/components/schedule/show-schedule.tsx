@@ -38,6 +38,7 @@ Font.registerHyphenationCallback((word) => [word]);
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 export interface ScheduleShowInfo {
+  slug: string;
   name: string;
   showType: string;
   showScope: string;
@@ -920,7 +921,7 @@ export function ShowSchedule({
 
           {/* Online entries link */}
           <Text style={s.coverFooterText}>
-            Enter online at remishowmanager.co.uk
+            Enter online at remishowmanager.co.uk/shows/{show.slug}
           </Text>
         </View>
 
@@ -1071,7 +1072,7 @@ export function ShowSchedule({
 
         {/* Online entries */}
         <InfoCard title="Online Entries">
-          <Text style={s.infoText}>Enter online at remishowmanager.co.uk</Text>
+          <Text style={s.infoText}>Enter online at remishowmanager.co.uk/shows/{show.slug}</Text>
         </InfoCard>
 
         {/* Awards */}
@@ -1478,7 +1479,7 @@ export function ShowSchedule({
             {show.juniorHandlerFee != null ? `. Junior Handler ${formatCurrency(show.juniorHandlerFee)}` : ''}.
           </Rule>
         )}
-        <Rule num="6">ONLINE ENTRY can be found at remishowmanager.co.uk</Rule>
+        <Rule num="6">ONLINE ENTRY can be found at remishowmanager.co.uk/shows/{show.slug}</Rule>
         <Rule num="7">The Committee reserves to itself the right to refuse any entries.</Rule>
         <Rule num="8">No dog under 6 calendar months of age on the first day of the Show is eligible for exhibition.</Rule>
         <Rule num="9">The mating of bitches within the precincts of the Show is forbidden.</Rule>
@@ -1629,7 +1630,7 @@ export function ShowSchedule({
           <SectionBand title="Entry Form" />
 
           <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textLight, marginBottom: 8, textAlign: 'center' }}>
-            Enter online at remishowmanager.co.uk — or complete this form and post to the show secretary
+            Enter online at remishowmanager.co.uk/shows/{show.slug} — or complete this form and post to the show secretary
           </Text>
 
           <Text style={{ fontFamily: 'Inter', fontSize: 8.5, fontWeight: 'bold', marginBottom: 8, color: C.primary }}>

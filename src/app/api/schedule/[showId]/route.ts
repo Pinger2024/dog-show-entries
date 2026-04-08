@@ -192,6 +192,7 @@ export async function GET(
     }));
 
   const showInfo: ScheduleShowInfo = {
+    slug: show.slug,
     name: show.name,
     showType: show.showType,
     showScope: show.showScope,

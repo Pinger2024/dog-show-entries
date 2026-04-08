@@ -349,6 +349,7 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
   }));
 
   const showInfo: ScheduleShowInfo = {
+    slug: show.slug,
     name: show.name,
     showType: show.showType,
     showScope: show.showScope ?? 'single_breed',
