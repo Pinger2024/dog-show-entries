@@ -205,8 +205,11 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     setHasLoaded(true);
   }, [effectiveExisting, showData, previousData, hasLoaded]);
 
+  // ── Derived counts ──
+  const officerCount = officers.filter((o) => o.name).length;
+  const guarantorCount = officers.filter((o) => o.isGuarantor).length;
+
   // ── Section completion checks ──
-  // Only mark complete when the section has been meaningfully filled in
   const hasBeenSaved = !!effectiveExisting;
   const sectionStatus = useMemo(() => {
     if (!hasBeenSaved) {
@@ -317,8 +320,8 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     );
   }
 
-  const officerCount = officers.filter((o) => o.name).length;
-  const guarantorCount = officers.filter((o) => o.isGuarantor).length;
+  // Derived counts — used below and passed to child components
+  // (defined earlier, near sectionStatus which depends on officerCount)
   const requiredGuarantors = showData?.showType === 'championship' ? 6 : 3;
 
   return (
