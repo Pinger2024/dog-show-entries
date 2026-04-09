@@ -148,7 +148,7 @@ export default function DocumentsPage() {
   // Prize card options
   const [prizeCardPlacements, setPrizeCardPlacements] = useState('5');
   const [includeJudge, setIncludeJudge] = useState(true);
-  const [prizeCardStyle, setPrizeCardStyle] = useState<'filled' | 'outline'>('filled');
+  const [prizeCardStyle, setPrizeCardStyle] = useState<'filled' | 'outline'>('outline');
 
   const catalogueDocuments: DocumentLink[] = hasNumbers
     ? [
