@@ -3,7 +3,7 @@ import { styles } from './catalogue-styles';
 import { CatalogueHeader } from './catalogue-header';
 import type { CatalogueEntry, CatalogueShowInfo } from './catalogue-standard';
 import { formatDobKC, formatPedigreeKC, formatOwnerKC, uppercaseName, buildSponsorLines } from './catalogue-utils';
-import { CoverPage, JudgesListPage, ClassDefinitionsPage, TrophiesPage } from './catalogue-front-matter';
+import { CoverPage, JudgesListPage, ClassDefinitionsPage, TrophiesPage, ExhibitorIndexPage } from './catalogue-front-matter';
 import type { ClassSponsorshipInfo } from './catalogue-front-matter';
 
 interface Props {
@@ -113,12 +113,13 @@ export function CatalogueByClass({ show, entries }: Props) {
 
   return (
     <Document>
-      {/* Front matter — cover, judges, definitions, trophies */}
+      {/* Front matter — cover, judges, exhibitor index, definitions, trophies */}
       <CoverPage show={show} />
       <JudgesListPage show={show} />
+      <ExhibitorIndexPage show={show} entries={entries} />
       <ClassDefinitionsPage show={show} />
-      {!show.skipTrophiesPage && show.classSponsorships && show.classSponsorships.length > 0 && (
-        <TrophiesPage show={show} sponsorships={show.classSponsorships} />
+      {!show.skipTrophiesPage && (
+        <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />
       )}
 
       {classChunks.map((chunkKeys, chunkIdx) => (
