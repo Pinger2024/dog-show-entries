@@ -46,7 +46,8 @@ const placementPreviews = [
   { label: '2nd', colour: 'bg-blue-100 text-blue-800 border-blue-300' },
   { label: '3rd', colour: 'bg-yellow-100 text-yellow-800 border-yellow-300' },
   { label: 'Reserve', colour: 'bg-green-100 text-green-800 border-green-300' },
-  { label: 'VHC', colour: 'bg-orange-100 text-orange-800 border-orange-300' },
+  { label: 'VHC', colour: 'bg-purple-100 text-purple-800 border-purple-300' },
+  { label: 'HC', colour: 'bg-orange-100 text-orange-800 border-orange-300' },
 ];
 
 interface DocumentLink {
@@ -198,6 +199,20 @@ export default function DocumentsPage() {
             description:
               'One page per class with exhibit numbers, placement columns, and signature area',
           },
+          {
+            label: 'Ring Numbers (A4 Grid)',
+            href: `/api/ring-numbers/${showId}`,
+            icon: <Hash className="size-4" />,
+            description:
+              '8 ring number cards per A4 page — print on card stock, cut along the guidelines',
+          },
+          {
+            label: 'Ring Numbers (Single)',
+            href: `/api/ring-numbers/${showId}?format=single`,
+            icon: <Hash className="size-4" />,
+            description:
+              'One ring number per page — for professional printing or booklet binding',
+          },
         ]
       : []),
     {
@@ -334,7 +349,7 @@ export default function DocumentsPage() {
             Prize Cards
           </CardTitle>
           <CardDescription>
-            A5 prize cards for 1st through to VHC — customise and download
+            A5 prize cards for 1st through to HC — customise and download
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -354,6 +369,7 @@ export default function DocumentsPage() {
                   <SelectItem value="3">1st – 3rd</SelectItem>
                   <SelectItem value="4">1st – Reserve</SelectItem>
                   <SelectItem value="5">1st – VHC</SelectItem>
+                  <SelectItem value="6">1st – HC</SelectItem>
                 </SelectContent>
               </Select>
             </div>
