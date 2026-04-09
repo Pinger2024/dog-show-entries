@@ -58,6 +58,19 @@ function InfoCard({ title, children }: { title?: string; children: React.ReactNo
   );
 }
 
+function JurisdictionBlock() {
+  return (
+    <View style={{ width: '100%', marginTop: 10, paddingHorizontal: 8 }} wrap={false}>
+      <Text style={{ fontFamily: 'Inter', fontSize: 7, fontWeight: 'bold', color: C.textDark, marginBottom: 2 }}>
+        Jurisdiction and Responsibilities
+      </Text>
+      <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 6.5, lineHeight: 1.4, color: C.textMedium }}>
+        The Officers and Committee members of the society holding the licence are deemed responsible for organising and conducting the show safely and in accordance with the Rules and Regulations of the Royal Kennel Club and agree to abide by and adopt any decision of the Board or any authority to whom the Board may delegate its powers, subject to the conditions of Regulation F16. In so doing those appointed as Officers and Committee members accept that they are jointly and severally responsible for the organisation of the show and that this is a binding undertaking (vide Royal Kennel Club General Show Regulations F4 and F5).
+      </Text>
+    </View>
+  );
+}
+
 // ── Cover Page ──────────────────────────────────────────────────
 
 /** Cover page for the RKC standard catalogue — matching schedule design */
@@ -265,34 +278,26 @@ export function CoverPage({ show }: FrontMatterProps) {
           </View>
         )}
 
-        {/* Jurisdiction and Responsibilities */}
-        <View style={{ width: '100%', marginTop: 4, marginBottom: 2, paddingHorizontal: 8 }}>
-          <Text style={{ fontFamily: 'Inter', fontSize: 7, fontWeight: 'bold', color: C.textDark, marginBottom: 2 }}>
-            Jurisdiction and Responsibilities
-          </Text>
-          <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 6.5, lineHeight: 1.4, color: C.textMedium }}>
-            The Officers and Committee members of the society holding the licence are deemed responsible for organising and conducting the show safely and in accordance with the Rules and Regulations of the Royal Kennel Club and agree to abide by and adopt any decision of the Board or any authority to whom the Board may delegate its powers, subject to the conditions of Regulation F16. In so doing those appointed as Officers and Committee members accept that they are jointly and severally responsible for the organisation of the show and that this is a binding undertaking (vide Royal Kennel Club General Show Regulations F4 and F5).
-          </Text>
-        </View>
-
-        {/* Show-level sponsors on cover */}
+        {/* Show-level sponsors on cover — logos displayed prominently */}
         {show.showSponsors && show.showSponsors.length > 0 && (() => {
           const tierSponsors = show.showSponsors!.filter(sp => sp.tier === 'title' || sp.tier === 'show');
           const supporterSponsors = show.showSponsors!.filter(sp => sp.tier !== 'title' && sp.tier !== 'show');
           return (
-            <View style={{ width: '100%', marginTop: 2, marginBottom: 4 }}>
+            <View style={{ width: '100%', marginTop: 6, marginBottom: 4 }}>
               {tierSponsors.length > 0 && (
-                <View style={{ ...styles.coverDetailCard, borderLeftColor: C.accent }}>
-                  <Text style={styles.coverSectionLabel}>Sponsors</Text>
+                <View style={{ alignItems: 'center', marginBottom: 6 }}>
+                  <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textLight, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 4 }}>
+                    {tierSponsors.length === 1 ? 'Sponsored by' : 'Sponsors'}
+                  </Text>
                   {tierSponsors.map((sp, i) => (
-                    <Text key={i} style={{
-                      fontFamily: 'Inter',
-                      fontSize: 8,
-                      color: C.textDark,
-                      marginBottom: 1,
-                    }}>
-                      {sp.customTitle ? `${sp.customTitle}: ` : ''}{sp.name}
-                    </Text>
+                    <View key={i} style={{ alignItems: 'center', marginBottom: 4 }}>
+                      {sp.logoUrl && (
+                        <Image src={sp.logoUrl} style={{ width: 100, height: 50, objectFit: 'contain', marginBottom: 3 }} />
+                      )}
+                      <Text style={{ fontFamily: 'Inter', fontSize: 9, fontWeight: 'bold', color: C.textDark }}>
+                        {sp.customTitle ? `${sp.customTitle}: ` : ''}{sp.name}
+                      </Text>
+                    </View>
                   ))}
                 </View>
               )}
@@ -300,14 +305,14 @@ export function CoverPage({ show }: FrontMatterProps) {
                 <View style={{ ...styles.coverDetailCard, borderLeftColor: C.accent }}>
                   <Text style={styles.coverSectionLabel}>With grateful thanks to</Text>
                   {supporterSponsors.map((sp, i) => (
-                    <Text key={i} style={{
-                      fontFamily: 'Inter',
-                      fontSize: 7.5,
-                      color: C.textMedium,
-                      marginBottom: 1,
-                    }}>
-                      {sp.name}
-                    </Text>
+                    <View key={i} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                      {sp.logoUrl && (
+                        <Image src={sp.logoUrl} style={{ width: 30, height: 15, objectFit: 'contain', marginRight: 6 }} />
+                      )}
+                      <Text style={{ fontFamily: 'Inter', fontSize: 7.5, color: C.textMedium }}>
+                        {sp.name}
+                      </Text>
+                    </View>
                   ))}
                 </View>
               )}
@@ -362,6 +367,7 @@ export function JudgesListPage({ show }: FrontMatterProps) {
             {label}
           </Text>
         ))}
+        <JurisdictionBlock />
       </Page>
     );
   }
@@ -410,6 +416,8 @@ export function JudgesListPage({ show }: FrontMatterProps) {
           </View>
         );
       })}
+
+      <JurisdictionBlock />
 
       <Text
         style={styles.footer}
