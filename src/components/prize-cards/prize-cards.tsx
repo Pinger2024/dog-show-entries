@@ -33,7 +33,7 @@ interface PrizeCardsProps {
   show: PrizeCardShowInfo;
   classes: PrizeCardClass[];
   includeJudgeName: boolean;
-  placements: number; // 1-5, how many placement cards per class
+  placements: number; // 1–6, how many placement cards per class
   cardStyle?: PrizeCardStyle; // 'filled' = coloured background, 'outline' = white bg + coloured text/frame
 }
 

@@ -14,13 +14,14 @@ Font.registerHyphenationCallback((word) => [word]);
 
 export interface RingNumberShowInfo {
   name: string;
-  organisation: string | null;
 }
+
+export type RingNumberFormat = 'multi-up' | 'single';
 
 interface RingNumbersProps {
   show: RingNumberShowInfo;
   numbers: number[];
-  format: 'multi-up' | 'single';
+  format: RingNumberFormat;
 }
 
 // A7 in points: 74mm × 105mm = 209.76 × 297.64 pts

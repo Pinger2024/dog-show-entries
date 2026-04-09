@@ -22,7 +22,7 @@ import type { ScheduleShowInfo, ScheduleClass, ScheduleJudge, ScheduleSponsor } 
 import { RingBoard } from '@/components/ring-board/ring-board';
 import type { RingBoardShowInfo, RingBoardRing } from '@/components/ring-board/ring-board';
 import { RingNumbers as RingNumbersComponent } from '@/components/ring-numbers/ring-numbers';
-import type { RingNumberShowInfo } from '@/components/ring-numbers/ring-numbers';
+import type { RingNumberShowInfo, RingNumberFormat } from '@/components/ring-numbers/ring-numbers';
 import React from 'react';
 import { uploadToR2, getPublicUrl } from '@/server/services/storage';
 import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
@@ -492,7 +492,7 @@ export async function generateRingBoardPdf(showId: string): Promise<Buffer> {
 
 export async function generateRingNumbersPdf(
   showId: string,
-  format: 'multi-up' | 'single' = 'multi-up'
+  format: RingNumberFormat = 'multi-up'
 ): Promise<Buffer> {
   const show = await db.query.shows.findFirst({
     where: eq(schema.shows.id, showId),
@@ -523,7 +523,6 @@ export async function generateRingNumbersPdf(
 
   const showInfo: RingNumberShowInfo = {
     name: show.name,
-    organisation: show.organisation?.name ?? null,
   };
 
   const pdfDocument = React.createElement(RingNumbersComponent, {

@@ -3,6 +3,7 @@ import { db } from '@/server/db';
 import { eq } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
 import { generateRingNumbersPdf } from '@/server/services/pdf-generation';
+import type { RingNumberFormat } from '@/components/ring-numbers/ring-numbers';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, makePdfResponse } from '@/lib/pdf-utils';
 
@@ -29,7 +30,7 @@ export async function GET(
   if (authResult instanceof NextResponse) return authResult;
 
   const searchParams = request.nextUrl.searchParams;
-  const format = searchParams.get('format') === 'single' ? 'single' : 'multi-up';
+  const format: RingNumberFormat = searchParams.get('format') === 'single' ? 'single' : 'multi-up';
   const isPreview = searchParams.has('preview');
 
   try {
