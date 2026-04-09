@@ -58,7 +58,10 @@ export interface CatalogueShowInfo {
   secretaryName?: string;
   secretaryEmail?: string;
   secretaryPhone?: string;
+  secretaryAddress?: string;
   onCallVet?: string;
+  showOpenTime?: string | null;
+  totalClasses?: number;
   wetWeatherAccommodation?: boolean;
   judgedOnGroupSystem?: boolean;
   judgesByBreedName?: Record<string, string>;

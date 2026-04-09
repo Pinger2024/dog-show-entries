@@ -108,6 +108,20 @@ export function CoverPage({ show }: FrontMatterProps) {
           <Image src={show.logoUrl} style={styles.coverLogo} />
         )}
 
+        {/* Title sponsor logo — prominent, above the show name (matching schedule) */}
+        {(() => {
+          const titleSponsor = (show.showSponsors ?? []).find((sp) => sp.tier === 'title' && sp.logoUrl);
+          if (!titleSponsor) return null;
+          return (
+            <View style={{ alignItems: 'center', marginBottom: 4 }}>
+              <Text style={{ fontFamily: 'Inter', fontSize: 6, color: C.textLight, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 3 }}>
+                {titleSponsor.customTitle ?? 'Sponsored by'}
+              </Text>
+              <Image src={titleSponsor.logoUrl!} style={{ maxWidth: 120, maxHeight: 40, objectFit: 'contain' }} />
+            </View>
+          );
+        })()}
+
         {/* Show name — LibreBaskerville */}
         <Text style={styles.coverShowName}>{show.name}</Text>
 
@@ -118,17 +132,30 @@ export function CoverPage({ show }: FrontMatterProps) {
           </View>
         )}
 
-        {/* "CATALOGUE" label */}
-        <Text style={{
-          fontFamily: 'Inter',
-          fontSize: 8,
-          color: C.textLight,
-          letterSpacing: 2,
-          textTransform: 'uppercase',
-          marginBottom: 4,
-        }}>
-          Catalogue
-        </Text>
+        {/* Show-level sponsor logos below badge (matching schedule) */}
+        {(() => {
+          const showLevelSponsors = (show.showSponsors ?? []).filter((sp) => sp.tier === 'show' && sp.logoUrl);
+          if (showLevelSponsors.length === 0) return null;
+          return (
+            <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 4, flexWrap: 'wrap' }}>
+              {showLevelSponsors.map((sp, i) => (
+                <View key={i} style={{ alignItems: 'center' }}>
+                  <Image src={sp.logoUrl!} style={{ maxWidth: 80, maxHeight: 28, objectFit: 'contain' }} />
+                  <Text style={{ fontFamily: 'Inter', fontSize: 5.5, color: C.textLight, marginTop: 1 }}>
+                    {sp.customTitle ?? sp.name}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          );
+        })()}
+
+        {/* Class count */}
+        {show.totalClasses != null && show.totalClasses > 0 && (
+          <Text style={{ fontFamily: 'Inter', fontSize: 8, color: C.textMedium, marginTop: 2, marginBottom: 2 }}>
+            {show.totalClasses} Class{show.totalClasses !== 1 ? 'es' : ''}
+          </Text>
+        )}
 
         {/* RKC jurisdiction */}
         <Text style={styles.coverRegulatory}>
@@ -137,7 +164,7 @@ export function CoverPage({ show }: FrontMatterProps) {
 
         <GoldRule />
 
-        {/* Key details card with gold left border */}
+        {/* Key details card with gold left border — matching schedule layout */}
         <View style={styles.coverDetailCard}>
           <View style={styles.coverDetailRow}>
             <Text style={styles.coverDetailLabel}>Date</Text>
@@ -151,26 +178,28 @@ export function CoverPage({ show }: FrontMatterProps) {
               </Text>
             </View>
           )}
-          {coverJudges.length > 0 && (
+          {coverJudges.length > 0 && coverJudges.map((j, i) => (
+            <View key={i} style={styles.coverDetailRow}>
+              <Text style={styles.coverDetailLabel}>{i === 0 ? (coverJudges.length === 1 ? 'Judge' : 'Judges') : ''}</Text>
+              <Text style={styles.coverDetailValue}>{j}</Text>
+            </View>
+          ))}
+          {show.showOpenTime && (
             <View style={styles.coverDetailRow}>
-              <Text style={styles.coverDetailLabel}>
-                {coverJudges.length === 1 ? 'Judge' : 'Judges'}
-              </Text>
-              <Text style={styles.coverDetailValue}>
-                {coverJudges.join(', ')}
-              </Text>
+              <Text style={styles.coverDetailLabel}>Show Opens</Text>
+              <Text style={styles.coverDetailValue}>{formatTime(show.showOpenTime)}</Text>
+            </View>
+          )}
+          {show.startTime && (
+            <View style={styles.coverDetailRow}>
+              <Text style={styles.coverDetailLabel}>Judging Starts</Text>
+              <Text style={styles.coverDetailValue}>{formatTime(show.startTime)}</Text>
             </View>
           )}
           {show.kcLicenceNo && (
             <View style={styles.coverDetailRow}>
               <Text style={styles.coverDetailLabel}>Licence</Text>
               <Text style={styles.coverDetailValue}>{show.kcLicenceNo}</Text>
-            </View>
-          )}
-          {show.startTime && (
-            <View style={styles.coverDetailRow}>
-              <Text style={styles.coverDetailLabel}>Judging</Text>
-              <Text style={styles.coverDetailValue}>Commences at {formatTime(show.startTime)}</Text>
             </View>
           )}
         </View>
@@ -254,18 +283,21 @@ export function CoverPage({ show }: FrontMatterProps) {
           </View>
         )}
 
-        {/* Secretary details — green left border */}
+        {/* Secretary details — green left border (matching schedule) */}
         {(show.secretaryName || show.secretaryEmail || show.secretaryPhone) && (
           <View style={{ ...styles.coverDetailCard, borderLeftColor: C.primary }}>
             <Text style={styles.coverSectionLabel}>Show Secretary</Text>
             {show.secretaryName && (
               <Text style={styles.coverSectionText}>{show.secretaryName}</Text>
             )}
-            {show.secretaryEmail && (
-              <Text style={styles.coverSectionText}>{show.secretaryEmail}</Text>
+            {show.secretaryAddress && (
+              <Text style={styles.coverSectionText}>{show.secretaryAddress}</Text>
             )}
             {show.secretaryPhone && (
               <Text style={styles.coverSectionText}>Tel: {show.secretaryPhone}</Text>
+            )}
+            {show.secretaryEmail && (
+              <Text style={styles.coverSectionText}>{show.secretaryEmail}</Text>
             )}
           </View>
         )}
@@ -273,8 +305,16 @@ export function CoverPage({ show }: FrontMatterProps) {
         {/* On-call vet */}
         {show.onCallVet && (
           <View style={{ ...styles.coverDetailCard, borderLeftColor: C.primary }}>
-            <Text style={styles.coverSectionLabel}>Veterinary Surgeon</Text>
+            <Text style={styles.coverSectionLabel}>On-Call Veterinary Surgeon</Text>
             <Text style={styles.coverSectionText}>{show.onCallVet}</Text>
+          </View>
+        )}
+
+        {/* Show manager */}
+        {show.showManager && (
+          <View style={{ width: '100%', marginBottom: 4 }}>
+            <Text style={styles.coverSectionLabel}>Show Manager</Text>
+            <Text style={styles.coverSectionText}>{show.showManager}</Text>
           </View>
         )}
 
