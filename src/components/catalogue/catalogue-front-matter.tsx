@@ -71,6 +71,18 @@ function JurisdictionBlock() {
   );
 }
 
+function WelcomeNote({ show }: FrontMatterProps) {
+  if (!show.welcomeNote) return null;
+  return (
+    <View style={{ ...styles.coverDetailCard, borderLeftColor: C.accent, marginTop: 8, marginBottom: 4 }} wrap={false}>
+      <Text style={styles.coverSectionLabel}>Welcome</Text>
+      <Text style={{ fontFamily: 'Times', fontSize: 8, fontStyle: 'italic', color: C.textDark, lineHeight: 1.4 }}>
+        {show.welcomeNote}
+      </Text>
+    </View>
+  );
+}
+
 // ── Cover Page ──────────────────────────────────────────────────
 
 /** Cover page for the RKC standard catalogue — matching schedule design */
@@ -228,18 +240,18 @@ export function CoverPage({ show }: FrontMatterProps) {
           </View>
         )}
 
-        {/* Custom statements — prominently on cover page */}
+        {/* Custom statements — compact on cover */}
         {show.customStatements && show.customStatements.length > 0 && (
-          <View style={{ width: '100%', marginTop: 4, marginBottom: 2, paddingHorizontal: 8 }}>
+          <View style={{ width: '100%', marginTop: 2, marginBottom: 1, paddingHorizontal: 8 }}>
             {show.customStatements.map((statement, i) => (
               <Text key={i} style={{
                 fontFamily: 'Inter',
-                fontSize: 7.5,
+                fontSize: 6.5,
                 fontWeight: 'bold',
                 color: C.textDark,
                 textAlign: 'center',
                 textTransform: 'uppercase',
-                marginTop: i > 0 ? 3 : 0,
+                marginTop: i > 0 ? 1 : 0,
               }}>
                 {statement}
               </Text>
@@ -251,12 +263,12 @@ export function CoverPage({ show }: FrontMatterProps) {
         {show.judgedOnGroupSystem && (
           <Text style={{
             fontFamily: 'Inter',
-            fontSize: 7.5,
+            fontSize: 6.5,
             fontWeight: 'bold',
             color: C.textDark,
             textAlign: 'center',
             textTransform: 'uppercase',
-            marginTop: 4,
+            marginTop: 2,
           }}>
             Judged on the Group System
           </Text>
@@ -264,28 +276,18 @@ export function CoverPage({ show }: FrontMatterProps) {
         {show.wetWeatherAccommodation === false && (
           <Text style={{
             fontFamily: 'Inter',
-            fontSize: 7,
+            fontSize: 6.5,
             color: C.textMedium,
             textAlign: 'center',
-            marginTop: 2,
+            marginTop: 1,
           }}>
             No wet weather accommodation is provided
           </Text>
         )}
 
-        {/* Secretary's welcome note */}
-        {show.welcomeNote && (
-          <View style={{ ...styles.coverDetailCard, borderLeftColor: C.accent, marginTop: 6 }}>
-            <Text style={styles.coverSectionLabel}>Welcome</Text>
-            <Text style={{ fontFamily: 'Times', fontSize: 8, fontStyle: 'italic', color: C.textDark, lineHeight: 1.4 }}>
-              {show.welcomeNote}
-            </Text>
-          </View>
-        )}
-
         {/* Secretary details — green left border (matching schedule) */}
         {(show.secretaryName || show.secretaryEmail || show.secretaryPhone) && (
-          <View style={{ ...styles.coverDetailCard, borderLeftColor: C.primary }}>
+          <View style={{ ...styles.coverDetailCard, borderLeftColor: C.primary, marginTop: 4 }}>
             <Text style={styles.coverSectionLabel}>Show Secretary</Text>
             {show.secretaryName && (
               <Text style={styles.coverSectionText}>{show.secretaryName}</Text>
@@ -302,19 +304,21 @@ export function CoverPage({ show }: FrontMatterProps) {
           </View>
         )}
 
-        {/* On-call vet */}
-        {show.onCallVet && (
-          <View style={{ ...styles.coverDetailCard, borderLeftColor: C.primary }}>
-            <Text style={styles.coverSectionLabel}>On-Call Veterinary Surgeon</Text>
-            <Text style={styles.coverSectionText}>{show.onCallVet}</Text>
-          </View>
-        )}
-
-        {/* Show manager */}
-        {show.showManager && (
-          <View style={{ width: '100%', marginBottom: 4 }}>
-            <Text style={styles.coverSectionLabel}>Show Manager</Text>
-            <Text style={styles.coverSectionText}>{show.showManager}</Text>
+        {/* On-call vet + show manager — compact */}
+        {(show.onCallVet || show.showManager) && (
+          <View style={{ width: '100%', marginTop: 2 }}>
+            {show.onCallVet && (
+              <View style={{ marginBottom: 2 }}>
+                <Text style={styles.coverSectionLabel}>On-Call Veterinary Surgeon</Text>
+                <Text style={styles.coverSectionText}>{show.onCallVet}</Text>
+              </View>
+            )}
+            {show.showManager && (
+              <View style={{ marginBottom: 2 }}>
+                <Text style={styles.coverSectionLabel}>Show Manager</Text>
+                <Text style={styles.coverSectionText}>{show.showManager}</Text>
+              </View>
+            )}
           </View>
         )}
 
@@ -407,6 +411,7 @@ export function JudgesListPage({ show }: FrontMatterProps) {
             {label}
           </Text>
         ))}
+        <WelcomeNote show={show} />
         <JurisdictionBlock />
       </Page>
     );
