@@ -21,6 +21,8 @@ import { ShowSchedule } from '@/components/schedule/show-schedule';
 import type { ScheduleShowInfo, ScheduleClass, ScheduleJudge, ScheduleSponsor } from '@/components/schedule/show-schedule';
 import { RingBoard } from '@/components/ring-board/ring-board';
 import type { RingBoardShowInfo, RingBoardRing } from '@/components/ring-board/ring-board';
+import { RingNumbers as RingNumbersComponent } from '@/components/ring-numbers/ring-numbers';
+import type { RingNumberShowInfo } from '@/components/ring-numbers/ring-numbers';
 import React from 'react';
 import { uploadToR2, getPublicUrl } from '@/server/services/storage';
 import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
@@ -488,29 +490,10 @@ export async function generateRingBoardPdf(showId: string): Promise<Buffer> {
 
 // ── Ring Numbers PDF ──
 
-const ringNumberStyles = StyleSheet.create({
-  page: {
-    width: '105mm',
-    height: '148mm',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  number: {
-    fontFamily: 'Helvetica-Bold',
-    fontSize: 120,
-    textAlign: 'center',
-  },
-  showName: {
-    fontFamily: 'Helvetica',
-    fontSize: 10,
-    color: '#666',
-    textAlign: 'center',
-    marginTop: 10,
-  },
-});
-
-export async function generateRingNumbersPdf(showId: string): Promise<Buffer> {
+export async function generateRingNumbersPdf(
+  showId: string,
+  format: 'multi-up' | 'single' = 'multi-up'
+): Promise<Buffer> {
   const show = await db.query.shows.findFirst({
     where: eq(schema.shows.id, showId),
     with: { organisation: true },
@@ -538,18 +521,16 @@ export async function generateRingNumbersPdf(showId: string): Promise<Buffer> {
     throw new Error('No catalogue numbers found — assign catalogue numbers before generating ring numbers');
   }
 
-  const pdfDocument = React.createElement(
-    Document,
-    {},
-    numbers.map((num) =>
-      React.createElement(
-        Page,
-        { key: num, size: [297.64, 419.53], style: ringNumberStyles.page },
-        React.createElement(Text, { style: ringNumberStyles.number }, String(num)),
-        React.createElement(Text, { style: ringNumberStyles.showName }, show.name)
-      )
-    )
-  );
+  const showInfo: RingNumberShowInfo = {
+    name: show.name,
+    organisation: show.organisation?.name ?? null,
+  };
+
+  const pdfDocument = React.createElement(RingNumbersComponent, {
+    show: showInfo,
+    numbers,
+    format,
+  });
 
   return Buffer.from(await renderToBuffer(pdfDocument));
 }

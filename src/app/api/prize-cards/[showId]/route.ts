@@ -34,7 +34,7 @@ export async function GET(
   // Parse query params
   const searchParams = request.nextUrl.searchParams;
   const includeJudgeName = searchParams.get('judge') !== 'false';
-  const placements = Math.min(Math.max(parseInt(searchParams.get('placements') ?? '5'), 1), 5);
+  const placements = Math.min(Math.max(parseInt(searchParams.get('placements') ?? '5'), 1), 6);
   const cardStyle = (searchParams.get('style') === 'outline' ? 'outline' : 'filled') as PrizeCardStyle;
 
   // Run independent DB queries and logo validation in parallel
