@@ -24,16 +24,15 @@ interface RingNumbersProps {
   format: RingNumberFormat;
 }
 
-// A7 in points: 74mm × 105mm = 209.76 × 297.64 pts
 // A4 in points: 210mm × 297mm = 595.28 × 841.89 pts
-// Layout: A7 landscape cards (105 × 74mm) → 2 cols × 4 rows = 8 per A4 page
+// Layout: 2 cols × 3 rows = 6 per A4 page, each card ~105mm × 99mm
 const CARDS_PER_ROW = 2;
-const ROWS_PER_PAGE = 4;
+const ROWS_PER_PAGE = 3;
 const CARDS_PER_PAGE = CARDS_PER_ROW * ROWS_PER_PAGE;
 
-// Card dimensions in points (A7 landscape)
+// Card dimensions in points (half A4 width × third A4 height)
 const CARD_W = 297.64; // 105mm
-const CARD_H = 209.76; // 74mm
+const CARD_H = 280.63; // 99mm
 
 const multiUp = StyleSheet.create({
   page: {
@@ -60,7 +59,7 @@ const multiUp = StyleSheet.create({
   number: {
     fontFamily: 'Inter',
     fontWeight: 'bold',
-    fontSize: 72,
+    fontSize: 90,
     color: '#1A1A1A',
     textAlign: 'center',
   },

@@ -204,7 +204,7 @@ export default function DocumentsPage() {
             href: `/api/ring-numbers/${showId}`,
             icon: <Hash className="size-4" />,
             description:
-              '8 ring number cards per A4 page — print on card stock, cut along the guidelines',
+              '6 ring number cards per A4 page — print on card stock, cut along the guidelines',
           },
           {
             label: 'Ring Numbers (Single)',
