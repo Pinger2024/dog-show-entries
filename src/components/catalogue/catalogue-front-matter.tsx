@@ -725,14 +725,20 @@ export function CoverPage({ show }: FrontMatterProps) {
           </View>
         )}
 
-        {/* Show-level sponsors on cover — logos displayed prominently */}
+        {/* Show-level sponsors on cover — logos displayed prominently.
+            We deliberately EXCLUDE `tier === 'title'` here because the
+            title sponsor is already rendered inline at the top of the
+            cover (right under the show name). Including it here too was
+            causing a duplicate Royal Canin block at the bottom of page 1
+            that orphaned its "SPONSORED BY" label across the page break
+            onto page 2 — Amanda flagged the rogue label in testing. */}
         {show.showSponsors && show.showSponsors.length > 0 && (() => {
-          const tierSponsors = show.showSponsors!.filter(sp => sp.tier === 'title' || sp.tier === 'show');
+          const tierSponsors = show.showSponsors!.filter(sp => sp.tier === 'show');
           const supporterSponsors = show.showSponsors!.filter(sp => sp.tier !== 'title' && sp.tier !== 'show');
           return (
             <View style={{ width: '100%', marginTop: 6, marginBottom: 4 }}>
               {tierSponsors.length > 0 && (
-                <View style={{ alignItems: 'center', marginBottom: 6 }}>
+                <View style={{ alignItems: 'center', marginBottom: 6 }} wrap={false}>
                   <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textLight, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 4 }}>
                     {tierSponsors.length === 1 ? 'Sponsored by' : 'Sponsors'}
                   </Text>
