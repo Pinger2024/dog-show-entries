@@ -1,8 +1,14 @@
 import { format, parseISO, formatDistanceToNow, differenceInMonths, isToday, isYesterday } from 'date-fns';
 
-/** Parse a YYYY-MM-DD date string as local (not UTC) — avoids off-by-one from ISO parsing */
-export function parseLocalDate(dateStr: string): Date {
-  const [y, m, d] = dateStr.split('-').map(Number);
+/** Parse a YYYY-MM-DD date string as local (not UTC) — avoids off-by-one from ISO parsing.
+ *  Also accepts Date objects and ISO timestamp strings so it's safe to pass superjson-hydrated
+ *  values from tRPC responses where `date` columns return strings but `timestamp` columns
+ *  return Date objects. */
+export function parseLocalDate(dateInput: string | Date): Date {
+  if (dateInput instanceof Date) return dateInput;
+  // ISO timestamps contain "T" — hand them off to the Date constructor
+  if (dateInput.includes('T')) return new Date(dateInput);
+  const [y, m, d] = dateInput.split('-').map(Number);
   return new Date(y, m - 1, d);
 }
 

@@ -230,9 +230,9 @@ export default function SchedulePage({
           </div>
           {show.entryCloseDate && (
             <p className="mt-2 text-xs text-muted-foreground">
-              Entries close: {format(parseLocalDate(show.entryCloseDate), 'd MMMM yyyy')}
+              Entries close: {format(new Date(show.entryCloseDate), 'd MMMM yyyy')}
               {showAny.acceptsPostalEntries && showAny.postalCloseDate && (
-                <> (postal: {format(parseLocalDate(showAny.postalCloseDate), 'd MMMM yyyy')})</>
+                <> (postal: {format(new Date(showAny.postalCloseDate), 'd MMMM yyyy')})</>
               )}
             </p>
           )}
