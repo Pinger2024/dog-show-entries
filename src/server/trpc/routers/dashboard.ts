@@ -31,6 +31,7 @@ import {
   dogFollows,
   dogTimelinePosts,
 } from '@/server/db/schema';
+import { isCcType, isRccType } from '@/lib/placements';
 
 export const dashboardRouter = createTRPCRouter({
   getSummary: protectedProcedure.query(async ({ ctx }) => {
@@ -416,9 +417,7 @@ export const dashboardRouter = createTRPCRouter({
         const hasCc = allAchievements.some(
           (a) =>
             a.dogId === entry.dogId &&
-            (a.type === 'cc' ||
-              a.type === 'dog_cc' ||
-              a.type === 'bitch_cc') &&
+            isCcType(a.type) &&
             a.date === entry.show.startDate
         );
 
@@ -484,30 +483,14 @@ export const dashboardRouter = createTRPCRouter({
         const dogAchievements = achievementsByDog.get(dog.id) ?? [];
         const dogTitlesList = titlesByDog.get(dog.id) ?? [];
 
-        const ccCount = dogAchievements.filter(
-          (a) =>
-            a.type === 'cc' ||
-            a.type === 'dog_cc' ||
-            a.type === 'bitch_cc'
-        ).length;
+        const ccCount = dogAchievements.filter((a) => isCcType(a.type)).length;
 
-        const rccCount = dogAchievements.filter(
-          (a) =>
-            a.type === 'reserve_cc' ||
-            a.type === 'reserve_dog_cc' ||
-            a.type === 'reserve_bitch_cc'
-        ).length;
+        const rccCount = dogAchievements.filter((a) => isRccType(a.type)).length;
 
         // Distinct judges who awarded CCs (for the 3-different-judges rule)
         const ccJudgeIds = new Set(
           dogAchievements
-            .filter(
-              (a) =>
-                (a.type === 'cc' ||
-                  a.type === 'dog_cc' ||
-                  a.type === 'bitch_cc') &&
-                a.judgeId
-            )
+            .filter((a) => isCcType(a.type) && a.judgeId)
             .map((a) => a.judgeId!)
         );
 

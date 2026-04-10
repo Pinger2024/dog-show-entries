@@ -50,6 +50,40 @@ export const ACHIEVEMENT_TYPES = [
 
 export type AchievementType = typeof ACHIEVEMENT_TYPES[number];
 
+/**
+ * All achievement types that represent a Challenge Certificate.
+ * At UK championship shows, CCs are awarded separately to the best dog
+ * and best bitch, so the sex-specific variants (`dog_cc`, `bitch_cc`)
+ * are what's actually recorded in practice. The generic `cc` exists for
+ * data imported from sources that don't distinguish by sex.
+ *
+ * Any code counting "how many CCs does this dog have?" must filter
+ * against this constant, not just `=== 'cc'`.
+ */
+export const CC_ACHIEVEMENT_TYPES = [
+  'cc',
+  'dog_cc',
+  'bitch_cc',
+] as const satisfies readonly AchievementType[];
+
+/**
+ * All achievement types that represent a Reserve Challenge Certificate.
+ * Same rationale as `CC_ACHIEVEMENT_TYPES`.
+ */
+export const RCC_ACHIEVEMENT_TYPES = [
+  'reserve_cc',
+  'reserve_dog_cc',
+  'reserve_bitch_cc',
+] as const satisfies readonly AchievementType[];
+
+export function isCcType(type: string): boolean {
+  return (CC_ACHIEVEMENT_TYPES as readonly string[]).includes(type);
+}
+
+export function isRccType(type: string): boolean {
+  return (RCC_ACHIEVEMENT_TYPES as readonly string[]).includes(type);
+}
+
 export const SPECIAL_AWARDS = [
   'Best of Breed',
   'Best Opposite Sex',

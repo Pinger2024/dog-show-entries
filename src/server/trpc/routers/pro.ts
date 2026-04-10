@@ -9,6 +9,7 @@ import {
   achievements,
 } from '@/server/db/schema';
 import { getStripe } from '@/server/services/stripe';
+import { isCcType, isRccType } from '@/lib/placements';
 
 // Remi Pro price — will be created in Stripe Dashboard
 // £4.99/month or £39.99/year
@@ -175,9 +176,6 @@ export const proRouter = createTRPCRouter({
         where: eq(achievements.dogId, input.dogId),
       });
 
-      // CC types: 'cc', 'dog_cc', 'bitch_cc'
-      const CC_TYPES = ['cc', 'dog_cc', 'bitch_cc'];
-      const RCC_TYPES = ['reserve_cc', 'reserve_dog_cc', 'reserve_bitch_cc'];
       const BOB_TYPE = 'best_of_breed';
 
       // Collect CCs from results
@@ -191,7 +189,7 @@ export const proRouter = createTRPCRouter({
           const award = ec.result.specialAward.toLowerCase().replace(/\s+/g, '_');
           const className = ec.showClass?.classDefinition?.name ?? '';
 
-          if (CC_TYPES.includes(award)) {
+          if (isCcType(award)) {
             ccAwards.push({
               showId: entry.show.id,
               showName: entry.show.name,
@@ -199,7 +197,7 @@ export const proRouter = createTRPCRouter({
               judgeId: ec.result.judgeId,
               className,
             });
-          } else if (RCC_TYPES.includes(award)) {
+          } else if (isRccType(award)) {
             rccAwards.push({
               showId: entry.show.id,
               showName: entry.show.name,
@@ -222,7 +220,7 @@ export const proRouter = createTRPCRouter({
       // Also collect from achievements table (may have pre-Remi data)
       for (const ach of dogAchievements) {
         const achShowId = ach.showId ?? '';
-        if (CC_TYPES.includes(ach.type)) {
+        if (isCcType(ach.type)) {
           // Avoid duplicates — normalize null showIds to empty string for comparison
           if (!ccAwards.some((a) => a.showId === achShowId && a.date === ach.date)) {
             ccAwards.push({
@@ -233,7 +231,7 @@ export const proRouter = createTRPCRouter({
               className: '',
             });
           }
-        } else if (RCC_TYPES.includes(ach.type)) {
+        } else if (isRccType(ach.type)) {
           if (!rccAwards.some((a) => a.showId === achShowId && a.date === ach.date)) {
             rccAwards.push({
               showId: achShowId,

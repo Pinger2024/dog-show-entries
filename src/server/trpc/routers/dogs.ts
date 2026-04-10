@@ -6,6 +6,7 @@ import { createTRPCRouter } from '../init';
 import { dogs, dogOwners, dogTitles, dogPhotos, users, entries, entryClasses, showClasses, shows, results, classDefinitions, achievements, judgeAssignments, judges } from '@/server/db/schema';
 import { deleteFromR2 } from '@/server/services/storage';
 import { scrapeKcDog, searchKcDogs, fetchKcDogProfile } from '@/server/services/firecrawl';
+import { isCcType, isRccType } from '@/lib/placements';
 
 /**
  * Recommend the best class for a dog based on age eligibility first,
@@ -870,9 +871,11 @@ export const dogsRouter = createTRPCRouter({
       const dob = new Date(dog.dateOfBirth);
       const ageMonths = (now.getFullYear() - dob.getFullYear()) * 12 + (now.getMonth() - dob.getMonth());
 
-      // Count achievements by type
-      const ccAchievements = dog.achievements.filter((a) => a.type === 'cc');
-      const reserveCCs = dog.achievements.filter((a) => a.type === 'reserve_cc');
+      // Count achievements by type. CCs at UK championship shows are
+      // recorded as `dog_cc` / `bitch_cc` (sex-specific), so we need to
+      // include all CC variants — matching the canonical set in placements.ts.
+      const ccAchievements = dog.achievements.filter((a) => isCcType(a.type));
+      const reserveCCs = dog.achievements.filter((a) => isRccType(a.type));
       const bobs = dog.achievements.filter((a) => a.type === 'best_of_breed');
 
       // Count unique judges who awarded CCs and RCCs

@@ -4,6 +4,10 @@ import {
   SPECIAL_AWARDS,
   getPlacementLabel,
   getPlacementShortLabel,
+  isCcType,
+  isRccType,
+  CC_ACHIEVEMENT_TYPES,
+  RCC_ACHIEVEMENT_TYPES,
 } from '@/lib/placements';
 
 describe('KC_PLACEMENTS', () => {
@@ -61,5 +65,52 @@ describe('getPlacementShortLabel', () => {
 
   it('returns fallback for unknown placement', () => {
     expect(getPlacementShortLabel(9)).toBe('9th');
+  });
+});
+
+describe('isCcType / CC_ACHIEVEMENT_TYPES', () => {
+  // Regression: Hundark Christmas Spirit had 2 `bitch_cc` achievements but
+  // the title progress query only filtered for `a.type === 'cc'`, so the
+  // CC count showed 0. This caused an inconsistent count vs the awards table
+  // on the dog profile. See dogs.ts:874 and dashboard.ts ccProgress.
+  it('includes all three CC variants', () => {
+    expect(CC_ACHIEVEMENT_TYPES).toEqual(['cc', 'dog_cc', 'bitch_cc']);
+  });
+
+  it('recognises sex-specific CCs (the RKC championship-show reality)', () => {
+    expect(isCcType('cc')).toBe(true);
+    expect(isCcType('dog_cc')).toBe(true);
+    expect(isCcType('bitch_cc')).toBe(true);
+  });
+
+  it('does not match unrelated types', () => {
+    expect(isCcType('best_of_breed')).toBe(false);
+    expect(isCcType('best_in_show')).toBe(false);
+    expect(isCcType('reserve_cc')).toBe(false);
+    expect(isCcType('reserve_bitch_cc')).toBe(false);
+    expect(isCcType('')).toBe(false);
+    expect(isCcType('CC')).toBe(false); // case sensitive on purpose
+  });
+});
+
+describe('isRccType / RCC_ACHIEVEMENT_TYPES', () => {
+  it('includes all three RCC variants', () => {
+    expect(RCC_ACHIEVEMENT_TYPES).toEqual([
+      'reserve_cc',
+      'reserve_dog_cc',
+      'reserve_bitch_cc',
+    ]);
+  });
+
+  it('recognises sex-specific reserve CCs', () => {
+    expect(isRccType('reserve_cc')).toBe(true);
+    expect(isRccType('reserve_dog_cc')).toBe(true);
+    expect(isRccType('reserve_bitch_cc')).toBe(true);
+  });
+
+  it('does not conflate RCCs with CCs', () => {
+    expect(isRccType('cc')).toBe(false);
+    expect(isRccType('dog_cc')).toBe(false);
+    expect(isRccType('bitch_cc')).toBe(false);
   });
 });
