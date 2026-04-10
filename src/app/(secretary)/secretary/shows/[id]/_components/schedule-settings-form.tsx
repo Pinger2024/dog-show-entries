@@ -515,7 +515,6 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
                       catering={catering} setCatering={setCatering}
                       futureShowDates={futureShowDates} setFutureShowDates={setFutureShowDates}
                       additionalNotes={additionalNotes} setAdditionalNotes={setAdditionalNotes}
-                      welcomeNote={welcomeNote} setWelcomeNote={setWelcomeNote}
                       outsideAttraction={outsideAttraction} setOutsideAttraction={setOutsideAttraction}
                     />
                   )}
@@ -884,7 +883,7 @@ function AwardsSection({
 function VenueSection({
   directions, setDirections, what3words, setWhat3words,
   catering, setCatering, futureShowDates, setFutureShowDates,
-  additionalNotes, setAdditionalNotes, welcomeNote, setWelcomeNote,
+  additionalNotes, setAdditionalNotes,
   outsideAttraction, setOutsideAttraction,
 }: {
   directions: string; setDirections: (v: string) => void;
@@ -892,7 +891,6 @@ function VenueSection({
   catering: string; setCatering: (v: string) => void;
   futureShowDates: string; setFutureShowDates: (v: string) => void;
   additionalNotes: string; setAdditionalNotes: (v: string) => void;
-  welcomeNote: string; setWelcomeNote: (v: string) => void;
   outsideAttraction: boolean; setOutsideAttraction: (v: boolean) => void;
 }) {
   return (
@@ -918,10 +916,6 @@ function VenueSection({
       <div className="space-y-1.5">
         <Label htmlFor="additionalNotes" className="text-xs">Additional Notes</Label>
         <Textarea id="additionalNotes" value={additionalNotes} onChange={(e) => setAdditionalNotes(e.target.value)} placeholder="Any other information to include in the schedule" rows={2} />
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="welcomeNote" className="text-xs">Welcome Note for Catalogue</Label>
-        <Textarea id="welcomeNote" value={welcomeNote} onChange={(e) => setWelcomeNote(e.target.value)} placeholder="Optional welcome message — shown on the catalogue cover page" rows={2} />
       </div>
       <div className="flex items-center justify-between rounded-lg border p-3">
         <div>

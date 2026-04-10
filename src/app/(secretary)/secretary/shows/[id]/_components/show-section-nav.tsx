@@ -14,6 +14,7 @@ import {
   ListChecks,
   PoundSterling,
   Printer,
+  Settings,
   Ticket,
   Trophy,
   Users,
@@ -43,6 +44,7 @@ const sections: Section[] = [
   { path: '/entries', label: 'Entries', icon: Ticket },
   { path: '/financial', label: 'Financial', icon: PoundSterling },
   { path: '/catalogue', label: 'Catalogue', icon: BookOpen },
+  { path: '/catalogue-settings', label: 'Catalogue Settings', icon: Settings },
   { path: '/results', label: 'Results', icon: Trophy },
   { path: '/reports', label: 'Reports', icon: FileText },
   { path: '/people', label: 'People', icon: Users },
@@ -59,7 +61,7 @@ const sectionGroups = [
   },
   {
     label: 'Finance & Print',
-    items: ['/financial', '/catalogue', '/reports', '/print-shop'],
+    items: ['/financial', '/catalogue', '/catalogue-settings', '/reports', '/print-shop'],
   },
   {
     label: 'Setup',
