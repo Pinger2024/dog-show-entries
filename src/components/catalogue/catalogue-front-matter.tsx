@@ -75,15 +75,160 @@ function JurisdictionBlock() {
   );
 }
 
-function WelcomeNote({ show }: FrontMatterProps) {
-  if (!show.welcomeNote) return null;
+// ── Show Information Page ──────────────────────────────────────
+//
+// Page 2 of every full-front-matter catalogue. Renders all the schedule
+// settings that secretaries fill in but that previously had nowhere to go
+// in the published catalogue (backlog #85). Also hosts the welcome note,
+// putting it on page 2/3 of the catalogue per backlog #91.
+//
+// The page only renders the sections that have data — if a society hasn't
+// filled in officers, the officers section just doesn't appear. The whole
+// page returns null when nothing is set, so we don't ship a blank page
+// when the secretary hasn't filled anything in.
+
+const showInfoStyles = {
+  sectionTitle: {
+    fontFamily: 'Inter',
+    fontSize: 8,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    color: C.primary,
+    marginBottom: 4,
+    marginTop: 8,
+  } as const,
+  bodyText: {
+    fontFamily: 'Times',
+    fontSize: 9,
+    color: C.textDark,
+    lineHeight: 1.4,
+  } as const,
+  officerRow: {
+    flexDirection: 'row' as const,
+    marginBottom: 2,
+  },
+  officerName: {
+    fontFamily: 'Inter',
+    fontSize: 8,
+    color: C.textDark,
+    width: '50%',
+  } as const,
+  officerPosition: {
+    fontFamily: 'Inter',
+    fontSize: 8,
+    fontStyle: 'italic',
+    color: C.textMedium,
+    width: '50%',
+  } as const,
+};
+
+export function ShowInformationPage({ show }: FrontMatterProps) {
+  // Pull out everything we might render so we can decide whether the page
+  // is worth printing at all.
+  const hasWelcome = !!show.welcomeNote;
+  const hasOfficers = (show.officers?.length ?? 0) > 0;
+  const hasGuarantors = (show.guarantors?.length ?? 0) > 0;
+  const hasAwardsDescription = !!show.awardsDescription;
+  const hasAdditionalNotes = !!show.additionalNotes;
+  const hasFutureShows = !!show.futureShowDates;
+  const practicalInfo: { label: string; value: string }[] = [];
+  if (show.latestArrivalTime) {
+    practicalInfo.push({ label: 'Latest Arrival', value: show.latestArrivalTime });
+  }
+  if (show.catering) {
+    practicalInfo.push({ label: 'Catering', value: show.catering });
+  }
+  if (show.acceptsNfc) {
+    practicalInfo.push({ label: 'NFC Entries', value: 'Accepted' });
+  }
+  if (show.prizeMoney) {
+    practicalInfo.push({ label: 'Prize Money', value: show.prizeMoney });
+  }
+  const hasPracticalInfo = practicalInfo.length > 0;
+
+  // Don't ship a blank page if nothing is set.
+  if (
+    !hasWelcome &&
+    !hasOfficers &&
+    !hasGuarantors &&
+    !hasAwardsDescription &&
+    !hasAdditionalNotes &&
+    !hasFutureShows &&
+    !hasPracticalInfo
+  ) {
+    return null;
+  }
+
   return (
-    <View style={{ ...styles.coverDetailCard, borderLeftColor: C.accent, marginTop: 8, marginBottom: 4 }} wrap={false}>
-      <Text style={styles.coverSectionLabel}>Welcome</Text>
-      <Text style={{ fontFamily: 'Times', fontSize: 8, fontStyle: 'italic', color: C.textDark, lineHeight: 1.4 }}>
-        {show.welcomeNote}
-      </Text>
-    </View>
+    <Page size="A5" style={styles.frontMatterPage} wrap>
+      <SectionBand title="Show Information" />
+
+      {hasWelcome && (
+        <View wrap={false} style={{ marginBottom: 6 }}>
+          <Text style={showInfoStyles.sectionTitle}>Welcome</Text>
+          <Text style={{ ...showInfoStyles.bodyText, fontStyle: 'italic' }}>
+            {show.welcomeNote}
+          </Text>
+        </View>
+      )}
+
+      {hasOfficers && (
+        <View wrap={false} style={{ marginBottom: 6 }}>
+          <Text style={showInfoStyles.sectionTitle}>Officers</Text>
+          {show.officers!.map((o, i) => (
+            <View key={i} style={showInfoStyles.officerRow}>
+              <Text style={showInfoStyles.officerName}>{o.name}</Text>
+              <Text style={showInfoStyles.officerPosition}>{o.position}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {hasGuarantors && (
+        <View wrap={false} style={{ marginBottom: 6 }}>
+          <Text style={showInfoStyles.sectionTitle}>Guarantors</Text>
+          <Text style={showInfoStyles.bodyText}>
+            {show.guarantors!.map((g) => g.name).join(', ')}
+          </Text>
+        </View>
+      )}
+
+      {hasAwardsDescription && (
+        <View wrap={false} style={{ marginBottom: 6 }}>
+          <Text style={showInfoStyles.sectionTitle}>Awards</Text>
+          <Text style={showInfoStyles.bodyText}>{show.awardsDescription}</Text>
+        </View>
+      )}
+
+      {hasPracticalInfo && (
+        <View wrap={false} style={{ marginBottom: 6 }}>
+          <Text style={showInfoStyles.sectionTitle}>Practical Information</Text>
+          {practicalInfo.map((item, i) => (
+            <View key={i} style={showInfoStyles.officerRow}>
+              <Text style={showInfoStyles.officerName}>{item.label}</Text>
+              <Text style={{ ...showInfoStyles.officerPosition, fontStyle: 'normal' }}>
+                {item.value}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {hasAdditionalNotes && (
+        <View wrap={false} style={{ marginBottom: 6 }}>
+          <Text style={showInfoStyles.sectionTitle}>Additional Notes</Text>
+          <Text style={showInfoStyles.bodyText}>{show.additionalNotes}</Text>
+        </View>
+      )}
+
+      {hasFutureShows && (
+        <View wrap={false} style={{ marginBottom: 6 }}>
+          <Text style={showInfoStyles.sectionTitle}>Future Show Dates</Text>
+          <Text style={showInfoStyles.bodyText}>{show.futureShowDates}</Text>
+        </View>
+      )}
+    </Page>
   );
 }
 
@@ -415,7 +560,6 @@ export function JudgesListPage({ show }: FrontMatterProps) {
             {label}
           </Text>
         ))}
-        <WelcomeNote show={show} />
         <JurisdictionBlock />
       </Page>
     );
@@ -466,7 +610,6 @@ export function JudgesListPage({ show }: FrontMatterProps) {
         );
       })}
 
-      <WelcomeNote show={show} />
       <JurisdictionBlock />
 
       <Text

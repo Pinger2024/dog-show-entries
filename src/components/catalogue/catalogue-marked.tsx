@@ -344,9 +344,6 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
       {/* Cover page with MARKED CATALOGUE subtitle */}
       <CoverPage show={{ ...show, name: `${show.name}\nMARKED CATALOGUE` }} />
       <JudgesListPage show={show} />
-      {isChampionship && !isMultiBreedChamp && (
-        <ExhibitorIndexPage show={show} entries={entries} />
-      )}
       <ClassDefinitionsPage show={show} />
       {!show.skipTrophiesPage && (
         <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />
@@ -610,6 +607,14 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
           </Page>
         </Fragment>
       ))}
+
+      {/* Back matter: exhibitor index — moved to the end per backlog #93.
+          Single-page version is for single-breed championship shows. The
+          per-breed version (used by multi-breed championships) stays
+          inline at the start of each breed section above. */}
+      {isChampionship && !isMultiBreedChamp && (
+        <ExhibitorIndexPage show={show} entries={entries} />
+      )}
     </Document>
   );
 }

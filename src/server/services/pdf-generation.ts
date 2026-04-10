@@ -148,7 +148,9 @@ export async function generateCataloguePdf(
     withholdFromPublication: entry.withholdFromPublication,
   }));
 
-  const scheduleData = show.scheduleData as Record<string, unknown> | null;
+  // Drizzle gives us `ScheduleData | null` directly via the jsonb $type<>
+  // annotation in the schema, so we can read fields without casts.
+  const scheduleData = show.scheduleData;
 
   const showInfo: CatalogueShowInfo = {
     name: show.name,
@@ -168,14 +170,33 @@ export async function generateCataloguePdf(
     showOpenTime: show.showOpenTime,
     startTime: show.startTime,
     totalClasses: showClassRows.length,
-    wetWeatherAccommodation: scheduleData?.wetWeatherAccommodation === true ? true : scheduleData?.wetWeatherAccommodation === false ? false : undefined,
-    judgedOnGroupSystem: scheduleData?.judgedOnGroupSystem === true ? true : undefined,
+    wetWeatherAccommodation: scheduleData?.wetWeatherAccommodation,
+    judgedOnGroupSystem: scheduleData?.judgedOnGroupSystem,
     judgesByBreedName,
     judgeDisplayList,
     classDefinitions,
     showScope: show.showScope ?? undefined,
-    customStatements: (scheduleData?.customStatements as string[] | undefined),
+    customStatements: scheduleData?.customStatements,
     dockingStatement: getDockingStatementFromScheduleData(scheduleData),
+
+    // Settings audit (backlog #85): wire schedule fields through to the
+    // catalogue render pipeline so they actually appear in the PDF.
+    welcomeNote: scheduleData?.welcomeNote,
+    outsideAttraction: scheduleData?.outsideAttraction === true ? true : undefined,
+    showManager: scheduleData?.showManager,
+    officers: scheduleData?.officers,
+    guarantors: scheduleData?.guarantors,
+    awardSponsors: scheduleData?.awardSponsors,
+    bestAwards: scheduleData?.bestAwards,
+    awardsDescription: scheduleData?.awardsDescription,
+    additionalNotes: scheduleData?.additionalNotes,
+    futureShowDates: scheduleData?.futureShowDates,
+    catering: scheduleData?.catering,
+    latestArrivalTime: scheduleData?.latestArrivalTime,
+    acceptsNfc: scheduleData?.acceptsNfc,
+    prizeMoney: scheduleData?.prizeMoney,
+    country: scheduleData?.country,
+    publicAdmission: scheduleData?.publicAdmission,
   };
 
   const isAllBreed = show.showScope !== 'single_breed';

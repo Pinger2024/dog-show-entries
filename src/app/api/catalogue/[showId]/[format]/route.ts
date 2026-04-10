@@ -221,7 +221,10 @@ export async function GET(
     sex: sc.sex,
   }));
 
-  const scheduleData = show.scheduleData as Record<string, unknown> | null;
+  // `show.scheduleData` is typed as `ScheduleData | null` by Drizzle via the
+  // jsonb $type<ScheduleData>() annotation in the schema. Use it directly
+  // instead of casting to a generic record so we get field-level safety.
+  const scheduleData = show.scheduleData;
 
   const showInfo: CatalogueShowInfo = {
     name: show.name,
@@ -249,13 +252,29 @@ export async function GET(
     classSponsorships: classSponsorships.length > 0 ? classSponsorships : undefined,
     // When sponsorships are shown inline with classes, skip the separate trophies page
     skipTrophiesPage: classSponsorships.length > 0,
-    customStatements: (scheduleData?.customStatements as string[] | undefined),
+    customStatements: scheduleData?.customStatements,
     showSponsors: showSponsorInfos.length > 0 ? showSponsorInfos : undefined,
     allShowClasses: allShowClasses.length > 0 ? allShowClasses : undefined,
-    welcomeNote: scheduleData?.welcomeNote as string | undefined,
+    welcomeNote: scheduleData?.welcomeNote,
     outsideAttraction: scheduleData?.outsideAttraction === true ? true : undefined,
-    showManager: scheduleData?.showManager as string | undefined,
+    showManager: scheduleData?.showManager,
     dockingStatement: getDockingStatementFromScheduleData(scheduleData),
+
+    // Settings audit (backlog #85): the fields below were filled in via the
+    // schedule settings form but never reached the catalogue render pipeline.
+    officers: scheduleData?.officers,
+    guarantors: scheduleData?.guarantors,
+    awardSponsors: scheduleData?.awardSponsors,
+    bestAwards: scheduleData?.bestAwards,
+    awardsDescription: scheduleData?.awardsDescription,
+    additionalNotes: scheduleData?.additionalNotes,
+    futureShowDates: scheduleData?.futureShowDates,
+    catering: scheduleData?.catering,
+    latestArrivalTime: scheduleData?.latestArrivalTime,
+    acceptsNfc: scheduleData?.acceptsNfc,
+    prizeMoney: scheduleData?.prizeMoney,
+    country: scheduleData?.country,
+    publicAdmission: scheduleData?.publicAdmission,
   };
 
   // Check if JSON format was explicitly requested (for data export)

@@ -3,7 +3,7 @@ import { styles } from './catalogue-styles';
 import { CatalogueHeader } from './catalogue-header';
 import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
 import { formatDobKC, formatPedigreeKC, formatOwnerKC, uppercaseName, buildSponsorLines } from './catalogue-utils';
-import { CoverPage, JudgesListPage, ClassDefinitionsPage, TrophiesPage, ExhibitorIndexPage } from './catalogue-front-matter';
+import { CoverPage, ShowInformationPage, JudgesListPage, ClassDefinitionsPage, TrophiesPage, ExhibitorIndexPage } from './catalogue-front-matter';
 
 interface Props {
   show: CatalogueShowInfo;
@@ -112,10 +112,13 @@ export function CatalogueByClass({ show, entries }: Props) {
 
   return (
     <Document>
-      {/* Front matter — cover, judges, exhibitor index, definitions, trophies */}
+      {/* Front matter — cover, show info, judges, definitions, trophies.
+          The exhibitor index lives at the back of the catalogue (backlog
+          #93) since exhibitors look up their own catalogue numbers more
+          often than they read alphabetical reference indexes. */}
       <CoverPage show={show} />
+      <ShowInformationPage show={show} />
       <JudgesListPage show={show} />
-      <ExhibitorIndexPage show={show} entries={entries} />
       <ClassDefinitionsPage show={show} />
       {!show.skipTrophiesPage && (
         <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />
@@ -260,6 +263,9 @@ export function CatalogueByClass({ show, entries }: Props) {
         />
       </Page>
       ))}
+
+      {/* Back matter: exhibitor index — moved to the end per backlog #93 */}
+      <ExhibitorIndexPage show={show} entries={entries} />
     </Document>
   );
 }

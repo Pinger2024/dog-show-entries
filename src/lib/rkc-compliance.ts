@@ -22,14 +22,15 @@ export function getDockingStatement(
 }
 
 /**
- * Extract docking statement from scheduleData JSON.
- * Convenience wrapper that reads country and publicAdmission from the
- * untyped scheduleData object stored on the show.
+ * Convenience wrapper that reads country and publicAdmission from a
+ * scheduleData object stored on the show. Accepts the partial shape we
+ * actually need from `ScheduleData`, so this helper doesn't have to import
+ * the full schema type.
  */
 export function getDockingStatementFromScheduleData(
-  sd: Record<string, unknown> | null,
+  sd: { country?: string; publicAdmission?: boolean } | null | undefined,
 ): string {
-  const country = (sd?.country as string) ?? 'england';
+  const country = sd?.country ?? 'england';
   const publicAdmission = sd?.publicAdmission !== false;
   return getDockingStatement(country, publicAdmission);
 }

@@ -14,11 +14,12 @@ import {
 import type { ClassGroup } from './catalogue-utils';
 import {
   CoverPage,
+  ShowInformationPage,
   JudgesListPage,
   ClassDefinitionsPage,
   TrophiesPage,
 } from './catalogue-front-matter';
-import type { ClassSponsorshipInfo } from './catalogue-front-matter';
+import type { ClassSponsorshipInfo } from './catalogue-types';
 
 interface Props {
   show: CatalogueShowInfo;
@@ -435,6 +436,7 @@ export function CatalogueRingside({ show, entries }: Props) {
     <Document title={`Ringside Catalogue — ${show.name}`} author="Remi Show Manager">
       {/* Front matter */}
       <CoverPage show={show} />
+      <ShowInformationPage show={show} />
       <JudgesListPage show={show} />
       <ClassDefinitionsPage show={show} />
       {!show.skipTrophiesPage && show.classSponsorships && show.classSponsorships.length > 0 && (

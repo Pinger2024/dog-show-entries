@@ -121,4 +121,43 @@ export interface CatalogueShowInfo {
   showManager?: string;
   /** Docking statement per F(1).7.c(2) — varies by country and public admission */
   dockingStatement?: string;
+
+  // ── The fields below come from the schedule settings form and were
+  //    historically not being passed through to the catalogue render
+  //    pipeline. Wired in as part of backlog #85 (settings audit).
+
+  /** Show committee officers — name + position (President, Treasurer, etc.) */
+  officers?: { name: string; position: string }[];
+  /** Show guarantors — name + optional address */
+  guarantors?: { name: string; address?: string }[];
+  /**
+   * Award sponsorships for "Best" awards (BIS, BoB, Best Dog, Best Bitch, etc.).
+   * Used by the BEST AWARDS section (backlog #94).
+   */
+  awardSponsors?: {
+    award: string;
+    sponsorName: string;
+    sponsorAffix?: string;
+    trophyName?: string;
+  }[];
+  /** Custom names for the show's "best" awards (e.g. include a club-specific top award) */
+  bestAwards?: string[];
+  /** Free-text description of the awards/trophies given out at the show */
+  awardsDescription?: string;
+  /** Free-text additional notes shown alongside the show details */
+  additionalNotes?: string;
+  /** Free-text list of upcoming shows by the same society — promotes future events */
+  futureShowDates?: string;
+  /** Free-text catering notes (e.g. "catering van on site") */
+  catering?: string;
+  /** Latest arrival time for exhibitors — important practical info */
+  latestArrivalTime?: string;
+  /** Whether the show accepts NFC (Not For Competition) entries */
+  acceptsNfc?: boolean;
+  /** Free-text prize money information */
+  prizeMoney?: string;
+  /** ISO country code for the show — affects compliance text and is shown in cover meta */
+  country?: 'england' | 'wales' | 'scotland' | 'northern_ireland';
+  /** Whether the show is open to the public (vs. exhibitors only) */
+  publicAdmission?: boolean;
 }

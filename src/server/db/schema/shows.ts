@@ -67,6 +67,12 @@ export interface ScheduleData {
   futureShowDates?: string;
   additionalNotes?: string;
 
+  // Catalogue-specific text (set in Catalogue Settings, not Schedule Settings)
+  /** Secretary's personal welcome note shown in the catalogue front matter */
+  welcomeNote?: string;
+  /** Whether the show has an outside attraction (RKC F(1) 16h) — surfaced on the catalogue cover */
+  outsideAttraction?: boolean;
+
   // Post-show tracking
   /** ISO timestamp when the marked catalogue was submitted to RKC */
   rkcSubmittedAt?: string;

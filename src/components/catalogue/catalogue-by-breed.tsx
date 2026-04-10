@@ -3,6 +3,7 @@ import { Document, Page, View, Text } from '@react-pdf/renderer';
 import { styles } from './catalogue-styles';
 import {
   CoverPage,
+  ShowInformationPage,
   JudgesListPage,
   ClassDefinitionsPage,
   TrophiesPage,
@@ -228,6 +229,7 @@ export function CatalogueByBreed({ show, entries }: Props) {
     <Document>
       {/* Front matter pages */}
       <CoverPage show={show} />
+      <ShowInformationPage show={show} />
       <JudgesListPage show={show} />
       <ClassDefinitionsPage show={show} />
       {!show.skipTrophiesPage && (
