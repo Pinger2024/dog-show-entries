@@ -159,10 +159,9 @@ function filterDuplicateRegulations(
 
 export function ShowInformationPage({ show }: FrontMatterProps) {
   // Pull out everything we might render so we can decide whether the page
-  // is worth printing at all.
+  // is worth printing at all. Officers and guarantors are deliberately
+  // not surfaced here — see the comment near the render below.
   const hasWelcome = !!show.welcomeNote;
-  const hasOfficers = (show.officers?.length ?? 0) > 0;
-  const hasGuarantors = (show.guarantors?.length ?? 0) > 0;
   const hasAwardsDescription = !!show.awardsDescription;
   const hasAdditionalNotes = !!show.additionalNotes;
   const hasFutureShows = !!show.futureShowDates;
@@ -193,8 +192,6 @@ export function ShowInformationPage({ show }: FrontMatterProps) {
   // Don't ship a blank page if nothing is set.
   if (
     !hasWelcome &&
-    !hasOfficers &&
-    !hasGuarantors &&
     !hasAwardsDescription &&
     !hasAdditionalNotes &&
     !hasFutureShows &&
@@ -217,37 +214,15 @@ export function ShowInformationPage({ show }: FrontMatterProps) {
         </View>
       )}
 
-      {hasOfficers && (
-        <View wrap={false} style={{ marginBottom: 6 }}>
-          <Text style={showInfoStyles.sectionTitle}>Officers</Text>
-          {show.officers!.map((o, i) => (
-            <View key={i} style={showInfoStyles.officerRow}>
-              <Text style={showInfoStyles.officerName}>{o.name}</Text>
-              <Text style={showInfoStyles.officerPosition}>{o.position}</Text>
-            </View>
-          ))}
-        </View>
-      )}
-
-      {hasGuarantors && (
-        <View wrap={false} style={{ marginBottom: 6 }}>
-          <Text style={showInfoStyles.sectionTitle}>Guarantors</Text>
-          <Text style={showInfoStyles.bodyText}>
-            {/* Standard RKC-convention guarantors paragraph that wraps the
-                names. Amanda flagged that her previous catalogues had this
-                wrapping prose around the names rather than a comma list. */}
-            The Show is held under the Rules and Regulations of the Royal
-            Kennel Club. The Guarantors of the Show are{' '}
-            {(() => {
-              const names = show.guarantors!.map((g) => g.name);
-              if (names.length === 1) return names[0];
-              if (names.length === 2) return `${names[0]} and ${names[1]}`;
-              return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
-            })()}
-            .
-          </Text>
-        </View>
-      )}
+      {/* Officers and Guarantors are deliberately NOT listed by name here.
+          Amanda's note: the standard RKC "Jurisdiction and Responsibilities"
+          paragraph (rendered by JurisdictionBlock at the bottom of
+          JudgesListPage and again on the schedule) covers them collectively
+          — "The Officers and Committee members of the society holding the
+          licence are deemed responsible..." — so naming them individually
+          is redundant. The schedule settings form still collects names
+          (we use them elsewhere — e.g. organisation people sync), but the
+          catalogue render skips the named list. */}
 
       {hasAwardsDescription && (
         <View wrap={false} style={{ marginBottom: 6 }}>
