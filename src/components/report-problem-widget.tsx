@@ -95,13 +95,25 @@ export function ReportProblemWidget() {
       setOpen(false);
       await new Promise((r) => setTimeout(r, 300));
 
-      const canvas = await import('html2canvas').then((mod) =>
-        mod.default(document.body, {
-          useCORS: true,
-          scale: Math.min(window.devicePixelRatio, 2),
-          logging: false,
-        })
-      );
+      // Lazily load html2canvas and capture the current viewport.
+      // On mobile Safari capturing the full document.body can crash or
+      // produce a blank image, so we capture the visible viewport instead
+      // and clip to the scroll position.
+      const html2canvas = (await import('html2canvas')).default;
+      const canvas = await html2canvas(document.body, {
+        useCORS: true,
+        allowTaint: true,
+        scale: Math.min(window.devicePixelRatio, 2),
+        logging: false,
+        // Capture only the visible viewport — mobile Safari struggles
+        // with long pages and capturing the whole body often fails silently.
+        windowWidth: window.innerWidth,
+        windowHeight: window.innerHeight,
+        x: window.scrollX,
+        y: window.scrollY,
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
 
       setOpen(true);
 
@@ -111,11 +123,15 @@ export function ReportProblemWidget() {
             type: 'image/png',
           });
           handleFileSelect(file);
+        } else {
+          toast.error('Could not capture screenshot. Please attach an image from your device instead.');
         }
       }, 'image/png');
-    } catch {
+    } catch (err) {
       setOpen(true);
-      toast.error('Screenshot failed. Try attaching an image instead.');
+      console.error('[screenshot] capture failed:', err);
+      const message = err instanceof Error ? err.message : 'Screenshot failed';
+      toast.error(`${message}. Take a screenshot with your device and attach it instead.`);
     }
   }, []);
 
