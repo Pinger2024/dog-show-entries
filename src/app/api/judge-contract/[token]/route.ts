@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { eq, and, ilike } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { judgeContracts, judgeAssignments, showChecklistItems } from '@/server/db/schema';
+import { getBaseUrl } from '@/server/lib/utils';
 import { Resend } from 'resend';
 
 function renderPage(title: string, body: string) {
@@ -355,7 +356,7 @@ export async function POST(
           The next step is to send the formal confirmation letter. You can do this from the Judges tab in the show management page.
         </p>
         <div style="text-align: center; margin: 24px 0;">
-          <a href="${process.env.RENDER_EXTERNAL_URL ?? 'https://remishowmanager.co.uk'}/secretary/shows/${show.slug ?? show.id}/people"
+          <a href="${getBaseUrl()}/secretary/shows/${show.slug ?? show.id}/people"
              style="display: inline-block; background: #2D5F3F; color: #ffffff; padding: 12px 24px; border-radius: 8px; font-size: 15px; font-weight: 600; text-decoration: none;">
             View Judges in Remi
           </a>
@@ -450,7 +451,7 @@ export async function POST(
           You may need to find a replacement judge and send a new offer. All checklist items for this judge have been marked as not applicable.
         </p>
         <div style="text-align: center; margin: 24px 0;">
-          <a href="${process.env.RENDER_EXTERNAL_URL ?? 'https://remishowmanager.co.uk'}/secretary/shows/${show.slug ?? show.id}/people"
+          <a href="${getBaseUrl()}/secretary/shows/${show.slug ?? show.id}/people"
              style="display: inline-block; background: #2D5F3F; color: #ffffff; padding: 12px 24px; border-radius: 8px; font-size: 15px; font-weight: 600; text-decoration: none;">
             View Judges in Remi
           </a>

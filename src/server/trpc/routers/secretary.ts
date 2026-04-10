@@ -5,6 +5,7 @@ import { secretaryProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { verifyShowAccess } from '../verify-show-access';
 import { verifyOrgAccess } from '../verify-org-access';
+import { getBaseUrl } from '@/server/lib/utils';
 import { ACHIEVEMENT_TYPES } from '@/lib/placements';
 import {
   shows,
@@ -3299,7 +3300,7 @@ export const secretaryRouter = createTRPCRouter({
       }
 
       // Build and send email
-      const baseUrl = process.env.RENDER_EXTERNAL_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
+      const baseUrl = getBaseUrl();
       const acceptUrl = `${baseUrl}/api/judge-contract/${contract.offerToken}`;
 
       const showDate = new Date(show.startDate).toLocaleDateString('en-GB', {
@@ -3493,7 +3494,7 @@ export const secretaryRouter = createTRPCRouter({
         : [...new Set(contract.show.showClasses.filter((sc) => sc.breed).map((sc) => sc.breed!.name))];
       const breedsText = buildJudgeBreedText(assignments, showBreedNames, contract.show.name);
 
-      const baseUrl = process.env.RENDER_EXTERNAL_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
+      const baseUrl = getBaseUrl();
       const acceptUrl = `${baseUrl}/api/judge-contract/${contract.offerToken}`;
       const show = contract.show;
       const orgName = show.organisation?.name ?? 'the Show Society';
@@ -3978,7 +3979,7 @@ export const secretaryRouter = createTRPCRouter({
 
       const resend = new Resend(process.env.RESEND_API_KEY);
       const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
-      const baseUrl = process.env.RENDER_EXTERNAL_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
+      const baseUrl = getBaseUrl();
       const orgName = show.organisation?.name ?? 'the Show Society';
 
       const showDate = new Date(show.startDate).toLocaleDateString('en-GB', {
