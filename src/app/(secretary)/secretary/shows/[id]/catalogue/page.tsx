@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import {
   BookOpen,
   ClipboardList,
@@ -55,6 +55,21 @@ export default function CataloguePage() {
   });
 
   const entries = catalogueData?.entries ?? [];
+  const hasNumbers = entries.some((e) => e.catalogueNumber);
+
+  // Auto-assign catalogue numbers the first time a secretary lands on the page
+  // with confirmed entries but no numbers yet. The manual button still exists
+  // below for re-assigning when entries are added or removed afterwards.
+  const autoAssignedRef = useRef(false);
+  useEffect(() => {
+    if (autoAssignedRef.current) return;
+    if (isLoading) return;
+    if (entries.length === 0) return;
+    if (hasNumbers) return;
+    if (assignMutation.isPending) return;
+    autoAssignedRef.current = true;
+    assignMutation.mutate({ showId });
+  }, [isLoading, entries.length, hasNumbers, assignMutation, showId]);
 
   const grouped = useMemo(() => {
     const groups: Record<string, Record<string, { dogs: typeof entries; bitches: typeof entries }>> = {};
@@ -72,13 +87,12 @@ export default function CataloguePage() {
     return groups;
   }, [entries]);
 
-  const hasNumbers = entries.some((e) => e.catalogueNumber);
-
   return (
     <div className="space-y-6">
       {/* Actions */}
       <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         <Button
+          variant={hasNumbers ? 'outline' : 'default'}
           onClick={() => assignMutation.mutate({ showId })}
           disabled={assignMutation.isPending || entries.length === 0}
         >
@@ -86,7 +100,7 @@ export default function CataloguePage() {
             <Loader2 className="size-4 animate-spin" />
           )}
           <Hash className="size-4" />
-          Assign Catalogue Numbers
+          {hasNumbers ? 'Re-assign Catalogue Numbers' : 'Assign Catalogue Numbers'}
         </Button>
         {hasNumbers && (
           <>
