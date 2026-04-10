@@ -15,6 +15,7 @@ import {
   Hash,
   List,
   Map,
+  Printer,
   Share2,
   Trophy,
   UserX,
@@ -224,7 +225,9 @@ export default function DocumentsPage() {
     },
   ];
 
-  const prizeCardHref = `/api/prize-cards/${showId}?placements=${prizeCardPlacements}&judge=${includeJudge}&style=${prizeCardStyle}`;
+  const prizeCardQuery = `placements=${prizeCardPlacements}&judge=${includeJudge}&style=${prizeCardStyle}`;
+  const prizeCardHref = `/api/prize-cards/${showId}?${prizeCardQuery}`;
+  const prizeCardPrintHref = `/api/prize-cards/${showId}/print?${prizeCardQuery}`;
 
   const postShowDocuments: DocumentLink[] = hasNumbers
     ? [
@@ -411,12 +414,20 @@ export default function DocumentsPage() {
                 by placement
               </p>
             </div>
-            <Button asChild className="w-full sm:w-auto min-h-[2.75rem]">
-              <a href={prizeCardHref} target="_blank" rel="noopener noreferrer">
-                <ExternalLink className="size-4" />
-                Open PDF
-              </a>
-            </Button>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Button asChild className="w-full sm:w-auto min-h-[2.75rem]">
+                <a href={prizeCardPrintHref} target="_blank" rel="noopener noreferrer">
+                  <Printer className="size-4" />
+                  Print
+                </a>
+              </Button>
+              <Button asChild variant="outline" className="w-full sm:w-auto min-h-[2.75rem]">
+                <a href={prizeCardHref} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="size-4" />
+                  Preview PDF
+                </a>
+              </Button>
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
