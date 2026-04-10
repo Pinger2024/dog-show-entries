@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   BookOpen,
   CheckSquare,
@@ -12,10 +12,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
-import { formatDogName } from '@/lib/utils';
-import { formatCurrency } from '@/lib/date-utils';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import {
   Card,
   CardContent,
@@ -33,7 +30,6 @@ import {
 } from '@/components/ui/table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { StatCard } from '@/components/ui/stat-card';
-import { formatDate, type CatalogueEntryItem } from '../_lib/show-utils';
 import { useShowId } from '../_lib/show-context';
 
 export default function CataloguePage() {
@@ -71,32 +67,23 @@ export default function CataloguePage() {
     assignMutation.mutate({ showId });
   }, [isLoading, entries.length, hasNumbers, assignMutation, showId]);
 
-  const grouped = useMemo(() => {
-    const groups: Record<string, Record<string, { dogs: typeof entries; bitches: typeof entries }>> = {};
-    for (const entry of entries) {
-      const groupName = entry.dog?.breed?.group?.name ?? 'Unclassified';
-      const breedName = entry.dog?.breed?.name ?? 'Unknown Breed';
-      groups[groupName] ??= {};
-      groups[groupName][breedName] ??= { dogs: [], bitches: [] };
-      if (entry.dog?.sex === 'bitch') {
-        groups[groupName][breedName].bitches.push(entry);
-      } else {
-        groups[groupName][breedName].dogs.push(entry);
-      }
-    }
-    return groups;
-  }, [entries]);
-
   return (
     <div className="space-y-6">
       {/* Actions — appear once catalogue numbers have been auto-assigned */}
       {hasNumbers && (
+        /* The `download` attribute on each link tells the browser to treat
+           the response as a download rather than navigating the current
+           window to the PDF. Combined with the existing `Content-Disposition:
+           attachment` header from makePdfResponse, this keeps Amanda inside
+           Remi when she taps a button on her phone — the PDF goes to her
+           Files app instead of replacing the Remi PWA view (backlog #82). */
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <Button variant="outline" asChild>
             <a
               href={`/api/catalogue/${showId}/standard`}
               target="_blank"
               rel="noopener noreferrer"
+              download
             >
               <BookOpen className="size-4" />
               Standard
@@ -107,6 +94,7 @@ export default function CataloguePage() {
               href={`/api/catalogue/${showId}/by-class`}
               target="_blank"
               rel="noopener noreferrer"
+              download
             >
               <List className="size-4" />
               By Class
@@ -117,6 +105,7 @@ export default function CataloguePage() {
               href={`/api/catalogue/${showId}/judging`}
               target="_blank"
               rel="noopener noreferrer"
+              download
             >
               <Users className="size-4" />
               Steward
@@ -127,6 +116,7 @@ export default function CataloguePage() {
               href={`/api/catalogue/${showId}/absentees`}
               target="_blank"
               rel="noopener noreferrer"
+              download
             >
               <Download className="size-4" />
               Absentees
@@ -141,6 +131,7 @@ export default function CataloguePage() {
                 href={`/api/catalogue/${showId}/marked`}
                 target="_blank"
                 rel="noopener noreferrer"
+                download
               >
                 <CheckSquare className="size-4" />
                 Marked (for RKC)
@@ -161,6 +152,7 @@ export default function CataloguePage() {
               href={`/api/judges-book/${showId}`}
               target="_blank"
               rel="noopener noreferrer"
+              download
             >
               <ClipboardList className="size-4" />
               Judge&apos;s Book
@@ -176,75 +168,16 @@ export default function CataloguePage() {
         <StatCard label="Numbers Assigned" value={hasNumbers ? 'Yes' : 'Not yet'} icon={Hash} />
       </div>
 
-      {/* Catalogue Preview */}
-      {isLoading ? (
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            Loading catalogue data...
-          </CardContent>
-        </Card>
-      ) : entries.length === 0 ? (
+      {/* Empty state when there are no entries yet — the previous in-page
+          breed-grouped preview was removed (backlog #82) since the per-
+          format download buttons above replaced its purpose. */}
+      {!isLoading && entries.length === 0 && (
         <EmptyState
           icon={BookOpen}
           title="No confirmed entries yet"
           description="Entries will appear here once exhibitors have paid."
           variant="card"
         />
-      ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>Catalogue Preview</CardTitle>
-            <CardDescription>
-              Entries ordered by breed group, breed, then sex
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {Object.entries(grouped)
-              .sort(([a], [b]) => a.localeCompare(b))
-              .map(([groupName, breeds]) => (
-                <div key={groupName}>
-                  <h3 className="mb-3 rounded bg-primary px-3 py-1.5 text-sm font-bold uppercase tracking-wider text-primary-foreground">
-                    {groupName}
-                  </h3>
-                  {Object.entries(breeds)
-                    .sort(([a], [b]) => a.localeCompare(b))
-                    .map(([breedName, { dogs, bitches }]) => (
-                      <div key={breedName} className="mb-4 pl-2">
-                        <h4 className="mb-2 border-b font-semibold">
-                          {breedName}
-                        </h4>
-                        {dogs.length > 0 && (
-                          <>
-                            <p className="mb-1 text-xs font-medium italic text-muted-foreground">
-                              Dogs
-                            </p>
-                            {dogs.map((entry) => (
-                              <CatalogueEntryRow
-                                key={entry.id}
-                                entry={entry}
-                              />
-                            ))}
-                          </>
-                        )}
-                        {bitches.length > 0 && (
-                          <>
-                            <p className="mb-1 mt-2 text-xs font-medium italic text-muted-foreground">
-                              Bitches
-                            </p>
-                            {bitches.map((entry) => (
-                              <CatalogueEntryRow
-                                key={entry.id}
-                                entry={entry}
-                              />
-                            ))}
-                          </>
-                        )}
-                      </div>
-                    ))}
-                </div>
-              ))}
-          </CardContent>
-        </Card>
       )}
 
       {/* Absentee List */}
@@ -302,51 +235,6 @@ export default function CataloguePage() {
             </div>
           </CardContent>
         </Card>
-      )}
-    </div>
-  );
-}
-
-function CatalogueEntryRow({ entry }: { entry: CatalogueEntryItem }) {
-  return (
-    <div className="mb-2 rounded border bg-card px-3 py-2 text-sm">
-      <div className="flex items-baseline gap-2">
-        <span className="font-mono text-xs font-bold text-muted-foreground">
-          {entry.catalogueNumber ?? '—'}
-        </span>
-        <span className="font-semibold">
-          {entry.dog ? formatDogName(entry.dog) : 'Junior Handler'}
-        </span>
-      </div>
-      {entry.dog && (
-        <div className="mt-1 grid grid-cols-2 gap-x-4 text-xs text-muted-foreground">
-          {entry.dog.dateOfBirth && (
-            <span>DOB: {formatDate(entry.dog.dateOfBirth)}</span>
-          )}
-          {entry.dog.sireName && <span>Sire: {entry.dog.sireName}</span>}
-          {entry.dog.damName && <span>Dam: {entry.dog.damName}</span>}
-          {entry.dog.breederName && (
-            <span>Breeder: {entry.dog.breederName}</span>
-          )}
-        </div>
-      )}
-      {entry.dog?.owners && entry.dog.owners.length > 0 && (
-        <p className="mt-1 text-xs text-muted-foreground">
-          Owner{entry.dog.owners.length > 1 ? 's' : ''}:{' '}
-          {entry.dog.owners
-            .map((o) => ('ownerName' in o ? o.ownerName : ''))
-            .filter(Boolean)
-            .join(' & ')}
-        </p>
-      )}
-      {entry.entryClasses.length > 0 && (
-        <div className="mt-1 flex flex-wrap gap-1">
-          {entry.entryClasses.map((ec, i) => (
-            <Badge key={i} variant="secondary" className="text-xs">
-              {ec.showClass?.classDefinition?.name ?? '?'}
-            </Badge>
-          ))}
-        </div>
       )}
     </div>
   );
