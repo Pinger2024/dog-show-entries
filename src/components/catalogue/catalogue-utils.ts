@@ -128,10 +128,13 @@ export const DEFAULT_ALL_BREED_AWARDS = [
 ] as const;
 
 /** Pick the right default best-awards list for a show based on its
- *  scope and type. Used as a fallback when `show.bestAwards` is empty. */
+ *  scope and type. Used as a fallback when `show.bestAwards` is empty.
+ *  Accepts the same string-typed scope/type as Drizzle inferred shapes
+ *  (Drizzle's enum-derived types are string literals, so passing them
+ *  through directly is type-safe at the call site). */
 export function pickDefaultBestAwards(show: {
-  showScope?: string;
-  showType?: string;
+  showScope?: 'single_breed' | 'group' | 'general' | string;
+  showType?: 'championship' | 'open' | 'limited' | 'premier' | 'club' | 'companion' | 'match' | string;
 }): string[] {
   const isSingleBreed = show.showScope === 'single_breed';
   const isChampionship = show.showType === 'championship';
@@ -139,6 +142,12 @@ export function pickDefaultBestAwards(show: {
   if (isSingleBreed) return [...DEFAULT_BREED_AWARDS];
   return [...DEFAULT_ALL_BREED_AWARDS];
 }
+
+// Hoisted regex patterns — used by classifyBestAwardSex below. Hoisting
+// avoids re-compiling the regex on every call (cheap, but a bad pattern
+// to leave in a function that may be called in a tight loop later).
+const BITCH_AWARD_REGEX = /\bbitch\b/;
+const DOG_AWARD_REGEX = /\bdog\b/;
 
 /**
  * Classify a best-award name by which sex section it belongs in for
@@ -155,8 +164,8 @@ export function classifyBestAwardSex(
   const lower = awardName.toLowerCase();
   // "Bitch" check first because "Best Puppy Bitch" contains "puppy" but
   // we want it filed under bitch, not under shared.
-  if (/\bbitch\b/.test(lower)) return 'bitch';
-  if (/\bdog\b/.test(lower)) return 'dog';
+  if (BITCH_AWARD_REGEX.test(lower)) return 'bitch';
+  if (DOG_AWARD_REGEX.test(lower)) return 'dog';
   return 'shared';
 }
 

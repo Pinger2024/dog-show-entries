@@ -3,9 +3,6 @@ import { Page, View, Text, Image } from '@react-pdf/renderer';
 import { styles, C } from './catalogue-styles';
 import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
 import { pickDefaultBestAwards } from './catalogue-utils';
-// Re-export so existing imports of ClassSponsorshipInfo from this module
-// keep working without touching every caller.
-export type { ClassSponsorshipInfo };
 
 const SHOW_TYPE_LABELS: Record<string, string> = {
   championship: 'Championship Show',
@@ -412,6 +409,11 @@ export function BestAwardsPage({ show }: FrontMatterProps) {
     return null;
   }
 
+  // Normalise award names once so the rest of the function can do plain
+  // string lookups instead of recomputing `.toLowerCase().trim()` on
+  // every comparison.
+  const normaliseAward = (s: string) => s.toLowerCase().trim();
+
   // Build a multimap of award name → sponsors. The same award can have
   // multiple sponsors (e.g. Best in Show might have separate sponsors for
   // the trophy and the rosettes), and Amanda's real shows do this — the
@@ -419,7 +421,7 @@ export function BestAwardsPage({ show }: FrontMatterProps) {
   type Sponsor = typeof awardSponsors[number];
   const sponsorsByAward = new Map<string, Sponsor[]>();
   for (const s of awardSponsors) {
-    const key = s.award.toLowerCase().trim();
+    const key = normaliseAward(s.award);
     const list = sponsorsByAward.get(key) ?? [];
     list.push(s);
     sponsorsByAward.set(key, list);
@@ -427,8 +429,9 @@ export function BestAwardsPage({ show }: FrontMatterProps) {
 
   // Also include any sponsor whose award isn't in the bestAwards list —
   // the society might have sponsored an extra award we don't know about.
+  const bestAwardKeys = new Set(bestAwards.map(normaliseAward));
   const extraSponsorAwards = awardSponsors
-    .filter((s) => !bestAwards.some((a) => a.toLowerCase().trim() === s.award.toLowerCase().trim()))
+    .filter((s) => !bestAwardKeys.has(normaliseAward(s.award)))
     .map((s) => s.award);
   // Dedupe extras (multiple sponsors for the same extra award shouldn't
   // produce duplicate rows).
@@ -465,7 +468,7 @@ export function BestAwardsPage({ show }: FrontMatterProps) {
       </View>
 
       {allAwards.map((award, i) => {
-        const sponsors = sponsorsByAward.get(award.toLowerCase().trim()) ?? [];
+        const sponsors = sponsorsByAward.get(normaliseAward(award)) ?? [];
         return (
           <View key={`${award}-${i}`} style={bestAwardsStyles.tableRow} wrap={false}>
             <View style={bestAwardsStyles.awardCol}>
@@ -820,11 +823,20 @@ export function JudgesListPage({ show }: FrontMatterProps) {
     // (e.g. "Dogs — Mr X" and "Bitches — Mr X") only renders one bio
     // block. We strip the role prefix off the label to get the judge
     // name; if there's no " — " it's just the name.
+    //
+    // FORMAT CONTRACT: judgeDisplayList strings are produced by route.ts
+    // and pdf-generation.ts as either `"<Role> — <Name>"` (with the U+2014
+    // em-dash separator) or just `"<Name>"` when the judge has no
+    // sex/JH role. The split below depends on em-dashes NOT appearing in
+    // RKC judge names, which has held in practice. If you ever change the
+    // label format on the producer side, also update this parser — or
+    // better, switch judgeDisplayList to a structured array.
+    const LABEL_SEPARATOR = ' \u2014 '; // " — " with the em-dash explicit
     const labelsByJudge = new Map<string, string[]>();
     for (const label of show.judgeDisplayList) {
-      const m = label.match(/^(.+?) — (.+)$/);
-      const role = m ? m[1] : null;
-      const name = m ? m[2] : label;
+      const sepIdx = label.indexOf(LABEL_SEPARATOR);
+      const role = sepIdx >= 0 ? label.slice(0, sepIdx) : null;
+      const name = sepIdx >= 0 ? label.slice(sepIdx + LABEL_SEPARATOR.length) : label;
       const list = labelsByJudge.get(name) ?? [];
       list.push(role ?? name);
       labelsByJudge.set(name, list);
