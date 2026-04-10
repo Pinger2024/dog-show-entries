@@ -3,7 +3,7 @@ import { styles } from './catalogue-styles';
 import { CatalogueHeader } from './catalogue-header';
 import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
 import { formatDobKC, formatPedigreeKC, formatOwnerKC, uppercaseName, buildSponsorLines } from './catalogue-utils';
-import { CoverPage, ShowInformationPage, JudgesListPage, ClassDefinitionsPage, TrophiesPage, ExhibitorIndexPage } from './catalogue-front-matter';
+import { CoverPage, ShowInformationPage, JudgesListPage, ClassDefinitionsPage, TrophiesPage, BestAwardsPage, ExhibitorIndexPage } from './catalogue-front-matter';
 
 interface Props {
   show: CatalogueShowInfo;
@@ -123,6 +123,7 @@ export function CatalogueByClass({ show, entries }: Props) {
       {!show.skipTrophiesPage && (
         <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />
       )}
+      <BestAwardsPage show={show} />
 
       {classChunks.map((chunkKeys, chunkIdx) => (
       <Page key={`chunk-${chunkIdx}`} size="A5" style={styles.page} wrap>

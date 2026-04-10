@@ -18,6 +18,7 @@ import {
   JudgesListPage,
   ClassDefinitionsPage,
   TrophiesPage,
+  BestAwardsPage,
 } from './catalogue-front-matter';
 import type { ClassSponsorshipInfo } from './catalogue-types';
 
@@ -442,6 +443,7 @@ export function CatalogueRingside({ show, entries }: Props) {
       {!show.skipTrophiesPage && show.classSponsorships && show.classSponsorships.length > 0 && (
         <TrophiesPage show={show} sponsorships={show.classSponsorships} />
       )}
+      <BestAwardsPage show={show} />
 
       {/* Class pages — grouped by sex */}
       {sections.map((section) => {

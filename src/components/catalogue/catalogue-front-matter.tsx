@@ -132,6 +132,11 @@ export function ShowInformationPage({ show }: FrontMatterProps) {
   const hasAwardsDescription = !!show.awardsDescription;
   const hasAdditionalNotes = !!show.additionalNotes;
   const hasFutureShows = !!show.futureShowDates;
+  // Regulations moved off the cover (backlog #90): every regulation EXCEPT
+  // outside attraction and the no-wet-weather notice now lives here.
+  const hasCustomStatements = (show.customStatements?.length ?? 0) > 0;
+  const hasGroupSystem = !!show.judgedOnGroupSystem;
+  const hasRegulations = hasCustomStatements || hasGroupSystem;
   const practicalInfo: { label: string; value: string }[] = [];
   if (show.latestArrivalTime) {
     practicalInfo.push({ label: 'Latest Arrival', value: show.latestArrivalTime });
@@ -155,7 +160,8 @@ export function ShowInformationPage({ show }: FrontMatterProps) {
     !hasAwardsDescription &&
     !hasAdditionalNotes &&
     !hasFutureShows &&
-    !hasPracticalInfo
+    !hasPracticalInfo &&
+    !hasRegulations
   ) {
     return null;
   }
@@ -228,6 +234,228 @@ export function ShowInformationPage({ show }: FrontMatterProps) {
           <Text style={showInfoStyles.bodyText}>{show.futureShowDates}</Text>
         </View>
       )}
+
+      {/* Regulations — moved off the cover per backlog #90. The cover keeps
+          only the RKC-mandatory loud notices (outside attraction, no wet
+          weather). */}
+      {hasRegulations && (
+        <View wrap={false} style={{ marginBottom: 6 }}>
+          <Text style={showInfoStyles.sectionTitle}>Regulations</Text>
+          {hasGroupSystem && (
+            <Text style={{ ...showInfoStyles.bodyText, fontWeight: 'bold', marginBottom: 2 }}>
+              Judged on the Group System
+            </Text>
+          )}
+          {show.customStatements?.map((statement, i) => (
+            <Text
+              key={i}
+              style={{ ...showInfoStyles.bodyText, marginBottom: 2 }}
+            >
+              {statement}
+            </Text>
+          ))}
+        </View>
+      )}
+    </Page>
+  );
+}
+
+// ── Best Awards Page (backlog #94 + #95) ───────────────────────
+//
+// Dedicated page listing every "Best in X" award the society is giving
+// out at this show, alongside who sponsors it (if anyone) and a
+// write-in line so the secretary or steward can fill in the winner
+// during judging.
+//
+// Data sources:
+//   - `show.bestAwards`     — the list of award names the society
+//                              configured (e.g. "Best in Show", "Best
+//                              Long Coat Dog"). When absent we fall
+//                              back to a sensible RKC default list.
+//   - `show.awardSponsors`  — optional per-award sponsorship details
+//                              (sponsor name, sponsor affix, trophy
+//                              name). Joined to bestAwards by award
+//                              name (case-insensitive).
+//
+// The page returns null when there are no awards configured AND no
+// sponsors configured — single-breed shows that haven't filled in the
+// awards section don't get a blank page.
+
+const bestAwardsStyles = {
+  tableHeaderRow: {
+    flexDirection: 'row' as const,
+    borderBottomWidth: 1.5,
+    borderBottomColor: C.primary,
+    paddingBottom: 4,
+    marginBottom: 6,
+  },
+  tableRow: {
+    flexDirection: 'row' as const,
+    borderBottomWidth: 0.5,
+    borderBottomColor: C.ruleLight,
+    paddingTop: 6,
+    paddingBottom: 8,
+  },
+  awardCol: { width: '38%', paddingRight: 6 } as const,
+  trophyCol: { width: '24%', paddingRight: 6 } as const,
+  sponsorCol: { width: '38%' } as const,
+  headerLabel: {
+    fontFamily: 'Inter',
+    fontSize: 7.5,
+    fontWeight: 'bold',
+    color: C.textDark,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  } as const,
+  awardName: {
+    fontFamily: 'Inter',
+    fontSize: 9,
+    fontWeight: 'bold',
+    color: C.textDark,
+    marginBottom: 2,
+  } as const,
+  trophyName: {
+    fontFamily: 'Inter',
+    fontSize: 8,
+    color: C.textMedium,
+  } as const,
+  sponsorName: {
+    fontFamily: 'Inter',
+    fontSize: 8,
+    color: C.textDark,
+  } as const,
+  sponsorAffix: {
+    fontFamily: 'Inter',
+    fontSize: 7,
+    fontStyle: 'italic',
+    color: C.textLight,
+  } as const,
+  winnerLine: {
+    borderBottomWidth: 0.75,
+    borderBottomColor: C.textLight,
+    borderBottomStyle: 'dotted',
+    width: '100%',
+    marginTop: 4,
+  } as const,
+  winnerLabel: {
+    fontFamily: 'Inter',
+    fontSize: 6,
+    color: C.textLight,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 1,
+  } as const,
+};
+
+/**
+ * Default best-award list for shows that haven't customised theirs.
+ * Covers the awards every UK championship show typically gives out per
+ * RKC F regulations.
+ */
+const DEFAULT_BEST_AWARDS = [
+  'Best in Show',
+  'Reserve Best in Show',
+  'Best Puppy in Show',
+  'Best Veteran in Show',
+];
+
+export function BestAwardsPage({ show }: FrontMatterProps) {
+  const bestAwards = show.bestAwards && show.bestAwards.length > 0
+    ? show.bestAwards
+    : DEFAULT_BEST_AWARDS;
+  const awardSponsors = show.awardSponsors ?? [];
+
+  // Nothing to show if both lists are empty even after defaults — only
+  // happens for shows that haven't been configured at all.
+  if (bestAwards.length === 0 && awardSponsors.length === 0) {
+    return null;
+  }
+
+  // Build a row for each award. Look up sponsorship by award name
+  // case-insensitively so secretaries don't get burned by capitalisation
+  // mismatches between the two lists.
+  const sponsorByAward = new Map<string, typeof awardSponsors[number]>();
+  for (const s of awardSponsors) {
+    sponsorByAward.set(s.award.toLowerCase().trim(), s);
+  }
+
+  // Also include any sponsor whose award isn't in the bestAwards list —
+  // the society might have sponsored an extra award we don't know about.
+  const extraSponsorAwards = awardSponsors
+    .filter((s) => !bestAwards.some((a) => a.toLowerCase().trim() === s.award.toLowerCase().trim()))
+    .map((s) => s.award);
+  const allAwards = [...bestAwards, ...extraSponsorAwards];
+
+  return (
+    <Page size="A5" style={styles.frontMatterPage} wrap>
+      <SectionBand title="Best Awards" />
+
+      <Text
+        style={{
+          fontFamily: 'Times',
+          fontSize: 8,
+          fontStyle: 'italic',
+          color: C.textMedium,
+          marginBottom: 8,
+        }}
+      >
+        Awarded at the discretion of the judges. Winners may be filled in
+        ringside.
+      </Text>
+
+      {/* Table header */}
+      <View style={bestAwardsStyles.tableHeaderRow}>
+        <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.awardCol }}>
+          Award
+        </Text>
+        <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.trophyCol }}>
+          Trophy
+        </Text>
+        <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.sponsorCol }}>
+          Sponsor
+        </Text>
+      </View>
+
+      {allAwards.map((award, i) => {
+        const sponsor = sponsorByAward.get(award.toLowerCase().trim());
+        return (
+          <View key={`${award}-${i}`} style={bestAwardsStyles.tableRow} wrap={false}>
+            <View style={bestAwardsStyles.awardCol}>
+              <Text style={bestAwardsStyles.awardName}>{award}</Text>
+              {/* Write-in space for the winner — backlog #95 */}
+              <View style={bestAwardsStyles.winnerLine} />
+              <Text style={bestAwardsStyles.winnerLabel}>Winner</Text>
+            </View>
+            <View style={bestAwardsStyles.trophyCol}>
+              {sponsor?.trophyName ? (
+                <Text style={bestAwardsStyles.trophyName}>{sponsor.trophyName}</Text>
+              ) : (
+                <Text style={{ ...bestAwardsStyles.trophyName, color: C.textLight }}>—</Text>
+              )}
+            </View>
+            <View style={bestAwardsStyles.sponsorCol}>
+              {sponsor ? (
+                <>
+                  <Text style={bestAwardsStyles.sponsorName}>{sponsor.sponsorName}</Text>
+                  {sponsor.sponsorAffix && (
+                    <Text style={bestAwardsStyles.sponsorAffix}>{sponsor.sponsorAffix}</Text>
+                  )}
+                </>
+              ) : (
+                <Text style={{ ...bestAwardsStyles.sponsorName, color: C.textLight }}>—</Text>
+              )}
+            </View>
+          </View>
+        );
+      })}
+
+      <Text
+        style={styles.footer}
+        render={({ pageNumber, totalPages }) =>
+          `Page ${pageNumber} of ${totalPages}  ·  Generated by Remi`
+        }
+        fixed
+      />
     </Page>
   );
 }
@@ -389,39 +617,11 @@ export function CoverPage({ show }: FrontMatterProps) {
           </View>
         )}
 
-        {/* Custom statements — compact on cover */}
-        {show.customStatements && show.customStatements.length > 0 && (
-          <View style={{ width: '100%', marginTop: 2, marginBottom: 1, paddingHorizontal: 8 }}>
-            {show.customStatements.map((statement, i) => (
-              <Text key={i} style={{
-                fontFamily: 'Inter',
-                fontSize: 6.5,
-                fontWeight: 'bold',
-                color: C.textDark,
-                textAlign: 'center',
-                textTransform: 'uppercase',
-                marginTop: i > 0 ? 1 : 0,
-              }}>
-                {statement}
-              </Text>
-            ))}
-          </View>
-        )}
+        {/* Cover keeps only the RKC-mandatory "loud" notices: outside
+            attraction (above) and no-wet-weather (below). All other
+            regulations (group system, custom statements, etc.) live on
+            the Show Information page now — backlog #90. */}
 
-        {/* Regulatory statements — group system + wet weather */}
-        {show.judgedOnGroupSystem && (
-          <Text style={{
-            fontFamily: 'Inter',
-            fontSize: 6.5,
-            fontWeight: 'bold',
-            color: C.textDark,
-            textAlign: 'center',
-            textTransform: 'uppercase',
-            marginTop: 2,
-          }}>
-            Judged on the Group System
-          </Text>
-        )}
         {show.wetWeatherAccommodation === false && (
           <Text style={{
             fontFamily: 'Inter',

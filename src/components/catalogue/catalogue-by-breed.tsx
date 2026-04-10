@@ -7,6 +7,7 @@ import {
   JudgesListPage,
   ClassDefinitionsPage,
   TrophiesPage,
+  BestAwardsPage,
   createBreedIndexRenderer,
   isMultiBreedChampionship,
 } from './catalogue-front-matter';
@@ -235,6 +236,7 @@ export function CatalogueByBreed({ show, entries }: Props) {
       {!show.skipTrophiesPage && (
         <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />
       )}
+      <BestAwardsPage show={show} />
 
       {/* One <Page> per breed — resets coordinate system */}
       {breedPages.map(({ groupName, breedName, judge, breedBucket }) => (
