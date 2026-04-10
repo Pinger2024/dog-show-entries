@@ -46,10 +46,13 @@ const SHOW_TYPE_LABELS: Record<string, string> = {
   championship: 'Championship Show',
 };
 
+// Punchy single-word/short labels matching traditional UK prize card style
+// (Higham Press / MBJ etc. all set the placement as a single bold word like
+// "FIRST" rather than "FIRST PLACE" — reads from across the ring).
 const PLACEMENT_LABELS: Record<number, string> = {
-  1: 'First Place',
-  2: 'Second Place',
-  3: 'Third Place',
+  1: 'First',
+  2: 'Second',
+  3: 'Third',
   4: 'Reserve',
   5: 'Very Highly Commended',
   6: 'Highly Commended',
@@ -76,6 +79,13 @@ const PLACEMENT_COLOURS: Record<number, { accent: string; filled: string; outlin
 
 export type PrizeCardStyle = 'filled' | 'outline';
 
+// Card design notes — see Amanda's prize-card feedback (2026-04-10):
+//   "More impressive, you can't even see our branding, larger font, fill the
+//    card, larger logo, professional pizazz".
+// Every measurement here was uplifted from the previous timid layout to feel
+// confident at arm's length. The reference is the Higham Press / Mixam
+// traditional UK prize card style — bold club name, prominent logo, single
+// dominant placement word, content that fills the card edge to edge.
 const s = StyleSheet.create({
   // A5 landscape: 595 x 420 pts (A5 = 148mm × 210mm)
   page: {
@@ -85,14 +95,15 @@ const s = StyleSheet.create({
     padding: 0,
     position: 'relative',
   },
-  // Decorative border
+  // Decorative double border — outer is the bold accent frame, inner is a
+  // hairline rule offset by 4pt to create a "matted print" look.
   outerBorder: {
     position: 'absolute',
-    top: 14,
-    left: 14,
-    right: 14,
-    bottom: 14,
-    borderWidth: 2,
+    top: 12,
+    left: 12,
+    right: 12,
+    bottom: 12,
+    borderWidth: 3,
     borderColor: '#000',
   },
   innerBorder: {
@@ -101,121 +112,129 @@ const s = StyleSheet.create({
     left: 18,
     right: 18,
     bottom: 18,
-    borderWidth: 0.5,
+    borderWidth: 0.75,
     borderColor: '#999',
   },
-  // Content area
+  // Content area — reduced padding so content reaches near the inner frame
   content: {
     flex: 1,
-    padding: '28 32',
+    padding: '20 28',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
   },
-  // Logo
+  // Top zone — logo + club identity
+  topZone: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  // Logo — was 50pt, now 95pt (≈23% of card height — anchors the top half
+  // without crowding the placement and bottom info out of the page).
   logo: {
-    width: 50,
-    height: 50,
-    marginBottom: 8,
+    width: 95,
+    height: 95,
+    marginBottom: 4,
+    objectFit: 'contain',
   },
-  // Club name
+  // Club name — was 14pt, now 22pt bold caps. The dominant identity element.
   clubName: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-    letterSpacing: 2,
-    color: '#333',
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  // Show name
-  showName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-    letterSpacing: 1.5,
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  // Show type
-  showType: {
-    fontSize: 9,
-    fontStyle: 'italic',
-    color: '#555',
-    marginBottom: 2,
-    textAlign: 'center',
-  },
-  // Date
-  date: {
-    fontSize: 9,
-    color: '#444',
-    marginBottom: 14,
-    textAlign: 'center',
-  },
-  // Decorative rule
-  rule: {
-    width: '60%',
-    borderBottomWidth: 1,
-    borderBottomColor: '#ccc',
-    marginBottom: 14,
-  },
-  // Placement
-  placementContainer: {
-    paddingVertical: 6,
-    paddingHorizontal: 24,
-    marginBottom: 12,
-    borderWidth: 1.5,
-  },
-  placementText: {
     fontSize: 22,
     fontWeight: 'bold',
     textTransform: 'uppercase',
-    letterSpacing: 3,
+    letterSpacing: 1.5,
+    color: '#1a1a1a',
+    marginBottom: 3,
     textAlign: 'center',
   },
-  // Class info
-  classInfo: {
-    fontSize: 11,
+  // Show name — was 16pt, now 14pt italic to subordinate to the club name
+  // and give the placement more breathing room. Title-cased not all-caps.
+  showName: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    color: '#444',
+    marginBottom: 2,
+    textAlign: 'center',
+  },
+  // Show type + date — combined into one line, was 9pt × 2 lines, now 10pt × 1
+  showMeta: {
+    fontSize: 10,
+    color: '#666',
+    textAlign: 'center',
+  },
+  // Middle zone — the placement, the visual hero
+  middleZone: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  // Decorative rule — slightly bolder, fuller width
+  rule: {
+    width: '70%',
+    borderBottomWidth: 1.25,
+    marginVertical: 6,
+  },
+  // Placement badge — was 22pt cramped, now 36pt with generous frame
+  placementContainer: {
+    paddingVertical: 8,
+    paddingHorizontal: 36,
+    borderWidth: 2.5,
+    marginVertical: 2,
+  },
+  placementText: {
+    fontSize: 36,
     fontWeight: 'bold',
-    marginBottom: 3,
+    textTransform: 'uppercase',
+    letterSpacing: 4,
+    textAlign: 'center',
+  },
+  // Bottom zone — class info, judge, write-in
+  bottomZone: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  // Class info — was 11pt, now 14pt bold
+  classInfo: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+    marginBottom: 2,
     textAlign: 'center',
   },
   breedInfo: {
-    fontSize: 10,
+    fontSize: 12,
     fontStyle: 'italic',
     color: '#333',
-    marginBottom: 3,
+    marginBottom: 2,
     textAlign: 'center',
   },
   sexInfo: {
-    fontSize: 9,
+    fontSize: 11,
     color: '#555',
-    marginBottom: 10,
+    marginBottom: 6,
     textAlign: 'center',
   },
-  // Judge
+  // Judge — was 9pt, now 11pt
   judgeName: {
-    fontSize: 9,
+    fontSize: 11,
     color: '#444',
     marginBottom: 4,
     textAlign: 'center',
   },
-  // Exhibitor write-in line
+  // Exhibitor write-in — bigger label, line tall enough for handwriting
   writeInLabel: {
-    fontSize: 8,
+    fontSize: 10,
     color: '#666',
-    marginTop: 10,
-  },
-  writeInLine: {
-    width: '70%',
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#999',
-    height: 16,
     marginTop: 2,
   },
-  // Footer
+  writeInLine: {
+    width: '78%',
+    borderBottomWidth: 0.75,
+    borderBottomColor: '#888',
+    height: 18,
+    marginTop: 2,
+  },
+  // Footer — slightly visible Remi credit
   footer: {
     position: 'absolute',
-    bottom: 8,
+    bottom: 6,
     left: 20,
     right: 20,
     textAlign: 'center',
@@ -225,7 +244,11 @@ const s = StyleSheet.create({
 });
 
 export function PrizeCards({ show, classes, includeJudgeName, placements, cardStyle = 'filled' }: PrizeCardsProps) {
+  // Full date format with weekday + ordinal day matches the Higham Press
+  // tradition (e.g. "Saturday 16 May 2026") — feels ceremonial vs the bare
+  // "16 May 2026" the previous design used.
   const showDate = new Date(show.date).toLocaleDateString('en-GB', {
+    weekday: 'long',
     day: 'numeric',
     month: 'long',
     year: 'numeric',
@@ -254,63 +277,54 @@ export function PrizeCards({ show, classes, includeJudgeName, placements, cardSt
               key={`${classIdx}-${placement}`}
               size="A5"
               orientation="landscape"
+              wrap={false}
               style={{ ...s.page, backgroundColor: bgColor }}
             >
-              {/* Decorative double border */}
+              {/* Decorative double border — outer in placement colour, inner hairline */}
               <View style={{ ...s.outerBorder, borderColor: colours.accent }} />
-              <View style={{ ...s.innerBorder, borderColor: colours.accent }} />
+              <View style={s.innerBorder} />
 
               <View style={s.content}>
-                {/* Club logo */}
-                {show.logoUrl && (
-                  <Image src={show.logoUrl} style={s.logo} />
-                )}
-
-                {/* Club name */}
-                {show.organisation && (
-                  <Text style={s.clubName}>{show.organisation}</Text>
-                )}
-
-                {/* Show name */}
-                <Text style={s.showName}>{show.name}</Text>
-
-                {/* Show type */}
-                <Text style={s.showType}>{showTypeLabel}</Text>
-
-                {/* Date */}
-                <Text style={s.date}>{showDate}</Text>
-
-                {/* Decorative rule */}
-                <View style={{ ...s.rule, borderBottomColor: colours.accent }} />
-
-                {/* Placement badge */}
-                <View style={{ ...s.placementContainer, borderColor: colours.accent }}>
-                  <Text style={{ ...s.placementText, color: colours.accent }}>
-                    {PLACEMENT_LABELS[placement]}
+                {/* TOP ZONE — club identity */}
+                <View style={s.topZone}>
+                  {show.logoUrl && (
+                    <Image src={show.logoUrl} style={s.logo} />
+                  )}
+                  {show.organisation && (
+                    <Text style={s.clubName}>{show.organisation}</Text>
+                  )}
+                  <Text style={s.showName}>{show.name}</Text>
+                  <Text style={s.showMeta}>
+                    {showTypeLabel} · {showDate}
                   </Text>
                 </View>
 
-                {/* Class info */}
-                <Text style={s.classInfo}>{classLabel}</Text>
+                {/* MIDDLE ZONE — the placement, visual hero */}
+                <View style={s.middleZone}>
+                  <View style={{ ...s.rule, borderBottomColor: colours.accent }} />
+                  <View style={{ ...s.placementContainer, borderColor: colours.accent }}>
+                    <Text style={{ ...s.placementText, color: colours.accent }}>
+                      {PLACEMENT_LABELS[placement]}
+                    </Text>
+                  </View>
+                  <View style={{ ...s.rule, borderBottomColor: colours.accent }} />
+                </View>
 
-                {/* Breed */}
-                {cls.breedName && (
-                  <Text style={s.breedInfo}>{cls.breedName}</Text>
-                )}
-
-                {/* Sex */}
-                {sexLabel && (
-                  <Text style={s.sexInfo}>{sexLabel}</Text>
-                )}
-
-                {/* Judge */}
-                {includeJudgeName && cls.judgeName && (
-                  <Text style={s.judgeName}>Judge: {cls.judgeName}</Text>
-                )}
-
-                {/* Write-in area for exhibitor/dog */}
-                <Text style={s.writeInLabel}>Exhibit</Text>
-                <View style={s.writeInLine} />
+                {/* BOTTOM ZONE — class details, judge, write-in */}
+                <View style={s.bottomZone}>
+                  <Text style={s.classInfo}>{classLabel}</Text>
+                  {cls.breedName && (
+                    <Text style={s.breedInfo}>{cls.breedName}</Text>
+                  )}
+                  {sexLabel && (
+                    <Text style={s.sexInfo}>{sexLabel}</Text>
+                  )}
+                  {includeJudgeName && cls.judgeName && (
+                    <Text style={s.judgeName}>Judge: {cls.judgeName}</Text>
+                  )}
+                  <Text style={s.writeInLabel}>Exhibit</Text>
+                  <View style={s.writeInLine} />
+                </View>
               </View>
 
               <Text style={s.footer}>RemiShowManager.co.uk</Text>
