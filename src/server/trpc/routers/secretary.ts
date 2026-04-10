@@ -3557,14 +3557,24 @@ export const secretaryRouter = createTRPCRouter({
       const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
 
       try {
-        await resend.emails.send({
+        const result = await resend.emails.send({
           from: emailFrom,
           to: contract.judgeEmail,
           replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
           subject: `Reminder: Judging Offer — ${show.name}`,
           html,
         });
+        // Resend SDK v6 returns { data, error } instead of throwing on HTTP errors,
+        // so a 4xx/5xx response leaves us with a non-null `error` and we must check it.
+        if (result.error) {
+          console.error('[email] Resend API rejected judge offer resend:', result.error);
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: `Email provider error: ${result.error.message ?? 'unknown error'}. Please try again in a few minutes.`,
+          });
+        }
       } catch (error) {
+        if (error instanceof TRPCError) throw error;
         console.error('[email] Failed to resend judge offer:', error);
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
