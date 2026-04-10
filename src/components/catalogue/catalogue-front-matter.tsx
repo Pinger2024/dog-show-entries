@@ -462,6 +462,7 @@ export function JudgesListPage({ show }: FrontMatterProps) {
         );
       })}
 
+      <WelcomeNote show={show} />
       <JurisdictionBlock />
 
       <Text

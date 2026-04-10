@@ -218,7 +218,17 @@ export function ClassManager({ showId, showType, classes }: ClassManagerProps) {
         );
         if (sexClasses.length === 0) continue;
 
-        const sexLabel = sex === 'dog' ? 'Dog Classes' : sex === 'bitch' ? 'Bitch Classes' : 'Any Sex Classes';
+        // For sexless classes, label them "Junior Handling" if that's what they all are
+        const allJuniorHandling = sex === null && sexClasses.every(
+          (sc) => sc.classDefinition?.type === 'junior_handler'
+        );
+        const sexLabel = sex === 'dog'
+          ? 'Dog Classes'
+          : sex === 'bitch'
+            ? 'Bitch Classes'
+            : allJuniorHandling
+              ? 'Junior Handling'
+              : 'Any Sex Classes';
         const sorted = [...sexClasses].sort((a, b) => a.sortOrder - b.sortOrder);
         groups.push({
           key: `${sex}`,
