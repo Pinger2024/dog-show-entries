@@ -16,6 +16,10 @@ export const SPECIAL_AWARDS = [
   'Best in Show',
   'Reserve Best in Show',
   'Best Puppy in Show',
+  // Best Veteran Group/Show progression — new for 2026 per RKC F(1).27
+  'Best Veteran in Group',
+  'Best Veteran in Show',
+  'Reserve Best Veteran in Show',
 ] as const;
 
 export function getPlacementLabel(value: number): string {
@@ -46,9 +50,12 @@ export const achievementLabels: Record<string, string> = {
   best_in_show: 'Best in Show',
   reserve_best_in_show: 'Reserve Best in Show',
   best_puppy_in_show: 'Best Puppy in Show',
+  best_veteran_in_show: 'Best Veteran in Show',
+  reserve_best_veteran_in_show: 'Reserve Best Veteran in Show',
   best_of_breed: 'Best of Breed',
   best_puppy_in_breed: 'Best Puppy in Breed',
   best_veteran_in_breed: 'Best Veteran in Breed',
+  best_veteran_in_group: 'Best Veteran in Group',
   dog_cc: 'Dog CC',
   reserve_dog_cc: 'Reserve Dog CC',
   bitch_cc: 'Bitch CC',

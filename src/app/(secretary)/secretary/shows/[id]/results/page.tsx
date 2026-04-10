@@ -51,6 +51,9 @@ type AchievementType =
   | 'best_of_breed'
   | 'best_puppy_in_breed'
   | 'best_veteran_in_breed'
+  | 'best_veteran_in_group'
+  | 'best_veteran_in_show'
+  | 'reserve_best_veteran_in_show'
   | 'group_placement'
   | 'best_in_show'
   | 'reserve_best_in_show'
@@ -71,6 +74,9 @@ const SHOW_LEVEL_AWARDS: { type: AchievementType; label: string }[] = [
   { type: 'best_in_show', label: 'Best in Show' },
   { type: 'reserve_best_in_show', label: 'Reserve Best in Show' },
   { type: 'best_puppy_in_show', label: 'Best Puppy in Show' },
+  // New 2026 — RKC F(1).27 Best Veteran in Show progression
+  { type: 'best_veteran_in_show', label: 'Best Veteran in Show' },
+  { type: 'reserve_best_veteran_in_show', label: 'Reserve Best Veteran in Show' },
   { type: 'best_long_coat_in_show', label: 'Best Long Coat in Show' },
 ];
 

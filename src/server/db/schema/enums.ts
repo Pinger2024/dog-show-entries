@@ -67,6 +67,10 @@ export const achievementTypeEnum = pgEnum('achievement_type', [
   'best_puppy_in_breed',
   'best_puppy_in_show',
   'best_veteran_in_breed',
+  // Best Veteran Group/Show progression — new for 2026 per RKC F(1).27
+  'best_veteran_in_group',
+  'best_veteran_in_show',
+  'reserve_best_veteran_in_show',
   'group_placement',
   'class_placement',
   'junior_warrant',
