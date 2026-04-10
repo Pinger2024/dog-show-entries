@@ -799,10 +799,10 @@ export function ShowDetailClient() {
                     className="border-stone-600 bg-transparent text-stone-300 shadow-none hover:bg-stone-700/50 hover:text-white"
                     asChild
                   >
-                    <Link href={`/shows/${show.slug ?? show.id}/schedule`}>
+                    <a href={`/api/schedule/${show.id}`} target="_blank" rel="noopener noreferrer">
                       <FileText className="size-4" />
                       Schedule
-                    </Link>
+                    </a>
                   </Button>
                 )}
                 {show.status !== 'draft' && show.status !== 'cancelled' && (
