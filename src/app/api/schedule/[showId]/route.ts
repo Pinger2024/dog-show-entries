@@ -35,7 +35,7 @@ export async function GET(
 
   // Draft shows require org membership (with admin bypass); published shows are public
   if (show.status === 'draft') {
-    const authResult = await authenticatePdfRequest(show.organisationId);
+    const authResult = await authenticatePdfRequest(show.organisationId, { showId });
     if (authResult instanceof NextResponse) return authResult;
   }
 
