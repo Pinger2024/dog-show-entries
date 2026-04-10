@@ -218,6 +218,7 @@ export const stewardRouter = createTRPCRouter({
                 with: { breed: true },
               },
               exhibitor: { columns: { id: true, name: true } },
+              juniorHandlerDetails: true,
             },
           },
           result: true,
@@ -245,25 +246,44 @@ export const stewardRouter = createTRPCRouter({
             const bCat = Number(b.entry.catalogueNumber) || 9999;
             return aCat - bCat;
           })
-          .map((ec) => ({
-            entryClassId: ec.id,
-            entryId: ec.entry.id,
-            dogId: ec.entry.dog?.id ?? null,
-            catalogueNumber: ec.entry.catalogueNumber,
-            dogName: ec.entry.dog?.registeredName ?? 'Unknown',
-            breederName: ec.entry.dog?.breederName ?? null,
-            breedName: ec.entry.dog?.breed?.name ?? '',
-            exhibitorName: ec.entry.exhibitor.name,
-            absent: ec.entry.absent,
-            result: ec.result
-              ? {
-                  id: ec.result.id,
-                  placement: ec.result.placement,
-                  specialAward: ec.result.specialAward,
-                  critiqueText: ec.result.critiqueText,
-                }
-              : null,
-          })),
+          .map((ec) => {
+            // For Junior Handler entries the "name" the steward needs to
+            // see at ringside is the JH child handler's name, not the
+            // owning user's name and not "Unknown" (which is what we
+            // showed before because there's no Dog row attached to a JH
+            // entry — Amanda flagged this in testing).
+            const isJuniorHandler = ec.entry.entryType === 'junior_handler';
+            const handlerName = ec.entry.juniorHandlerDetails?.handlerName ?? null;
+            const displayName = isJuniorHandler
+              ? handlerName ?? ec.entry.exhibitor.name
+              : ec.entry.dog?.registeredName ?? 'Unknown';
+            return {
+              entryClassId: ec.id,
+              entryId: ec.entry.id,
+              dogId: ec.entry.dog?.id ?? null,
+              catalogueNumber: ec.entry.catalogueNumber,
+              entryType: ec.entry.entryType,
+              isJuniorHandler,
+              dogName: displayName,
+              breederName: ec.entry.dog?.breederName ?? null,
+              breedName: ec.entry.dog?.breed?.name ?? '',
+              // For JH entries, the "exhibitor" line under the handler
+              // name shows the parent/guardian (the user who entered)
+              // so the steward knows who to talk to. For dog entries
+              // it's the entering user as before.
+              exhibitorName: ec.entry.exhibitor.name,
+              absent: ec.entry.absent,
+              result: ec.result
+                ? {
+                    id: ec.result.id,
+                    placement: ec.result.placement,
+                    placementStatus: ec.result.placementStatus,
+                    specialAward: ec.result.specialAward,
+                    critiqueText: ec.result.critiqueText,
+                  }
+                : null,
+            };
+          }),
       };
     }),
 
@@ -272,7 +292,11 @@ export const stewardRouter = createTRPCRouter({
     .input(
       z.object({
         entryClassId: z.string().uuid(),
+        // `placement` and `placementStatus` are mutually exclusive — an
+        // entry is either numerically placed (1-7) OR has a non-numeric
+        // status ('withheld' / 'unplaced'), never both.
         placement: z.number().int().min(1).max(7).nullable(),
+        placementStatus: z.enum(['withheld', 'unplaced']).nullable().optional(),
         specialAward: z.string().nullable().optional(),
         critiqueText: z.string().nullable().optional(),
         winnerPhotoUrl: z.string().nullable().optional(),
@@ -317,6 +341,7 @@ export const stewardRouter = createTRPCRouter({
         .values({
           entryClassId: input.entryClassId,
           placement: input.placement,
+          placementStatus: input.placementStatus ?? null,
           specialAward: input.specialAward ?? null,
           critiqueText: input.critiqueText ?? null,
           winnerPhotoUrl: input.winnerPhotoUrl ?? null,
@@ -328,6 +353,7 @@ export const stewardRouter = createTRPCRouter({
           target: results.entryClassId,
           set: {
             placement: input.placement,
+            placementStatus: input.placementStatus ?? null,
             specialAward: input.specialAward ?? null,
             critiqueText: input.critiqueText ?? null,
             winnerPhotoUrl: input.winnerPhotoUrl ?? null,

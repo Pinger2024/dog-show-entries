@@ -117,6 +117,17 @@ export default function StewardClassResultsPage({
   // Scope-aware placements: all-breed = 1st–HC, breed = 1st–Commended
   const availablePlacements = getPlacementsForScope(showClass.showScope);
 
+  // Set of placement integers already taken by other entries in this class.
+  // Each placement should only ever be assigned to one dog, so the steward
+  // shouldn't be able to pick the same placement twice — once an entry has
+  // 1st, "1st" disappears from every other entry's dropdown. Amanda flagged
+  // this in testing.
+  const usedPlacements = new Set(
+    entries
+      .map((e) => e.result?.placement)
+      .filter((p): p is number => p != null)
+  );
+
   // "Dogs forward" = present (not absent) — standard RKC terminology
   const dogsForward = entries.filter((e) => !e.absent).length;
 
@@ -140,10 +151,20 @@ export default function StewardClassResultsPage({
   ) {
     if (value === 'none') {
       removeResult.mutate({ entryClassId });
+    } else if (value === 'withheld' || value === 'unplaced') {
+      // Non-numeric statuses go in the new placementStatus column,
+      // and we explicitly null out the numeric placement.
+      recordResult.mutate({
+        entryClassId,
+        placement: null,
+        placementStatus: value,
+        specialAward: currentSpecialAward,
+      });
     } else {
       recordResult.mutate({
         entryClassId,
         placement: parseInt(value),
+        placementStatus: null,
         specialAward: currentSpecialAward,
       });
     }
@@ -279,7 +300,9 @@ export default function StewardClassResultsPage({
                     value={
                       entry.result?.placement
                         ? String(entry.result.placement)
-                        : 'none'
+                        : entry.result?.placementStatus
+                          ? entry.result.placementStatus
+                          : 'none'
                     }
                     onValueChange={(v) =>
                       handlePlacementChange(
@@ -294,11 +317,27 @@ export default function StewardClassResultsPage({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">—</SelectItem>
-                      {availablePlacements.map((p) => (
-                        <SelectItem key={p.value} value={String(p.value)}>
-                          {p.label}
-                        </SelectItem>
-                      ))}
+                      {availablePlacements.map((p) => {
+                        // Hide placements that another entry has already
+                        // claimed, but keep this entry's own selection
+                        // visible so the steward can see/clear it.
+                        const isOwnSelection = entry.result?.placement === p.value;
+                        if (usedPlacements.has(p.value) && !isOwnSelection) {
+                          return null;
+                        }
+                        return (
+                          <SelectItem key={p.value} value={String(p.value)}>
+                            {p.label}
+                          </SelectItem>
+                        );
+                      })}
+                      {/* Non-numeric placement statuses — Amanda's
+                          additions in steward testing. Withheld is when
+                          the judge withholds a placement; Unplaced is an
+                          explicit "judged but not in the prizes". Both
+                          are mutually exclusive with a numeric placement. */}
+                      <SelectItem value="withheld">Withheld</SelectItem>
+                      <SelectItem value="unplaced">Unplaced</SelectItem>
                     </SelectContent>
                   </Select>
 

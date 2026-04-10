@@ -19,6 +19,16 @@ export const results = pgTable(
       .notNull()
       .references(() => entryClasses.id, { onDelete: 'cascade' }),
     placement: integer('placement'),
+    /**
+     * For entries that aren't placed numerically. Mutually exclusive
+     * with `placement` — when this is set, `placement` should be null.
+     * Possible values: 'withheld' (judge withheld the placement, no
+     * dog was good enough) or 'unplaced' (entry was judged but didn't
+     * make the placements). Null means "no decision recorded yet" —
+     * different from 'unplaced' which is an explicit "judged, didn't
+     * place".
+     */
+    placementStatus: text('placement_status'),
     specialAward: text('special_award'),
     judgeId: uuid('judge_id').references(() => users.id, { onDelete: 'set null' }),
     critiqueText: text('critique_text'),
