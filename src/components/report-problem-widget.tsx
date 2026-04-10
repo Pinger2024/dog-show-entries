@@ -95,38 +95,25 @@ export function ReportProblemWidget() {
       setOpen(false);
       await new Promise((r) => setTimeout(r, 300));
 
-      // Lazily load html2canvas and capture the current viewport.
-      // On mobile Safari capturing the full document.body can crash or
-      // produce a blank image, so we capture the visible viewport instead
-      // and clip to the scroll position.
-      const html2canvas = (await import('html2canvas')).default;
-      const canvas = await html2canvas(document.body, {
-        useCORS: true,
-        allowTaint: true,
-        scale: Math.min(window.devicePixelRatio, 2),
-        logging: false,
-        // Capture only the visible viewport — mobile Safari struggles
-        // with long pages and capturing the whole body often fails silently.
-        windowWidth: window.innerWidth,
-        windowHeight: window.innerHeight,
-        x: window.scrollX,
-        y: window.scrollY,
-        width: window.innerWidth,
-        height: window.innerHeight,
+      // Use html-to-image — a modern replacement for html2canvas that
+      // handles Tailwind v4's lab()/oklch() CSS color functions that
+      // crashed the old library on mobile Safari.
+      const { toBlob } = await import('html-to-image');
+      const blob = await toBlob(document.body, {
+        cacheBust: true,
+        pixelRatio: Math.min(window.devicePixelRatio, 2),
       });
 
       setOpen(true);
 
-      canvas.toBlob((blob) => {
-        if (blob) {
-          const file = new File([blob], `screenshot-${Date.now()}.png`, {
-            type: 'image/png',
-          });
-          handleFileSelect(file);
-        } else {
-          toast.error('Could not capture screenshot. Please attach an image from your device instead.');
-        }
-      }, 'image/png');
+      if (blob) {
+        const file = new File([blob], `screenshot-${Date.now()}.png`, {
+          type: 'image/png',
+        });
+        handleFileSelect(file);
+      } else {
+        toast.error('Could not capture screenshot. Please attach an image from your device instead.');
+      }
     } catch (err) {
       setOpen(true);
       console.error('[screenshot] capture failed:', err);
