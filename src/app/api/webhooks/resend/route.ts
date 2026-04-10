@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
       const preview = textBody ? esc(textBody.slice(0, 500)) : '(No text body)';
       resend.emails
         .send({
-          from: process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>',
+          from: process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>',
           to: notifyEmail,
           subject: `New feedback from ${fromName ?? fromEmail}`,
           html: `<p><strong>From:</strong> ${displaySender}</p>

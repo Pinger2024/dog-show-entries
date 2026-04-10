@@ -320,7 +320,7 @@ export async function POST(
     // Send notification email to secretary
     try {
       const resend = new Resend(process.env.RESEND_API_KEY);
-      const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>';
+      const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
 
       // Notify both the system admin and the show secretary if one is set
       const adminEmail = process.env.FEEDBACK_NOTIFY_EMAIL ?? 'michael@prometheus-it.com';
@@ -331,7 +331,7 @@ export async function POST(
       await resend.emails.send({
         from: emailFrom,
         to: notifyEmail,
-        replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+        replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
         subject: `Judge Accepted — ${contract.judgeName} for ${show.name}`,
         html: `
 <!DOCTYPE html>
@@ -418,7 +418,7 @@ export async function POST(
     // Notify secretary
     try {
       const resend = new Resend(process.env.RESEND_API_KEY);
-      const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>';
+      const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
       const adminEmail = process.env.FEEDBACK_NOTIFY_EMAIL ?? 'michael@prometheus-it.com';
       const secretaryEmail = show.secretaryEmail;
       const notifyEmail = [adminEmail, ...(secretaryEmail && secretaryEmail !== adminEmail ? [secretaryEmail] : [])];
@@ -426,7 +426,7 @@ export async function POST(
       await resend.emails.send({
         from: emailFrom,
         to: notifyEmail,
-        replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+        replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
         subject: `Judge Declined — ${contract.judgeName} for ${show.name}`,
         html: `
 <!DOCTYPE html>

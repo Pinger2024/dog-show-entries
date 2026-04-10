@@ -8,7 +8,7 @@ import { isCatalogueItem } from '@/lib/catalogue-utils';
 export const resend = new Resend(process.env.RESEND_API_KEY);
 
 export const FROM =
-  process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>';
+  process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
 
 export const APP_URL =
   process.env.NEXTAUTH_URL ?? 'https://remishowmanager.co.uk';
@@ -263,7 +263,7 @@ export async function sendEntryConfirmationEmail(orderId: string) {
     const result = await resend.emails.send({
       from: FROM,
       to: exhibitor.email,
-      replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+      replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
       subject: `Entry Confirmed — ${show.name}`,
       html,
     });
@@ -414,7 +414,7 @@ export async function sendSecretaryNotificationEmail(orderId: string) {
     const result = await resend.emails.send({
       from: FROM,
       to: secretaryEmail,
-      replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+      replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
       subject: `New Entry — ${exhibitor?.name ?? 'Exhibitor'} → ${show.name}`,
       html,
     });
@@ -536,7 +536,7 @@ export async function sendPrintOrderConfirmationEmail(printOrderId: string) {
     const result = await resend.emails.send({
       from: FROM,
       to: order.orderedBy.email,
-      replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+      replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
       subject: `Print Order Confirmed — ${show.name} (${orderRef})`,
       html,
     });
@@ -643,7 +643,7 @@ export async function sendPrintOrderDispatchEmail(printOrderId: string) {
     const result = await resend.emails.send({
       from: FROM,
       to: order.orderedBy.email,
-      replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+      replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
       subject: `Your Print Order Has Shipped! — ${show.name} (${orderRef})`,
       html,
     });
@@ -739,7 +739,7 @@ export async function sendJudgeApprovalRequestEmail(params: {
     const result = await resend.emails.send({
       from: FROM,
       to: judge.email,
-      replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+      replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
       subject: `Results Approval — ${show.name}`,
       html,
     });

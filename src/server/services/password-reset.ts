@@ -6,7 +6,7 @@ import { db } from '@/server/db';
 import { users, passwordResetTokens } from '@/server/db/schema';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM = process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>';
+const FROM = process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
 const APP_URL = process.env.NEXTAUTH_URL ?? 'https://remishowmanager.co.uk';
 
 /**
@@ -63,7 +63,7 @@ export async function requestPasswordReset(email: string) {
   await resend.emails.send({
     from: FROM,
     to: user.email,
-    replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+    replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
     subject: 'Reset your Remi password',
     text: [
       'Reset your password',

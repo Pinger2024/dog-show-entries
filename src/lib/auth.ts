@@ -31,15 +31,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Resend({
       apiKey: process.env.RESEND_API_KEY,
-      from: process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>',
+      from: process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>',
       async sendVerificationRequest({ identifier: email, url, provider }) {
         const resend = new ResendClient(process.env.RESEND_API_KEY);
-        const from = provider.from ?? 'Remi <noreply@lettiva.com>';
+        const from = provider.from ?? 'Remi <noreply@remishowmanager.co.uk>';
 
         await resend.emails.send({
           from,
           to: email,
-          replyTo: 'feedback@inbound.lettiva.com',
+          replyTo: 'feedback@remishowmanager.co.uk',
           subject: 'Your Remi sign-in link',
           text: [
             'Sign in to Remi',

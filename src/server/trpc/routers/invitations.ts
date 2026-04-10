@@ -68,9 +68,9 @@ export const invitationsRouter = createTRPCRouter({
           const dashboardUrl = `${getBaseUrl()}/dashboard`;
 
           await resend.emails.send({
-            from: 'Remi <noreply@lettiva.com>',
+            from: 'Remi <noreply@remishowmanager.co.uk>',
             to: [input.email],
-            replyTo: 'feedback@inbound.lettiva.com',
+            replyTo: 'feedback@remishowmanager.co.uk',
             subject: `You've been made a ${roleName} on Remi`,
             html: `
               <div style="font-family: Georgia, serif; max-width: 560px; margin: 0 auto;">
@@ -114,9 +114,9 @@ export const invitationsRouter = createTRPCRouter({
         const acceptUrl = `${getBaseUrl()}/invite/${token}`;
 
         await resend.emails.send({
-          from: 'Remi <noreply@lettiva.com>',
+          from: 'Remi <noreply@remishowmanager.co.uk>',
           to: [input.email],
-          replyTo: 'feedback@inbound.lettiva.com',
+          replyTo: 'feedback@remishowmanager.co.uk',
           subject: `You've been added as a ${roleName} on Remi`,
           html: `
             <div style="font-family: Georgia, serif; max-width: 560px; margin: 0 auto;">

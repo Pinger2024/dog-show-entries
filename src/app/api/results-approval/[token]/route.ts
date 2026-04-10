@@ -436,7 +436,7 @@ export async function POST(
       await resend.emails.send({
         from: emailFrom,
         to: toAddresses,
-        replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+        replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
         subject: `Results Approved — ${judge.name} for ${show.name}`,
         html: `
 <!DOCTYPE html>
@@ -534,7 +534,7 @@ export async function POST(
       await resend.emails.send({
         from: emailFrom,
         to: toAddresses,
-        replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+        replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
         subject: `Results Query — ${judge.name} for ${show.name}`,
         html: `
 <!DOCTYPE html>

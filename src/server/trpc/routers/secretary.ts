@@ -3424,13 +3424,13 @@ export const secretaryRouter = createTRPCRouter({
 </html>`;
 
       const resend = new Resend(process.env.RESEND_API_KEY);
-      const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>';
+      const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
 
       try {
         await resend.emails.send({
           from: emailFrom,
           to: input.judgeEmail,
-          replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+          replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
           subject: `Judging Offer — ${show.name}`,
           html,
         });
@@ -3554,13 +3554,13 @@ export const secretaryRouter = createTRPCRouter({
 </html>`;
 
       const resend = new Resend(process.env.RESEND_API_KEY);
-      const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>';
+      const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
 
       try {
         await resend.emails.send({
           from: emailFrom,
           to: contract.judgeEmail,
-          replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+          replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
           subject: `Reminder: Judging Offer — ${show.name}`,
           html,
         });
@@ -3697,13 +3697,13 @@ export const secretaryRouter = createTRPCRouter({
 </html>`;
 
       const resend = new Resend(process.env.RESEND_API_KEY);
-      const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>';
+      const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
 
       try {
         await resend.emails.send({
           from: emailFrom,
           to: contract.judgeEmail,
-          replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+          replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
           subject: `Appointment Confirmed — ${show.name}`,
           html,
         });
@@ -3966,7 +3966,7 @@ export const secretaryRouter = createTRPCRouter({
       if (!show) throw new TRPCError({ code: 'NOT_FOUND' });
 
       const resend = new Resend(process.env.RESEND_API_KEY);
-      const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>';
+      const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
       const baseUrl = process.env.RENDER_EXTERNAL_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
       const orgName = show.organisation?.name ?? 'the Show Society';
 
@@ -4052,7 +4052,7 @@ export const secretaryRouter = createTRPCRouter({
           await resend.emails.send({
             from: emailFrom,
             to: judge.contactEmail,
-            replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+            replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
             subject: `Judging Offer — ${show.name}`,
             html: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="margin:0;padding:0;background-color:#f5f3ef;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
@@ -4116,7 +4116,7 @@ export const secretaryRouter = createTRPCRouter({
       });
 
       const resend = new Resend(process.env.RESEND_API_KEY);
-      const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>';
+      const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
 
       // Pre-fetch all assignments to avoid N+1 queries
       const judgeIds = acceptedContracts.map((c) => c.judgeId);
@@ -4175,7 +4175,7 @@ export const secretaryRouter = createTRPCRouter({
           await resend.emails.send({
             from: emailFrom,
             to: contract.judgeEmail,
-            replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+            replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
             subject: `Appointment Confirmed — ${show.name}`,
             html: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="margin:0;padding:0;background-color:#f5f3ef;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
@@ -4305,12 +4305,12 @@ export const secretaryRouter = createTRPCRouter({
         : '<tr><td colspan="2" style="padding:12px;text-align:center;color:#999;">No class data available yet</td></tr>';
 
       const resend = new Resend(process.env.RESEND_API_KEY);
-      const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>';
+      const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
 
       await resend.emails.send({
         from: emailFrom,
         to: judge.contactEmail,
-        replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+        replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
         subject: `Entry Numbers — ${show.name}`,
         html: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="margin:0;padding:0;background-color:#f5f3ef;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
@@ -4397,12 +4397,12 @@ export const secretaryRouter = createTRPCRouter({
         </p>` : '';
 
       const resend = new Resend(process.env.RESEND_API_KEY);
-      const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>';
+      const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
 
       await resend.emails.send({
         from: emailFrom,
         to: judge.contactEmail,
-        replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+        replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
         subject: `Thank You — ${show.name}`,
         html: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="margin:0;padding:0;background-color:#f5f3ef;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">

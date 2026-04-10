@@ -189,7 +189,7 @@ export async function sendExhibitorResultsEmails(showId: string) {
     emailPayloads.push({
       from: FROM,
       to: exhibitor.email,
-      replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+      replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
       subject,
       html,
     });
@@ -381,7 +381,7 @@ export async function sendFollowerResultsNotifications(showId: string) {
     emailPayloads.push({
       from: FROM,
       to: follower.email,
-      replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+      replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
       subject,
       html,
     });

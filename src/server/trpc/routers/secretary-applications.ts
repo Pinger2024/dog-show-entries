@@ -107,9 +107,9 @@ export const secretaryApplicationsRouter = createTRPCRouter({
             if (adminEmails.length === 0) return;
 
             resend.emails.send({
-              from: 'Remi <noreply@lettiva.com>',
+              from: 'Remi <noreply@remishowmanager.co.uk>',
               to: adminEmails,
-              replyTo: 'feedback@inbound.lettiva.com',
+              replyTo: 'feedback@remishowmanager.co.uk',
               subject: `New Secretary Registered: ${input.organisationName}`,
               html: `
                 <div style="font-family: Georgia, serif; max-width: 560px; margin: 0 auto;">
@@ -282,9 +282,9 @@ export const secretaryApplicationsRouter = createTRPCRouter({
           const acceptUrl = `${getBaseUrl()}/invite/${token}`;
 
           resend.emails.send({
-            from: 'Remi <noreply@lettiva.com>',
+            from: 'Remi <noreply@remishowmanager.co.uk>',
             to: [application.contactEmail],
-            replyTo: 'feedback@inbound.lettiva.com',
+            replyTo: 'feedback@remishowmanager.co.uk',
             subject: `Your Remi Secretary Application Has Been Approved!`,
             html: `
               <div style="font-family: Georgia, serif; max-width: 560px; margin: 0 auto;">
@@ -335,9 +335,9 @@ export const secretaryApplicationsRouter = createTRPCRouter({
         // Send rejection email (fire-and-forget)
         if (resend) {
           resend.emails.send({
-            from: 'Remi <noreply@lettiva.com>',
+            from: 'Remi <noreply@remishowmanager.co.uk>',
             to: [application.contactEmail],
-            replyTo: 'feedback@inbound.lettiva.com',
+            replyTo: 'feedback@remishowmanager.co.uk',
             subject: `Update on Your Remi Secretary Application`,
             html: `
               <div style="font-family: Georgia, serif; max-width: 560px; margin: 0 auto;">

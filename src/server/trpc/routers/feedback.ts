@@ -71,9 +71,9 @@ export const feedbackRouter = createTRPCRouter({
         const displaySender = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
         resend.emails
           .send({
-            from: process.env.EMAIL_FROM ?? 'Remi <noreply@lettiva.com>',
+            from: process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>',
             to: notifyEmails,
-            replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@inbound.lettiva.com',
+            replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
             subject: `Support request from ${fromName ?? fromEmail}: ${input.subject}`,
             html: `<div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; padding: 20px;">
 <h2 style="color: #1a1a1a;">New Support Request</h2>
