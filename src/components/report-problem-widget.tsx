@@ -131,6 +131,22 @@ export function ReportProblemWidget() {
       setOpen(true);
       console.error('[screenshot] capture failed:', err);
       const message = err instanceof Error ? err.message : 'Screenshot failed';
+      // Report screenshot failures to the server so we can diagnose them
+      try {
+        await fetch('/api/client-error', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            boundary: 'report-problem-widget:screenshot',
+            message,
+            stack: err instanceof Error ? err.stack?.slice(0, 2000) : undefined,
+            url: window.location.href,
+            userAgent: navigator.userAgent,
+          }),
+        });
+      } catch {
+        // Best-effort reporting
+      }
       toast.error(`${message}. Take a screenshot with your device and attach it instead.`);
     }
   }, []);

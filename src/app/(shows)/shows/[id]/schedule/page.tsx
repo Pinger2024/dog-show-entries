@@ -192,6 +192,22 @@ export default function SchedulePage({
         )}
       </div>
 
+      {/* ── Primary action: download full PDF schedule ── */}
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <Button asChild className="min-h-[2.75rem] flex-1">
+          <a href={`/api/schedule/${show.id}`} target="_blank" rel="noopener noreferrer">
+            <Download className="size-4" />
+            View Full Schedule PDF
+          </a>
+        </Button>
+        <Button variant="outline" className="min-h-[2.75rem] flex-1" asChild>
+          <Link href={`${showPath}/enter`}>
+            <Ticket className="size-4" />
+            Enter This Show
+          </Link>
+        </Button>
+      </div>
+
       {/* ── Timing ── */}
       {(showAny.showOpenTime || sd?.latestArrivalTime || showAny.startTime) && (
         <section>
