@@ -208,6 +208,65 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     setHasLoaded(true);
   }, [effectiveExisting, showData, previousData, hasLoaded]);
 
+  // ── Autosave ──
+  // Debounces form changes and saves silently in the background so users
+  // don't lose progress when navigating away mid-edit.
+  const [lastAutoSavedAt, setLastAutoSavedAt] = useState<Date | null>(null);
+  useEffect(() => {
+    if (!hasLoaded) return;
+    const timer = setTimeout(() => {
+      const data: ScheduleData = {
+        ...effectiveExisting,
+        country: country as ScheduleData['country'],
+        publicAdmission,
+        wetWeatherAccommodation: wetWeather,
+        isBenched,
+        benchingRemovalTime: benchingRemovalTime || undefined,
+        acceptsNfc,
+        judgedOnGroupSystem,
+        latestArrivalTime: latestArrivalTime || undefined,
+        showManager: showManager || undefined,
+        officers: officers
+          .filter((o) => o.name)
+          .map((o) => ({ name: o.name, position: o.position })),
+        guarantors: officers
+          .filter((o) => o.name && o.isGuarantor)
+          .map((o) => ({ name: o.name, address: o.address || undefined })),
+        awardsDescription: awardsDescription || undefined,
+        prizeMoney: prizeMoney || undefined,
+        what3words: what3words || undefined,
+        directions: directions || undefined,
+        catering: catering || undefined,
+        futureShowDates: futureShowDates || undefined,
+        additionalNotes: additionalNotes || undefined,
+        welcomeNote: welcomeNote || undefined,
+        outsideAttraction: outsideAttraction || undefined,
+        customStatements: customStatements.filter((s) => s.trim()).length > 0
+          ? customStatements.filter((s) => s.trim())
+          : undefined,
+      };
+      updateMutation.mutateAsync({
+        showId,
+        showOpenTime: showOpenTime || undefined,
+        judgingStartTime: judgingStartTime || undefined,
+        onCallVet: onCallVet || undefined,
+        scheduleData: data,
+      }).then(() => {
+        setLastAutoSavedAt(new Date());
+      }).catch(() => {
+        // Silent fail — user can still hit Save manually
+      });
+    }, 2000);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    hasLoaded, country, publicAdmission, wetWeather, isBenched, benchingRemovalTime,
+    acceptsNfc, judgedOnGroupSystem, latestArrivalTime, showOpenTime, judgingStartTime,
+    onCallVet, what3words, showManager, officers, awardsDescription, prizeMoney,
+    directions, catering, futureShowDates, additionalNotes, welcomeNote,
+    outsideAttraction, customStatements,
+  ]);
+
   // ── Derived counts ──
   const officerCount = officers.filter((o) => o.name).length;
   const guarantorCount = officers.filter((o) => o.isGuarantor).length;
@@ -480,7 +539,12 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       </div>
 
       {/* Save bar */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:justify-end pb-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end pb-4">
+        {lastAutoSavedAt && (
+          <p className="text-xs text-muted-foreground sm:mr-auto">
+            Auto-saved at {lastAutoSavedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+          </p>
+        )}
         <Button variant="outline" asChild className="w-full sm:w-auto min-h-[2.75rem]">
           <a href={`/api/schedule/${showId}`} target="_blank" rel="noopener noreferrer">
             <ExternalLink className="size-4" />
