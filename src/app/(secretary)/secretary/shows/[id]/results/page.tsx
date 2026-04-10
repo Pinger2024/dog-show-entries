@@ -22,7 +22,12 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { uploadImage } from '@/lib/upload';
-import { getPlacementLabel, placementColors, achievementLabels } from '@/lib/placements';
+import {
+  getPlacementLabel,
+  placementColors,
+  achievementLabels,
+  type AchievementType,
+} from '@/lib/placements';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -45,30 +50,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 
-// ── Achievement type definitions ──────────────────────────
-
-type AchievementType =
-  | 'best_of_breed'
-  | 'best_puppy_in_breed'
-  | 'best_veteran_in_breed'
-  | 'best_veteran_in_group'
-  | 'best_veteran_in_show'
-  | 'reserve_best_veteran_in_show'
-  | 'group_placement'
-  | 'best_in_show'
-  | 'reserve_best_in_show'
-  | 'best_puppy_in_show'
-  | 'dog_cc'
-  | 'reserve_dog_cc'
-  | 'bitch_cc'
-  | 'reserve_bitch_cc'
-  | 'best_puppy_dog'
-  | 'best_puppy_bitch'
-  | 'best_long_coat_dog'
-  | 'best_long_coat_bitch'
-  | 'best_long_coat_in_show'
-  | 'cc'
-  | 'reserve_cc';
+// ── Achievement award groupings ──────────────────────────
 
 const SHOW_LEVEL_AWARDS: { type: AchievementType; label: string }[] = [
   { type: 'best_in_show', label: 'Best in Show' },

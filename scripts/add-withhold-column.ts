@@ -11,4 +11,7 @@ async function main() {
   console.log('✓ Added withhold_from_publication column to entries');
   await client.end();
 }
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

@@ -8,6 +8,48 @@ export const KC_PLACEMENTS = [
   { value: 7, label: 'Commended', shortLabel: 'C' },
 ] as const;
 
+/**
+ * Single source of truth for achievement type identifiers.
+ * This array is the canonical ordering used by:
+ *   - `achievementTypeEnum` in src/server/db/schema/enums.ts (pgEnum)
+ *   - recordAchievement/removeAchievement z.enum in secretary.ts and steward.ts
+ *   - local AchievementType unions in the secretary/steward results pages
+ *
+ * Add a new award type HERE and it flows to all consumers automatically.
+ * Order must match the postgres enum order — to add a new value, append to
+ * the end AND run an `ALTER TYPE achievement_type ADD VALUE` migration.
+ */
+export const ACHIEVEMENT_TYPES = [
+  'cc',
+  'reserve_cc',
+  'best_of_breed',
+  'best_in_show',
+  'reserve_best_in_show',
+  'best_puppy_in_breed',
+  'best_puppy_in_show',
+  'best_veteran_in_breed',
+  // Best Veteran Group/Show progression — new for 2026 per RKC F(1).27
+  'best_veteran_in_group',
+  'best_veteran_in_show',
+  'reserve_best_veteran_in_show',
+  'group_placement',
+  'class_placement',
+  'junior_warrant',
+  'stud_book',
+  // Championship & breed-specific awards
+  'dog_cc',
+  'reserve_dog_cc',
+  'bitch_cc',
+  'reserve_bitch_cc',
+  'best_puppy_dog',
+  'best_puppy_bitch',
+  'best_long_coat_dog',
+  'best_long_coat_bitch',
+  'best_long_coat_in_show',
+] as const;
+
+export type AchievementType = typeof ACHIEVEMENT_TYPES[number];
+
 export const SPECIAL_AWARDS = [
   'Best of Breed',
   'Best Opposite Sex',

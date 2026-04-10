@@ -45,8 +45,11 @@ export async function GET(
   const authResult = await authenticatePdfRequest(show.organisationId, { showId, format });
   if (authResult instanceof NextResponse) return authResult;
 
-  // Run independent DB queries and logo validation in parallel
-  const [judgeAssignmentRows, showClassRows, entries, safeLogoUrl, showSponsorRows] = await Promise.all([
+  // Run independent DB queries and logo validation in parallel.
+  // The marked-catalogue achievements query only runs when it's needed; for
+  // every other format it short-circuits to an empty array so the Promise.all
+  // still resolves cleanly.
+  const [judgeAssignmentRows, showClassRows, entries, safeLogoUrl, showSponsorRows, achievementRows] = await Promise.all([
     db.query.judgeAssignments.findMany({
       where: eq(schema.judgeAssignments.showId, showId),
       with: { judge: true, breed: true, ring: true },
@@ -98,6 +101,12 @@ export async function GET(
       with: { sponsor: true },
       orderBy: [asc(schema.showSponsors.displayOrder)],
     }),
+    format === 'marked'
+      ? db.query.achievements.findMany({
+          where: eq(schema.achievements.showId, showId),
+          with: { dog: { with: { breed: true } } },
+        })
+      : Promise.resolve([] as never[]),
   ]);
 
   const judgesByBreedName: Record<string, string> = {};
@@ -291,16 +300,7 @@ export async function GET(
         }
       }
 
-      // Fetch achievements for the awards summary
-      const achievementRows = await db.query.achievements.findMany({
-        where: eq(schema.achievements.showId, showId),
-        with: {
-          dog: {
-            with: { breed: true },
-          },
-        },
-      });
-
+      // Achievements were fetched in the Promise.all above
       const markedAchievements: MarkedAchievement[] = achievementRows.map((a) => ({
         type: a.type,
         dogName: a.dog?.registeredName ?? 'Unknown',

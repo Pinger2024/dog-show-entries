@@ -4,6 +4,12 @@ import { CoverPage, JudgesListPage, ClassDefinitionsPage, TrophiesPage, Exhibito
 import { formatDobKC, formatPedigreeKC, formatOwnerKC, uppercaseName } from './catalogue-utils';
 import type { CatalogueEntry, CatalogueShowInfo } from './catalogue-standard';
 
+// The marked catalogue is a secretary-only submission to the RKC, not a public
+// publication. RKC F(1).11.b.(6) withhold-from-publication rules apply to
+// *published* catalogues (standard/alphabetical) — the RKC still needs the
+// full owner details on the marked copy, so `formatOwnerKC` is called without
+// a `withholdFromPublication` flag here by design.
+
 // ── Marked catalogue result data ─────────────────────────────
 
 export interface MarkedResult {

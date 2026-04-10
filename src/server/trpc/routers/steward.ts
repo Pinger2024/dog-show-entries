@@ -4,6 +4,7 @@ import { and, eq, isNull, isNotNull, asc } from 'drizzle-orm';
 import { stewardProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import type { Database } from '@/server/db';
+import { ACHIEVEMENT_TYPES } from '@/lib/placements';
 import {
   shows,
   entries,
@@ -443,26 +444,7 @@ export const stewardRouter = createTRPCRouter({
       z.object({
         showId: z.string().uuid(),
         dogId: z.string().uuid(),
-        type: z.enum([
-          'cc',
-          'reserve_cc',
-          'best_of_breed',
-          'best_puppy_in_breed',
-          'best_veteran_in_breed',
-          'group_placement',
-          'best_in_show',
-          'reserve_best_in_show',
-          'best_puppy_in_show',
-          'dog_cc',
-          'reserve_dog_cc',
-          'bitch_cc',
-          'reserve_bitch_cc',
-          'best_puppy_dog',
-          'best_puppy_bitch',
-          'best_long_coat_dog',
-          'best_long_coat_bitch',
-          'best_long_coat_in_show',
-        ]),
+        type: z.enum(ACHIEVEMENT_TYPES),
         date: z.string(),
       })
     )
@@ -534,26 +516,7 @@ export const stewardRouter = createTRPCRouter({
       z.object({
         showId: z.string().uuid(),
         dogId: z.string().uuid(),
-        type: z.enum([
-          'cc',
-          'reserve_cc',
-          'best_of_breed',
-          'best_puppy_in_breed',
-          'best_veteran_in_breed',
-          'group_placement',
-          'best_in_show',
-          'reserve_best_in_show',
-          'best_puppy_in_show',
-          'dog_cc',
-          'reserve_dog_cc',
-          'bitch_cc',
-          'reserve_bitch_cc',
-          'best_puppy_dog',
-          'best_puppy_bitch',
-          'best_long_coat_dog',
-          'best_long_coat_bitch',
-          'best_long_coat_in_show',
-        ]),
+        type: z.enum(ACHIEVEMENT_TYPES),
       })
     )
     .mutation(async ({ ctx, input }) => {

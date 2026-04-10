@@ -1,4 +1,5 @@
 import { pgEnum } from 'drizzle-orm/pg-core';
+import { ACHIEVEMENT_TYPES } from '@/lib/placements';
 
 export const showTypeEnum = pgEnum('show_type', [
   'companion',
@@ -58,34 +59,8 @@ export const userRoleEnum = pgEnum('user_role', [
   'admin',
 ]);
 
-export const achievementTypeEnum = pgEnum('achievement_type', [
-  'cc',
-  'reserve_cc',
-  'best_of_breed',
-  'best_in_show',
-  'reserve_best_in_show',
-  'best_puppy_in_breed',
-  'best_puppy_in_show',
-  'best_veteran_in_breed',
-  // Best Veteran Group/Show progression — new for 2026 per RKC F(1).27
-  'best_veteran_in_group',
-  'best_veteran_in_show',
-  'reserve_best_veteran_in_show',
-  'group_placement',
-  'class_placement',
-  'junior_warrant',
-  'stud_book',
-  // Championship & breed-specific awards
-  'dog_cc',
-  'reserve_dog_cc',
-  'bitch_cc',
-  'reserve_bitch_cc',
-  'best_puppy_dog',
-  'best_puppy_bitch',
-  'best_long_coat_dog',
-  'best_long_coat_bitch',
-  'best_long_coat_in_show',
-]);
+// ACHIEVEMENT_TYPES is the canonical ordering — see src/lib/placements.ts
+export const achievementTypeEnum = pgEnum('achievement_type', ACHIEVEMENT_TYPES);
 
 export const classTypeEnum = pgEnum('class_type', [
   'age',

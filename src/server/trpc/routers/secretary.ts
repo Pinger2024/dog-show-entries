@@ -5,6 +5,7 @@ import { secretaryProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { verifyShowAccess } from '../verify-show-access';
 import { verifyOrgAccess } from '../verify-org-access';
+import { ACHIEVEMENT_TYPES } from '@/lib/placements';
 import {
   shows,
   entries,
@@ -5591,29 +5592,7 @@ export const secretaryRouter = createTRPCRouter({
       z.object({
         showId: z.string().uuid(),
         dogId: z.string().uuid(),
-        type: z.enum([
-          'cc',
-          'reserve_cc',
-          'best_of_breed',
-          'best_puppy_in_breed',
-          'best_veteran_in_breed',
-          'best_veteran_in_group',
-          'best_veteran_in_show',
-          'reserve_best_veteran_in_show',
-          'group_placement',
-          'best_in_show',
-          'reserve_best_in_show',
-          'best_puppy_in_show',
-          'dog_cc',
-          'reserve_dog_cc',
-          'bitch_cc',
-          'reserve_bitch_cc',
-          'best_puppy_dog',
-          'best_puppy_bitch',
-          'best_long_coat_dog',
-          'best_long_coat_bitch',
-          'best_long_coat_in_show',
-        ]),
+        type: z.enum(ACHIEVEMENT_TYPES),
         date: z.string(),
       })
     )

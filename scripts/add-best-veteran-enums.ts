@@ -11,4 +11,7 @@ async function main() {
   console.log('✓ Added best_veteran_in_group, best_veteran_in_show, reserve_best_veteran_in_show to achievement_type');
   await client.end();
 }
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

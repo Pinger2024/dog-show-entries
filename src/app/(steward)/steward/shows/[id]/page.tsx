@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
+import type { AchievementType } from '@/lib/placements';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -212,24 +213,6 @@ export default function StewardShowPage({
 
 // ── Best of Breed / BIS Component ─────────────────────────
 
-type AchievementType =
-  | 'best_of_breed'
-  | 'best_puppy_in_breed'
-  | 'best_veteran_in_breed'
-  | 'group_placement'
-  | 'best_in_show'
-  | 'reserve_best_in_show'
-  | 'best_puppy_in_show'
-  | 'dog_cc'
-  | 'reserve_dog_cc'
-  | 'bitch_cc'
-  | 'reserve_bitch_cc'
-  | 'best_puppy_dog'
-  | 'best_puppy_bitch'
-  | 'best_long_coat_dog'
-  | 'best_long_coat_bitch'
-  | 'best_long_coat_in_show';
-
 const BOB_AWARDS: { type: AchievementType; label: string }[] = [
   { type: 'best_of_breed', label: 'Best of Breed' },
   { type: 'best_puppy_in_breed', label: 'Best Puppy in Breed' },
@@ -251,6 +234,9 @@ const BIS_AWARDS: { type: AchievementType; label: string }[] = [
   { type: 'best_in_show', label: 'Best in Show' },
   { type: 'reserve_best_in_show', label: 'Reserve Best in Show' },
   { type: 'best_puppy_in_show', label: 'Best Puppy in Show' },
+  // New 2026 — RKC F(1).27 Best Veteran in Show progression
+  { type: 'best_veteran_in_show', label: 'Best Veteran in Show' },
+  { type: 'reserve_best_veteran_in_show', label: 'Reserve Best Veteran in Show' },
   { type: 'best_long_coat_in_show', label: 'Best Long Coat in Show' },
 ];
 
