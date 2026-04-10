@@ -94,23 +94,29 @@ export const ordersRouter = createTRPCRouter({
           });
         }
 
-        // Breed validation for single-breed shows
+        // Breed validation for single-breed shows.
+        // Primary source: the show's own breedId (set when the single-breed show is created).
+        // Fallback: derive from show classes and judge assignments for legacy shows.
         if (show.showScope === 'single_breed') {
-          // Determine allowed breed IDs from show classes and judge assignments
-          const showClassRows = await ctx.db.query.showClasses.findMany({
-            where: eq(showClasses.showId, input.showId),
-            columns: { breedId: true },
-          });
-          const judgeAssignmentRows = await ctx.db.query.judgeAssignments.findMany({
-            where: eq(judgeAssignments.showId, input.showId),
-            columns: { breedId: true },
-          });
           const allowedBreedIds = new Set<string>();
-          for (const sc of showClassRows) {
-            if (sc.breedId) allowedBreedIds.add(sc.breedId);
-          }
-          for (const ja of judgeAssignmentRows) {
-            if (ja.breedId) allowedBreedIds.add(ja.breedId);
+          if (show.breedId) allowedBreedIds.add(show.breedId);
+
+          // Fallback for shows without show.breedId set
+          if (allowedBreedIds.size === 0) {
+            const showClassRows = await ctx.db.query.showClasses.findMany({
+              where: eq(showClasses.showId, input.showId),
+              columns: { breedId: true },
+            });
+            const judgeAssignmentRows = await ctx.db.query.judgeAssignments.findMany({
+              where: eq(judgeAssignments.showId, input.showId),
+              columns: { breedId: true },
+            });
+            for (const sc of showClassRows) {
+              if (sc.breedId) allowedBreedIds.add(sc.breedId);
+            }
+            for (const ja of judgeAssignmentRows) {
+              if (ja.breedId) allowedBreedIds.add(ja.breedId);
+            }
           }
 
           // If we found breed constraints, validate each dog

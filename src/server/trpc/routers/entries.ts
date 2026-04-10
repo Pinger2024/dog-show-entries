@@ -79,22 +79,28 @@ export const entriesRouter = createTRPCRouter({
         });
       }
 
-      // Breed validation for single-breed shows
+      // Breed validation for single-breed shows.
+      // Primary source: the show's own breedId. Fallback: derive from show
+      // classes and judge assignments for legacy shows without show.breedId.
       if (show.showScope === 'single_breed') {
-        const showClassRows = await ctx.db.query.showClasses.findMany({
-          where: eq(showClasses.showId, input.showId),
-          columns: { breedId: true },
-        });
-        const judgeAssignmentRows = await ctx.db.query.judgeAssignments.findMany({
-          where: eq(judgeAssignments.showId, input.showId),
-          columns: { breedId: true },
-        });
         const allowedBreedIds = new Set<string>();
-        for (const sc of showClassRows) {
-          if (sc.breedId) allowedBreedIds.add(sc.breedId);
-        }
-        for (const ja of judgeAssignmentRows) {
-          if (ja.breedId) allowedBreedIds.add(ja.breedId);
+        if (show.breedId) allowedBreedIds.add(show.breedId);
+
+        if (allowedBreedIds.size === 0) {
+          const showClassRows = await ctx.db.query.showClasses.findMany({
+            where: eq(showClasses.showId, input.showId),
+            columns: { breedId: true },
+          });
+          const judgeAssignmentRows = await ctx.db.query.judgeAssignments.findMany({
+            where: eq(judgeAssignments.showId, input.showId),
+            columns: { breedId: true },
+          });
+          for (const sc of showClassRows) {
+            if (sc.breedId) allowedBreedIds.add(sc.breedId);
+          }
+          for (const ja of judgeAssignmentRows) {
+            if (ja.breedId) allowedBreedIds.add(ja.breedId);
+          }
         }
 
         if (allowedBreedIds.size > 0 && !allowedBreedIds.has(dog.breedId)) {
