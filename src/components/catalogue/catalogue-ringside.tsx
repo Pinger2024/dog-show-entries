@@ -10,6 +10,8 @@ import {
   sortEntries,
   displayEntryName,
   buildSponsorLines,
+  pickDefaultBestAwards,
+  splitBestAwardsBySex,
 } from './catalogue-utils';
 import type { ClassGroup } from './catalogue-utils';
 import {
@@ -410,20 +412,41 @@ export function CatalogueRingside({ show, entries }: Props) {
   if (bitchClasses.length > 0) sections.push({ key: 'bitch', label: 'Bitch', classes: bitchClasses });
   if (jhClasses.length > 0) sections.push({ key: 'jh', label: 'Junior Handling', classes: jhClasses });
 
-  // Best-of awards — only include longcoat awards for GSD shows
+  // Best-of awards — derived from `show.bestAwards` (or smart defaults
+  // based on show scope/type) and split by sex section. Single source of
+  // truth with the BestAwardsPage summary, so the inline awards at the
+  // end of dog/bitch sections always agree with the summary list.
+  // We also detect long-coat awards (GSD shows specifically) and add
+  // them on top of the configured list.
   const hasLongcoat = entries.some((e) =>
     e.classes.some((c) => /long\s*coat/i.test(c.name ?? '')),
   );
+  const configuredAwards = show.bestAwards && show.bestAwards.length > 0
+    ? show.bestAwards
+    : pickDefaultBestAwards(show);
+  // Auto-augment with long-coat awards if the show has long-coat classes
+  // and the configured list doesn't already include them.
+  const longCoatExtras = hasLongcoat
+    ? [
+        'Best Long Coat Dog',
+        'Best Long Coat Bitch',
+        'Best Long Coat Puppy',
+        'Best Long Coat in Show',
+      ].filter((lc) =>
+        !configuredAwards.some((a) => a.toLowerCase().trim() === lc.toLowerCase().trim()),
+      )
+    : [];
+  const allBestAwards = [...configuredAwards, ...longCoatExtras];
+  const splitAwards = splitBestAwardsBySex(allBestAwards);
   const bestAwards: Record<string, string[]> = {
-    dog: hasLongcoat
-      ? ['Best Dog', 'Best Longcoat Dog', 'Best Puppy Dog']
-      : ['Best Dog', 'Best Puppy Dog'],
-    bitch: hasLongcoat
-      ? ['Best Bitch', 'Best Longcoat Bitch', 'Best Puppy Bitch']
-      : ['Best Bitch', 'Best Puppy Bitch'],
+    dog: splitAwards.dog,
+    bitch: splitAwards.bitch,
   };
-  const bisAwards = hasLongcoat
-    ? ['Best Longcoat Puppy', 'Best in Show', 'Best Longcoat in Show']
+  // Shared awards (Best of Breed, Best in Show, Best Long Coat in Show,
+  // etc.) go on the dedicated Best in Show page after both sexes are
+  // judged.
+  const bisAwards = splitAwards.shared.length > 0
+    ? splitAwards.shared
     : ['Best in Show'];
 
   // Build exhibitor index

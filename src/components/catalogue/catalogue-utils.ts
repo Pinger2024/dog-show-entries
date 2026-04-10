@@ -87,6 +87,103 @@ export function formatClassList(
     .join(', ');
 }
 
+// ── Best Awards helpers ───────────────────────────────────────
+//
+// Used by both BestAwardsPage (the dedicated summary page in the front
+// matter) and the inline best-awards rendering at the end of the dog
+// and bitch sections in catalogue-ringside. Both consumers should agree
+// on the list of awards a given show offers, otherwise the summary page
+// and the inline section will disagree about what's on offer.
+
+/** Default best awards for a single-breed CHAMPIONSHIP show — every
+ *  award a UK breed champ show typically gives out per RKC F regs. */
+export const DEFAULT_BREED_CHAMP_AWARDS = [
+  'Best of Breed',
+  'Best Opposite Sex',
+  'Dog CC',
+  'Reserve Dog CC',
+  'Bitch CC',
+  'Reserve Bitch CC',
+  'Best Puppy in Breed',
+  'Best Puppy Dog',
+  'Best Puppy Bitch',
+  'Best Veteran in Breed',
+] as const;
+
+/** Default best awards for a single-breed open/limited show. */
+export const DEFAULT_BREED_AWARDS = [
+  'Best of Breed',
+  'Best Opposite Sex',
+  'Best Dog',
+  'Best Bitch',
+  'Best Puppy in Breed',
+] as const;
+
+/** Default best awards for an all-breed show. */
+export const DEFAULT_ALL_BREED_AWARDS = [
+  'Best in Show',
+  'Reserve Best in Show',
+  'Best Puppy in Show',
+  'Best Veteran in Show',
+] as const;
+
+/** Pick the right default best-awards list for a show based on its
+ *  scope and type. Used as a fallback when `show.bestAwards` is empty. */
+export function pickDefaultBestAwards(show: {
+  showScope?: string;
+  showType?: string;
+}): string[] {
+  const isSingleBreed = show.showScope === 'single_breed';
+  const isChampionship = show.showType === 'championship';
+  if (isSingleBreed && isChampionship) return [...DEFAULT_BREED_CHAMP_AWARDS];
+  if (isSingleBreed) return [...DEFAULT_BREED_AWARDS];
+  return [...DEFAULT_ALL_BREED_AWARDS];
+}
+
+/**
+ * Classify a best-award name by which sex section it belongs in for
+ * inline rendering at the end of dog/bitch sections.
+ *
+ * Returns:
+ *   'dog'    — award is specific to dogs (Dog CC, Best Puppy Dog, etc.)
+ *   'bitch'  — award is specific to bitches (Bitch CC, Best Puppy Bitch, etc.)
+ *   'shared' — award covers the whole show (Best of Breed, Best in Show)
+ */
+export function classifyBestAwardSex(
+  awardName: string,
+): 'dog' | 'bitch' | 'shared' {
+  const lower = awardName.toLowerCase();
+  // "Bitch" check first because "Best Puppy Bitch" contains "puppy" but
+  // we want it filed under bitch, not under shared.
+  if (/\bbitch\b/.test(lower)) return 'bitch';
+  if (/\bdog\b/.test(lower)) return 'dog';
+  return 'shared';
+}
+
+/**
+ * Split an award list into per-sex buckets for inline rendering.
+ * Sex-specific awards go in their own bucket; "shared" awards (Best of
+ * Breed, Best in Show, etc.) are returned separately so the caller can
+ * decide where to render them (typically a Best in Show summary page
+ * after both sexes have been judged).
+ */
+export function splitBestAwardsBySex(awards: readonly string[]): {
+  dog: string[];
+  bitch: string[];
+  shared: string[];
+} {
+  const dog: string[] = [];
+  const bitch: string[] = [];
+  const shared: string[] = [];
+  for (const award of awards) {
+    const sex = classifyBestAwardSex(award);
+    if (sex === 'dog') dog.push(award);
+    else if (sex === 'bitch') bitch.push(award);
+    else shared.push(award);
+  }
+  return { dog, bitch, shared };
+}
+
 // ── Shared catalogue grouping utilities ───────────────────────
 
 /** Minimal entry shape needed by shared grouping functions */

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Page, View, Text, Image } from '@react-pdf/renderer';
 import { styles, C } from './catalogue-styles';
 import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
+import { pickDefaultBestAwards } from './catalogue-utils';
 // Re-export so existing imports of ClassSponsorshipInfo from this module
 // keep working without touching every caller.
 export type { ClassSponsorshipInfo };
@@ -398,52 +399,6 @@ const bestAwardsStyles = {
     marginTop: 1,
   } as const,
 };
-
-/**
- * Sensible default best-award lists when the secretary hasn't configured
- * `bestAwards` on a show. We pick the right defaults based on show shape:
- *
- * - Single-breed CHAMPIONSHIP show: Best of Breed, Dog CC + Reserve,
- *   Bitch CC + Reserve, Best Puppy Dog/Bitch — these are the awards
- *   every UK breed champ show gives out per RKC F regulations.
- * - Single-breed open/limited show: Best of Breed and best-of-each-sex.
- * - All-breed show: Best in Show + Reserve + Best Puppy/Veteran in Show.
- */
-const DEFAULT_BREED_CHAMP_AWARDS = [
-  'Best of Breed',
-  'Best Opposite Sex',
-  'Dog CC',
-  'Reserve Dog CC',
-  'Bitch CC',
-  'Reserve Bitch CC',
-  'Best Puppy in Breed',
-  'Best Puppy Dog',
-  'Best Puppy Bitch',
-  'Best Veteran in Breed',
-];
-
-const DEFAULT_BREED_AWARDS = [
-  'Best of Breed',
-  'Best Opposite Sex',
-  'Best Dog',
-  'Best Bitch',
-  'Best Puppy in Breed',
-];
-
-const DEFAULT_ALL_BREED_AWARDS = [
-  'Best in Show',
-  'Reserve Best in Show',
-  'Best Puppy in Show',
-  'Best Veteran in Show',
-];
-
-function pickDefaultBestAwards(show: FrontMatterProps['show']): string[] {
-  const isSingleBreed = show.showScope === 'single_breed';
-  const isChampionship = show.showType === 'championship';
-  if (isSingleBreed && isChampionship) return DEFAULT_BREED_CHAMP_AWARDS;
-  if (isSingleBreed) return DEFAULT_BREED_AWARDS;
-  return DEFAULT_ALL_BREED_AWARDS;
-}
 
 export function BestAwardsPage({ show }: FrontMatterProps) {
   const bestAwards = show.bestAwards && show.bestAwards.length > 0
