@@ -1,7 +1,7 @@
 import { Document, Page, View, Text } from '@react-pdf/renderer';
 import { styles } from './catalogue-styles';
 import { CatalogueHeader } from './catalogue-header';
-import type { CatalogueEntry, CatalogueShowInfo } from './catalogue-standard';
+import type { CatalogueEntry, CatalogueShowInfo } from './catalogue-types';
 import { uppercaseName } from './catalogue-utils';
 
 interface Props {

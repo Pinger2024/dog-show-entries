@@ -9,9 +9,8 @@ import {
   createBreedIndexRenderer,
   isMultiBreedChampionship,
 } from './catalogue-front-matter';
-import type { ClassSponsorshipInfo } from './catalogue-front-matter';
 import { formatDobKC, formatPedigreeKC, formatOwnerKC, uppercaseName } from './catalogue-utils';
-import type { CatalogueEntry, CatalogueShowInfo } from './catalogue-standard';
+import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
 
 interface Props {
   show: CatalogueShowInfo;

@@ -1,10 +1,9 @@
 import { Document, Page, View, Text } from '@react-pdf/renderer';
 import { styles } from './catalogue-styles';
 import { CatalogueHeader } from './catalogue-header';
-import type { CatalogueEntry, CatalogueShowInfo } from './catalogue-standard';
+import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
 import { formatDobKC, formatPedigreeKC, formatOwnerKC, uppercaseName, buildSponsorLines } from './catalogue-utils';
 import { CoverPage, JudgesListPage, ClassDefinitionsPage, TrophiesPage, ExhibitorIndexPage } from './catalogue-front-matter';
-import type { ClassSponsorshipInfo } from './catalogue-front-matter';
 
 interface Props {
   show: CatalogueShowInfo;

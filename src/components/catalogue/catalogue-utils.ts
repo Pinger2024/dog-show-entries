@@ -95,8 +95,11 @@ export interface CatalogueEntryBase {
   dogName: string | null;
   sex: string | undefined;
   entryType: string;
-  exhibitor: string | undefined;
-  handler: string | undefined;
+  // exhibitor / handler come from optional related rows whose name column
+  // is nullable — so the full shape from the DB layer is `string | null`
+  // as well as the undefined that appears when the row is missing.
+  exhibitor: string | null | undefined;
+  handler: string | null | undefined;
   jhHandlerName?: string | null | undefined;
   classes: {
     name: string | undefined;

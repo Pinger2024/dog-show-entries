@@ -2,16 +2,13 @@
 
 import { useEffect, useMemo, useRef } from 'react';
 import {
-  AlignLeft,
   BookOpen,
   CheckSquare,
   ClipboardList,
   Download,
-  Gavel,
   Hash,
-  Loader2,
-  FileText,
   List,
+  Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
@@ -49,8 +46,7 @@ export default function CataloguePage() {
     trpc.secretary.getAbsenteeList.useQuery({ showId });
 
   const assignMutation = trpc.secretary.assignCatalogueNumbers.useMutation({
-    onSuccess: (data) => {
-      toast.success(`Assigned catalogue numbers to ${data.assigned} entries`);
+    onSuccess: () => {
       utils.secretary.getCatalogueData.invalidate({ showId });
     },
     onError: () => toast.error('Failed to assign catalogue numbers'),
@@ -58,10 +54,12 @@ export default function CataloguePage() {
 
   const entries = catalogueData?.entries ?? [];
   const hasNumbers = entries.some((e) => e.catalogueNumber);
+  const resultsFinalised = Boolean(catalogueData?.show?.resultsPublishedAt);
 
-  // Auto-assign catalogue numbers the first time a secretary lands on the page
-  // with confirmed entries but no numbers yet. The manual button still exists
-  // below for re-assigning when entries are added or removed afterwards.
+  // Auto-assign catalogue numbers the first time a secretary lands on the
+  // page with confirmed entries but no numbers yet. There is no manual
+  // reassignment button any more — numbers should always appear
+  // automatically (backlog #81).
   const autoAssignedRef = useRef(false);
   useEffect(() => {
     if (autoAssignedRef.current) return;
@@ -91,81 +89,53 @@ export default function CataloguePage() {
 
   return (
     <div className="space-y-6">
-      {/* Actions */}
-      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-        <Button
-          variant={hasNumbers ? 'outline' : 'default'}
-          onClick={() => assignMutation.mutate({ showId })}
-          disabled={assignMutation.isPending || entries.length === 0}
-        >
-          {assignMutation.isPending && (
-            <Loader2 className="size-4 animate-spin" />
-          )}
-          <Hash className="size-4" />
-          {hasNumbers ? 'Re-assign Catalogue Numbers' : 'Assign Catalogue Numbers'}
-        </Button>
-        {hasNumbers && (
-          <>
-            <Button variant="outline" asChild>
-              <a
-                href={`/api/catalogue/${showId}/standard`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <FileText className="size-4" />
-                Standard
-              </a>
-            </Button>
-            <Button variant="outline" asChild>
-              <a
-                href={`/api/catalogue/${showId}/by-class`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <List className="size-4" />
-                By Class
-              </a>
-            </Button>
-            <Button variant="outline" asChild>
-              <a
-                href={`/api/catalogue/${showId}/alphabetical`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <AlignLeft className="size-4" />
-                Alphabetical
-              </a>
-            </Button>
-            <Button variant="outline" asChild>
-              <a
-                href={`/api/catalogue/${showId}/ringside`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <BookOpen className="size-4" />
-                Ringside
-              </a>
-            </Button>
-            <Button variant="outline" asChild>
-              <a
-                href={`/api/catalogue/${showId}/judging`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Gavel className="size-4" />
-                Judging
-              </a>
-            </Button>
-            <Button variant="outline" asChild>
-              <a
-                href={`/api/catalogue/${showId}/absentees`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Download className="size-4" />
-                Absentees
-              </a>
-            </Button>
+      {/* Actions — appear once catalogue numbers have been auto-assigned */}
+      {hasNumbers && (
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <Button variant="outline" asChild>
+            <a
+              href={`/api/catalogue/${showId}/standard`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <BookOpen className="size-4" />
+              Standard
+            </a>
+          </Button>
+          <Button variant="outline" asChild>
+            <a
+              href={`/api/catalogue/${showId}/by-class`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <List className="size-4" />
+              By Class
+            </a>
+          </Button>
+          <Button variant="outline" asChild>
+            <a
+              href={`/api/catalogue/${showId}/judging`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Users className="size-4" />
+              Steward
+            </a>
+          </Button>
+          <Button variant="outline" asChild>
+            <a
+              href={`/api/catalogue/${showId}/absentees`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Download className="size-4" />
+              Absentees
+            </a>
+          </Button>
+          {/* Marked for RKC — only usable once results are finalised
+              (backlog #89). Before results are published the button is
+              disabled with a hint so clicks don't produce an empty doc. */}
+          {resultsFinalised ? (
             <Button variant="outline" asChild>
               <a
                 href={`/api/catalogue/${showId}/marked`}
@@ -176,19 +146,28 @@ export default function CataloguePage() {
                 Marked (for RKC)
               </a>
             </Button>
-            <Button variant="outline" asChild>
-              <a
-                href={`/api/judges-book/${showId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <ClipboardList className="size-4" />
-                Judge&apos;s Book
-              </a>
+          ) : (
+            <Button
+              variant="outline"
+              disabled
+              title="Available once results are finalised"
+            >
+              <CheckSquare className="size-4" />
+              Marked (for RKC)
             </Button>
-          </>
-        )}
-      </div>
+          )}
+          <Button variant="outline" asChild>
+            <a
+              href={`/api/judges-book/${showId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <ClipboardList className="size-4" />
+              Judge&apos;s Book
+            </a>
+          </Button>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-3">

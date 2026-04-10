@@ -10,11 +10,10 @@ import { and, eq, isNull, asc, sql } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
 import { formatDogName, formatDogNameForCatalogue } from '@/lib/utils';
 import { renderToBuffer, Document, Page, Text, StyleSheet } from '@react-pdf/renderer';
-import { CatalogueStandard } from '@/components/catalogue/catalogue-standard';
+import { CatalogueRingside } from '@/components/catalogue/catalogue-ringside';
 import { CatalogueByClass } from '@/components/catalogue/catalogue-by-class';
 import { CatalogueByBreed } from '@/components/catalogue/catalogue-by-breed';
-import { CatalogueAlphabetical } from '@/components/catalogue/catalogue-alphabetical';
-import type { CatalogueEntry, CatalogueShowInfo } from '@/components/catalogue/catalogue-standard';
+import type { CatalogueEntry, CatalogueShowInfo } from '@/components/catalogue/catalogue-types';
 import { PrizeCards } from '@/components/prize-cards/prize-cards';
 import type { PrizeCardShowInfo, PrizeCardClass } from '@/components/prize-cards/prize-cards';
 import { ShowSchedule } from '@/components/schedule/show-schedule';
@@ -31,7 +30,7 @@ import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
 
 export async function generateCataloguePdf(
   showId: string,
-  format: 'standard' | 'by-class' | 'alphabetical' = 'standard'
+  format: 'standard' | 'by-class' = 'standard'
 ): Promise<Buffer> {
   const show = await db.query.shows.findFirst({
     where: eq(schema.shows.id, showId),
@@ -107,7 +106,10 @@ export async function generateCataloguePdf(
     }
   }
 
-  const useKCFormat = format === 'standard' || (format === 'by-class' && show.showScope !== 'single_breed');
+  // The ringside-based "standard" format uses plain formatting; only the
+  // Crufts-style by-breed layout (for all-breed shows under "by-class")
+  // needs RKC catalogue formatting.
+  const useKCFormat = format === 'by-class' && show.showScope !== 'single_breed';
 
   const catalogueEntries: CatalogueEntry[] = entries.map((entry) => ({
     catalogueNumber: entry.catalogueNumber,
@@ -178,9 +180,8 @@ export async function generateCataloguePdf(
 
   const isAllBreed = show.showScope !== 'single_breed';
   const formatComponents = {
-    standard: CatalogueStandard,
+    standard: CatalogueRingside,
     'by-class': isAllBreed ? CatalogueByBreed : CatalogueByClass,
-    alphabetical: CatalogueAlphabetical,
   } as const;
 
   const Component = formatComponents[format];
@@ -550,7 +551,7 @@ export async function generateAndUploadForPrint(
 
   switch (documentType) {
     case 'catalogue':
-      buffer = await generateCataloguePdf(showId, (documentFormat as 'standard' | 'by-class' | 'alphabetical') ?? 'standard');
+      buffer = await generateCataloguePdf(showId, (documentFormat as 'standard' | 'by-class') ?? 'standard');
       break;
     case 'prize_cards':
       buffer = await generatePrizeCardsPdf(showId);

@@ -1,7 +1,7 @@
 import { Document, Page, View, Text, StyleSheet } from '@react-pdf/renderer';
 import './catalogue-styles'; // side-effect: registers Inter + LibreBaskerville fonts
 import { C } from './catalogue-styles';
-import type { CatalogueEntry, CatalogueShowInfo } from './catalogue-standard';
+import type { CatalogueEntry, CatalogueShowInfo } from './catalogue-types';
 import {
   uppercaseName,
   formatDobKC,

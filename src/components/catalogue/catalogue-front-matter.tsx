@@ -1,7 +1,10 @@
 import type { ReactNode } from 'react';
 import { Page, View, Text, Image } from '@react-pdf/renderer';
 import { styles, C } from './catalogue-styles';
-import type { CatalogueShowInfo } from './catalogue-standard';
+import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
+// Re-export so existing imports of ClassSponsorshipInfo from this module
+// keep working without touching every caller.
+export type { ClassSponsorshipInfo };
 
 const SHOW_TYPE_LABELS: Record<string, string> = {
   championship: 'Championship Show',
@@ -513,7 +516,7 @@ export function ClassDefinitionsPage({ show }: FrontMatterProps) {
 // ── Exhibitor Index (Championship shows — RKC F(1).11.b(6)) ───
 
 type ExhibitorIndexEntry = Pick<
-  import('./catalogue-standard').CatalogueEntry,
+  CatalogueEntry,
   'exhibitor' | 'exhibitorId' | 'catalogueNumber' | 'owners' | 'classes' | 'withholdFromPublication' | 'breed'
 >;
 
@@ -654,16 +657,6 @@ export function createBreedIndexRenderer(
 }
 
 // ── Trophies & Sponsorships Page ────────────────────────────────
-
-export interface ClassSponsorshipInfo {
-  className: string;
-  classNumber: number | null;
-  trophyName: string | null;
-  trophyDonor: string | null;
-  sponsorName: string | null;
-  sponsorAffix: string | null;
-  prizeDescription: string | null;
-}
 
 interface TrophiesPageProps {
   show: CatalogueShowInfo;

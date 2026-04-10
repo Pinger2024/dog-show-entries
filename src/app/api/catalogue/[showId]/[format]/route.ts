@@ -4,15 +4,13 @@ import { and, eq, isNull, asc, or } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
 import { formatDogName, formatDogNameForCatalogue } from '@/lib/utils';
 import { renderToBuffer } from '@react-pdf/renderer';
-import { CatalogueStandard } from '@/components/catalogue/catalogue-standard';
 import { CatalogueAbsentees } from '@/components/catalogue/catalogue-absentees';
 import { CatalogueByClass } from '@/components/catalogue/catalogue-by-class';
 import { CatalogueByBreed } from '@/components/catalogue/catalogue-by-breed';
-import { CatalogueAlphabetical } from '@/components/catalogue/catalogue-alphabetical';
 import { CatalogueMarked } from '@/components/catalogue/catalogue-marked';
 import { CatalogueJudging } from '@/components/catalogue/catalogue-judging';
 import { CatalogueRingside } from '@/components/catalogue/catalogue-ringside';
-import type { CatalogueEntry, CatalogueShowInfo, ShowSponsorInfo, ShowClassInfo } from '@/components/catalogue/catalogue-standard';
+import type { CatalogueEntry, CatalogueShowInfo, ShowSponsorInfo, ShowClassInfo } from '@/components/catalogue/catalogue-types';
 import type { MarkedResult, MarkedAchievement } from '@/components/catalogue/catalogue-marked';
 import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
@@ -29,8 +27,8 @@ export async function GET(
     return NextResponse.json({ error: 'Database not available' }, { status: 500 });
   }
 
-  if (!['standard', 'absentees', 'by-class', 'alphabetical', 'judging', 'marked', 'ringside'].includes(format)) {
-    return NextResponse.json({ error: 'Invalid format. Use "standard", "by-class", "alphabetical", "judging", "ringside", "absentees", or "marked".' }, { status: 400 });
+  if (!['standard', 'absentees', 'by-class', 'judging', 'marked'].includes(format)) {
+    return NextResponse.json({ error: 'Invalid format. Use "standard", "by-class", "judging", "absentees", or "marked".' }, { status: 400 });
   }
 
   const show = await db.query.shows.findFirst({
@@ -163,8 +161,11 @@ export async function GET(
     }
   }
 
-  // Use RKC catalogue formatting for standard and by-breed formats
-  const useKCFormat = format === 'standard' || format === 'marked' || (format === 'by-class' && show.showScope !== 'single_breed');
+  // Use RKC catalogue formatting for the marked catalogue and the Crufts-
+  // style by-breed layout (used for all-breed shows under the "by-class"
+  // format). The "standard" format is rendered by the ringside component,
+  // which uses its own simpler formatting.
+  const useKCFormat = format === 'marked' || (format === 'by-class' && show.showScope !== 'single_breed');
 
   const catalogueEntries: CatalogueEntry[] = entries.map((entry) => ({
     catalogueNumber: entry.catalogueNumber,
@@ -272,7 +273,13 @@ export async function GET(
   try {
     // For all-breed shows, the "by-class" format uses the Crufts-style breed-grouped layout
     const isAllBreed = show.showScope !== 'single_breed';
-    let pdfDocument: React.ReactElement;
+    // `ReactElement<any>` here because the format components have slightly
+    // different prop signatures (marked takes extra `results`/`absentees`
+    // props) — the union can't collapse cleanly, and `renderToBuffer`'s
+    // signature uses the internal `DocumentProps` type which we don't
+    // import. `any` matches the existing lax typing elsewhere in the PDF
+    // pipeline (see pdf-generation.ts).
+    let pdfDocument: React.ReactElement<any>;
 
     if (format === 'marked') {
       // Build results map and absentees set for the marked catalogue
@@ -315,12 +322,13 @@ export async function GET(
         achievements: markedAchievements,
       });
     } else {
+      // The "standard" format is now rendered by the ringside component
+      // (the old standalone "standard" was a near-duplicate of "by-class"
+      // and has been removed — see backlog #83).
       const formatComponents = {
-        standard: CatalogueStandard,
+        standard: CatalogueRingside,
         'by-class': isAllBreed ? CatalogueByBreed : CatalogueByClass,
-        alphabetical: CatalogueAlphabetical,
         judging: CatalogueJudging,
-        ringside: CatalogueRingside,
         absentees: CatalogueAbsentees,
       } as const;
 
@@ -333,9 +341,7 @@ export async function GET(
     const formatLabels: Record<string, string> = {
       standard: 'Catalogue',
       'by-class': isAllBreed ? 'Catalogue-By-Breed' : 'Catalogue-By-Class',
-      alphabetical: 'Catalogue-Alphabetical',
-      judging: 'Judging-Catalogue',
-      ringside: 'Ringside-Catalogue',
+      judging: 'Steward-Catalogue',
       absentees: 'Absentees',
       marked: 'Marked-Catalogue',
     };
