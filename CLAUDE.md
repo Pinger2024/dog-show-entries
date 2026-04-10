@@ -7,21 +7,21 @@ Remi is a dog show entry management platform for the UK Kennel Club show circuit
 **Live URL:** https://remishowmanager.co.uk
 **Hosting:** Render (web service `srv-d6g578a4d50c73dj4rpg`)
 **Database:** PostgreSQL on Render
-**Email:** Resend (sending from `noreply@lettiva.com`)
+**Email:** Resend (sending from `noreply@remishowmanager.co.uk`)
 **Payments:** Stripe
-**DNS:** Vercel nameservers for `lettiva.com`
+**DNS:** Cloudflare for `remishowmanager.co.uk` (zone `e8d86cbbc2aadf1aac365d637f85969e`)
 
 ## Key People
 
 - **Michael** (`michael@prometheus-it.com`) — Developer/admin. Gets notified of all feedback.
-- **Amanda** (`hundarkgsd@gmail.com`, show email: `mandy@hundarkgsd.co.uk`) — Secretary of Clyde Valley GSD Club. Primary user and source of feature requests. She emails feedback to `feedback@inbound.lettiva.com`.
+- **Amanda** (`hundarkgsd@gmail.com`, show email: `mandy@hundarkgsd.co.uk`, Remi email: `mandy@remishowmanager.co.uk`) — Secretary of Clyde Valley GSD Club and co-founder. Primary user and source of feature requests. She emails feedback to `feedback@inbound.remishowmanager.co.uk`.
 
 ## Feedback Loop Workflow
 
-Amanda sends feedback, bug reports, and feature requests by replying to Remi emails (or emailing `feedback@inbound.lettiva.com` directly). The pipeline:
+Amanda sends feedback, bug reports, and feature requests by replying to Remi emails (or emailing `feedback@inbound.remishowmanager.co.uk` directly). The pipeline:
 
-1. Outgoing emails include `replyTo: feedback@inbound.lettiva.com`
-2. Resend receives inbound email via MX record on `inbound.lettiva.com`
+1. Outgoing emails include `replyTo: feedback@inbound.remishowmanager.co.uk`
+2. Resend receives inbound email via MX record on `inbound.remishowmanager.co.uk`
 3. Resend fires `email.received` webhook → `POST /api/webhooks/resend`
 4. Webhook verifies via svix, fetches full email body via `resend.emails.receiving.get()`, stores in `feedback` table
 5. Notification email sent to Michael at `michael@prometheus-it.com`
@@ -35,7 +35,8 @@ Amanda sends feedback, bug reports, and feature requests by replying to Remi ema
 |----------|---------|
 | `RESEND_API_KEY` | Resend API key for sending/receiving |
 | `RESEND_WEBHOOK_SECRET` | Svix signing secret for webhook verification |
-| `FEEDBACK_EMAIL` | Reply-To address (`feedback@inbound.lettiva.com`) |
+| `FEEDBACK_EMAIL` | Reply-To address (`feedback@inbound.remishowmanager.co.uk`) |
+| `EMAIL_FROM` | Sending address (`Remi <noreply@remishowmanager.co.uk>`) |
 | `FEEDBACK_NOTIFY_EMAIL` | Who gets notified of new feedback (`michael@prometheus-it.com`) |
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret |
 
@@ -97,16 +98,19 @@ src/
 ## Sending Emails to Amanda
 
 When sending update/notification emails to Amanda, use the Resend API with:
-- `from: "Remi <noreply@lettiva.com>"`
-- `to: ["mandy@hundarkgsd.co.uk"]` (her show email) or `hundarkgsd@gmail.com` (her personal)
-- `reply_to: "feedback@inbound.lettiva.com"` so her replies feed back into the system
+- `from: "Remi <noreply@remishowmanager.co.uk>"`
+- `to: ["mandy@hundarkgsd.co.uk"]` (her show email) or `hundarkgsd@gmail.com` (her personal) or `mandy@remishowmanager.co.uk` (her Remi mailbox)
+- `reply_to: "feedback@inbound.remishowmanager.co.uk"` so her replies feed back into the system
 
 ## DNS Notes
 
-`lettiva.com` DNS is managed via **Vercel** (not LCN, even though LCN is the registrar). Key records for inbound email:
-- MX: `inbound` → `inbound-smtp.eu-west-1.amazonaws.com` (priority 10)
-- TXT: `resend._domainkey.inbound` → DKIM key
-- A: `inbound` → `127.0.0.1` (overrides wildcard CNAME `*.lettiva.com → cname.vercel-dns.com`)
+`remishowmanager.co.uk` DNS is managed via **Cloudflare** (zone ID `e8d86cbbc2aadf1aac365d637f85969e`). Three email services coexist:
+
+- **Zoho Mail** owns the root MX (`mx.zoho.eu`, `mx2.zoho.eu`, `mx3.zoho.eu`) — provides personal mailboxes (`michael@`, `mandy@`)
+- **Resend inbound** owns `inbound.remishowmanager.co.uk` MX (`inbound-smtp.eu-west-1.amazonaws.com`) — provides the feedback webhook pipeline
+- **Resend sending** uses `send.remishowmanager.co.uk` for SES return path + `resend._domainkey` for DKIM — handles outbound email
+
+The lettiva.com domain is no longer used — migrated to remishowmanager.co.uk on 2026-04-10 after a DNS move broke the inbound email pipeline.
 
 ## Database Migrations
 
