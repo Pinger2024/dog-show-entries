@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useRef } from 'react';
 import {
+  AlignLeft,
   BookOpen,
+  CheckSquare,
   ClipboardList,
   Download,
   Gavel,
@@ -126,6 +128,16 @@ export default function CataloguePage() {
             </Button>
             <Button variant="outline" asChild>
               <a
+                href={`/api/catalogue/${showId}/alphabetical`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <AlignLeft className="size-4" />
+                Alphabetical
+              </a>
+            </Button>
+            <Button variant="outline" asChild>
+              <a
                 href={`/api/catalogue/${showId}/ringside`}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -152,6 +164,16 @@ export default function CataloguePage() {
               >
                 <Download className="size-4" />
                 Absentees
+              </a>
+            </Button>
+            <Button variant="outline" asChild>
+              <a
+                href={`/api/catalogue/${showId}/marked`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <CheckSquare className="size-4" />
+                Marked (for RKC)
               </a>
             </Button>
             <Button variant="outline" asChild>

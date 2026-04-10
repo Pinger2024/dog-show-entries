@@ -17,13 +17,15 @@ export const CATALOGUE_AVAILABLE_STATUSES: ReadonlySet<string> = new Set([
   'completed',
 ]);
 
-/** Catalogue formats restricted to secretaries/admins — not available to exhibitors */
+/** Catalogue formats restricted to secretaries/admins — not available to exhibitors.
+ *  Note: `by-breed` is not a valid route format — the CatalogueByBreed component is
+ *  rendered via the `by-class` format for all-breed shows. Exhibitor-accessible formats:
+ *  standard, by-class, alphabetical. */
 export const SECRETARY_ONLY_FORMATS = new Set([
   'judging',
   'marked',
   'ringside',
   'absentees',
-  'by-breed',
 ]);
 
 /** Check if a user has a paid order with a catalogue sundry item for a given show */
