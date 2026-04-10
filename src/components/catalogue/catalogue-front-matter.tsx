@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Page, View, Text, Image } from '@react-pdf/renderer';
 import { styles, C } from './catalogue-styles';
 import type { CatalogueShowInfo } from './catalogue-standard';
@@ -511,9 +512,14 @@ export function ClassDefinitionsPage({ show }: FrontMatterProps) {
 
 // ── Exhibitor Index (Championship shows — RKC F(1).11.b(6)) ───
 
+type ExhibitorIndexEntry = Pick<
+  import('./catalogue-standard').CatalogueEntry,
+  'exhibitor' | 'exhibitorId' | 'catalogueNumber' | 'owners' | 'classes' | 'withholdFromPublication' | 'breed'
+>;
+
 interface ExhibitorIndexPageProps {
   show: CatalogueShowInfo;
-  entries: Pick<import('./catalogue-standard').CatalogueEntry, 'exhibitor' | 'exhibitorId' | 'catalogueNumber' | 'owners' | 'classes' | 'withholdFromPublication'>[];
+  entries: ExhibitorIndexEntry[];
   /**
    * When set, renders a per-breed exhibitor index with the breed name in the
    * heading. Used for multi-breed championship shows where RKC F(1).11.b(6)
@@ -528,12 +534,10 @@ interface ExhibitorIndexPageProps {
  * championship shows. Lists each exhibitor with their catalogue numbers
  * and classes entered, sorted alphabetically by exhibitor name.
  *
- * For single-breed championship shows: rendered once as front matter with
- * every entry. For multi-breed championship shows: rendered once per breed
- * section by passing `breedName` and pre-filtered entries.
- *
- * Callers are responsible for the `showType === 'championship'` check;
- * this component focuses on rendering.
+ * Called by ExhibitorIndexPage (front-matter, single-breed champ shows) and
+ * by createBreedIndexRenderer (per-breed, multi-breed champ shows). Callers
+ * are responsible for the `showType === 'championship'` check; this component
+ * focuses on rendering.
  *
  * Entries where the exhibitor has requested withholding from publication
  * per F(1).11.b.(6)/(8) are excluded from the index entirely.
@@ -596,6 +600,57 @@ export function ExhibitorIndexPage({ show, entries, breedName }: ExhibitorIndexP
       />
     </Page>
   );
+}
+
+/** True when the show requires per-breed exhibitor indexes instead of a single
+ *  front-matter index — RKC F(1).11.b(6) applies to multi-breed champ shows. */
+export function isMultiBreedChampionship(
+  show: Pick<CatalogueShowInfo, 'showType' | 'showScope'>,
+): boolean {
+  return show.showType === 'championship' && show.showScope !== 'single_breed';
+}
+
+/**
+ * Builds a per-breed exhibitor-index renderer for multi-breed champ shows.
+ *
+ * Entries are bucketed by breed name in a single O(n) pass up front, so each
+ * `render(breedName)` call is O(1) — no filter-inside-map-loop scaling.
+ *
+ * The returned function is a closure with private first-occurrence state: it
+ * renders an index the first time a breed is seen and `null` on subsequent
+ * calls, so callers can invoke it once per breed page without worrying about
+ * deduping. When `enabled` is false (non-champ shows, single-breed champ shows),
+ * it always returns `null` and skips the bucketing work entirely.
+ */
+export function createBreedIndexRenderer(
+  show: CatalogueShowInfo,
+  entries: ExhibitorIndexEntry[],
+  enabled: boolean,
+): (breedName: string) => ReactNode {
+  if (!enabled) return () => null;
+
+  const entriesByBreed = new Map<string, ExhibitorIndexEntry[]>();
+  for (const entry of entries) {
+    if (!entry.breed) continue;
+    const bucket = entriesByBreed.get(entry.breed);
+    if (bucket) bucket.push(entry);
+    else entriesByBreed.set(entry.breed, [entry]);
+  }
+
+  const rendered = new Set<string>();
+  return (breedName: string) => {
+    if (rendered.has(breedName)) return null;
+    const breedEntries = entriesByBreed.get(breedName);
+    if (!breedEntries || breedEntries.length === 0) return null;
+    rendered.add(breedName);
+    return (
+      <ExhibitorIndexPage
+        show={show}
+        entries={breedEntries}
+        breedName={breedName}
+      />
+    );
+  };
 }
 
 // ── Trophies & Sponsorships Page ────────────────────────────────

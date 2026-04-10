@@ -1,8 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/server/db';
-import { eq } from 'drizzle-orm';
-import * as schema from '@/server/db/schema';
-import { authenticatePdfRequest } from '@/lib/pdf-utils';
 
 /**
  * Returns an HTML wrapper page that embeds the prize-card PDF and
@@ -12,28 +8,18 @@ import { authenticatePdfRequest } from '@/lib/pdf-utils';
  * viewing a raw PDF, so secretaries on iPads/iPhones can't find how to print.
  * An HTML page with a `window.print()` call on load sidesteps Safari's PDF
  * viewer entirely and brings up the OS print dialog directly.
+ *
+ * This route serves a fully static HTML shell — no DB lookup, no auth check.
+ * The embedded iframe points at `/api/prize-cards/[showId]?preview=1`, which
+ * does its own auth + data fetch, so anyone hitting this wrapper without a
+ * valid session just gets an empty iframe. Nothing sensitive leaks from the
+ * wrapper itself (it doesn't contain the show name, entries, or any PII).
  */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ showId: string }> }
 ) {
   const { showId } = await params;
-
-  if (!db) {
-    return NextResponse.json({ error: 'Database not available' }, { status: 500 });
-  }
-
-  const show = await db.query.shows.findFirst({
-    where: eq(schema.shows.id, showId),
-    with: { organisation: true },
-  });
-
-  if (!show) {
-    return NextResponse.json({ error: 'Show not found' }, { status: 404 });
-  }
-
-  const authResult = await authenticatePdfRequest(show.organisationId);
-  if (authResult instanceof NextResponse) return authResult;
 
   // Forward all the PDF customisation params (placements, judge, style) to
   // the underlying PDF route. `preview` ensures inline Content-Disposition
@@ -52,7 +38,7 @@ export async function GET(
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Print Prize Cards — ${escapeHtml(show.name)}</title>
+  <title>Print Prize Cards — Remi</title>
   <style>
     html, body { margin: 0; padding: 0; height: 100vh; background: #f5f3ef; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
     iframe { border: 0; width: 100%; height: 100vh; display: block; }
@@ -143,13 +129,4 @@ export async function GET(
       'Cache-Control': 'private, no-store',
     },
   });
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }
