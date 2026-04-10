@@ -28,6 +28,13 @@ export interface MarkedResult {
   showClassId: string;
   /** Placement: 1=1st, 2=2nd, 3=3rd, 4=Reserve, 5=VHC, 6=HC, 7=Commended */
   placement: number | null;
+  /**
+   * Non-numeric placement status — mutually exclusive with `placement`.
+   * 'withheld' = judge withheld the placement; 'unplaced' = explicitly
+   * judged but not in the prizes. RKC sees this on the marked copy as
+   * a "W" or "Unp" annotation next to the entry instead of a number.
+   */
+  placementStatus: 'withheld' | 'unplaced' | null;
   /** Special award text (e.g. "Best of Breed") */
   specialAward: string | null;
 }
@@ -63,6 +70,20 @@ const PLACEMENT_LABELS: Record<number, string> = {
 
 function getPlacementLabel(placement: number): string {
   return PLACEMENT_LABELS[placement] ?? `${placement}th`;
+}
+
+/**
+ * Render a result's placement marker for the marked catalogue. Prefers
+ * the numeric placement when set; falls back to the non-numeric status
+ * (Withheld / Unplaced) when only that's set; returns null when there's
+ * nothing to render.
+ */
+function getResultMarker(result: MarkedResult | undefined): string | null {
+  if (!result) return null;
+  if (result.placement) return getPlacementLabel(result.placement);
+  if (result.placementStatus === 'withheld') return 'W';
+  if (result.placementStatus === 'unplaced') return 'Unp';
+  return null;
 }
 
 // ── Marked-specific styles ───────────────────────────────────
@@ -462,9 +483,9 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                               {isAbsent && (
                                 <Text style={markedStyles.absentBadge}> Abs.</Text>
                               )}
-                              {result?.placement && (
+                              {getResultMarker(result) && (
                                 <Text style={markedStyles.placementBadge}>
-                                  {' '}{getPlacementLabel(result.placement)}
+                                  {' '}{getResultMarker(result)}
                                 </Text>
                               )}
                             </View>
@@ -491,9 +512,9 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                               {isAbsent && (
                                 <Text style={markedStyles.absentBadge}> Abs.</Text>
                               )}
-                              {result?.placement && (
+                              {getResultMarker(result) && (
                                 <Text style={markedStyles.placementBadge}>
-                                  {' '}{getPlacementLabel(result.placement)}
+                                  {' '}{getResultMarker(result)}
                                 </Text>
                               )}
                             </View>
@@ -537,9 +558,9 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                             {isAbsent && (
                               <Text style={markedStyles.absentBadge}> Abs.</Text>
                             )}
-                            {result?.placement && (
+                            {getResultMarker(result) && (
                               <Text style={markedStyles.placementBadge}>
-                                {' '}{getPlacementLabel(result.placement)}
+                                {' '}{getResultMarker(result)}
                               </Text>
                             )}
                           </View>

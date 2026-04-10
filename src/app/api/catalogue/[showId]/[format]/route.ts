@@ -337,13 +337,23 @@ export async function GET(
 
         // Collect results from entry classes
         for (const ec of entry.entryClasses) {
-          const result = (ec as { result?: { placement: number | null; specialAward: string | null } | null }).result;
+          const result = (ec as {
+            result?: {
+              placement: number | null;
+              placementStatus: string | null;
+              specialAward: string | null;
+            } | null;
+          }).result;
           if (result && entry.catalogueNumber) {
             const key = `${entry.catalogueNumber}-${ec.showClassId}`;
             resultsMap.set(key, {
               catalogueNumber: entry.catalogueNumber,
               showClassId: ec.showClassId,
               placement: result.placement,
+              placementStatus:
+                result.placementStatus === 'withheld' || result.placementStatus === 'unplaced'
+                  ? result.placementStatus
+                  : null,
               specialAward: result.specialAward,
             });
           }

@@ -657,6 +657,7 @@ export const stewardRouter = createTRPCRouter({
             results: {
               entryClassId: string;
               placement: number | null;
+              placementStatus: 'withheld' | 'unplaced' | null;
               specialAward: string | null;
               critiqueText: string | null;
               winnerPhotoUrl: string | null;
@@ -696,6 +697,10 @@ export const stewardRouter = createTRPCRouter({
           .map((ec) => ({
             entryClassId: ec.id,
             placement: ec.result!.placement,
+            placementStatus:
+              ec.result!.placementStatus === 'withheld' || ec.result!.placementStatus === 'unplaced'
+                ? (ec.result!.placementStatus as 'withheld' | 'unplaced')
+                : null,
             specialAward: ec.result!.specialAward,
             critiqueText: ec.result!.critiqueText,
             winnerPhotoUrl: ec.result!.winnerPhotoUrl,
@@ -707,6 +712,8 @@ export const stewardRouter = createTRPCRouter({
             dogSex: ec.entry.dog?.sex ?? null,
             exhibitorName: ec.entry.exhibitor?.name ?? '',
           }))
+          // Sort numeric placements ascending (1st, 2nd, 3rd...), then
+          // withheld/unplaced at the end (99 sentinel for sort).
           .sort((a, b) => (a.placement ?? 99) - (b.placement ?? 99));
 
         if (classResults.length > 0) {

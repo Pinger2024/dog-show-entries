@@ -934,14 +934,28 @@ export default function SecretaryResultsPage() {
                       <div className="space-y-1">
                         {cls.results.map((result) => (
                           <div key={result.entryClassId} className="flex flex-wrap items-center gap-1.5 sm:gap-3 text-sm">
-                              {result.placement && (
+                              {result.placement ? (
                                 <Badge
                                   variant="outline"
                                   className={`text-xs font-semibold whitespace-nowrap ${placementColors[result.placement] ?? ''}`}
                                 >
                                   {getPlacementLabel(result.placement)}
                                 </Badge>
-                              )}
+                              ) : result.placementStatus === 'withheld' ? (
+                                <Badge
+                                  variant="outline"
+                                  className="text-xs font-semibold whitespace-nowrap bg-amber-50 text-amber-700 border-amber-200"
+                                >
+                                  Withheld
+                                </Badge>
+                              ) : result.placementStatus === 'unplaced' ? (
+                                <Badge
+                                  variant="outline"
+                                  className="text-xs font-semibold whitespace-nowrap bg-slate-50 text-slate-600 border-slate-200"
+                                >
+                                  Unplaced
+                                </Badge>
+                              ) : null}
                               <span className="font-mono text-xs text-muted-foreground">
                                 {result.catalogueNumber ?? '—'}
                               </span>
