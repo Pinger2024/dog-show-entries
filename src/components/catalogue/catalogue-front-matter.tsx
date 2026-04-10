@@ -88,15 +88,23 @@ function JurisdictionBlock() {
 // when the secretary hasn't filled anything in.
 
 const showInfoStyles = {
+  // Subsection header — green-banded box with white writing, matching the
+  // page-title SectionBand style. Amanda's feedback: the page was too
+  // bland with plain green text.
   sectionTitle: {
     fontFamily: 'Inter',
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: 'bold',
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    color: C.primary,
-    marginBottom: 4,
-    marginTop: 8,
+    letterSpacing: 1,
+    color: '#fff',
+    backgroundColor: C.primary,
+    paddingTop: 4,
+    paddingBottom: 4,
+    paddingLeft: 8,
+    paddingRight: 8,
+    marginTop: 10,
+    marginBottom: 6,
   } as const,
   bodyText: {
     fontFamily: 'Times',
@@ -110,18 +118,46 @@ const showInfoStyles = {
   },
   officerName: {
     fontFamily: 'Inter',
-    fontSize: 8,
+    fontSize: 9,
     color: C.textDark,
     width: '50%',
   } as const,
   officerPosition: {
     fontFamily: 'Inter',
-    fontSize: 8,
+    fontSize: 9,
     fontStyle: 'italic',
     color: C.textMedium,
     width: '50%',
   } as const,
 };
+
+/**
+ * The dedicated `wetWeatherAccommodation` and `outsideAttraction` fields
+ * each render their own prominent notice on the cover page. Many secretaries
+ * (Amanda included) ALSO add the same text as a free-form `customStatement`,
+ * which used to be the only way to express it. Result: the same notice
+ * appears twice in the catalogue once we wired customStatements through.
+ *
+ * This filter drops any custom statement that's clearly a duplicate of one
+ * of the dedicated notices, so the cover stays the single source of truth
+ * for "no wet weather" and "outside attraction".
+ */
+function filterDuplicateRegulations(
+  customStatements: string[] | undefined,
+  show: { wetWeatherAccommodation?: boolean; outsideAttraction?: boolean },
+): string[] {
+  if (!customStatements || customStatements.length === 0) return [];
+  return customStatements.filter((statement) => {
+    const lower = statement.toLowerCase();
+    if (show.wetWeatherAccommodation === false && lower.includes('wet weather')) {
+      return false;
+    }
+    if (show.outsideAttraction === true && lower.includes('outside attraction')) {
+      return false;
+    }
+    return true;
+  });
+}
 
 export function ShowInformationPage({ show }: FrontMatterProps) {
   // Pull out everything we might render so we can decide whether the page
@@ -133,8 +169,12 @@ export function ShowInformationPage({ show }: FrontMatterProps) {
   const hasAdditionalNotes = !!show.additionalNotes;
   const hasFutureShows = !!show.futureShowDates;
   // Regulations moved off the cover (backlog #90): every regulation EXCEPT
-  // outside attraction and the no-wet-weather notice now lives here.
-  const hasCustomStatements = (show.customStatements?.length ?? 0) > 0;
+  // outside attraction and the no-wet-weather notice now lives here. We
+  // also dedupe custom statements that just restate the dedicated fields,
+  // since Amanda (and most secretaries) fill in BOTH (the field for
+  // structured data, the custom statement out of habit).
+  const filteredStatements = filterDuplicateRegulations(show.customStatements, show);
+  const hasCustomStatements = filteredStatements.length > 0;
   const hasGroupSystem = !!show.judgedOnGroupSystem;
   const hasRegulations = hasCustomStatements || hasGroupSystem;
   const practicalInfo: { label: string; value: string }[] = [];
@@ -195,7 +235,18 @@ export function ShowInformationPage({ show }: FrontMatterProps) {
         <View wrap={false} style={{ marginBottom: 6 }}>
           <Text style={showInfoStyles.sectionTitle}>Guarantors</Text>
           <Text style={showInfoStyles.bodyText}>
-            {show.guarantors!.map((g) => g.name).join(', ')}
+            {/* Standard RKC-convention guarantors paragraph that wraps the
+                names. Amanda flagged that her previous catalogues had this
+                wrapping prose around the names rather than a comma list. */}
+            The Show is held under the Rules and Regulations of the Royal
+            Kennel Club. The Guarantors of the Show are{' '}
+            {(() => {
+              const names = show.guarantors!.map((g) => g.name);
+              if (names.length === 1) return names[0];
+              if (names.length === 2) return `${names[0]} and ${names[1]}`;
+              return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
+            })()}
+            .
           </Text>
         </View>
       )}
@@ -237,7 +288,8 @@ export function ShowInformationPage({ show }: FrontMatterProps) {
 
       {/* Regulations — moved off the cover per backlog #90. The cover keeps
           only the RKC-mandatory loud notices (outside attraction, no wet
-          weather). */}
+          weather). Custom statements are deduped against the dedicated
+          fields above so the same notice doesn't appear twice. */}
       {hasRegulations && (
         <View wrap={false} style={{ marginBottom: 6 }}>
           <Text style={showInfoStyles.sectionTitle}>Regulations</Text>
@@ -246,7 +298,7 @@ export function ShowInformationPage({ show }: FrontMatterProps) {
               Judged on the Group System
             </Text>
           )}
-          {show.customStatements?.map((statement, i) => (
+          {filteredStatements.map((statement, i) => (
             <Text
               key={i}
               style={{ ...showInfoStyles.bodyText, marginBottom: 2 }}
@@ -348,21 +400,55 @@ const bestAwardsStyles = {
 };
 
 /**
- * Default best-award list for shows that haven't customised theirs.
- * Covers the awards every UK championship show typically gives out per
- * RKC F regulations.
+ * Sensible default best-award lists when the secretary hasn't configured
+ * `bestAwards` on a show. We pick the right defaults based on show shape:
+ *
+ * - Single-breed CHAMPIONSHIP show: Best of Breed, Dog CC + Reserve,
+ *   Bitch CC + Reserve, Best Puppy Dog/Bitch — these are the awards
+ *   every UK breed champ show gives out per RKC F regulations.
+ * - Single-breed open/limited show: Best of Breed and best-of-each-sex.
+ * - All-breed show: Best in Show + Reserve + Best Puppy/Veteran in Show.
  */
-const DEFAULT_BEST_AWARDS = [
+const DEFAULT_BREED_CHAMP_AWARDS = [
+  'Best of Breed',
+  'Best Opposite Sex',
+  'Dog CC',
+  'Reserve Dog CC',
+  'Bitch CC',
+  'Reserve Bitch CC',
+  'Best Puppy in Breed',
+  'Best Puppy Dog',
+  'Best Puppy Bitch',
+  'Best Veteran in Breed',
+];
+
+const DEFAULT_BREED_AWARDS = [
+  'Best of Breed',
+  'Best Opposite Sex',
+  'Best Dog',
+  'Best Bitch',
+  'Best Puppy in Breed',
+];
+
+const DEFAULT_ALL_BREED_AWARDS = [
   'Best in Show',
   'Reserve Best in Show',
   'Best Puppy in Show',
   'Best Veteran in Show',
 ];
 
+function pickDefaultBestAwards(show: FrontMatterProps['show']): string[] {
+  const isSingleBreed = show.showScope === 'single_breed';
+  const isChampionship = show.showType === 'championship';
+  if (isSingleBreed && isChampionship) return DEFAULT_BREED_CHAMP_AWARDS;
+  if (isSingleBreed) return DEFAULT_BREED_AWARDS;
+  return DEFAULT_ALL_BREED_AWARDS;
+}
+
 export function BestAwardsPage({ show }: FrontMatterProps) {
   const bestAwards = show.bestAwards && show.bestAwards.length > 0
     ? show.bestAwards
-    : DEFAULT_BEST_AWARDS;
+    : pickDefaultBestAwards(show);
   const awardSponsors = show.awardSponsors ?? [];
 
   // Nothing to show if both lists are empty even after defaults — only
@@ -371,12 +457,17 @@ export function BestAwardsPage({ show }: FrontMatterProps) {
     return null;
   }
 
-  // Build a row for each award. Look up sponsorship by award name
-  // case-insensitively so secretaries don't get burned by capitalisation
-  // mismatches between the two lists.
-  const sponsorByAward = new Map<string, typeof awardSponsors[number]>();
+  // Build a multimap of award name → sponsors. The same award can have
+  // multiple sponsors (e.g. Best in Show might have separate sponsors for
+  // the trophy and the rosettes), and Amanda's real shows do this — the
+  // earlier single-Map approach silently dropped duplicates.
+  type Sponsor = typeof awardSponsors[number];
+  const sponsorsByAward = new Map<string, Sponsor[]>();
   for (const s of awardSponsors) {
-    sponsorByAward.set(s.award.toLowerCase().trim(), s);
+    const key = s.award.toLowerCase().trim();
+    const list = sponsorsByAward.get(key) ?? [];
+    list.push(s);
+    sponsorsByAward.set(key, list);
   }
 
   // Also include any sponsor whose award isn't in the bestAwards list —
@@ -384,7 +475,9 @@ export function BestAwardsPage({ show }: FrontMatterProps) {
   const extraSponsorAwards = awardSponsors
     .filter((s) => !bestAwards.some((a) => a.toLowerCase().trim() === s.award.toLowerCase().trim()))
     .map((s) => s.award);
-  const allAwards = [...bestAwards, ...extraSponsorAwards];
+  // Dedupe extras (multiple sponsors for the same extra award shouldn't
+  // produce duplicate rows).
+  const allAwards = Array.from(new Set([...bestAwards, ...extraSponsorAwards]));
 
   return (
     <Page size="A5" style={styles.frontMatterPage} wrap>
@@ -417,7 +510,7 @@ export function BestAwardsPage({ show }: FrontMatterProps) {
       </View>
 
       {allAwards.map((award, i) => {
-        const sponsor = sponsorByAward.get(award.toLowerCase().trim());
+        const sponsors = sponsorsByAward.get(award.toLowerCase().trim()) ?? [];
         return (
           <View key={`${award}-${i}`} style={bestAwardsStyles.tableRow} wrap={false}>
             <View style={bestAwardsStyles.awardCol}>
@@ -427,22 +520,28 @@ export function BestAwardsPage({ show }: FrontMatterProps) {
               <Text style={bestAwardsStyles.winnerLabel}>Winner</Text>
             </View>
             <View style={bestAwardsStyles.trophyCol}>
-              {sponsor?.trophyName ? (
-                <Text style={bestAwardsStyles.trophyName}>{sponsor.trophyName}</Text>
-              ) : (
+              {sponsors.length === 0 ? (
                 <Text style={{ ...bestAwardsStyles.trophyName, color: C.textLight }}>—</Text>
+              ) : (
+                sponsors.map((s, idx) => (
+                  <Text key={idx} style={{ ...bestAwardsStyles.trophyName, marginBottom: idx < sponsors.length - 1 ? 2 : 0 }}>
+                    {s.trophyName ?? '—'}
+                  </Text>
+                ))
               )}
             </View>
             <View style={bestAwardsStyles.sponsorCol}>
-              {sponsor ? (
-                <>
-                  <Text style={bestAwardsStyles.sponsorName}>{sponsor.sponsorName}</Text>
-                  {sponsor.sponsorAffix && (
-                    <Text style={bestAwardsStyles.sponsorAffix}>{sponsor.sponsorAffix}</Text>
-                  )}
-                </>
-              ) : (
+              {sponsors.length === 0 ? (
                 <Text style={{ ...bestAwardsStyles.sponsorName, color: C.textLight }}>—</Text>
+              ) : (
+                sponsors.map((s, idx) => (
+                  <View key={idx} style={{ marginBottom: idx < sponsors.length - 1 ? 4 : 0 }}>
+                    <Text style={bestAwardsStyles.sponsorName}>{s.sponsorName}</Text>
+                    {s.sponsorAffix && (
+                      <Text style={bestAwardsStyles.sponsorAffix}>{s.sponsorAffix}</Text>
+                    )}
+                  </View>
+                ))
               )}
             </View>
           </View>
@@ -750,16 +849,62 @@ export function JudgesListPage({ show }: FrontMatterProps) {
   const hasRings = Object.keys(ringNumbers).length > 0;
   const sortedBreeds = Object.keys(judges).sort();
 
-  // For single-breed shows where judgesByBreedName is empty, show the display list instead
+  // For single-breed shows the judge assignments don't carry breed_ids,
+  // so judgesByBreedName is empty. Render from the display list instead,
+  // and include bios + photos from `judgeBios` / `judgePhotos`. Earlier
+  // versions only rendered the labels here, so single-breed catalogues
+  // were missing all the judge bios — Amanda flagged this in testing.
   if (sortedBreeds.length === 0 && show.judgeDisplayList && show.judgeDisplayList.length > 0) {
+    // Group labels by judge name so the same judge with multiple roles
+    // (e.g. "Dogs — Mr X" and "Bitches — Mr X") only renders one bio
+    // block. We strip the role prefix off the label to get the judge
+    // name; if there's no " — " it's just the name.
+    const labelsByJudge = new Map<string, string[]>();
+    for (const label of show.judgeDisplayList) {
+      const m = label.match(/^(.+?) — (.+)$/);
+      const role = m ? m[1] : null;
+      const name = m ? m[2] : label;
+      const list = labelsByJudge.get(name) ?? [];
+      list.push(role ?? name);
+      labelsByJudge.set(name, list);
+    }
+
     return (
       <Page size="A5" style={styles.frontMatterPage} wrap>
         <SectionBand title="List of Judges" />
-        {show.judgeDisplayList.map((label, i) => (
-          <Text key={i} style={{ fontFamily: 'Inter', fontSize: 9, textAlign: 'center', marginBottom: 4, color: C.textDark }}>
-            {label}
-          </Text>
-        ))}
+        {Array.from(labelsByJudge.entries()).map(([name, roles], i) => {
+          const bio = judgeBios[name];
+          const photoUrl = show.judgePhotos?.[name];
+          // Format the role label: "Dogs & Bitches" rather than two
+          // separate "Dogs", "Bitches" lines for the same judge.
+          const roleLabel = roles.includes(name)
+            ? null // role list contained the bare name (no prefix)
+            : roles.join(' & ');
+          return (
+            <View key={i} wrap={false} style={{ marginBottom: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                {photoUrl && (
+                  <Image src={photoUrl} style={{ width: 44, height: 44, borderRadius: 22 }} />
+                )}
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontFamily: 'Inter', fontSize: 11, fontWeight: 'bold', color: C.textDark }}>
+                    {name}
+                  </Text>
+                  {roleLabel && (
+                    <Text style={{ fontFamily: 'Inter', fontSize: 9, fontStyle: 'italic', color: C.textMedium }}>
+                      {roleLabel}
+                    </Text>
+                  )}
+                </View>
+              </View>
+              {bio && (
+                <Text style={{ ...styles.judgeBio, marginTop: 4, marginBottom: 0 }}>
+                  {bio}
+                </Text>
+              )}
+            </View>
+          );
+        })}
         <JurisdictionBlock />
       </Page>
     );

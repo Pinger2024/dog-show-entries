@@ -111,17 +111,40 @@ export async function GET(
   const judgeBios: Record<string, string> = {};
   const judgePhotos: Record<string, string> = {};
   const judgeRingNumbers: Record<string, string> = {};
+  // For single-breed shows the judge assignments don't have a breed_id
+  // (no need — there's only one breed), so the breed-keyed loop below
+  // would skip them entirely and the catalogue wouldn't show any judges
+  // page at all. Collect bios/photos/labels for ALL named judges so the
+  // single-breed branch of JudgesListPage can render them.
+  const seenJudgeKeys = new Set<string>();
+  const judgeDisplayList: string[] = [];
   for (const ja of judgeAssignmentRows) {
-    if (ja.breed?.name && ja.judge?.name) {
+    if (!ja.judge?.name) continue;
+    // Bios and photos always — keyed by judge name so the same judge
+    // assigned to both dogs and bitches doesn't double-render.
+    if (ja.judge.bio && !judgeBios[ja.judge.name]) {
+      judgeBios[ja.judge.name] = ja.judge.bio;
+    }
+    if (ja.judge.photoUrl && !judgePhotos[ja.judge.name]) {
+      judgePhotos[ja.judge.name] = ja.judge.photoUrl;
+    }
+    // Build the sex-annotated display label, deduped by name+sex.
+    const sexKey = `${ja.judge.name}::${ja.sex ?? 'all'}`;
+    if (!seenJudgeKeys.has(sexKey)) {
+      seenJudgeKeys.add(sexKey);
+      const isJH = !ja.breed && ja.sex === null;
+      const prefix = isJH
+        ? 'Junior Handling'
+        : ja.sex === 'dog'
+        ? 'Dogs'
+        : ja.sex === 'bitch'
+        ? 'Bitches'
+        : null;
+      judgeDisplayList.push(prefix ? `${prefix} — ${ja.judge.name}` : ja.judge.name);
+    }
+    // Breed-keyed entries (multi-breed shows) and ring numbers.
+    if (ja.breed?.name) {
       judgesByBreedName[ja.breed.name] = ja.judge.name;
-      // Collect judge bios and photos (keyed by judge name for dedup)
-      if (ja.judge.bio && !judgeBios[ja.judge.name]) {
-        judgeBios[ja.judge.name] = ja.judge.bio;
-      }
-      if (ja.judge.photoUrl && !judgePhotos[ja.judge.name]) {
-        judgePhotos[ja.judge.name] = ja.judge.photoUrl;
-      }
-      // Ring number per breed
       if (ja.ring?.number) {
         judgeRingNumbers[ja.breed.name] = String(ja.ring.number);
       }
@@ -244,6 +267,7 @@ export async function GET(
     wetWeatherAccommodation: scheduleData?.wetWeatherAccommodation === true ? true : scheduleData?.wetWeatherAccommodation === false ? false : undefined,
     judgedOnGroupSystem: scheduleData?.judgedOnGroupSystem === true ? true : undefined,
     judgesByBreedName,
+    judgeDisplayList: judgeDisplayList.length > 0 ? judgeDisplayList : undefined,
     judgeBios: Object.keys(judgeBios).length > 0 ? judgeBios : undefined,
     judgePhotos: Object.keys(judgePhotos).length > 0 ? judgePhotos : undefined,
     judgeRingNumbers: Object.keys(judgeRingNumbers).length > 0 ? judgeRingNumbers : undefined,
