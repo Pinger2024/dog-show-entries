@@ -90,7 +90,7 @@ export function CatalogueAlphabetical({ show, entries }: Props) {
                       <Text style={styles.entryDetailLabel}>
                         Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
                       </Text>
-                      {formatOwnerKC(entry.owners, entry.exhibitorId)}
+                      {formatOwnerKC(entry.owners, entry.exhibitorId, entry.withholdFromPublication)}
                     </Text>
                   )}
                   {entry.classes.length > 0 && (
@@ -148,7 +148,7 @@ export function CatalogueAlphabetical({ show, entries }: Props) {
                     <Text style={styles.entryDetailLabel}>
                       Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
                     </Text>
-                    {formatOwnerKC(entry.owners, entry.exhibitorId)}
+                    {formatOwnerKC(entry.owners, entry.exhibitorId, entry.withholdFromPublication)}
                   </Text>
                 )}
 

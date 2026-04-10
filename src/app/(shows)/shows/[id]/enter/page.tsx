@@ -86,6 +86,7 @@ export default function EnterShowPage() {
   const [isNfc, setIsNfc] = useState(false);
   const [healthDeclared, setHealthDeclared] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [withholdFromPublication, setWithholdFromPublication] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState(0);
@@ -418,6 +419,7 @@ export default function EnterShowPage() {
       const result = await checkoutMutation.mutateAsync({
         showId,
         catalogueRequested: false,
+        withholdFromPublication,
         entries: cart.entries
           .filter((e) => e.classIds.length > 0 || e.isNfc)
           .map((e) => ({
@@ -1447,6 +1449,24 @@ export default function EnterShowPage() {
               />
               <span className="text-sm font-medium leading-relaxed">
                 I agree to the above declaration
+              </span>
+            </label>
+          </div>
+
+          {/* Privacy: right to withhold from catalogue — RKC F(1).11.b.(6)/(8) */}
+          <div className="rounded-lg border bg-card p-4">
+            <label className="flex cursor-pointer items-start gap-3">
+              <Checkbox
+                checked={withholdFromPublication}
+                onCheckedChange={(checked) => setWithholdFromPublication(checked === true)}
+                className="mt-0.5"
+              />
+              <span className="text-sm leading-relaxed">
+                <span className="font-medium">Keep my name and address out of the catalogue</span>
+                <span className="mt-1 block text-xs text-muted-foreground">
+                  Your dog&apos;s registered name and pedigree details will still appear — only your owner details will be withheld.
+                  This is your right under Kennel Club regulation F(1).11.b.
+                </span>
               </span>
             </label>
           </div>

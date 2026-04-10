@@ -40,6 +40,10 @@ export const entries = pgTable(
       .notNull(),
     catalogueNumber: text('catalogue_number'),
     catalogueRequested: boolean('catalogue_requested').notNull().default(false),
+    /** RKC F(1).11.b.(6) / (8) — exhibitors have the right to have their name
+     *  and address withheld from the catalogue. When true, catalogue rendering
+     *  displays "Owner withheld" in place of owner name/address. */
+    withholdFromPublication: boolean('withhold_from_publication').notNull().default(false),
     absent: boolean('absent').notNull().default(false),
     totalFee: integer('total_fee').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true })

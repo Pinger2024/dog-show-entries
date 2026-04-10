@@ -26,6 +26,8 @@ export interface CatalogueEntry {
   classes: { name: string | undefined; sex: string | null | undefined; classNumber: number | null | undefined; sortOrder: number | undefined; showClassId?: string | undefined }[];
   status: string;
   entryType: string;
+  /** RKC F(1).11.b.(6)/(8) — when true, owner name and address are withheld from the catalogue */
+  withholdFromPublication?: boolean;
 }
 
 export interface ShowSponsorInfo {
@@ -490,7 +492,7 @@ export function CatalogueStandard({ show, entries }: Props) {
                                 <Text style={styles.entryDetailLabel}>
                                   Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
                                 </Text>
-                                {formatOwnerKC(entry.owners, entry.exhibitorId)}
+                                {formatOwnerKC(entry.owners, entry.exhibitorId, entry.withholdFromPublication)}
                               </Text>
                             )}
                           </View>
@@ -545,7 +547,7 @@ export function CatalogueStandard({ show, entries }: Props) {
                               <Text style={styles.entryDetailLabel}>
                                 Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
                               </Text>
-                              {formatOwnerKC(entry.owners, entry.exhibitorId)}
+                              {formatOwnerKC(entry.owners, entry.exhibitorId, entry.withholdFromPublication)}
                             </Text>
                           )}
 

@@ -41,6 +41,8 @@ export const ordersRouter = createTRPCRouter({
         showId: z.string().uuid(),
         entries: z.array(cartEntrySchema).min(1),
         catalogueRequested: z.boolean().default(false),
+        /** RKC F(1).11.b.(6)/(8) — exhibitor right to withhold name/address from catalogue */
+        withholdFromPublication: z.boolean().default(false),
         sundryItems: z.array(z.object({
           sundryItemId: z.string().uuid(),
           quantity: z.number().int().min(1),
@@ -488,6 +490,7 @@ export const ordersRouter = createTRPCRouter({
             status: 'pending',
             totalFee: entryFee,
             catalogueRequested: input.catalogueRequested,
+            withholdFromPublication: input.withholdFromPublication,
           })
           .returning();
 

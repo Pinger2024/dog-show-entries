@@ -513,19 +513,23 @@ export function ClassDefinitionsPage({ show }: FrontMatterProps) {
 
 interface ExhibitorIndexPageProps {
   show: CatalogueShowInfo;
-  entries: Pick<import('./catalogue-standard').CatalogueEntry, 'exhibitor' | 'exhibitorId' | 'catalogueNumber' | 'owners' | 'classes'>[];
+  entries: Pick<import('./catalogue-standard').CatalogueEntry, 'exhibitor' | 'exhibitorId' | 'catalogueNumber' | 'owners' | 'classes' | 'withholdFromPublication'>[];
 }
 
 /**
  * Alphabetical exhibitor index — required by RKC F(1).11.b(6) for
  * championship shows. Lists each exhibitor with their catalogue numbers
  * and classes entered, sorted alphabetically by exhibitor name.
+ *
+ * Entries where the exhibitor has requested withholding from publication
+ * per F(1).11.b.(6)/(8) are excluded from the index entirely.
  */
 export function ExhibitorIndexPage({ show, entries }: ExhibitorIndexPageProps) {
   if (show.showType !== 'championship') return null;
 
   const byExhibitor = new Map<string, { name: string; address?: string; catNos: string[]; classes: string[] }>();
   for (const entry of entries) {
+    if (entry.withholdFromPublication) continue;
     const name = entry.exhibitor ?? entry.owners[0]?.name ?? 'Unknown';
     const key = name.toUpperCase();
     if (!byExhibitor.has(key)) {

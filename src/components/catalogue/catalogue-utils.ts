@@ -43,11 +43,17 @@ export function formatPedigreeKC(
  * Format owner names + address for RKC catalogue (UPPER CASE name).
  * Per RKC regulations, when an owner is also the exhibitor the address
  * is replaced with "Exh." (short for "Exhibitor").
+ *
+ * If `withhold` is true, owner details are replaced with "Details withheld"
+ * per the exhibitor's right under F(1).11.b.(6)/(8) to have their name and
+ * address kept out of publication.
  */
 export function formatOwnerKC(
   owners: { name: string; address: string | null; userId: string | null }[],
-  exhibitorId?: string | undefined
+  exhibitorId?: string | undefined,
+  withhold?: boolean
 ): string {
+  if (withhold) return 'Details withheld';
   if (owners.length === 0) return '';
   return owners
     .map((o) => {

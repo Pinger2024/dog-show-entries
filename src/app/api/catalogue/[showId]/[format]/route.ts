@@ -191,6 +191,7 @@ export async function GET(
     status: entry.status,
     entryType: entry.entryType,
     jhHandlerName: entry.juniorHandlerDetails?.handlerName ?? undefined,
+    withholdFromPublication: entry.withholdFromPublication,
   }));
 
   // Build show-level sponsor info for cover/front matter

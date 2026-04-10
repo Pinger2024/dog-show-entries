@@ -143,6 +143,7 @@ export async function generateCataloguePdf(
     })),
     status: entry.status,
     entryType: entry.entryType,
+    withholdFromPublication: entry.withholdFromPublication,
   }));
 
   const scheduleData = show.scheduleData as Record<string, unknown> | null;
