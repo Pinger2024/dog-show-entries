@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { Document, Page, View, Text } from '@react-pdf/renderer';
 import { styles } from './catalogue-styles';
 import { CoverPage, JudgesListPage, ClassDefinitionsPage, TrophiesPage, ExhibitorIndexPage } from './catalogue-front-matter';
@@ -375,20 +376,51 @@ export function CatalogueStandard({ show, entries }: Props) {
     }
   }
 
+  // RKC F(1).11.b(6) exhibitor index policy:
+  //   - Single-breed championship shows: one index in the front matter.
+  //   - Multi-breed championship shows: one index per breed section, rendered
+  //     immediately before the breed's entry pages.
+  //   - Non-championship shows: no exhibitor index required.
+  const isChampionship = show.showType === 'championship';
+  const isMultiBreedChamp = isChampionship && show.showScope !== 'single_breed';
+  const renderedBreedIndexes = new Set<string>();
+
   return (
     <Document>
       {/* Front matter pages */}
       <CoverPage show={show} />
       <JudgesListPage show={show} />
-      <ExhibitorIndexPage show={show} entries={entries} />
+      {isChampionship && !isMultiBreedChamp && (
+        <ExhibitorIndexPage show={show} entries={entries} />
+      )}
       <ClassDefinitionsPage show={show} />
       {!show.skipTrophiesPage && (
         <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />
       )}
 
       {/* One <Page> per breed (or per sex for large breeds) — resets coordinate system */}
-      {breedPages.map(({ groupName, breedName, judge, breedBucket, sexLabel }, pageIdx) => (
-        <Page key={`${groupName}-${breedName}-${sexLabel ?? 'all'}-${pageIdx}`} size="A5" style={styles.page} wrap>
+      {breedPages.map(({ groupName, breedName, judge, breedBucket, sexLabel }, pageIdx) => {
+        // For multi-breed championship shows, render the per-breed exhibitor
+        // index once, just before the first page of each breed section.
+        let breedIndex: React.ReactNode = null;
+        if (isMultiBreedChamp && !renderedBreedIndexes.has(breedName)) {
+          renderedBreedIndexes.add(breedName);
+          const breedEntries = entries.filter((e) => e.breed === breedName);
+          if (breedEntries.length > 0) {
+            breedIndex = (
+              <ExhibitorIndexPage
+                show={show}
+                entries={breedEntries}
+                breedName={breedName}
+              />
+            );
+          }
+        }
+
+        return (
+        <Fragment key={`${groupName}-${breedName}-${sexLabel ?? 'all'}-${pageIdx}`}>
+          {breedIndex}
+          <Page size="A5" style={styles.page} wrap>
           <Text style={styles.groupHeading}>{groupName}</Text>
           <Text style={styles.breedHeading}>{breedName}</Text>
           {judge && (
@@ -574,8 +606,10 @@ export function CatalogueStandard({ show, entries }: Props) {
             }
             fixed
           />
-        </Page>
-      ))}
+          </Page>
+        </Fragment>
+        );
+      })}
     </Document>
   );
 }

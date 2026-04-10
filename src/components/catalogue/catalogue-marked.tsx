@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { Document, Page, View, Text, StyleSheet } from '@react-pdf/renderer';
 import { styles } from './catalogue-styles';
 import { CoverPage, JudgesListPage, ClassDefinitionsPage, TrophiesPage, ExhibitorIndexPage } from './catalogue-front-matter';
@@ -325,12 +326,19 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
   const showAwards = achievements.filter((a) => showLevelTypes.has(a.type));
   const breedAwards = achievements.filter((a) => !showLevelTypes.has(a.type));
 
+  // RKC F(1).11.b(6) exhibitor index policy — see catalogue-standard.tsx.
+  const isChampionship = show.showType === 'championship';
+  const isMultiBreedChamp = isChampionship && show.showScope !== 'single_breed';
+  const renderedBreedIndexes = new Set<string>();
+
   return (
     <Document>
       {/* Cover page with MARKED CATALOGUE subtitle */}
       <CoverPage show={{ ...show, name: `${show.name}\nMARKED CATALOGUE` }} />
       <JudgesListPage show={show} />
-      <ExhibitorIndexPage show={show} entries={entries} />
+      {isChampionship && !isMultiBreedChamp && (
+        <ExhibitorIndexPage show={show} entries={entries} />
+      )}
       <ClassDefinitionsPage show={show} />
       {!show.skipTrophiesPage && (
         <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />
@@ -382,8 +390,28 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
       )}
 
       {/* One <Page> per breed with result annotations */}
-      {breedPages.map(({ groupName, breedName, judge, breedBucket, sexLabel }, pageIdx) => (
-        <Page key={`${groupName}-${breedName}-${sexLabel ?? 'all'}-${pageIdx}`} size="A5" style={styles.page} wrap>
+      {breedPages.map(({ groupName, breedName, judge, breedBucket, sexLabel }, pageIdx) => {
+        // Per-breed exhibitor index for multi-breed championship shows —
+        // rendered once, immediately before the breed's first page.
+        let breedIndex: React.ReactNode = null;
+        if (isMultiBreedChamp && !renderedBreedIndexes.has(breedName)) {
+          renderedBreedIndexes.add(breedName);
+          const breedEntries = entries.filter((e) => e.breed === breedName);
+          if (breedEntries.length > 0) {
+            breedIndex = (
+              <ExhibitorIndexPage
+                show={show}
+                entries={breedEntries}
+                breedName={breedName}
+              />
+            );
+          }
+        }
+
+        return (
+        <Fragment key={`${groupName}-${breedName}-${sexLabel ?? 'all'}-${pageIdx}`}>
+          {breedIndex}
+          <Page size="A5" style={styles.page} wrap>
           <Text style={markedStyles.watermark}>MARKED CATALOGUE</Text>
           <Text style={styles.groupHeading}>{groupName}</Text>
           <Text style={styles.breedHeading}>{breedName}</Text>
@@ -589,8 +617,10 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
             }
             fixed
           />
-        </Page>
-      ))}
+          </Page>
+        </Fragment>
+        );
+      })}
     </Document>
   );
 }

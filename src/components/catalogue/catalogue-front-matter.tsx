@@ -514,6 +514,13 @@ export function ClassDefinitionsPage({ show }: FrontMatterProps) {
 interface ExhibitorIndexPageProps {
   show: CatalogueShowInfo;
   entries: Pick<import('./catalogue-standard').CatalogueEntry, 'exhibitor' | 'exhibitorId' | 'catalogueNumber' | 'owners' | 'classes' | 'withholdFromPublication'>[];
+  /**
+   * When set, renders a per-breed exhibitor index with the breed name in the
+   * heading. Used for multi-breed championship shows where RKC F(1).11.b(6)
+   * requires each breed section to start with its own alphabetical index.
+   * Callers are responsible for filtering `entries` to just that breed.
+   */
+  breedName?: string;
 }
 
 /**
@@ -521,12 +528,17 @@ interface ExhibitorIndexPageProps {
  * championship shows. Lists each exhibitor with their catalogue numbers
  * and classes entered, sorted alphabetically by exhibitor name.
  *
+ * For single-breed championship shows: rendered once as front matter with
+ * every entry. For multi-breed championship shows: rendered once per breed
+ * section by passing `breedName` and pre-filtered entries.
+ *
+ * Callers are responsible for the `showType === 'championship'` check;
+ * this component focuses on rendering.
+ *
  * Entries where the exhibitor has requested withholding from publication
  * per F(1).11.b.(6)/(8) are excluded from the index entirely.
  */
-export function ExhibitorIndexPage({ show, entries }: ExhibitorIndexPageProps) {
-  if (show.showType !== 'championship') return null;
-
+export function ExhibitorIndexPage({ show, entries, breedName }: ExhibitorIndexPageProps) {
   const byExhibitor = new Map<string, { name: string; address?: string; catNos: string[]; classes: string[] }>();
   for (const entry of entries) {
     if (entry.withholdFromPublication) continue;
@@ -553,9 +565,11 @@ export function ExhibitorIndexPage({ show, entries }: ExhibitorIndexPageProps) {
   const sorted = Array.from(byExhibitor.values()).sort((a, b) => a.name.localeCompare(b.name));
   if (sorted.length === 0) return null;
 
+  const title = breedName ? `Exhibitor Index — ${breedName}` : 'Exhibitor Index';
+
   return (
     <Page size="A5" style={styles.frontMatterPage} wrap>
-      <SectionBand title="Exhibitor Index" />
+      <SectionBand title={title} />
       <View style={{ flexDirection: 'row', borderBottomWidth: 1.5, borderBottomColor: C.primary, paddingBottom: 3, marginBottom: 4 }}>
         <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '40%', color: C.textDark }}>Exhibitor</Text>
         <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '20%', color: C.textDark }}>Cat No(s)</Text>
