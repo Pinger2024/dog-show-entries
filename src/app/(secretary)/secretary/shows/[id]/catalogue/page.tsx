@@ -250,7 +250,15 @@ function PdfViewerButton({
       </Button>
       <DialogContent
         showCloseButton={false}
-        className="max-w-none sm:max-w-none p-0 gap-0 w-screen h-[100dvh] sm:w-[95vw] sm:h-[95vh] sm:rounded-lg max-sm:inset-0 max-sm:top-0 max-sm:bottom-0 max-sm:rounded-none flex flex-col"
+        /* Mobile: max-sm:inset-0 overrides Radix's default bottom-
+           sheet position to fill the viewport. max-h-none cancels
+           the default max-h-[90vh] that would otherwise cap height.
+           max-sm:translate-x-0 + max-sm:translate-y-0 cancels the
+           centering transforms. The inset-0 gives full width safely
+           (no scrollbar-width overflow issues on mobile).
+           Desktop: sm:w-[95vw] sm:h-[95vh] for a large but not
+           fullscreen modal. */
+        className="max-w-none sm:max-w-none p-0 gap-0 sm:w-[95vw] sm:h-[95vh] sm:rounded-lg max-sm:inset-0 max-sm:top-0 max-sm:bottom-0 max-sm:left-0 max-sm:right-0 max-sm:max-h-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none flex flex-col"
       >
         <DialogTitle className="sr-only">{label}</DialogTitle>
         {/* Header with title + actions + close */}

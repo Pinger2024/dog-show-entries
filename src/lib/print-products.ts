@@ -415,3 +415,212 @@ export const PRINT_ORDER_STATUS_CONFIG: Record<string, { label: string; variant:
   cancelled: { label: 'Cancelled', variant: 'outline' },
   failed: { label: 'Failed', variant: 'destructive' },
 };
+
+// ── Mixam spec translation ────────────────────────────────────
+//
+// The legacy Tradeprint product records here still drive the Print
+// Shop UI (preset labels, configurable specs, etc.), but the actual
+// pricing + order submission goes through the Mixam API as of
+// 2026-04-11 (backlog #99). These helpers bridge the two worlds:
+// they take a Tradeprint-style product name + spec map and translate
+// it to a Mixam ItemSpecification that getOffers / submitOrder can
+// accept.
+//
+// The translation is deliberate rather than automatic. Mixam's data
+// model (product + components + numeric substrate IDs) is completely
+// different to Tradeprint's (product name + free-form spec strings),
+// so each product needs a bespoke translator. Currently only the
+// catalogue (saddle-stitched booklet) is wired through — prize cards,
+// ring numbers, and other document types will fall through to null
+// and the calling code will log a "no Mixam mapping" error until
+// they're added.
+//
+// Schema column rename is deferred — the database still stores
+// `tradeprintProductId`, `tradeprintOrderRef`, `tradeprintStatus`
+// columns and the Print Shop UI still uses those names in labels.
+// That's cosmetic debt, tracked as part of #99 follow-up work.
+
+import type {
+  MixamItemSpecification,
+  MixamOrderItem,
+  LegacyTradeprintOrderInput,
+} from '@/server/services/mixam';
+import {
+  MIXAM_FORMAT,
+  MIXAM_SUBSTRATE_TYPE,
+  MIXAM_SUBSTRATE_WEIGHT,
+} from '@/server/services/mixam';
+
+/** Extract the substrate weight ID from a Tradeprint "Paper Type" spec.
+ *  Tradeprint strings look like "100gsm Art Paper Silk Finish" —
+ *  we match the "Xgsm" prefix. */
+function paperWeightToMixamId(paperSpec: string): number | null {
+  const m = paperSpec.match(/^(\d+)gsm/i);
+  if (!m) return null;
+  const gsm = `${m[1]}gsm` as keyof typeof MIXAM_SUBSTRATE_WEIGHT;
+  return MIXAM_SUBSTRATE_WEIGHT[gsm] ?? null;
+}
+
+/** Extract substrate type (SILK / GLOSS / UNCOATED) from a Tradeprint
+ *  "Paper Type" spec. */
+function paperTypeToMixamId(paperSpec: string): number {
+  const lower = paperSpec.toLowerCase();
+  if (lower.includes('silk')) return MIXAM_SUBSTRATE_TYPE.SILK;
+  if (lower.includes('gloss')) return MIXAM_SUBSTRATE_TYPE.GLOSS;
+  if (lower.includes('uncoated')) return MIXAM_SUBSTRATE_TYPE.UNCOATED;
+  return MIXAM_SUBSTRATE_TYPE.SILK; // default
+}
+
+/** Map Tradeprint size strings ("A4 Portrait", "A5 Landscape") to
+ *  Mixam's { format, orientation } pair. */
+function sizeToMixamFormat(size: string): {
+  format: number;
+  orientation: 'PORTRAIT' | 'LANDSCAPE';
+} {
+  const lower = size.toLowerCase();
+  const orientation: 'PORTRAIT' | 'LANDSCAPE' = lower.includes('landscape')
+    ? 'LANDSCAPE'
+    : 'PORTRAIT';
+  // Widen the literal-union return of MIXAM_FORMAT.* to plain number
+  // so we can reassign across formats without TS narrowing to the
+  // first-assigned literal.
+  let format: number = MIXAM_FORMAT.A5;
+  if (lower.includes('a3')) format = MIXAM_FORMAT.A3;
+  else if (lower.includes('a4')) format = MIXAM_FORMAT.A4;
+  else if (lower.includes('a5')) format = MIXAM_FORMAT.A5;
+  else if (lower.includes('a6')) format = MIXAM_FORMAT.A6;
+  return { format, orientation };
+}
+
+/**
+ * Translate a Tradeprint-style product name + spec map into a Mixam
+ * ItemSpecification for use with getOffers / submitOrder. Returns null
+ * when the product isn't (yet) mapped to a Mixam equivalent.
+ */
+export function specsToMixamItemSpecification(
+  productNameOrId: string,
+  specs: Record<string, string>,
+  quantity: number,
+): MixamItemSpecification | null {
+  // Find the product by either name or ID — callers pass whichever
+  // they have in scope (getTradePrice takes the name, getDeliveryEstimate
+  // takes the ID).
+  const product = PRINT_PRODUCTS.find(
+    (p) =>
+      p.tradeprintProductName === productNameOrId ||
+      p.tradeprintProductId === productNameOrId,
+  );
+  if (!product) return null;
+
+  const paperSpec = specs['Paper Type'] ?? product.defaultSpecs['Paper Type'] ?? '';
+  const coverSpec = specs['Cover Material'] ?? product.defaultSpecs['Cover Material'] ?? paperSpec;
+  const sizeSpec = specs['Size'] ?? product.defaultSpecs['Size'] ?? 'A5 Portrait';
+  const pagesSpec = specs['Pages'] ?? specs['Page Count'] ?? '';
+
+  const { format, orientation } = sizeToMixamFormat(sizeSpec);
+  const paperWeight = paperWeightToMixamId(paperSpec) ?? MIXAM_SUBSTRATE_WEIGHT['100gsm'];
+  const paperType = paperTypeToMixamId(paperSpec);
+  const coverWeight = paperWeightToMixamId(coverSpec) ?? MIXAM_SUBSTRATE_WEIGHT['250gsm'];
+  const coverType = paperTypeToMixamId(coverSpec);
+
+  switch (product.documentType) {
+    case 'catalogue': {
+      // Saddle-stitched booklet — BROCHURES product with a BOUND
+      // component. Page count must be a multiple of 4.
+      const pages = Math.max(8, roundUpToMultipleOf4(parseInt(pagesSpec || '24', 10)));
+      return {
+        copies: quantity,
+        product: 'BROCHURES',
+        components: [
+          {
+            componentType: 'BOUND',
+            format,
+            standardSize: 'NONE',
+            orientation,
+            colours: 'PROCESS',
+            substrate: { typeId: paperType, weightId: paperWeight },
+            pages,
+            binding: { type: 'STAPLED' },
+          },
+          // Separate cover component when the cover stock differs
+          // from the body stock. Mixam treats this as an override on
+          // the outer sheet.
+          ...(coverWeight !== paperWeight || coverType !== paperType
+            ? [
+                {
+                  componentType: 'COVER' as const,
+                  format,
+                  standardSize: 'NONE',
+                  orientation,
+                  colours: 'PROCESS' as const,
+                  substrate: { typeId: coverType, weightId: coverWeight },
+                  lamination: 'NONE' as const,
+                },
+              ]
+            : []),
+        ],
+      };
+    }
+
+    case 'prize_cards': {
+      // Prize cards — FLYERS product, single flat component, heavy
+      // substrate, double sided, A5 landscape.
+      return {
+        copies: quantity,
+        product: 'FLYERS',
+        components: [
+          {
+            componentType: 'FLAT',
+            format,
+            standardSize: 'NONE',
+            orientation,
+            colours: 'PROCESS',
+            substrate: { typeId: paperType, weightId: paperWeight },
+            backColours: 'PROCESS',
+          },
+        ],
+      };
+    }
+
+    default:
+      // Schedules, ring numbers, ring boards, judges book — not yet
+      // mapped to Mixam. Caller will log a "no mapping" error and
+      // fall through gracefully.
+      return null;
+  }
+}
+
+function roundUpToMultipleOf4(n: number): number {
+  return Math.ceil(n / 4) * 4;
+}
+
+/**
+ * Translate a legacy Tradeprint-shaped order item (used by the Stripe
+ * webhook submission path) into a Mixam order item. Returns null when
+ * the product isn't mapped.
+ */
+export function legacyTradeprintItemToMixamItem(
+  item: LegacyTradeprintOrderInput['items'][number],
+): MixamOrderItem | null {
+  const spec = specsToMixamItemSpecification(
+    item.productId,
+    item.productionData,
+    item.quantity,
+  );
+  if (!spec) return null;
+
+  return {
+    itemSpecification: spec,
+    artworkUrl: item.fileUrl,
+    deliveryAddress: {
+      name: `${item.deliveryAddress.firstName} ${item.deliveryAddress.lastName}`.trim(),
+      line1: item.deliveryAddress.add1,
+      line2: item.deliveryAddress.add2,
+      city: item.deliveryAddress.town,
+      postcode: item.deliveryAddress.postcode,
+      country: item.deliveryAddress.country,
+      phone: item.deliveryAddress.contactPhone,
+      email: item.partnerContactDetails?.email,
+    },
+  };
+}

@@ -1,223 +1,42 @@
 /**
- * Refreshes the local print price cache from Tradeprint.
+ * Print price cache — read-only accessors.
  *
- * Downloads the full price CSV for each product, stream-parses every row,
- * and stores ALL specs/quantities in the database. This gives us full
- * flexibility to offer different paper types, sizes, etc. in future.
+ * This file used to also contain a refresh job that downloaded the
+ * full price CSV from Tradeprint and stored every quantity × spec
+ * combination in the `printPriceCache` table. That approach doesn't
+ * translate to Mixam: Mixam's /api/public/offers endpoint is per-
+ * quantity, per-spec — there's no bulk CSV endpoint to scrape.
  *
- * Run daily via cron or on-demand from admin tools.
- * Typical data: ~200K rows total across all products (trivial for Postgres).
+ * When we switched from Tradeprint to Mixam on 2026-04-11 (backlog
+ * #99), the refresh job was neutralised. The read-only functions
+ * below still work against whatever's in the cache table, but new
+ * pricing is fetched live from Mixam via `getTradePrice` in
+ * `src/server/services/mixam.ts`. The cache table can be retired
+ * entirely once we're confident the live-fetch path is performant
+ * enough; for now we leave it in place so that any stale data the
+ * Print Shop UI reads is visibly out-of-date rather than mysteriously
+ * missing.
  */
 
 import { eq, and, sql } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { printPriceCache } from '@/server/db/schema';
-import { getPrintableProducts, type PrintProduct } from '@/lib/print-products';
-import { getSDK, parseCSVLine } from './tradeprint';
 
 /**
- * Build a set of allowed spec values per key from a product's presets and defaults.
- * Only rows matching these specs will be cached — dramatically reduces storage
- * for products like Perfect Bound Booklets that have millions of combinations.
- */
-function buildSpecFilter(product: PrintProduct): Map<string, Set<string>> {
-  const filter = new Map<string, Set<string>>();
-  // Collect all spec values from default specs and all presets
-  const allSpecs = [product.defaultSpecs, ...product.presets.map((p) => p.specs)];
-  for (const specs of allSpecs) {
-    for (const [key, value] of Object.entries(specs)) {
-      if (!filter.has(key)) filter.set(key, new Set());
-      filter.get(key)!.add(value);
-    }
-  }
-  return filter;
-}
-
-/** Check if a row's specs match the allowed values (all filter keys must match) */
-function matchesSpecFilter(specs: Record<string, string>, filter: Map<string, Set<string>>): boolean {
-  for (const [key, allowed] of filter) {
-    const value = specs[key];
-    if (value === undefined || !allowed.has(value)) return false;
-  }
-  return true;
-}
-
-const SERVICE_LEVELS = ['Saver', 'Standard', 'Express'] as const;
-
-/**
- * Refresh prices for all printable products across all service levels.
+ * Neutralised — Mixam's pricing model is per-quantity, not bulk
+ * CSV, so there's nothing to refresh. Returns an empty result with
+ * a single warning so anyone who calls this (cron job, admin tool)
+ * gets a clear signal rather than a silent no-op.
  */
 export async function refreshAllPrintPrices(): Promise<{
   productsRefreshed: number;
   totalRows: number;
   errors: string[];
 }> {
-  const products = getPrintableProducts();
-  let totalRows = 0;
-  const errors: string[] = [];
-
-  for (const product of products) {
-    try {
-      console.log(`[print-price-refresh] Fetching ${product.tradeprintProductName}...`);
-
-      const rows = await fetchAndParseAllPrices(product.tradeprintProductName, product);
-
-      if (rows.length === 0) {
-        console.log(`[print-price-refresh] No prices found for ${product.tradeprintProductName}`);
-        continue;
-      }
-
-      // Atomic swap: delete old + insert new in a single transaction
-      await db.transaction(async (tx) => {
-        await tx
-          .delete(printPriceCache)
-          .where(eq(printPriceCache.tradeprintProductName, product.tradeprintProductName));
-
-        for (let i = 0; i < rows.length; i += 1000) {
-          await tx.insert(printPriceCache).values(rows.slice(i, i + 1000));
-        }
-      });
-
-      totalRows += rows.length;
-      console.log(`[print-price-refresh] Cached ${rows.length} prices for ${product.tradeprintProductName}`);
-    } catch (err) {
-      const msg = `${product.tradeprintProductName}: ${err instanceof Error ? err.message : String(err)}`;
-      console.error(`[print-price-refresh] Error: ${msg}`);
-      errors.push(msg);
-    }
-  }
-
-  return { productsRefreshed: products.length, totalRows, errors };
-}
-
-/**
- * Fetch the full CSV for a product and parse ALL rows into cache-ready objects.
- * Uses streaming to avoid loading the full CSV into memory.
- */
-async function fetchAndParseAllPrices(
-  productName: string,
-  product: PrintProduct
-): Promise<Array<typeof printPriceCache.$inferInsert>> {
-  const specFilter = buildSpecFilter(product);
-  const SDK = getSDK();
-  const productService = new SDK.ProductService();
-  const response = await productService
-    .priceListSingleProductRequest(productName)
-    .setMarkup(0)
-    .setFormatCsv()
-    .execute();
-
-  if (!response?.url) {
-    console.error('[print-price-refresh] No URL in response:', JSON.stringify(response).slice(0, 200));
-    return [];
-  }
-
-  const resp = await fetch(response.url);
-  if (!resp.ok) throw new Error(`CSV fetch failed: ${resp.status}`);
-  if (!resp.body) throw new Error('No response body');
-
-  const reader = resp.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let headersParsed = false;
-  const rows: Array<typeof printPriceCache.$inferInsert> = [];
-  const now = new Date();
-
-  // Column indices (populated after header row)
-  let qtyIdx = -1;
-  const priceIndices: Record<string, number> = {};
-  const specColumnNames: string[] = [];
-  const specColumnIndices: number[] = [];
-  const META_COLUMNS = new Set([
-    'ProductName', 'ProductID', 'Quantity', 'Tax',
-    'PriceSaver', 'PriceStandard', 'PriceExpress',
-    'Production Days Saver', 'Production Days Standard', 'Production Days Express',
-  ]);
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() ?? '';
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-
-      const cols = parseCSVLine(trimmed);
-
-      if (!headersParsed) {
-        const headers = cols.map((c) => c.trim());
-        qtyIdx = headers.indexOf('Quantity');
-        for (const level of SERVICE_LEVELS) {
-          const idx = headers.indexOf(`Price${level}`);
-          if (idx >= 0) priceIndices[level] = idx;
-        }
-        for (let i = 0; i < headers.length; i++) {
-          if (!META_COLUMNS.has(headers[i])) {
-            specColumnNames.push(headers[i]);
-            specColumnIndices.push(i);
-          }
-        }
-        headersParsed = true;
-        continue;
-      }
-
-      processDataRow(cols, qtyIdx, specColumnNames, specColumnIndices, priceIndices, productName, now, rows, specFilter);
-    }
-  }
-
-  // Process remaining buffer
-  if (buffer.trim() && headersParsed) {
-    processDataRow(parseCSVLine(buffer.trim()), qtyIdx, specColumnNames, specColumnIndices, priceIndices, productName, now, rows, specFilter);
-  }
-
-  return rows;
-}
-
-/** Extract price rows from a single CSV data line */
-function processDataRow(
-  cols: string[],
-  qtyIdx: number,
-  specColumnNames: string[],
-  specColumnIndices: number[],
-  priceIndices: Record<string, number>,
-  productName: string,
-  now: Date,
-  rows: Array<typeof printPriceCache.$inferInsert>,
-  specFilter: Map<string, Set<string>>
-) {
-  if (qtyIdx < 0) return;
-  const qty = parseInt(cols[qtyIdx]?.trim(), 10);
-  if (isNaN(qty) || qty <= 0) return;
-
-  const specs: Record<string, string> = {};
-  for (let i = 0; i < specColumnNames.length; i++) {
-    const val = cols[specColumnIndices[i]];
-    if (val) specs[specColumnNames[i]] = val.trim();
-  }
-
-  // Skip rows that don't match our product's configured specs
-  if (!matchesSpecFilter(specs, specFilter)) return;
-
-  for (const level of SERVICE_LEVELS) {
-    const priceIdx = priceIndices[level];
-    if (priceIdx === undefined) continue;
-
-    const totalPrice = parseFloat(cols[priceIdx]?.trim());
-    if (isNaN(totalPrice) || totalPrice <= 0) continue;
-
-    rows.push({
-      tradeprintProductName: productName,
-      serviceLevel: level.toLowerCase(),
-      quantity: qty,
-      totalPricePence: Math.round(totalPrice * 100),
-      specs,
-      fetchedAt: now,
-    });
-  }
+  const warning =
+    'refreshAllPrintPrices is a no-op under Mixam — pricing is fetched live per-quantity via getTradePrice in mixam.ts. Remove this cron job from your scheduler.';
+  console.warn(`[print-price-refresh] ${warning}`);
+  return { productsRefreshed: 0, totalRows: 0, errors: [warning] };
 }
 
 /**

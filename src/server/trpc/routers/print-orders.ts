@@ -28,7 +28,7 @@ import {
   getAvailableQuantities,
   getDeliveryEstimate,
   getOrderStatus,
-} from '@/server/services/tradeprint';
+} from '@/server/services/mixam';
 import { sendPrintOrderDispatchEmail } from '@/server/services/email';
 import {
   getCachedTotalPrice,

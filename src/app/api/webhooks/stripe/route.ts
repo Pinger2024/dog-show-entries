@@ -366,13 +366,18 @@ async function submitPrintOrderToTradeprint(printOrderId: string) {
   }
 
   try {
-    const { submitOrder, capitaliseServiceLevel } = await import('@/server/services/tradeprint');
+    // Uses the legacy-shaped adapter in mixam.ts so we don't have to
+    // refactor this whole webhook handler on the Mixam swap. The
+    // adapter translates the Tradeprint-shaped call into a Mixam
+    // order and returns the resulting orderRef in the same shape.
+    // See backlog #99 for the full production-readiness plan.
+    const { submitOrderLegacy, capitaliseServiceLevel } = await import('@/server/services/mixam');
 
     const nameParts = (order.deliveryName ?? 'Show Secretary').split(' ');
     const firstName = nameParts[0] ?? 'Show';
     const lastName = nameParts.slice(1).join(' ') || 'Secretary';
 
-    const result = await submitOrder({
+    const result = await submitOrderLegacy({
       orderReference: `REMI-${formatOrderRef(order.id)}`,
       billingAddress: {
         firstName,
@@ -412,11 +417,14 @@ async function submitPrintOrderToTradeprint(printOrderId: string) {
       .update(printOrders)
       .set({
         status: 'submitted',
+        // Column name is still `tradeprintOrderRef` from the previous
+        // integration — rename deferred to a future migration. The
+        // value is now a Mixam order ID.
         tradeprintOrderRef: result.orderRef,
       })
       .where(eq(printOrders.id, printOrderId));
 
-    console.log(`[tradeprint] Order ${printOrderId} submitted: ${result.orderRef}`);
+    console.log(`[mixam] Order ${printOrderId} submitted: ${result.orderRef}`);
 
     // Send confirmation email (non-blocking)
     sendPrintOrderConfirmationEmail(printOrderId).catch((err) =>
