@@ -661,6 +661,14 @@ export const dogsRouter = createTRPCRouter({
         breed: d.breed?.name ?? null,
         sex: d.sex,
         dateOfBirth: d.dateOfBirth,
+        // Extra fields returned so the "Add a Dog" form can populate
+        // completely from a Remi match (Apr 2026 bug fix — the form
+        // used to only nav to the existing profile, now it prefills).
+        sireName: d.sireName,
+        damName: d.damName,
+        breederName: d.breederName,
+        colour: d.colour,
+        ownerId: d.ownerId,
         source: 'remi' as const,
       }));
     }),

@@ -258,9 +258,51 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
 
   // Local Remi search results
   const [remiResults, setRemiResults] = useState<
-    { id: string; registeredName: string; kcRegNumber: string | null; breed: string | null; sex: string | null; dateOfBirth: string | null; source: 'remi' }[]
+    {
+      id: string;
+      registeredName: string;
+      kcRegNumber: string | null;
+      breed: string | null;
+      sex: string | null;
+      dateOfBirth: string | null;
+      sireName: string | null;
+      damName: string | null;
+      breederName: string | null;
+      colour: string | null;
+      ownerId: string;
+      source: 'remi';
+    }[]
   >([]);
   const [searchingRemi, setSearchingRemi] = useState(false);
+
+  function applyRemiResult(data: typeof remiResults[number]) {
+    const sv = { shouldValidate: true, shouldDirty: true } as const;
+
+    if (data.registeredName) form.setValue('registeredName', data.registeredName, sv);
+    if (data.kcRegNumber) form.setValue('kcRegNumber', data.kcRegNumber, sv);
+    if (data.sex === 'dog' || data.sex === 'bitch') {
+      form.setValue('sex', data.sex, sv);
+    }
+    if (data.dateOfBirth) form.setValue('dateOfBirth', data.dateOfBirth, sv);
+    if (data.colour) form.setValue('colour', data.colour, sv);
+    if (data.sireName) form.setValue('sireName', data.sireName, sv);
+    if (data.damName) form.setValue('damName', data.damName, sv);
+    if (data.breederName) form.setValue('breederName', data.breederName, sv);
+
+    if (data.breed) {
+      if (breeds) {
+        const matched = breeds.find((b) => b.name === data.breed);
+        if (matched) form.setValue('breedId', matched.id, sv);
+      } else {
+        pendingBreedName.current = data.breed;
+      }
+    }
+
+    setRemiResults([]);
+    toast.success('Dog details populated from Remi', {
+      description: `${data.registeredName} — check the fields and fill in anything missing.`,
+    });
+  }
 
   const kcLookup = trpc.dogs.kcLookup.useMutation({
     onSuccess: (results) => {
@@ -485,30 +527,45 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                     )}
                   </Button>
 
-                  {/* Remi local results */}
+                  {/* Remi local results — clicking the dog name populates
+                      the form. A secondary "Go to existing profile →" link
+                      is offered underneath for the rare case where the user
+                      actually wants to navigate to the existing dog rather
+                      than create a new entry. */}
                   {remiResults.length > 0 && (
                     <div className="mt-3 space-y-2">
                       <p className="text-sm font-medium text-emerald-700">
-                        Found in Remi — is this your dog?
+                        Found in Remi — tap to fill in the details
                       </p>
                       <div className="space-y-1">
                         {remiResults.map((dog) => (
-                          <a
+                          <div
                             key={dog.id}
-                            href={`/dogs/${dog.id}`}
-                            className="flex w-full flex-col gap-0.5 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-left text-sm transition-colors hover:bg-emerald-100 sm:flex-row sm:items-center sm:justify-between sm:gap-2 sm:py-2"
+                            className="rounded-md border border-emerald-200 bg-emerald-50"
                           >
-                            <div className="min-w-0">
-                              <span className="font-medium">{dog.registeredName}</span>
-                              {dog.breed && (
-                                <span className="ml-2 text-muted-foreground">{dog.breed}</span>
-                              )}
-                            </div>
-                            <span className="shrink-0 text-xs text-muted-foreground">
-                              {dog.sex === 'bitch' ? 'Bitch' : dog.sex === 'dog' ? 'Dog' : ''}
-                              {dog.kcRegNumber ? ` · ${dog.kcRegNumber}` : ''}
-                            </span>
-                          </a>
+                            <button
+                              type="button"
+                              onClick={() => applyRemiResult(dog)}
+                              className="flex w-full flex-col gap-0.5 px-3 py-2.5 text-left text-sm transition-colors hover:bg-emerald-100 sm:flex-row sm:items-center sm:justify-between sm:gap-2 sm:py-2"
+                            >
+                              <div className="min-w-0">
+                                <span className="font-medium">{dog.registeredName}</span>
+                                {dog.breed && (
+                                  <span className="ml-2 text-muted-foreground">{dog.breed}</span>
+                                )}
+                              </div>
+                              <span className="shrink-0 text-xs text-muted-foreground">
+                                {dog.sex === 'bitch' ? 'Bitch' : dog.sex === 'dog' ? 'Dog' : ''}
+                                {dog.kcRegNumber ? ` · ${dog.kcRegNumber}` : ''}
+                              </span>
+                            </button>
+                            <a
+                              href={`/dogs/${dog.id}`}
+                              className="block border-t border-emerald-200 px-3 py-1.5 text-center text-xs text-emerald-700 hover:bg-emerald-100"
+                            >
+                              Go to existing profile →
+                            </a>
+                          </div>
                         ))}
                       </div>
                       <Button
