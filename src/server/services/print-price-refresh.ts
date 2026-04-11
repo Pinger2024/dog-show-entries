@@ -18,9 +18,11 @@
  * missing.
  */
 
-import { eq, and, sql } from 'drizzle-orm';
-import { db } from '@/server/db';
-import { printPriceCache } from '@/server/db/schema';
+import {
+  getTradePrice,
+  getAvailableQuantities,
+} from './mixam';
+import { PRINT_PRODUCTS } from '@/lib/print-products';
 
 /**
  * Neutralised — Mixam's pricing model is per-quantity, not bulk
@@ -40,94 +42,67 @@ export async function refreshAllPrintPrices(): Promise<{
 }
 
 /**
- * Get a cached trade price for specific specs + quantity.
- * Returns the TOTAL price in pence (ex-VAT) for the given quantity, or null if not cached.
- * Callers should compute unit price by dividing after markup to avoid premature rounding.
+ * Legacy-shaped accessor that the tRPC print-orders router still
+ * imports. Under Tradeprint this read from a local cache populated
+ * by the refresh job; under Mixam we fetch live per-quantity via
+ * the /offers endpoint and scale to the total.
+ *
+ * Returns TOTAL price in pence (ex-VAT), or null if no offer.
  */
 export async function getCachedTotalPrice(
   productName: string,
   specs: Record<string, string>,
   quantity: number,
-  serviceLevel: string = 'standard'
+  serviceLevel: string = 'standard',
 ): Promise<number | null> {
-  const rows = await db
-    .select({ totalPricePence: printPriceCache.totalPricePence })
-    .from(printPriceCache)
-    .where(
-      and(
-        eq(printPriceCache.tradeprintProductName, productName),
-        eq(printPriceCache.serviceLevel, serviceLevel.toLowerCase()),
-        eq(printPriceCache.quantity, quantity),
-        sql`${printPriceCache.specs} @> ${JSON.stringify(specs)}::jsonb`
-      )
-    )
-    .limit(1);
-
-  if (rows.length === 0) return null;
-  return rows[0].totalPricePence;
+  const unitPence = await getTradePrice(productName, specs, quantity, serviceLevel);
+  if (unitPence == null) return null;
+  return unitPence * quantity;
 }
 
 /**
- * Get all available quantities for specific specs from cache.
+ * Legacy-shaped accessor — returns the canonical list of quantities
+ * the Print Shop UI offers. Under Tradeprint this was filtered from
+ * the cached CSV; under Mixam there's no bulk list so we use the
+ * same canonical quantity set that mixam.ts exposes.
  */
 export async function getCachedQuantities(
   productName: string,
-  specs: Record<string, string>,
-  serviceLevel: string = 'standard'
+  _specs: Record<string, string>,
+  serviceLevel: string = 'standard',
 ): Promise<number[]> {
-  const rows = await db
-    .select({ quantity: printPriceCache.quantity })
-    .from(printPriceCache)
-    .where(
-      and(
-        eq(printPriceCache.tradeprintProductName, productName),
-        eq(printPriceCache.serviceLevel, serviceLevel.toLowerCase()),
-        sql`${printPriceCache.specs} @> ${JSON.stringify(specs)}::jsonb`
-      )
-    )
-    .orderBy(printPriceCache.quantity);
-
-  return rows.map((r) => r.quantity);
+  return getAvailableQuantities(productName, _specs, serviceLevel);
 }
 
 /**
- * Check if the cache has been populated.
- */
-export async function isCachePopulated(): Promise<boolean> {
-  const [row] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(printPriceCache);
-  return Number(row?.count ?? 0) > 0;
-}
-
-/**
- * Get distinct values for a specific spec key, optionally filtered by other specs.
- * Powers the configurator dropdowns — shows only compatible options.
+ * Legacy-shaped accessor — returns distinct values a spec key can
+ * take for a given product. Under Tradeprint this filtered the
+ * cached CSV; under Mixam we derive it from the product's static
+ * presets + defaultSpecs in print-products.ts. This limits the UI
+ * to the same set of spec combinations the product was configured
+ * with (which is what we want — every other combination would
+ * require a bespoke Mixam spec translation anyway).
  */
 export async function getDistinctSpecValues(
   productName: string,
   specKey: string,
-  serviceLevel: string = 'standard',
-  filterSpecs?: Record<string, string>
+  _serviceLevel: string = 'standard',
+  _filterSpecs?: Record<string, string>,
 ): Promise<string[]> {
-  const conditions = [
-    eq(printPriceCache.tradeprintProductName, productName),
-    eq(printPriceCache.serviceLevel, serviceLevel.toLowerCase()),
-  ];
-
-  if (filterSpecs && Object.keys(filterSpecs).length > 0) {
-    conditions.push(sql`${printPriceCache.specs} @> ${JSON.stringify(filterSpecs)}::jsonb`);
+  const product = PRINT_PRODUCTS.find(
+    (p) => p.tradeprintProductName === productName,
+  );
+  if (!product) return [];
+  const values = new Set<string>();
+  const defaultValue = product.defaultSpecs[specKey];
+  if (defaultValue) values.add(defaultValue);
+  for (const preset of product.presets) {
+    const v = preset.specs[specKey];
+    if (v) values.add(v);
   }
-
-  const rows = await db
-    .selectDistinct({
-      value: sql<string>`${printPriceCache.specs}->>${specKey}`,
-    })
-    .from(printPriceCache)
-    .where(and(...conditions));
-
-  return rows
-    .map((r) => r.value)
-    .filter((v): v is string => v !== null && v !== '')
-    .sort();
+  return Array.from(values);
 }
+
+// (Old Tradeprint DB-cache accessors lived here — deleted as part of
+// the Mixam swap. The Mixam-backed replacements are above, near the
+// top of the file.)
