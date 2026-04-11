@@ -91,9 +91,22 @@ export const PRINT_PRODUCTS: PrintProduct[] = [
   {
     documentType: 'catalogue',
     label: 'Catalogues',
-    description: 'Perfect bound booklets — the official show catalogue',
-    tradeprintProductName: 'Perfect Bound Booklets',
-    tradeprintProductId: 'PRD-SRDTEO0K',
+    // "Saddle Stitched Booklets" is the correct Tradeprint product for
+    // the show-catalogue use case (50-500 copies, A5, 16-32 pages).
+    // Perfect Bound Booklets — the previous value — has a minimum order
+    // quantity of 1000+ which doesn't match any realistic dog show.
+    description: 'Saddle-stitched A5 booklets — the official show catalogue',
+    tradeprintProductName: 'Saddle Stitched Booklets',
+    // TODO(print-shop): this product ID was set to 'PRD-SRDTEO0K' when
+    // the product name was Perfect Bound Booklets, but that ID doesn't
+    // match the Tradeprint sandbox catalogue (sandbox Perfect Bound is
+    // actually PRD-HKSRILFY as of 2026-04-11). Saddle Stitched Booklets
+    // is not in the sandbox at all, so the correct production ID
+    // cannot be verified from here — it needs to be fetched from the
+    // production Tradeprint account dashboard before the Print Shop
+    // can submit real orders. See
+    // `memory/project_inhouse_print_pricing.md` for context.
+    tradeprintProductId: 'PRD-TODO-SADDLE-STITCHED-BOOKLETS',
     defaultSpecs: {
       'Size': 'A5 Portrait',
       'Cover Material': '250gsm Art Paper Silk Finish',
