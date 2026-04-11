@@ -417,28 +417,6 @@ export const PRINT_ORDER_STATUS_CONFIG: Record<string, { label: string; variant:
 };
 
 // ── Mixam spec translation ────────────────────────────────────
-//
-// The legacy Tradeprint product records here still drive the Print
-// Shop UI (preset labels, configurable specs, etc.), but the actual
-// pricing + order submission goes through the Mixam API as of
-// 2026-04-11 (backlog #99). These helpers bridge the two worlds:
-// they take a Tradeprint-style product name + spec map and translate
-// it to a Mixam ItemSpecification that getOffers / submitOrder can
-// accept.
-//
-// The translation is deliberate rather than automatic. Mixam's data
-// model (product + components + numeric substrate IDs) is completely
-// different to Tradeprint's (product name + free-form spec strings),
-// so each product needs a bespoke translator. Currently only the
-// catalogue (saddle-stitched booklet) is wired through — prize cards,
-// ring numbers, and other document types will fall through to null
-// and the calling code will log a "no Mixam mapping" error until
-// they're added.
-//
-// Schema column rename is deferred — the database still stores
-// `tradeprintProductId`, `tradeprintOrderRef`, `tradeprintStatus`
-// columns and the Print Shop UI still uses those names in labels.
-// That's cosmetic debt, tracked as part of #99 follow-up work.
 
 import type {
   MixamItemSpecification,
@@ -451,9 +429,7 @@ import {
   MIXAM_SUBSTRATE_WEIGHT,
 } from '@/server/services/mixam';
 
-/** Extract the substrate weight ID from a Tradeprint "Paper Type" spec.
- *  Tradeprint strings look like "100gsm Art Paper Silk Finish" —
- *  we match the "Xgsm" prefix. */
+/** Parse "100gsm Art Paper Silk Finish" → Mixam weight ID. */
 function paperWeightToMixamId(paperSpec: string): number | null {
   const m = paperSpec.match(/^(\d+)gsm/i);
   if (!m) return null;
@@ -461,18 +437,16 @@ function paperWeightToMixamId(paperSpec: string): number | null {
   return MIXAM_SUBSTRATE_WEIGHT[gsm] ?? null;
 }
 
-/** Extract substrate type (SILK / GLOSS / UNCOATED) from a Tradeprint
- *  "Paper Type" spec. */
+/** Parse "… Silk Finish" → Mixam substrate type (silk/gloss/uncoated). */
 function paperTypeToMixamId(paperSpec: string): number {
   const lower = paperSpec.toLowerCase();
   if (lower.includes('silk')) return MIXAM_SUBSTRATE_TYPE.SILK;
   if (lower.includes('gloss')) return MIXAM_SUBSTRATE_TYPE.GLOSS;
   if (lower.includes('uncoated')) return MIXAM_SUBSTRATE_TYPE.UNCOATED;
-  return MIXAM_SUBSTRATE_TYPE.SILK; // default
+  return MIXAM_SUBSTRATE_TYPE.SILK;
 }
 
-/** Map Tradeprint size strings ("A4 Portrait", "A5 Landscape") to
- *  Mixam's { format, orientation } pair. */
+/** Parse "A4 Portrait" / "A5 Landscape" → Mixam format + orientation. */
 function sizeToMixamFormat(size: string): {
   format: number;
   orientation: 'PORTRAIT' | 'LANDSCAPE';
@@ -481,15 +455,10 @@ function sizeToMixamFormat(size: string): {
   const orientation: 'PORTRAIT' | 'LANDSCAPE' = lower.includes('landscape')
     ? 'LANDSCAPE'
     : 'PORTRAIT';
-  // Widen the literal-union return of MIXAM_FORMAT.* to plain number
-  // so we can reassign across formats without TS narrowing to the
-  // first-assigned literal.
-  let format: number = MIXAM_FORMAT.A5;
-  if (lower.includes('a3')) format = MIXAM_FORMAT.A3;
-  else if (lower.includes('a4')) format = MIXAM_FORMAT.A4;
-  else if (lower.includes('a5')) format = MIXAM_FORMAT.A5;
-  else if (lower.includes('a6')) format = MIXAM_FORMAT.A6;
-  return { format, orientation };
+  if (lower.includes('a3')) return { format: MIXAM_FORMAT.A3, orientation };
+  if (lower.includes('a4')) return { format: MIXAM_FORMAT.A4, orientation };
+  if (lower.includes('a6')) return { format: MIXAM_FORMAT.A6, orientation };
+  return { format: MIXAM_FORMAT.A5, orientation };
 }
 
 /**

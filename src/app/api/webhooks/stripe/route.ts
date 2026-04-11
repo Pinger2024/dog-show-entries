@@ -49,9 +49,9 @@ export async function POST(request: NextRequest) {
           })
           .where(eq(printOrders.id, printOrderId));
 
-        // Submit to Tradeprint (non-blocking)
-        submitPrintOrderToTradeprint(printOrderId).catch((err) =>
-          console.error('[webhook] Tradeprint submission failed:', err)
+        // Submit to Mixam (non-blocking)
+        submitPrintOrderToMixam(printOrderId).catch((err) =>
+          console.error('[webhook] Mixam submission failed:', err)
         );
         break;
       }
@@ -344,34 +344,28 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * Submit a print order to Tradeprint after successful payment.
+ * Submit a print order to Mixam after successful payment.
  * Runs asynchronously so the webhook returns quickly.
  */
-async function submitPrintOrderToTradeprint(printOrderId: string) {
+async function submitPrintOrderToMixam(printOrderId: string) {
   const order = await db.query.printOrders.findFirst({
     where: eq(printOrders.id, printOrderId),
     with: { items: true, orderedBy: true, show: true },
   });
 
   if (!order || !order.items.length) {
-    console.error(`[tradeprint] Cannot submit: order ${printOrderId} not found or empty`);
+    console.error(`[mixam] Cannot submit: order ${printOrderId} not found or empty`);
     return;
   }
 
-  // Check all PDFs are generated
   const missingPdfs = order.items.filter((i) => !i.pdfPublicUrl);
   if (missingPdfs.length > 0) {
-    console.error(`[tradeprint] Missing PDFs for items: ${missingPdfs.map((i) => i.documentType).join(', ')}`);
+    console.error(`[mixam] Missing PDFs for items: ${missingPdfs.map((i) => i.documentType).join(', ')}`);
     return;
   }
 
   try {
-    // Uses the legacy-shaped adapter in mixam.ts so we don't have to
-    // refactor this whole webhook handler on the Mixam swap. The
-    // adapter translates the Tradeprint-shaped call into a Mixam
-    // order and returns the resulting orderRef in the same shape.
-    // See backlog #99 for the full production-readiness plan.
-    const { submitOrderLegacy, capitaliseServiceLevel } = await import('@/server/services/mixam');
+    const { submitOrderLegacy } = await import('@/server/services/mixam');
 
     const nameParts = (order.deliveryName ?? 'Show Secretary').split(' ');
     const firstName = nameParts[0] ?? 'Show';
@@ -391,7 +385,6 @@ async function submitPrintOrderToTradeprint(printOrderId: string) {
       },
       items: order.items.map((item) => ({
         fileUrl: item.pdfPublicUrl!,
-        serviceLevel: capitaliseServiceLevel(order.serviceLevel),
         productId: item.tradeprintProductId ?? '',
         quantity: item.quantity,
         productionData: (item.printSpecs as Record<string, string>) ?? {},
@@ -417,21 +410,19 @@ async function submitPrintOrderToTradeprint(printOrderId: string) {
       .update(printOrders)
       .set({
         status: 'submitted',
-        // Column name is still `tradeprintOrderRef` from the previous
-        // integration — rename deferred to a future migration. The
-        // value is now a Mixam order ID.
+        // Column name still `tradeprintOrderRef` pending a schema
+        // rename; the value is a Mixam order ID.
         tradeprintOrderRef: result.orderRef,
       })
       .where(eq(printOrders.id, printOrderId));
 
     console.log(`[mixam] Order ${printOrderId} submitted: ${result.orderRef}`);
 
-    // Send confirmation email (non-blocking)
     sendPrintOrderConfirmationEmail(printOrderId).catch((err) =>
       console.error('[webhook] Print order confirmation email failed:', err)
     );
   } catch (err) {
-    console.error(`[tradeprint] Submission failed for ${printOrderId}:`, err);
+    console.error(`[mixam] Submission failed for ${printOrderId}:`, err);
     // Order stays as 'paid' — can retry via refreshStatus
   }
 }

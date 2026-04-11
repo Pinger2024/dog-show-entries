@@ -24,7 +24,6 @@ import {
   type ShowStats,
 } from '@/lib/print-products';
 import {
-  getTradePrice,
   getAvailableQuantities,
   getDeliveryEstimate,
   getOrderStatus,
@@ -32,9 +31,7 @@ import {
 import { sendPrintOrderDispatchEmail } from '@/server/services/email';
 import {
   getCachedTotalPrice,
-  getCachedQuantities,
   getDistinctSpecValues,
-  refreshAllPrintPrices,
 } from '@/server/services/print-price-refresh';
 import { createPaymentIntent } from '@/server/services/stripe';
 import { generateAndUploadForPrint } from '@/server/services/pdf-generation';
@@ -95,26 +92,12 @@ export const printOrdersRouter = createTRPCRouter({
       const stats = await getShowStatsForPrinting(ctx.db, input.showId);
       const products = getPrintableProducts();
 
+      const quantities = getAvailableQuantities();
+
       const available = await Promise.all(
         products.map(async (product) => {
           try {
-            // Get quantities from cache (instant) with fallback to live API
-            let quantities = await getCachedQuantities(
-              product.tradeprintProductName,
-              product.defaultSpecs,
-              input.serviceLevel
-            );
-
-            if (quantities.length === 0) {
-              quantities = await getAvailableQuantities(
-                product.tradeprintProductId,
-                product.defaultSpecs
-              );
-            }
-
-            if (quantities.length === 0) return null;
-
-            // Use show-aware quantity options if available, otherwise raw Tradeprint quantities
+            // Use show-aware quantity options if available, otherwise the canonical Mixam list
             const displayQuantities = product.getQuantityOptions
               ? product.getQuantityOptions(stats, quantities)
               : quantities;
@@ -122,22 +105,19 @@ export const printOrdersRouter = createTRPCRouter({
             const suggestedQty = product.suggestQuantity(stats);
             const bestQty = displayQuantities.find((q) => q >= suggestedQty) ?? displayQuantities[displayQuantities.length - 1];
 
-            // Get total price for the suggested quantity with default specs (instant from cache)
+            // Fetch the default-spec price and all preset prices in parallel
             const defaultTotalCost = await getCachedTotalPrice(
               product.tradeprintProductName,
               product.defaultSpecs,
               bestQty,
-              input.serviceLevel
             );
 
-            // Get preset prices in parallel
             const presetPricing = await Promise.all(
               product.presets.map(async (preset) => {
                 const totalCost = await getCachedTotalPrice(
                   product.tradeprintProductName,
                   preset.specs,
                   bestQty,
-                  input.serviceLevel
                 );
                 return {
                   id: preset.id,
@@ -194,30 +174,16 @@ export const printOrdersRouter = createTRPCRouter({
       const allSpecs = input.currentSpecs ?? product.defaultSpecs;
       const configurableKeys = new Set(product.configurableSpecs.map((s) => s.key));
 
-      // Run spec options and price lookup concurrently
-      const [entries, totalCost] = await Promise.all([
-        Promise.all(
-          product.configurableSpecs.map(async (spec) => {
-            const filterSpecs: Record<string, string> = {};
-            for (const key of configurableKeys) {
-              if (key !== spec.key && allSpecs[key]) {
-                filterSpecs[key] = allSpecs[key];
-              }
-            }
+      // getDistinctSpecValues is synchronous (pure product-config lookup);
+      // only the price query actually hits Mixam.
+      const specEntries = product.configurableSpecs.map((spec) => {
+        const values = getDistinctSpecValues(input.productName, spec.key);
+        return [spec.key, values] as const;
+      });
 
-            const values = await getDistinctSpecValues(
-              input.productName,
-              spec.key,
-              input.serviceLevel,
-              Object.keys(filterSpecs).length > 0 ? filterSpecs : undefined
-            );
-            return [spec.key, values] as const;
-          })
-        ),
-        input.currentSpecs && input.quantity
-          ? getCachedTotalPrice(input.productName, input.currentSpecs, input.quantity, input.serviceLevel)
-          : Promise.resolve(null),
-      ]);
+      const totalCost = input.currentSpecs && input.quantity
+        ? await getCachedTotalPrice(input.productName, input.currentSpecs, input.quantity)
+        : null;
 
       const price = totalCost !== null && input.quantity
         ? {
@@ -226,7 +192,7 @@ export const printOrdersRouter = createTRPCRouter({
           }
         : null;
 
-      return { options: Object.fromEntries(entries) as Record<string, string[]>, price };
+      return { options: Object.fromEntries(specEntries) as Record<string, string[]>, price };
     }),
 
   /** Get a quote for selected items (supports custom specs via presets or manual selection) */
@@ -267,27 +233,11 @@ export const printOrdersRouter = createTRPCRouter({
             const specs = item.customSpecs
               ?? (item.presetId ? getPresetSpecs(product, item.presetId) : product.defaultSpecs);
 
-            // Try local cache first (instant), fall back to live API (slow)
-            // Both return TOTAL price for the quantity (not unit price)
-            let totalTradeCost = await getCachedTotalPrice(
+            const totalTradeCost = await getCachedTotalPrice(
               product.tradeprintProductName,
               specs,
               item.quantity,
-              input.serviceLevel
             );
-
-            if (totalTradeCost === null) {
-              // Live API returns unit price — convert to total
-              const unitCost = await getTradePrice(
-                product.tradeprintProductName,
-                specs,
-                item.quantity,
-                input.serviceLevel
-              );
-              if (unitCost !== null) {
-                totalTradeCost = unitCost * item.quantity;
-              }
-            }
 
             if (totalTradeCost === null) {
               throw new TRPCError({
@@ -317,10 +267,8 @@ export const printOrdersRouter = createTRPCRouter({
         firstProduct
           ? getDeliveryEstimate(
               firstProduct.tradeprintProductId,
-              input.serviceLevel,
               input.items[0].quantity,
               firstProduct.defaultSpecs,
-              input.postcode
             )
           : null,
       ]);
@@ -625,16 +573,6 @@ export const printOrdersRouter = createTRPCRouter({
         updated: results.filter((r) => r.changed).length,
         results,
       };
-    }),
-
-  /** Admin: refresh the local print price cache from Tradeprint */
-  refreshPriceCache: secretaryProcedure
-    .mutation(async ({ ctx }) => {
-      if (!ctx.callerIsAdmin) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin only' });
-      }
-
-      return refreshAllPrintPrices();
     }),
 });
 
