@@ -9,6 +9,7 @@ import {
   ExternalLink,
   Hash,
   List,
+  Save,
   Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -258,17 +259,36 @@ function PdfViewerButton({
             {icon}
             <span className="truncate">{label}</span>
           </h2>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+            {/* Save button — uses the attachment URL (no ?preview=1) so
+                the server sends Content-Disposition: attachment. The
+                `download` attribute is a hint for desktop browsers; on
+                iOS it typically opens the share sheet with "Save to
+                Files" as an option. */}
             <Button variant="outline" size="sm" asChild>
               <a
                 href={url}
+                download
+                target="_blank"
+                rel="noopener noreferrer"
+                className="gap-1"
+              >
+                <Save className="size-3.5" />
+                <span className="hidden sm:inline">Save</span>
+              </a>
+            </Button>
+            {/* Open in new tab — fallback when the iframe refuses to
+                render the PDF (common on some mobile browsers). Points
+                at the preview URL so the new tab displays inline. */}
+            <Button variant="outline" size="sm" asChild>
+              <a
+                href={inlineUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="gap-1"
               >
                 <ExternalLink className="size-3.5" />
                 <span className="hidden sm:inline">Open in new tab</span>
-                <span className="sm:hidden">Open</span>
               </a>
             </Button>
             <Button
