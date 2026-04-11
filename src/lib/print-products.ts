@@ -262,77 +262,26 @@ export const PRINT_PRODUCTS: PrintProduct[] = [
   {
     documentType: 'ring_board',
     label: 'Ring Boards',
-    description: 'Posters — one per ring showing the running order',
-    tradeprintProductName: 'Indoor Posters',
-    tradeprintProductId: 'PRD-WYKGWGHH',
-    defaultSpecs: {
-      'Size': 'A3',
-      'Paper Type': '170gsm Art Paper Silk Finish',
-      'Sides Printed': 'Single Sided',
-    },
-    presets: [
-      {
-        id: 'standard',
-        label: 'Standard',
-        description: 'A3 silk poster',
-        tier: 'standard',
-        specs: {
-          'Size': 'A3',
-          'Paper Type': '170gsm Art Paper Silk Finish',
-          'Sides Printed': 'Single Sided',
-        },
-      },
-    ],
-    configurableSpecs: [
-      { key: 'Paper Type', label: 'Paper' },
-      { key: 'Size', label: 'Size' },
-    ],
+    description: 'Posters — one per ring. Download and print at home.',
+    tradeprintProductName: '',
+    tradeprintProductId: '',
+    defaultSpecs: {},
+    presets: [],
+    configurableSpecs: [],
     suggestQuantity: (stats) => Math.max(stats.ringCount, 1),
-    getQuantityOptions: (stats, tpQty) => {
-      // Ring boards: based on ring count, offer a few options around it
-      const ringCount = Math.max(stats.ringCount, 1);
-      const options = [ringCount, ringCount * 2, ringCount * 3, 10, 20, 50];
-      return generateSnappedOptions(options.filter((n) => n > 0), tpQty);
-    },
+    downloadOnly: true,
   },
   {
     documentType: 'ring_numbers',
     label: 'Ring Numbers',
-    description: 'Numbered cards — one per dog, fits ring clip',
-    tradeprintProductName: 'Flyers',
-    tradeprintProductId: 'PRD-CMHPUMSF',
-    defaultSpecs: {
-      'Size': 'A6',
-      'Sides Printed': 'Single Sided',
-      'Paper Type': '130gsm Art Paper Silk Finish',
-      'Lamination': 'None',
-      'Sets': '1',
-    },
-    presets: [
-      {
-        id: 'standard',
-        label: 'Standard',
-        description: '130gsm silk — matches industry standard',
-        tier: 'standard',
-        specs: {
-          'Size': 'A6',
-          'Sides Printed': 'Single Sided',
-          'Paper Type': '130gsm Art Paper Silk Finish',
-          'Lamination': 'None',
-          'Sets': '1',
-        },
-      },
-    ],
-    configurableSpecs: [
-      { key: 'Paper Type', label: 'Card Weight' },
-    ],
-    suggestQuantity: (stats) => roundUp10(stats.confirmedEntries),
-    getQuantityOptions: (stats, tpQty) => {
-      // Ring numbers: 1 set = total entries. Offer the exact count snapped to available
-      const entryCount = Math.max(stats.confirmedEntries, 50);
-      const options = [entryCount, roundUp10(entryCount * 1.1)];
-      return generateSnappedOptions(options, tpQty);
-    },
+    description: 'Numbered cards — one per dog. Download and print at home.',
+    tradeprintProductName: '',
+    tradeprintProductId: '',
+    defaultSpecs: {},
+    presets: [],
+    configurableSpecs: [],
+    suggestQuantity: (stats) => stats.confirmedEntries,
+    downloadOnly: true,
   },
   {
     documentType: 'judges_books',
