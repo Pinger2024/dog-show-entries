@@ -11,10 +11,10 @@ import {
 } from '@/lib/placements';
 
 describe('KC_PLACEMENTS', () => {
-  it('has 7 placements in order', () => {
-    expect(KC_PLACEMENTS).toHaveLength(7);
+  it('has 5 placements (podium through VHC)', () => {
+    expect(KC_PLACEMENTS).toHaveLength(5);
     expect(KC_PLACEMENTS[0].value).toBe(1);
-    expect(KC_PLACEMENTS[6].value).toBe(7);
+    expect(KC_PLACEMENTS[4].value).toBe(5);
   });
 
   it('has expected labels for standard RKC placements', () => {
@@ -23,8 +23,12 @@ describe('KC_PLACEMENTS', () => {
     expect(KC_PLACEMENTS[2].label).toBe('3rd');
     expect(KC_PLACEMENTS[3].label).toBe('Reserve');
     expect(KC_PLACEMENTS[4].label).toBe('VHC');
-    expect(KC_PLACEMENTS[5].label).toBe('HC');
-    expect(KC_PLACEMENTS[6].label).toBe('Commended');
+  });
+
+  it('does not include HC or Commended — UK single-breed shows do not card past VHC', () => {
+    const labels = KC_PLACEMENTS.map((p) => p.label as string);
+    expect(labels).not.toContain('HC');
+    expect(labels).not.toContain('Commended');
   });
 });
 
@@ -45,12 +49,11 @@ describe('getPlacementLabel', () => {
     expect(getPlacementLabel(3)).toBe('3rd');
     expect(getPlacementLabel(4)).toBe('Reserve');
     expect(getPlacementLabel(5)).toBe('VHC');
-    expect(getPlacementLabel(6)).toBe('HC');
-    expect(getPlacementLabel(7)).toBe('Commended');
   });
 
-  it('returns fallback for unknown placement', () => {
-    expect(getPlacementLabel(8)).toBe('8th');
+  it('returns numeric fallback for unknown placement (incl. legacy HC/C data)', () => {
+    expect(getPlacementLabel(6)).toBe('6th');
+    expect(getPlacementLabel(7)).toBe('7th');
     expect(getPlacementLabel(10)).toBe('10th');
   });
 });
@@ -59,11 +62,10 @@ describe('getPlacementShortLabel', () => {
   it('returns short labels', () => {
     expect(getPlacementShortLabel(1)).toBe('1st');
     expect(getPlacementShortLabel(4)).toBe('Res');
-    expect(getPlacementShortLabel(6)).toBe('HC');
-    expect(getPlacementShortLabel(7)).toBe('C');
+    expect(getPlacementShortLabel(5)).toBe('VHC');
   });
 
-  it('returns fallback for unknown placement', () => {
+  it('returns numeric fallback for unknown placement', () => {
     expect(getPlacementShortLabel(9)).toBe('9th');
   });
 });

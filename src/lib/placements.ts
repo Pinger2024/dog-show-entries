@@ -1,11 +1,14 @@
+// Placements cap at 5 (VHC) — research across 14 non-GSD single-breed
+// championship schedules (Higham Press / Have A Dog Day, Apr 2026) showed
+// zero shows carding past VHC. Some shows only card the podium (RKC
+// minimum is 3). Nothing in the sample used HC or Commended, so the
+// dropdown, prize cards, and catalogue display all cap at 5.
 export const KC_PLACEMENTS = [
   { value: 1, label: '1st', shortLabel: '1st' },
   { value: 2, label: '2nd', shortLabel: '2nd' },
   { value: 3, label: '3rd', shortLabel: '3rd' },
   { value: 4, label: 'Reserve', shortLabel: 'Res' },
   { value: 5, label: 'VHC', shortLabel: 'VHC' },
-  { value: 6, label: 'HC', shortLabel: 'HC' },
-  { value: 7, label: 'Commended', shortLabel: 'C' },
 ] as const;
 
 /**
@@ -109,17 +112,14 @@ export function getPlacementShortLabel(value: number): string {
 }
 
 /**
- * Returns available RKC placements based on show scope.
- * All-breed (general/group): 1st–HC (6 places)
- * Breed (single_breed): 1st–Commended (all 7)
+ * Returns available RKC placements. Kept as a function (vs. a direct
+ * export of KC_PLACEMENTS) so call sites don't need to change if the
+ * breed/group distinction ever comes back.
  */
 export function getPlacementsForScope(
-  showScope: 'single_breed' | 'group' | 'general'
+  _showScope: 'single_breed' | 'group' | 'general'
 ) {
-  if (showScope === 'single_breed') {
-    return KC_PLACEMENTS; // all 7
-  }
-  return KC_PLACEMENTS.filter((p) => p.value <= 6); // 1st–HC, no Commended
+  return KC_PLACEMENTS;
 }
 
 export const achievementLabels: Record<string, string> = {
@@ -151,6 +151,4 @@ export const placementColors: Record<number, string> = {
   3: 'bg-amber-100 text-amber-800 border-amber-200',
   4: 'bg-blue-50 text-blue-700 border-blue-200',
   5: 'bg-purple-50 text-purple-700 border-purple-200',
-  6: 'bg-teal-50 text-teal-700 border-teal-200',
-  7: 'bg-slate-50 text-slate-600 border-slate-200',
 };

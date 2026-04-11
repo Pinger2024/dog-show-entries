@@ -48,7 +48,6 @@ const placementPreviews = [
   { label: '3rd', colour: 'bg-yellow-100 text-yellow-800 border-yellow-300' },
   { label: 'Reserve', colour: 'bg-green-100 text-green-800 border-green-300' },
   { label: 'VHC', colour: 'bg-purple-100 text-purple-800 border-purple-300' },
-  { label: 'HC', colour: 'bg-orange-100 text-orange-800 border-orange-300' },
 ];
 
 interface DocumentLink {

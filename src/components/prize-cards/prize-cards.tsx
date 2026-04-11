@@ -33,8 +33,10 @@ interface PrizeCardsProps {
   show: PrizeCardShowInfo;
   classes: PrizeCardClass[];
   includeJudgeName: boolean;
-  placements: number; // 1–6, how many placement cards per class
-  cardStyle?: PrizeCardStyle; // 'filled' = coloured background, 'outline' = white bg + coloured text/frame
+  /** How many placement cards per class, 1–5 (RKC podium through VHC). */
+  placements: number;
+  /** 'filled' = coloured background, 'outline' = white bg + coloured text/frame */
+  cardStyle?: PrizeCardStyle;
 }
 
 const SHOW_TYPE_LABELS: Record<string, string> = {
@@ -55,26 +57,17 @@ const PLACEMENT_LABELS: Record<number, string> = {
   3: 'Third',
   4: 'Reserve',
   5: 'Very Highly Commended',
-  6: 'Highly Commended',
 };
 
-const PLACEMENT_ABBREVIATIONS: Record<number, string> = {
-  1: '1st',
-  2: '2nd',
-  3: '3rd',
-  4: 'Res',
-  5: 'VHC',
-  6: 'HC',
-};
-
-// Traditional UK dog show prize card colours — matches Amanda's spec
-const PLACEMENT_COLOURS: Record<number, { accent: string; filled: string; outline: string }> = {
-  1: { accent: '#C41E3A', filled: '#FDE8EC', outline: '#FAFAFA' }, // Red
-  2: { accent: '#1E4D8C', filled: '#E3ECF6', outline: '#FAFAFA' }, // Blue
-  3: { accent: '#C5960C', filled: '#FDF6E0', outline: '#FAFAFA' }, // Yellow
-  4: { accent: '#1E7A3A', filled: '#E4F5EA', outline: '#FAFAFA' }, // Green
-  5: { accent: '#6B2FA0', filled: '#F3EAFA', outline: '#FAFAFA' }, // Purple
-  6: { accent: '#D45B07', filled: '#FDF0E4', outline: '#FAFAFA' }, // Orange
+// Traditional UK dog show prize card colours — red/blue/yellow/green/purple
+// for 1st through VHC. No HC (orange) — research showed zero shows card
+// past VHC, so the 6th colour was removed.
+const PLACEMENT_COLOURS: Record<number, { accent: string; filled: string }> = {
+  1: { accent: '#C41E3A', filled: '#FDE8EC' }, // Red
+  2: { accent: '#1E4D8C', filled: '#E3ECF6' }, // Blue
+  3: { accent: '#C5960C', filled: '#FDF6E0' }, // Yellow
+  4: { accent: '#1E7A3A', filled: '#E4F5EA' }, // Green
+  5: { accent: '#6B2FA0', filled: '#F3EAFA' }, // Purple
 };
 
 export type PrizeCardStyle = 'filled' | 'outline';
@@ -211,9 +204,10 @@ const s = StyleSheet.create({
     marginBottom: 6,
     textAlign: 'center',
   },
-  // Judge — was 9pt, now 11pt
+  // Judge — was 11pt, now 13pt per Amanda 2026-04-11 (she wanted it a bit
+  // larger so the judge credit reads more confidently on the card).
   judgeName: {
-    fontSize: 11,
+    fontSize: 13,
     color: '#444',
     marginBottom: 4,
     textAlign: 'center',
@@ -254,7 +248,7 @@ export function PrizeCards({ show, classes, includeJudgeName, placements, cardSt
     year: 'numeric',
   });
   const showTypeLabel = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
-  const placementCount = Math.min(Math.max(placements, 1), 6);
+  const placementCount = Math.min(Math.max(placements, 1), 5);
 
   return (
     <Document title={`Prize Cards — ${show.name}`} author="Remi Show Manager">
@@ -270,7 +264,11 @@ export function PrizeCards({ show, classes, includeJudgeName, placements, cardSt
         return Array.from({ length: placementCount }, (_, placeIdx) => {
           const placement = placeIdx + 1;
           const colours = PLACEMENT_COLOURS[placement];
-          const bgColor = cardStyle === 'outline' ? colours.outline : colours.filled;
+          // outline style: pure white paper — no tint. Amanda saw a faint
+          // grey on printed copies because the old value was #FAFAFA
+          // (almost-white but not white). Printers render that as a
+          // visible background wash.
+          const bgColor = cardStyle === 'outline' ? '#FFFFFF' : colours.filled;
 
           return (
             <Page

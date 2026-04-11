@@ -26,7 +26,8 @@ export interface MarkedResult {
   catalogueNumber: string;
   /** Show class ID */
   showClassId: string;
-  /** Placement: 1=1st, 2=2nd, 3=3rd, 4=Reserve, 5=VHC, 6=HC, 7=Commended */
+  /** Placement: 1=1st, 2=2nd, 3=3rd, 4=Reserve, 5=VHC. System caps at 5
+   *  since no UK single-breed show in our research cards past VHC. */
   placement: number | null;
   /**
    * Non-numeric placement status — mutually exclusive with `placement`.
@@ -64,8 +65,6 @@ const PLACEMENT_LABELS: Record<number, string> = {
   3: '3rd',
   4: 'Res',
   5: 'VHC',
-  6: 'HC',
-  7: 'C',
 };
 
 function getPlacementLabel(placement: number): string {
