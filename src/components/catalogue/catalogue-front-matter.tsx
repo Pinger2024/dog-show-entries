@@ -860,6 +860,33 @@ export function JudgesListPage({ show }: FrontMatterProps) {
 
   if (sortedBreeds.length === 0) return null;
 
+  // Names already rendered in the breed table. Used to avoid
+  // double-rendering when we list "other" judges below.
+  const breedKeyedJudgeNames = new Set(Object.values(judges));
+
+  // Judges with a bio/photo/display-list entry who are NOT assigned to
+  // a specific breed — e.g. JH judges, or dog/bitch-only judges on a
+  // single-breed show. Amanda flagged in testing (msg 863) that these
+  // weren't appearing at all because the breed table skipped them.
+  const otherJudges: Array<{ name: string; roles: string[] }> = [];
+  if (show.judgeDisplayList && show.judgeDisplayList.length > 0) {
+    const LABEL_SEPARATOR = ' \u2014 '; // " — " with explicit em-dash
+    const rolesByJudge = new Map<string, string[]>();
+    for (const label of show.judgeDisplayList) {
+      const sepIdx = label.indexOf(LABEL_SEPARATOR);
+      const role = sepIdx >= 0 ? label.slice(0, sepIdx) : null;
+      const name = sepIdx >= 0 ? label.slice(sepIdx + LABEL_SEPARATOR.length) : label;
+      // Skip judges already in the breed table
+      if (breedKeyedJudgeNames.has(name)) continue;
+      const list = rolesByJudge.get(name) ?? [];
+      if (role) list.push(role);
+      rolesByJudge.set(name, list);
+    }
+    for (const [name, roles] of rolesByJudge) {
+      otherJudges.push({ name, roles });
+    }
+  }
+
   return (
     <Page size="A5" style={styles.frontMatterPage} wrap>
       <SectionBand title="List of Judges" />
@@ -902,6 +929,46 @@ export function JudgesListPage({ show }: FrontMatterProps) {
           </View>
         );
       })}
+
+      {/* Other judges (JH, dogs/bitches-only, etc.) not in the breed
+          table. Each gets a card-style row with photo + name + role +
+          bio — matching the single-breed branch layout above. */}
+      {otherJudges.length > 0 && (
+        <View style={{ marginTop: 10 }}>
+          <Text style={{ fontFamily: 'Inter', fontSize: 8, fontWeight: 'bold', color: C.primary, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 6 }}>
+            Other Judges
+          </Text>
+          {otherJudges.map(({ name, roles }, i) => {
+            const bio = judgeBios[name];
+            const photoUrl = show.judgePhotos?.[name];
+            const roleLabel = roles.length > 0 ? roles.join(' & ') : null;
+            return (
+              <View key={i} wrap={false} style={{ marginBottom: 8 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  {photoUrl && (
+                    <Image src={photoUrl} style={{ width: 36, height: 36, borderRadius: 18 }} />
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontFamily: 'Inter', fontSize: 10, fontWeight: 'bold', color: C.textDark }}>
+                      {name}
+                    </Text>
+                    {roleLabel && (
+                      <Text style={{ fontFamily: 'Inter', fontSize: 8, fontStyle: 'italic', color: C.textMedium }}>
+                        {roleLabel}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+                {bio && (
+                  <Text style={{ ...styles.judgeBio, marginTop: 3, marginBottom: 0 }}>
+                    {bio}
+                  </Text>
+                )}
+              </View>
+            );
+          })}
+        </View>
+      )}
 
       <JurisdictionBlock />
 
