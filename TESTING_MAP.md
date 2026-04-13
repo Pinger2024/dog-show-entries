@@ -27,8 +27,8 @@ factories and the test caller.
 | 6 | Validate profile before entry | `entries.validateExhibitorForEntry` | 🔴 | ⬜ | Critical gate; blocks checkout if profile incomplete |
 | 7 | Browse + filter shows | `shows.list` with breed/status/date filters | 🟡 | ⬜ | Breed filter uses exists() subquery |
 | 8 | View show detail + classes | `shows.getById`, `shows.getClasses` | 🟡 | ⬜ | showScope affects placement rules |
-| 9 | Enter dog into show (create payment intent) | `payments.createIntent` | 🔴 | ✅ | `payments-create-intent.test.ts` |
-| 10 | Validate dog eligibility (age, breed, JH vs standard) | `entries.create` checks | 🔴 | ⬜ | 6mo min, 12wk for NFC; class breed limits |
+| 9 | Enter dog into show (live path) | `orders.checkout` | 🔴 | 🟠 | `breed-validation.test.ts` exercises the breed/age path; need broader checkout test for sundries, JH details, multi-entry carts. **Note**: `payments.createIntent` and `entries.create` are not called from the UI but still have tests guarding any future re-use |
+| 10 | Validate dog eligibility (age, breed, JH vs standard) | `orders.checkout` checks | 🔴 | ✅ | `breed-validation.test.ts` — primary + fallback breed paths, class-level enforcement, JH bypass, age 4mo / 6mo / 12wk gates |
 | 11 | Detect judge conflict (can't exhibit under assigned judge) | `entries.create` fuzzy name match | 🟡 | ⬜ | Case-insensitive trim — fuzzy match risk |
 | 12 | Enter multiple classes in one entry | `entries.create` array of classIds | 🟡 | ⬜ | Duplicate-class guard; fee summing |
 | 13 | Complete payment via Stripe | `POST /api/webhooks/stripe` (payment_intent.succeeded) | 🔴 | ✅ | `stripe-webhook.test.ts` — legacy single-entry + order-level + idempotent re-delivery |
