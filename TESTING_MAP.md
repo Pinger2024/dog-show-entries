@@ -47,10 +47,10 @@ factories and the test caller.
 | 26 | Follow / unfollow a dog | `follows.toggle`, `follows.isFollowing`, `follows.count`, `follows.getFollowedDogs` | 🟢 | ✅ | `timeline-follows-progress.test.ts` — toggle round-trip, isFollowing reflects state, count is public, getFollowedDogs lists subscriptions |
 | 27 | View title progress (Champion, etc.) | `dogs.getTitleProgress` | 🟢 | ✅ | `timeline-follows-progress.test.ts` — shape only + NOT_FOUND |
 | 28 | Add external result (won outside Remi) | `dogs.addExternalResult`, `dogs.removeExternalResult` | 🟢 | ✅ | `timeline-follows-progress.test.ts` — happy add (selfReported=true), ownership guard, remove only allows self-reported (not official) |
-| 29 | View user dashboard | `users.getDashboard` | 🟡 | ⬜ | Next shows, recent entries, trial status |
-| 30 | Update profile | `users.updateProfile` | 🟡 | ⬜ | Validated before entry |
-| 31 | Set / change password | `users.setPassword`, `users.changePassword` | 🟡 | ⬜ | Old-password verification |
-| 32 | Submit feedback widget | `feedback.submit` (+ optional attachment) | 🟢 | ⬜ | Web entry into feedback table |
+| 29 | View user dashboard | `users.getDashboard` | 🟡 | ✅ | `user-profile.test.ts` — shape only with dogs + upcoming entry |
+| 30 | Update profile | `users.updateProfile` | 🟡 | ✅ | `user-profile.test.ts` — full update + nullable clear |
+| 31 | Set / change password | `users.setPassword`, `users.changePassword`, `users.hasPassword` | 🟡 | ✅ | `user-profile.test.ts` — set, refuse double-set, change with correct/wrong current password, refuse change without prior password |
+| 32 | Submit feedback widget | `feedback.submit` | 🟢 | ✅ | `user-profile.test.ts` — widget row with diagnostics, zod min-length rejection |
 
 ---
 
@@ -267,7 +267,7 @@ Areas with clusters of fix commits — bias test priority here:
 
 | Section | Total | ✅ | 🟠 | ⬜ |
 |---|---:|---:|---:|---:|
-| Exhibitor | 32 | 13 | 1 | 18 |
+| Exhibitor | 32 | 17 | 1 | 14 |
 | Secretary | 46 | 24 | 3 | 19 |
 | Steward | 15 | 14 | 0 | 1 |
 | Judge | 3 | 0 | 0 | 3 |
@@ -280,7 +280,7 @@ Areas with clusters of fix commits — bias test priority here:
 | File upload | 3 | 0 | 0 | 3 |
 | Soft-delete | 3 | 1 | 1 | 1 |
 | Phase / breed | 3 | 2 | 0 | 1 |
-| **TOTAL** | **141** | **73** | **11** | **57** |
+| **TOTAL** | **141** | **77** | **11** | **53** |
 
 🔴 show-day-critical journeys still uncovered: ~2.
 
