@@ -38,7 +38,7 @@ factories and the test caller.
 | 17 | Edit entry classes (swap/add pre-show) | `entries.update` | 🟡 | ✅ | `shows-browse-and-edit.test.ts` — class set replaced; fee recalculated using show-level tiered pricing; audit log written |
 | 18 | Handle fee adjustment (add/remove class) | `entries.update` feeDiff path | 🟡 | ✅ | `shows-browse-and-edit.test.ts` — feeDiff > 0 creates adjustment PaymentIntent + payment row; feeDiff < 0 creates Stripe refund + refund payment row (via mocked stripe.refunds.create) |
 | 19 | Withdraw from show | `entries.withdraw` | 🟡 | ✅ | `exhibitor-data.test.ts` — happy path, ownership guard, double-withdraw rejection |
-| 20 | View show schedule PDF | `GET /api/schedule/[showId]` | 🟡 | ⬜ | React-PDF generation |
+| 20 | View show schedule PDF | `GET /api/schedule/[showId]` | 🟡 | ✅ | `pdf-routes.test.ts` — 404/401/200 with React-PDF mocked at the renderToBuffer level |
 | 21 | Purchase catalogue | `orders.checkout` (catalogue sundry) | 🟡 | 🟠 | Sundry order setup covered indirectly via `orders-and-catalogue.test.ts` paid-order fixture; full checkout flow uncovered |
 | 22 | View purchased catalogue | `shows.getCatalogueAccess`, `shows.getMyCataloguePurchases` | 🟡 | ✅ | `orders-and-catalogue.test.ts` — hasPurchased + isAvailable; getMyCataloguePurchases lists shows where caller bought |
 | 23 | View dog results post-show | `dogs.getShowResults`, `dogs.getWinSummary` | 🟢 | ✅ | `edge-cases-sweep.test.ts` — getShowResults returns flat placements sorted by show date desc; empty for dogs with no placements; getWinSummary shape |
@@ -81,12 +81,12 @@ factories and the test caller.
 | 53 | Edit schedule data (sponsors, judge bios, etc.) | `secretary.updateScheduleData` | 🟡 | ✅ | `secretary-schedule-judges.test.ts` — saves scheduleData JSONB + show-level fields (showOpenTime, judgingStartTime, onCallVet); syncs new officers + guarantors into organisationPeople; case-insensitive dedup |
 | 54 | Create / quote print order (Mixam) | `printOrders.createDraftOrder`, `getById`, `listByShow`, `cancelOrder` | 🟡 | 🟠 | `print-orders.test.ts` — full CRUD + cancel lifecycle; cross-org rejection. getQuote (Mixam pricing) deferred. |
 | 55 | Pay for print order | `printOrders.initiatePayment` → Stripe → Mixam submission | 🟡 | 🟠 | Stripe webhook print-order branch covered in `stripe-webhook.test.ts`; initiatePayment itself uncovered (heavy: PDF + R2 + Stripe intent) |
-| 56 | Download catalogue PDF | `GET /api/catalogue/[showId]/[format]` | 🟡 | ⬜ | Formats: standard, by-class, judges-book |
-| 57 | Download schedule PDF | `GET /api/schedule/[showId]` | 🟡 | ⬜ | |
-| 58 | Download absentee report | `GET /api/absentee-report/[showId]` | 🟡 | ⬜ | Built from steward `markAbsent` data |
-| 59 | Download prize cards PDF | prize-cards route | 🟡 | ⬜ | Home-print gated to admin (b020229) |
-| 60 | Download judges' book | judges-book route | 🟡 | ⬜ | Dense write-in format |
-| 61 | Download ring numbers / ring board | ring-numbers, ring-board routes | 🟡 | ⬜ | 6-up cards; logistics overview |
+| 56 | Download catalogue PDF | `GET /api/catalogue/[showId]/[format]` | 🟡 | 🟠 | Catalogue route uses generateCataloguePdf (mocked); separate test file would cover the format-specific access gates |
+| 57 | Download schedule PDF | `GET /api/schedule/[showId]` | 🟡 | ✅ | `pdf-routes.test.ts` |
+| 58 | Download absentee report | `GET /api/absentee-report/[showId]` | 🟡 | ✅ | `pdf-routes.test.ts` — CSV happy + 401 + 403 |
+| 59 | Download prize cards PDF | prize-cards route | 🟡 | ✅ | `pdf-routes.test.ts` |
+| 60 | Download judges' book | judges-book route | 🟡 | ✅ | `pdf-routes.test.ts` |
+| 61 | Download ring numbers / ring board | ring-numbers, ring-board routes | 🟡 | ✅ | `pdf-routes.test.ts` (incl. 403 non-member) |
 | 62 | Assign / remove stewards | `secretary.assignSteward`, `secretary.setStewardBreeds`, `secretary.removeSteward`, `getShowStewards` | 🟡 | ✅ | `secretary-stewards-checklist.test.ts` — assign promotes exhibitor → steward; remove reverts role only when last assignment goes; double-assign rejected; non-existent email rejected |
 | 63 | Assign judge to class / breed / sex | `secretary.assignJudge`, `bulkAssignJudge`, `removeJudgeAssignment` | 🟡 | ✅ | `secretary-judges.test.ts` (already covered as part of judge management sweep) |
 | 64 | Add ring | `secretary.addRing` | 🟡 | ✅ | `show-creation.test.ts` |
@@ -268,7 +268,7 @@ Areas with clusters of fix commits — bias test priority here:
 | Section | Total | ✅ | 🟠 | ⬜ |
 |---|---:|---:|---:|---:|
 | Exhibitor | 32 | 27 | 2 | 3 |
-| Secretary | 46 | 38 | 5 | 3 |
+| Secretary | 46 | 41 | 6 | 0 |
 | Steward | 15 | 15 | 0 | 0 |
 | Judge | 3 | 3 | 0 | 0 |
 | Admin | 8 | 7 | 1 | 0 |
@@ -280,7 +280,7 @@ Areas with clusters of fix commits — bias test priority here:
 | File upload | 3 | 3 | 0 | 0 |
 | Soft-delete | 3 | 3 | 0 | 0 |
 | Phase / breed | 3 | 3 | 0 | 0 |
-| **TOTAL** | **141** | **118** | **13** | **10** |
+| **TOTAL** | **141** | **125** | **14** | **2** |
 
 🔴 show-day-critical journeys still uncovered: ~2.
 
