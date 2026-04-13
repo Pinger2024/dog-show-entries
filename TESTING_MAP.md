@@ -159,8 +159,8 @@ factories and the test caller.
 | # | Journey | Procedures / Routes | Pri | Status | Notes |
 |---|---|---|---|---|---|
 | 105 | Google OAuth login | NextAuth Google strategy | 🟡 | ⬜ | Hard to test; consider stub |
-| 106 | Forgot password (send link) | `POST /api/auth/forgot-password` | 🟡 | ⬜ | Resend; token expiry |
-| 107 | Reset password from token | `POST /api/auth/reset-password` | 🟡 | ⬜ | |
+| 106 | Forgot password (send link) | `POST /api/auth/forgot-password` | 🟡 | ✅ | `auth-password-reset.test.ts` — token created (1h expiry); no enumeration for unknown emails or empty body; 60s rate-limit; older unused tokens invalidated when issuing new one |
+| 107 | Reset password from token | `POST /api/auth/reset-password` | 🟡 | ✅ | `auth-password-reset.test.ts` — bcrypt hash updated, token burned; rejects unknown/missing/expired/already-used token; rejects too-short password |
 | 108 | JWT/DB role lag (freshly-promoted user) | `resolveCurrentRole` in `src/server/trpc/procedures.ts:20` | 🔴 | ✅ | `role-lag.test.ts` (3e9bc93 regression guard) |
 | 109 | Impersonation never grants admin | `isAdmin` middleware uses real session | 🟡 | ✅ | `permission-guards.test.ts` — admin impersonating secretary keeps admin powers; secretary procedure runs as the impersonated user |
 
@@ -272,7 +272,7 @@ Areas with clusters of fix commits — bias test priority here:
 | Steward | 15 | 14 | 0 | 1 |
 | Judge | 3 | 0 | 0 | 3 |
 | Admin | 8 | 6 | 1 | 1 |
-| Auth & roles | 5 | 2 | 0 | 3 |
+| Auth & roles | 5 | 4 | 0 | 1 |
 | Permission guards | 5 | 5 | 0 | 0 |
 | Results lock | 4 | 4 | 0 | 0 |
 | Payment / webhooks | 7 | 3 | 1 | 3 |
@@ -280,7 +280,7 @@ Areas with clusters of fix commits — bias test priority here:
 | File upload | 3 | 0 | 0 | 3 |
 | Soft-delete | 3 | 1 | 1 | 1 |
 | Phase / breed | 3 | 2 | 0 | 1 |
-| **TOTAL** | **141** | **87** | **13** | **41** |
+| **TOTAL** | **141** | **89** | **13** | **39** |
 
 🔴 show-day-critical journeys still uncovered: ~2.
 
