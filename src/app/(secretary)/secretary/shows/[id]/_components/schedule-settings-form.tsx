@@ -209,66 +209,81 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
   }, [effectiveExisting, showData, previousData, hasLoaded]);
 
   // ── Autosave ──
-  // Debounces form changes and saves silently in the background so users
-  // don't lose progress when navigating away mid-edit. We also flush any
-  // pending save on unmount, so leaving the page (e.g. clicking through to
-  // Sponsors) within the 2s debounce window doesn't drop the change.
+  // Two-pronged save:
+  //   1. Debounced tRPC mutation while the form is mounted — gives us
+  //      the Saving…/Saved status indicator and proper React Query
+  //      cache invalidation on success.
+  //   2. navigator.sendBeacon() to a dedicated REST endpoint on
+  //      unmount — guaranteed delivery even when navigating away,
+  //      because beacons survive page tear-down whereas tRPC's
+  //      AbortController-backed fetch gets cancelled when the
+  //      mutation observer is destroyed.
+  // The debounce is short (350ms) so the loss window in the rare
+  // case where neither path fires (network drop, browser crash) is
+  // very small.
   const [lastAutoSavedAt, setLastAutoSavedAt] = useState<Date | null>(null);
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'pending' | 'saving' | 'saved' | 'error'>('idle');
-  const flushPendingSaveRef = useRef<(() => void) | null>(null);
+  const latestPayloadRef = useRef<{
+    showOpenTime: string | undefined;
+    judgingStartTime: string | undefined;
+    onCallVet: string | undefined;
+    scheduleData: ScheduleData;
+  } | null>(null);
 
   useEffect(() => {
     if (!hasLoaded) return;
-    const performSave = () => {
-      const data: ScheduleData = {
-        ...effectiveExisting,
-        country: country as ScheduleData['country'],
-        publicAdmission,
-        wetWeatherAccommodation: wetWeather,
-        isBenched,
-        benchingRemovalTime: benchingRemovalTime || undefined,
-        acceptsNfc,
-        judgedOnGroupSystem,
-        latestArrivalTime: latestArrivalTime || undefined,
-        showManager: showManager || undefined,
-        officers: officers
-          .filter((o) => o.name)
-          .map((o) => ({ name: o.name, position: o.position })),
-        guarantors: officers
-          .filter((o) => o.name && o.isGuarantor)
-          .map((o) => ({ name: o.name, address: o.address || undefined })),
-        awardsDescription: awardsDescription || undefined,
-        prizeMoney: prizeMoney || undefined,
-        what3words: what3words || undefined,
-        directions: directions || undefined,
-        catering: catering || undefined,
-        futureShowDates: futureShowDates || undefined,
-        additionalNotes: additionalNotes || undefined,
-        welcomeNote: welcomeNote || undefined,
-        outsideAttraction: outsideAttraction || undefined,
-        customStatements: customStatements.filter((s) => s.trim()).length > 0
-          ? customStatements.filter((s) => s.trim())
-          : undefined,
-      };
-      setAutoSaveStatus('saving');
-      updateMutation.mutateAsync({
-        showId,
-        showOpenTime: showOpenTime || undefined,
-        judgingStartTime: judgingStartTime || undefined,
-        onCallVet: onCallVet || undefined,
-        scheduleData: data,
-      }).then(() => {
-        setLastAutoSavedAt(new Date());
-        setAutoSaveStatus('saved');
-      }).catch(() => {
-        setAutoSaveStatus('error');
-      });
-      flushPendingSaveRef.current = null;
+    const data: ScheduleData = {
+      ...effectiveExisting,
+      country: country as ScheduleData['country'],
+      publicAdmission,
+      wetWeatherAccommodation: wetWeather,
+      isBenched,
+      benchingRemovalTime: benchingRemovalTime || undefined,
+      acceptsNfc,
+      judgedOnGroupSystem,
+      latestArrivalTime: latestArrivalTime || undefined,
+      showManager: showManager || undefined,
+      officers: officers
+        .filter((o) => o.name)
+        .map((o) => ({ name: o.name, position: o.position })),
+      guarantors: officers
+        .filter((o) => o.name && o.isGuarantor)
+        .map((o) => ({ name: o.name, address: o.address || undefined })),
+      awardsDescription: awardsDescription || undefined,
+      prizeMoney: prizeMoney || undefined,
+      what3words: what3words || undefined,
+      directions: directions || undefined,
+      catering: catering || undefined,
+      futureShowDates: futureShowDates || undefined,
+      additionalNotes: additionalNotes || undefined,
+      welcomeNote: welcomeNote || undefined,
+      outsideAttraction: outsideAttraction || undefined,
+      customStatements: customStatements.filter((s) => s.trim()).length > 0
+        ? customStatements.filter((s) => s.trim())
+        : undefined,
     };
+    const payload = {
+      showOpenTime: showOpenTime || undefined,
+      judgingStartTime: judgingStartTime || undefined,
+      onCallVet: onCallVet || undefined,
+      scheduleData: data,
+    };
+    // Always update the ref so the unmount beacon has the latest
+    // snapshot to send, regardless of whether the debounce has fired.
+    latestPayloadRef.current = payload;
 
     setAutoSaveStatus('pending');
-    flushPendingSaveRef.current = performSave;
-    const timer = setTimeout(performSave, 2000);
+    const timer = setTimeout(() => {
+      setAutoSaveStatus('saving');
+      updateMutation.mutateAsync({ showId, ...payload })
+        .then(() => {
+          setLastAutoSavedAt(new Date());
+          setAutoSaveStatus('saved');
+        })
+        .catch(() => {
+          setAutoSaveStatus('error');
+        });
+    }, 350);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -279,15 +294,25 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     outsideAttraction, customStatements,
   ]);
 
-  // Flush any pending autosave when the form unmounts (e.g. user clicks
-  // through to the Sponsors page during the 2s debounce window). The
-  // mutation will complete in the background on the tRPC client even
-  // though this component is gone.
+  // Flush the latest snapshot via navigator.sendBeacon when the form
+  // unmounts (e.g. user clicks through to Sponsors). Beacons are
+  // delivered by the browser even during navigation tear-down — they
+  // bypass the AbortController abort that kills our normal tRPC
+  // fetch when the React Query mutation observer is destroyed.
   useEffect(() => {
     return () => {
-      flushPendingSaveRef.current?.();
+      const payload = latestPayloadRef.current;
+      if (!payload) return;
+      if (typeof navigator === 'undefined' || !navigator.sendBeacon) return;
+      try {
+        const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+        navigator.sendBeacon(`/api/schedule-autosave/${showId}`, blob);
+      } catch {
+        // Beacon is best-effort; if it fails the user has already
+        // navigated and we can't show anything anyway.
+      }
     };
-  }, []);
+  }, [showId]);
 
   // ── Derived counts ──
   const officerCount = officers.filter((o) => o.name).length;
