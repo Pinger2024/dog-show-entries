@@ -21,6 +21,7 @@ import {
   achievements,
   feedback,
   sponsors,
+  plans,
   userRoleEnum,
   membershipStatusEnum,
   entryStatusEnum,
@@ -265,6 +266,24 @@ export async function makeSponsor(opts: Partial<typeof sponsors.$inferInsert> & 
     .values({
       name: opts.name ?? `Test Sponsor ${n}`,
       organisationId: opts.organisationId,
+      ...opts,
+    })
+    .returning();
+  return row;
+}
+
+export async function makePlan(opts: Partial<typeof plans.$inferInsert> = {}) {
+  const n = seq();
+  const [row] = await testDb
+    .insert(plans)
+    .values({
+      name: opts.name ?? `Test Plan ${n}`,
+      clubType: opts.clubType ?? 'single_breed',
+      serviceTier: opts.serviceTier ?? 'diy',
+      annualFeePence: opts.annualFeePence ?? 0,
+      perShowFeePence: opts.perShowFeePence ?? 0,
+      perEntryFeePence: opts.perEntryFeePence ?? 0,
+      stripePriceId: opts.stripePriceId,
       ...opts,
     })
     .returning();
