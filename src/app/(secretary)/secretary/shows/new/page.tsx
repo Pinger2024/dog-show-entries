@@ -1071,7 +1071,9 @@ export default function NewShowPage() {
                               toast.success('Invite sent! They\'ve been set as secretary.');
                             }
                           } catch (err) {
-                            toast.error('Failed to add member. Please try again.');
+                            const description =
+                              err instanceof Error ? err.message : 'Please try again.';
+                            toast.error('Failed to add member', { description });
                           }
                         }}
                       >

@@ -1,12 +1,32 @@
 import { TRPCError } from '@trpc/server';
+import { eq } from 'drizzle-orm';
 import type { TRPCContext, Session } from './init';
 import { baseProcedure, middleware } from './init';
+import { users } from '@/server/db/schema';
 
 /** Returns the impersonated session when active, otherwise the real session. */
 function getEffectiveSession(ctx: TRPCContext): Session {
   return ctx.impersonating
     ? { user: ctx.impersonating }
     : ctx.session!;
+}
+
+/**
+ * JWT role can lag behind the DB — e.g. immediately after `applications.submit`
+ * promotes an exhibitor to secretary, the browser's session cookie still holds
+ * the old role until it's refreshed. Fall back to a DB read so freshly-promoted
+ * users aren't blocked on their first elevated call.
+ */
+async function resolveCurrentRole(
+  ctx: TRPCContext,
+  session: Session,
+): Promise<string> {
+  const [dbUser] = await ctx.db
+    .select({ role: users.role })
+    .from(users)
+    .where(eq(users.id, session.user.id))
+    .limit(1);
+  return dbUser?.role ?? session.user.role;
 }
 
 const isAuthed = middleware(async ({ ctx, next }) => {
@@ -27,11 +47,13 @@ const isSecretary = middleware(async ({ ctx, next }) => {
   }
 
   const effectiveSession = getEffectiveSession(ctx);
+  let role = effectiveSession.user.role;
 
-  if (
-    effectiveSession.user.role !== 'secretary' &&
-    effectiveSession.user.role !== 'admin'
-  ) {
+  if (role !== 'secretary' && role !== 'admin') {
+    role = await resolveCurrentRole(ctx, effectiveSession);
+  }
+
+  if (role !== 'secretary' && role !== 'admin') {
     throw new TRPCError({
       code: 'FORBIDDEN',
       message: 'Secretary or admin access required',
@@ -39,7 +61,7 @@ const isSecretary = middleware(async ({ ctx, next }) => {
   }
   return next({
     ctx: {
-      session: effectiveSession,
+      session: { user: { ...effectiveSession.user, role } },
     },
   });
 });
@@ -50,12 +72,13 @@ const isSteward = middleware(async ({ ctx, next }) => {
   }
 
   const effectiveSession = getEffectiveSession(ctx);
+  let role = effectiveSession.user.role;
 
-  if (
-    effectiveSession.user.role !== 'steward' &&
-    effectiveSession.user.role !== 'secretary' &&
-    effectiveSession.user.role !== 'admin'
-  ) {
+  if (role !== 'steward' && role !== 'secretary' && role !== 'admin') {
+    role = await resolveCurrentRole(ctx, effectiveSession);
+  }
+
+  if (role !== 'steward' && role !== 'secretary' && role !== 'admin') {
     throw new TRPCError({
       code: 'FORBIDDEN',
       message: 'Steward, secretary, or admin access required',
@@ -63,7 +86,7 @@ const isSteward = middleware(async ({ ctx, next }) => {
   }
   return next({
     ctx: {
-      session: effectiveSession,
+      session: { user: { ...effectiveSession.user, role } },
     },
   });
 });
