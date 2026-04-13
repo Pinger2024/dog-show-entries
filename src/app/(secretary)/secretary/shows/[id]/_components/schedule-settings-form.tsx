@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle,
@@ -210,11 +210,16 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
 
   // ── Autosave ──
   // Debounces form changes and saves silently in the background so users
-  // don't lose progress when navigating away mid-edit.
+  // don't lose progress when navigating away mid-edit. We also flush any
+  // pending save on unmount, so leaving the page (e.g. clicking through to
+  // Sponsors) within the 2s debounce window doesn't drop the change.
   const [lastAutoSavedAt, setLastAutoSavedAt] = useState<Date | null>(null);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'pending' | 'saving' | 'saved' | 'error'>('idle');
+  const flushPendingSaveRef = useRef<(() => void) | null>(null);
+
   useEffect(() => {
     if (!hasLoaded) return;
-    const timer = setTimeout(() => {
+    const performSave = () => {
       const data: ScheduleData = {
         ...effectiveExisting,
         country: country as ScheduleData['country'],
@@ -245,6 +250,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
           ? customStatements.filter((s) => s.trim())
           : undefined,
       };
+      setAutoSaveStatus('saving');
       updateMutation.mutateAsync({
         showId,
         showOpenTime: showOpenTime || undefined,
@@ -253,10 +259,16 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
         scheduleData: data,
       }).then(() => {
         setLastAutoSavedAt(new Date());
+        setAutoSaveStatus('saved');
       }).catch(() => {
-        // Silent fail — user can still hit Save manually
+        setAutoSaveStatus('error');
       });
-    }, 2000);
+      flushPendingSaveRef.current = null;
+    };
+
+    setAutoSaveStatus('pending');
+    flushPendingSaveRef.current = performSave;
+    const timer = setTimeout(performSave, 2000);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -266,6 +278,16 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     directions, catering, futureShowDates, additionalNotes, welcomeNote,
     outsideAttraction, customStatements,
   ]);
+
+  // Flush any pending autosave when the form unmounts (e.g. user clicks
+  // through to the Sponsors page during the 2s debounce window). The
+  // mutation will complete in the background on the tRPC client even
+  // though this component is gone.
+  useEffect(() => {
+    return () => {
+      flushPendingSaveRef.current?.();
+    };
+  }, []);
 
   // ── Derived counts ──
   const officerCount = officers.filter((o) => o.name).length;
@@ -397,12 +419,15 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
             <span className="hidden sm:inline"> Mandatory RKC statements are auto-included.</span>
           </p>
         </div>
-        <Button variant="outline" size="sm" asChild>
-          <a href={`/api/schedule/${showId}`} target="_blank" rel="noopener noreferrer">
-            <Eye className="size-4" />
-            Preview PDF
-          </a>
-        </Button>
+        <div className="flex items-center gap-2">
+          <AutoSaveIndicator status={autoSaveStatus} lastAutoSavedAt={lastAutoSavedAt} />
+          <Button variant="outline" size="sm" asChild>
+            <a href={`/api/schedule/${showId}`} target="_blank" rel="noopener noreferrer">
+              <Eye className="size-4" />
+              Preview PDF
+            </a>
+          </Button>
+        </div>
       </div>
 
       {/* Smart defaults notice */}
@@ -697,6 +722,38 @@ function ShowDaySection({
 
 // ── People Section ───────────────────────────────────
 
+function AutoSaveIndicator({
+  status,
+  lastAutoSavedAt,
+}: {
+  status: 'idle' | 'pending' | 'saving' | 'saved' | 'error';
+  lastAutoSavedAt: Date | null;
+}) {
+  if (status === 'idle') return null;
+  if (status === 'pending' || status === 'saving') {
+    return (
+      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Loader2 className="size-3 animate-spin" />
+        Saving…
+      </span>
+    );
+  }
+  if (status === 'error') {
+    return (
+      <span className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+        <AlertTriangle className="size-3" />
+        Couldn&apos;t save
+      </span>
+    );
+  }
+  return (
+    <span className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400">
+      <Check className="size-3" />
+      Saved {lastAutoSavedAt ? lastAutoSavedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : ''}
+    </span>
+  );
+}
+
 function PeopleSection({
   showManager, setShowManager, officers,
   addOfficer, removeOfficer, updateOfficer,
@@ -779,32 +836,17 @@ function PeopleSection({
         {officers.length > 0 && (
           <div className="rounded-lg border divide-y">
             {officers.map((officer, idx) => (
-              <div key={idx} className="flex items-center gap-2 px-3 py-2">
-                {/* Guarantor toggle */}
-                <button
-                  type="button"
-                  title={officer.isGuarantor ? 'Remove as guarantor' : 'Mark as guarantor'}
-                  className={cn(
-                    'flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors',
-                    officer.isGuarantor
-                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                      : 'bg-muted text-muted-foreground hover:bg-muted/80',
-                  )}
-                  onClick={() => updateOfficer(idx, 'isGuarantor', !officer.isGuarantor)}
-                >
-                  G
-                </button>
-
+              <div key={idx} className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center">
                 {/* Name + Position */}
                 <div className="grid flex-1 grid-cols-1 gap-1.5 sm:grid-cols-2 min-w-0">
                   <Input
                     placeholder="Name"
                     value={officer.name}
                     onChange={(e) => updateOfficer(idx, 'name', e.target.value)}
-                    className="h-9 text-sm"
+                    className="h-10 text-sm"
                   />
                   <Select value={officer.position} onValueChange={(v) => updateOfficer(idx, 'position', v)}>
-                    <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Position" /></SelectTrigger>
+                    <SelectTrigger className="h-10 text-sm"><SelectValue placeholder="Position" /></SelectTrigger>
                     <SelectContent>
                       {OFFICER_POSITIONS.map((pos) => (
                         <SelectItem key={pos} value={pos}>{pos}</SelectItem>
@@ -813,19 +855,43 @@ function PeopleSection({
                   </Select>
                 </div>
 
-                <Button variant="ghost" size="icon" className="shrink-0 size-8" onClick={() => removeOfficer(idx)}>
-                  <X className="size-3.5 text-muted-foreground" />
-                </Button>
+                <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3">
+                  {/* Guarantor checkbox — clearly labelled, was previously a tiny G icon nobody noticed */}
+                  <label className="flex items-center gap-2 text-sm font-medium cursor-pointer select-none whitespace-nowrap">
+                    <Checkbox
+                      checked={officer.isGuarantor}
+                      onCheckedChange={(checked) => updateOfficer(idx, 'isGuarantor', checked === true)}
+                      className="size-5"
+                    />
+                    Guarantor
+                  </label>
+                  <Button variant="ghost" size="icon" className="shrink-0 size-8" onClick={() => removeOfficer(idx)}>
+                    <X className="size-3.5 text-muted-foreground" />
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
         )}
 
-        <p className={cn('text-xs flex items-center gap-1', met ? 'text-emerald-600' : 'text-amber-600')}>
-          {met ? <Check className="size-3" /> : <AlertTriangle className="size-3" />}
-          {guarantorCount}/{requiredGuarantors} guarantors
-          {!met && ' — tap G to mark guarantors'}
-        </p>
+        <div
+          className={cn(
+            'rounded-lg border px-3 py-2 text-sm flex items-start gap-2',
+            met
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200'
+              : 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200',
+          )}
+        >
+          {met ? <Check className="size-4 mt-0.5 shrink-0" /> : <AlertTriangle className="size-4 mt-0.5 shrink-0" />}
+          <div>
+            <p className="font-medium">{guarantorCount} of {requiredGuarantors} guarantors</p>
+            {!met && (
+              <p className="text-xs mt-0.5 opacity-80">
+                Tick the &quot;Guarantor&quot; box next to each officer who is acting as a guarantor for this show. {showType === 'championship' ? 'Championship' : 'Open'} shows need {requiredGuarantors}.
+              </p>
+            )}
+          </div>
+        </div>
       </div>
 
     </div>
