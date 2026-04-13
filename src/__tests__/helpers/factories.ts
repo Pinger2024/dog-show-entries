@@ -20,6 +20,7 @@ import {
   judgeAssignments,
   achievements,
   feedback,
+  sponsors,
   userRoleEnum,
   membershipStatusEnum,
   entryStatusEnum,
@@ -252,6 +253,19 @@ export async function makeJudgeAssignment(opts: {
       judgeId: opts.judgeId,
       breedId: opts.breedId,
       sex: opts.sex,
+    })
+    .returning();
+  return row;
+}
+
+export async function makeSponsor(opts: Partial<typeof sponsors.$inferInsert> & { organisationId: string }) {
+  const n = seq();
+  const [row] = await testDb
+    .insert(sponsors)
+    .values({
+      name: opts.name ?? `Test Sponsor ${n}`,
+      organisationId: opts.organisationId,
+      ...opts,
     })
     .returning();
   return row;

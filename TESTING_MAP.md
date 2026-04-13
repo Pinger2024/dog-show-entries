@@ -66,7 +66,7 @@ factories and the test caller.
 | 38 | — Define show details (type, breed, dates, fees) | `shows.create` | 🔴 | ✅ | `show-creation.test.ts` — happy path, classes (combined + separate sex), slug uniqueness, subscription gate, non-member rejection |
 | 39 | — Seed checklist from defaults | `secretary.seedChecklist` | 🟡 | ⬜ | Default items + due dates |
 | 40 | — Bulk-create classes from template | `secretary.bulkCreateClasses` | 🟡 | ⬜ | Auto catalogue numbering (9aad79a) |
-| 41 | — Manage sundry items | `secretary.createSundryItem`, `secretary.bulkCreateSundryItems` | 🟡 | ⬜ | Programmes, discs, etc. |
+| 41 | — Manage sundry items | `secretary.createSundryItem`, `updateSundryItem` | 🟡 | ✅ | `secretary-crud-sweep.test.ts` — auto sortOrder, update price + enabled, cross-org/cross-show rejection |
 | 42 | Send judge offers | `secretary.sendJudgeOffer` | 🟡 | ✅ | `secretary-judges.test.ts` — happy path creates contract + sends email + backfills judge.contactEmail; rejects unknown judge; org access guard |
 | 43 | Search + add judges | `secretary.searchJudges`, `secretary.addJudge` | 🟡 | 🟠 | `secretary-judges.test.ts` covers add + searchJudges (case-insensitive dedup); RKC scrape (kcJudgeSearch) untested |
 | 44 | Update judge (breed/sex assignments) | `secretary.updateJudge`, `assignJudge`, `bulkAssignJudge`, `removeJudgeAssignment`, `getShowJudges` | 🟡 | ✅ | `secretary-judges.test.ts` |
@@ -90,8 +90,8 @@ factories and the test caller.
 | 62 | Assign / remove stewards | `secretary.assignSteward`, `secretary.setStewardBreeds`, `secretary.removeSteward` | 🟡 | ⬜ | Breed-specific assignments |
 | 63 | Assign judge to class / breed / sex | `secretary.assignJudge` | 🟡 | ⬜ | Complex breed fallback |
 | 64 | Add ring | `secretary.addRing` | 🟡 | ✅ | `show-creation.test.ts` |
-| 65 | Manage org people (officers, trustees) | `secretary.createOrgPerson` etc. | 🟡 | ⬜ | Surface in catalogue front matter |
-| 66 | Manage sponsors (CRUD + assignment) | `secretary.createSponsor` etc., `secretary.assignClassSponsorship`, `secretary.assignShowSponsor` | 🟡 | ⬜ | Logos/names on catalogue + schedule |
+| 65 | Manage org people (officers, trustees) | `secretary.createOrgPerson`, `listOrgPeople`, `updateOrgPerson`, `deleteOrgPerson` | 🟡 | ✅ | `secretary-crud-sweep.test.ts` — full CRUD + name-sorted list + cross-org rejection |
+| 66 | Manage sponsors (CRUD + assignment) | `secretary.createSponsor`, `updateSponsor`, `deleteSponsor`, `listSponsors`, `assignShowSponsor`, `removeShowSponsor`, `listShowSponsors`, `assignClassSponsorship`, `removeClassSponsorship`, `upsertClassSponsor` | 🟡 | ✅ | `secretary-crud-sweep.test.ts` — full sponsor directory CRUD (soft-delete), show-level + class-level assignment lifecycle, free-text upsert with trim |
 | 67 | Record achievement manually | `secretary.recordAchievement` | 🟡 | ⬜ | For hand-recorded specials |
 | 68 | View audit log of entry changes | `secretary.getAuditLog` | 🟡 | ⬜ | |
 | 69 | View financial / sundry / entry reports | `secretary.getPaymentReport`, `secretary.getEntryReport`, `secretary.getSundryItemReport` | 🟡 | ⬜ | |
@@ -268,7 +268,7 @@ Areas with clusters of fix commits — bias test priority here:
 | Section | Total | ✅ | 🟠 | ⬜ |
 |---|---:|---:|---:|---:|
 | Exhibitor | 32 | 8 | 1 | 23 |
-| Secretary | 46 | 10 | 2 | 34 |
+| Secretary | 46 | 13 | 2 | 31 |
 | Steward | 15 | 14 | 0 | 1 |
 | Judge | 3 | 0 | 0 | 3 |
 | Admin | 8 | 6 | 1 | 1 |
@@ -280,7 +280,7 @@ Areas with clusters of fix commits — bias test priority here:
 | File upload | 3 | 0 | 0 | 3 |
 | Soft-delete | 3 | 1 | 1 | 1 |
 | Phase / breed | 3 | 2 | 0 | 1 |
-| **TOTAL** | **141** | **54** | **10** | **77** |
+| **TOTAL** | **141** | **57** | **10** | **74** |
 
 🔴 show-day-critical journeys still uncovered: ~3.
 
