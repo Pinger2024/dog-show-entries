@@ -38,15 +38,21 @@ vi.mock('@/server/services/stripe', () => ({
   createBillingPortalSession: vi.fn(async () => 'https://billing.stripe.test/portal'),
 }));
 
-vi.mock('resend', () => ({
-  Resend: class {
-    emails = {
-      send: vi.fn(async () => ({ data: { id: 'em_test' }, error: null })),
-      receiving: { get: vi.fn(async () => ({ data: null, error: null })) },
-    };
-    contacts = { create: vi.fn(), remove: vi.fn() };
-  },
-}));
+// Resend SDK mock — instances share captured send/receiving.get fns so
+// tests can inspect call payloads via `import { resendMocks } from
+// '../helpers/resend-mocks'`.
+vi.mock('resend', async () => {
+  const { resendMocks } = await import('./resend-mocks');
+  return {
+    Resend: class {
+      emails = {
+        send: resendMocks.send,
+        receiving: { get: resendMocks.receivingGet },
+      };
+      contacts = { create: vi.fn(), remove: vi.fn() };
+    },
+  };
+});
 
 vi.mock('@/server/services/results-notifications', () => ({
   sendExhibitorResultsEmails: vi.fn(async () => undefined),
