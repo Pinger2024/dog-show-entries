@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import * as stripeService from '@/server/services/stripe';
 import * as emailService from '@/server/services/email';
 import { entries, orders, payments } from '@/server/db/schema';
@@ -105,9 +105,10 @@ describe('POST /api/webhooks/stripe — payment_intent.succeeded', () => {
       exhibitorId: exhibitor.id,
       status: 'pending_payment',
     });
-    // Link entries to the order
-    await testDb.update(entries).set({ orderId: order.id }).where(eq(entries.id, e1.id));
-    await testDb.update(entries).set({ orderId: order.id }).where(eq(entries.id, e2.id));
+    await testDb
+      .update(entries)
+      .set({ orderId: order.id })
+      .where(inArray(entries.id, [e1.id, e2.id]));
     const intentId = 'pi_test_order_succeeded';
     await makePayment({ orderId: order.id, stripePaymentId: intentId });
 

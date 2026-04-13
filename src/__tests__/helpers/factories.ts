@@ -19,12 +19,16 @@ import {
   userRoleEnum,
   membershipStatusEnum,
   entryStatusEnum,
+  orderStatusEnum,
+  paymentStatusEnum,
 } from '@/server/db/schema';
 import { randomUUID } from 'crypto';
 
 type UserRole = (typeof userRoleEnum.enumValues)[number];
 type MembershipStatus = (typeof membershipStatusEnum.enumValues)[number];
 type EntryStatus = (typeof entryStatusEnum.enumValues)[number];
+type OrderStatus = (typeof orderStatusEnum.enumValues)[number];
+type PaymentStatus = (typeof paymentStatusEnum.enumValues)[number];
 
 let counter = 0;
 const seq = () => ++counter;
@@ -232,7 +236,7 @@ export async function makeStewardAssignment(opts: {
 export async function makeOrder(opts: {
   showId: string;
   exhibitorId: string;
-  status?: 'draft' | 'pending_payment' | 'paid' | 'failed' | 'cancelled';
+  status?: OrderStatus;
   totalAmount?: number;
   stripePaymentIntentId?: string;
 }) {
@@ -254,7 +258,7 @@ export async function makePayment(opts: {
   orderId?: string;
   stripePaymentId: string;
   amount?: number;
-  status?: 'pending' | 'succeeded' | 'failed' | 'refunded' | 'partially_refunded';
+  status?: PaymentStatus;
 }) {
   const [row] = await testDb
     .insert(payments)
