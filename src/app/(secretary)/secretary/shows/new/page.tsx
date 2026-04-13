@@ -276,6 +276,20 @@ export default function NewShowPage() {
     }
   }, [organisations, form]);
 
+  // Pull the club's breed through into the show form when the org is single-breed.
+  // Single-breed clubs only ever run their one breed, so we shouldn't re-ask.
+  useEffect(() => {
+    if (!currentOrgId) return;
+    const org = organisations.find((o) => o.id === currentOrgId);
+    if (!org?.breedId) return;
+    if (!form.getValues('showScope')) {
+      form.setValue('showScope', 'single_breed', { shouldDirty: false });
+    }
+    if (!form.getValues('breedId')) {
+      form.setValue('breedId', org.breedId, { shouldDirty: false });
+    }
+  }, [currentOrgId, organisations, form]);
+
   // Fetch venues for this org
   const { data: venues } = trpc.secretary.listVenues.useQuery(
     { organisationId: currentOrgId },

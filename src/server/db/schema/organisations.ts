@@ -6,12 +6,15 @@ import { memberships } from './memberships';
 import { plans } from './plans';
 import { sponsors } from './sponsors';
 import { venues } from './venues';
+import { breeds } from './breeds';
 
 export const organisations = pgTable('organisations', {
   id: uuid('id').defaultRandom().primaryKey(),
   name: text('name').notNull(),
   kcRegNumber: text('kc_reg_number').unique(),
   type: text('type'),
+  /** For single-breed clubs: the one breed this club runs shows for. Populates show defaults. */
+  breedId: uuid('breed_id').references(() => breeds.id),
   contactEmail: text('contact_email'),
   contactPhone: text('contact_phone'),
   website: text('website'),
@@ -43,6 +46,10 @@ export const organisationsRelations = relations(
     plan: one(plans, {
       fields: [organisations.planId],
       references: [plans.id],
+    }),
+    breed: one(breeds, {
+      fields: [organisations.breedId],
+      references: [breeds.id],
     }),
     sponsors: many(sponsors),
     venues: many(venues),

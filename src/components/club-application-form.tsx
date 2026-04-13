@@ -34,13 +34,18 @@ export function ClubApplicationForm({
   const { update: updateSession } = useSession();
   const [clubType, setClubType] = useState<string>('');
   const [organisationName, setOrganisationName] = useState('');
-  const [breedOrGroup, setBreedOrGroup] = useState('');
+  const [breedId, setBreedId] = useState<string>('');
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
   const [kcRegNumber, setKcRegNumber] = useState('');
   const [contactEmail, setContactEmail] = useState(defaultContactEmail);
   const [contactPhone, setContactPhone] = useState('');
   const [website, setWebsite] = useState('');
   const [details, setDetails] = useState('');
+
+  const { data: breeds } = trpc.breeds.list.useQuery(undefined, {
+    enabled: clubType === 'single_breed',
+    staleTime: 60 * 60 * 1000,
+  });
 
   const submitMutation = trpc.applications.submit.useMutation({
     onSuccess: async () => {
@@ -59,17 +64,21 @@ export function ClubApplicationForm({
     e.preventDefault();
     if (!clubType || !organisationName || !contactEmail) return;
 
-    const groupValue =
-      clubType === 'multi_breed'
-        ? selectedGroups.length > 0
-          ? selectedGroups.join(', ')
-          : undefined
-        : breedOrGroup || undefined;
+    const isSingleBreed = clubType === 'single_breed';
+    const breedLabel = isSingleBreed
+      ? breeds?.find((b) => b.id === breedId)?.name
+      : undefined;
+    const breedOrGroup = isSingleBreed
+      ? breedLabel
+      : selectedGroups.length > 0
+        ? selectedGroups.join(', ')
+        : undefined;
 
     submitMutation.mutate({
       organisationName,
       clubType: clubType as 'single_breed' | 'multi_breed',
-      breedOrGroup: groupValue,
+      breedOrGroup,
+      breedId: isSingleBreed ? breedId || undefined : undefined,
       kcRegNumber: kcRegNumber || undefined,
       contactEmail,
       contactPhone: contactPhone || undefined,
@@ -136,19 +145,22 @@ export function ClubApplicationForm({
         </div>
       ) : clubType === 'single_breed' ? (
         <div className="space-y-2">
-          <label className="text-sm font-medium">Breed Group</label>
-          <Select value={breedOrGroup} onValueChange={setBreedOrGroup}>
+          <label className="text-sm font-medium">Breed *</label>
+          <Select value={breedId} onValueChange={setBreedId}>
             <SelectTrigger className={inputCn}>
-              <SelectValue placeholder="Select a group..." />
+              <SelectValue placeholder={breeds ? 'Select the breed…' : 'Loading breeds…'} />
             </SelectTrigger>
             <SelectContent>
-              {BREED_GROUPS.map((group) => (
-                <SelectItem key={group} value={group}>
-                  {group}
+              {(breeds ?? []).map((b) => (
+                <SelectItem key={b.id} value={b.id}>
+                  {b.name}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          <p className="text-xs text-muted-foreground">
+            We&apos;ll use this as the default breed for your shows.
+          </p>
         </div>
       ) : null}
 
@@ -215,7 +227,8 @@ export function ClubApplicationForm({
           submitMutation.isPending ||
           !organisationName ||
           !clubType ||
-          !contactEmail
+          !contactEmail ||
+          (clubType === 'single_breed' && !breedId)
         }
       >
         {submitMutation.isPending ? (
