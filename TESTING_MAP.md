@@ -19,7 +19,7 @@ factories and the test caller.
 
 | # | Journey | Procedures / Routes | Pri | Status | Notes |
 |---|---|---|---|---|---|
-| 1 | Sign up + register account | NextAuth (Google or password) | 🟡 | ⬜ | Google OAuth path needs a stubbed strategy |
+| 1 | Sign up + register account | NextAuth (Google or password) | 🟡 | ✅ | `auth-config.test.ts` — Credentials authorize() logic (case-insensitive ilike, bcrypt compare, null on wrong/no password). Google OAuth dance not exercised — next-auth's runtime needs Next.js's edge module loader. |
 | 2 | Complete onboarding profile | `onboarding.saveProfile`, `onboarding.complete`, `onboarding.getStatus` | 🟡 | ✅ | `invitations-onboarding.test.ts` — getStatus reflects profile completeness; saveProfile writes fields; complete sets onboardingCompletedAt |
 | 3 | Add a dog | `dogs.create` (+ `dogOwners` row with isPrimary) | 🔴 | ✅ | `exhibitor-data.test.ts` — happy path + explicit owners |
 | 4 | Update dog | `dogs.update`, `dogs.updateOwner` | 🟡 | ✅ | `exhibitor-data.test.ts` — happy path + ownership guard + soft-delete NOT_FOUND |
@@ -32,7 +32,7 @@ factories and the test caller.
 | 11 | Detect judge conflict (can't exhibit under assigned judge) | `orders.checkout` fuzzy name match | 🟡 | ✅ | `edge-cases-sweep.test.ts` — exhibitor name matches assigned judge → BAD_REQUEST |
 | 12 | Enter multiple classes in one entry | `orders.checkout` array of classIds | 🟡 | ✅ | `edge-cases-sweep.test.ts` — sums fees via show-level tiered pricing (firstEntryFee + subsequentEntryFee × n-1) |
 | 13 | Complete payment via Stripe | `POST /api/webhooks/stripe` (payment_intent.succeeded) | 🔴 | ✅ | `stripe-webhook.test.ts` — legacy single-entry + order-level + idempotent re-delivery |
-| 14 | Receive entry confirmation email | `sendEntryConfirmationEmail` (async post-webhook) | 🟡 | ⬜ | Fire-and-forget; assert payload shape only |
+| 14 | Receive entry confirmation email | `sendEntryConfirmationEmail` (async post-webhook) | 🟡 | ✅ | `email-payloads.test.ts` — to/subject/body assertions; no-op for missing order |
 | 15 | View my entries (active + past) | `entries.list` | 🟡 | ✅ | `exhibitor-data.test.ts` — own-entries scope, dogId filter, soft-delete excluded |
 | 16 | View entry detail | `entries.getById` | 🟡 | ✅ | `exhibitor-data.test.ts` — own + secretary + admin can read; other exhibitors blocked |
 | 17 | Edit entry classes (swap/add pre-show) | `entries.update` | 🟡 | ✅ | `shows-browse-and-edit.test.ts` — class set replaced; fee recalculated using show-level tiered pricing; audit log written |
@@ -158,7 +158,7 @@ factories and the test caller.
 
 | # | Journey | Procedures / Routes | Pri | Status | Notes |
 |---|---|---|---|---|---|
-| 105 | Google OAuth login | NextAuth Google strategy | 🟡 | ⬜ | Hard to test; consider stub |
+| 105 | Google OAuth login | NextAuth Google strategy | 🟡 | 🟠 | `auth-config.test.ts` covers Credentials provider; Google OAuth callback can't be exercised in vitest without a real browser + Google tokens |
 | 106 | Forgot password (send link) | `POST /api/auth/forgot-password` | 🟡 | ✅ | `auth-password-reset.test.ts` — token created (1h expiry); no enumeration for unknown emails or empty body; 60s rate-limit; older unused tokens invalidated when issuing new one |
 | 107 | Reset password from token | `POST /api/auth/reset-password` | 🟡 | ✅ | `auth-password-reset.test.ts` — bcrypt hash updated, token burned; rejects unknown/missing/expired/already-used token; rejects too-short password |
 | 108 | JWT/DB role lag (freshly-promoted user) | `resolveCurrentRole` in `src/server/trpc/procedures.ts:20` | 🔴 | ✅ | `role-lag.test.ts` (3e9bc93 regression guard) |
@@ -209,11 +209,11 @@ factories and the test caller.
 |---|---|---|---|---|---|
 | 126 | Entry confirmation email | `sendEntryConfirmationEmail` | 🟡 | 🟠 | Mock invoked in `stripe-webhook.test.ts`; payload not asserted |
 | 127 | Secretary new-entry notification | `sendSecretaryNotificationEmail` | 🟡 | 🟠 | Mock invoked in `stripe-webhook.test.ts`; payload not asserted |
-| 128 | Judge offer email | `secretary.sendJudgeOffer` | 🟡 | ⬜ | Token link |
+| 128 | Judge offer email | `secretary.sendJudgeOffer`, `sendJudgeApprovalRequestEmail` | 🟡 | ✅ | `email-payloads.test.ts` — payload incl. token + show name |
 | 129 | Exhibitor results emails | `sendExhibitorResultsEmails` | 🟡 | 🟠 | Mock invoked; live payload not asserted |
 | 130 | Follower results notifications | `sendFollowerResultsNotifications` | 🟡 | 🟠 | Same |
 | 131 | Results milestone timeline posts | `createResultsMilestonePosts` | 🟡 | 🟠 | Same |
-| 132 | Print order confirmation email | `sendPrintOrderConfirmationEmail` | 🟡 | ⬜ | |
+| 132 | Print order confirmation email | `sendPrintOrderConfirmationEmail` | 🟡 | ✅ | `email-payloads.test.ts` — payload incl. order items + delivery |
 
 ---
 
@@ -267,20 +267,20 @@ Areas with clusters of fix commits — bias test priority here:
 
 | Section | Total | ✅ | 🟠 | ⬜ |
 |---|---:|---:|---:|---:|
-| Exhibitor | 32 | 27 | 2 | 3 |
+| Exhibitor | 32 | 30 | 2 | 0 |
 | Secretary | 46 | 41 | 6 | 0 |
 | Steward | 15 | 15 | 0 | 0 |
 | Judge | 3 | 3 | 0 | 0 |
 | Admin | 8 | 7 | 1 | 0 |
-| Auth & roles | 5 | 4 | 0 | 1 |
+| Auth & roles | 5 | 4 | 1 | 0 |
 | Permission guards | 5 | 5 | 0 | 0 |
 | Results lock | 4 | 4 | 0 | 0 |
 | Payment / webhooks | 7 | 5 | 2 | 0 |
-| Notifications | 7 | 0 | 5 | 2 |
+| Notifications | 7 | 4 | 3 | 0 |
 | File upload | 3 | 3 | 0 | 0 |
 | Soft-delete | 3 | 3 | 0 | 0 |
 | Phase / breed | 3 | 3 | 0 | 0 |
-| **TOTAL** | **141** | **125** | **14** | **2** |
+| **TOTAL** | **141** | **136** | **5** | **0** |
 
 🔴 show-day-critical journeys still uncovered: ~2.
 
