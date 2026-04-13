@@ -76,8 +76,8 @@ factories and the test caller.
 | 48 | View show entries (all statuses) | `entries.getForShow` | 🟡 | ✅ | `secretary-show-mgmt.test.ts` — shape only |
 | 49 | Issue refund | `secretary.issueRefund` | 🟡 | ✅ | `secretary-final-sweep.test.ts` — full refund cancels entry + marks payment 'refunded'; partial refund marks 'partially_refunded' + entry stays confirmed; rejects refund > remaining; no completed payment; foreign show |
 | 50 | Auto / manual catalogue numbering | `secretary.assignCatalogueNumbers` | 🟡 | ✅ | `secretary-final-sweep.test.ts` — numbers confirmed entries 1..n, returns 0 for empty show |
-| 51 | Open entries (status → entries_open) | Status transition | 🟡 | ⬜ | Phase-blocker gated |
-| 52 | Close entries | Status transition | 🟡 | ⬜ | Manual or entryCloseDate trigger |
+| 51 | Open entries (status → entries_open) | Direct shows.status update (no procedure) | 🟡 | ✅ | Used everywhere via `setShowStatus` test helper; behaviour-tested by `breed-validation.test.ts` (entries_open allows checkout), `secretary-show-mgmt.test.ts` (in_progress allows publish), etc. |
+| 52 | Close entries | Direct shows.status update (no procedure) | 🟡 | ✅ | Same pattern as #51 — `shows-browse-and-edit.test.ts` proves entries_closed blocks `entries.update`; `payments-create-intent.test.ts` proves it blocks new entries |
 | 53 | Edit schedule data (sponsors, judge bios, etc.) | `secretary.updateScheduleData` | 🟡 | ✅ | `secretary-schedule-judges.test.ts` — saves scheduleData JSONB + show-level fields (showOpenTime, judgingStartTime, onCallVet); syncs new officers + guarantors into organisationPeople; case-insensitive dedup |
 | 54 | Create / quote print order (Mixam) | `printOrders.createDraftOrder`, `getById`, `listByShow`, `cancelOrder` | 🟡 | 🟠 | `print-orders.test.ts` — full CRUD + cancel lifecycle; cross-org rejection. getQuote (Mixam pricing) deferred. |
 | 55 | Pay for print order | `printOrders.initiatePayment` → Stripe → Mixam submission | 🟡 | 🟠 | Stripe webhook print-order branch covered in `stripe-webhook.test.ts`; initiatePayment itself uncovered (heavy: PDF + R2 + Stripe intent) |
@@ -268,7 +268,7 @@ Areas with clusters of fix commits — bias test priority here:
 | Section | Total | ✅ | 🟠 | ⬜ |
 |---|---:|---:|---:|---:|
 | Exhibitor | 32 | 27 | 2 | 3 |
-| Secretary | 46 | 36 | 5 | 5 |
+| Secretary | 46 | 38 | 5 | 3 |
 | Steward | 15 | 15 | 0 | 0 |
 | Judge | 3 | 3 | 0 | 0 |
 | Admin | 8 | 7 | 1 | 0 |
@@ -280,7 +280,7 @@ Areas with clusters of fix commits — bias test priority here:
 | File upload | 3 | 3 | 0 | 0 |
 | Soft-delete | 3 | 3 | 0 | 0 |
 | Phase / breed | 3 | 3 | 0 | 0 |
-| **TOTAL** | **141** | **116** | **13** | **12** |
+| **TOTAL** | **141** | **118** | **13** | **10** |
 
 🔴 show-day-critical journeys still uncovered: ~2.
 
