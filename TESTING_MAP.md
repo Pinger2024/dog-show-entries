@@ -197,7 +197,7 @@ factories and the test caller.
 | 120 | payment_intent.succeeded → confirm entry | `POST /api/webhooks/stripe` | 🔴 | ✅ | `stripe-webhook.test.ts` |
 | 121 | payment_intent.payment_failed → mark failed | Same webhook | 🟡 | ✅ | `stripe-webhook.test.ts` |
 | 122 | checkout.session.completed → activate subscription | Same webhook | 🟡 | ⬜ | Pro plan |
-| 123 | Resend inbound email → feedback row + admin notification | `POST /api/webhooks/resend` | 🟡 | ⬜ | Svix sig verification + Resend SDK fetch |
+| 123 | Resend inbound email → feedback row + admin notification | `POST /api/webhooks/resend` | 🟡 | ✅ | `resend-webhook.test.ts` — 400 missing svix headers; 400 verification throw; 500 missing secret; happy path inserts feedback row (parsed from name + Re: prefix stripped); idempotent re-delivery; ignores non-email.received types |
 | 124 | Order checkout (entries + sundries bundled) | `orders.checkout`, `orders.list`, `orders.getById` | 🟡 | 🟠 | `orders-and-catalogue.test.ts` covers list + getById (own only, NOT_FOUND); checkout's full multi-entry/sundries path remains partial |
 | 125 | Print order checkout → Mixam submission | `printOrders.initiatePayment` + Stripe webhook | 🟡 | ⬜ | Async non-blocking Mixam call |
 
@@ -275,12 +275,12 @@ Areas with clusters of fix commits — bias test priority here:
 | Auth & roles | 5 | 4 | 0 | 1 |
 | Permission guards | 5 | 5 | 0 | 0 |
 | Results lock | 4 | 4 | 0 | 0 |
-| Payment / webhooks | 7 | 3 | 1 | 3 |
+| Payment / webhooks | 7 | 4 | 1 | 2 |
 | Notifications | 7 | 0 | 5 | 2 |
 | File upload | 3 | 0 | 0 | 3 |
 | Soft-delete | 3 | 1 | 1 | 1 |
 | Phase / breed | 3 | 2 | 0 | 1 |
-| **TOTAL** | **141** | **91** | **13** | **37** |
+| **TOTAL** | **141** | **92** | **13** | **36** |
 
 🔴 show-day-critical journeys still uncovered: ~2.
 
