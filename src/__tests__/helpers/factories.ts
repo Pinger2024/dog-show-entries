@@ -284,8 +284,19 @@ export async function lockShowResults(showId: string) {
 
 /** Convenience: build a secretary user belonging to a fresh org. */
 export async function makeSecretaryWithOrg() {
-  const user = await makeUser({ role: 'secretary' });
-  const org = await makeOrg();
+  const [user, org] = await Promise.all([
+    makeUser({ role: 'secretary' }),
+    makeOrg(),
+  ]);
   await makeMembership({ userId: user.id, organisationId: org.id });
   return { user, org };
+}
+
+/** Same as makeSecretaryWithOrg + a fresh breed. Convenience for show-creation tests. */
+export async function makeSecretaryWithOrgAndBreed() {
+  const [{ user, org }, breed] = await Promise.all([
+    makeSecretaryWithOrg(),
+    makeBreed(),
+  ]);
+  return { user, org, breed };
 }

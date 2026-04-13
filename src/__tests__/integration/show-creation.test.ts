@@ -6,17 +6,16 @@ import { createTestCaller } from '../helpers/context';
 import {
   makeUser,
   makeOrg,
-  makeMembership,
   makeBreed,
   makeClassDef,
   makeSecretaryWithOrg,
+  makeSecretaryWithOrgAndBreed,
   makeShow,
 } from '../helpers/factories';
 
 describe('shows.create', () => {
   it('creates a draft show with a slug derived from name + start date', async () => {
-    const { user, org } = await makeSecretaryWithOrg();
-    const breed = await makeBreed();
+    const { user, org, breed } = await makeSecretaryWithOrgAndBreed();
     const caller = createTestCaller(user);
 
     const created = await caller.shows.create({
@@ -39,12 +38,13 @@ describe('shows.create', () => {
   });
 
   it('seeds show classes from classDefinitionIds in canonical order (combined sex)', async () => {
-    const { user, org } = await makeSecretaryWithOrg();
-    const breed = await makeBreed();
+    const { user, org, breed } = await makeSecretaryWithOrgAndBreed();
     // Insert class defs out of canonical order to prove the procedure sorts them.
-    const veteran = await makeClassDef({ name: 'Veteran', type: 'age', sortOrder: 99 });
-    const puppy = await makeClassDef({ name: 'Puppy', type: 'age', sortOrder: 1 });
-    const open = await makeClassDef({ name: 'Open', type: 'achievement', sortOrder: 50 });
+    const [veteran, puppy, open] = await Promise.all([
+      makeClassDef({ name: 'Veteran', type: 'age', sortOrder: 99 }),
+      makeClassDef({ name: 'Puppy', type: 'age', sortOrder: 1 }),
+      makeClassDef({ name: 'Open', type: 'achievement', sortOrder: 50 }),
+    ]);
     const caller = createTestCaller(user);
 
     const created = await caller.shows.create({
@@ -70,10 +70,11 @@ describe('shows.create', () => {
   });
 
   it('separate_sex splits classes into dog+bitch but keeps junior_handler single', async () => {
-    const { user, org } = await makeSecretaryWithOrg();
-    const breed = await makeBreed();
-    const puppy = await makeClassDef({ name: 'Puppy', type: 'age', sortOrder: 1 });
-    const jh = await makeClassDef({ name: 'JH 12-17', type: 'junior_handler', sortOrder: 1 });
+    const { user, org, breed } = await makeSecretaryWithOrgAndBreed();
+    const [puppy, jh] = await Promise.all([
+      makeClassDef({ name: 'Puppy', type: 'age', sortOrder: 1 }),
+      makeClassDef({ name: 'JH 12-17', type: 'junior_handler', sortOrder: 1 }),
+    ]);
     const caller = createTestCaller(user);
 
     const created = await caller.shows.create({
@@ -94,15 +95,14 @@ describe('shows.create', () => {
     });
     // Expect 3 rows: Puppy(dog), Puppy(bitch), JH (no sex)
     expect(cls).toHaveLength(3);
-    expect(new Set(cls.map((c) => c.sex))).toEqual(new Set(['dog', 'bitch', null]));
+    expect(cls.map((c) => c.sex).sort()).toEqual(['bitch', 'dog', null].sort());
     const jhRows = cls.filter((c) => c.classDefinitionId === jh.id);
     expect(jhRows).toHaveLength(1);
     expect(jhRows[0]?.sex).toBeNull();
   });
 
   it('appends -2 to the slug when the same name is used twice', async () => {
-    const { user, org } = await makeSecretaryWithOrg();
-    const breed = await makeBreed();
+    const { user, org, breed } = await makeSecretaryWithOrgAndBreed();
     const caller = createTestCaller(user);
     const input = {
       name: 'Annual Bonanza',
@@ -127,8 +127,7 @@ describe('shows.create', () => {
   });
 
   it('blocks the second show until subscriptionStatus is active (first show free)', async () => {
-    const { user, org } = await makeSecretaryWithOrg();
-    const breed = await makeBreed();
+    const { user, org, breed } = await makeSecretaryWithOrgAndBreed();
     const caller = createTestCaller(user);
     // Org defaults to subscriptionStatus='none'. First show should succeed…
     await caller.shows.create({
@@ -203,7 +202,7 @@ describe('secretary.createVenue', () => {
 });
 
 describe('secretary.addRing', () => {
-  it('adds a ring to a show in the secretary\'s org', async () => {
+  it("adds a ring to a show in the secretary's org", async () => {
     const { user, org } = await makeSecretaryWithOrg();
     const show = await makeShow({ organisationId: org.id });
     const caller = createTestCaller(user);
