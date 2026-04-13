@@ -45,6 +45,19 @@ vi.mock('@/server/services/results-notifications', () => ({
   createResultsMilestonePosts: vi.fn(async () => undefined),
 }));
 
+vi.mock('@/server/services/email', async (importOriginal) => {
+  // Keep helpers like FROM/btn/APP_URL real; only stub the network-touching senders.
+  const actual = await importOriginal<typeof import('@/server/services/email')>();
+  return {
+    ...actual,
+    sendEntryConfirmationEmail: vi.fn(async () => undefined),
+    sendSecretaryNotificationEmail: vi.fn(async () => undefined),
+    sendPrintOrderConfirmationEmail: vi.fn(async () => undefined),
+    sendPrintOrderDispatchEmail: vi.fn(async () => undefined),
+    sendJudgeApprovalRequestEmail: vi.fn(async () => undefined),
+  };
+});
+
 // Note: storage service is intentionally NOT globally mocked — it has its own
 // unit tests for pure validation logic. Integration tests that exercise the
 // upload network call should mock @/server/services/storage locally.

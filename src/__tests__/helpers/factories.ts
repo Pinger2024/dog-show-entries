@@ -14,6 +14,8 @@ import {
   entryClasses,
   results,
   stewardAssignments,
+  orders,
+  payments,
   userRoleEnum,
   membershipStatusEnum,
   entryStatusEnum,
@@ -223,6 +225,46 @@ export async function makeStewardAssignment(opts: {
   const [row] = await testDb
     .insert(stewardAssignments)
     .values({ userId: opts.userId, showId: opts.showId, ringId: opts.ringId })
+    .returning();
+  return row;
+}
+
+export async function makeOrder(opts: {
+  showId: string;
+  exhibitorId: string;
+  status?: 'draft' | 'pending_payment' | 'paid' | 'failed' | 'cancelled';
+  totalAmount?: number;
+  stripePaymentIntentId?: string;
+}) {
+  const [row] = await testDb
+    .insert(orders)
+    .values({
+      showId: opts.showId,
+      exhibitorId: opts.exhibitorId,
+      status: opts.status ?? 'pending_payment',
+      totalAmount: opts.totalAmount ?? 1000,
+      stripePaymentIntentId: opts.stripePaymentIntentId,
+    })
+    .returning();
+  return row;
+}
+
+export async function makePayment(opts: {
+  entryId?: string;
+  orderId?: string;
+  stripePaymentId: string;
+  amount?: number;
+  status?: 'pending' | 'succeeded' | 'failed' | 'refunded' | 'partially_refunded';
+}) {
+  const [row] = await testDb
+    .insert(payments)
+    .values({
+      entryId: opts.entryId,
+      orderId: opts.orderId,
+      stripePaymentId: opts.stripePaymentId,
+      amount: opts.amount ?? 1000,
+      status: opts.status ?? 'pending',
+    })
     .returning();
   return row;
 }

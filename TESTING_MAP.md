@@ -31,7 +31,7 @@ factories and the test caller.
 | 10 | Validate dog eligibility (age, breed, JH vs standard) | `entries.create` checks | 🔴 | ⬜ | 6mo min, 12wk for NFC; class breed limits |
 | 11 | Detect judge conflict (can't exhibit under assigned judge) | `entries.create` fuzzy name match | 🟡 | ⬜ | Case-insensitive trim — fuzzy match risk |
 | 12 | Enter multiple classes in one entry | `entries.create` array of classIds | 🟡 | ⬜ | Duplicate-class guard; fee summing |
-| 13 | Complete payment via Stripe | `POST /api/webhooks/stripe` (payment_intent.succeeded) | 🔴 | ⬜ | Webhook flips entry pending → confirmed |
+| 13 | Complete payment via Stripe | `POST /api/webhooks/stripe` (payment_intent.succeeded) | 🔴 | ✅ | `stripe-webhook.test.ts` — legacy single-entry + order-level + idempotent re-delivery |
 | 14 | Receive entry confirmation email | `sendEntryConfirmationEmail` (async post-webhook) | 🟡 | ⬜ | Fire-and-forget; assert payload shape only |
 | 15 | View my entries (active + past) | `entries.list` | 🟡 | ⬜ | Soft-delete filter; per-exhibitor scoping |
 | 16 | View entry detail | `entries.getById` | 🟡 | ⬜ | Non-secretary callers see only own entries |
@@ -194,8 +194,8 @@ factories and the test caller.
 | # | Journey | Procedures / Routes | Pri | Status | Notes |
 |---|---|---|---|---|---|
 | 119 | Create entry payment intent | `payments.createIntent` | 🔴 | ✅ | payments-create-intent.test.ts |
-| 120 | payment_intent.succeeded → confirm entry | `POST /api/webhooks/stripe` | 🔴 | ⬜ | Highest-value untested path |
-| 121 | payment_intent.payment_failed → mark failed | Same webhook | 🟡 | ⬜ | |
+| 120 | payment_intent.succeeded → confirm entry | `POST /api/webhooks/stripe` | 🔴 | ✅ | `stripe-webhook.test.ts` |
+| 121 | payment_intent.payment_failed → mark failed | Same webhook | 🟡 | ✅ | `stripe-webhook.test.ts` |
 | 122 | checkout.session.completed → activate subscription | Same webhook | 🟡 | ⬜ | Pro plan |
 | 123 | Resend inbound email → feedback row + admin notification | `POST /api/webhooks/resend` | 🟡 | ⬜ | Svix sig verification + Resend SDK fetch |
 | 124 | Order checkout (entries + sundries bundled) | `orders.checkout` | 🟡 | ⬜ | |
@@ -207,8 +207,8 @@ factories and the test caller.
 
 | # | Journey | Procedures / Routes | Pri | Status | Notes |
 |---|---|---|---|---|---|
-| 126 | Entry confirmation email | `sendEntryConfirmationEmail` | 🟡 | ⬜ | Assert payload shape, not HTML |
-| 127 | Secretary new-entry notification | `sendSecretaryNotificationEmail` | 🟡 | ⬜ | |
+| 126 | Entry confirmation email | `sendEntryConfirmationEmail` | 🟡 | 🟠 | Mock invoked in `stripe-webhook.test.ts`; payload not asserted |
+| 127 | Secretary new-entry notification | `sendSecretaryNotificationEmail` | 🟡 | 🟠 | Mock invoked in `stripe-webhook.test.ts`; payload not asserted |
 | 128 | Judge offer email | `secretary.sendJudgeOffer` | 🟡 | ⬜ | Token link |
 | 129 | Exhibitor results emails | `sendExhibitorResultsEmails` | 🟡 | 🟠 | Mock invoked; live payload not asserted |
 | 130 | Follower results notifications | `sendFollowerResultsNotifications` | 🟡 | 🟠 | Same |
@@ -267,7 +267,7 @@ Areas with clusters of fix commits — bias test priority here:
 
 | Section | Total | ✅ | 🟠 | ⬜ |
 |---|---:|---:|---:|---:|
-| Exhibitor | 32 | 1 | 0 | 31 |
+| Exhibitor | 32 | 2 | 0 | 30 |
 | Secretary | 46 | 2 | 0 | 44 |
 | Steward | 15 | 6 | 0 | 9 |
 | Judge | 3 | 0 | 0 | 3 |
@@ -275,14 +275,14 @@ Areas with clusters of fix commits — bias test priority here:
 | Auth & roles | 5 | 1 | 0 | 4 |
 | Permission guards | 5 | 0 | 3 | 2 |
 | Results lock | 4 | 3 | 0 | 1 |
-| Payment / webhooks | 7 | 1 | 0 | 6 |
-| Notifications | 7 | 0 | 3 | 4 |
+| Payment / webhooks | 7 | 3 | 0 | 4 |
+| Notifications | 7 | 0 | 5 | 2 |
 | File upload | 3 | 0 | 0 | 3 |
 | Soft-delete | 3 | 0 | 0 | 3 |
 | Phase / breed | 3 | 0 | 0 | 3 |
-| **TOTAL** | **141** | **13** | **6** | **122** |
+| **TOTAL** | **141** | **17** | **8** | **116** |
 
-🔴 show-day-critical journeys still uncovered: ~13.
+🔴 show-day-critical journeys still uncovered: ~12.
 
 ---
 
