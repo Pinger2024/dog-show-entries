@@ -222,8 +222,8 @@ factories and the test caller.
 | # | Journey | Procedures / Routes | Pri | Status | Notes |
 |---|---|---|---|---|---|
 | 133 | Presign S3 upload URL | `POST /api/upload/presign` | 🟡 | ✅ | `upload-presign-route.test.ts` — 401 unauth; happy path returns presignedUrl + publicUrl + scoped key; rejects unsupported MIME / over-size / missing fields; **security**: extension derived from validated MIME type, NOT client filename (rejects `.exe` masquerade via `contentType: application/pdf`) |
-| 134 | Dog photo upload | `POST /api/upload/dog-photo` | 🟡 | ⬜ | Mobile Safari hardening |
-| 135 | Judge / timeline / feedback / checklist photo upload | per-type endpoints | 🟢 | ⬜ | Validation in `storage.ts` |
+| 134 | Dog photo upload | `POST /api/upload/dog-photo` | 🟡 | ✅ | `edge-cases-sweep.test.ts` |
+| 135 | Judge / timeline / feedback / checklist photo upload | per-type endpoints | 🟢 | ✅ | `upload-per-type-routes.test.ts` — auth, file, MIME validation; happy-path 200 with R2 mock for all four routes |
 
 ---
 
@@ -277,10 +277,10 @@ Areas with clusters of fix commits — bias test priority here:
 | Results lock | 4 | 4 | 0 | 0 |
 | Payment / webhooks | 7 | 5 | 1 | 1 |
 | Notifications | 7 | 0 | 5 | 2 |
-| File upload | 3 | 2 | 0 | 1 |
+| File upload | 3 | 3 | 0 | 0 |
 | Soft-delete | 3 | 3 | 0 | 0 |
 | Phase / breed | 3 | 2 | 0 | 1 |
-| **TOTAL** | **141** | **105** | **11** | **25** |
+| **TOTAL** | **141** | **106** | **11** | **24** |
 
 🔴 show-day-critical journeys still uncovered: ~2.
 
