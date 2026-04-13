@@ -13,11 +13,13 @@ import {
   Trophy,
   Image as ImageIcon,
   Upload,
+  ArrowLeft,
   ArrowRight,
   ArrowUp,
   ArrowDown,
   X,
 } from 'lucide-react';
+import Link from 'next/link';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { trpc } from '@/lib/trpc';
@@ -2312,11 +2314,19 @@ export default function SponsorsPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h2 className="font-serif text-lg font-semibold">Sponsors</h2>
-        <p className="text-sm text-muted-foreground">
-          Manage your sponsor directory and assign sponsors to this show. RKC regulations require all sponsorships to be acknowledged in schedules and catalogues.
-        </p>
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="font-serif text-lg font-semibold">Sponsors</h2>
+          <p className="text-sm text-muted-foreground">
+            Manage your sponsor directory and assign sponsors to this show. RKC regulations require all sponsorships to be acknowledged in schedules and catalogues.
+          </p>
+        </div>
+        <Button asChild variant="outline" size="sm" className="shrink-0 self-start">
+          <Link href={`/secretary/shows/${showId}/schedule`}>
+            <ArrowLeft className="size-4" />
+            Back to Show Setup
+          </Link>
+        </Button>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
