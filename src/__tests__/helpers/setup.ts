@@ -15,7 +15,16 @@ if (!/localhost|127\.0\.0\.1/.test(url)) {
 // Tests inspect calls via `vi.mocked(importedFn)`.
 
 vi.mock('@/server/services/stripe', () => ({
-  getStripe: vi.fn(() => ({})),
+  getStripe: vi.fn(() => ({
+    refunds: {
+      create: vi.fn(async (opts: { payment_intent: string; amount: number }) => ({
+        id: `re_test_${Math.random().toString(36).slice(2, 10)}`,
+        payment_intent: opts.payment_intent,
+        amount: opts.amount,
+        status: 'succeeded',
+      })),
+    },
+  })),
   createPaymentIntent: vi.fn(async (amount: number, metadata: Record<string, string>) => ({
     id: `pi_test_${Math.random().toString(36).slice(2, 10)}`,
     client_secret: `pi_test_${Math.random().toString(36).slice(2, 10)}_secret_x`,

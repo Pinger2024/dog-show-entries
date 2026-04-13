@@ -25,8 +25,8 @@ factories and the test caller.
 | 4 | Update dog | `dogs.update`, `dogs.updateOwner` | 🟡 | ✅ | `exhibitor-data.test.ts` — happy path + ownership guard + soft-delete NOT_FOUND |
 | 5 | Upload dog photo | `POST /api/upload/dog-photo` → S3 → `dogs.updatePhotoCaption` | 🟡 | ⬜ | Mobile-Safari html-to-image fix recently |
 | 6 | Validate profile before entry | `entries.validateExhibitorForEntry` | 🔴 | ✅ | `exhibitor-data.test.ts` — flags missing fields, valid for complete profile, auto-fills from primary dogOwner |
-| 7 | Browse + filter shows | `shows.list` with breed/status/date filters | 🟡 | ⬜ | Breed filter uses exists() subquery |
-| 8 | View show detail + classes | `shows.getById`, `shows.getClasses` | 🟡 | ⬜ | showScope affects placement rules |
+| 7 | Browse + filter shows | `shows.list` with breed/status/date/search filters | 🟡 | ✅ | `shows-browse-and-edit.test.ts` — default visibility, status + showType filters, breedId narrowing, name search |
+| 8 | View show detail + classes | `shows.getById`, `shows.getClasses` | 🟡 | ✅ | `shows-browse-and-edit.test.ts` — happy + NOT_FOUND |
 | 9 | Enter dog into show (live path) | `orders.checkout` | 🔴 | 🟠 | `breed-validation.test.ts` exercises the breed/age path; need broader checkout test for sundries, JH details, multi-entry carts. **Note**: `payments.createIntent` and `entries.create` are not called from the UI but still have tests guarding any future re-use |
 | 10 | Validate dog eligibility (age, breed, JH vs standard) | `orders.checkout` checks | 🔴 | ✅ | `breed-validation.test.ts` — primary + fallback breed paths, class-level enforcement, JH bypass, age 4mo / 6mo / 12wk gates |
 | 11 | Detect judge conflict (can't exhibit under assigned judge) | `entries.create` fuzzy name match | 🟡 | ⬜ | Case-insensitive trim — fuzzy match risk |
@@ -35,8 +35,8 @@ factories and the test caller.
 | 14 | Receive entry confirmation email | `sendEntryConfirmationEmail` (async post-webhook) | 🟡 | ⬜ | Fire-and-forget; assert payload shape only |
 | 15 | View my entries (active + past) | `entries.list` | 🟡 | ✅ | `exhibitor-data.test.ts` — own-entries scope, dogId filter, soft-delete excluded |
 | 16 | View entry detail | `entries.getById` | 🟡 | ✅ | `exhibitor-data.test.ts` — own + secretary + admin can read; other exhibitors blocked |
-| 17 | Edit entry classes (swap/add pre-show) | `entries.update` | 🟡 | ⬜ | Recalculates fees; payment or refund as needed |
-| 18 | Handle fee adjustment (add/remove class) | `entries.update` feeDiff path | 🟡 | ⬜ | New PaymentIntent or auto-refund |
+| 17 | Edit entry classes (swap/add pre-show) | `entries.update` | 🟡 | ✅ | `shows-browse-and-edit.test.ts` — class set replaced; fee recalculated using show-level tiered pricing; audit log written |
+| 18 | Handle fee adjustment (add/remove class) | `entries.update` feeDiff path | 🟡 | ✅ | `shows-browse-and-edit.test.ts` — feeDiff > 0 creates adjustment PaymentIntent + payment row; feeDiff < 0 creates Stripe refund + refund payment row (via mocked stripe.refunds.create) |
 | 19 | Withdraw from show | `entries.withdraw` | 🟡 | ✅ | `exhibitor-data.test.ts` — happy path, ownership guard, double-withdraw rejection |
 | 20 | View show schedule PDF | `GET /api/schedule/[showId]` | 🟡 | ⬜ | React-PDF generation |
 | 21 | Purchase catalogue | `orders.checkout` (catalogue line item) | 🟡 | ⬜ | Separate from entry payment |
@@ -267,7 +267,7 @@ Areas with clusters of fix commits — bias test priority here:
 
 | Section | Total | ✅ | 🟠 | ⬜ |
 |---|---:|---:|---:|---:|
-| Exhibitor | 32 | 17 | 1 | 14 |
+| Exhibitor | 32 | 21 | 1 | 10 |
 | Secretary | 46 | 24 | 3 | 19 |
 | Steward | 15 | 14 | 0 | 1 |
 | Judge | 3 | 0 | 0 | 3 |
@@ -280,7 +280,7 @@ Areas with clusters of fix commits — bias test priority here:
 | File upload | 3 | 0 | 0 | 3 |
 | Soft-delete | 3 | 1 | 1 | 1 |
 | Phase / breed | 3 | 2 | 0 | 1 |
-| **TOTAL** | **141** | **77** | **11** | **53** |
+| **TOTAL** | **141** | **81** | **11** | **49** |
 
 🔴 show-day-critical journeys still uncovered: ~2.
 
