@@ -350,12 +350,15 @@ export default function DocumentsPage() {
         </Card>
       )}
 
-      {/* Prize Cards */}
+      {/* Prize Cards — admin-only: Amanda + Michael fulfil orders via
+          the Print Shop, regular secretaries don't need home-print PDFs. */}
+      {isAdmin && (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Award className="size-5" />
             Prize Cards
+            <span className="rounded-full bg-purple-600 px-2 py-0.5 text-[10px] font-semibold text-white">ADMIN</span>
           </CardTitle>
           <CardDescription>
             A5 prize cards for 1st through to HC — customise and download
@@ -483,6 +486,7 @@ export default function DocumentsPage() {
           </div>
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }
