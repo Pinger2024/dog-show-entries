@@ -778,6 +778,19 @@ function DogStep({
                     <Input
                       placeholder="e.g. Dorabella Dancing Queen"
                       {...field}
+                      onBlur={(e) => {
+                        field.onBlur();
+                        // Auto-fire RKC lookup when the user finishes typing
+                        // the registered name, so they don't have to find the
+                        // Lookup button. Only triggers if the dependent fields
+                        // (sex/dob) are still untouched, so we never overwrite
+                        // values the user has already entered.
+                        const name = e.target.value.trim();
+                        if (name.length < 3) return;
+                        if (kcLookup.isPending) return;
+                        if (form.getValues('sex') || form.getValues('dateOfBirth')) return;
+                        kcLookup.mutate({ query: name });
+                      }}
                     />
                   </FormControl>
                   <FormMessage />
