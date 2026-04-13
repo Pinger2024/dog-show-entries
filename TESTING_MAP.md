@@ -65,7 +65,7 @@ factories and the test caller.
 | 37 | — Create / select venue | `secretary.createVenue`, `secretary.listVenues` | 🟡 | ✅ | `show-creation.test.ts` (no-postcode path; geocoding fetch not exercised) |
 | 38 | — Define show details (type, breed, dates, fees) | `shows.create` | 🔴 | ✅ | `show-creation.test.ts` — happy path, classes (combined + separate sex), slug uniqueness, subscription gate, non-member rejection |
 | 39 | — Seed checklist from defaults | `secretary.seedChecklist` | 🟡 | ⬜ | Default items + due dates |
-| 40 | — Bulk-create classes from template | `secretary.bulkCreateClasses` | 🟡 | ⬜ | Auto catalogue numbering (9aad79a) |
+| 40 | — Bulk-create classes from template | `secretary.bulkCreateClasses` | 🟡 | ✅ | `secretary-class-venue-bulk.test.ts` — breed×classDef matrix; splitBySex doubles standard classes but JH stays single global; handling classes (no breeds); auto class numbers; cross-org rejection |
 | 41 | — Manage sundry items | `secretary.createSundryItem`, `updateSundryItem` | 🟡 | ✅ | `secretary-crud-sweep.test.ts` — auto sortOrder, update price + enabled, cross-org/cross-show rejection |
 | 42 | Send judge offers | `secretary.sendJudgeOffer` | 🟡 | ✅ | `secretary-judges.test.ts` — happy path creates contract + sends email + backfills judge.contactEmail; rejects unknown judge; org access guard |
 | 43 | Search + add judges | `secretary.searchJudges`, `secretary.addJudge` | 🟡 | 🟠 | `secretary-judges.test.ts` covers add + searchJudges (case-insensitive dedup); RKC scrape (kcJudgeSearch) untested |
@@ -268,7 +268,7 @@ Areas with clusters of fix commits — bias test priority here:
 | Section | Total | ✅ | 🟠 | ⬜ |
 |---|---:|---:|---:|---:|
 | Exhibitor | 32 | 23 | 2 | 7 |
-| Secretary | 46 | 28 | 3 | 15 |
+| Secretary | 46 | 29 | 3 | 14 |
 | Steward | 15 | 14 | 0 | 1 |
 | Judge | 3 | 2 | 0 | 1 |
 | Admin | 8 | 6 | 1 | 1 |
@@ -280,7 +280,7 @@ Areas with clusters of fix commits — bias test priority here:
 | File upload | 3 | 1 | 0 | 2 |
 | Soft-delete | 3 | 1 | 1 | 1 |
 | Phase / breed | 3 | 2 | 0 | 1 |
-| **TOTAL** | **141** | **94** | **13** | **34** |
+| **TOTAL** | **141** | **95** | **13** | **33** |
 
 🔴 show-day-critical journeys still uncovered: ~2.
 
