@@ -15,30 +15,8 @@ import {
   makeOrder,
   makePayment,
 } from '../helpers/factories';
+import { injectStripeEvent, buildStripeWebhookRequest } from '../helpers/stripe-event';
 import { POST as stripeWebhook } from '@/app/api/webhooks/stripe/route';
-
-/**
- * The webhook calls `getStripe().webhooks.constructEvent()` to verify the
- * signature. We bypass verification by handing the mocked Stripe client a
- * `constructEvent` that returns whatever event the test wants.
- */
-function injectEvent(event: unknown) {
-  vi.mocked(stripeService.getStripe).mockReturnValue({
-    webhooks: { constructEvent: vi.fn(() => event) },
-    // The subscription handler also calls stripe.subscriptions.retrieve;
-    // stub it loosely so that path doesn't crash if exercised.
-    subscriptions: { retrieve: vi.fn(async () => ({ items: { data: [] } })) },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } as any);
-}
-
-function buildRequest(body = '{}', headers: Record<string, string> = { 'stripe-signature': 't=1,v1=stub' }) {
-  return new Request('http://localhost/api/webhooks/stripe', {
-    method: 'POST',
-    headers,
-    body,
-  });
-}
 
 async function entryReadyForPayment() {
   const [exhibitor, org, breed] = await Promise.all([
@@ -71,7 +49,7 @@ describe('POST /api/webhooks/stripe — payment_intent.succeeded', () => {
     const intentId = 'pi_test_legacy_succeeded';
     await makePayment({ entryId: entry.id, stripePaymentId: intentId });
 
-    injectEvent({
+    injectStripeEvent({
       type: 'payment_intent.succeeded',
       data: {
         object: {
@@ -81,7 +59,7 @@ describe('POST /api/webhooks/stripe — payment_intent.succeeded', () => {
       },
     });
 
-    const res = await stripeWebhook(buildRequest() as never);
+    const res = await stripeWebhook(buildStripeWebhookRequest() as never);
 
     expect(res.status).toBe(200);
     const updated = await testDb.query.entries.findFirst({ where: eq(entries.id, entry.id) });
@@ -112,12 +90,12 @@ describe('POST /api/webhooks/stripe — payment_intent.succeeded', () => {
     const intentId = 'pi_test_order_succeeded';
     await makePayment({ orderId: order.id, stripePaymentId: intentId });
 
-    injectEvent({
+    injectStripeEvent({
       type: 'payment_intent.succeeded',
       data: { object: { id: intentId, metadata: { orderId: order.id } } },
     });
 
-    const res = await stripeWebhook(buildRequest() as never);
+    const res = await stripeWebhook(buildStripeWebhookRequest() as never);
 
     expect(res.status).toBe(200);
     const updatedEntries = await testDb.query.entries.findMany({
@@ -142,10 +120,10 @@ describe('POST /api/webhooks/stripe — payment_intent.succeeded', () => {
       data: { object: { id: intentId, metadata: { orderId: order.id } } },
     };
 
-    injectEvent(event);
-    await stripeWebhook(buildRequest() as never);
-    injectEvent(event);
-    const res2 = await stripeWebhook(buildRequest() as never);
+    injectStripeEvent(event);
+    await stripeWebhook(buildStripeWebhookRequest() as never);
+    injectStripeEvent(event);
+    const res2 = await stripeWebhook(buildStripeWebhookRequest() as never);
 
     expect(res2.status).toBe(200);
     const final = await testDb.query.entries.findFirst({ where: eq(entries.id, entry.id) });
@@ -155,12 +133,12 @@ describe('POST /api/webhooks/stripe — payment_intent.succeeded', () => {
   });
 
   it('no-ops when the metadata points at no known entry/order', async () => {
-    injectEvent({
+    injectStripeEvent({
       type: 'payment_intent.succeeded',
       data: { object: { id: 'pi_test_unknown', metadata: {} } },
     });
 
-    const res = await stripeWebhook(buildRequest() as never);
+    const res = await stripeWebhook(buildStripeWebhookRequest() as never);
 
     expect(res.status).toBe(200);
   });
@@ -174,12 +152,12 @@ describe('POST /api/webhooks/stripe — payment_intent.payment_failed', () => {
     const intentId = 'pi_test_failed';
     await makePayment({ orderId: order.id, stripePaymentId: intentId });
 
-    injectEvent({
+    injectStripeEvent({
       type: 'payment_intent.payment_failed',
       data: { object: { id: intentId, metadata: { orderId: order.id } } },
     });
 
-    const res = await stripeWebhook(buildRequest() as never);
+    const res = await stripeWebhook(buildStripeWebhookRequest() as never);
 
     expect(res.status).toBe(200);
     const updatedOrder = await testDb.query.orders.findFirst({ where: eq(orders.id, order.id) });
@@ -197,7 +175,7 @@ describe('POST /api/webhooks/stripe — payment_intent.payment_failed', () => {
 describe('POST /api/webhooks/stripe — signature handling', () => {
   it('returns 400 when the stripe-signature header is missing', async () => {
     const res = await stripeWebhook(
-      buildRequest('{}', {} /* no signature header */) as never,
+      buildStripeWebhookRequest('{}', {} /* no signature header */) as never,
     );
 
     expect(res.status).toBe(400);
@@ -215,7 +193,7 @@ describe('POST /api/webhooks/stripe — signature handling', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
 
-    const res = await stripeWebhook(buildRequest() as never);
+    const res = await stripeWebhook(buildStripeWebhookRequest() as never);
 
     expect(res.status).toBe(400);
     const json = await res.json();

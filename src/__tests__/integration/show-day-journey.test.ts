@@ -1,21 +1,19 @@
 import { describe, it, expect, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { entries, results, shows, payments, organisations } from '@/server/db/schema';
-import * as stripeService from '@/server/services/stripe';
-import * as emailService from '@/server/services/email';
 import * as notifications from '@/server/services/results-notifications';
 import { POST as stripeWebhook } from '@/app/api/webhooks/stripe/route';
 import { testDb } from '../helpers/db';
 import { createTestCaller } from '../helpers/context';
 import {
   makeUser,
-  makeBreed,
   makeClassDef,
   makeDog,
   makeSecretaryWithOrgAndBreed,
   makeStewardAssignment,
-  makePayment,
+  setShowStatus,
 } from '../helpers/factories';
+import { injectStripeEvent, buildStripeWebhookRequest } from '../helpers/stripe-event';
 
 /**
  * The marathon test. Walks one entry from "secretary clicks New Show"
@@ -45,7 +43,7 @@ describe('end-to-end show day', () => {
 
     // The show is created in 'draft'; flip it to entries_open the way
     // the secretary UI does (status update outside this procedure).
-    await testDb.update(shows).set({ status: 'entries_open' }).where(eq(shows.id, show.id));
+    await setShowStatus(show.id, 'entries_open');
 
     // ── 2. Exhibitor enters their dog and gets a payment intent ─────
     const exhibitor = await makeUser({ role: 'exhibitor' });
@@ -67,40 +65,36 @@ describe('end-to-end show day', () => {
     expect(entry?.status).toBe('pending');
 
     // ── 3. Stripe webhook confirms the payment ─────────────────────
-    vi.mocked(stripeService.getStripe).mockReturnValue({
-      webhooks: {
-        constructEvent: vi.fn(() => ({
-          type: 'payment_intent.succeeded',
-          data: {
-            object: { id: intent.entryId /* not real, but unique */, metadata: { entryId: intent.entryId } },
-          },
-        })),
-      },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
-    // The createIntent procedure inserted a payment row with the real intent ID;
-    // bridge that to our test event by inserting another payment row keyed off the same id.
-    const realPayment = await testDb.query.payments.findFirst({
+    // Use the REAL stripe_payment_id that createIntent stored on the payment row,
+    // otherwise the webhook's "update payments where stripe_payment_id = …" matches
+    // zero rows and the payment-status side of the assertion silently passes.
+    const pendingPayment = await testDb.query.payments.findFirst({
       where: eq(payments.entryId, intent.entryId),
     });
-    expect(realPayment).toBeTruthy();
-    // Webhook updates payments by stripe_payment_id — we already have one with the real ID,
-    // so reusing that is correct. No extra insert needed.
+    expect(pendingPayment?.stripePaymentId).toBeTruthy();
 
-    const webhookRes = await stripeWebhook(
-      new Request('http://localhost/api/webhooks/stripe', {
-        method: 'POST',
-        headers: { 'stripe-signature': 't=1,v1=stub' },
-        body: '{}',
-      }) as never,
-    );
+    injectStripeEvent({
+      type: 'payment_intent.succeeded',
+      data: {
+        object: {
+          id: pendingPayment!.stripePaymentId,
+          metadata: { entryId: intent.entryId },
+        },
+      },
+    });
+
+    const webhookRes = await stripeWebhook(buildStripeWebhookRequest() as never);
     expect(webhookRes.status).toBe(200);
 
     entry = await testDb.query.entries.findFirst({ where: eq(entries.id, intent.entryId) });
     expect(entry?.status).toBe('confirmed');
+    const settledPayment = await testDb.query.payments.findFirst({
+      where: eq(payments.id, pendingPayment!.id),
+    });
+    expect(settledPayment?.status).toBe('succeeded');
 
     // ── 4. Steward records a result for the entry ──────────────────
-    await testDb.update(shows).set({ status: 'in_progress' }).where(eq(shows.id, show.id));
+    await setShowStatus(show.id, 'in_progress');
     const steward = await makeUser({ role: 'steward' });
     await makeStewardAssignment({ userId: steward.id, showId: show.id });
     const stewardCaller = createTestCaller(steward);
@@ -170,8 +164,10 @@ describe('end-to-end show day', () => {
       classDefinitionIds: [(await makeClassDef({ name: 'Puppy B', type: 'age' })).id],
       entryFee: 500,
     });
-    await testDb.update(shows).set({ status: 'entries_open' }).where(eq(shows.id, showA.id));
-    await testDb.update(shows).set({ status: 'entries_open' }).where(eq(shows.id, showB.id));
+    await Promise.all([
+      setShowStatus(showA.id, 'entries_open'),
+      setShowStatus(showB.id, 'entries_open'),
+    ]);
 
     const exhibitor = await makeUser({ role: 'exhibitor' });
     const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });

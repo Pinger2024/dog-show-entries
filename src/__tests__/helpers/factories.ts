@@ -21,6 +21,7 @@ import {
   entryStatusEnum,
   orderStatusEnum,
   paymentStatusEnum,
+  showStatusEnum,
 } from '@/server/db/schema';
 import { randomUUID } from 'crypto';
 
@@ -271,6 +272,13 @@ export async function makePayment(opts: {
     })
     .returning();
   return row;
+}
+
+type ShowStatus = (typeof showStatusEnum.enumValues)[number];
+
+/** Flip a show's status — mirrors what the secretary UI does outside of show.create. */
+export async function setShowStatus(showId: string, status: ShowStatus) {
+  await testDb.update(shows).set({ status }).where(eq(shows.id, showId));
 }
 
 /** Simulate a published-and-locked show without going through publishResults. */
