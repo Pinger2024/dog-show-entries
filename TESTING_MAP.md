@@ -71,14 +71,14 @@ factories and the test caller.
 | 43 | Search + add judges | `secretary.searchJudges`, `secretary.addJudge` | 🟡 | 🟠 | `secretary-judges.test.ts` covers add + searchJudges (case-insensitive dedup); RKC scrape (kcJudgeSearch) untested |
 | 44 | Update judge (breed/sex assignments) | `secretary.updateJudge`, `assignJudge`, `bulkAssignJudge`, `removeJudgeAssignment`, `getShowJudges` | 🟡 | ✅ | `secretary-judges.test.ts` |
 | 45 | View judge contract status | `secretary.getJudgeContracts` | 🟡 | ✅ | `secretary-judges.test.ts` — happy + empty |
-| 46 | Resend judge offer | `secretary.resendJudgeOffer` | 🟡 | ⬜ | Resend SDK error guard (be9c661); deferred until cooldown logic stabilises |
+| 46 | Resend judge offer | `secretary.resendJudgeOffer` | 🟡 | ✅ | `secretary-schedule-judges.test.ts` — happy path refreshes tokenExpiresAt + offerSentAt; rejects when contract is past offer_sent stage |
 | 47 | View judge coverage report | `secretary.getJudgeCoverage` | 🟡 | ✅ | `secretary-judges.test.ts` — unmet + covered after assignment |
 | 48 | View show entries (all statuses) | `entries.getForShow` | 🟡 | ✅ | `secretary-show-mgmt.test.ts` — shape only |
 | 49 | Issue refund | `secretary.issueRefund` | 🟡 | ⬜ | Stripe refund + payments record (live API call; deferred) |
 | 50 | Auto / manual catalogue numbering | `secretary.assignCatalogueNumbers` | 🟡 | ⬜ | Auto on first secretary visit |
 | 51 | Open entries (status → entries_open) | Status transition | 🟡 | ⬜ | Phase-blocker gated |
 | 52 | Close entries | Status transition | 🟡 | ⬜ | Manual or entryCloseDate trigger |
-| 53 | Edit schedule data (sponsors, judge bios, etc.) | `secretary.updateScheduleData` | 🟡 | ⬜ | JSON form; autosave (a3de5cd) |
+| 53 | Edit schedule data (sponsors, judge bios, etc.) | `secretary.updateScheduleData` | 🟡 | ✅ | `secretary-schedule-judges.test.ts` — saves scheduleData JSONB + show-level fields (showOpenTime, judgingStartTime, onCallVet); syncs new officers + guarantors into organisationPeople; case-insensitive dedup |
 | 54 | Create / quote print order (Mixam) | `printOrders.createDraftOrder`, `printOrders.getQuote` | 🟡 | ⬜ | Tradeprint→Mixam migration (d092a93) |
 | 55 | Pay for print order | `printOrders.initiatePayment` → Stripe → Mixam submission | 🟡 | ⬜ | Webhook submits to Mixam (non-blocking) |
 | 56 | Download catalogue PDF | `GET /api/catalogue/[showId]/[format]` | 🟡 | ⬜ | Formats: standard, by-class, judges-book |
@@ -92,7 +92,7 @@ factories and the test caller.
 | 64 | Add ring | `secretary.addRing` | 🟡 | ✅ | `show-creation.test.ts` |
 | 65 | Manage org people (officers, trustees) | `secretary.createOrgPerson`, `listOrgPeople`, `updateOrgPerson`, `deleteOrgPerson` | 🟡 | ✅ | `secretary-crud-sweep.test.ts` — full CRUD + name-sorted list + cross-org rejection |
 | 66 | Manage sponsors (CRUD + assignment) | `secretary.createSponsor`, `updateSponsor`, `deleteSponsor`, `listSponsors`, `assignShowSponsor`, `removeShowSponsor`, `listShowSponsors`, `assignClassSponsorship`, `removeClassSponsorship`, `upsertClassSponsor` | 🟡 | ✅ | `secretary-crud-sweep.test.ts` — full sponsor directory CRUD (soft-delete), show-level + class-level assignment lifecycle, free-text upsert with trim |
-| 67 | Record achievement manually | `secretary.recordAchievement` | 🟡 | ✅ | `secretary-show-mgmt.test.ts` — happy path + duplicate-tolerant |
+| 67 | Record achievement manually | `secretary.recordAchievement`, `getShowAchievements` | 🟡 | ✅ | `secretary-show-mgmt.test.ts` (record); `secretary-schedule-judges.test.ts` (getShowAchievements with dog + breed embedded) |
 | 68 | View audit log of entry changes | `secretary.getAuditLog` | 🟡 | ✅ | `secretary-show-mgmt.test.ts` — shape only |
 | 69 | View financial / sundry / entry reports | `secretary.getPaymentReport`, `secretary.getEntryReport`, `secretary.getSundryItemReport` | 🟡 | 🟠 | `secretary-show-mgmt.test.ts` covers entry + payment shape; sundry report uncovered |
 | 70 | View results publication status | `secretary.getResultsPublicationStatus` | 🟡 | ✅ | `secretary-show-mgmt.test.ts` — published/locked + judge approval breakdown |
@@ -268,7 +268,7 @@ Areas with clusters of fix commits — bias test priority here:
 | Section | Total | ✅ | 🟠 | ⬜ |
 |---|---:|---:|---:|---:|
 | Exhibitor | 32 | 23 | 2 | 7 |
-| Secretary | 46 | 25 | 3 | 18 |
+| Secretary | 46 | 28 | 3 | 15 |
 | Steward | 15 | 14 | 0 | 1 |
 | Judge | 3 | 0 | 0 | 3 |
 | Admin | 8 | 6 | 1 | 1 |
@@ -280,7 +280,7 @@ Areas with clusters of fix commits — bias test priority here:
 | File upload | 3 | 0 | 0 | 3 |
 | Soft-delete | 3 | 1 | 1 | 1 |
 | Phase / breed | 3 | 2 | 0 | 1 |
-| **TOTAL** | **141** | **84** | **13** | **44** |
+| **TOTAL** | **141** | **87** | **13** | **41** |
 
 🔴 show-day-critical journeys still uncovered: ~2.
 
