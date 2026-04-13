@@ -67,12 +67,12 @@ factories and the test caller.
 | 39 | — Seed checklist from defaults | `secretary.seedChecklist` | 🟡 | ⬜ | Default items + due dates |
 | 40 | — Bulk-create classes from template | `secretary.bulkCreateClasses` | 🟡 | ⬜ | Auto catalogue numbering (9aad79a) |
 | 41 | — Manage sundry items | `secretary.createSundryItem`, `secretary.bulkCreateSundryItems` | 🟡 | ⬜ | Programmes, discs, etc. |
-| 42 | Send judge offers (single + bulk) | `secretary.sendJudgeOffer`, `secretary.sendBulkJudgeOffers` | 🟡 | ⬜ | Email with contract token |
-| 43 | Search RKC + assign judges | `secretary.kcJudgeSearch`, `secretary.kcJudgeProfile`, `secretary.addJudge` | 🟡 | ⬜ | Firecrawl→fetch refactor (922d74d) |
-| 44 | Update judge (breed/sex assignments) | `secretary.updateJudge` | 🟡 | ⬜ | |
-| 45 | View judge contract status | `secretary.getJudgeContracts` | 🟡 | ⬜ | Tracks offered/opened/approved/declined |
-| 46 | Resend judge offer | `secretary.resendJudgeOffer` | 🟡 | ⬜ | Resend SDK error guard (be9c661) |
-| 47 | View judge coverage report | `secretary.getJudgeCoverage` | 🟡 | ⬜ | Highlights breed gaps |
+| 42 | Send judge offers | `secretary.sendJudgeOffer` | 🟡 | ✅ | `secretary-judges.test.ts` — happy path creates contract + sends email + backfills judge.contactEmail; rejects unknown judge; org access guard |
+| 43 | Search + add judges | `secretary.searchJudges`, `secretary.addJudge` | 🟡 | 🟠 | `secretary-judges.test.ts` covers add + searchJudges (case-insensitive dedup); RKC scrape (kcJudgeSearch) untested |
+| 44 | Update judge (breed/sex assignments) | `secretary.updateJudge`, `assignJudge`, `bulkAssignJudge`, `removeJudgeAssignment`, `getShowJudges` | 🟡 | ✅ | `secretary-judges.test.ts` |
+| 45 | View judge contract status | `secretary.getJudgeContracts` | 🟡 | ✅ | `secretary-judges.test.ts` — happy + empty |
+| 46 | Resend judge offer | `secretary.resendJudgeOffer` | 🟡 | ⬜ | Resend SDK error guard (be9c661); deferred until cooldown logic stabilises |
+| 47 | View judge coverage report | `secretary.getJudgeCoverage` | 🟡 | ✅ | `secretary-judges.test.ts` — unmet + covered after assignment |
 | 48 | View show entries (all statuses) | `entries.getForShow` (or secretary equivalent) | 🟡 | ⬜ | Paginated; includes audit log |
 | 49 | Issue refund | `secretary.issueRefund` | 🟡 | ⬜ | Stripe refund + payments record |
 | 50 | Auto / manual catalogue numbering | `secretary.assignCatalogueNumbers` | 🟡 | ⬜ | Auto on first secretary visit |
@@ -268,7 +268,7 @@ Areas with clusters of fix commits — bias test priority here:
 | Section | Total | ✅ | 🟠 | ⬜ |
 |---|---:|---:|---:|---:|
 | Exhibitor | 32 | 8 | 1 | 23 |
-| Secretary | 46 | 5 | 1 | 40 |
+| Secretary | 46 | 10 | 2 | 34 |
 | Steward | 15 | 14 | 0 | 1 |
 | Judge | 3 | 0 | 0 | 3 |
 | Admin | 8 | 6 | 1 | 1 |
@@ -280,7 +280,7 @@ Areas with clusters of fix commits — bias test priority here:
 | File upload | 3 | 0 | 0 | 3 |
 | Soft-delete | 3 | 1 | 1 | 1 |
 | Phase / breed | 3 | 2 | 0 | 1 |
-| **TOTAL** | **141** | **49** | **9** | **83** |
+| **TOTAL** | **141** | **54** | **10** | **77** |
 
 🔴 show-day-critical journeys still uncovered: ~3.
 
