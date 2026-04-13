@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useSession } from 'next-auth/react';
 import {
   Award,
   BookOpen,
@@ -17,6 +18,7 @@ import {
   Map,
   Printer,
   Share2,
+  Sparkles,
   Trophy,
   UserX,
 } from 'lucide-react';
@@ -144,6 +146,11 @@ export default function DocumentsPage() {
 
   const entries = catalogueData?.entries ?? [];
   const hasNumbers = entries.some((e) => e.catalogueNumber);
+
+  // Admin-only UI gate — only Amanda + Michael see internal Print Shop
+  // fulfilment tools like the Mixam overprint generator.
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === 'admin';
 
   // Prize card options
   const [prizeCardPlacements, setPrizeCardPlacements] = useState('5');
@@ -428,6 +435,38 @@ export default function DocumentsPage() {
               </Button>
             </div>
           </div>
+
+          {/* Admin-only: Mixam overprint PDF generator.
+              Produces a 5-page PDF with only the show-specific text +
+              logo, positioned to land on the cream middle zone of the
+              Mixam pre-printed blank prize cards. Used by fulfilment
+              to run Print Shop orders: load red blanks → print page 1
+              × N, swap to blue blanks → print page 2 × N, etc. */}
+          {isAdmin && (
+            <div className="flex flex-col gap-3 rounded-lg border border-dashed border-purple-300 bg-purple-50/50 p-4 sm:flex-row sm:items-center dark:border-purple-900 dark:bg-purple-950/30">
+              <Sparkles className="size-8 shrink-0 text-purple-600 hidden sm:block" />
+              <div className="flex-1">
+                <p className="font-medium flex items-center gap-2">
+                  Mixam Overprint PDF
+                  <span className="rounded-full bg-purple-600 px-2 py-0.5 text-[10px] font-semibold text-white">ADMIN</span>
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  5-page overprint for use with Mixam-preprinted blanks — feed
+                  red blanks, print page 1 × N copies, swap to blue, print page 2, etc.
+                </p>
+              </div>
+              <Button asChild variant="outline" className="w-full sm:w-auto min-h-[2.75rem]">
+                <a
+                  href={`/api/prize-card-overprint/${showId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Download className="size-4" />
+                  Download Overprint
+                </a>
+              </Button>
+            </div>
+          )}
 
           <div className="flex flex-wrap gap-2">
             {placementPreviews.map((p) => (
