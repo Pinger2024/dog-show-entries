@@ -42,11 +42,11 @@ factories and the test caller.
 | 21 | Purchase catalogue | `orders.checkout` (catalogue line item) | 🟡 | ⬜ | Separate from entry payment |
 | 22 | View purchased catalogue | `shows.getCatalogueAccess` + `GET /api/catalogue/[showId]/[format]` | 🟡 | ⬜ | Gated on purchase or secretary role |
 | 23 | View dog results post-show | `dogs.getShowResults`, `dogs.getWinSummary` | 🟢 | ⬜ | Depends on `results.publishedAt` |
-| 24 | Create timeline post for dog | `timeline.createPost` | 🟡 | ⬜ | S3 photo; privacy toggle |
-| 25 | Delete timeline post | `timeline.deletePost` (own only) | 🟡 | ⬜ | Soft-delete |
-| 26 | Follow / unfollow a dog | `follows.create`, `follows.delete` | 🟢 | ⬜ | Simple relation |
-| 27 | View title progress (Champion, etc.) | `dogs.getTitleProgress`, `dogs.checkLimitedShowEligibility` | 🟢 | ⬜ | RKC achievement counting |
-| 28 | Add external result (won outside Remi) | `dogs.addExternalResult` | 🟢 | ⬜ | Manual entry; counted in title progress |
+| 24 | Create timeline post for dog | `timeline.createPost` | 🟡 | ✅ | `timeline-follows-progress.test.ts` — happy + ownership guard + empty-post rejection |
+| 25 | Delete timeline post | `timeline.deletePost` (author or dog owner) | 🟡 | ✅ | `timeline-follows-progress.test.ts` — author can delete; stranger blocked; NOT_FOUND |
+| 26 | Follow / unfollow a dog | `follows.toggle`, `follows.isFollowing`, `follows.count`, `follows.getFollowedDogs` | 🟢 | ✅ | `timeline-follows-progress.test.ts` — toggle round-trip, isFollowing reflects state, count is public, getFollowedDogs lists subscriptions |
+| 27 | View title progress (Champion, etc.) | `dogs.getTitleProgress` | 🟢 | ✅ | `timeline-follows-progress.test.ts` — shape only + NOT_FOUND |
+| 28 | Add external result (won outside Remi) | `dogs.addExternalResult`, `dogs.removeExternalResult` | 🟢 | ✅ | `timeline-follows-progress.test.ts` — happy add (selfReported=true), ownership guard, remove only allows self-reported (not official) |
 | 29 | View user dashboard | `users.getDashboard` | 🟡 | ⬜ | Next shows, recent entries, trial status |
 | 30 | Update profile | `users.updateProfile` | 🟡 | ⬜ | Validated before entry |
 | 31 | Set / change password | `users.setPassword`, `users.changePassword` | 🟡 | ⬜ | Old-password verification |
@@ -267,7 +267,7 @@ Areas with clusters of fix commits — bias test priority here:
 
 | Section | Total | ✅ | 🟠 | ⬜ |
 |---|---:|---:|---:|---:|
-| Exhibitor | 32 | 8 | 1 | 23 |
+| Exhibitor | 32 | 13 | 1 | 18 |
 | Secretary | 46 | 24 | 3 | 19 |
 | Steward | 15 | 14 | 0 | 1 |
 | Judge | 3 | 0 | 0 | 3 |
@@ -280,7 +280,7 @@ Areas with clusters of fix commits — bias test priority here:
 | File upload | 3 | 0 | 0 | 3 |
 | Soft-delete | 3 | 1 | 1 | 1 |
 | Phase / breed | 3 | 2 | 0 | 1 |
-| **TOTAL** | **141** | **68** | **11** | **62** |
+| **TOTAL** | **141** | **73** | **11** | **57** |
 
 🔴 show-day-critical journeys still uncovered: ~2.
 
