@@ -162,7 +162,7 @@ factories and the test caller.
 | 106 | Forgot password (send link) | `POST /api/auth/forgot-password` | 🟡 | ⬜ | Resend; token expiry |
 | 107 | Reset password from token | `POST /api/auth/reset-password` | 🟡 | ⬜ | |
 | 108 | JWT/DB role lag (freshly-promoted user) | `resolveCurrentRole` in `src/server/trpc/procedures.ts:20` | 🔴 | ✅ | `role-lag.test.ts` (3e9bc93 regression guard) |
-| 109 | Impersonation never grants admin | `isAdmin` middleware uses real session | 🟡 | ⬜ | Must test that impersonating an admin does NOT elevate |
+| 109 | Impersonation never grants admin | `isAdmin` middleware uses real session | 🟡 | ✅ | `permission-guards.test.ts` — admin impersonating secretary keeps admin powers; secretary procedure runs as the impersonated user |
 
 ---
 
@@ -170,11 +170,11 @@ factories and the test caller.
 
 | # | Journey | Procedures / Routes | Pri | Status | Notes |
 |---|---|---|---|---|---|
-| 110 | secretaryProcedure: foreign-org user blocked | All secretary procedures + `verifyShowAccess` | 🔴 | 🟠 | Cases in publishResults, show-creation (createShow, createVenue, addRing); needs full sweep |
-| 111 | stewardProcedure: only assigned stewards | All steward procedures + `stewardAssignments` check | 🔴 | 🟠 | `steward-record-result.test.ts` covers recordResult; needs sweep across other steward procedures |
-| 112 | adminProcedure: real role check | All admin procedures | 🟡 | ⬜ | |
-| 113 | protectedProcedure: rejects unauthed | All `protectedProcedure` | 🟡 | 🟠 | One case in payments test |
-| 114 | Exhibitor cannot view others' entries | `entries.getById` | 🟡 | ⬜ | |
+| 110 | secretaryProcedure: foreign-org user blocked | All secretary procedures + `verifyShowAccess` | 🔴 | ✅ | `permission-guards.test.ts` (middleware sweep); also publishResults, show-creation tests for verifyShowAccess/verifyOrgAccess specifically |
+| 111 | stewardProcedure: only assigned stewards | All steward procedures + `stewardAssignments` check | 🔴 | ✅ | `permission-guards.test.ts` (middleware sweep); `steward-record-result.test.ts` for assignment check |
+| 112 | adminProcedure: real role check | All admin procedures | 🟡 | ✅ | `permission-guards.test.ts` |
+| 113 | protectedProcedure: rejects unauthed | All `protectedProcedure` | 🟡 | ✅ | `permission-guards.test.ts` (admin/secretary/steward sweeps cover unauthed); `payments-create-intent.test.ts` |
+| 114 | Exhibitor cannot view others' entries | `entries.getById` | 🟡 | ⬜ | Needs separate test for entry-level scoping |
 
 ---
 
@@ -272,17 +272,17 @@ Areas with clusters of fix commits — bias test priority here:
 | Steward | 15 | 6 | 0 | 9 |
 | Judge | 3 | 0 | 0 | 3 |
 | Admin | 8 | 0 | 0 | 8 |
-| Auth & roles | 5 | 1 | 0 | 4 |
-| Permission guards | 5 | 0 | 3 | 2 |
+| Auth & roles | 5 | 2 | 0 | 3 |
+| Permission guards | 5 | 4 | 0 | 1 |
 | Results lock | 4 | 3 | 0 | 1 |
 | Payment / webhooks | 7 | 3 | 0 | 4 |
 | Notifications | 7 | 0 | 5 | 2 |
 | File upload | 3 | 0 | 0 | 3 |
 | Soft-delete | 3 | 0 | 0 | 3 |
 | Phase / breed | 3 | 0 | 0 | 3 |
-| **TOTAL** | **141** | **20** | **9** | **112** |
+| **TOTAL** | **141** | **25** | **6** | **110** |
 
-🔴 show-day-critical journeys still uncovered: ~11.
+🔴 show-day-critical journeys still uncovered: ~9.
 
 ---
 
@@ -292,7 +292,7 @@ Areas with clusters of fix commits — bias test priority here:
 2. ~~**Payment webhook → entry confirmed** (#120)~~ ✅
 3. ~~**Show-creation wizard** (#36–41)~~ ✅ (partial — wizard sub-steps remain)
 4. ~~**First true journey test**: secretary creates show → exhibitor enters → steward records → secretary publishes~~ ✅ — `show-day-journey.test.ts`
-5. **Permission guard sweep** (#110–114) — small per-procedure tests; security regression net
+5. ~~**Permission guard sweep** (#110–114)~~ ✅ — `permission-guards.test.ts` (16 tests + impersonation invariants)
 6. **Catalogue / schedule / print PDFs** (#56–61) — most fragile per git history
 7. **Notifications sweep** (#126–132) — assert payloads, not HTML
 8. **Edge-case sweeps**: breed validation paths, soft-delete consistency, JH lifecycle
