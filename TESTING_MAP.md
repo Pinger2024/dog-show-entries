@@ -20,7 +20,7 @@ factories and the test caller.
 | # | Journey | Procedures / Routes | Pri | Status | Notes |
 |---|---|---|---|---|---|
 | 1 | Sign up + register account | NextAuth (Google or password) | 🟡 | ⬜ | Google OAuth path needs a stubbed strategy |
-| 2 | Complete onboarding profile | `onboarding.saveProfile`, `onboarding.complete` | 🟡 | ⬜ | Auto-fills from `dogOwners`; gates entry validation |
+| 2 | Complete onboarding profile | `onboarding.saveProfile`, `onboarding.complete`, `onboarding.getStatus` | 🟡 | ✅ | `invitations-onboarding.test.ts` — getStatus reflects profile completeness; saveProfile writes fields; complete sets onboardingCompletedAt |
 | 3 | Add a dog | `dogs.create` (+ `dogOwners` row with isPrimary) | 🔴 | ✅ | `exhibitor-data.test.ts` — happy path + explicit owners |
 | 4 | Update dog | `dogs.update`, `dogs.updateOwner` | 🟡 | ✅ | `exhibitor-data.test.ts` — happy path + ownership guard + soft-delete NOT_FOUND |
 | 5 | Upload dog photo | `POST /api/upload/dog-photo` → S3 → `dogs.updatePhotoCaption` | 🟡 | ⬜ | Mobile-Safari html-to-image fix recently |
@@ -58,7 +58,7 @@ factories and the test caller.
 
 | # | Journey | Procedures / Routes | Pri | Status | Notes |
 |---|---|---|---|---|---|
-| 33 | Accept secretary invitation | `invitations.accept` | 🟡 | ⬜ | Promotes role; route to /secretary (0ea4cc6) |
+| 33 | Accept secretary invitation | `invitations.send`, `invitations.getByToken`, `invitations.accept`, `invitations.list`, `invitations.revoke` | 🟡 | ✅ | `invitations-onboarding.test.ts` — send auto-accepts existing users + assigns role + creates membership; pending path for new emails; getByToken (incl. expired status); accept rejects wrong-email + expired tokens; list/revoke with cross-secretary guard |
 | 34 | View dashboard (orgs + shows summary) | `secretary.getDashboard` | 🟡 | ⬜ | Aggregates entry counts, revenue |
 | 35 | View organisation + members | `secretary.getOrganisation`, `secretary.orgMembers` | 🟡 | ⬜ | Active-membership filter |
 | 36 | Create new show (full wizard) | many `secretary.*` mutations | 🔴 | 🟠 | `show-creation.test.ts` covers create+venue+ring; class wizard + checklist seed remain |
@@ -267,8 +267,8 @@ Areas with clusters of fix commits — bias test priority here:
 
 | Section | Total | ✅ | 🟠 | ⬜ |
 |---|---:|---:|---:|---:|
-| Exhibitor | 32 | 21 | 1 | 10 |
-| Secretary | 46 | 24 | 3 | 19 |
+| Exhibitor | 32 | 22 | 1 | 9 |
+| Secretary | 46 | 25 | 3 | 18 |
 | Steward | 15 | 14 | 0 | 1 |
 | Judge | 3 | 0 | 0 | 3 |
 | Admin | 8 | 6 | 1 | 1 |
@@ -280,7 +280,7 @@ Areas with clusters of fix commits — bias test priority here:
 | File upload | 3 | 0 | 0 | 3 |
 | Soft-delete | 3 | 1 | 1 | 1 |
 | Phase / breed | 3 | 2 | 0 | 1 |
-| **TOTAL** | **141** | **81** | **11** | **49** |
+| **TOTAL** | **141** | **83** | **11** | **47** |
 
 🔴 show-day-critical journeys still uncovered: ~2.
 
