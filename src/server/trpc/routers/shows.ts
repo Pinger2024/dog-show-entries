@@ -252,9 +252,24 @@ export const showsRouter = createTRPCRouter({
         });
       }
 
-      // Hide draft/cancelled shows from non-secretary/admin users
+      // Hide draft/cancelled shows from people who aren't part of the show's org.
+      // Check membership rather than the JWT role — role can lag behind the DB
+      // immediately after a user becomes a secretary, but membership is the true
+      // authority for "can you see this draft?".
+      const userId = ctx.session?.user?.id;
       const userRole = ctx.session?.user?.role;
-      const isPrivileged = userRole === 'secretary' || userRole === 'admin';
+      let isPrivileged = userRole === 'admin';
+      if (!isPrivileged && userId) {
+        const membership = await ctx.db.query.memberships.findFirst({
+          where: and(
+            eq(memberships.userId, userId),
+            eq(memberships.organisationId, show.organisationId),
+            eq(memberships.status, 'active'),
+          ),
+          columns: { id: true },
+        });
+        isPrivileged = !!membership;
+      }
       if (!isPrivileged && (show.status === 'draft' || show.status === 'cancelled')) {
         throw new TRPCError({
           code: 'NOT_FOUND',
