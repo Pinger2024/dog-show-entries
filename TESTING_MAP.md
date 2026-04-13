@@ -21,10 +21,10 @@ factories and the test caller.
 |---|---|---|---|---|---|
 | 1 | Sign up + register account | NextAuth (Google or password) | 🟡 | ⬜ | Google OAuth path needs a stubbed strategy |
 | 2 | Complete onboarding profile | `onboarding.saveProfile`, `onboarding.complete` | 🟡 | ⬜ | Auto-fills from `dogOwners`; gates entry validation |
-| 3 | Add a dog | `dogs.create` (+ `dogOwners` row with isPrimary) | 🔴 | ⬜ | Feeds every downstream entry flow |
-| 4 | Update dog | `dogs.update`, `dogs.updateOwner` | 🟡 | ⬜ | Soft-delete + photo handling |
+| 3 | Add a dog | `dogs.create` (+ `dogOwners` row with isPrimary) | 🔴 | ✅ | `exhibitor-data.test.ts` — happy path + explicit owners |
+| 4 | Update dog | `dogs.update`, `dogs.updateOwner` | 🟡 | ✅ | `exhibitor-data.test.ts` — happy path + ownership guard + soft-delete NOT_FOUND |
 | 5 | Upload dog photo | `POST /api/upload/dog-photo` → S3 → `dogs.updatePhotoCaption` | 🟡 | ⬜ | Mobile-Safari html-to-image fix recently |
-| 6 | Validate profile before entry | `entries.validateExhibitorForEntry` | 🔴 | ⬜ | Critical gate; blocks checkout if profile incomplete |
+| 6 | Validate profile before entry | `entries.validateExhibitorForEntry` | 🔴 | ✅ | `exhibitor-data.test.ts` — flags missing fields, valid for complete profile, auto-fills from primary dogOwner |
 | 7 | Browse + filter shows | `shows.list` with breed/status/date filters | 🟡 | ⬜ | Breed filter uses exists() subquery |
 | 8 | View show detail + classes | `shows.getById`, `shows.getClasses` | 🟡 | ⬜ | showScope affects placement rules |
 | 9 | Enter dog into show (live path) | `orders.checkout` | 🔴 | 🟠 | `breed-validation.test.ts` exercises the breed/age path; need broader checkout test for sundries, JH details, multi-entry carts. **Note**: `payments.createIntent` and `entries.create` are not called from the UI but still have tests guarding any future re-use |
@@ -33,11 +33,11 @@ factories and the test caller.
 | 12 | Enter multiple classes in one entry | `entries.create` array of classIds | 🟡 | ⬜ | Duplicate-class guard; fee summing |
 | 13 | Complete payment via Stripe | `POST /api/webhooks/stripe` (payment_intent.succeeded) | 🔴 | ✅ | `stripe-webhook.test.ts` — legacy single-entry + order-level + idempotent re-delivery |
 | 14 | Receive entry confirmation email | `sendEntryConfirmationEmail` (async post-webhook) | 🟡 | ⬜ | Fire-and-forget; assert payload shape only |
-| 15 | View my entries (active + past) | `entries.list` | 🟡 | ⬜ | Soft-delete filter; per-exhibitor scoping |
-| 16 | View entry detail | `entries.getById` | 🟡 | ⬜ | Non-secretary callers see only own entries |
+| 15 | View my entries (active + past) | `entries.list` | 🟡 | ✅ | `exhibitor-data.test.ts` — own-entries scope, dogId filter, soft-delete excluded |
+| 16 | View entry detail | `entries.getById` | 🟡 | ✅ | `exhibitor-data.test.ts` — own + secretary + admin can read; other exhibitors blocked |
 | 17 | Edit entry classes (swap/add pre-show) | `entries.update` | 🟡 | ⬜ | Recalculates fees; payment or refund as needed |
 | 18 | Handle fee adjustment (add/remove class) | `entries.update` feeDiff path | 🟡 | ⬜ | New PaymentIntent or auto-refund |
-| 19 | Withdraw from show | `entries.withdraw` | 🟡 | ⬜ | Sets status='withdrawn'; audit log |
+| 19 | Withdraw from show | `entries.withdraw` | 🟡 | ✅ | `exhibitor-data.test.ts` — happy path, ownership guard, double-withdraw rejection |
 | 20 | View show schedule PDF | `GET /api/schedule/[showId]` | 🟡 | ⬜ | React-PDF generation |
 | 21 | Purchase catalogue | `orders.checkout` (catalogue line item) | 🟡 | ⬜ | Separate from entry payment |
 | 22 | View purchased catalogue | `shows.getCatalogueAccess` + `GET /api/catalogue/[showId]/[format]` | 🟡 | ⬜ | Gated on purchase or secretary role |
@@ -174,7 +174,7 @@ factories and the test caller.
 | 111 | stewardProcedure: only assigned stewards | All steward procedures + `stewardAssignments` check | 🔴 | ✅ | `permission-guards.test.ts` (middleware sweep); `steward-record-result.test.ts` for assignment check |
 | 112 | adminProcedure: real role check | All admin procedures | 🟡 | ✅ | `permission-guards.test.ts` |
 | 113 | protectedProcedure: rejects unauthed | All `protectedProcedure` | 🟡 | ✅ | `permission-guards.test.ts` (admin/secretary/steward sweeps cover unauthed); `payments-create-intent.test.ts` |
-| 114 | Exhibitor cannot view others' entries | `entries.getById` | 🟡 | ⬜ | Needs separate test for entry-level scoping |
+| 114 | Exhibitor cannot view others' entries | `entries.getById` | 🟡 | ✅ | `exhibitor-data.test.ts` — covered as part of getById test group |
 
 ---
 
@@ -231,8 +231,8 @@ factories and the test caller.
 
 | # | Journey | Procedures / Routes | Pri | Status | Notes |
 |---|---|---|---|---|---|
-| 136 | Deleted entries excluded from queries | `isNull(entries.deletedAt)` everywhere | 🟡 | ⬜ | Sweep test |
-| 137 | Deleted dogs excluded from owner views | `isNull(dogs.deletedAt)` | 🟡 | ⬜ | But still visible in past entries |
+| 136 | Deleted entries excluded from queries | `isNull(entries.deletedAt)` everywhere | 🟡 | 🟠 | `exhibitor-data.test.ts` covers entries.list; broader sweep deferred |
+| 137 | Deleted dogs excluded from owner views | `isNull(dogs.deletedAt)` | 🟡 | ✅ | `exhibitor-data.test.ts` — dogs.list excludes soft-deleted |
 | 138 | Withdrawn vs cancelled vs deleted distinctions | entries.status enum vs deletedAt | 🟡 | ⬜ | Easy to confuse — sweep test |
 
 ---
@@ -267,22 +267,22 @@ Areas with clusters of fix commits — bias test priority here:
 
 | Section | Total | ✅ | 🟠 | ⬜ |
 |---|---:|---:|---:|---:|
-| Exhibitor | 32 | 3 | 1 | 28 |
+| Exhibitor | 32 | 8 | 1 | 23 |
 | Secretary | 46 | 5 | 1 | 40 |
 | Steward | 15 | 14 | 0 | 1 |
 | Judge | 3 | 0 | 0 | 3 |
 | Admin | 8 | 6 | 1 | 1 |
 | Auth & roles | 5 | 2 | 0 | 3 |
-| Permission guards | 5 | 4 | 0 | 1 |
+| Permission guards | 5 | 5 | 0 | 0 |
 | Results lock | 4 | 3 | 0 | 1 |
 | Payment / webhooks | 7 | 3 | 0 | 4 |
 | Notifications | 7 | 0 | 5 | 2 |
 | File upload | 3 | 0 | 0 | 3 |
-| Soft-delete | 3 | 0 | 0 | 3 |
+| Soft-delete | 3 | 1 | 1 | 1 |
 | Phase / breed | 3 | 2 | 0 | 1 |
-| **TOTAL** | **141** | **42** | **8** | **91** |
+| **TOTAL** | **141** | **49** | **9** | **83** |
 
-🔴 show-day-critical journeys still uncovered: ~5.
+🔴 show-day-critical journeys still uncovered: ~3.
 
 ---
 
