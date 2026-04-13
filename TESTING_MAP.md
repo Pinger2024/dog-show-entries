@@ -61,9 +61,9 @@ factories and the test caller.
 | 33 | Accept secretary invitation | `invitations.accept` | 🟡 | ⬜ | Promotes role; route to /secretary (0ea4cc6) |
 | 34 | View dashboard (orgs + shows summary) | `secretary.getDashboard` | 🟡 | ⬜ | Aggregates entry counts, revenue |
 | 35 | View organisation + members | `secretary.getOrganisation`, `secretary.orgMembers` | 🟡 | ⬜ | Active-membership filter |
-| 36 | Create new show (full wizard) | many `secretary.*` mutations | 🔴 | ⬜ | Multi-step; break into sub-rows below |
-| 37 | — Create / select venue | `secretary.createVenue`, `secretary.listVenues` | 🟡 | ⬜ | Per-org reuse |
-| 38 | — Define show details (type, breed, dates, fees) | `secretary.createShow` | 🔴 | ⬜ | Sets breedId for single-breed shows |
+| 36 | Create new show (full wizard) | many `secretary.*` mutations | 🔴 | 🟠 | `show-creation.test.ts` covers create+venue+ring; class wizard + checklist seed remain |
+| 37 | — Create / select venue | `secretary.createVenue`, `secretary.listVenues` | 🟡 | ✅ | `show-creation.test.ts` (no-postcode path; geocoding fetch not exercised) |
+| 38 | — Define show details (type, breed, dates, fees) | `shows.create` | 🔴 | ✅ | `show-creation.test.ts` — happy path, classes (combined + separate sex), slug uniqueness, subscription gate, non-member rejection |
 | 39 | — Seed checklist from defaults | `secretary.seedChecklist` | 🟡 | ⬜ | Default items + due dates |
 | 40 | — Bulk-create classes from template | `secretary.bulkCreateClasses` | 🟡 | ⬜ | Auto catalogue numbering (9aad79a) |
 | 41 | — Manage sundry items | `secretary.createSundryItem`, `secretary.bulkCreateSundryItems` | 🟡 | ⬜ | Programmes, discs, etc. |
@@ -89,7 +89,7 @@ factories and the test caller.
 | 61 | Download ring numbers / ring board | ring-numbers, ring-board routes | 🟡 | ⬜ | 6-up cards; logistics overview |
 | 62 | Assign / remove stewards | `secretary.assignSteward`, `secretary.setStewardBreeds`, `secretary.removeSteward` | 🟡 | ⬜ | Breed-specific assignments |
 | 63 | Assign judge to class / breed / sex | `secretary.assignJudge` | 🟡 | ⬜ | Complex breed fallback |
-| 64 | Add ring | `secretary.addRing` | 🟡 | ⬜ | |
+| 64 | Add ring | `secretary.addRing` | 🟡 | ✅ | `show-creation.test.ts` |
 | 65 | Manage org people (officers, trustees) | `secretary.createOrgPerson` etc. | 🟡 | ⬜ | Surface in catalogue front matter |
 | 66 | Manage sponsors (CRUD + assignment) | `secretary.createSponsor` etc., `secretary.assignClassSponsorship`, `secretary.assignShowSponsor` | 🟡 | ⬜ | Logos/names on catalogue + schedule |
 | 67 | Record achievement manually | `secretary.recordAchievement` | 🟡 | ⬜ | For hand-recorded specials |
@@ -170,7 +170,7 @@ factories and the test caller.
 
 | # | Journey | Procedures / Routes | Pri | Status | Notes |
 |---|---|---|---|---|---|
-| 110 | secretaryProcedure: foreign-org user blocked | All secretary procedures + `verifyShowAccess` | 🔴 | 🟠 | One case in publishResults test; need a sweep |
+| 110 | secretaryProcedure: foreign-org user blocked | All secretary procedures + `verifyShowAccess` | 🔴 | 🟠 | Cases in publishResults, show-creation (createShow, createVenue, addRing); needs full sweep |
 | 111 | stewardProcedure: only assigned stewards | All steward procedures + `stewardAssignments` check | 🔴 | 🟠 | `steward-record-result.test.ts` covers recordResult; needs sweep across other steward procedures |
 | 112 | adminProcedure: real role check | All admin procedures | 🟡 | ⬜ | |
 | 113 | protectedProcedure: rejects unauthed | All `protectedProcedure` | 🟡 | 🟠 | One case in payments test |
@@ -268,7 +268,7 @@ Areas with clusters of fix commits — bias test priority here:
 | Section | Total | ✅ | 🟠 | ⬜ |
 |---|---:|---:|---:|---:|
 | Exhibitor | 32 | 2 | 0 | 30 |
-| Secretary | 46 | 2 | 0 | 44 |
+| Secretary | 46 | 5 | 1 | 40 |
 | Steward | 15 | 6 | 0 | 9 |
 | Judge | 3 | 0 | 0 | 3 |
 | Admin | 8 | 0 | 0 | 8 |
@@ -280,9 +280,9 @@ Areas with clusters of fix commits — bias test priority here:
 | File upload | 3 | 0 | 0 | 3 |
 | Soft-delete | 3 | 0 | 0 | 3 |
 | Phase / breed | 3 | 0 | 0 | 3 |
-| **TOTAL** | **141** | **17** | **8** | **116** |
+| **TOTAL** | **141** | **20** | **9** | **112** |
 
-🔴 show-day-critical journeys still uncovered: ~12.
+🔴 show-day-critical journeys still uncovered: ~11.
 
 ---
 
