@@ -79,8 +79,8 @@ factories and the test caller.
 | 51 | Open entries (status → entries_open) | Status transition | 🟡 | ⬜ | Phase-blocker gated |
 | 52 | Close entries | Status transition | 🟡 | ⬜ | Manual or entryCloseDate trigger |
 | 53 | Edit schedule data (sponsors, judge bios, etc.) | `secretary.updateScheduleData` | 🟡 | ✅ | `secretary-schedule-judges.test.ts` — saves scheduleData JSONB + show-level fields (showOpenTime, judgingStartTime, onCallVet); syncs new officers + guarantors into organisationPeople; case-insensitive dedup |
-| 54 | Create / quote print order (Mixam) | `printOrders.createDraftOrder`, `printOrders.getQuote` | 🟡 | ⬜ | Tradeprint→Mixam migration (d092a93) |
-| 55 | Pay for print order | `printOrders.initiatePayment` → Stripe → Mixam submission | 🟡 | ⬜ | Webhook submits to Mixam (non-blocking) |
+| 54 | Create / quote print order (Mixam) | `printOrders.createDraftOrder`, `getById`, `listByShow`, `cancelOrder` | 🟡 | 🟠 | `print-orders.test.ts` — full CRUD + cancel lifecycle; cross-org rejection. getQuote (Mixam pricing) deferred. |
+| 55 | Pay for print order | `printOrders.initiatePayment` → Stripe → Mixam submission | 🟡 | 🟠 | Stripe webhook print-order branch covered in `stripe-webhook.test.ts`; initiatePayment itself uncovered (heavy: PDF + R2 + Stripe intent) |
 | 56 | Download catalogue PDF | `GET /api/catalogue/[showId]/[format]` | 🟡 | ⬜ | Formats: standard, by-class, judges-book |
 | 57 | Download schedule PDF | `GET /api/schedule/[showId]` | 🟡 | ⬜ | |
 | 58 | Download absentee report | `GET /api/absentee-report/[showId]` | 🟡 | ⬜ | Built from steward `markAbsent` data |
@@ -199,7 +199,7 @@ factories and the test caller.
 | 122 | checkout.session.completed → activate subscription | Same webhook | 🟡 | ✅ | `stripe-subscription-webhook.test.ts` — org subscription (links plan via priceId, sets stripeCustomerId/SubscriptionId/status); Pro user subscription; non-subscription mode no-op. Plus `customer.subscription.updated` (status + plan changes for org and Pro) and `customer.subscription.deleted` (clears planId, marks cancelled) |
 | 123 | Resend inbound email → feedback row + admin notification | `POST /api/webhooks/resend` | 🟡 | ✅ | `resend-webhook.test.ts` — 400 missing svix headers; 400 verification throw; 500 missing secret; happy path inserts feedback row (parsed from name + Re: prefix stripped); idempotent re-delivery; ignores non-email.received types |
 | 124 | Order checkout (entries + sundries bundled) | `orders.checkout`, `orders.list`, `orders.getById` | 🟡 | 🟠 | `orders-and-catalogue.test.ts` covers list + getById (own only, NOT_FOUND); checkout's full multi-entry/sundries path remains partial |
-| 125 | Print order checkout → Mixam submission | `printOrders.initiatePayment` + Stripe webhook | 🟡 | ⬜ | Async non-blocking Mixam call |
+| 125 | Print order checkout → Mixam submission | `printOrders.initiatePayment` + Stripe webhook | 🟡 | 🟠 | Stripe webhook print-order branch covered; initiatePayment itself uncovered |
 
 ---
 
@@ -268,19 +268,19 @@ Areas with clusters of fix commits — bias test priority here:
 | Section | Total | ✅ | 🟠 | ⬜ |
 |---|---:|---:|---:|---:|
 | Exhibitor | 32 | 27 | 2 | 3 |
-| Secretary | 46 | 29 | 3 | 14 |
+| Secretary | 46 | 30 | 5 | 11 |
 | Steward | 15 | 14 | 0 | 1 |
 | Judge | 3 | 3 | 0 | 0 |
 | Admin | 8 | 7 | 1 | 0 |
 | Auth & roles | 5 | 4 | 0 | 1 |
 | Permission guards | 5 | 5 | 0 | 0 |
 | Results lock | 4 | 4 | 0 | 0 |
-| Payment / webhooks | 7 | 5 | 1 | 1 |
+| Payment / webhooks | 7 | 5 | 2 | 0 |
 | Notifications | 7 | 0 | 5 | 2 |
 | File upload | 3 | 3 | 0 | 0 |
 | Soft-delete | 3 | 3 | 0 | 0 |
 | Phase / breed | 3 | 2 | 0 | 1 |
-| **TOTAL** | **141** | **106** | **11** | **24** |
+| **TOTAL** | **141** | **107** | **13** | **21** |
 
 🔴 show-day-critical journeys still uncovered: ~2.
 
