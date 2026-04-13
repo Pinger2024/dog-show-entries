@@ -133,8 +133,8 @@ factories and the test caller.
 
 | # | Journey | Procedures / Routes | Pri | Status | Notes |
 |---|---|---|---|---|---|
-| 94 | Accept judge offer | `GET /api/judge-contract/[token]` (form submit) | 🟡 | ⬜ | No NextAuth — token-only |
-| 95 | Decline judge offer | Same endpoint, decline path | 🟡 | ⬜ | |
+| 94 | Accept judge offer | `GET /api/judge-contract/[token]` + `POST` action=accept | 🟡 | ✅ | `judge-contract-route.test.ts` — POST accept stamps offer_accepted + acceptedAt; GET 200 happy / 404 unknown / 410 expired; rejects already-responded contracts |
+| 95 | Decline judge offer | Same endpoint, action=decline | 🟡 | ✅ | `judge-contract-route.test.ts` — POST decline marks declined + stores reason in expenseNotes |
 | 96 | Approve steward-submitted results | `GET /api/results-approval/[token]` | 🟡 | ⬜ | Gates secretary publish |
 
 ---
@@ -270,7 +270,7 @@ Areas with clusters of fix commits — bias test priority here:
 | Exhibitor | 32 | 23 | 2 | 7 |
 | Secretary | 46 | 28 | 3 | 15 |
 | Steward | 15 | 14 | 0 | 1 |
-| Judge | 3 | 0 | 0 | 3 |
+| Judge | 3 | 2 | 0 | 1 |
 | Admin | 8 | 6 | 1 | 1 |
 | Auth & roles | 5 | 4 | 0 | 1 |
 | Permission guards | 5 | 5 | 0 | 0 |
@@ -280,7 +280,7 @@ Areas with clusters of fix commits — bias test priority here:
 | File upload | 3 | 0 | 0 | 3 |
 | Soft-delete | 3 | 1 | 1 | 1 |
 | Phase / breed | 3 | 2 | 0 | 1 |
-| **TOTAL** | **141** | **89** | **13** | **39** |
+| **TOTAL** | **141** | **91** | **13** | **37** |
 
 🔴 show-day-critical journeys still uncovered: ~2.
 
