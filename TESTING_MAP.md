@@ -87,7 +87,7 @@ factories and the test caller.
 | 59 | Download prize cards PDF | prize-cards route | 🟡 | ⬜ | Home-print gated to admin (b020229) |
 | 60 | Download judges' book | judges-book route | 🟡 | ⬜ | Dense write-in format |
 | 61 | Download ring numbers / ring board | ring-numbers, ring-board routes | 🟡 | ⬜ | 6-up cards; logistics overview |
-| 62 | Assign / remove stewards | `secretary.assignSteward`, `secretary.setStewardBreeds`, `secretary.removeSteward` | 🟡 | ⬜ | Breed-specific assignments |
+| 62 | Assign / remove stewards | `secretary.assignSteward`, `secretary.setStewardBreeds`, `secretary.removeSteward`, `getShowStewards` | 🟡 | ✅ | `secretary-stewards-checklist.test.ts` — assign promotes exhibitor → steward; remove reverts role only when last assignment goes; double-assign rejected; non-existent email rejected |
 | 63 | Assign judge to class / breed / sex | `secretary.assignJudge` | 🟡 | ⬜ | Complex breed fallback |
 | 64 | Add ring | `secretary.addRing` | 🟡 | ✅ | `show-creation.test.ts` |
 | 65 | Manage org people (officers, trustees) | `secretary.createOrgPerson`, `listOrgPeople`, `updateOrgPerson`, `deleteOrgPerson` | 🟡 | ✅ | `secretary-crud-sweep.test.ts` — full CRUD + name-sorted list + cross-org rejection |
@@ -101,8 +101,8 @@ factories and the test caller.
 | 73 | Unpublish results (whole show) | `secretary.unpublishResults` | 🔴 | ✅ | Same file |
 | 74 | Unpublish per-class results | `secretary.unpublishClassResults` | 🟡 | ✅ | `secretary-show-mgmt.test.ts` |
 | 75 | Mark / unmark RKC submission | `secretary.markRkcSubmitted`, `secretary.unmarkRkcSubmitted` | 🟡 | ✅ | `secretary-show-mgmt.test.ts` — only completed shows can be marked; toggle is reversible |
-| 76 | Manage show checklist (add/check/delete) | `secretary.addChecklistItem`, `secretary.updateChecklistItem`, `secretary.deleteChecklistItem` | 🟡 | ⬜ | |
-| 77 | Auto-detect checklist completion | `secretary.getChecklistAutoDetect` | 🟡 | ⬜ | Marks done when conditions met |
+| 76 | Manage show checklist (add/check/delete) | `secretary.addChecklistItem`, `secretary.updateChecklistItem`, `secretary.deleteChecklistItem` | 🟡 | ✅ | `secretary-stewards-checklist.test.ts` — auto sortOrder per phase, status flip stamps completedAt + completedByUserId, notes/assignedToName, delete |
+| 77 | Auto-detect checklist completion | `secretary.getChecklistAutoDetect` | 🟡 | ✅ | `secretary-stewards-checklist.test.ts` — shape only |
 | 78 | Delete show (drafts only) | `secretary.deleteShow` | 🟡 | ✅ | `secretary-show-mgmt.test.ts` — happy path + non-draft guard + has-entries guard + cross-org rejection |
 
 ---
@@ -268,7 +268,7 @@ Areas with clusters of fix commits — bias test priority here:
 | Section | Total | ✅ | 🟠 | ⬜ |
 |---|---:|---:|---:|---:|
 | Exhibitor | 32 | 8 | 1 | 23 |
-| Secretary | 46 | 21 | 3 | 22 |
+| Secretary | 46 | 24 | 3 | 19 |
 | Steward | 15 | 14 | 0 | 1 |
 | Judge | 3 | 0 | 0 | 3 |
 | Admin | 8 | 6 | 1 | 1 |
@@ -280,7 +280,7 @@ Areas with clusters of fix commits — bias test priority here:
 | File upload | 3 | 0 | 0 | 3 |
 | Soft-delete | 3 | 1 | 1 | 1 |
 | Phase / breed | 3 | 2 | 0 | 1 |
-| **TOTAL** | **141** | **65** | **11** | **65** |
+| **TOTAL** | **141** | **68** | **11** | **62** |
 
 🔴 show-day-critical journeys still uncovered: ~2.
 
