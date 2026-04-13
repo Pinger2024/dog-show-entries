@@ -16,6 +16,9 @@ import {
   stewardAssignments,
   orders,
   payments,
+  judges,
+  judgeAssignments,
+  achievements,
   userRoleEnum,
   membershipStatusEnum,
   entryStatusEnum,
@@ -217,6 +220,55 @@ export async function makeResult(opts: {
       placement: opts.placement ?? null,
       placementStatus: opts.placementStatus ?? null,
       recordedBy: opts.recordedBy,
+    })
+    .returning();
+  return row;
+}
+
+export async function makeJudge(opts: Partial<typeof judges.$inferInsert> = {}) {
+  const n = seq();
+  const [row] = await testDb
+    .insert(judges)
+    .values({
+      name: opts.name ?? `Test Judge ${n}`,
+      contactEmail: opts.contactEmail,
+      ...opts,
+    })
+    .returning();
+  return row;
+}
+
+export async function makeJudgeAssignment(opts: {
+  showId: string;
+  judgeId: string;
+  breedId?: string;
+  sex?: 'dog' | 'bitch' | null;
+}) {
+  const [row] = await testDb
+    .insert(judgeAssignments)
+    .values({
+      showId: opts.showId,
+      judgeId: opts.judgeId,
+      breedId: opts.breedId,
+      sex: opts.sex,
+    })
+    .returning();
+  return row;
+}
+
+export async function makeAchievement(opts: {
+  showId?: string;
+  dogId: string;
+  type: (typeof achievements.$inferInsert)['type'];
+  date?: string;
+}) {
+  const [row] = await testDb
+    .insert(achievements)
+    .values({
+      showId: opts.showId,
+      dogId: opts.dogId,
+      type: opts.type,
+      date: opts.date ?? '2030-06-01',
     })
     .returning();
   return row;

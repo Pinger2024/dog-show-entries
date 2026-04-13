@@ -112,20 +112,20 @@ factories and the test caller.
 | # | Journey | Procedures / Routes | Pri | Status | Notes |
 |---|---|---|---|---|---|
 | 79 | View my assigned shows | `steward.getMyShows` | 🔴 | ✅ | `steward-record-result.test.ts` |
-| 80 | View show classes in my ring | `steward.getShowClasses` | 🔴 | ⬜ | Breed-filtered if assigned |
-| 81 | View entries in a class | `steward.getClassEntries` | 🔴 | ⬜ | JH name handling (8c62cb6) |
+| 80 | View show classes in my ring | `steward.getShowClasses` | 🔴 | ✅ | `steward-sweep.test.ts` |
+| 81 | View entries in a class | `steward.getClassEntries` | 🔴 | ✅ | `steward-sweep.test.ts` |
 | 82 | Record placement (1–7 or withheld/unplaced) | `steward.recordResult` | 🔴 | ✅ | `steward-record-result.test.ts` |
 | 83 | Update existing result | `steward.recordResult` (re-call) | 🔴 | ✅ | Same file (upsert test) |
 | 84 | Mark entry absent | `steward.markAbsent` | 🟡 | ✅ | Same file |
 | 85 | Remove a recorded result | `steward.removeResult` | 🟡 | ✅ | Same file |
 | 86 | Lock check before edit | `assertResultsNotLocked` (called inside recordResult) | 🔴 | ✅ | Same file (record + remove lock tests) |
-| 87 | View live results | `steward.getLiveResults` | 🟢 | ⬜ | |
-| 88 | View results summary | `steward.getResultsSummary` | 🟡 | ⬜ | Aggregated for ringside |
-| 89 | View judge approval status | `steward.getJudgeApprovalStatus` | 🟡 | ⬜ | Gates publish |
-| 90 | Record achievement (BoB, CC, RCC, etc.) | `steward.recordAchievement` | 🟡 | ⬜ | Keyed by ACHIEVEMENT_TYPES |
-| 91 | Remove achievement | `steward.removeAchievement` | 🟡 | ⬜ | |
-| 92 | Submit results for judge approval | `steward.submitForJudgeApproval` | 🟡 | ⬜ | Token email to judge |
-| 93 | Update winner photo | `steward.updateWinnerPhoto` | 🟢 | ⬜ | S3 upload |
+| 87 | View live results | `steward.getLiveResults` | 🟢 | ✅ | `steward-sweep.test.ts` — public unpublished gate + privileged bypass |
+| 88 | View results summary | `steward.getResultsSummary` | 🟡 | ⬜ | Aggregated for ringside; large query, low-value standalone test |
+| 89 | View judge approval status | `steward.getJudgeApprovalStatus` | 🟡 | ✅ | `steward-sweep.test.ts` |
+| 90 | Record achievement (BoB, CC, RCC, etc.) | `steward.recordAchievement` | 🟡 | ✅ | `steward-sweep.test.ts` — happy path, sex validation, upsert, lock guard, dog-not-entered |
+| 91 | Remove achievement | `steward.removeAchievement` | 🟡 | ✅ | `steward-sweep.test.ts` |
+| 92 | Submit results for judge approval | `steward.submitForJudgeApproval` | 🟡 | ✅ | `steward-sweep.test.ts` — happy + email mock, no-email, no-assignment |
+| 93 | Update winner photo | `steward.updateWinnerPhoto` | 🟢 | ✅ | `steward-sweep.test.ts` — happy path, requires existing result |
 
 ---
 
@@ -269,7 +269,7 @@ Areas with clusters of fix commits — bias test priority here:
 |---|---:|---:|---:|---:|
 | Exhibitor | 32 | 3 | 1 | 28 |
 | Secretary | 46 | 5 | 1 | 40 |
-| Steward | 15 | 6 | 0 | 9 |
+| Steward | 15 | 14 | 0 | 1 |
 | Judge | 3 | 0 | 0 | 3 |
 | Admin | 8 | 0 | 0 | 8 |
 | Auth & roles | 5 | 2 | 0 | 3 |
@@ -280,9 +280,9 @@ Areas with clusters of fix commits — bias test priority here:
 | File upload | 3 | 0 | 0 | 3 |
 | Soft-delete | 3 | 0 | 0 | 3 |
 | Phase / breed | 3 | 2 | 0 | 1 |
-| **TOTAL** | **141** | **28** | **7** | **106** |
+| **TOTAL** | **141** | **36** | **7** | **98** |
 
-🔴 show-day-critical journeys still uncovered: ~7.
+🔴 show-day-critical journeys still uncovered: ~5.
 
 ---
 
