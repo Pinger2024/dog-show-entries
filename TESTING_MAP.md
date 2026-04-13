@@ -23,14 +23,14 @@ factories and the test caller.
 | 2 | Complete onboarding profile | `onboarding.saveProfile`, `onboarding.complete`, `onboarding.getStatus` | 🟡 | ✅ | `invitations-onboarding.test.ts` — getStatus reflects profile completeness; saveProfile writes fields; complete sets onboardingCompletedAt |
 | 3 | Add a dog | `dogs.create` (+ `dogOwners` row with isPrimary) | 🔴 | ✅ | `exhibitor-data.test.ts` — happy path + explicit owners |
 | 4 | Update dog | `dogs.update`, `dogs.updateOwner` | 🟡 | ✅ | `exhibitor-data.test.ts` — happy path + ownership guard + soft-delete NOT_FOUND |
-| 5 | Upload dog photo | `POST /api/upload/dog-photo` → S3 → `dogs.updatePhotoCaption` | 🟡 | ⬜ | Mobile-Safari html-to-image fix recently |
+| 5 | Upload dog photo | `POST /api/upload/dog-photo` | 🟡 | ✅ | `edge-cases-sweep.test.ts` — 401 unauth, 400 missing file, 404 unowned dog, 200 success (first photo auto-marked primary, R2 upload mocked, key scoped to dogs/<dogId>/<uuid>.<ext>), 400 non-image MIME |
 | 6 | Validate profile before entry | `entries.validateExhibitorForEntry` | 🔴 | ✅ | `exhibitor-data.test.ts` — flags missing fields, valid for complete profile, auto-fills from primary dogOwner |
 | 7 | Browse + filter shows | `shows.list` with breed/status/date/search filters | 🟡 | ✅ | `shows-browse-and-edit.test.ts` — default visibility, status + showType filters, breedId narrowing, name search |
 | 8 | View show detail + classes | `shows.getById`, `shows.getClasses` | 🟡 | ✅ | `shows-browse-and-edit.test.ts` — happy + NOT_FOUND |
 | 9 | Enter dog into show (live path) | `orders.checkout` | 🔴 | 🟠 | `breed-validation.test.ts` exercises the breed/age path; need broader checkout test for sundries, JH details, multi-entry carts. **Note**: `payments.createIntent` and `entries.create` are not called from the UI but still have tests guarding any future re-use |
 | 10 | Validate dog eligibility (age, breed, JH vs standard) | `orders.checkout` checks | 🔴 | ✅ | `breed-validation.test.ts` — primary + fallback breed paths, class-level enforcement, JH bypass, age 4mo / 6mo / 12wk gates |
-| 11 | Detect judge conflict (can't exhibit under assigned judge) | `entries.create` fuzzy name match | 🟡 | ⬜ | Case-insensitive trim — fuzzy match risk |
-| 12 | Enter multiple classes in one entry | `entries.create` array of classIds | 🟡 | ⬜ | Duplicate-class guard; fee summing |
+| 11 | Detect judge conflict (can't exhibit under assigned judge) | `orders.checkout` fuzzy name match | 🟡 | ✅ | `edge-cases-sweep.test.ts` — exhibitor name matches assigned judge → BAD_REQUEST |
+| 12 | Enter multiple classes in one entry | `orders.checkout` array of classIds | 🟡 | ✅ | `edge-cases-sweep.test.ts` — sums fees via show-level tiered pricing (firstEntryFee + subsequentEntryFee × n-1) |
 | 13 | Complete payment via Stripe | `POST /api/webhooks/stripe` (payment_intent.succeeded) | 🔴 | ✅ | `stripe-webhook.test.ts` — legacy single-entry + order-level + idempotent re-delivery |
 | 14 | Receive entry confirmation email | `sendEntryConfirmationEmail` (async post-webhook) | 🟡 | ⬜ | Fire-and-forget; assert payload shape only |
 | 15 | View my entries (active + past) | `entries.list` | 🟡 | ✅ | `exhibitor-data.test.ts` — own-entries scope, dogId filter, soft-delete excluded |
@@ -41,7 +41,7 @@ factories and the test caller.
 | 20 | View show schedule PDF | `GET /api/schedule/[showId]` | 🟡 | ⬜ | React-PDF generation |
 | 21 | Purchase catalogue | `orders.checkout` (catalogue sundry) | 🟡 | 🟠 | Sundry order setup covered indirectly via `orders-and-catalogue.test.ts` paid-order fixture; full checkout flow uncovered |
 | 22 | View purchased catalogue | `shows.getCatalogueAccess`, `shows.getMyCataloguePurchases` | 🟡 | ✅ | `orders-and-catalogue.test.ts` — hasPurchased + isAvailable; getMyCataloguePurchases lists shows where caller bought |
-| 23 | View dog results post-show | `dogs.getShowResults`, `dogs.getWinSummary` | 🟢 | ⬜ | Depends on `results.publishedAt` |
+| 23 | View dog results post-show | `dogs.getShowResults`, `dogs.getWinSummary` | 🟢 | ✅ | `edge-cases-sweep.test.ts` — getShowResults returns flat placements sorted by show date desc; empty for dogs with no placements; getWinSummary shape |
 | 24 | Create timeline post for dog | `timeline.createPost` | 🟡 | ✅ | `timeline-follows-progress.test.ts` — happy + ownership guard + empty-post rejection |
 | 25 | Delete timeline post | `timeline.deletePost` (author or dog owner) | 🟡 | ✅ | `timeline-follows-progress.test.ts` — author can delete; stranger blocked; NOT_FOUND |
 | 26 | Follow / unfollow a dog | `follows.toggle`, `follows.isFollowing`, `follows.count`, `follows.getFollowedDogs` | 🟢 | ✅ | `timeline-follows-progress.test.ts` — toggle round-trip, isFollowing reflects state, count is public, getFollowedDogs lists subscriptions |
@@ -267,7 +267,7 @@ Areas with clusters of fix commits — bias test priority here:
 
 | Section | Total | ✅ | 🟠 | ⬜ |
 |---|---:|---:|---:|---:|
-| Exhibitor | 32 | 23 | 2 | 7 |
+| Exhibitor | 32 | 27 | 2 | 3 |
 | Secretary | 46 | 29 | 3 | 14 |
 | Steward | 15 | 14 | 0 | 1 |
 | Judge | 3 | 3 | 0 | 0 |
@@ -277,10 +277,10 @@ Areas with clusters of fix commits — bias test priority here:
 | Results lock | 4 | 4 | 0 | 0 |
 | Payment / webhooks | 7 | 5 | 1 | 1 |
 | Notifications | 7 | 0 | 5 | 2 |
-| File upload | 3 | 1 | 0 | 2 |
+| File upload | 3 | 2 | 0 | 1 |
 | Soft-delete | 3 | 3 | 0 | 0 |
 | Phase / breed | 3 | 2 | 0 | 1 |
-| **TOTAL** | **141** | **100** | **11** | **30** |
+| **TOTAL** | **141** | **105** | **11** | **25** |
 
 🔴 show-day-critical journeys still uncovered: ~2.
 
