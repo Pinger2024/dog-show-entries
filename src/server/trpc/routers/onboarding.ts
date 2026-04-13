@@ -30,6 +30,7 @@ export const onboardingRouter = createTRPCRouter({
       hasDogs: (dogCount?.count ?? 0) > 0,
       hasEntries: (entryCount?.count ?? 0) > 0,
       dogCount: dogCount?.count ?? 0,
+      role: user?.role ?? 'exhibitor',
       profile: user
         ? {
             name: user.name,

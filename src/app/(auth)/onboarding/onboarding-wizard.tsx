@@ -196,12 +196,16 @@ export function OnboardingWizard({ user }: OnboardingWizardProps) {
 
   const { data: status } = trpc.onboarding.getStatus.useQuery();
 
-  // If already completed, redirect to dashboard
+  // If already completed, send secretaries to their dashboard
   useEffect(() => {
     if (status?.isComplete) {
-      router.replace('/dashboard');
+      const destination =
+        status.role === 'secretary' || status.role === 'admin'
+          ? '/secretary'
+          : '/dashboard';
+      router.replace(destination);
     }
-  }, [status?.isComplete, router]);
+  }, [status?.isComplete, status?.role, router]);
 
   // Auto-advance if profile already completed (e.g., returning to onboarding)
   useEffect(() => {
@@ -1209,7 +1213,7 @@ function SuccessStep({
       <CardContent className="flex flex-col gap-3">
         <Button
           className="h-11 sm:h-12 w-full text-sm sm:text-[0.9375rem]"
-          onClick={() => { window.location.href = showRunMessage ? '/shows/new' : '/shows'; }}
+          onClick={() => { window.location.href = showRunMessage ? '/secretary/shows/new' : '/shows'; }}
         >
           <CalendarDays className="size-4" />
           {showRunMessage ? 'Create Your First Show' : 'Browse Shows'}
@@ -1227,7 +1231,7 @@ function SuccessStep({
         <Button
           variant="ghost"
           className="h-11 sm:h-12 w-full text-sm sm:text-[0.9375rem]"
-          onClick={() => { window.location.href = '/dashboard'; }}
+          onClick={() => { window.location.href = showRunMessage ? '/secretary' : '/dashboard'; }}
         >
           Go to Dashboard
           <ArrowRight className="size-4" />
