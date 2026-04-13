@@ -19,6 +19,7 @@ import {
   judges,
   judgeAssignments,
   achievements,
+  feedback,
   userRoleEnum,
   membershipStatusEnum,
   entryStatusEnum,
@@ -251,6 +252,20 @@ export async function makeJudgeAssignment(opts: {
       judgeId: opts.judgeId,
       breedId: opts.breedId,
       sex: opts.sex,
+    })
+    .returning();
+  return row;
+}
+
+export async function makeFeedback(opts: Partial<typeof feedback.$inferInsert> = {}) {
+  const n = seq();
+  const [row] = await testDb
+    .insert(feedback)
+    .values({
+      resendEmailId: opts.resendEmailId ?? `em_test_${shortId()}_${n}`,
+      fromEmail: opts.fromEmail ?? `sender${n}@test.local`,
+      subject: opts.subject ?? `Feedback ${n}`,
+      ...opts,
     })
     .returning();
   return row;

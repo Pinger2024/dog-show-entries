@@ -143,14 +143,14 @@ factories and the test caller.
 
 | # | Journey | Procedures / Routes | Pri | Status | Notes |
 |---|---|---|---|---|---|
-| 97 | View admin dashboard | `adminDashboard.getDashboard` | 🟢 | ⬜ | Platform metrics |
-| 98 | Manage breeds (CRUD + reorder) | `admin.createBreed`, `admin.updateBreed`, `admin.deleteBreed`, `admin.reorderBreedGroups` | 🟡 | ⬜ | Cascades |
-| 99 | Manage breed groups | `admin.createBreedGroup`, `admin.updateBreedGroup` | 🟡 | ⬜ | |
-| 100 | Manage class definitions | `admin.createClassDefinition`, `admin.updateClassDefinition`, `admin.deleteClassDefinition`, `admin.listClassDefinitions` | 🟡 | ⬜ | Global templates |
-| 101 | Manage feedback inbox | `feedback.list`, `feedback.get`, `feedback.updateStatus`, `feedback.updateNotes` | 🟡 | ⬜ | Admin-only at /feedback |
-| 102 | Manage backlog | `backlog.list`, `backlog.updateStatus`, `backlog.updateNotes`, `backlog.updateResponse` | 🟢 | ⬜ | Internal tool |
-| 103 | Impersonate user | `POST /api/admin/impersonate`, `POST /api/admin/stop-impersonate` | 🟡 | ⬜ | Real-user role check critical |
-| 104 | View system stats | `admin.getStats` | 🟢 | ⬜ | |
+| 97 | View admin dashboard | `adminDashboard.getDashboard` | 🟢 | ✅ | `admin-sweep.test.ts` (shape only) |
+| 98 | Manage breeds (CRUD + reorder) | `admin.createBreed`, `admin.updateBreed`, `admin.deleteBreed`, `admin.reorderBreedGroups` | 🟡 | ✅ | `admin-sweep.test.ts` |
+| 99 | Manage breed groups | `admin.createBreedGroup`, `admin.updateBreedGroup`, `deleteBreedGroup`, `reorderBreedGroups` | 🟡 | ✅ | `admin-sweep.test.ts` — incl. delete-blocked-by-breeds + reorder positional sortOrder |
+| 100 | Manage class definitions | `admin.createClassDefinition`, `updateClassDefinition`, `deleteClassDefinition`, `listClassDefinitions` | 🟡 | ✅ | `admin-sweep.test.ts` — duplicate-name CONFLICT bug noted (postgres-js error wrapping) |
+| 101 | Manage feedback inbox | `feedback.list`, `feedback.get`, `feedback.updateStatus`, `feedback.updateNotes` | 🟡 | ✅ | `admin-sweep.test.ts` — list, status filter, role gate, status update, notes update, get NOT_FOUND |
+| 102 | Manage backlog | `backlog.list`, `backlog.updateStatus`, `backlog.updateNotes`, `backlog.updateResponse` | 🟢 | ⬜ | Internal tool — defer until a feature lands on it |
+| 103 | Impersonate user | `POST /api/admin/impersonate`, `POST /api/admin/stop-impersonate` | 🟡 | 🟠 | `permission-guards.test.ts` covers the impersonation invariants; the route handlers themselves uncovered |
+| 104 | View system stats | `admin.getStats` | 🟢 | ✅ | `permission-guards.test.ts` (canary) |
 
 ---
 
@@ -271,7 +271,7 @@ Areas with clusters of fix commits — bias test priority here:
 | Secretary | 46 | 5 | 1 | 40 |
 | Steward | 15 | 14 | 0 | 1 |
 | Judge | 3 | 0 | 0 | 3 |
-| Admin | 8 | 0 | 0 | 8 |
+| Admin | 8 | 6 | 1 | 1 |
 | Auth & roles | 5 | 2 | 0 | 3 |
 | Permission guards | 5 | 4 | 0 | 1 |
 | Results lock | 4 | 3 | 0 | 1 |
@@ -280,7 +280,7 @@ Areas with clusters of fix commits — bias test priority here:
 | File upload | 3 | 0 | 0 | 3 |
 | Soft-delete | 3 | 0 | 0 | 3 |
 | Phase / breed | 3 | 2 | 0 | 1 |
-| **TOTAL** | **141** | **36** | **7** | **98** |
+| **TOTAL** | **141** | **42** | **8** | **91** |
 
 🔴 show-day-critical journeys still uncovered: ~5.
 
