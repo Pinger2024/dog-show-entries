@@ -22,6 +22,7 @@ import {
   feedback,
   sponsors,
   plans,
+  backlog,
   userRoleEnum,
   membershipStatusEnum,
   entryStatusEnum,
@@ -266,6 +267,21 @@ export async function makeSponsor(opts: Partial<typeof sponsors.$inferInsert> & 
     .values({
       name: opts.name ?? `Test Sponsor ${n}`,
       organisationId: opts.organisationId,
+      ...opts,
+    })
+    .returning();
+  return row;
+}
+
+let backlogFeatureCounter = 1000;
+export async function makeBacklogItem(opts: Partial<typeof backlog.$inferInsert> = {}) {
+  const n = seq();
+  const [row] = await testDb
+    .insert(backlog)
+    .values({
+      featureNumber: opts.featureNumber ?? ++backlogFeatureCounter,
+      title: opts.title ?? `Backlog item ${n}`,
+      description: opts.description ?? `Description for backlog item ${n}`,
       ...opts,
     })
     .returning();

@@ -148,7 +148,7 @@ factories and the test caller.
 | 99 | Manage breed groups | `admin.createBreedGroup`, `admin.updateBreedGroup`, `deleteBreedGroup`, `reorderBreedGroups` | 🟡 | ✅ | `admin-sweep.test.ts` — incl. delete-blocked-by-breeds + reorder positional sortOrder |
 | 100 | Manage class definitions | `admin.createClassDefinition`, `updateClassDefinition`, `deleteClassDefinition`, `listClassDefinitions` | 🟡 | ✅ | `admin-sweep.test.ts` — duplicate-name CONFLICT bug noted (postgres-js error wrapping) |
 | 101 | Manage feedback inbox | `feedback.list`, `feedback.get`, `feedback.updateStatus`, `feedback.updateNotes` | 🟡 | ✅ | `admin-sweep.test.ts` — list, status filter, role gate, status update, notes update, get NOT_FOUND |
-| 102 | Manage backlog | `backlog.list`, `backlog.updateStatus`, `backlog.updateNotes`, `backlog.updateResponse` | 🟢 | ⬜ | Internal tool — defer until a feature lands on it |
+| 102 | Manage backlog | `backlog.list`, `get`, `updateStatus`, `updateNotes`, `updateResponse`, `counts` | 🟢 | ✅ | `backlog-and-soft-delete.test.ts` — list (sorted by featureNumber desc), status filter, role gate, full update CRUD with NOT_FOUND, per-status counts (zero-filled), get NOT_FOUND |
 | 103 | Impersonate user | `POST /api/admin/impersonate`, `POST /api/admin/stop-impersonate` | 🟡 | 🟠 | `permission-guards.test.ts` covers the impersonation invariants; the route handlers themselves uncovered |
 | 104 | View system stats | `admin.getStats` | 🟢 | ✅ | `permission-guards.test.ts` (canary) |
 
@@ -231,9 +231,9 @@ factories and the test caller.
 
 | # | Journey | Procedures / Routes | Pri | Status | Notes |
 |---|---|---|---|---|---|
-| 136 | Deleted entries excluded from queries | `isNull(entries.deletedAt)` everywhere | 🟡 | 🟠 | `exhibitor-data.test.ts` covers entries.list; broader sweep deferred |
-| 137 | Deleted dogs excluded from owner views | `isNull(dogs.deletedAt)` | 🟡 | ✅ | `exhibitor-data.test.ts` — dogs.list excludes soft-deleted |
-| 138 | Withdrawn vs cancelled vs deleted distinctions | entries.status enum vs deletedAt | 🟡 | ⬜ | Easy to confuse — sweep test |
+| 136 | Deleted entries excluded from queries | `isNull(entries.deletedAt)` everywhere | 🟡 | ✅ | `backlog-and-soft-delete.test.ts` — covers entries.list (exhibitor) AND entries.getForShow (secretary) AND dogs.getById |
+| 137 | Deleted dogs excluded from owner views | `isNull(dogs.deletedAt)` | 🟡 | ✅ | `exhibitor-data.test.ts` + `backlog-and-soft-delete.test.ts` |
+| 138 | Withdrawn vs cancelled vs deleted distinctions | entries.status enum vs deletedAt | 🟡 | ✅ | `backlog-and-soft-delete.test.ts` — orders.checkout's stale-entry sweep marks status='cancelled' AND sets deletedAt simultaneously |
 
 ---
 
@@ -271,16 +271,16 @@ Areas with clusters of fix commits — bias test priority here:
 | Secretary | 46 | 29 | 3 | 14 |
 | Steward | 15 | 14 | 0 | 1 |
 | Judge | 3 | 3 | 0 | 0 |
-| Admin | 8 | 6 | 1 | 1 |
+| Admin | 8 | 7 | 1 | 0 |
 | Auth & roles | 5 | 4 | 0 | 1 |
 | Permission guards | 5 | 5 | 0 | 0 |
 | Results lock | 4 | 4 | 0 | 0 |
 | Payment / webhooks | 7 | 5 | 1 | 1 |
 | Notifications | 7 | 0 | 5 | 2 |
 | File upload | 3 | 1 | 0 | 2 |
-| Soft-delete | 3 | 1 | 1 | 1 |
+| Soft-delete | 3 | 3 | 0 | 0 |
 | Phase / breed | 3 | 2 | 0 | 1 |
-| **TOTAL** | **141** | **96** | **13** | **32** |
+| **TOTAL** | **141** | **100** | **11** | **30** |
 
 🔴 show-day-critical journeys still uncovered: ~2.
 
