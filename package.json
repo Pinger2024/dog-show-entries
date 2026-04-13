@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "db:push": "drizzle-kit push",
-    "db:push:test": "DATABASE_URL=\"${DATABASE_URL:-postgresql://localhost:5432/remi_test}\" drizzle-kit push --force",
+    "db:push:test": "DATABASE_URL=${DATABASE_URL:-postgresql://localhost:5432/remi_test} drizzle-kit push --force",
     "db:studio": "drizzle-kit studio",
     "db:generate": "drizzle-kit generate",
     "db:seed": "tsx src/server/db/seed.ts",

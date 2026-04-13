@@ -75,13 +75,13 @@ describe('secretary.publishResults', () => {
 
     await caller.secretary.publishResults({ showId: show.id });
 
-    // The procedure fires notifications via fire-and-forget Promise.all.
-    // Yield to the microtask queue so the dynamic import + .then settle.
-    await new Promise((r) => setImmediate(r));
-
-    expect(vi.mocked(notifications.sendExhibitorResultsEmails)).toHaveBeenCalledWith(show.id);
-    expect(vi.mocked(notifications.sendFollowerResultsNotifications)).toHaveBeenCalledWith(show.id);
-    expect(vi.mocked(notifications.createResultsMilestonePosts)).toHaveBeenCalledWith(show.id);
+    // publishResults uses void Promise.all + dynamic import — vi.waitFor polls
+    // until the side-effect lands rather than guessing at event-loop timing.
+    await vi.waitFor(() => {
+      expect(vi.mocked(notifications.sendExhibitorResultsEmails)).toHaveBeenCalledWith(show.id);
+      expect(vi.mocked(notifications.sendFollowerResultsNotifications)).toHaveBeenCalledWith(show.id);
+      expect(vi.mocked(notifications.createResultsMilestonePosts)).toHaveBeenCalledWith(show.id);
+    });
   });
 
   it('skips notifications when sendNotifications is false', async () => {
@@ -90,7 +90,8 @@ describe('secretary.publishResults', () => {
     vi.mocked(notifications.sendExhibitorResultsEmails).mockClear();
 
     await caller.secretary.publishResults({ showId: show.id, sendNotifications: false });
-    await new Promise((r) => setImmediate(r));
+    // Give any (unwanted) async fire-and-forget a chance to run before asserting absence.
+    await new Promise((r) => setTimeout(r, 50));
 
     expect(vi.mocked(notifications.sendExhibitorResultsEmails)).not.toHaveBeenCalled();
   });

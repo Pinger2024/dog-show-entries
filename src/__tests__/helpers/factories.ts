@@ -12,18 +12,26 @@ import {
   entries,
   entryClasses,
   results,
+  userRoleEnum,
+  membershipStatusEnum,
+  entryStatusEnum,
 } from '@/server/db/schema';
 import { randomUUID } from 'crypto';
 
+type UserRole = (typeof userRoleEnum.enumValues)[number];
+type MembershipStatus = (typeof membershipStatusEnum.enumValues)[number];
+type EntryStatus = (typeof entryStatusEnum.enumValues)[number];
+
 let counter = 0;
 const seq = () => ++counter;
+const shortId = (len = 8) => randomUUID().slice(0, len);
 
 export async function makeUser(opts: Partial<typeof users.$inferInsert> = {}) {
   const n = seq();
   const [row] = await testDb
     .insert(users)
     .values({
-      email: opts.email ?? `user-${n}-${randomUUID().slice(0, 8)}@test.local`,
+      email: opts.email ?? `user-${n}-${shortId()}@test.local`,
       name: opts.name ?? `Test User ${n}`,
       role: opts.role ?? 'exhibitor',
       ...opts,
@@ -47,7 +55,7 @@ export async function makeOrg(opts: Partial<typeof organisations.$inferInsert> =
 export async function makeMembership(opts: {
   userId: string;
   organisationId: string;
-  status?: 'active' | 'expired' | 'pending' | 'cancelled';
+  status?: MembershipStatus;
 }) {
   const [row] = await testDb
     .insert(memberships)
@@ -64,7 +72,7 @@ export async function makeBreedGroup(opts: Partial<typeof breedGroups.$inferInse
   const n = seq();
   const [row] = await testDb
     .insert(breedGroups)
-    .values({ name: opts.name ?? `Group ${n}-${randomUUID().slice(0, 4)}`, ...opts })
+    .values({ name: opts.name ?? `Group ${n}-${shortId(4)}`, ...opts })
     .returning();
   return row;
 }
@@ -75,7 +83,7 @@ export async function makeBreed(opts: Partial<typeof breeds.$inferInsert> = {}) 
   const [row] = await testDb
     .insert(breeds)
     .values({
-      name: opts.name ?? `Test Breed ${n}-${randomUUID().slice(0, 4)}`,
+      name: opts.name ?? `Test Breed ${n}-${shortId(4)}`,
       groupId,
       ...opts,
     })
@@ -88,7 +96,7 @@ export async function makeClassDef(opts: Partial<typeof classDefinitions.$inferI
   const [row] = await testDb
     .insert(classDefinitions)
     .values({
-      name: opts.name ?? `Class Def ${n}-${randomUUID().slice(0, 4)}`,
+      name: opts.name ?? `Class Def ${n}-${shortId(4)}`,
       type: opts.type ?? 'age',
       ...opts,
     })
@@ -155,7 +163,7 @@ export async function makeEntry(opts: {
   showId: string;
   dogId: string;
   exhibitorId: string;
-  status?: 'pending' | 'confirmed' | 'withdrawn' | 'transferred' | 'cancelled';
+  status?: EntryStatus;
   totalFee?: number;
 }) {
   const [row] = await testDb
