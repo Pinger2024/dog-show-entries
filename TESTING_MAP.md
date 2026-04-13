@@ -73,8 +73,8 @@ factories and the test caller.
 | 45 | View judge contract status | `secretary.getJudgeContracts` | 🟡 | ✅ | `secretary-judges.test.ts` — happy + empty |
 | 46 | Resend judge offer | `secretary.resendJudgeOffer` | 🟡 | ⬜ | Resend SDK error guard (be9c661); deferred until cooldown logic stabilises |
 | 47 | View judge coverage report | `secretary.getJudgeCoverage` | 🟡 | ✅ | `secretary-judges.test.ts` — unmet + covered after assignment |
-| 48 | View show entries (all statuses) | `entries.getForShow` (or secretary equivalent) | 🟡 | ⬜ | Paginated; includes audit log |
-| 49 | Issue refund | `secretary.issueRefund` | 🟡 | ⬜ | Stripe refund + payments record |
+| 48 | View show entries (all statuses) | `entries.getForShow` | 🟡 | ✅ | `secretary-show-mgmt.test.ts` — shape only |
+| 49 | Issue refund | `secretary.issueRefund` | 🟡 | ⬜ | Stripe refund + payments record (live API call; deferred) |
 | 50 | Auto / manual catalogue numbering | `secretary.assignCatalogueNumbers` | 🟡 | ⬜ | Auto on first secretary visit |
 | 51 | Open entries (status → entries_open) | Status transition | 🟡 | ⬜ | Phase-blocker gated |
 | 52 | Close entries | Status transition | 🟡 | ⬜ | Manual or entryCloseDate trigger |
@@ -92,18 +92,18 @@ factories and the test caller.
 | 64 | Add ring | `secretary.addRing` | 🟡 | ✅ | `show-creation.test.ts` |
 | 65 | Manage org people (officers, trustees) | `secretary.createOrgPerson`, `listOrgPeople`, `updateOrgPerson`, `deleteOrgPerson` | 🟡 | ✅ | `secretary-crud-sweep.test.ts` — full CRUD + name-sorted list + cross-org rejection |
 | 66 | Manage sponsors (CRUD + assignment) | `secretary.createSponsor`, `updateSponsor`, `deleteSponsor`, `listSponsors`, `assignShowSponsor`, `removeShowSponsor`, `listShowSponsors`, `assignClassSponsorship`, `removeClassSponsorship`, `upsertClassSponsor` | 🟡 | ✅ | `secretary-crud-sweep.test.ts` — full sponsor directory CRUD (soft-delete), show-level + class-level assignment lifecycle, free-text upsert with trim |
-| 67 | Record achievement manually | `secretary.recordAchievement` | 🟡 | ⬜ | For hand-recorded specials |
-| 68 | View audit log of entry changes | `secretary.getAuditLog` | 🟡 | ⬜ | |
-| 69 | View financial / sundry / entry reports | `secretary.getPaymentReport`, `secretary.getEntryReport`, `secretary.getSundryItemReport` | 🟡 | ⬜ | |
-| 70 | View results publication status | `secretary.getResultsPublicationStatus` | 🟡 | ⬜ | Show-level + per-class |
+| 67 | Record achievement manually | `secretary.recordAchievement` | 🟡 | ✅ | `secretary-show-mgmt.test.ts` — happy path + duplicate-tolerant |
+| 68 | View audit log of entry changes | `secretary.getAuditLog` | 🟡 | ✅ | `secretary-show-mgmt.test.ts` — shape only |
+| 69 | View financial / sundry / entry reports | `secretary.getPaymentReport`, `secretary.getEntryReport`, `secretary.getSundryItemReport` | 🟡 | 🟠 | `secretary-show-mgmt.test.ts` covers entry + payment shape; sundry report uncovered |
+| 70 | View results publication status | `secretary.getResultsPublicationStatus` | 🟡 | ✅ | `secretary-show-mgmt.test.ts` — published/locked + judge approval breakdown |
 | 71 | Publish results (whole show) | `secretary.publishResults` | 🔴 | ✅ | `publish-results.test.ts` |
-| 72 | Publish per-class results | `secretary.publishClassResults` | 🟡 | ⬜ | Incremental |
+| 72 | Publish per-class results | `secretary.publishClassResults` | 🟡 | ✅ | `secretary-show-mgmt.test.ts` — only the targeted class is published |
 | 73 | Unpublish results (whole show) | `secretary.unpublishResults` | 🔴 | ✅ | Same file |
-| 74 | Unpublish per-class results | `secretary.unpublishClassResults` | 🟡 | ⬜ | |
-| 75 | Mark / unmark RKC submission | `secretary.markRkcSubmitted`, `secretary.unmarkRkcSubmitted` | 🟡 | ⬜ | Final lock |
+| 74 | Unpublish per-class results | `secretary.unpublishClassResults` | 🟡 | ✅ | `secretary-show-mgmt.test.ts` |
+| 75 | Mark / unmark RKC submission | `secretary.markRkcSubmitted`, `secretary.unmarkRkcSubmitted` | 🟡 | ✅ | `secretary-show-mgmt.test.ts` — only completed shows can be marked; toggle is reversible |
 | 76 | Manage show checklist (add/check/delete) | `secretary.addChecklistItem`, `secretary.updateChecklistItem`, `secretary.deleteChecklistItem` | 🟡 | ⬜ | |
 | 77 | Auto-detect checklist completion | `secretary.getChecklistAutoDetect` | 🟡 | ⬜ | Marks done when conditions met |
-| 78 | Delete show (drafts only) | `secretary.deleteShow` | 🟡 | ⬜ | |
+| 78 | Delete show (drafts only) | `secretary.deleteShow` | 🟡 | ✅ | `secretary-show-mgmt.test.ts` — happy path + non-draft guard + has-entries guard + cross-org rejection |
 
 ---
 
@@ -185,7 +185,7 @@ factories and the test caller.
 | 115 | Publish locks results (sets resultsLockedAt) | `secretary.publishResults` | 🔴 | ✅ | publish-results.test.ts |
 | 116 | Steward cannot edit after publish | `steward.recordResult` + `assertResultsNotLocked` | 🔴 | ✅ | `steward-record-result.test.ts` (record + remove lock tests) |
 | 117 | Unpublish unlocks for further edits | `secretary.unpublishResults` | 🔴 | ✅ | publish-results.test.ts |
-| 118 | RKC submission as final lock | `secretary.markRkcSubmitted` | 🟡 | ⬜ | Beyond unpublish |
+| 118 | RKC submission as final lock | `secretary.markRkcSubmitted` | 🟡 | ✅ | `secretary-show-mgmt.test.ts` |
 
 ---
 
@@ -268,21 +268,21 @@ Areas with clusters of fix commits — bias test priority here:
 | Section | Total | ✅ | 🟠 | ⬜ |
 |---|---:|---:|---:|---:|
 | Exhibitor | 32 | 8 | 1 | 23 |
-| Secretary | 46 | 13 | 2 | 31 |
+| Secretary | 46 | 21 | 3 | 22 |
 | Steward | 15 | 14 | 0 | 1 |
 | Judge | 3 | 0 | 0 | 3 |
 | Admin | 8 | 6 | 1 | 1 |
 | Auth & roles | 5 | 2 | 0 | 3 |
 | Permission guards | 5 | 5 | 0 | 0 |
-| Results lock | 4 | 3 | 0 | 1 |
+| Results lock | 4 | 4 | 0 | 0 |
 | Payment / webhooks | 7 | 3 | 0 | 4 |
 | Notifications | 7 | 0 | 5 | 2 |
 | File upload | 3 | 0 | 0 | 3 |
 | Soft-delete | 3 | 1 | 1 | 1 |
 | Phase / breed | 3 | 2 | 0 | 1 |
-| **TOTAL** | **141** | **57** | **10** | **74** |
+| **TOTAL** | **141** | **65** | **11** | **65** |
 
-🔴 show-day-critical journeys still uncovered: ~3.
+🔴 show-day-critical journeys still uncovered: ~2.
 
 ---
 
