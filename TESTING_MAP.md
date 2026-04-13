@@ -241,8 +241,8 @@ factories and the test caller.
 
 | # | Journey | Procedures / Routes | Pri | Status | Notes |
 |---|---|---|---|---|---|
-| 139 | Single-breed show validates dog breed | `entries.create` show.breedId primary, fallback to classes (6ec1d6f) | 🔴 | ⬜ | Both primary and legacy fallback paths |
-| 140 | Class breed restriction enforced | `entries.create` per-class breed check | 🟡 | ⬜ | |
+| 139 | Single-breed show validates dog breed | `orders.checkout` show.breedId primary, fallback to classes (6ec1d6f) | 🔴 | ✅ | `breed-validation.test.ts` — both primary and legacy fallback; permissive when no breed info anywhere |
+| 140 | Class breed restriction enforced | `orders.checkout` per-class breed check | 🟡 | ✅ | `breed-validation.test.ts` — wrong breed in restricted class rejected; JH classes always exempt |
 | 141 | Phase blockers gate status transitions | `secretary.getPhaseBlockers`, `getShowPhaseContext` | 🟡 | ⬜ | Checklist-driven |
 
 ---
@@ -251,7 +251,7 @@ factories and the test caller.
 
 Areas with clusters of fix commits — bias test priority here:
 
-1. **Show breed validation** — `6ec1d6f` shifted primary source to `show.breedId`; legacy fallback path still active
+1. ~~**Show breed validation** — `6ec1d6f` shifted primary source to `show.breedId`; legacy fallback path still active~~ ✅ — covered in `breed-validation.test.ts` (primary + fallback paths)
 2. **JWT role lag** — `3e9bc93` added DB fallback; the only thing standing between freshly-promoted users and FORBIDDEN
 3. **Placement display** — `adec801`, `c8ed1bd` show recurring fixes around placementStatus across PDF, secretary view, steward filter
 4. **Mobile Safari PDF gen** — `013eb7f`, `1d130eb`, `0bbea64` switched html2canvas → html-to-image; brittle
@@ -267,7 +267,7 @@ Areas with clusters of fix commits — bias test priority here:
 
 | Section | Total | ✅ | 🟠 | ⬜ |
 |---|---:|---:|---:|---:|
-| Exhibitor | 32 | 2 | 0 | 30 |
+| Exhibitor | 32 | 3 | 1 | 28 |
 | Secretary | 46 | 5 | 1 | 40 |
 | Steward | 15 | 6 | 0 | 9 |
 | Judge | 3 | 0 | 0 | 3 |
@@ -279,10 +279,10 @@ Areas with clusters of fix commits — bias test priority here:
 | Notifications | 7 | 0 | 5 | 2 |
 | File upload | 3 | 0 | 0 | 3 |
 | Soft-delete | 3 | 0 | 0 | 3 |
-| Phase / breed | 3 | 0 | 0 | 3 |
-| **TOTAL** | **141** | **25** | **6** | **110** |
+| Phase / breed | 3 | 2 | 0 | 1 |
+| **TOTAL** | **141** | **28** | **7** | **106** |
 
-🔴 show-day-critical journeys still uncovered: ~9.
+🔴 show-day-critical journeys still uncovered: ~7.
 
 ---
 
