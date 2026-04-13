@@ -88,7 +88,7 @@ factories and the test caller.
 | 60 | Download judges' book | judges-book route | 🟡 | ⬜ | Dense write-in format |
 | 61 | Download ring numbers / ring board | ring-numbers, ring-board routes | 🟡 | ⬜ | 6-up cards; logistics overview |
 | 62 | Assign / remove stewards | `secretary.assignSteward`, `secretary.setStewardBreeds`, `secretary.removeSteward`, `getShowStewards` | 🟡 | ✅ | `secretary-stewards-checklist.test.ts` — assign promotes exhibitor → steward; remove reverts role only when last assignment goes; double-assign rejected; non-existent email rejected |
-| 63 | Assign judge to class / breed / sex | `secretary.assignJudge` | 🟡 | ⬜ | Complex breed fallback |
+| 63 | Assign judge to class / breed / sex | `secretary.assignJudge`, `bulkAssignJudge`, `removeJudgeAssignment` | 🟡 | ✅ | `secretary-judges.test.ts` (already covered as part of judge management sweep) |
 | 64 | Add ring | `secretary.addRing` | 🟡 | ✅ | `show-creation.test.ts` |
 | 65 | Manage org people (officers, trustees) | `secretary.createOrgPerson`, `listOrgPeople`, `updateOrgPerson`, `deleteOrgPerson` | 🟡 | ✅ | `secretary-crud-sweep.test.ts` — full CRUD + name-sorted list + cross-org rejection |
 | 66 | Manage sponsors (CRUD + assignment) | `secretary.createSponsor`, `updateSponsor`, `deleteSponsor`, `listSponsors`, `assignShowSponsor`, `removeShowSponsor`, `listShowSponsors`, `assignClassSponsorship`, `removeClassSponsorship`, `upsertClassSponsor` | 🟡 | ✅ | `secretary-crud-sweep.test.ts` — full sponsor directory CRUD (soft-delete), show-level + class-level assignment lifecycle, free-text upsert with trim |
@@ -268,7 +268,7 @@ Areas with clusters of fix commits — bias test priority here:
 | Section | Total | ✅ | 🟠 | ⬜ |
 |---|---:|---:|---:|---:|
 | Exhibitor | 32 | 27 | 2 | 3 |
-| Secretary | 46 | 35 | 5 | 6 |
+| Secretary | 46 | 36 | 5 | 5 |
 | Steward | 15 | 15 | 0 | 0 |
 | Judge | 3 | 3 | 0 | 0 |
 | Admin | 8 | 7 | 1 | 0 |
@@ -280,7 +280,7 @@ Areas with clusters of fix commits — bias test priority here:
 | File upload | 3 | 3 | 0 | 0 |
 | Soft-delete | 3 | 3 | 0 | 0 |
 | Phase / breed | 3 | 3 | 0 | 0 |
-| **TOTAL** | **141** | **115** | **13** | **13** |
+| **TOTAL** | **141** | **116** | **13** | **12** |
 
 🔴 show-day-critical journeys still uncovered: ~2.
 
