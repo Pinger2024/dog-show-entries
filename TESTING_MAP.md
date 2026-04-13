@@ -221,7 +221,7 @@ factories and the test caller.
 
 | # | Journey | Procedures / Routes | Pri | Status | Notes |
 |---|---|---|---|---|---|
-| 133 | Presign S3 upload URL | `POST /api/upload/presign` | 🟡 | ⬜ | Per-type endpoints |
+| 133 | Presign S3 upload URL | `POST /api/upload/presign` | 🟡 | ✅ | `upload-presign-route.test.ts` — 401 unauth; happy path returns presignedUrl + publicUrl + scoped key; rejects unsupported MIME / over-size / missing fields; **security**: extension derived from validated MIME type, NOT client filename (rejects `.exe` masquerade via `contentType: application/pdf`) |
 | 134 | Dog photo upload | `POST /api/upload/dog-photo` | 🟡 | ⬜ | Mobile Safari hardening |
 | 135 | Judge / timeline / feedback / checklist photo upload | per-type endpoints | 🟢 | ⬜ | Validation in `storage.ts` |
 
@@ -277,10 +277,10 @@ Areas with clusters of fix commits — bias test priority here:
 | Results lock | 4 | 4 | 0 | 0 |
 | Payment / webhooks | 7 | 5 | 1 | 1 |
 | Notifications | 7 | 0 | 5 | 2 |
-| File upload | 3 | 0 | 0 | 3 |
+| File upload | 3 | 1 | 0 | 2 |
 | Soft-delete | 3 | 1 | 1 | 1 |
 | Phase / breed | 3 | 2 | 0 | 1 |
-| **TOTAL** | **141** | **93** | **13** | **35** |
+| **TOTAL** | **141** | **94** | **13** | **34** |
 
 🔴 show-day-critical journeys still uncovered: ~2.
 
