@@ -24,7 +24,7 @@ describe('JWT/DB role lag', () => {
     // …but their browser session still says exhibitor (JWT not refreshed yet).
     const staleSession = {
       id: user.id,
-      email: user.email!,
+      email: user.email,
       name: user.name ?? '',
       role: 'exhibitor' as const,
     };

@@ -14,22 +14,27 @@ import {
   makeEntryClass,
   makeResult,
   makeStewardAssignment,
+  lockShowResults,
 } from '../helpers/factories';
 
 /** A confirmed entry on an in_progress show, with a steward assigned. Lock open. */
 async function showWithStewardAndEntry() {
-  const steward = await makeUser({ role: 'steward' });
-  const exhibitor = await makeUser({ role: 'exhibitor' });
-  const org = await makeOrg();
-  const breed = await makeBreed();
+  const [steward, exhibitor, org, breed] = await Promise.all([
+    makeUser({ role: 'steward' }),
+    makeUser({ role: 'exhibitor' }),
+    makeOrg(),
+    makeBreed(),
+  ]);
   const show = await makeShow({
     organisationId: org.id,
     breedId: breed.id,
     status: 'in_progress',
   });
-  await makeStewardAssignment({ userId: steward.id, showId: show.id });
-  const showClass = await makeShowClass({ showId: show.id, breedId: breed.id });
-  const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+  const [, showClass, dog] = await Promise.all([
+    makeStewardAssignment({ userId: steward.id, showId: show.id }),
+    makeShowClass({ showId: show.id, breedId: breed.id }),
+    makeDog({ ownerId: exhibitor.id, breedId: breed.id }),
+  ]);
   const entry = await makeEntry({
     showId: show.id,
     dogId: dog.id,
@@ -85,11 +90,7 @@ describe('steward.recordResult', () => {
 
   it('refuses to record once results are locked (post-publish)', async () => {
     const { steward, show, ec } = await showWithStewardAndEntry();
-    // Simulate publish: set the lock directly without going through publishResults.
-    await testDb
-      .update(shows)
-      .set({ resultsLockedAt: new Date(), resultsPublishedAt: new Date() })
-      .where(eq(shows.id, show.id));
+    await lockShowResults(show.id);
     const caller = createTestCaller(steward);
 
     await expect(
@@ -147,10 +148,7 @@ describe('steward.removeResult', () => {
   it('refuses to remove once results are locked', async () => {
     const { steward, show, ec } = await showWithStewardAndEntry();
     await makeResult({ entryClassId: ec.id, placement: 1, recordedBy: steward.id });
-    await testDb
-      .update(shows)
-      .set({ resultsLockedAt: new Date(), resultsPublishedAt: new Date() })
-      .where(eq(shows.id, show.id));
+    await lockShowResults(show.id);
     const caller = createTestCaller(steward);
 
     await expect(
@@ -196,14 +194,20 @@ describe('steward.getMyShows', () => {
   });
 
   it('filters out drafts and cancelled assignments', async () => {
-    const steward = await makeUser({ role: 'steward' });
-    const org = await makeOrg();
-    const draftShow = await makeShow({ organisationId: org.id, status: 'draft' });
-    const cancelledShow = await makeShow({ organisationId: org.id, status: 'cancelled' });
-    const liveShow = await makeShow({ organisationId: org.id, status: 'in_progress' });
-    await makeStewardAssignment({ userId: steward.id, showId: draftShow.id });
-    await makeStewardAssignment({ userId: steward.id, showId: cancelledShow.id });
-    await makeStewardAssignment({ userId: steward.id, showId: liveShow.id });
+    const [steward, org] = await Promise.all([
+      makeUser({ role: 'steward' }),
+      makeOrg(),
+    ]);
+    const [draftShow, cancelledShow, liveShow] = await Promise.all([
+      makeShow({ organisationId: org.id, status: 'draft' }),
+      makeShow({ organisationId: org.id, status: 'cancelled' }),
+      makeShow({ organisationId: org.id, status: 'in_progress' }),
+    ]);
+    await Promise.all([
+      makeStewardAssignment({ userId: steward.id, showId: draftShow.id }),
+      makeStewardAssignment({ userId: steward.id, showId: cancelledShow.id }),
+      makeStewardAssignment({ userId: steward.id, showId: liveShow.id }),
+    ]);
 
     const caller = createTestCaller(steward);
     const myShows = await caller.steward.getMyShows();

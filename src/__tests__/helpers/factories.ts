@@ -1,3 +1,4 @@
+import { eq } from 'drizzle-orm';
 import { testDb } from './db';
 import {
   users,
@@ -224,6 +225,15 @@ export async function makeStewardAssignment(opts: {
     .values({ userId: opts.userId, showId: opts.showId, ringId: opts.ringId })
     .returning();
   return row;
+}
+
+/** Simulate a published-and-locked show without going through publishResults. */
+export async function lockShowResults(showId: string) {
+  const now = new Date();
+  await testDb
+    .update(shows)
+    .set({ resultsLockedAt: now, resultsPublishedAt: now })
+    .where(eq(shows.id, showId));
 }
 
 /** Convenience: build a secretary user belonging to a fresh org. */
