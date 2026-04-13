@@ -288,13 +288,15 @@ Areas with clusters of fix commits — bias test priority here:
 
 ## Suggested session order
 
-1. **Steward show-day** (#79–86) + **lock-edit guard** (#116) + **JWT role lag** (#108) — closes the show-day loop with the publish/unpublish work already done
-2. **Permission guard sweep** (#110–114) — small per-procedure tests; security regression net
-3. **Payment webhook → entry confirmed** (#120) — the other half of the money path
-4. **First true journey test**: secretary creates show → exhibitor enters → steward records → secretary publishes (Phase 2)
-5. **Show-creation wizard** (#36–41) — unblocks every downstream secretary journey
+1. ~~**Steward show-day** (#79–86) + **lock-edit guard** (#116) + **JWT role lag** (#108)~~ ✅
+2. ~~**Payment webhook → entry confirmed** (#120)~~ ✅
+3. ~~**Show-creation wizard** (#36–41)~~ ✅ (partial — wizard sub-steps remain)
+4. ~~**First true journey test**: secretary creates show → exhibitor enters → steward records → secretary publishes~~ ✅ — `show-day-journey.test.ts`
+5. **Permission guard sweep** (#110–114) — small per-procedure tests; security regression net
 6. **Catalogue / schedule / print PDFs** (#56–61) — most fragile per git history
 7. **Notifications sweep** (#126–132) — assert payloads, not HTML
 8. **Edge-case sweeps**: breed validation paths, soft-delete consistency, JH lifecycle
+9. **Bulk classes + checklist seed** (#39, #40) — finish the show-creation wizard
+10. **Judge contract / approval flow** (#42–46, 94–96) — token-based external flow
 
 Tick journeys ✅ as their tests land. Add new journeys when you discover them.
