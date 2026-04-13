@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { entries, organisations } from '@/server/db/schema';
+import { entries } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
 import { createTestCaller } from '../helpers/context';
 import {
@@ -58,7 +58,7 @@ async function setupExhibitorAndShow(opts: {
 
 describe('orders.checkout breed validation — single-breed show (primary path)', () => {
   it('rejects a dog whose breed does not match show.breedId', async () => {
-    const { exhibitor, show, showClass, showBreed } = await setupExhibitorAndShow({});
+    const { exhibitor, show, showClass } = await setupExhibitorAndShow({});
     const wrongBreed = await makeBreed();
     const wrongDog = await makeDog({ ownerId: exhibitor.id, breedId: wrongBreed.id });
     const caller = createTestCaller(exhibitor);
@@ -73,7 +73,6 @@ describe('orders.checkout breed validation — single-breed show (primary path)'
     // No order or entry should have been created.
     const dbEntries = await testDb.query.entries.findMany({ where: eq(entries.showId, show.id) });
     expect(dbEntries).toHaveLength(0);
-    void showBreed;
   });
 
   it('accepts a dog whose breed matches show.breedId', async () => {
@@ -193,7 +192,11 @@ describe('orders.checkout breed validation — class-level (any show scope)', ()
 });
 
 describe('orders.checkout RKC age validation', () => {
-  /** dateOfBirth such that the dog is exactly N months old on 2030-06-01. */
+  /**
+   * dateOfBirth such that the dog is exactly N months old on the show day.
+   * Anchor date intentionally uses day-of-month ≤ 28 so `setMonth(-N)`
+   * doesn't overflow into the next/previous month.
+   */
   const dobForMonthsOnShowDay = (months: number) => {
     const showDay = new Date('2030-06-01');
     const dob = new Date(showDay);
@@ -252,5 +255,3 @@ describe('orders.checkout RKC age validation', () => {
   });
 });
 
-// Avoid unused import warnings from the helper file.
-void organisations;
