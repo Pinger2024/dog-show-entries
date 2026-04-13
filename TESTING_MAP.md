@@ -39,8 +39,8 @@ factories and the test caller.
 | 18 | Handle fee adjustment (add/remove class) | `entries.update` feeDiff path | 🟡 | ✅ | `shows-browse-and-edit.test.ts` — feeDiff > 0 creates adjustment PaymentIntent + payment row; feeDiff < 0 creates Stripe refund + refund payment row (via mocked stripe.refunds.create) |
 | 19 | Withdraw from show | `entries.withdraw` | 🟡 | ✅ | `exhibitor-data.test.ts` — happy path, ownership guard, double-withdraw rejection |
 | 20 | View show schedule PDF | `GET /api/schedule/[showId]` | 🟡 | ⬜ | React-PDF generation |
-| 21 | Purchase catalogue | `orders.checkout` (catalogue line item) | 🟡 | ⬜ | Separate from entry payment |
-| 22 | View purchased catalogue | `shows.getCatalogueAccess` + `GET /api/catalogue/[showId]/[format]` | 🟡 | ⬜ | Gated on purchase or secretary role |
+| 21 | Purchase catalogue | `orders.checkout` (catalogue sundry) | 🟡 | 🟠 | Sundry order setup covered indirectly via `orders-and-catalogue.test.ts` paid-order fixture; full checkout flow uncovered |
+| 22 | View purchased catalogue | `shows.getCatalogueAccess`, `shows.getMyCataloguePurchases` | 🟡 | ✅ | `orders-and-catalogue.test.ts` — hasPurchased + isAvailable; getMyCataloguePurchases lists shows where caller bought |
 | 23 | View dog results post-show | `dogs.getShowResults`, `dogs.getWinSummary` | 🟢 | ⬜ | Depends on `results.publishedAt` |
 | 24 | Create timeline post for dog | `timeline.createPost` | 🟡 | ✅ | `timeline-follows-progress.test.ts` — happy + ownership guard + empty-post rejection |
 | 25 | Delete timeline post | `timeline.deletePost` (author or dog owner) | 🟡 | ✅ | `timeline-follows-progress.test.ts` — author can delete; stranger blocked; NOT_FOUND |
@@ -198,7 +198,7 @@ factories and the test caller.
 | 121 | payment_intent.payment_failed → mark failed | Same webhook | 🟡 | ✅ | `stripe-webhook.test.ts` |
 | 122 | checkout.session.completed → activate subscription | Same webhook | 🟡 | ⬜ | Pro plan |
 | 123 | Resend inbound email → feedback row + admin notification | `POST /api/webhooks/resend` | 🟡 | ⬜ | Svix sig verification + Resend SDK fetch |
-| 124 | Order checkout (entries + sundries bundled) | `orders.checkout` | 🟡 | ⬜ | |
+| 124 | Order checkout (entries + sundries bundled) | `orders.checkout`, `orders.list`, `orders.getById` | 🟡 | 🟠 | `orders-and-catalogue.test.ts` covers list + getById (own only, NOT_FOUND); checkout's full multi-entry/sundries path remains partial |
 | 125 | Print order checkout → Mixam submission | `printOrders.initiatePayment` + Stripe webhook | 🟡 | ⬜ | Async non-blocking Mixam call |
 
 ---
@@ -267,7 +267,7 @@ Areas with clusters of fix commits — bias test priority here:
 
 | Section | Total | ✅ | 🟠 | ⬜ |
 |---|---:|---:|---:|---:|
-| Exhibitor | 32 | 22 | 1 | 9 |
+| Exhibitor | 32 | 23 | 2 | 7 |
 | Secretary | 46 | 25 | 3 | 18 |
 | Steward | 15 | 14 | 0 | 1 |
 | Judge | 3 | 0 | 0 | 3 |
@@ -275,12 +275,12 @@ Areas with clusters of fix commits — bias test priority here:
 | Auth & roles | 5 | 2 | 0 | 3 |
 | Permission guards | 5 | 5 | 0 | 0 |
 | Results lock | 4 | 4 | 0 | 0 |
-| Payment / webhooks | 7 | 3 | 0 | 4 |
+| Payment / webhooks | 7 | 3 | 1 | 3 |
 | Notifications | 7 | 0 | 5 | 2 |
 | File upload | 3 | 0 | 0 | 3 |
 | Soft-delete | 3 | 1 | 1 | 1 |
 | Phase / breed | 3 | 2 | 0 | 1 |
-| **TOTAL** | **141** | **83** | **11** | **47** |
+| **TOTAL** | **141** | **84** | **13** | **44** |
 
 🔴 show-day-critical journeys still uncovered: ~2.
 
