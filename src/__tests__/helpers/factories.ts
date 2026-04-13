@@ -12,6 +12,7 @@ import {
   entries,
   entryClasses,
   results,
+  stewardAssignments,
   userRoleEnum,
   membershipStatusEnum,
   entryStatusEnum,
@@ -209,6 +210,18 @@ export async function makeResult(opts: {
       placementStatus: opts.placementStatus ?? null,
       recordedBy: opts.recordedBy,
     })
+    .returning();
+  return row;
+}
+
+export async function makeStewardAssignment(opts: {
+  userId: string;
+  showId: string;
+  ringId?: string;
+}) {
+  const [row] = await testDb
+    .insert(stewardAssignments)
+    .values({ userId: opts.userId, showId: opts.showId, ringId: opts.ringId })
     .returning();
   return row;
 }

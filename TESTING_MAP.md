@@ -111,14 +111,14 @@ factories and the test caller.
 
 | # | Journey | Procedures / Routes | Pri | Status | Notes |
 |---|---|---|---|---|---|
-| 79 | View my assigned shows | `steward.getMyShows` | 🔴 | ⬜ | Filters drafts/cancelled |
+| 79 | View my assigned shows | `steward.getMyShows` | 🔴 | ✅ | `steward-record-result.test.ts` |
 | 80 | View show classes in my ring | `steward.getShowClasses` | 🔴 | ⬜ | Breed-filtered if assigned |
 | 81 | View entries in a class | `steward.getClassEntries` | 🔴 | ⬜ | JH name handling (8c62cb6) |
-| 82 | Record placement (1–7 or withheld/unplaced) | `steward.recordResult` | 🔴 | ⬜ | placement XOR placementStatus |
-| 83 | Update existing result | `steward.recordResult` (re-call) | 🔴 | ⬜ | Idempotent overwrite |
-| 84 | Mark entry absent | `steward.markAbsent` | 🟡 | ⬜ | Skipped from results; in absentee report |
-| 85 | Remove a recorded result | `steward.removeResult` | 🟡 | ⬜ | Reverts to no-result |
-| 86 | Lock check before edit | `assertResultsNotLocked` (called inside recordResult) | 🔴 | ⬜ | Throws after publish |
+| 82 | Record placement (1–7 or withheld/unplaced) | `steward.recordResult` | 🔴 | ✅ | `steward-record-result.test.ts` |
+| 83 | Update existing result | `steward.recordResult` (re-call) | 🔴 | ✅ | Same file (upsert test) |
+| 84 | Mark entry absent | `steward.markAbsent` | 🟡 | ✅ | Same file |
+| 85 | Remove a recorded result | `steward.removeResult` | 🟡 | ✅ | Same file |
+| 86 | Lock check before edit | `assertResultsNotLocked` (called inside recordResult) | 🔴 | ✅ | Same file (record + remove lock tests) |
 | 87 | View live results | `steward.getLiveResults` | 🟢 | ⬜ | |
 | 88 | View results summary | `steward.getResultsSummary` | 🟡 | ⬜ | Aggregated for ringside |
 | 89 | View judge approval status | `steward.getJudgeApprovalStatus` | 🟡 | ⬜ | Gates publish |
@@ -161,7 +161,7 @@ factories and the test caller.
 | 105 | Google OAuth login | NextAuth Google strategy | 🟡 | ⬜ | Hard to test; consider stub |
 | 106 | Forgot password (send link) | `POST /api/auth/forgot-password` | 🟡 | ⬜ | Resend; token expiry |
 | 107 | Reset password from token | `POST /api/auth/reset-password` | 🟡 | ⬜ | |
-| 108 | JWT/DB role lag (freshly-promoted user) | `resolveCurrentRole` in `src/server/trpc/procedures.ts:20` | 🔴 | ⬜ | Regression guard for fix `3e9bc93` |
+| 108 | JWT/DB role lag (freshly-promoted user) | `resolveCurrentRole` in `src/server/trpc/procedures.ts:20` | 🔴 | ✅ | `role-lag.test.ts` (3e9bc93 regression guard) |
 | 109 | Impersonation never grants admin | `isAdmin` middleware uses real session | 🟡 | ⬜ | Must test that impersonating an admin does NOT elevate |
 
 ---
@@ -171,7 +171,7 @@ factories and the test caller.
 | # | Journey | Procedures / Routes | Pri | Status | Notes |
 |---|---|---|---|---|---|
 | 110 | secretaryProcedure: foreign-org user blocked | All secretary procedures + `verifyShowAccess` | 🔴 | 🟠 | One case in publishResults test; need a sweep |
-| 111 | stewardProcedure: only assigned stewards | All steward procedures + `stewardAssignments` check | 🔴 | ⬜ | Cross-org steward attempt |
+| 111 | stewardProcedure: only assigned stewards | All steward procedures + `stewardAssignments` check | 🔴 | 🟠 | `steward-record-result.test.ts` covers recordResult; needs sweep across other steward procedures |
 | 112 | adminProcedure: real role check | All admin procedures | 🟡 | ⬜ | |
 | 113 | protectedProcedure: rejects unauthed | All `protectedProcedure` | 🟡 | 🟠 | One case in payments test |
 | 114 | Exhibitor cannot view others' entries | `entries.getById` | 🟡 | ⬜ | |
@@ -183,7 +183,7 @@ factories and the test caller.
 | # | Journey | Procedures / Routes | Pri | Status | Notes |
 |---|---|---|---|---|---|
 | 115 | Publish locks results (sets resultsLockedAt) | `secretary.publishResults` | 🔴 | ✅ | publish-results.test.ts |
-| 116 | Steward cannot edit after publish | `steward.recordResult` + `assertResultsNotLocked` | 🔴 | ⬜ | Highest-stakes gate |
+| 116 | Steward cannot edit after publish | `steward.recordResult` + `assertResultsNotLocked` | 🔴 | ✅ | `steward-record-result.test.ts` (record + remove lock tests) |
 | 117 | Unpublish unlocks for further edits | `secretary.unpublishResults` | 🔴 | ✅ | publish-results.test.ts |
 | 118 | RKC submission as final lock | `secretary.markRkcSubmitted` | 🟡 | ⬜ | Beyond unpublish |
 
@@ -269,20 +269,20 @@ Areas with clusters of fix commits — bias test priority here:
 |---|---:|---:|---:|---:|
 | Exhibitor | 32 | 1 | 0 | 31 |
 | Secretary | 46 | 2 | 0 | 44 |
-| Steward | 15 | 0 | 0 | 15 |
+| Steward | 15 | 6 | 0 | 9 |
 | Judge | 3 | 0 | 0 | 3 |
 | Admin | 8 | 0 | 0 | 8 |
-| Auth & roles | 5 | 0 | 0 | 5 |
-| Permission guards | 5 | 0 | 2 | 3 |
-| Results lock | 4 | 2 | 0 | 2 |
+| Auth & roles | 5 | 1 | 0 | 4 |
+| Permission guards | 5 | 0 | 3 | 2 |
+| Results lock | 4 | 3 | 0 | 1 |
 | Payment / webhooks | 7 | 1 | 0 | 6 |
 | Notifications | 7 | 0 | 3 | 4 |
 | File upload | 3 | 0 | 0 | 3 |
 | Soft-delete | 3 | 0 | 0 | 3 |
 | Phase / breed | 3 | 0 | 0 | 3 |
-| **TOTAL** | **141** | **6** | **5** | **130** |
+| **TOTAL** | **141** | **13** | **6** | **122** |
 
-🔴 show-day-critical journeys still uncovered: ~20.
+🔴 show-day-critical journeys still uncovered: ~13.
 
 ---
 
