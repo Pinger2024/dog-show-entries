@@ -59,12 +59,12 @@ factories and the test caller.
 | # | Journey | Procedures / Routes | Pri | Status | Notes |
 |---|---|---|---|---|---|
 | 33 | Accept secretary invitation | `invitations.send`, `invitations.getByToken`, `invitations.accept`, `invitations.list`, `invitations.revoke` | 🟡 | ✅ | `invitations-onboarding.test.ts` — send auto-accepts existing users + assigns role + creates membership; pending path for new emails; getByToken (incl. expired status); accept rejects wrong-email + expired tokens; list/revoke with cross-secretary guard |
-| 34 | View dashboard (orgs + shows summary) | `secretary.getDashboard` | 🟡 | ⬜ | Aggregates entry counts, revenue |
-| 35 | View organisation + members | `secretary.getOrganisation`, `secretary.orgMembers` | 🟡 | ⬜ | Active-membership filter |
+| 34 | View dashboard (orgs + shows summary) | `secretary.getDashboard` | 🟡 | ✅ | `easy-wins-final.test.ts` |
+| 35 | View organisation + members | `secretary.getOrganisation`, `secretary.orgMembers` | 🟡 | ✅ | `easy-wins-final.test.ts` |
 | 36 | Create new show (full wizard) | many `secretary.*` mutations | 🔴 | 🟠 | `show-creation.test.ts` covers create+venue+ring; class wizard + checklist seed remain |
 | 37 | — Create / select venue | `secretary.createVenue`, `secretary.listVenues` | 🟡 | ✅ | `show-creation.test.ts` (no-postcode path; geocoding fetch not exercised) |
 | 38 | — Define show details (type, breed, dates, fees) | `shows.create` | 🔴 | ✅ | `show-creation.test.ts` — happy path, classes (combined + separate sex), slug uniqueness, subscription gate, non-member rejection |
-| 39 | — Seed checklist from defaults | `secretary.seedChecklist` | 🟡 | ⬜ | Default items + due dates |
+| 39 | — Seed checklist from defaults | `secretary.seedChecklist` | 🟡 | ✅ | `easy-wins-final.test.ts` — seeds + idempotent no-op |
 | 40 | — Bulk-create classes from template | `secretary.bulkCreateClasses` | 🟡 | ✅ | `secretary-class-venue-bulk.test.ts` — breed×classDef matrix; splitBySex doubles standard classes but JH stays single global; handling classes (no breeds); auto class numbers; cross-org rejection |
 | 41 | — Manage sundry items | `secretary.createSundryItem`, `updateSundryItem` | 🟡 | ✅ | `secretary-crud-sweep.test.ts` — auto sortOrder, update price + enabled, cross-org/cross-show rejection |
 | 42 | Send judge offers | `secretary.sendJudgeOffer` | 🟡 | ✅ | `secretary-judges.test.ts` — happy path creates contract + sends email + backfills judge.contactEmail; rejects unknown judge; org access guard |
@@ -120,7 +120,7 @@ factories and the test caller.
 | 85 | Remove a recorded result | `steward.removeResult` | 🟡 | ✅ | Same file |
 | 86 | Lock check before edit | `assertResultsNotLocked` (called inside recordResult) | 🔴 | ✅ | Same file (record + remove lock tests) |
 | 87 | View live results | `steward.getLiveResults` | 🟢 | ✅ | `steward-sweep.test.ts` — public unpublished gate + privileged bypass |
-| 88 | View results summary | `steward.getResultsSummary` | 🟡 | ⬜ | Aggregated for ringside; large query, low-value standalone test |
+| 88 | View results summary | `steward.getResultsSummary` | 🟡 | ✅ | `easy-wins-final.test.ts` |
 | 89 | View judge approval status | `steward.getJudgeApprovalStatus` | 🟡 | ✅ | `steward-sweep.test.ts` |
 | 90 | Record achievement (BoB, CC, RCC, etc.) | `steward.recordAchievement` | 🟡 | ✅ | `steward-sweep.test.ts` — happy path, sex validation, upsert, lock guard, dog-not-entered |
 | 91 | Remove achievement | `steward.removeAchievement` | 🟡 | ✅ | `steward-sweep.test.ts` |
@@ -243,7 +243,7 @@ factories and the test caller.
 |---|---|---|---|---|---|
 | 139 | Single-breed show validates dog breed | `orders.checkout` show.breedId primary, fallback to classes (6ec1d6f) | 🔴 | ✅ | `breed-validation.test.ts` — both primary and legacy fallback; permissive when no breed info anywhere |
 | 140 | Class breed restriction enforced | `orders.checkout` per-class breed check | 🟡 | ✅ | `breed-validation.test.ts` — wrong breed in restricted class rejected; JH classes always exempt |
-| 141 | Phase blockers gate status transitions | `secretary.getPhaseBlockers`, `getShowPhaseContext` | 🟡 | ⬜ | Checklist-driven |
+| 141 | Phase blockers gate status transitions | `secretary.getPhaseBlockers`, `getShowPhaseContext` | 🟡 | ✅ | `secretary-show-mgmt.test.ts` (blockers); `easy-wins-final.test.ts` (phase context) |
 
 ---
 
@@ -269,7 +269,7 @@ Areas with clusters of fix commits — bias test priority here:
 |---|---:|---:|---:|---:|
 | Exhibitor | 32 | 27 | 2 | 3 |
 | Secretary | 46 | 32 | 5 | 9 |
-| Steward | 15 | 14 | 0 | 1 |
+| Steward | 15 | 15 | 0 | 0 |
 | Judge | 3 | 3 | 0 | 0 |
 | Admin | 8 | 7 | 1 | 0 |
 | Auth & roles | 5 | 4 | 0 | 1 |
@@ -279,8 +279,8 @@ Areas with clusters of fix commits — bias test priority here:
 | Notifications | 7 | 0 | 5 | 2 |
 | File upload | 3 | 3 | 0 | 0 |
 | Soft-delete | 3 | 3 | 0 | 0 |
-| Phase / breed | 3 | 2 | 0 | 1 |
-| **TOTAL** | **141** | **109** | **13** | **19** |
+| Phase / breed | 3 | 3 | 0 | 0 |
+| **TOTAL** | **141** | **115** | **13** | **13** |
 
 🔴 show-day-critical journeys still uncovered: ~2.
 
