@@ -268,7 +268,7 @@ Areas with clusters of fix commits — bias test priority here:
 | Section | Total | ✅ | 🟠 | ⬜ |
 |---|---:|---:|---:|---:|
 | Exhibitor | 32 | 27 | 2 | 3 |
-| Secretary | 46 | 32 | 5 | 9 |
+| Secretary | 46 | 35 | 5 | 6 |
 | Steward | 15 | 15 | 0 | 0 |
 | Judge | 3 | 3 | 0 | 0 |
 | Admin | 8 | 7 | 1 | 0 |
