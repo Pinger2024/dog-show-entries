@@ -186,20 +186,26 @@ const s = StyleSheet.create({
   },
   exhibitorDogRow: {
     paddingLeft: 12,
-    marginBottom: 3,
+    marginBottom: 5,
   },
   exhibitorDogName: {
     fontFamily: 'Inter',
     fontSize: 7.5,
     fontWeight: 'bold',
     color: C.textDark,
+    lineHeight: 1.3,
   },
+  // NOTE: lineHeight is set explicitly here because long pedigree /
+  // multi-class detail lines wrap to 2 visual lines inside a single
+  // <Text>. Without an explicit lineHeight, react-pdf collapses the
+  // wrapped lines on top of each other at small font sizes.
   exhibitorDogDetail: {
     fontFamily: 'Inter',
     fontSize: 6.5,
     color: C.textMedium,
     paddingLeft: 16,
-    marginBottom: 0.5,
+    marginBottom: 1.5,
+    lineHeight: 1.35,
   },
   emptyClass: {
     fontFamily: 'Inter',
