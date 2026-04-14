@@ -146,7 +146,12 @@ export function CatalogueByClass({ show, entries }: Props) {
           >
 
             <View
-              minPresenceAhead={60}
+              // Reserve enough room below the header for the sponsor
+              // line, the "N entries" line, and at least one full
+              // entry row. If less than 150pt remains, react-pdf
+              // pushes the whole class heading onto the next page
+              // rather than orphaning it at the bottom of this one.
+              minPresenceAhead={150}
               style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', ...styles.groupHeading }}
             >
               <Text>{classNumber ? `Class ${classNumber}: ${className}` : className}</Text>
