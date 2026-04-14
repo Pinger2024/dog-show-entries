@@ -124,32 +124,36 @@ export function PrizeCardOverprint({ show }: OverprintProps) {
   });
   const showTypeLabel = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
 
-  // Format the judge line. Single judge → "Judge: Name (Affix)".
-  // Split sex → "Dogs: Name (Affix) · Bitches: Name (Affix)".
-  // Affix is appended in parentheses per UK schedule convention.
   const formatJudge = (j: { name: string; affix?: string | null }) =>
     j.affix ? `${j.name} (${j.affix})` : j.name;
-  const judgeLine = (() => {
-    const judges = show.judges ?? [];
-    if (judges.length === 0) return null;
-    if (judges.length === 1) return `Judge: ${formatJudge(judges[0])}`;
-    const dogJudge = judges.find((j) => j.sex === 'dog');
-    const bitchJudge = judges.find((j) => j.sex === 'bitch');
-    if (dogJudge && bitchJudge) {
-      return `Dogs: ${formatJudge(dogJudge)}  ·  Bitches: ${formatJudge(bitchJudge)}`;
-    }
-    return `Judges: ${judges.map(formatJudge).join(', ')}`;
-  })();
 
-  // Render the same content 5 times — one page per placement. The
-  // content is identical; paging exists so the user can load a
-  // specific colour of blanks and print N copies of just that page.
-  const pages = [1, 2, 3, 4, 5];
+  // When a show has multiple judges, each judge needs their OWN set
+  // of cards (dog winners are judged by the dog judge, bitch winners
+  // by the bitch judge, etc). So we produce 5 placements × N judges
+  // pages, grouped BY PLACEMENT — Amanda loads red blanks, prints
+  // every judge's 1st card, swaps to blue blanks, prints every
+  // judge's 2nd card, and so on. One colour-swap per placement.
+  const judges = show.judges ?? [];
+  const variants: { judgeLine: string | null }[] = judges.length === 0
+    ? [{ judgeLine: null }]
+    : judges.map((j) => ({ judgeLine: `Judge: ${formatJudge(j)}` }));
+
+  const placements = [1, 2, 3, 4, 5];
+  const pages: { placement: number; judgeLine: string | null; key: string }[] = [];
+  for (const p of placements) {
+    for (let i = 0; i < variants.length; i++) {
+      pages.push({
+        placement: p,
+        judgeLine: variants[i].judgeLine,
+        key: `${p}-${i}`,
+      });
+    }
+  }
 
   return (
     <Document title={`Prize Card Overprint — ${show.clubName}`} author="Remi Show Manager">
-      {pages.map((placement) => (
-        <Page key={placement} size="A5" orientation="landscape" style={styles.page} wrap={false}>
+      {pages.map((page) => (
+        <Page key={page.key} size="A5" orientation="landscape" style={styles.page} wrap={false}>
           <View style={styles.overprintZone}>
             {show.logoUrl && <Image src={show.logoUrl} style={styles.logo} />}
             <Text style={styles.clubName}>{show.clubName}</Text>
@@ -157,7 +161,7 @@ export function PrizeCardOverprint({ show }: OverprintProps) {
             <Text style={styles.showMeta}>
               {showTypeLabel} · {showDate}
             </Text>
-            {judgeLine && <Text style={styles.judgeLine}>{judgeLine}</Text>}
+            {page.judgeLine && <Text style={styles.judgeLine}>{page.judgeLine}</Text>}
           </View>
         </Page>
       ))}

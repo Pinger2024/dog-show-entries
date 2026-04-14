@@ -75,38 +75,21 @@ export async function GET(
     return false;
   });
 
-  // Collapse per judge: if the same person is assigned to both dog
-  // and bitch, they're effectively "both" (no sex split). Only emit
-  // sex='dog' or sex='bitch' when the judge is solely for that sex
-  // AND a different judge covers the other sex.
-  type JudgeTally = { id: string; name: string; affix: string | null; sexes: Set<string> };
-  const tallied = new Map<string, JudgeTally>();
-  for (const a of mainAssignments) {
-    const id = a.judge!.id;
-    const t = tallied.get(id) ?? {
-      id,
-      name: a.judge!.name,
-      affix: a.judge!.kennelClubAffix,
-      sexes: new Set<string>(),
-    };
-    t.sexes.add(a.sex ?? 'both');
-    tallied.set(id, t);
-  }
-
-  const judges: JudgeTally[] = Array.from(tallied.values());
+  // Each unique judge becomes one variant. The PDF then renders
+  // 5 placements × N variants pages, grouped by placement, so the
+  // operator can print every judge's 1st card on red blanks before
+  // swapping to blue. Dedupe by judgeId (a single judge assigned to
+  // both dog and bitch only needs one variant).
+  const seen = new Set<string>();
   const breedJudges: { name: string; sex: 'dog' | 'bitch' | null; affix: string | null }[] = [];
-
-  if (judges.length === 1) {
-    // One judge for the breed, regardless of sex split — show as "Judge: Name"
-    breedJudges.push({ name: judges[0].name, sex: null, affix: judges[0].affix });
-  } else {
-    // Multiple judges: emit with their distinguishing sex where possible
-    for (const j of judges) {
-      const onlyDog = j.sexes.has('dog') && !j.sexes.has('bitch');
-      const onlyBitch = j.sexes.has('bitch') && !j.sexes.has('dog');
-      const sex: 'dog' | 'bitch' | null = onlyDog ? 'dog' : onlyBitch ? 'bitch' : null;
-      breedJudges.push({ name: j.name, sex, affix: j.affix });
-    }
+  for (const a of mainAssignments) {
+    if (seen.has(a.judge!.id)) continue;
+    seen.add(a.judge!.id);
+    breedJudges.push({
+      name: a.judge!.name,
+      sex: null,
+      affix: a.judge!.kennelClubAffix,
+    });
   }
 
   const showInfo: OverprintShowInfo = {
