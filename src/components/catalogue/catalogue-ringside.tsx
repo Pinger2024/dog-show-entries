@@ -336,7 +336,6 @@ function buildExhibitorIndex(entries: CatalogueEntry[]): ExhibitorInfo[] {
 // ── Page chunking (module-scope to avoid re-creation per render) ──
 
 const PAGE_ENTRY_THRESHOLD = 50;
-const EXHIBITOR_PAGE_THRESHOLD = 20;
 
 function chunkClasses(classes: ClassGroup[]): ClassGroup[][] {
   const chunks: ClassGroup[][] = [];
@@ -351,24 +350,6 @@ function chunkClasses(classes: ClassGroup[]): ClassGroup[][] {
     }
     currentChunk.push(cls);
     currentCount += entryCount;
-  }
-  if (currentChunk.length > 0) chunks.push(currentChunk);
-  return chunks;
-}
-
-function chunkExhibitors(exs: ExhibitorInfo[]): ExhibitorInfo[][] {
-  const chunks: ExhibitorInfo[][] = [];
-  let currentChunk: ExhibitorInfo[] = [];
-  let currentCount = 0;
-  for (const ex of exs) {
-    const weight = 1 + ex.dogs.length;
-    if (currentChunk.length > 0 && currentCount + weight > EXHIBITOR_PAGE_THRESHOLD) {
-      chunks.push(currentChunk);
-      currentChunk = [];
-      currentCount = 0;
-    }
-    currentChunk.push(ex);
-    currentCount += weight;
   }
   if (currentChunk.length > 0) chunks.push(currentChunk);
   return chunks;
@@ -449,9 +430,10 @@ export function CatalogueRingside({ show, entries }: Props) {
     ? splitAwards.shared
     : ['Best in Show'];
 
-  // Build exhibitor index
+  // Build exhibitor index. No longer chunked — react-pdf wraps
+  // the single <Page> naturally so content flows continuously
+  // across pages rather than leaving half-empty chunked pages.
   const exhibitors = entries.length > 0 ? buildExhibitorIndex(entries) : [];
-  const exhibitorChunks = chunkExhibitors(exhibitors);
 
   const footerRender = ({ pageNumber, totalPages }: { pageNumber: number; totalPages: number }) =>
     `${show.name}  ·  Ringside Catalogue  ·  Page ${pageNumber} of ${totalPages}`;
@@ -623,16 +605,20 @@ export function CatalogueRingside({ show, entries }: Props) {
         <Text style={s.footer} render={footerRender} fixed />
       </Page>
 
-      {/* Exhibitor Index — full details like the GSD Scotland PDF */}
-      {exhibitorChunks.map((chunk, chunkIdx) => (
-        <Page key={`exhibitors-${chunkIdx}`} size="A5" style={s.page} wrap>
-          {chunkIdx === 0 && (
-            <View style={s.sectionBand}>
-              <Text style={s.sectionBandText}>List of Exhibitors</Text>
-            </View>
-          )}
+      {/* Exhibitor Index — full details like the GSD Scotland PDF.
+          One <Page wrap> for the whole list; react-pdf handles the
+          natural page break when content overflows A5. Per-exhibitor
+          <View wrap={false}> below keeps an individual exhibitor
+          block from being split mid-name/address. This avoids the
+          half-empty trailing pages we were getting when the code
+          chunked exhibitors by an arbitrary threshold. */}
+      {exhibitors.length > 0 && (
+        <Page size="A5" style={s.page} wrap>
+          <View style={s.sectionBand}>
+            <Text style={s.sectionBandText}>List of Exhibitors</Text>
+          </View>
 
-          {chunk.map((ex, exIdx) => (
+          {exhibitors.map((ex, exIdx) => (
             <View
               key={`${ex.name}-${exIdx}`}
               wrap={false}
@@ -697,7 +683,7 @@ export function CatalogueRingside({ show, entries }: Props) {
 
           <Text style={s.footer} render={footerRender} fixed />
         </Page>
-      ))}
+      )}
     </Document>
   );
 }
