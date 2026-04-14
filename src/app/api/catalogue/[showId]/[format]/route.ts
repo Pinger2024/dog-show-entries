@@ -15,6 +15,7 @@ import type { MarkedResult, MarkedAchievement } from '@/components/catalogue/cat
 import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, validateRasterLogoUrl, makePdfResponse } from '@/lib/pdf-utils';
+import { padPdfToMultiple } from '@/lib/pdf-pad';
 import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
 
 export async function GET(
@@ -391,6 +392,16 @@ export async function GET(
 
     const buffer = await renderToBuffer(pdfDocument);
 
+    // Mixam saddle-stitched booklets require a page count that's a
+    // multiple of 4 (each folded A4 sheet = 4 pages). Pad the two
+    // public-facing catalogue formats with blank pages at the end
+    // so they can be sent straight to Mixam. Internal working docs
+    // (steward/marked/absentees) are home-printed and don't need it.
+    const needsBookletPadding = format === 'standard' || format === 'by-class';
+    const finalBuffer = needsBookletPadding
+      ? Buffer.from(await padPdfToMultiple(buffer, 4))
+      : buffer;
+
     const formatLabels: Record<string, string> = {
       standard: 'Catalogue',
       'by-class': isAllBreed ? 'Catalogue-By-Breed' : 'Catalogue-By-Class',
@@ -400,7 +411,7 @@ export async function GET(
     };
     const filename = `${sanitizeFilename(show.name)}-${formatLabels[format] ?? 'Catalogue'}.pdf`;
     const isPreview = request.nextUrl.searchParams.has('preview');
-    return makePdfResponse(buffer, filename, isPreview);
+    return makePdfResponse(finalBuffer, filename, isPreview);
   } catch (err) {
     console.error('PDF generation failed:', err);
     const message = err instanceof Error ? err.message : String(err);
