@@ -39,6 +39,10 @@ export interface OverprintShowInfo {
   showType: string;
   date: string; // ISO yyyy-mm-dd
   logoUrl: string | null;
+  /** Main breed judges (excludes JH and other non-breed roles).
+   *  sex: null = both, 'dog' = dogs only, 'bitch' = bitches only.
+   *  affix: optional kennel club affix appended in parentheses. */
+  judges?: { name: string; sex: 'dog' | 'bitch' | null; affix?: string | null }[];
 }
 
 interface OverprintProps {
@@ -102,6 +106,13 @@ const styles = StyleSheet.create({
     color: '#555',
     letterSpacing: 0.3,
   },
+  judgeLine: {
+    fontSize: 12,
+    textAlign: 'center',
+    color: '#333',
+    marginTop: 10,
+    letterSpacing: 0.3,
+  },
 });
 
 export function PrizeCardOverprint({ show }: OverprintProps) {
@@ -112,6 +123,23 @@ export function PrizeCardOverprint({ show }: OverprintProps) {
     year: 'numeric',
   });
   const showTypeLabel = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
+
+  // Format the judge line. Single judge → "Judge: Name (Affix)".
+  // Split sex → "Dogs: Name (Affix) · Bitches: Name (Affix)".
+  // Affix is appended in parentheses per UK schedule convention.
+  const formatJudge = (j: { name: string; affix?: string | null }) =>
+    j.affix ? `${j.name} (${j.affix})` : j.name;
+  const judgeLine = (() => {
+    const judges = show.judges ?? [];
+    if (judges.length === 0) return null;
+    if (judges.length === 1) return `Judge: ${formatJudge(judges[0])}`;
+    const dogJudge = judges.find((j) => j.sex === 'dog');
+    const bitchJudge = judges.find((j) => j.sex === 'bitch');
+    if (dogJudge && bitchJudge) {
+      return `Dogs: ${formatJudge(dogJudge)}  ·  Bitches: ${formatJudge(bitchJudge)}`;
+    }
+    return `Judges: ${judges.map(formatJudge).join(', ')}`;
+  })();
 
   // Render the same content 5 times — one page per placement. The
   // content is identical; paging exists so the user can load a
@@ -129,6 +157,7 @@ export function PrizeCardOverprint({ show }: OverprintProps) {
             <Text style={styles.showMeta}>
               {showTypeLabel} · {showDate}
             </Text>
+            {judgeLine && <Text style={styles.judgeLine}>{judgeLine}</Text>}
           </View>
         </Page>
       ))}

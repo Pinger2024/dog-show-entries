@@ -41,7 +41,12 @@ export async function GET(
 
   const show = await db.query.shows.findFirst({
     where: eq(schema.shows.id, showId),
-    with: { organisation: true },
+    with: {
+      organisation: true,
+      judgeAssignments: {
+        with: { judge: true },
+      },
+    },
   });
 
   if (!show) {
@@ -53,12 +58,25 @@ export async function GET(
 
   const safeLogoUrl = await validateRasterLogoUrl(show.organisation?.logoUrl);
 
+  // Pick the "main" judges for the overprint: those assigned to a
+  // breed (excludes JH, which has breedId null on a single-breed
+  // show). If a judge appears multiple times (e.g. once per sex),
+  // dedupe by judgeId+sex so dog/bitch splits read cleanly.
+  const breedJudges = show.judgeAssignments
+    .filter((a) => a.breedId !== null && a.judge)
+    .map((a) => ({
+      name: a.judge!.name,
+      sex: a.sex as 'dog' | 'bitch' | null,
+      affix: a.judge!.kennelClubAffix,
+    }));
+
   const showInfo: OverprintShowInfo = {
     clubName: show.organisation?.name ?? 'Unknown Club',
     showName: show.name,
     showType: show.showType,
     date: show.startDate,
     logoUrl: safeLogoUrl,
+    judges: breedJudges,
   };
 
   try {
