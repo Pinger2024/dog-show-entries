@@ -58,17 +58,56 @@ export async function GET(
 
   const safeLogoUrl = await validateRasterLogoUrl(show.organisation?.logoUrl);
 
-  // Pick the "main" judges for the overprint: those assigned to a
-  // breed (excludes JH, which has breedId null on a single-breed
-  // show). If a judge appears multiple times (e.g. once per sex),
-  // dedupe by judgeId+sex so dog/bitch splits read cleanly.
-  const breedJudges = show.judgeAssignments
-    .filter((a) => a.breedId !== null && a.judge)
-    .map((a) => ({
+  // Pick the "main" judges for the overprint. Per the codebase
+  // convention (see pdf-generation.ts judge-label builder):
+  //   - breed=null AND sex=null  → Junior Handling judge  (SKIP)
+  //   - breed=X                  → main judge for that breed
+  //   - breed=null AND sex!=null → sex-specific main judge
+  //     (single-breed shows leave breed implicit)
+  //
+  // For the overprint we want the breed's main judges only, so
+  // include any assignment for the show's breed, plus any with
+  // an explicit sex (since those are definitively not JH).
+  const mainAssignments = show.judgeAssignments.filter((a) => {
+    if (!a.judge) return false;
+    if (a.breedId === show.breedId && show.breedId !== null) return true;
+    if (a.breedId === null && a.sex !== null) return true;
+    return false;
+  });
+
+  // Collapse per judge: if the same person is assigned to both dog
+  // and bitch, they're effectively "both" (no sex split). Only emit
+  // sex='dog' or sex='bitch' when the judge is solely for that sex
+  // AND a different judge covers the other sex.
+  type JudgeTally = { id: string; name: string; affix: string | null; sexes: Set<string> };
+  const tallied = new Map<string, JudgeTally>();
+  for (const a of mainAssignments) {
+    const id = a.judge!.id;
+    const t = tallied.get(id) ?? {
+      id,
       name: a.judge!.name,
-      sex: a.sex as 'dog' | 'bitch' | null,
       affix: a.judge!.kennelClubAffix,
-    }));
+      sexes: new Set<string>(),
+    };
+    t.sexes.add(a.sex ?? 'both');
+    tallied.set(id, t);
+  }
+
+  const judges: JudgeTally[] = Array.from(tallied.values());
+  const breedJudges: { name: string; sex: 'dog' | 'bitch' | null; affix: string | null }[] = [];
+
+  if (judges.length === 1) {
+    // One judge for the breed, regardless of sex split — show as "Judge: Name"
+    breedJudges.push({ name: judges[0].name, sex: null, affix: judges[0].affix });
+  } else {
+    // Multiple judges: emit with their distinguishing sex where possible
+    for (const j of judges) {
+      const onlyDog = j.sexes.has('dog') && !j.sexes.has('bitch');
+      const onlyBitch = j.sexes.has('bitch') && !j.sexes.has('dog');
+      const sex: 'dog' | 'bitch' | null = onlyDog ? 'dog' : onlyBitch ? 'bitch' : null;
+      breedJudges.push({ name: j.name, sex, affix: j.affix });
+    }
+  }
 
   const showInfo: OverprintShowInfo = {
     clubName: show.organisation?.name ?? 'Unknown Club',
