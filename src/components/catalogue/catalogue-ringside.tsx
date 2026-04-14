@@ -585,8 +585,13 @@ export function CatalogueRingside({ show, entries }: Props) {
         ));
       })}
 
-      {/* Best in Show page */}
-      <Page size="A5" style={s.page} wrap={false}>
+      {/* Best in Show page.
+          NOTE: leave wrap at default (true). wrap={false} on a
+          <Page> causes react-pdf to shrink the page to content
+          height when content is small — seen in the wild as a
+          Best-in-Show page coming out at 148×79mm instead of
+          148×210mm, which Mixam rejects as a size mismatch. */}
+      <Page size="A5" style={s.page}>
         <View
           style={{
             borderWidth: 1.5,

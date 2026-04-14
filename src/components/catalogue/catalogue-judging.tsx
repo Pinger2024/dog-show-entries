@@ -310,8 +310,11 @@ export function CatalogueJudging({ show, entries }: Props) {
 
   return (
     <Document title={`Judging Catalogue — ${show.name}`} author="Remi Show Manager">
-      {/* ── COVER PAGE ── */}
-      <Page size="A5" style={s.coverPage} wrap={false}>
+      {/* ── COVER PAGE ──
+          NOTE: leave wrap at default (true). wrap={false} on a
+          <Page> with short content shrinks the page to fit, which
+          Mixam rejects as a size mismatch. */}
+      <Page size="A5" style={s.coverPage}>
         {show.logoUrl && <Image src={show.logoUrl} style={s.coverLogo} />}
         {show.organisation && <Text style={s.coverOrg}>{show.organisation}</Text>}
         <Text style={s.coverTitle}>{show.name}</Text>
