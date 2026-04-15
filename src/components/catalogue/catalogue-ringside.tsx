@@ -21,6 +21,7 @@ import {
   ClassDefinitionsPage,
   TrophiesPage,
   BestAwardsPage,
+  JurisdictionBlock,
 } from './catalogue-front-matter';
 import type { ClassSponsorshipInfo } from './catalogue-types';
 
@@ -699,6 +700,12 @@ export function CatalogueRingside({ show, entries }: Props) {
               })}
             </View>
           ))}
+
+          {/* RKC-required jurisdiction statement — rendered at the
+              very end so it fills trailing whitespace on the last
+              exhibitor page rather than forcing its own page higher
+              up in the catalogue. */}
+          <JurisdictionBlock />
 
           <Text style={s.footer} render={footerRender} fixed />
         </Page>
