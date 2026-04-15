@@ -341,15 +341,15 @@ function buildExhibitorIndex(entries: CatalogueEntry[]): ExhibitorInfo[] {
 
 // ── Page chunking (module-scope to avoid re-creation per render) ──
 
-// Chunk threshold: high enough to let small/medium shows render a
-// section in one chunk (avoids artificial page breaks with trailing
-// whitespace), low enough to dodge the pdfkit coordinate-overflow
-// crash that hits when a single <Page wrap> has hundreds of entry
-// nodes. The by-class catalogue has much heavier per-entry markup
-// and crashes around 250 entries; ringside entries are simpler
-// (cat# + name in a 2-col grid) so it can take more, but staying
-// well below by-class's crash threshold is the safe play.
-const PAGE_ENTRY_THRESHOLD = 100;
+// Chunk threshold. Ringside entries are VERY simple (just cat# +
+// dog name in a 2-col grid) so vertical page extent stays small
+// per entry — much smaller than by-class's 3-line detail blocks
+// that hit the pdfkit coordinate-overflow crash at ~250 entries.
+// For ringside we can safely fit a typical championship show
+// (180-220 entries) in a single <Page wrap>, which eliminates the
+// artificial page breaks Amanda flagged on her 188-entry test.
+// Threshold kept below 300 as a safety margin.
+const PAGE_ENTRY_THRESHOLD = 250;
 
 function chunkClasses(classes: ClassGroup[]): ClassGroup[][] {
   const chunks: ClassGroup[][] = [];
@@ -490,13 +490,21 @@ export function CatalogueRingside({ show, entries }: Props) {
                   : [];
               const sponsorLines = buildSponsorLines(sps);
 
+              // Classes with ≤8 entries stay fully atomic (wrap=false on
+              // the whole block so header + entries never split). Larger
+              // classes are allowed to wrap across pages — needed for
+              // Amanda's "flow continuously regardless of entry count"
+              // ask — but the header carries minPresenceAhead so it
+              // never orphans at the bottom of a page with no entries
+              // below it.
+              const keepAtomic = sorted.length <= 8;
               return (
                 <View
                   key={`cls-${section.key}-${classGroup.classNumber ?? classGroup.className}-${classIdx}`}
-                  wrap={false}
+                  wrap={!keepAtomic}
                 >
                   {/* Class header strip */}
-                  <View style={s.classHeader}>
+                  <View style={s.classHeader} minPresenceAhead={keepAtomic ? undefined : 120}>
                     <Text style={s.classHeaderText}>
                       {classGroup.classNumber != null
                         ? `${classGroup.classNumber}. ${classGroup.className}`
