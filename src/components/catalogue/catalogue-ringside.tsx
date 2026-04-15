@@ -189,14 +189,15 @@ const s = StyleSheet.create({
   },
   exhibitorDogRow: {
     paddingLeft: 12,
-    marginBottom: 4,
+    marginBottom: 5,
   },
   exhibitorDogName: {
     fontFamily: 'Inter',
     fontSize: 7.5,
     fontWeight: 'bold',
     color: C.textDark,
-    lineHeight: 1.3,
+    lineHeight: 1.4,
+    marginBottom: 1,
   },
   // NOTE: lineHeight is set explicitly here because long pedigree /
   // multi-class detail lines wrap to 2 visual lines inside a single
@@ -207,8 +208,8 @@ const s = StyleSheet.create({
     fontSize: 6.5,
     color: C.textMedium,
     paddingLeft: 16,
-    marginBottom: 0.5,
-    lineHeight: 1.3,
+    marginBottom: 1,
+    lineHeight: 1.4,
   },
   emptyClass: {
     fontFamily: 'Inter',
