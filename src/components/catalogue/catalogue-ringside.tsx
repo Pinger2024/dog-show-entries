@@ -642,9 +642,16 @@ export function CatalogueRingside({ show, entries }: Props) {
           </View>
 
           {exhibitors.map((ex, exIdx) => (
+            // Exhibitors with many dogs (e.g. 15+) can be bigger than
+            // an A5 page — forcing wrap=false on those causes react-pdf
+            // to fail-fit and compress the text (seen on p25 of
+            // Amanda's 188-entry test). Only keep the block atomic
+            // when small enough to fit on a single page. Big exhibitors
+            // split naturally; minPresenceAhead on the name keeps the
+            // header from orphaning at the bottom of a page.
             <View
               key={`${ex.name}-${exIdx}`}
-              wrap={false}
+              wrap={ex.dogs.length > 10}
               style={{
                 marginBottom: 6,
                 borderBottomWidth: 0.5,
@@ -653,7 +660,7 @@ export function CatalogueRingside({ show, entries }: Props) {
               }}
             >
               {/* Exhibitor name + address */}
-              <Text style={s.exhibitorName}>{ex.name}</Text>
+              <Text style={s.exhibitorName} minPresenceAhead={ex.dogs.length > 10 ? 80 : undefined}>{ex.name}</Text>
               {ex.address && <Text style={s.exhibitorAddress}>{ex.address}</Text>}
 
               {/* Each dog */}
