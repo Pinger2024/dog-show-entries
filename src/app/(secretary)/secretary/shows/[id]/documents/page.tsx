@@ -229,6 +229,13 @@ export default function DocumentsPage() {
       description:
         'Ring assignments showing judges, breeds, and classes with entry counts',
     },
+    {
+      label: 'Award Board',
+      href: `/api/award-board/${showId}`,
+      icon: <Award className="size-4" />,
+      description:
+        'A4 landscape wipe-clean grid — laminate and re-use with a dry-wipe marker to record placements and best-of awards on the day',
+    },
   ];
 
   const prizeCardQuery = `placements=${prizeCardPlacements}&judge=${includeJudge}&style=${prizeCardStyle}`;
