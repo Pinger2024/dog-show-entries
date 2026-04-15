@@ -149,7 +149,7 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'baseline',
     paddingHorizontal: 8,
-    paddingVertical: 2.5,
+    paddingVertical: 1.5,
   },
   bestAwardLabel: {
     fontFamily: 'LibreBaskerville',
@@ -165,9 +165,9 @@ const s = StyleSheet.create({
     height: 12,
   },
   bestAwardSection: {
-    marginTop: 6,
-    paddingTop: 4,
-    borderTopWidth: 1,
+    marginTop: 4,
+    paddingTop: 2,
+    borderTopWidth: 0.5,
     borderTopColor: C.primary,
   },
   // Exhibitor index styles
