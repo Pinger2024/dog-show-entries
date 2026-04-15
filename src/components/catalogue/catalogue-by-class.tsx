@@ -89,10 +89,13 @@ export function CatalogueByClass({ show, entries }: Props) {
     return a.localeCompare(b);
   });
 
-  // Chunk classes into page-sized groups to avoid @react-pdf/renderer coordinate
-  // overflow bug (single <Page wrap> with many nodes crashes pdfkit with values
-  // like -9.979e+21). Each chunk gets its own <Page> so coordinates reset.
-  const PAGE_ENTRY_THRESHOLD = 35;
+  // One chunk holds the whole catalogue body unless entry count is
+  // huge — react-pdf wraps within a single <Page>, so chunking just
+  // creates artificial page breaks where natural overflow would pack
+  // tighter. Threshold kept high to guard against the historical
+  // pdfkit overflow crash on very large single pages (hundreds of
+  // entry nodes).
+  const PAGE_ENTRY_THRESHOLD = 250;
   const classChunks: string[][] = [];
   let currentChunk: string[] = [];
   let currentCount = 0;
@@ -138,6 +141,68 @@ export function CatalogueByClass({ show, entries }: Props) {
         // unless its a big class that takes up more than one page".
         const keepTogether = sorted.length <= 8;
 
+        // Render one entry — extracted so we can render the FIRST
+        // entry inside the wrap=false header block (keeping header
+        // and first dog atomic, per Amanda) and the rest as a
+        // normal flowing list.
+        const renderEntry = (entry: typeof classEntries[number], entryIdx: number) => {
+          const isJH = entry.entryType === 'junior_handler';
+          const rowKey = `${classKey}-${entry.catalogueNumber ?? 'nocat'}-${entryIdx}`;
+          if (isJH) {
+            const handlerName = entry.jhHandlerName ?? entry.exhibitor ?? 'Unnamed Handler';
+            return (
+              <View key={rowKey} style={styles.entryRowWrap} wrap={false}>
+                <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                  <Text style={styles.catalogueNumber}>{entry.catalogueNumber ?? '—'}</Text>
+                  <Text style={styles.dogName}>{handlerName}</Text>
+                </View>
+                {entry.dogName && (
+                  <Text style={styles.entryDetail}>
+                    <Text style={styles.entryDetailLabel}>Dog: </Text>
+                    {entry.dogName}
+                  </Text>
+                )}
+                {entry.owners.length > 0 && (
+                  <Text style={styles.entryDetail}>
+                    <Text style={styles.entryDetailLabel}>
+                      Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
+                    </Text>
+                    {formatOwnerKC(entry.owners, entry.exhibitorId, entry.withholdFromPublication)}
+                  </Text>
+                )}
+              </View>
+            );
+          }
+          const pedigree = formatPedigreeKC(entry.sire, entry.dam);
+          const metaParts = [
+            entry.kcRegNumber,
+            entry.dateOfBirth ? `DOB ${formatDobKC(entry.dateOfBirth)}` : null,
+            entry.colour,
+            entry.sex === 'dog' ? 'Dog' : entry.sex === 'bitch' ? 'Bitch' : null,
+            pedigree,
+            entry.breeder ? `br ${entry.breeder}` : null,
+          ].filter(Boolean);
+          return (
+            <View key={rowKey} style={styles.entryRowWrap} wrap={false}>
+              <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                <Text style={styles.catalogueNumber}>{entry.catalogueNumber ?? '—'}</Text>
+                <Text style={styles.dogName}>{uppercaseName(entry.dogName) || 'Unnamed'}</Text>
+              </View>
+              {metaParts.length > 0 && (
+                <Text style={styles.entryDetail}>{metaParts.join('  ·  ')}</Text>
+              )}
+              {entry.owners.length > 0 && (
+                <Text style={styles.entryDetail}>
+                  <Text style={styles.entryDetailLabel}>
+                    Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
+                  </Text>
+                  {formatOwnerKC(entry.owners, entry.exhibitorId, entry.withholdFromPublication)}
+                </Text>
+              )}
+            </View>
+          );
+        };
+
         return (
           <View
             key={classKey}
@@ -145,114 +210,35 @@ export function CatalogueByClass({ show, entries }: Props) {
             style={idx > 0 ? { marginTop: 6 } : undefined}
           >
 
-            <View
-              // Reserve enough room below the header for the sponsor
-              // line, the "N entries" line, and at least one full
-              // entry row. If less than 150pt remains, react-pdf
-              // pushes the whole class heading onto the next page
-              // rather than orphaning it at the bottom of this one.
-              minPresenceAhead={150}
-              style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', ...styles.groupHeading }}
-            >
-              <Text>{classNumber ? `Class ${classNumber}: ${className}` : className}</Text>
-              {sex && (
-                <Text style={{ fontSize: 9, fontStyle: 'italic', color: '#fff' }}>
-                  ({sex === 'dog' ? 'Dogs' : sex === 'bitch' ? 'Bitches' : 'Open'})
-                </Text>
-              )}
+            {/* Header block kept atomic with the FIRST entry so we
+                never orphan a class heading at the bottom of a page
+                with the dogs starting fresh on the next. Per Amanda:
+                "if there is a dog displayed immediately under the
+                classification … but it doesn't look right" without. */}
+            <View wrap={false}>
+              <View
+                style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', ...styles.groupHeading }}
+              >
+                <Text>{classNumber ? `Class ${classNumber}: ${className}` : className}</Text>
+                {sex && (
+                  <Text style={{ fontSize: 9, fontStyle: 'italic', color: '#fff' }}>
+                    ({sex === 'dog' ? 'Dogs' : sex === 'bitch' ? 'Bitches' : 'Open'})
+                  </Text>
+                )}
+              </View>
+              {classNumber != null && sponsorsByClassNumber.has(classNumber) &&
+                buildSponsorLines(sponsorsByClassNumber.get(classNumber)!).map((line, i) => (
+                  <Text key={i} style={styles.sponsorLine}>{line}</Text>
+                ))}
+
+              <Text style={styles.classEntryCount}>
+                {sorted.length} {sorted.length === 1 ? 'entry' : 'entries'}
+              </Text>
+
+              {sorted.length > 0 && renderEntry(sorted[0], 0)}
             </View>
-            {classNumber != null && sponsorsByClassNumber.has(classNumber) &&
-              buildSponsorLines(sponsorsByClassNumber.get(classNumber)!).map((line, i) => (
-                <Text key={i} style={styles.sponsorLine}>{line}</Text>
-              ))}
 
-            <Text style={styles.classEntryCount}>
-              {sorted.length} {sorted.length === 1 ? 'entry' : 'entries'}
-            </Text>
-
-            {sorted.map((entry, entryIdx) => {
-              const isJH = entry.entryType === 'junior_handler';
-              const rowKey = `${classKey}-${entry.catalogueNumber ?? 'nocat'}-${entryIdx}`;
-              if (isJH) {
-                // Junior Handling: handler-centric display
-                const handlerName = entry.jhHandlerName ?? entry.exhibitor ?? 'Unnamed Handler';
-                return (
-                  <View
-                    key={rowKey}
-                    style={styles.entryRowWrap}
-                    wrap={false}
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                      <Text style={styles.catalogueNumber}>
-                        {entry.catalogueNumber ?? '—'}
-                      </Text>
-                      <Text style={styles.dogName}>
-                        {handlerName}
-                      </Text>
-                    </View>
-                    {entry.dogName && (
-                      <Text style={styles.entryDetail}>
-                        <Text style={styles.entryDetailLabel}>Dog: </Text>
-                        {entry.dogName}
-                      </Text>
-                    )}
-                    {entry.owners.length > 0 && (
-                      <Text style={styles.entryDetail}>
-                        <Text style={styles.entryDetailLabel}>
-                          Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
-                        </Text>
-                        {formatOwnerKC(entry.owners, entry.exhibitorId, entry.withholdFromPublication)}
-                      </Text>
-                    )}
-                  </View>
-                );
-              }
-
-              const pedigree = formatPedigreeKC(entry.sire, entry.dam);
-              // Compressed to 3 lines per entry (was 5):
-              //   L1: cat# DOG NAME
-              //   L2: meta · pedigree · breeder
-              //   L3: owner(s) + address
-              // Saves ~20pt per entry vs the previous stacked layout.
-              const metaParts = [
-                entry.kcRegNumber,
-                entry.dateOfBirth ? `DOB ${formatDobKC(entry.dateOfBirth)}` : null,
-                entry.colour,
-                entry.sex === 'dog' ? 'Dog' : entry.sex === 'bitch' ? 'Bitch' : null,
-                pedigree,
-                entry.breeder ? `br ${entry.breeder}` : null,
-              ].filter(Boolean);
-              return (
-                <View
-                  key={rowKey}
-                  style={styles.entryRowWrap}
-                  wrap={false}
-                >
-                  {/* Catalogue number + dog name (UPPER CASE) */}
-                  <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                    <Text style={styles.catalogueNumber}>
-                      {entry.catalogueNumber ?? '—'}
-                    </Text>
-                    <Text style={styles.dogName}>
-                      {uppercaseName(entry.dogName) || 'Unnamed'}
-                    </Text>
-                  </View>
-                  {metaParts.length > 0 && (
-                    <Text style={styles.entryDetail}>
-                      {metaParts.join('  ·  ')}
-                    </Text>
-                  )}
-                  {entry.owners.length > 0 && (
-                    <Text style={styles.entryDetail}>
-                      <Text style={styles.entryDetailLabel}>
-                        Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
-                      </Text>
-                      {formatOwnerKC(entry.owners, entry.exhibitorId, entry.withholdFromPublication)}
-                    </Text>
-                  )}
-                </View>
-              );
-            })}
+            {sorted.slice(1).map((entry, sliceIdx) => renderEntry(entry, sliceIdx + 1))}
 
           </View>
         );
