@@ -556,14 +556,37 @@ export function CatalogueRingside({ show, entries }: Props) {
               );
             })}
 
-            {/* Best of Sex awards — only on the last chunk of dog/bitch sections */}
+            {/* Best of Sex awards — only on the last chunk of dog/bitch
+                sections. Rendered as a horizontal strip (one column per
+                award) rather than a stacked list, so the whole block is
+                ~25pt tall and almost always fits at the bottom of the
+                last chunk page. */}
             {chunkIdx === chunks.length - 1 &&
               bestAwards[section.key] && (
-                <View style={s.bestAwardSection} wrap={false}>
-                  {bestAwards[section.key].map((award) => (
-                    <View key={award} style={s.bestAwardRow}>
-                      <Text style={s.bestAwardLabel}>{award}</Text>
-                      <View style={s.bestAwardLine} />
+                <View
+                  wrap={false}
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    marginTop: 6,
+                    paddingTop: 4,
+                    paddingHorizontal: 6,
+                    borderTopWidth: 0.5,
+                    borderTopColor: C.primary,
+                  }}
+                >
+                  {bestAwards[section.key].map((award, i, arr) => (
+                    <View
+                      key={award}
+                      style={{
+                        flex: 1,
+                        marginRight: i < arr.length - 1 ? 8 : 0,
+                      }}
+                    >
+                      <Text style={{ ...s.bestAwardLabel, fontSize: 7.5, marginBottom: 2 }}>
+                        {award}
+                      </Text>
+                      <View style={{ borderBottomWidth: 0.5, borderBottomColor: C.textDark, height: 12 }} />
                     </View>
                   ))}
                 </View>

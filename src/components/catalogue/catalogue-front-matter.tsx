@@ -481,6 +481,12 @@ export function BestAwardsPage({ show }: FrontMatterProps) {
         );
       })}
 
+      {/* RKC-required Jurisdiction & Responsibilities statement.
+          Lives at the bottom of Best Awards (rather than the
+          Judges page) so it doesn't push small judge bios onto
+          their own near-empty pages in the front matter. */}
+      <JurisdictionBlock />
+
       <Text
         style={styles.footer}
         render={({ pageNumber, totalPages }) =>
@@ -853,7 +859,10 @@ export function JudgesListPage({ show }: FrontMatterProps) {
             </View>
           );
         })}
-        <JurisdictionBlock />
+        {/* Jurisdiction block moved out of this page — it was being
+            forced wrap={false} and pushing a small judge bio
+            (e.g. Miss P Ingham) onto its own near-empty page.
+            BestAwardsPage now hosts it instead. */}
       </Page>
     );
   }
