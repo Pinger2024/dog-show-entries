@@ -142,7 +142,7 @@ export function CatalogueByClass({ show, entries }: Props) {
           <View
             key={classKey}
             wrap={!keepTogether}
-            style={idx > 0 ? { marginTop: 12 } : undefined}
+            style={idx > 0 ? { marginTop: 6 } : undefined}
           >
 
             <View
@@ -209,6 +209,19 @@ export function CatalogueByClass({ show, entries }: Props) {
               }
 
               const pedigree = formatPedigreeKC(entry.sire, entry.dam);
+              // Compressed to 3 lines per entry (was 5):
+              //   L1: cat# DOG NAME
+              //   L2: meta · pedigree · breeder
+              //   L3: owner(s) + address
+              // Saves ~20pt per entry vs the previous stacked layout.
+              const metaParts = [
+                entry.kcRegNumber,
+                entry.dateOfBirth ? `DOB ${formatDobKC(entry.dateOfBirth)}` : null,
+                entry.colour,
+                entry.sex === 'dog' ? 'Dog' : entry.sex === 'bitch' ? 'Bitch' : null,
+                pedigree,
+                entry.breeder ? `br ${entry.breeder}` : null,
+              ].filter(Boolean);
               return (
                 <View
                   key={rowKey}
@@ -224,27 +237,11 @@ export function CatalogueByClass({ show, entries }: Props) {
                       {uppercaseName(entry.dogName) || 'Unnamed'}
                     </Text>
                   </View>
-                  {/* RKC reg + DOB + colour + sex */}
-                  <Text style={styles.entryDetail}>
-                    {[
-                      entry.kcRegNumber,
-                      entry.dateOfBirth ? `D.O.B: ${formatDobKC(entry.dateOfBirth)}` : null,
-                      entry.colour,
-                      entry.sex === 'dog' ? 'Dog' : entry.sex === 'bitch' ? 'Bitch' : null,
-                    ].filter(Boolean).join('  —  ')}
-                  </Text>
-                  {/* Pedigree: By [sire] ex [dam] */}
-                  {pedigree && (
-                    <Text style={styles.entryDetail}>{pedigree}</Text>
-                  )}
-                  {/* Breeder */}
-                  {entry.breeder && (
+                  {metaParts.length > 0 && (
                     <Text style={styles.entryDetail}>
-                      <Text style={styles.entryDetailLabel}>Breeder: </Text>
-                      {entry.breeder}
+                      {metaParts.join('  ·  ')}
                     </Text>
                   )}
-                  {/* Owner(s) — UPPER CASE + address (or "Exh." if owner is exhibiting) */}
                   {entry.owners.length > 0 && (
                     <Text style={styles.entryDetail}>
                       <Text style={styles.entryDetailLabel}>

@@ -135,9 +135,9 @@ export const styles = StyleSheet.create({
     textTransform: 'uppercase',
     backgroundColor: C.primary,
     color: C.textOnPrimary,
-    padding: '3 6',
-    marginTop: 10,
-    marginBottom: 4,
+    padding: '2 6',
+    marginTop: 6,
+    marginBottom: 2,
     letterSpacing: 0.8,
   },
   breedHeading: {
@@ -171,7 +171,7 @@ export const styles = StyleSheet.create({
   },
   // Prevent entries from splitting across pages
   entryRowWrap: {
-    marginBottom: 4,
+    marginBottom: 2.5,
     paddingLeft: 4,
   },
   catalogueNumber: {
@@ -224,7 +224,7 @@ export const styles = StyleSheet.create({
     fontFamily: 'Inter',
     fontSize: 6,
     color: C.textLight,
-    marginBottom: 3,
+    marginBottom: 1,
     paddingLeft: 6,
   },
 
