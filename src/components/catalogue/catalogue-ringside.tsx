@@ -341,7 +341,12 @@ function buildExhibitorIndex(entries: CatalogueEntry[]): ExhibitorInfo[] {
 
 // ── Page chunking (module-scope to avoid re-creation per render) ──
 
-const PAGE_ENTRY_THRESHOLD = 50;
+// One chunk per section in nearly all cases — react-pdf wraps within
+// a single <Page>, so chunking just creates artificial page breaks
+// where natural overflow would pack tighter. Threshold kept high to
+// guard against the historical pdfkit overflow crash on very large
+// single pages with hundreds of nodes.
+const PAGE_ENTRY_THRESHOLD = 200;
 
 function chunkClasses(classes: ClassGroup[]): ClassGroup[][] {
   const chunks: ClassGroup[][] = [];
@@ -556,80 +561,52 @@ export function CatalogueRingside({ show, entries }: Props) {
               );
             })}
 
-            {/* Best of Sex awards — only on the last chunk of dog/bitch
-                sections. Rendered as a horizontal strip (one column per
-                award) rather than a stacked list, so the whole block is
-                ~25pt tall and almost always fits at the bottom of the
-                last chunk page. */}
-            {chunkIdx === chunks.length - 1 &&
-              bestAwards[section.key] && (
+            {/* Consolidated Best Awards table — all bests (Dog, Bitch,
+                BIS, Long Coat etc.) in one table at the very end of the
+                last section, per Amanda's request. Replaces the old
+                per-section best-of-sex inline strips, which fragmented
+                the awards across multiple pages.
+                Two-column table layout: label | write-in line. */}
+            {isLastSection && chunkIdx === chunks.length - 1 && (() => {
+              const allBests = [
+                ...(bestAwards.dog ?? []),
+                ...(bestAwards.bitch ?? []),
+                ...bisAwards,
+              ];
+              if (allBests.length === 0) return null;
+              return (
                 <View
                   wrap={false}
                   style={{
-                    flexDirection: 'row',
-                    justifyContent: 'space-between',
-                    marginTop: 6,
-                    paddingTop: 4,
-                    paddingHorizontal: 6,
-                    borderTopWidth: 0.5,
-                    borderTopColor: C.primary,
+                    marginTop: 10,
+                    borderWidth: 1.5,
+                    borderColor: C.primary,
+                    padding: '8 12',
                   }}
                 >
-                  {bestAwards[section.key].map((award, i, arr) => (
-                    <View
-                      key={award}
-                      style={{
-                        flex: 1,
-                        marginRight: i < arr.length - 1 ? 8 : 0,
-                      }}
-                    >
-                      <Text style={{ ...s.bestAwardLabel, fontSize: 7.5, marginBottom: 2 }}>
-                        {award}
-                      </Text>
-                      <View style={{ borderBottomWidth: 0.5, borderBottomColor: C.textDark, height: 12 }} />
+                  <Text
+                    style={{
+                      fontFamily: 'LibreBaskerville',
+                      fontSize: 12,
+                      fontWeight: 'bold',
+                      textAlign: 'center',
+                      textTransform: 'uppercase',
+                      color: C.textDark,
+                      marginBottom: 6,
+                      letterSpacing: 1.5,
+                    }}
+                  >
+                    Best Awards
+                  </Text>
+                  {allBests.map((award) => (
+                    <View key={award} style={{ ...s.bestAwardRow, paddingVertical: 2.5 }}>
+                      <Text style={s.bestAwardLabel}>{award}</Text>
+                      <View style={s.bestAwardLine} />
                     </View>
                   ))}
                 </View>
-              )}
-
-            {/* Best in Show — inline at the end of the last section's
-                last chunk page, instead of its own dedicated page.
-                Saves one near-empty page in every catalogue. wrap=false
-                so the block stays atomic; if it doesn't fit react-pdf
-                will push it to a new page (same fallback behaviour as
-                a standalone BIS Page). */}
-            {isLastSection && chunkIdx === chunks.length - 1 && (
-              <View
-                wrap={false}
-                style={{
-                  marginTop: 12,
-                  borderWidth: 1.5,
-                  borderColor: C.primary,
-                  padding: '10 14',
-                }}
-              >
-                <Text
-                  style={{
-                    fontFamily: 'LibreBaskerville',
-                    fontSize: 12,
-                    fontWeight: 'bold',
-                    textAlign: 'center',
-                    textTransform: 'uppercase',
-                    color: C.textDark,
-                    marginBottom: 8,
-                    letterSpacing: 1.5,
-                  }}
-                >
-                  Best in Show
-                </Text>
-                {bisAwards.map((award) => (
-                  <View key={award} style={{ ...s.bestAwardRow, paddingVertical: 3 }}>
-                    <Text style={s.bestAwardLabel}>{award}</Text>
-                    <View style={s.bestAwardLine} />
-                  </View>
-                ))}
-              </View>
-            )}
+              );
+            })()}
 
             <Text style={s.footer} render={footerRender} fixed />
           </Page>
