@@ -62,11 +62,11 @@ function InfoCard({ title, children }: { title?: string; children: React.ReactNo
 
 function JurisdictionBlock() {
   return (
-    <View style={{ width: '100%', marginTop: 10, paddingHorizontal: 8 }} wrap={false}>
-      <Text style={{ fontFamily: 'Inter', fontSize: 7, fontWeight: 'bold', color: C.textDark, marginBottom: 2 }}>
+    <View style={{ width: '100%', marginTop: 6, paddingHorizontal: 8 }} wrap={false}>
+      <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', color: C.textDark, marginBottom: 1 }}>
         Jurisdiction and Responsibilities
       </Text>
-      <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 6.5, lineHeight: 1.4, color: C.textMedium }}>
+      <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 6, lineHeight: 1.3, color: C.textMedium }}>
         The Officers and Committee members of the society holding the licence are deemed responsible for organising and conducting the show safely and in accordance with the Rules and Regulations of the Royal Kennel Club and agree to abide by and adopt any decision of the Board or any authority to whom the Board may delegate its powers, subject to the conditions of Regulation F16. In so doing those appointed as Officers and Committee members accept that they are jointly and severally responsible for the organisation of the show and that this is a binding undertaking (vide Royal Kennel Club General Show Regulations F4 and F5).
       </Text>
     </View>
@@ -829,7 +829,7 @@ export function JudgesListPage({ show }: FrontMatterProps) {
             ? null // role list contained the bare name (no prefix)
             : roles.join(' & ');
           return (
-            <View key={i} wrap={false} style={{ marginBottom: 10 }}>
+            <View key={i} wrap={false} style={{ marginBottom: 6 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 {photoUrl && (
                   <Image src={photoUrl} style={{ width: 44, height: 44, borderRadius: 22 }} />

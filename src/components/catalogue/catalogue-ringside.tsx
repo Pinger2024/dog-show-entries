@@ -186,7 +186,7 @@ const s = StyleSheet.create({
   },
   exhibitorDogRow: {
     paddingLeft: 12,
-    marginBottom: 5,
+    marginBottom: 3,
   },
   exhibitorDogName: {
     fontFamily: 'Inter',
@@ -204,8 +204,8 @@ const s = StyleSheet.create({
     fontSize: 6.5,
     color: C.textMedium,
     paddingLeft: 16,
-    marginBottom: 1.5,
-    lineHeight: 1.35,
+    marginBottom: 0.5,
+    lineHeight: 1.3,
   },
   emptyClass: {
     fontFamily: 'Inter',
@@ -457,8 +457,9 @@ export function CatalogueRingside({ show, entries }: Props) {
       <BestAwardsPage show={show} />
 
       {/* Class pages — grouped by sex */}
-      {sections.map((section) => {
+      {sections.map((section, sectionIdx) => {
         const chunks = chunkClasses(section.classes);
+        const isLastSection = sectionIdx === sections.length - 1;
         return chunks.map((chunkClasses, chunkIdx) => (
           <Page
             key={`${section.key}-chunk-${chunkIdx}`}
@@ -568,48 +569,49 @@ export function CatalogueRingside({ show, entries }: Props) {
                 </View>
               )}
 
+            {/* Best in Show — inline at the end of the last section's
+                last chunk page, instead of its own dedicated page.
+                Saves one near-empty page in every catalogue. wrap=false
+                so the block stays atomic; if it doesn't fit react-pdf
+                will push it to a new page (same fallback behaviour as
+                a standalone BIS Page). */}
+            {isLastSection && chunkIdx === chunks.length - 1 && (
+              <View
+                wrap={false}
+                style={{
+                  marginTop: 12,
+                  borderWidth: 1.5,
+                  borderColor: C.primary,
+                  padding: '10 14',
+                }}
+              >
+                <Text
+                  style={{
+                    fontFamily: 'LibreBaskerville',
+                    fontSize: 12,
+                    fontWeight: 'bold',
+                    textAlign: 'center',
+                    textTransform: 'uppercase',
+                    color: C.textDark,
+                    marginBottom: 8,
+                    letterSpacing: 1.5,
+                  }}
+                >
+                  Best in Show
+                </Text>
+                {bisAwards.map((award) => (
+                  <View key={award} style={{ ...s.bestAwardRow, paddingVertical: 3 }}>
+                    <Text style={s.bestAwardLabel}>{award}</Text>
+                    <View style={s.bestAwardLine} />
+                  </View>
+                ))}
+              </View>
+            )}
+
             <Text style={s.footer} render={footerRender} fixed />
           </Page>
         ));
       })}
-
-      {/* Best in Show page.
-          NOTE: leave wrap at default (true). wrap={false} on a
-          <Page> causes react-pdf to shrink the page to content
-          height when content is small — seen in the wild as a
-          Best-in-Show page coming out at 148×79mm instead of
-          148×210mm, which Mixam rejects as a size mismatch. */}
-      <Page size="A5" style={s.page}>
-        <View
-          style={{
-            borderWidth: 1.5,
-            borderColor: C.primary,
-            padding: '16 20',
-            marginTop: 30,
-          }}
-        >
-          <Text
-            style={{
-              fontFamily: 'LibreBaskerville',
-              fontSize: 14,
-              fontWeight: 'bold',
-              textAlign: 'center',
-              textTransform: 'uppercase',
-              color: C.textDark,
-              marginBottom: 16,
-            }}
-          >
-            Best in Show
-          </Text>
-          {bisAwards.map((award) => (
-            <View key={award} style={{ ...s.bestAwardRow, paddingVertical: 6 }}>
-              <Text style={s.bestAwardLabel}>{award}</Text>
-              <View style={s.bestAwardLine} />
-            </View>
-          ))}
-        </View>
-        <Text style={s.footer} render={footerRender} fixed />
-      </Page>
 
       {/* Exhibitor Index — full details like the GSD Scotland PDF.
           One <Page wrap> for the whole list; react-pdf handles the

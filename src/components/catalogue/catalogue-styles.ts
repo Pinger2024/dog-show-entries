@@ -466,7 +466,7 @@ export const styles = StyleSheet.create({
   frontMatterPage: {
     fontFamily: 'Inter',
     fontSize: 7.5,
-    padding: '25 25 36 25',
+    padding: '20 22 30 22',
     lineHeight: 1.3,
     color: C.textDark,
   },
