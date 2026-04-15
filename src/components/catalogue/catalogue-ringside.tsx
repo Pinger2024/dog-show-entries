@@ -178,16 +178,18 @@ const s = StyleSheet.create({
     fontWeight: 'bold',
     color: C.textDark,
     textTransform: 'uppercase',
+    lineHeight: 1.3,
   },
   exhibitorAddress: {
     fontFamily: 'Inter',
     fontSize: 7,
     color: C.textMedium,
-    marginBottom: 2,
+    marginBottom: 3,
+    lineHeight: 1.3,
   },
   exhibitorDogRow: {
     paddingLeft: 12,
-    marginBottom: 3,
+    marginBottom: 4,
   },
   exhibitorDogName: {
     fontFamily: 'Inter',
@@ -700,12 +702,6 @@ export function CatalogueRingside({ show, entries }: Props) {
               })}
             </View>
           ))}
-
-          {/* RKC-required jurisdiction statement — rendered at the
-              very end so it fills trailing whitespace on the last
-              exhibitor page rather than forcing its own page higher
-              up in the catalogue. */}
-          <JurisdictionBlock />
 
           <Text style={s.footer} render={footerRender} fixed />
         </Page>
