@@ -89,17 +89,13 @@ export function CatalogueByClass({ show, entries }: Props) {
     return a.localeCompare(b);
   });
 
-  // Chunk classes into page-sized groups. The threshold matters in
-  // two directions:
-  //   - Too low (~30) creates artificial page breaks that leave large
-  //     trailing whitespace on chunk boundaries.
-  //   - Too high (200+) triggers a pdfkit coordinate-overflow crash
-  //     ("unsupported number: -9.979e+21") on shows with many entries
-  //     in a single <Page wrap>. Confirmed in production 2026-04-15.
-  // 60 is a happy medium — large enough that small/medium shows fit
-  // in one chunk, low enough that pdfkit's coordinate math stays in
-  // safe range.
-  const PAGE_ENTRY_THRESHOLD = 60;
+  // Chunk threshold. Too low (~30) creates artificial page breaks
+  // with trailing whitespace; too high (250+) triggers a pdfkit
+  // coordinate-overflow crash on shows with many entries in a single
+  // <Page wrap>. 130 gives a typical small-to-medium championship
+  // show (180-250 entries) just 1-2 chunks so flow is natural, and
+  // stays well below the confirmed crash point.
+  const PAGE_ENTRY_THRESHOLD = 130;
   const classChunks: string[][] = [];
   let currentChunk: string[] = [];
   let currentCount = 0;

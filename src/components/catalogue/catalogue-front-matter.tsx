@@ -61,9 +61,17 @@ function InfoCard({ title, children }: { title?: string; children: React.ReactNo
 }
 
 function JurisdictionBlock() {
+  // NOT wrap={false}: on shows with a long Best Awards list, forcing
+  // this block atomic orphaned the whole thing onto its own near-empty
+  // page. Letting it wrap means the band + paragraph flow below the
+  // Best Awards content and split at the natural page boundary rather
+  // than wholesale. The band uses minPresenceAhead via its own View
+  // so it doesn't end up alone at the bottom.
   return (
-    <View style={{ width: '100%', marginTop: 14 }} wrap={false}>
-      <SectionBand title="Jurisdiction and Responsibilities" />
+    <View style={{ width: '100%', marginTop: 14 }}>
+      <View minPresenceAhead={60}>
+        <SectionBand title="Jurisdiction and Responsibilities" />
+      </View>
       <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 8, lineHeight: 1.35, color: C.textMedium, paddingHorizontal: 8 }}>
         The Officers and Committee members of the society holding the licence are deemed responsible for organising and conducting the show safely and in accordance with the Rules and Regulations of the Royal Kennel Club and agree to abide by and adopt any decision of the Board or any authority to whom the Board may delegate its powers, subject to the conditions of Regulation F16. In so doing those appointed as Officers and Committee members accept that they are jointly and severally responsible for the organisation of the show and that this is a binding undertaking (vide Royal Kennel Club General Show Regulations F4 and F5).
       </Text>
