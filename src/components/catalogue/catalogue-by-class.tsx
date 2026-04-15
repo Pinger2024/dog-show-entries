@@ -89,13 +89,17 @@ export function CatalogueByClass({ show, entries }: Props) {
     return a.localeCompare(b);
   });
 
-  // One chunk holds the whole catalogue body unless entry count is
-  // huge — react-pdf wraps within a single <Page>, so chunking just
-  // creates artificial page breaks where natural overflow would pack
-  // tighter. Threshold kept high to guard against the historical
-  // pdfkit overflow crash on very large single pages (hundreds of
-  // entry nodes).
-  const PAGE_ENTRY_THRESHOLD = 250;
+  // Chunk classes into page-sized groups. The threshold matters in
+  // two directions:
+  //   - Too low (~30) creates artificial page breaks that leave large
+  //     trailing whitespace on chunk boundaries.
+  //   - Too high (200+) triggers a pdfkit coordinate-overflow crash
+  //     ("unsupported number: -9.979e+21") on shows with many entries
+  //     in a single <Page wrap>. Confirmed in production 2026-04-15.
+  // 60 is a happy medium — large enough that small/medium shows fit
+  // in one chunk, low enough that pdfkit's coordinate math stays in
+  // safe range.
+  const PAGE_ENTRY_THRESHOLD = 60;
   const classChunks: string[][] = [];
   let currentChunk: string[] = [];
   let currentCount = 0;

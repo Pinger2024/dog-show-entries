@@ -341,12 +341,15 @@ function buildExhibitorIndex(entries: CatalogueEntry[]): ExhibitorInfo[] {
 
 // ── Page chunking (module-scope to avoid re-creation per render) ──
 
-// One chunk per section in nearly all cases — react-pdf wraps within
-// a single <Page>, so chunking just creates artificial page breaks
-// where natural overflow would pack tighter. Threshold kept high to
-// guard against the historical pdfkit overflow crash on very large
-// single pages with hundreds of nodes.
-const PAGE_ENTRY_THRESHOLD = 200;
+// Chunk threshold: high enough to let small/medium shows render a
+// section in one chunk (avoids artificial page breaks with trailing
+// whitespace), low enough to dodge the pdfkit coordinate-overflow
+// crash that hits when a single <Page wrap> has hundreds of entry
+// nodes. The by-class catalogue has much heavier per-entry markup
+// and crashes around 250 entries; ringside entries are simpler
+// (cat# + name in a 2-col grid) so it can take more, but staying
+// well below by-class's crash threshold is the safe play.
+const PAGE_ENTRY_THRESHOLD = 100;
 
 function chunkClasses(classes: ClassGroup[]): ClassGroup[][] {
   const chunks: ClassGroup[][] = [];
