@@ -56,7 +56,7 @@ export const styles = StyleSheet.create({
   page: {
     fontFamily: 'Inter',
     fontSize: 7.5,
-    padding: '25 25 36 25',
+    padding: '20 22 30 22',
     lineHeight: 1.3,
     color: C.textDark,
   },
@@ -111,11 +111,11 @@ export const styles = StyleSheet.create({
   // ── Section band (full-width green band like schedule) ────
   sectionBand: {
     backgroundColor: C.primary,
-    marginTop: -25,
-    marginHorizontal: -25,
+    marginTop: -20,
+    marginHorizontal: -22,
     paddingVertical: 9,
-    paddingHorizontal: 25,
-    marginBottom: 14,
+    paddingHorizontal: 22,
+    marginBottom: 12,
   },
   sectionBandText: {
     fontFamily: 'LibreBaskerville',

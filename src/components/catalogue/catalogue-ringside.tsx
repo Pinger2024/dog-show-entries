@@ -51,8 +51,8 @@ const s = StyleSheet.create({
     textAlign: 'center',
     textTransform: 'uppercase',
     letterSpacing: 2,
-    paddingVertical: 4,
-    marginBottom: 8,
+    paddingVertical: 3,
+    marginBottom: 5,
   },
   // Class header row
   classHeader: {
@@ -60,9 +60,9 @@ const s = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: C.primary,
-    paddingVertical: 3,
+    paddingVertical: 2,
     paddingHorizontal: 8,
-    marginTop: 8,
+    marginTop: 5,
   },
   classHeaderText: {
     fontFamily: 'Inter',
@@ -85,7 +85,7 @@ const s = StyleSheet.create({
     fontWeight: 'bold',
     color: C.primary,
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 1,
   },
   // Entry grid — two columns of catalogue# + dog name
   entriesGrid: {
@@ -120,8 +120,8 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 6,
-    paddingTop: 4,
-    paddingBottom: 6,
+    paddingTop: 3,
+    paddingBottom: 4,
     borderBottomWidth: 0.5,
     borderBottomColor: C.ruleLight,
   },
@@ -149,7 +149,7 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'baseline',
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 2.5,
   },
   bestAwardLabel: {
     fontFamily: 'LibreBaskerville',
@@ -165,8 +165,8 @@ const s = StyleSheet.create({
     height: 12,
   },
   bestAwardSection: {
-    marginTop: 10,
-    paddingTop: 6,
+    marginTop: 6,
+    paddingTop: 4,
     borderTopWidth: 1,
     borderTopColor: C.primary,
   },
