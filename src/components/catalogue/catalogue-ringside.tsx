@@ -507,24 +507,27 @@ export function CatalogueRingside({ show, entries }: Props) {
                   key={`cls-${section.key}-${classGroup.classNumber ?? classGroup.className}-${classIdx}`}
                   wrap={!keepAtomic}
                 >
-                  {/* Class header strip */}
-                  <View style={s.classHeader} minPresenceAhead={keepAtomic ? undefined : 120}>
-                    <Text style={s.classHeaderText}>
-                      {classGroup.classNumber != null
-                        ? `${classGroup.classNumber}. ${classGroup.className}`
-                        : classGroup.className}
-                    </Text>
-                    <Text style={s.classHeaderCount}>
-                      {sorted.length} {sorted.length === 1 ? 'Entry' : 'Entries'}
-                    </Text>
+                  {/* Class header strip + sponsor lines kept atomic so a
+                      Trophy-and-Rosettes class never has one sponsor
+                      line orphaned at the top of the next page with no
+                      class heading above it. */}
+                  <View wrap={false} minPresenceAhead={keepAtomic ? undefined : 160}>
+                    <View style={s.classHeader}>
+                      <Text style={s.classHeaderText}>
+                        {classGroup.classNumber != null
+                          ? `${classGroup.classNumber}. ${classGroup.className}`
+                          : classGroup.className}
+                      </Text>
+                      <Text style={s.classHeaderCount}>
+                        {sorted.length} {sorted.length === 1 ? 'Entry' : 'Entries'}
+                      </Text>
+                    </View>
+                    {sponsorLines.map((line, i) => (
+                      <Text key={i} style={s.sponsorLine}>
+                        {line}
+                      </Text>
+                    ))}
                   </View>
-
-                  {/* Sponsorship lines */}
-                  {sponsorLines.map((line, i) => (
-                    <Text key={i} style={s.sponsorLine}>
-                      {line}
-                    </Text>
-                  ))}
 
                   {/* Entry grid — catalogue number + dog name, two columns */}
                   {sorted.length > 0 ? (
