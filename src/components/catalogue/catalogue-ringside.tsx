@@ -645,16 +645,18 @@ export function CatalogueRingside({ show, entries }: Props) {
           </View>
 
           {exhibitors.map((ex, exIdx) => (
-            // Exhibitors with many dogs (e.g. 15+) can be bigger than
-            // an A5 page — forcing wrap=false on those causes react-pdf
-            // to fail-fit and compress the text (seen on p25 of
-            // Amanda's 188-entry test). Only keep the block atomic
-            // when small enough to fit on a single page. Big exhibitors
-            // split naturally; minPresenceAhead on the name keeps the
-            // header from orphaning at the bottom of a page.
+            // Every exhibitor block is wrappable so the layout engine
+            // can break mid-block when a block is taller than the
+            // remaining page space — otherwise a 4-dog block that
+            // doesn't fit at page-bottom jumps whole, leaving big
+            // trailing whitespace (what Amanda flagged on p23 of her
+            // test show). minPresenceAhead on the exhibitor name stops
+            // the name itself from orphaning alone at the bottom —
+            // if < 80pt of space ahead, the name plus any first dog
+            // text moves to the next page as a unit.
             <View
               key={`${ex.name}-${exIdx}`}
-              wrap={ex.dogs.length > 10}
+              wrap
               style={{
                 marginBottom: 6,
                 borderBottomWidth: 0.5,
@@ -662,8 +664,7 @@ export function CatalogueRingside({ show, entries }: Props) {
                 paddingBottom: 4,
               }}
             >
-              {/* Exhibitor name + address */}
-              <Text style={s.exhibitorName} minPresenceAhead={ex.dogs.length > 10 ? 80 : undefined}>{ex.name}</Text>
+              <Text style={s.exhibitorName} minPresenceAhead={80}>{ex.name}</Text>
               {ex.address && <Text style={s.exhibitorAddress}>{ex.address}</Text>}
 
               {/* Each dog */}
@@ -689,7 +690,7 @@ export function CatalogueRingside({ show, entries }: Props) {
                 ].filter(Boolean);
 
                 return (
-                  <View key={`${dog.catalogueNumber}-${dogIdx}`} style={s.exhibitorDogRow}>
+                  <View key={`${dog.catalogueNumber}-${dogIdx}`} wrap={false} style={s.exhibitorDogRow}>
                     {/* Catalogue number + dog/handler name */}
                     <Text style={s.exhibitorDogName}>
                       {dog.catalogueNumber ? `${dog.catalogueNumber}. ` : ''}
