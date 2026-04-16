@@ -595,6 +595,21 @@ export function CoverPage({ show }: FrontMatterProps) {
           Held under Royal Kennel Club Rules &amp; Show Regulations F(1)
         </Text>
 
+        {/* Product label — so exhibitors buying a printed copy on the
+            day can see at a glance what the booklet is. Deliberately
+            understated; Amanda wanted it present but not shouty. */}
+        <Text style={{
+          fontFamily: 'Inter',
+          fontSize: 7.5,
+          letterSpacing: 1.8,
+          textTransform: 'uppercase',
+          color: C.textLight,
+          textAlign: 'center',
+          marginTop: 2,
+        }}>
+          Show Catalogue
+        </Text>
+
         <GoldRule />
 
         {/* Key details card with gold left border — matching schedule layout */}
