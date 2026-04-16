@@ -90,12 +90,14 @@ export function CatalogueByClass({ show, entries }: Props) {
   });
 
   // Chunk threshold. Too low (~30) creates artificial page breaks
-  // with trailing whitespace; too high (250+) triggers a pdfkit
-  // coordinate-overflow crash on shows with many entries in a single
-  // <Page wrap>. 130 gives a typical small-to-medium championship
-  // show (180-250 entries) just 1-2 chunks so flow is natural, and
-  // stays well below the confirmed crash point.
-  const PAGE_ENTRY_THRESHOLD = 130;
+  // with trailing whitespace; too high triggers pdfkit's
+  // coordinate-overflow crash (unsupported number -9.979e+21) inside
+  // `clipBorderTop` on shows with many entries in a single <Page wrap>.
+  // Sponsor lines add ~22pt per sponsored class, so a show with
+  // sponsors across most classes lowers the effective ceiling vs.
+  // a plain show. 80 is the safe threshold measured against Amanda's
+  // 187-entry Final Test Show with 44 sponsorships (scripts/repro-byclass-overflow.ts).
+  const PAGE_ENTRY_THRESHOLD = 80;
   const classChunks: string[][] = [];
   let currentChunk: string[] = [];
   let currentCount = 0;
