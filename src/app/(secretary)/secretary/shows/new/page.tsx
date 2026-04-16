@@ -840,9 +840,12 @@ export default function NewShowPage() {
                   />
                 </div>
 
-                {/* Entry dates */}
-                <div className="grid gap-4 sm:grid-cols-2">
+                {/* Entry dates — sm:grid-cols-3 matches the row above so
+                    Entries Open aligns with Show Date and Entries Close
+                    aligns with Show Opens At (col 2 deliberately empty). */}
+                <div className="grid gap-4 sm:grid-cols-3">
                   <DatePickerField control={form.control} name="entriesOpenDate" label="Entries Open" placeholder="Optional" />
+                  <div className="hidden sm:block" />
                   <div>
                     <DatePickerField control={form.control} name="entryCloseDate" label="Entries Close" placeholder="Optional" disableBefore={watchedEntriesOpen ? parseLocalDate(watchedEntriesOpen) : undefined} disableAfter={watchedStartDate ? parseLocalDate(watchedStartDate) : undefined} />
                     {watchedStartDate && (
