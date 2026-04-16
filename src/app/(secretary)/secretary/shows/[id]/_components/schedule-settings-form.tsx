@@ -208,6 +208,21 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     setHasLoaded(true);
   }, [effectiveExisting, showData, previousData, hasLoaded]);
 
+  // Belt-and-braces: if the main load useEffect raced past showData
+  // (hasLoaded flipped true before the server column values arrived
+  // from shows.getById), adopt the server values for show-level
+  // fields on first showData tick. Uses a functional update so user
+  // edits made in the meantime are preserved.
+  const initialShowLevelHydratedRef = useRef(false);
+  useEffect(() => {
+    if (initialShowLevelHydratedRef.current) return;
+    if (!showData) return;
+    if (showData.showOpenTime) setShowOpenTime((prev) => prev || showData.showOpenTime!);
+    if (showData.startTime) setJudgingStartTime((prev) => prev || showData.startTime!);
+    if (showData.onCallVet) setOnCallVet((prev) => prev || showData.onCallVet!);
+    initialShowLevelHydratedRef.current = true;
+  }, [showData]);
+
   // ── Autosave ──
   // Two-pronged save:
   //   1. Debounced tRPC mutation while the form is mounted — gives us
