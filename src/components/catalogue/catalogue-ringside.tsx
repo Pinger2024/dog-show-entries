@@ -16,6 +16,7 @@ import {
 import type { ClassGroup } from './catalogue-utils';
 import {
   CoverPage,
+  ShowParticularsPage,
   ShowInformationPage,
   JudgesListPage,
   ClassDefinitionsPage,
@@ -460,6 +461,7 @@ export function CatalogueRingside({ show, entries }: Props) {
     <Document title={`Ringside Catalogue — ${show.name}`} author="Remi Show Manager">
       {/* Front matter */}
       <CoverPage show={show} />
+      <ShowParticularsPage show={show} />
       <ShowInformationPage show={show} />
       <JudgesListPage show={show} />
       <ClassDefinitionsPage show={show} />

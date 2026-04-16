@@ -697,95 +697,16 @@ export function CoverPage({ show }: FrontMatterProps) {
           </View>
         )}
 
-        {/* On-call vet + show manager — compact */}
-        {(show.onCallVet || show.showManager) && (
-          <View style={{ width: '100%', marginTop: 2 }}>
-            {show.onCallVet && (
-              <View style={{ marginBottom: 2 }}>
-                <Text style={styles.coverSectionLabel}>On-Call Veterinary Surgeon</Text>
-                <Text style={styles.coverSectionText}>{show.onCallVet}</Text>
-              </View>
-            )}
-            {show.showManager && (
-              <View style={{ marginBottom: 2 }}>
-                <Text style={styles.coverSectionLabel}>Show Manager</Text>
-                <Text style={styles.coverSectionText}>{show.showManager}</Text>
-              </View>
-            )}
+        {/* On-call vet — last item on the cover. Show Manager,
+            sponsors, docking statement and Jurisdiction & Responsibilities
+            moved to ShowParticularsPage so the cover is consistent
+            across shows regardless of which optional fields are set. */}
+        {show.onCallVet && (
+          <View style={{ width: '100%', marginTop: 2, marginBottom: 2 }}>
+            <Text style={styles.coverSectionLabel}>On-Call Veterinary Surgeon</Text>
+            <Text style={styles.coverSectionText}>{show.onCallVet}</Text>
           </View>
         )}
-
-        {/* Show-level sponsors on cover — logos displayed prominently.
-            We deliberately EXCLUDE `tier === 'title'` here because the
-            title sponsor is already rendered inline at the top of the
-            cover (right under the show name). Including it here too was
-            causing a duplicate Royal Canin block at the bottom of page 1
-            that orphaned its "SPONSORED BY" label across the page break
-            onto page 2 — Amanda flagged the rogue label in testing. */}
-        {show.showSponsors && show.showSponsors.length > 0 && (() => {
-          const tierSponsors = show.showSponsors!.filter(sp => sp.tier === 'show');
-          const supporterSponsors = show.showSponsors!.filter(sp => sp.tier !== 'title' && sp.tier !== 'show');
-          return (
-            <View style={{ width: '100%', marginTop: 6, marginBottom: 4 }}>
-              {tierSponsors.length > 0 && (
-                <View style={{ alignItems: 'center', marginBottom: 6 }} wrap={false}>
-                  <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textLight, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 4 }}>
-                    {tierSponsors.length === 1 ? 'Sponsored by' : 'Sponsors'}
-                  </Text>
-                  {tierSponsors.map((sp, i) => (
-                    <View key={i} style={{ alignItems: 'center', marginBottom: 4 }}>
-                      {sp.logoUrl && (
-                        <Image src={sp.logoUrl} style={{ width: 100, height: 50, objectFit: 'contain', marginBottom: 3 }} />
-                      )}
-                      <Text style={{ fontFamily: 'Inter', fontSize: 9, fontWeight: 'bold', color: C.textDark }}>
-                        {sp.customTitle ? `${sp.customTitle}: ` : ''}{sp.name}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-              {supporterSponsors.length > 0 && (
-                <View style={{ ...styles.coverDetailCard, borderLeftColor: C.accent }}>
-                  <Text style={styles.coverSectionLabel}>With grateful thanks to</Text>
-                  {supporterSponsors.map((sp, i) => (
-                    <View key={i} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
-                      {sp.logoUrl && (
-                        <Image src={sp.logoUrl} style={{ width: 30, height: 15, objectFit: 'contain', marginRight: 6 }} />
-                      )}
-                      <Text style={{ fontFamily: 'Inter', fontSize: 7.5, color: C.textMedium }}>
-                        {sp.name}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-            </View>
-          );
-        })()}
-
-        {/* Docking statement — mandatory per F(1).7.c(2) */}
-        {show.dockingStatement && (
-          <Text style={{
-            fontFamily: 'Times',
-            fontSize: 7,
-            fontStyle: 'italic',
-            color: C.textMedium,
-            textAlign: 'center',
-            marginTop: 4,
-            marginBottom: 2,
-            paddingHorizontal: 8,
-          }}>
-            {show.dockingStatement}
-          </Text>
-        )}
-
-        {/* RKC-required Jurisdiction & Responsibilities statement —
-            rendered at the end of the cover content so it fills the
-            tail of the "Sponsored by" overflow page (p2). Per Amanda
-            2026-04-15: "add it to underneath the sponsors page, so
-            make the sponsors section 3/4 of a page and that fits at
-            the bottom". */}
-        <JurisdictionBlock />
 
         <Text style={styles.coverFooterText}>
           Generated by Remi  ·  remishowmanager.co.uk
@@ -794,6 +715,92 @@ export function CoverPage({ show }: FrontMatterProps) {
 
       {/* Green bottom band */}
       <View style={styles.coverBottomBand} />
+    </Page>
+  );
+}
+
+// ── Show Particulars Page ───────────────────────────────────────
+//
+// Everything that used to trail the cover: show manager, supporter /
+// show-tier sponsors, docking statement, and the RKC-mandatory
+// Jurisdiction block. Separating it keeps the cover identical between
+// shows so secretaries aren't adjusting formatting every time.
+
+export function ShowParticularsPage({ show }: FrontMatterProps) {
+  const sponsors = show.showSponsors ?? [];
+  const tierSponsors = sponsors.filter((sp) => sp.tier === 'show');
+  const supporterSponsors = sponsors.filter(
+    (sp) => sp.tier !== 'title' && sp.tier !== 'show',
+  );
+  const hasSponsors = tierSponsors.length > 0 || supporterSponsors.length > 0;
+
+  return (
+    <Page size="A5" style={styles.frontMatterPage} wrap>
+      {show.showManager && (
+        <View wrap={false} style={{ marginBottom: 8 }}>
+          <Text style={styles.coverSectionLabel}>Show Manager</Text>
+          <Text style={styles.coverSectionText}>{show.showManager}</Text>
+        </View>
+      )}
+
+      {hasSponsors && (
+        <View style={{ marginBottom: 10 }}>
+          {tierSponsors.length > 0 && (
+            <View style={{ alignItems: 'center', marginBottom: 6 }} wrap={false}>
+              <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textLight, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 4 }}>
+                {tierSponsors.length === 1 ? 'Sponsored by' : 'Sponsors'}
+              </Text>
+              {tierSponsors.map((sp, i) => (
+                <View key={i} style={{ alignItems: 'center', marginBottom: 4 }}>
+                  {sp.logoUrl && (
+                    <Image src={sp.logoUrl} style={{ width: 100, height: 50, objectFit: 'contain', marginBottom: 3 }} />
+                  )}
+                  <Text style={{ fontFamily: 'Inter', fontSize: 9, fontWeight: 'bold', color: C.textDark }}>
+                    {sp.customTitle ? `${sp.customTitle}: ` : ''}{sp.name}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+          {supporterSponsors.length > 0 && (
+            <View style={{ ...styles.coverDetailCard, borderLeftColor: C.accent }}>
+              <Text style={styles.coverSectionLabel}>With grateful thanks to</Text>
+              {supporterSponsors.map((sp, i) => (
+                <View key={i} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                  {sp.logoUrl && (
+                    <Image src={sp.logoUrl} style={{ width: 30, height: 15, objectFit: 'contain', marginRight: 6 }} />
+                  )}
+                  <Text style={{ fontFamily: 'Inter', fontSize: 7.5, color: C.textMedium }}>
+                    {sp.name}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
+
+      {show.dockingStatement && (
+        <Text style={{
+          fontFamily: 'Times',
+          fontSize: 7,
+          fontStyle: 'italic',
+          color: C.textMedium,
+          textAlign: 'center',
+          marginBottom: 8,
+          paddingHorizontal: 8,
+        }}>
+          {show.dockingStatement}
+        </Text>
+      )}
+
+      <JurisdictionBlock />
+
+      <Text
+        style={styles.footer}
+        render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}  ·  Generated by Remi`}
+        fixed
+      />
     </Page>
   );
 }
