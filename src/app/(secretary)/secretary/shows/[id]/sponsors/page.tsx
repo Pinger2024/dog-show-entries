@@ -1027,18 +1027,13 @@ function NewSponsorshipRow({
       setName(s.sponsor_name);
       if (s.sponsor_affix) setAffix(s.sponsor_affix);
       setIsActive(true);
-      // Auto-save after picking a suggestion
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = setTimeout(() => {
-        createMutation.mutate({
-          showClassId,
-          sponsorName: s.sponsor_name,
-          sponsorAffix: s.sponsor_affix ?? undefined,
-          trophyName: trophy.trim() || undefined,
-        });
-      }, 800);
+      // Don't auto-save here — closure captures whatever trophy state
+      // was when the user clicked the suggestion, which is usually
+      // empty, and a second row gets created when trySave fires on
+      // blur after trophy is filled in. Blur-driven save is the
+      // single commit point.
     },
-    [showClassId, trophy, createMutation]
+    [],
   );
 
   if (!isActive) {
