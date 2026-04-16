@@ -497,15 +497,20 @@ export function CatalogueRingside({ show, entries }: Props) {
               // never orphans at the bottom of a page with no entries
               // below it.
               const keepAtomic = sorted.length <= 8;
+              // Keep the class header atomic with its first pair of
+              // entries — prevents the "header at page-bottom with no
+              // dogs below it" orphan Amanda flagged. The first two
+              // rows of a 2-column grid = first 4 entries. If fewer,
+              // take what we have.
+              const firstEntries = sorted.slice(0, 4);
+              const restEntries = sorted.slice(4);
               return (
                 <View
                   key={`cls-${section.key}-${classGroup.classNumber ?? classGroup.className}-${classIdx}`}
                   wrap={!keepAtomic}
                 >
-                  {/* Header + sponsor lines kept atomic so a Rosettes
-                      line can't orphan at the top of the next page
-                      without its class heading above it. */}
-                  <View wrap={false} minPresenceAhead={keepAtomic ? undefined : 160}>
+                  {/* Header + sponsor lines + first entries kept atomic */}
+                  <View wrap={false} minPresenceAhead={keepAtomic ? undefined : 100}>
                     <View style={s.classHeader}>
                       <Text style={s.classHeaderText}>
                         {classGroup.classNumber != null
@@ -521,27 +526,36 @@ export function CatalogueRingside({ show, entries }: Props) {
                         {line}
                       </Text>
                     ))}
+                    {firstEntries.length > 0 ? (
+                      <View style={s.entriesGrid}>
+                        {firstEntries.map((entry, entryIdx) => (
+                          <View
+                            key={`${classGroup.classNumber ?? classGroup.className}-${entry.catalogueNumber ?? 'nocat'}-${entryIdx}`}
+                            style={s.entryCell}
+                          >
+                            <Text style={s.entryNumber}>{entry.catalogueNumber ?? '—'}</Text>
+                            <Text style={s.entryName}>{displayEntryName(entry)}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    ) : (
+                      <Text style={s.emptyClass}>No entries</Text>
+                    )}
                   </View>
 
-                  {/* Entry grid — catalogue number + dog name, two columns */}
-                  {sorted.length > 0 ? (
+                  {/* Remaining entries flow naturally — can split across pages */}
+                  {restEntries.length > 0 && (
                     <View style={s.entriesGrid}>
-                      {sorted.map((entry, entryIdx) => (
+                      {restEntries.map((entry, entryIdx) => (
                         <View
-                          key={`${classGroup.classNumber ?? classGroup.className}-${entry.catalogueNumber ?? 'nocat'}-${entryIdx}`}
+                          key={`rest-${classGroup.classNumber ?? classGroup.className}-${entry.catalogueNumber ?? 'nocat'}-${entryIdx}`}
                           style={s.entryCell}
                         >
-                          <Text style={s.entryNumber}>
-                            {entry.catalogueNumber ?? '—'}
-                          </Text>
-                          <Text style={s.entryName}>
-                            {displayEntryName(entry)}
-                          </Text>
+                          <Text style={s.entryNumber}>{entry.catalogueNumber ?? '—'}</Text>
+                          <Text style={s.entryName}>{displayEntryName(entry)}</Text>
                         </View>
                       ))}
                     </View>
-                  ) : (
-                    <Text style={s.emptyClass}>No entries</Text>
                   )}
 
                   {/* Write-in placement lines */}

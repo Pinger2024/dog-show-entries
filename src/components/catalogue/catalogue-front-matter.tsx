@@ -309,30 +309,37 @@ export function ShowInformationPage({ show }: FrontMatterProps) {
 export function FrontMatterContent({ show }: FrontMatterProps) {
   const hasJudges = Object.keys(show.judgesByBreedName ?? {}).length > 0
     || (show.judgeDisplayList?.length ?? 0) > 0;
+  // Section-between gap: large enough that a section banner never visually
+  // collides with the tail of the previous section's content (e.g. a judge
+  // bio flowing right up to the next SectionBand looks like a bug).
+  const SECTION_GAP = 16;
   return (
     <>
       <ShowParticularsContent show={show} />
 
       {showHasShowInformation(show) && (
-        <View style={{ marginTop: 10 }}>
+        <View style={{ marginTop: SECTION_GAP }}>
           <ShowInformationContent show={show} />
         </View>
       )}
 
       {hasJudges && (
-        <View style={{ marginTop: 10 }}>
+        <View style={{ marginTop: SECTION_GAP }}>
           <JudgesListContent show={show} />
         </View>
       )}
 
+      {/* Class definitions stay atomic — they're short enough (typically
+          8-12 defs on one page) that fitting them on a single page is
+          always preferable to a two-page split. */}
       {(show.classDefinitions?.length ?? 0) > 0 && (
-        <View style={{ marginTop: 10 }}>
+        <View style={{ marginTop: SECTION_GAP }} wrap={false} minPresenceAhead={240}>
           <ClassDefinitionsContent show={show} />
         </View>
       )}
 
       {hasBestAwards(show) && (
-        <View style={{ marginTop: 10 }}>
+        <View style={{ marginTop: SECTION_GAP }}>
           <BestAwardsContent show={show} />
         </View>
       )}
