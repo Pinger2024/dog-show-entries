@@ -3,12 +3,8 @@ import { Document, Page, View, Text } from '@react-pdf/renderer';
 import { styles } from './catalogue-styles';
 import {
   CoverPage,
-  ShowParticularsPage,
-  ShowInformationPage,
-  JudgesListPage,
-  ClassDefinitionsPage,
+  FrontMatterPage,
   TrophiesPage,
-  BestAwardsPage,
   createBreedIndexRenderer,
   isMultiBreedChampionship,
 } from './catalogue-front-matter';
@@ -229,16 +225,13 @@ export function CatalogueByBreed({ show, entries }: Props) {
 
   return (
     <Document>
-      {/* Front matter pages */}
+      {/* Front matter — cover is its own Page; the rest flows in a
+          single consolidated FrontMatterPage. */}
       <CoverPage show={show} />
-      <ShowParticularsPage show={show} />
-      <ShowInformationPage show={show} />
-      <JudgesListPage show={show} />
-      <ClassDefinitionsPage show={show} />
+      <FrontMatterPage show={show} />
       {!show.skipTrophiesPage && (
         <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />
       )}
-      <BestAwardsPage show={show} />
 
       {/* One <Page> per breed — resets coordinate system */}
       {breedPages.map(({ groupName, breedName, judge, breedBucket }) => (

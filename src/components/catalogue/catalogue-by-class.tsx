@@ -3,7 +3,7 @@ import { styles } from './catalogue-styles';
 import { CatalogueHeader } from './catalogue-header';
 import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
 import { formatDobKC, formatPedigreeKC, formatOwnerKC, uppercaseName, buildSponsorLines } from './catalogue-utils';
-import { CoverPage, ShowParticularsPage, ShowInformationPage, JudgesListPage, ClassDefinitionsPage, TrophiesPage, BestAwardsPage, ExhibitorIndexPage } from './catalogue-front-matter';
+import { CoverPage, FrontMatterPage, TrophiesPage, ExhibitorIndexPage } from './catalogue-front-matter';
 
 interface Props {
   show: CatalogueShowInfo;
@@ -118,14 +118,10 @@ export function CatalogueByClass({ show, entries }: Props) {
           #93) since exhibitors look up their own catalogue numbers more
           often than they read alphabetical reference indexes. */}
       <CoverPage show={show} />
-      <ShowParticularsPage show={show} />
-      <ShowInformationPage show={show} />
-      <JudgesListPage show={show} />
-      <ClassDefinitionsPage show={show} />
+      <FrontMatterPage show={show} />
       {!show.skipTrophiesPage && (
         <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />
       )}
-      <BestAwardsPage show={show} />
 
       {classChunks.map((chunkKeys, chunkIdx) => (
       <Page key={`chunk-${chunkIdx}`} size="A5" style={styles.page} wrap>

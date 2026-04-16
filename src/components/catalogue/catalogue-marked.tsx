@@ -3,7 +3,7 @@ import { Document, Page, View, Text, StyleSheet } from '@react-pdf/renderer';
 import { styles } from './catalogue-styles';
 import {
   CoverPage,
-  ShowParticularsPage,
+  ShowInformationPage,
   JudgesListPage,
   ClassDefinitionsPage,
   TrophiesPage,
@@ -364,7 +364,7 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
     <Document>
       {/* Cover page with MARKED CATALOGUE subtitle */}
       <CoverPage show={{ ...show, name: `${show.name}\nMARKED CATALOGUE` }} />
-      <ShowParticularsPage show={show} />
+      <ShowInformationPage show={show} />
       <JudgesListPage show={show} />
       <ClassDefinitionsPage show={show} />
       {!show.skipTrophiesPage && (
