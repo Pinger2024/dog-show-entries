@@ -5143,15 +5143,32 @@ export const secretaryRouter = createTRPCRouter({
     .input(z.object({ organisationId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
+      // Names are drawn from two sources: class-level sponsorships
+      // (class_sponsorships.sponsor_name) and show-level awards
+      // (shows.schedule_data->'awardSponsors'[*]). UNION + GROUP BY
+      // collapses duplicates that appear in both.
       const rows = await ctx.db.execute(sql`
-        SELECT DISTINCT cs.sponsor_name, cs.sponsor_affix
-        FROM class_sponsorships cs
-        JOIN show_classes sc ON cs.show_class_id = sc.id
-        JOIN shows s ON sc.show_id = s.id
-        WHERE s.organisation_id = ${input.organisationId}
-          AND cs.sponsor_name IS NOT NULL
-          AND cs.sponsor_name != ''
-        ORDER BY cs.sponsor_name
+        SELECT sponsor_name, MAX(sponsor_affix) AS sponsor_affix
+        FROM (
+          SELECT cs.sponsor_name, cs.sponsor_affix
+          FROM class_sponsorships cs
+          JOIN show_classes sc ON cs.show_class_id = sc.id
+          JOIN shows s ON sc.show_id = s.id
+          WHERE s.organisation_id = ${input.organisationId}
+            AND cs.sponsor_name IS NOT NULL
+            AND cs.sponsor_name != ''
+          UNION ALL
+          SELECT
+            entry->>'sponsorName' AS sponsor_name,
+            entry->>'sponsorAffix' AS sponsor_affix
+          FROM shows s,
+               jsonb_array_elements(COALESCE(s.schedule_data->'awardSponsors', '[]'::jsonb)) AS entry
+          WHERE s.organisation_id = ${input.organisationId}
+            AND entry->>'sponsorName' IS NOT NULL
+            AND entry->>'sponsorName' != ''
+        ) combined
+        GROUP BY sponsor_name
+        ORDER BY sponsor_name
       `);
       return rows as { sponsor_name: string; sponsor_affix: string | null }[];
     }),
