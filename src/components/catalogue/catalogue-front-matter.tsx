@@ -163,52 +163,41 @@ function filterDuplicateRegulations(
   });
 }
 
-export function ShowInformationPage({ show }: FrontMatterProps) {
-  // Pull out everything we might render so we can decide whether the page
-  // is worth printing at all. Officers and guarantors are deliberately
-  // not surfaced here — see the comment near the render below.
+/** Heuristic: is there anything worth rendering in Show Information? */
+function showHasShowInformation(show: CatalogueShowInfo): boolean {
+  if (show.welcomeNote || show.awardsDescription) return true;
+  if (show.additionalNotes || show.futureShowDates) return true;
+  if (show.latestArrivalTime || show.catering) return true;
+  if (show.acceptsNfc || show.prizeMoney) return true;
+  if (show.judgedOnGroupSystem) return true;
+  if (filterDuplicateRegulations(show.customStatements, show).length > 0) return true;
+  return false;
+}
+
+export function ShowInformationContent({ show }: FrontMatterProps) {
   const hasWelcome = !!show.welcomeNote;
   const hasAwardsDescription = !!show.awardsDescription;
   const hasAdditionalNotes = !!show.additionalNotes;
   const hasFutureShows = !!show.futureShowDates;
-  // Regulations moved off the cover (backlog #90): every regulation EXCEPT
-  // outside attraction and the no-wet-weather notice now lives here. We
-  // also dedupe custom statements that just restate the dedicated fields,
-  // since Amanda (and most secretaries) fill in BOTH (the field for
-  // structured data, the custom statement out of habit).
+  // Regulations: every regulation EXCEPT outside attraction and the
+  // no-wet-weather notice lives here (those stay as loud cover notices).
+  // Dedupe custom statements that just restate the structured fields
+  // — secretaries often fill in both, and duplicate rendering looks bad.
   const filteredStatements = filterDuplicateRegulations(show.customStatements, show);
   const hasCustomStatements = filteredStatements.length > 0;
   const hasGroupSystem = !!show.judgedOnGroupSystem;
   const hasRegulations = hasCustomStatements || hasGroupSystem;
   const practicalInfo: { label: string; value: string }[] = [];
-  if (show.latestArrivalTime) {
-    practicalInfo.push({ label: 'Latest Arrival', value: show.latestArrivalTime });
-  }
-  if (show.catering) {
-    practicalInfo.push({ label: 'Catering', value: show.catering });
-  }
-  if (show.acceptsNfc) {
-    practicalInfo.push({ label: 'NFC Entries', value: 'Accepted' });
-  }
-  if (show.prizeMoney) {
-    practicalInfo.push({ label: 'Prize Money', value: show.prizeMoney });
-  }
+  if (show.latestArrivalTime) practicalInfo.push({ label: 'Latest Arrival', value: show.latestArrivalTime });
+  if (show.catering) practicalInfo.push({ label: 'Catering', value: show.catering });
+  if (show.acceptsNfc) practicalInfo.push({ label: 'NFC Entries', value: 'Accepted' });
+  if (show.prizeMoney) practicalInfo.push({ label: 'Prize Money', value: show.prizeMoney });
   const hasPracticalInfo = practicalInfo.length > 0;
 
-  // Don't ship a blank page if nothing is set.
-  if (
-    !hasWelcome &&
-    !hasAwardsDescription &&
-    !hasAdditionalNotes &&
-    !hasFutureShows &&
-    !hasPracticalInfo &&
-    !hasRegulations
-  ) {
-    return null;
-  }
+  if (!showHasShowInformation(show)) return null;
 
   return (
-    <Page size="A5" style={styles.frontMatterPage} wrap>
+    <>
       <SectionBand title="Show Information" />
 
       {hasWelcome && (
@@ -220,15 +209,9 @@ export function ShowInformationPage({ show }: FrontMatterProps) {
         </View>
       )}
 
-      {/* Officers and Guarantors are deliberately NOT listed by name here.
-          Amanda's note: the standard RKC "Jurisdiction and Responsibilities"
-          paragraph (rendered by JurisdictionBlock at the bottom of
-          JudgesListPage and again on the schedule) covers them collectively
-          — "The Officers and Committee members of the society holding the
-          licence are deemed responsible..." — so naming them individually
-          is redundant. The schedule settings form still collects names
-          (we use them elsewhere — e.g. organisation people sync), but the
-          catalogue render skips the named list. */}
+      {/* Officers and Guarantors are deliberately not listed by name
+          here — the RKC Jurisdiction & Responsibilities paragraph on
+          the particulars page covers them collectively. */}
 
       {hasAwardsDescription && (
         <View wrap={false} style={{ marginBottom: 6 }}>
@@ -265,10 +248,6 @@ export function ShowInformationPage({ show }: FrontMatterProps) {
         </View>
       )}
 
-      {/* Regulations — moved off the cover per backlog #90. The cover keeps
-          only the RKC-mandatory loud notices (outside attraction, no wet
-          weather). Custom statements are deduped against the dedicated
-          fields above so the same notice doesn't appear twice. */}
       {hasRegulations && (
         <View wrap={false} style={{ marginBottom: 6 }}>
           <Text style={showInfoStyles.sectionTitle}>Regulations</Text>
@@ -287,6 +266,17 @@ export function ShowInformationPage({ show }: FrontMatterProps) {
           ))}
         </View>
       )}
+    </>
+  );
+}
+
+// Legacy standalone page wrapper — kept for callers that haven't
+// migrated to FrontMatterPage yet.
+export function ShowInformationPage({ show }: FrontMatterProps) {
+  if (!showHasShowInformation(show)) return null;
+  return (
+    <Page size="A5" style={styles.frontMatterPage} wrap>
+      <ShowInformationContent show={show} />
     </Page>
   );
 }
@@ -734,14 +724,15 @@ export function CoverPage({ show }: FrontMatterProps) {
   );
 }
 
-// ── Show Particulars Page ───────────────────────────────────────
+// ── Show Particulars Block ──────────────────────────────────────
 //
 // Everything that used to trail the cover: show manager, supporter /
 // show-tier sponsors, docking statement, and the RKC-mandatory
-// Jurisdiction block. Separating it keeps the cover identical between
-// shows so secretaries aren't adjusting formatting every time.
+// Jurisdiction text. Rendered as a View so it can be composed inside
+// the consolidated front-matter Page together with other front-matter
+// sections, keeping the layout densely packed.
 
-export function ShowParticularsPage({ show }: FrontMatterProps) {
+export function ShowParticularsContent({ show }: FrontMatterProps) {
   const sponsors = show.showSponsors ?? [];
   const tierSponsors = sponsors.filter((sp) => sp.tier === 'show');
   const supporterSponsors = sponsors.filter(
@@ -750,7 +741,7 @@ export function ShowParticularsPage({ show }: FrontMatterProps) {
   const hasSponsors = tierSponsors.length > 0 || supporterSponsors.length > 0;
 
   return (
-    <Page size="A5" style={styles.frontMatterPage} wrap>
+    <>
       {show.showManager && (
         <View wrap={false} style={{ marginBottom: 8 }}>
           <Text style={styles.coverSectionLabel}>Show Manager</Text>
@@ -810,6 +801,16 @@ export function ShowParticularsPage({ show }: FrontMatterProps) {
       )}
 
       <JurisdictionBlock />
+    </>
+  );
+}
+
+// Legacy standalone page wrapper — kept for callers that haven't
+// migrated to the consolidated FrontMatterPage yet.
+export function ShowParticularsPage(props: FrontMatterProps) {
+  return (
+    <Page size="A5" style={styles.frontMatterPage} wrap>
+      <ShowParticularsContent {...props} />
 
       <Text
         style={styles.footer}
@@ -1015,7 +1016,10 @@ export function JudgesListPage({ show }: FrontMatterProps) {
         </View>
       )}
 
-      <JurisdictionBlock />
+      {/* Jurisdiction block used to live here — moved to
+          ShowParticularsPage now that the cover ends cleanly at
+          On-Call Vet. Rendering it twice was creating duplicate
+          legal text across the front matter. */}
 
       <Text
         style={styles.footer}
