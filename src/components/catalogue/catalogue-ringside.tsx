@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { Document, Page, View, Text, StyleSheet } from '@react-pdf/renderer';
 import './catalogue-styles'; // side-effect: registers Inter + LibreBaskerville fonts
 import { C } from './catalogue-styles';
@@ -16,7 +17,7 @@ import {
 import type { ClassGroup } from './catalogue-utils';
 import {
   CoverPage,
-  FrontMatterPage,
+  FrontMatterContent,
   TrophiesPage,
   JurisdictionBlock,
 } from './catalogue-front-matter';
@@ -60,7 +61,7 @@ const s = StyleSheet.create({
     backgroundColor: C.primary,
     paddingVertical: 2,
     paddingHorizontal: 8,
-    marginTop: 5,
+    marginTop: 3,
   },
   classHeaderText: {
     fontFamily: 'Inter',
@@ -89,8 +90,8 @@ const s = StyleSheet.create({
   entriesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingTop: 3,
-    paddingBottom: 2,
+    paddingTop: 2,
+    paddingBottom: 1,
     paddingHorizontal: 6,
   },
   entryCell: {
@@ -118,8 +119,8 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 6,
-    paddingTop: 3,
-    paddingBottom: 4,
+    paddingTop: 2,
+    paddingBottom: 3,
     borderBottomWidth: 0.5,
     borderBottomColor: C.ruleLight,
   },
@@ -455,34 +456,32 @@ export function CatalogueRingside({ show, entries }: Props) {
 
   return (
     <Document title={`Ringside Catalogue — ${show.name}`} author="Remi Show Manager">
-      {/* Front matter — cover is its own Page; everything else flows
-          inside a single consolidated FrontMatterPage so sections pack
-          without forced page breaks between them. */}
+      {/* Everything after the cover flows inside a single <Page wrap>
+          so front matter and body share pages — a partial front-matter
+          page can absorb the start of the body rather than leaving
+          trailing whitespace. Cover stays its own Page (different
+          styling / branded layout).
+          Safety: this relies on total entries staying under pdfkit's
+          coordinate-overflow ceiling (~250 entries per wrapped Page).
+          Shows above that threshold will need re-chunking — raise a
+          diagnostic or fall back to per-section pages if it becomes
+          a problem. */}
       <CoverPage show={show} />
-      <FrontMatterPage show={show} />
       {!show.skipTrophiesPage && show.classSponsorships && show.classSponsorships.length > 0 && (
         <TrophiesPage show={show} sponsorships={show.classSponsorships} />
       )}
-
-      {/* Class pages — grouped by sex */}
-      {sections.map((section, sectionIdx) => {
-        const chunks = chunkClasses(section.classes);
-        const isLastSection = sectionIdx === sections.length - 1;
-        return chunks.map((chunkClasses, chunkIdx) => (
-          <Page
-            key={`${section.key}-chunk-${chunkIdx}`}
-            size="A5"
-            style={s.page}
-            wrap
-          >
-            {/* Sex band on first chunk of each section */}
-            {chunkIdx === 0 && (
+      <Page size="A5" style={s.page} wrap>
+        <FrontMatterContent show={show} />
+        <View style={{ marginTop: 14 }} />
+        {sections.map((section, sectionIdx) => {
+          const isLastSection = sectionIdx === sections.length - 1;
+          const chunkClasses = section.classes;
+          return (
+            <Fragment key={`section-${section.key}`}>
               <Text style={s.sexBand} minPresenceAhead={80}>
                 {section.label}
               </Text>
-            )}
-
-            {chunkClasses.map((classGroup, classIdx) => {
+              {chunkClasses.map((classGroup, classIdx) => {
               const sorted = sortEntries(classGroup.entries);
               const sps =
                 classGroup.classNumber != null
@@ -574,57 +573,53 @@ export function CatalogueRingside({ show, entries }: Props) {
               );
             })}
 
-            {/* Consolidated Best Awards table — all bests (Dog, Bitch,
-                BIS, Long Coat etc.) in one table at the very end of the
-                last section, per Amanda's request. Replaces the old
-                per-section best-of-sex inline strips, which fragmented
-                the awards across multiple pages.
-                Two-column table layout: label | write-in line. */}
-            {isLastSection && chunkIdx === chunks.length - 1 && (() => {
-              const allBests = [
-                ...(bestAwards.dog ?? []),
-                ...(bestAwards.bitch ?? []),
-                ...bisAwards,
-              ];
-              if (allBests.length === 0) return null;
-              return (
-                <View
-                  wrap={false}
-                  style={{
-                    marginTop: 10,
-                    borderWidth: 1.5,
-                    borderColor: C.primary,
-                    padding: '8 12',
-                  }}
-                >
-                  <Text
+              {/* Best Awards table only after the LAST section */}
+              {isLastSection && (() => {
+                const allBests = [
+                  ...(bestAwards.dog ?? []),
+                  ...(bestAwards.bitch ?? []),
+                  ...bisAwards,
+                ];
+                if (allBests.length === 0) return null;
+                return (
+                  <View
+                    wrap={false}
                     style={{
-                      fontFamily: 'LibreBaskerville',
-                      fontSize: 12,
-                      fontWeight: 'bold',
-                      textAlign: 'center',
-                      textTransform: 'uppercase',
-                      color: C.textDark,
-                      marginBottom: 6,
-                      letterSpacing: 1.5,
+                      marginTop: 10,
+                      borderWidth: 1.5,
+                      borderColor: C.primary,
+                      padding: '8 12',
                     }}
                   >
-                    Best Awards
-                  </Text>
-                  {allBests.map((award) => (
-                    <View key={award} style={{ ...s.bestAwardRow, paddingVertical: 2.5 }}>
-                      <Text style={s.bestAwardLabel}>{award}</Text>
-                      <View style={s.bestAwardLine} />
-                    </View>
-                  ))}
-                </View>
-              );
-            })()}
+                    <Text
+                      style={{
+                        fontFamily: 'LibreBaskerville',
+                        fontSize: 12,
+                        fontWeight: 'bold',
+                        textAlign: 'center',
+                        textTransform: 'uppercase',
+                        color: C.textDark,
+                        marginBottom: 6,
+                        letterSpacing: 1.5,
+                      }}
+                    >
+                      Best Awards
+                    </Text>
+                    {allBests.map((award) => (
+                      <View key={award} style={{ ...s.bestAwardRow, paddingVertical: 2.5 }}>
+                        <Text style={s.bestAwardLabel}>{award}</Text>
+                        <View style={s.bestAwardLine} />
+                      </View>
+                    ))}
+                  </View>
+                );
+              })()}
+            </Fragment>
+          );
+        })}
+        <Text style={s.footer} render={footerRender} fixed />
+      </Page>
 
-            <Text style={s.footer} render={footerRender} fixed />
-          </Page>
-        ));
-      })}
 
       {/* Exhibitor Index — full details like the GSD Scotland PDF.
           One <Page wrap> for the whole list; react-pdf handles the
