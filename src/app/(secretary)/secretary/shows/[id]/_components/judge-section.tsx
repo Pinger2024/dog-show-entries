@@ -183,6 +183,9 @@ export function JudgesSection({ showId }: { showId: string }) {
       setSelectedRingId('');
       setSelectedSexFilter('both');
       utils.secretary.getShowJudges.invalidate({ showId });
+      utils.secretary.getJudgeCoverage.invalidate({ showId });
+      utils.secretary.getPhaseBlockers.invalidate({ showId });
+      utils.secretary.getChecklistAutoDetect.invalidate({ showId });
     },
     onError: (err) => {
       const msg = err.message ?? 'Failed to assign judge';
@@ -202,6 +205,9 @@ export function JudgesSection({ showId }: { showId: string }) {
       setSelectedRingId('');
       setSelectedSexFilter('both');
       utils.secretary.getShowJudges.invalidate({ showId });
+      utils.secretary.getJudgeCoverage.invalidate({ showId });
+      utils.secretary.getPhaseBlockers.invalidate({ showId });
+      utils.secretary.getChecklistAutoDetect.invalidate({ showId });
     },
     onError: (err) => {
       const msg = err.message ?? 'Failed to assign judge';
@@ -218,6 +224,8 @@ export function JudgesSection({ showId }: { showId: string }) {
       toast.success('Judge assignment removed');
       utils.secretary.getShowJudges.invalidate({ showId });
       utils.secretary.getJudgeCoverage.invalidate({ showId });
+      utils.secretary.getPhaseBlockers.invalidate({ showId });
+      utils.secretary.getChecklistAutoDetect.invalidate({ showId });
     },
     onError: () => toast.error('Failed to remove judge assignment'),
   });
