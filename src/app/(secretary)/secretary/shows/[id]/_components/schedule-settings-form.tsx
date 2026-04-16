@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle,
@@ -238,7 +238,6 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
   const prevGuarantorCountRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!hasLoaded) return;
     const data: ScheduleData = {
       ...effectiveExisting,
       country: country as ScheduleData['country'],
@@ -275,9 +274,12 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       onCallVet: onCallVet || undefined,
       scheduleData: data,
     };
-    // Always update the ref so the unmount beacon has the latest
-    // snapshot to send, regardless of whether the debounce has fired.
+    // Always update the ref, even before initial hydration finishes —
+    // the unmount beacon reads from here and we want it to fire with
+    // whatever the user typed regardless of load order.
     latestPayloadRef.current = payload;
+
+    if (!hasLoaded) return;
 
     setAutoSaveStatus('pending');
     const guarantorCount = payload.scheduleData.guarantors?.length ?? 0;
@@ -349,18 +351,10 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     return { showday, people, awards, venue, regulations };
   }, [hasBeenSaved, showOpenTime, judgingStartTime, showManager, officerCount, awardsDescription, directions, what3words, catering, country]);
 
-  async function handleSave() {
-    if (!showOpenTime) {
-      toast.error('Show opens at time is required');
-      setEditingSection('showday');
-      return;
-    }
-    if (!judgingStartTime) {
-      toast.error('Judging commences time is required');
-      setEditingSection('showday');
-      return;
-    }
-
+  // Build the payload from current form state. Extracted so
+  // both the explicit "Save Settings" button and the silent
+  // save-on-section-close path can share it.
+  const buildPayload = useCallback(() => {
     const data: ScheduleData = {
       ...effectiveExisting,
       country: country as ScheduleData['country'],
@@ -391,15 +385,59 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
         ? customStatements.filter((s) => s.trim())
         : undefined,
     };
+    return {
+      showId,
+      showOpenTime: showOpenTime || undefined,
+      judgingStartTime: judgingStartTime || undefined,
+      onCallVet: onCallVet || undefined,
+      scheduleData: data,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    effectiveExisting, country, publicAdmission, wetWeather, isBenched,
+    benchingRemovalTime, acceptsNfc, judgedOnGroupSystem, latestArrivalTime,
+    showOpenTime, judgingStartTime, onCallVet, what3words, showManager,
+    officers, awardsDescription, prizeMoney, directions, catering,
+    futureShowDates, additionalNotes, welcomeNote, outsideAttraction,
+    customStatements, showId,
+  ]);
+
+  /** Silent commit used when the user collapses / switches section.
+   *  No toasts, no validation — just persists whatever they've entered
+   *  so nothing is lost if they navigate to Sponsors next. */
+  const saveSectionSilent = useCallback(async () => {
+    if (!hasLoaded) return;
+    try {
+      const payload = buildPayload();
+      await updateMutation.mutateAsync(payload);
+      utils.secretary.getScheduleData.invalidate({ showId });
+      utils.shows.getById.invalidate({ id: showId });
+      const newGuarantorCount = payload.scheduleData.guarantors?.length ?? 0;
+      if (prevGuarantorCountRef.current !== newGuarantorCount) {
+        prevGuarantorCountRef.current = newGuarantorCount;
+        utils.secretary.getPhaseBlockers.invalidate({ showId });
+        utils.secretary.getChecklistAutoDetect.invalidate({ showId });
+      }
+    } catch {
+      // swallow — user sees the in-form autosave indicator; a real
+      // failure will also surface on the explicit Save Settings click
+    }
+  }, [hasLoaded, buildPayload, updateMutation, utils, showId]);
+
+  async function handleSave() {
+    if (!showOpenTime) {
+      toast.error('Show opens at time is required');
+      setEditingSection('showday');
+      return;
+    }
+    if (!judgingStartTime) {
+      toast.error('Judging commences time is required');
+      setEditingSection('showday');
+      return;
+    }
 
     try {
-      await updateMutation.mutateAsync({
-        showId,
-        showOpenTime: showOpenTime || undefined,
-        judgingStartTime: judgingStartTime || undefined,
-        onCallVet: onCallVet || undefined,
-        scheduleData: data,
-      });
+      await updateMutation.mutateAsync(buildPayload());
       await Promise.all([
         utils.secretary.getScheduleData.invalidate({ showId }),
         utils.shows.getById.invalidate({ id: showId }),
@@ -494,7 +532,11 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
               <button
                 type="button"
                 className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-muted/50"
-                onClick={() => setEditingSection(isEditing ? null : section.id)}
+                onClick={async () => {
+                  // Commit current section before collapsing or switching.
+                  if (editingSection) await saveSectionSilent();
+                  setEditingSection(isEditing ? null : section.id);
+                }}
               >
                 <div className={cn(
                   'flex size-8 items-center justify-center rounded-full',
