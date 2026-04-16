@@ -229,6 +229,13 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     onCallVet: string | undefined;
     scheduleData: ScheduleData;
   } | null>(null);
+  // Track the last guarantor count we invalidated blockers for.
+  // getPhaseBlockers / getChecklistAutoDetect are DB-heavy (5+ queries
+  // each) and the only form field that actually moves the needle on
+  // those queries is guarantor count. Without this gate, every 350ms
+  // debounce tick re-invalidates and refetches both views while the
+  // user types.
+  const prevGuarantorCountRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!hasLoaded) return;
@@ -273,20 +280,21 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     latestPayloadRef.current = payload;
 
     setAutoSaveStatus('pending');
+    const guarantorCount = payload.scheduleData.guarantors?.length ?? 0;
     const timer = setTimeout(() => {
       setAutoSaveStatus('saving');
       updateMutation.mutateAsync({ showId, ...payload })
         .then(() => {
           setLastAutoSavedAt(new Date());
           setAutoSaveStatus('saved');
-          // Blocker banners (e.g. "Guarantors 0 of 3") read from the
-          // same scheduleData we just wrote, but are cached by
-          // getPhaseBlockers with a staleTime, so without an explicit
-          // invalidation they show stale "error" state for up to 15s
-          // after Amanda fills in guarantors. Invalidating here keeps
-          // the banner in sync with what she just saved.
-          utils.secretary.getPhaseBlockers.invalidate({ showId });
-          utils.secretary.getChecklistAutoDetect.invalidate({ showId });
+          // Blocker views depend only on guarantor count from this
+          // form — gate the invalidation so typing in other fields
+          // doesn't refetch them repeatedly.
+          if (prevGuarantorCountRef.current !== guarantorCount) {
+            prevGuarantorCountRef.current = guarantorCount;
+            utils.secretary.getPhaseBlockers.invalidate({ showId });
+            utils.secretary.getChecklistAutoDetect.invalidate({ showId });
+          }
         })
         .catch(() => {
           setAutoSaveStatus('error');

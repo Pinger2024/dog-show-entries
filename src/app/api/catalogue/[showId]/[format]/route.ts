@@ -59,6 +59,7 @@ export async function GET(
         classDefinition: true,
         classSponsorships: {
           with: { showSponsor: { with: { sponsor: true } } },
+          orderBy: [asc(schema.classSponsorships.createdAt)],
         },
       },
       orderBy: [asc(schema.showClasses.sortOrder), asc(schema.showClasses.classNumber)],

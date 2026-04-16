@@ -5129,10 +5129,9 @@ export const secretaryRouter = createTRPCRouter({
         with: {
           classDefinition: true,
           breed: true,
-          // Insertion order keeps Trophy above Rosettes on the page —
-          // secretaries typically add Trophy first, Rosettes second,
-          // and without this ordering the rows would shuffle around
-          // each edit (per Amanda's flag that lines were "swapping").
+          // Insertion order keeps Trophy above Rosettes on the page.
+          // Secretaries add Trophy first; without an explicit order
+          // the rows shuffle between edits.
           classSponsorships: { orderBy: [asc(classSponsorships.createdAt)] },
         },
         orderBy: [asc(showClasses.sortOrder)],

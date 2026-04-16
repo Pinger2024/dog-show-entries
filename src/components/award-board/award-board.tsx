@@ -1,5 +1,8 @@
-import { Document, Page, Text, View, Image, StyleSheet, Font } from '@react-pdf/renderer';
+import { Document, Page, Text, View, Image, StyleSheet } from '@react-pdf/renderer';
 import path from 'path';
+// Side-effect import: registers Inter font + hyphenation callback.
+import { C } from '@/components/catalogue/catalogue-styles';
+import { KC_PLACEMENTS } from '@/lib/placements';
 
 /**
  * Award Board PDF — a wipe-clean, laminatable show-day grid where
@@ -11,45 +14,27 @@ import path from 'path';
  *     secretary dashboard.
  *   - A3 generic — blank write-in header fields, bigger writing area
  *     in every cell. Designed as the master artwork for a bulk
- *     Mixam run (~500 sheets) that Amanda posts out alongside prize
- *     card orders.
+ *     print run posted alongside prize card orders.
  *
  * Class-number headers are WHITE with a green underline (not solid
  * green) so a handwritten number from a dry-wipe marker remains
  * visible when clubs relabel boards for different shows.
  */
 
-const fontsDir = path.join(process.cwd(), 'public', 'fonts');
-Font.register({
-  family: 'Inter',
-  fonts: [
-    { src: path.join(fontsDir, 'inter-regular.ttf') },
-    { src: path.join(fontsDir, 'inter-semibold.ttf'), fontWeight: 'bold' },
-  ],
-});
-
-const GREEN = '#2D5F3F';
-const GOLD = '#B8963E';
-const PLACEMENTS = ['1st', '2nd', '3rd', 'Res', 'VHC'] as const;
+const PLACEMENTS = KC_PLACEMENTS.map((p) => p.shortLabel);
 const CELLS = Array.from({ length: 22 }, (_, i) => i + 1);
 const BEST_DOG = ['Best Dog', 'Reserve Best Dog', 'Best Puppy Dog'];
 const BEST_BITCH = ['Best Bitch', 'Reserve Best Bitch', 'Best Puppy Bitch'];
-const BEST_OTHER = [
-  'Best in Show',
-  'Reserve Best in Show',
-  'Best Puppy in Show',
-  'Best Veteran in Show',
-];
+const BEST_BREED = ['Best of Breed', 'Reserve Best of Breed'];
+const OTHER_AWARDS_ROW_COUNT = 4;
 
 const REMI_LOGO = path.join(process.cwd(), 'public', 'branding', 'remi-horizontal.png');
 
 export type AwardBoardSize = 'a4' | 'a3';
 
-// A3 is sqrt(2)× the linear dimensions of A4. Scaling the design
-// proportionally keeps relative layout identical while giving every
-// text size, line, and padding the extra writing room Amanda asked
-// for (handwritten numbers readable from the ringside, not just the
-// steward's desk).
+// A3 is sqrt(2)× the linear dimensions of A4, so scaling every
+// numeric style by this factor keeps the layout identical at native
+// print size while giving every write-line proportionally more room.
 function scaleFor(size: AwardBoardSize) {
   return size === 'a3' ? Math.SQRT2 : 1;
 }
@@ -67,7 +52,7 @@ function createStyles(size: AwardBoardSize) {
       flexDirection: 'row',
       flexWrap: 'wrap',
       borderBottomWidth: 1,
-      borderBottomColor: GREEN,
+      borderBottomColor: C.primary,
       paddingBottom: s(6),
       marginBottom: s(6),
     },
@@ -80,7 +65,7 @@ function createStyles(size: AwardBoardSize) {
     headerLabel: {
       fontSize: s(8),
       fontWeight: 'bold',
-      color: GREEN,
+      color: C.primary,
       textTransform: 'uppercase',
       letterSpacing: 0.5,
       marginRight: s(4),
@@ -105,7 +90,7 @@ function createStyles(size: AwardBoardSize) {
     colLabel: {
       fontSize: s(9),
       fontWeight: 'bold',
-      color: GREEN,
+      color: C.primary,
       textTransform: 'uppercase',
       letterSpacing: 0.5,
     },
@@ -119,13 +104,13 @@ function createStyles(size: AwardBoardSize) {
       flex: 1,
       flexDirection: 'column',
       borderWidth: 1,
-      borderColor: GREEN,
+      borderColor: C.primary,
       borderRadius: 2,
     },
     cellHeader: {
       backgroundColor: '#fff',
       borderBottomWidth: 1,
-      borderBottomColor: GREEN,
+      borderBottomColor: C.primary,
       paddingVertical: s(3),
       paddingHorizontal: s(4),
       flexDirection: 'row',
@@ -134,12 +119,12 @@ function createStyles(size: AwardBoardSize) {
     cellNumber: {
       fontSize: s(8),
       fontWeight: 'bold',
-      color: GREEN,
+      color: C.primary,
       marginRight: s(4),
     },
     cellNumberSep: {
       fontSize: s(8),
-      color: GREEN,
+      color: C.primary,
       marginRight: s(4),
     },
     cellClassLine: {
@@ -161,7 +146,7 @@ function createStyles(size: AwardBoardSize) {
       width: s(18),
       fontSize: s(7),
       fontWeight: 'bold',
-      color: GREEN,
+      color: C.primary,
     },
     writeLine: {
       flex: 1,
@@ -174,7 +159,7 @@ function createStyles(size: AwardBoardSize) {
       flexDirection: 'row',
       alignItems: 'flex-start',
       borderTopWidth: 0.7,
-      borderTopColor: GREEN,
+      borderTopColor: C.primary,
       paddingVertical: s(3),
       paddingHorizontal: s(3),
       backgroundColor: '#f2f0ea',
@@ -193,11 +178,11 @@ function createStyles(size: AwardBoardSize) {
     bestSidebar: {
       width: s(170),
       borderWidth: 1.5,
-      borderColor: GOLD,
+      borderColor: C.accent,
       borderRadius: 2,
     },
     bestHeader: {
-      backgroundColor: GOLD,
+      backgroundColor: C.accent,
       color: '#fff',
       paddingVertical: s(3),
       paddingHorizontal: s(6),
@@ -210,7 +195,7 @@ function createStyles(size: AwardBoardSize) {
     bestGroupLabel: {
       fontSize: s(8),
       fontWeight: 'bold',
-      color: GREEN,
+      color: C.primary,
       textTransform: 'uppercase',
       letterSpacing: 0.5,
       paddingHorizontal: s(8),
@@ -228,7 +213,7 @@ function createStyles(size: AwardBoardSize) {
     bestRowLabel: {
       fontSize: s(7.5),
       fontWeight: 'bold',
-      color: GREEN,
+      color: C.primary,
       marginBottom: s(3),
     },
     bestSpacer: {
@@ -311,8 +296,6 @@ export function AwardBoard({
           <HeaderField label="Club" value={show?.clubName ?? null} styles={styles} />
           <HeaderField label="Show Type" value={showTypeLabel} styles={styles} />
           <HeaderField label="Show Date" value={showDate} styles={styles} />
-          <HeaderField label="Best of Breed" styles={styles} />
-          <HeaderField label="Reserve Best of Breed" styles={styles} />
         </View>
 
         <View style={styles.body}>
@@ -368,10 +351,17 @@ export function AwardBoard({
               </View>
             ))}
             <View style={styles.bestSpacer} />
-            <Text style={styles.bestGroupLabel}>Other Best Awards</Text>
-            {BEST_OTHER.map((a) => (
+            <Text style={styles.bestGroupLabel}>Breed</Text>
+            {BEST_BREED.map((a) => (
               <View key={a} style={styles.bestRow}>
                 <Text style={styles.bestRowLabel}>{a}</Text>
+                <View style={styles.writeLine} />
+              </View>
+            ))}
+            <View style={styles.bestSpacer} />
+            <Text style={styles.bestGroupLabel}>Other Awards</Text>
+            {Array.from({ length: OTHER_AWARDS_ROW_COUNT }).map((_, i) => (
+              <View key={i} style={styles.bestRow}>
                 <View style={styles.writeLine} />
               </View>
             ))}

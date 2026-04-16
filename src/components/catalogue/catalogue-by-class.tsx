@@ -89,16 +89,10 @@ export function CatalogueByClass({ show, entries }: Props) {
     return a.localeCompare(b);
   });
 
-  // Chunk threshold. Too low creates artificial page breaks with
-  // trailing whitespace; too high triggers pdfkit's coordinate-
-  // overflow crash (unsupported number -9.979e+21) inside
-  // `clipBorderTop` on shows with many entries in a single <Page wrap>.
-  // Crash boundary is between 125 and 128 entries on Amanda's 187-entry
-  // Final Test Show with 44 sponsorships (scripts/repro-byclass-overflow.ts
-  // sweeps the value). 125 sits one safety margin below the boundary
-  // while keeping chunks as big as possible so the whole catalogue
-  // usually fits in 2 chunks rather than 3, minimising the forced-
-  // break whitespace at chunk boundaries.
+  // Above ~128 entries per wrapped Page, pdfkit underflows coordinates
+  // inside clipBorderTop (renders as "unsupported number -9.979e+21").
+  // 125 is the highest safe value; going much lower forces extra page
+  // breaks with trailing whitespace.
   const PAGE_ENTRY_THRESHOLD = 125;
   const classChunks: string[][] = [];
   let currentChunk: string[] = [];

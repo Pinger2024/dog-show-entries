@@ -507,10 +507,9 @@ export function CatalogueRingside({ show, entries }: Props) {
                   key={`cls-${section.key}-${classGroup.classNumber ?? classGroup.className}-${classIdx}`}
                   wrap={!keepAtomic}
                 >
-                  {/* Class header strip + sponsor lines kept atomic so a
-                      Trophy-and-Rosettes class never has one sponsor
-                      line orphaned at the top of the next page with no
-                      class heading above it. */}
+                  {/* Header + sponsor lines kept atomic so a Rosettes
+                      line can't orphan at the top of the next page
+                      without its class heading above it. */}
                   <View wrap={false} minPresenceAhead={keepAtomic ? undefined : 160}>
                     <View style={s.classHeader}>
                       <Text style={s.classHeaderText}>
@@ -645,15 +644,13 @@ export function CatalogueRingside({ show, entries }: Props) {
           </View>
 
           {exhibitors.map((ex, exIdx) => (
-            // Every exhibitor block is wrappable so the layout engine
-            // can break mid-block when a block is taller than the
-            // remaining page space — otherwise a 4-dog block that
-            // doesn't fit at page-bottom jumps whole, leaving big
-            // trailing whitespace (what Amanda flagged on p23 of her
-            // test show). minPresenceAhead on the exhibitor name stops
-            // the name itself from orphaning alone at the bottom —
-            // if < 80pt of space ahead, the name plus any first dog
-            // text moves to the next page as a unit.
+            // Every block is wrappable: without wrap, a block that
+            // doesn't fit the remaining page jumps whole and leaves
+            // trailing whitespace. react-pdf also fail-fit compresses
+            // wrap={false} blocks larger than the page. minPresenceAhead
+            // on the name prevents the header from orphaning alone at
+            // page bottom. Each dog row is wrap={false} further down so
+            // a single dog's lines never split mid-block.
             <View
               key={`${ex.name}-${exIdx}`}
               wrap
