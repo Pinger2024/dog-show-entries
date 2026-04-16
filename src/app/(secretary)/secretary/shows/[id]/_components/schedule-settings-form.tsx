@@ -279,6 +279,14 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
         .then(() => {
           setLastAutoSavedAt(new Date());
           setAutoSaveStatus('saved');
+          // Blocker banners (e.g. "Guarantors 0 of 3") read from the
+          // same scheduleData we just wrote, but are cached by
+          // getPhaseBlockers with a staleTime, so without an explicit
+          // invalidation they show stale "error" state for up to 15s
+          // after Amanda fills in guarantors. Invalidating here keeps
+          // the banner in sync with what she just saved.
+          utils.secretary.getPhaseBlockers.invalidate({ showId });
+          utils.secretary.getChecklistAutoDetect.invalidate({ showId });
         })
         .catch(() => {
           setAutoSaveStatus('error');
