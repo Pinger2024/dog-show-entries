@@ -959,42 +959,57 @@ export function JudgesListContent({ show }: FrontMatterProps) {
       labelsByJudge.set(name, list);
     }
 
-    return (
-      <>
-        <SectionBand title="List of Judges" />
-        {Array.from(labelsByJudge.entries()).map(([name, roles], i) => {
-          const bio = judgeBios[name];
-          const photoUrl = show.judgePhotos?.[name];
-          // Format the role label: "Dogs & Bitches" rather than two
-          // separate "Dogs", "Bitches" lines for the same judge.
-          const roleLabel = roles.includes(name)
-            ? null // role list contained the bare name (no prefix)
-            : roles.join(' & ');
-          return (
-            <View key={i} wrap={false} style={{ marginBottom: 6 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                {photoUrl && (
-                  <Image src={photoUrl} style={{ width: 44, height: 44, borderRadius: 22 }} />
-                )}
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontFamily: 'Inter', fontSize: 11, fontWeight: 'bold', color: C.textDark }}>
-                    {name}
-                  </Text>
-                  {roleLabel && (
-                    <Text style={{ fontFamily: 'Inter', fontSize: 9, fontStyle: 'italic', color: C.textMedium }}>
-                      {roleLabel}
-                    </Text>
-                  )}
-                </View>
-              </View>
-              {bio && (
-                <Text style={{ ...styles.judgeBio, marginTop: 4, marginBottom: 0 }}>
-                  {bio}
+    const judgeEntries = Array.from(labelsByJudge.entries());
+
+    // Render a single judge's row. Extracted so the first judge can be
+    // rendered inside the wrap=false banner block (keeping banner and
+    // first judge atomic, so the banner never orphans at the bottom of
+    // a page) while subsequent judges render as normal flowing cards.
+    const renderJudgeCard = (name: string, roles: string[], key: string | number) => {
+      const bio = judgeBios[name];
+      const photoUrl = show.judgePhotos?.[name];
+      const roleLabel = roles.includes(name)
+        ? null
+        : roles.join(' & ');
+      return (
+        <View key={key} wrap={false} style={{ marginBottom: 6 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {photoUrl && (
+              <Image src={photoUrl} style={{ width: 44, height: 44, borderRadius: 22 }} />
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontFamily: 'Inter', fontSize: 11, fontWeight: 'bold', color: C.textDark }}>
+                {name}
+              </Text>
+              {roleLabel && (
+                <Text style={{ fontFamily: 'Inter', fontSize: 9, fontStyle: 'italic', color: C.textMedium }}>
+                  {roleLabel}
                 </Text>
               )}
             </View>
-          );
-        })}
+          </View>
+          {bio && (
+            <Text style={{ ...styles.judgeBio, marginTop: 4, marginBottom: 0 }}>
+              {bio}
+            </Text>
+          )}
+        </View>
+      );
+    };
+
+    return (
+      <>
+        {/* Band + first judge atomic. A long bio on the first judge
+            still forces a page break, but the banner will never sit
+            alone at the bottom of a page again. */}
+        <View wrap={false}>
+          <SectionBand title="List of Judges" />
+          {judgeEntries.length > 0 &&
+            renderJudgeCard(judgeEntries[0][0], judgeEntries[0][1], 0)}
+        </View>
+        {judgeEntries.slice(1).map(([name, roles], i) =>
+          renderJudgeCard(name, roles, i + 1)
+        )}
       </>
     );
   }
@@ -1030,15 +1045,18 @@ export function JudgesListContent({ show }: FrontMatterProps) {
 
   return (
     <>
-      <SectionBand title="List of Judges" />
-
-      {/* Table header */}
-      <View style={{ ...styles.judgesListRow, borderBottomWidth: 1.5, borderBottomColor: C.primary, marginBottom: 4 }}>
-        <Text style={{ ...styles.judgesListBreed, fontWeight: 'bold' }}>Breed</Text>
-        <Text style={{ ...styles.judgesListJudge, fontWeight: 'bold' }}>Judge</Text>
-        {hasRings && (
-          <Text style={{ fontFamily: 'Inter', fontSize: 7.5, fontWeight: 'bold', width: 30, textAlign: 'right' }}>Ring</Text>
-        )}
+      {/* Keep banner + table header atomic so the banner never sits
+          alone at the bottom of a page with the table flowing to the
+          next. */}
+      <View wrap={false}>
+        <SectionBand title="List of Judges" />
+        <View style={{ ...styles.judgesListRow, borderBottomWidth: 1.5, borderBottomColor: C.primary, marginBottom: 4 }}>
+          <Text style={{ ...styles.judgesListBreed, fontWeight: 'bold' }}>Breed</Text>
+          <Text style={{ ...styles.judgesListJudge, fontWeight: 'bold' }}>Judge</Text>
+          {hasRings && (
+            <Text style={{ fontFamily: 'Inter', fontSize: 7.5, fontWeight: 'bold', width: 30, textAlign: 'right' }}>Ring</Text>
+          )}
+        </View>
       </View>
 
       {sortedBreeds.map((breed) => {
