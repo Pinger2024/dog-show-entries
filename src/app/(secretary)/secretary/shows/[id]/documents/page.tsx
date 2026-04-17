@@ -133,6 +133,31 @@ function DocumentLinkCard({ doc }: { doc: DocumentLink }) {
     e.preventDefault();
     e.stopPropagation();
 
+    // Preferred path: share the actual PDF file so the recipient gets
+    // the document, not a login-gated URL. Amanda's use case is sharing
+    // a generated catalogue with Michael — the API endpoint requires an
+    // active session + org membership, so a URL share 404s for anyone
+    // without the right access.
+    if (typeof navigator !== 'undefined' && typeof navigator.canShare === 'function') {
+      try {
+        const filename = filenameFromLabel(doc.label);
+        const res = await fetch(doc.href, { credentials: 'include' });
+        if (res.ok) {
+          const blob = await res.blob();
+          const file = new File([blob], filename, { type: 'application/pdf' });
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({ title: doc.label, files: [file] });
+            return;
+          }
+        }
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return;
+        // fall through to URL / clipboard paths
+      }
+    }
+
+    // Secondary: share the URL (only useful if the recipient has an
+    // active session — we warn in the toast).
     if (typeof navigator !== 'undefined' && navigator.share) {
       try {
         await navigator.share({ title: doc.label, url: fullUrl });
@@ -141,10 +166,11 @@ function DocumentLinkCard({ doc }: { doc: DocumentLink }) {
         if ((err as Error).name === 'AbortError') return;
       }
     }
-    // Fallback: copy link
+
+    // Fallback: copy link (recipient will need to be signed in).
     await navigator.clipboard.writeText(fullUrl);
     setCopied(true);
-    toast.success('PDF link copied');
+    toast.success('PDF link copied — recipient must be signed in');
     setTimeout(() => setCopied(false), 2000);
   }
 
