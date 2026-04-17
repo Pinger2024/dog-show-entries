@@ -425,7 +425,6 @@ async function seedShow(targetEntries: number) {
   const exhibitorCount = Math.ceil(targetEntries / dogsPerExhibitor);
 
   let entryCount = 0;
-  let catalogueNumber = 1;
   for (let i = 0; i < exhibitorCount && entryCount < targetEntries; i++) {
     const first = FIRST_NAMES[i % FIRST_NAMES.length];
     const last = SURNAMES[(i + 3) % SURNAMES.length];
@@ -515,9 +514,11 @@ async function seedShow(targetEntries: number) {
         status: 'confirmed',
         totalFee,
         entryDate: new Date(),
-        catalogueNumber: String(catalogueNumber),
+        // Catalogue number assigned in a post-seed pass that mirrors
+        // the production assignCatalogueNumbers sort (lowest-class
+        // first) — see reassignCatalogueNumbers() below.
+        catalogueNumber: null,
       });
-      catalogueNumber++;
       for (let ci = 0; ci < selected.length; ci++) {
         await db.insert(s.entryClasses).values({
           entryId,
@@ -536,7 +537,55 @@ async function seedShow(targetEntries: number) {
   }
   console.log(`  ✓ ${entryCount} entries seeded (${exhibitorCount} exhibitors)`);
 
+  await reassignCatalogueNumbers(showId);
+
   return showId;
+}
+
+/**
+ * Mirror src/server/trpc/routers/secretary.ts::assignCatalogueNumbers so
+ * the E2E test catalogue has numbers in the same class-first order the
+ * live app would produce (Minor Puppy Dog 1,2,3…; then Puppy Dog
+ * continuing from wherever Minor Puppy finished; etc.) rather than
+ * exhibitor-insert order.
+ */
+async function reassignCatalogueNumbers(showId: string) {
+  if (!db) return;
+  const rows = await db.query.entries.findMany({
+    where: and(
+      eq(s.entries.showId, showId),
+      eq(s.entries.status, 'confirmed'),
+    ),
+    with: {
+      dog: { with: { breed: { with: { group: true } } } },
+      entryClasses: { with: { showClass: true } },
+    },
+    orderBy: [asc(s.entries.entryDate)],
+  });
+
+  const sorted = [...rows].sort((a, b) => {
+    const aMin = Math.min(...a.entryClasses.map((ec) => ec.showClass?.classNumber ?? ec.showClass?.sortOrder ?? 999));
+    const bMin = Math.min(...b.entryClasses.map((ec) => ec.showClass?.classNumber ?? ec.showClass?.sortOrder ?? 999));
+    if (aMin !== bMin) return aMin - bMin;
+    const aGroup = a.dog?.breed?.group?.sortOrder ?? 99;
+    const bGroup = b.dog?.breed?.group?.sortOrder ?? 99;
+    if (aGroup !== bGroup) return aGroup - bGroup;
+    const aBreed = a.dog?.breed?.name ?? '';
+    const bBreed = b.dog?.breed?.name ?? '';
+    if (aBreed !== bBreed) return aBreed.localeCompare(bBreed);
+    const sexOrder: Record<string, number> = { dog: 0, bitch: 1 };
+    const aSex = a.dog?.sex ? sexOrder[a.dog.sex] ?? 2 : 2;
+    const bSex = b.dog?.sex ? sexOrder[b.dog.sex] ?? 2 : 2;
+    if (aSex !== bSex) return aSex - bSex;
+    return new Date(a.entryDate).getTime() - new Date(b.entryDate).getTime();
+  });
+
+  for (let i = 0; i < sorted.length; i++) {
+    await db.update(s.entries)
+      .set({ catalogueNumber: String(i + 1), updatedAt: new Date() })
+      .where(eq(s.entries.id, sorted[i].id));
+  }
+  console.log(`  ✓ catalogue numbers reassigned class-first (${sorted.length} entries)`);
 }
 
 async function renderCatalogues(showId: string, entryCount: number) {
