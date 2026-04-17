@@ -320,13 +320,13 @@ export function FrontMatterContent({ show }: FrontMatterProps) {
       <ShowParticularsContent show={show} />
 
       {showHasShowInformation(show) && (
-        <View style={{ marginTop: SECTION_GAP }}>
+        <View style={{ marginTop: SECTION_GAP }} minPresenceAhead={100}>
           <ShowInformationContent show={show} />
         </View>
       )}
 
       {hasJudges && (
-        <View style={{ marginTop: SECTION_GAP }}>
+        <View style={{ marginTop: SECTION_GAP }} minPresenceAhead={140}>
           <JudgesListContent show={show} />
         </View>
       )}
@@ -341,7 +341,7 @@ export function FrontMatterContent({ show }: FrontMatterProps) {
       )}
 
       {hasBestAwards(show) && (
-        <View style={{ marginTop: SECTION_GAP }}>
+        <View style={{ marginTop: SECTION_GAP }} minPresenceAhead={120}>
           <BestAwardsContent show={show} />
         </View>
       )}
