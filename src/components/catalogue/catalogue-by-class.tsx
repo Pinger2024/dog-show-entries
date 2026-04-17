@@ -89,11 +89,18 @@ export function CatalogueByClass({ show, entries }: Props) {
     return a.localeCompare(b);
   });
 
-  // Above ~128 entries per wrapped Page, pdfkit underflows coordinates
-  // inside clipBorderTop (renders as "unsupported number -9.979e+21").
-  // 125 is the highest safe value; going much lower forces extra page
-  // breaks with trailing whitespace.
-  const PAGE_ENTRY_THRESHOLD = 125;
+  // pdfkit underflows coordinates inside clipBorderTop once a wrapped
+  // <Page> accumulates too many layout nodes (error:
+  // "unsupported number -9.979e+21"). The node count depends on
+  // class + entry + sponsor rows, not just entry count. Empirically:
+  //   - 82 entries / 20 classes / no sponsors → safe
+  //   - 90 entries / ~24 classes / ~15 sponsors → crash
+  //   - 117 entries / ~30 classes / sponsors → crash
+  //   - 187 entries split across chunks (each ~93) → safe (fewer
+  //     classes-per-chunk keeps node count down)
+  // 80 is conservative enough to survive sponsorship-heavy shows
+  // without turning every chunk into one tiny Page.
+  const PAGE_ENTRY_THRESHOLD = 80;
   const classChunks: string[][] = [];
   let currentChunk: string[] = [];
   let currentCount = 0;
