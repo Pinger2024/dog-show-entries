@@ -39,15 +39,25 @@ export async function generateCataloguePdf(
 
   if (!show) throw new Error(`Show ${showId} not found`);
 
-  // Run independent queries in parallel
-  const [judgeAssignmentRows, showClassRows, entries] = await Promise.all([
+  // Run independent queries in parallel. These match the catalogue
+  // API route's queries so both pipelines build identical showInfo —
+  // previously this service dropped bios/photos/ring numbers/class
+  // sponsorships/show sponsors, so any catalogue generated via
+  // generateAndUploadForPrint was missing them.
+  const [judgeAssignmentRows, showClassRows, entries, showSponsorRows] = await Promise.all([
     db.query.judgeAssignments.findMany({
       where: eq(schema.judgeAssignments.showId, showId),
-      with: { judge: true, breed: true },
+      with: { judge: true, breed: true, ring: true },
     }),
     db.query.showClasses.findMany({
       where: eq(schema.showClasses.showId, showId),
-      with: { classDefinition: true },
+      with: {
+        classDefinition: true,
+        classSponsorships: {
+          with: { showSponsor: { with: { sponsor: true } } },
+          orderBy: [asc(schema.classSponsorships.createdAt)],
+        },
+      },
       orderBy: [asc(schema.showClasses.sortOrder), asc(schema.showClasses.classNumber)],
     }),
     db.query.entries.findMany({
@@ -73,13 +83,30 @@ export async function generateCataloguePdf(
       },
       orderBy: [asc(schema.entries.catalogueNumber)],
     }),
+    db.query.showSponsors.findMany({
+      where: eq(schema.showSponsors.showId, showId),
+      with: { sponsor: true },
+      orderBy: [asc(schema.showSponsors.displayOrder)],
+    }),
   ]);
 
   const judgesByBreedName: Record<string, string> = {};
+  const judgeBios: Record<string, string> = {};
+  const judgePhotos: Record<string, string> = {};
+  const judgeRingNumbers: Record<string, string> = {};
   const judgeDisplayList: string[] = []; // Sex-annotated: "Dogs — Mr A Winfrow"
   for (const ja of judgeAssignmentRows) {
     if (ja.breed?.name && ja.judge?.name) {
       judgesByBreedName[ja.breed.name] = ja.judge.name;
+    }
+    if (ja.judge?.bio && !judgeBios[ja.judge.name]) {
+      judgeBios[ja.judge.name] = ja.judge.bio;
+    }
+    if (ja.judge?.photoUrl && !judgePhotos[ja.judge.name]) {
+      judgePhotos[ja.judge.name] = ja.judge.photoUrl;
+    }
+    if (ja.ring?.number != null && ja.breed?.name) {
+      judgeRingNumbers[ja.breed.name] = String(ja.ring.number);
     }
   }
   // Build sex-annotated display labels for catalogue front matter
@@ -93,6 +120,42 @@ export async function generateCataloguePdf(
     const prefix = isJH ? 'Junior Handling' : ja.sex === 'dog' ? 'Dogs' : ja.sex === 'bitch' ? 'Bitches' : null;
     judgeDisplayList.push(prefix ? `${prefix} — ${ja.judge.name}` : ja.judge.name);
   }
+
+  // Build class sponsorship list for the Trophies & Sponsorships page
+  // AND the inline per-class sponsor lines. Mirrors route.ts so the two
+  // pipelines produce the same catalogue for the same show.
+  const classSponsorshipInfos: CatalogueShowInfo['classSponsorships'] = [];
+  for (const sc of showClassRows) {
+    for (const cs of sc.classSponsorships ?? []) {
+      const sponsorName = cs.sponsorName ?? cs.showSponsor?.sponsor?.name ?? null;
+      if (cs.trophyName || sponsorName || cs.prizeDescription) {
+        classSponsorshipInfos.push({
+          className: sc.classDefinition?.name ?? 'Unknown Class',
+          classNumber: sc.classNumber,
+          trophyName: cs.trophyName,
+          trophyDonor: cs.trophyDonor,
+          sponsorName,
+          sponsorAffix: cs.sponsorAffix ?? null,
+          prizeDescription: cs.prizeDescription,
+        });
+      }
+    }
+  }
+
+  const showSponsorInfos = showSponsorRows.map((ss) => ({
+    name: ss.sponsor.name,
+    tier: ss.tier,
+    logoUrl: ss.sponsor.logoUrl,
+    website: ss.sponsor.website,
+    customTitle: ss.customTitle,
+  }));
+
+  const allShowClasses = showClassRows.map((sc) => ({
+    className: sc.classDefinition?.name ?? 'Unknown Class',
+    classNumber: sc.classNumber,
+    sortOrder: sc.sortOrder,
+    sex: sc.sex,
+  }));
 
   const seenDefIds = new Set<string>();
   const classDefinitions: { name: string; description: string | null }[] = [];
@@ -173,9 +236,16 @@ export async function generateCataloguePdf(
     wetWeatherAccommodation: scheduleData?.wetWeatherAccommodation,
     judgedOnGroupSystem: scheduleData?.judgedOnGroupSystem,
     judgesByBreedName,
-    judgeDisplayList,
+    judgeDisplayList: judgeDisplayList.length > 0 ? judgeDisplayList : undefined,
+    judgeBios: Object.keys(judgeBios).length > 0 ? judgeBios : undefined,
+    judgePhotos: Object.keys(judgePhotos).length > 0 ? judgePhotos : undefined,
+    judgeRingNumbers: Object.keys(judgeRingNumbers).length > 0 ? judgeRingNumbers : undefined,
     classDefinitions,
     showScope: show.showScope ?? undefined,
+    classSponsorships: classSponsorshipInfos.length > 0 ? classSponsorshipInfos : undefined,
+    skipTrophiesPage: classSponsorshipInfos.length > 0,
+    showSponsors: showSponsorInfos.length > 0 ? showSponsorInfos : undefined,
+    allShowClasses: allShowClasses.length > 0 ? allShowClasses : undefined,
     customStatements: scheduleData?.customStatements,
     dockingStatement: getDockingStatementFromScheduleData(scheduleData),
 

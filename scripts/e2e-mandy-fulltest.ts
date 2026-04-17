@@ -40,8 +40,11 @@ const futureDate = (daysAhead: number) => {
   return d;
 };
 
+// react-pdf's image validator looks for a file extension in the URL; without
+// one it warns "Not valid image extension" and omits the image. placehold.co
+// accepts `.png` (or `.jpg`) in the path and returns the matching format.
 const PLACEHOLDER = (w: number, h: number, bg: string, fg: string, text: string) =>
-  `https://placehold.co/${w}x${h}/${bg}/${fg}?text=${encodeURIComponent(text)}&font=serif`;
+  `https://placehold.co/${w}x${h}/${bg}/${fg}.png?text=${encodeURIComponent(text)}&font=serif`;
 
 function parseArgs() {
   const entryArg = process.argv.find((a) => a.startsWith('--entries='));
@@ -229,25 +232,45 @@ async function seedShow(targetEntries: number) {
   ]);
 
   // ── JUDGES ────────────────────────────────────────
-  // Per Amanda's request: Mandy is one of the judges.
+  // Per Amanda: 3 judges for a single-breed show — Dogs / Bitches / JH.
+  // Each gets a realistic bio + placeholder photo so the catalogue exercises
+  // the bio + photo rendering paths.
   const judgeMandyId = uuid();
   const judgeMikeId = uuid();
-  const judgeKeithId = uuid();
   const judgeJhId = uuid();
   await db.insert(s.judges).values([
-    { id: judgeMandyId, name: 'Mandy McAteer', contactEmail: 'mandy@hundarkgsd.co.uk' },
-    { id: judgeMikeId, name: 'Mr Michael Stewart', contactEmail: 'stewart.judge@test.com' },
-    { id: judgeKeithId, name: 'Mrs Elaine Robertson', contactEmail: 'robertson.judge@test.com' },
-    { id: judgeJhId, name: 'Miss Patricia Ingham', contactEmail: 'ingham.judge@test.com' },
+    {
+      id: judgeMandyId,
+      name: 'Mandy McAteer',
+      contactEmail: 'mandy@hundarkgsd.co.uk',
+      bio: 'Mandy has been involved with German Shepherd Dogs for over thirty years, exhibiting, breeding and judging at club, breed and championship level. She has awarded CCs in the breed since 2015 and has judged GSDs at shows across the UK, Ireland and mainland Europe. A committee member of Hundark GSD Club, she has also judged Junior Handling and is a KC A-List judge for the breed.',
+      photoUrl: PLACEHOLDER(220, 220, '1f4a3a', 'C9A84C', 'Mandy McAteer'),
+    },
+    {
+      id: judgeMikeId,
+      name: 'Mr Michael Stewart',
+      contactEmail: 'stewart.judge@test.com',
+      bio: 'Michael has been breeding and exhibiting German Shepherds under the Strathmore affix for over twenty-five years. He has made up five UK Show Champions and awarded CCs in the breed since 2018. A frequent speaker at breed seminars, he is particularly known for his keen eye on movement and overall breed type.',
+      photoUrl: PLACEHOLDER(220, 220, '2d5f3f', 'C9A84C', 'M Stewart'),
+    },
+    {
+      id: judgeJhId,
+      name: 'Miss Patricia Ingham',
+      contactEmail: 'ingham.judge@test.com',
+      bio: 'Patricia has a lifetime of handling experience and is one of the most respected Junior Handling judges in Scotland. She has judged junior handling classes at over forty RKC-licensed shows and regularly mentors young handlers through the Hundark Junior Handlers programme.',
+      photoUrl: PLACEHOLDER(220, 220, '6b5b95', 'ffffff', 'P Ingham'),
+    },
   ]);
 
+  // Single-breed championship assignments: Dogs judge, Bitches judge,
+  // Junior Handling judge. No per-breed "overall" assignment (that was
+  // the rogue row Amanda flagged in the first pass).
   await db.insert(s.judgeAssignments).values([
     { showId, judgeId: judgeMandyId, breedId: GSD_BREED_ID, sex: 'dog', ringId: ringDogsId },
     { showId, judgeId: judgeMikeId, breedId: GSD_BREED_ID, sex: 'bitch', ringId: ringBitchesId },
-    { showId, judgeId: judgeKeithId, breedId: GSD_BREED_ID, ringId: ringDogsId },
-    { showId, judgeId: judgeJhId, ringId: ringBitchesId },
+    { showId, judgeId: judgeJhId, ringId: ringBitchesId }, // JH = no breed, no sex
   ]);
-  console.log('  ✓ 4 judges assigned (Dogs=Mandy, Bitches=Michael Stewart, Long Coat=Elaine Robertson, JH=Patricia Ingham)');
+  console.log('  ✓ 3 judges assigned (Dogs=Mandy, Bitches=Michael Stewart, JH=Patricia Ingham) — all with bios + photos');
 
   // ── CLASSES ───────────────────────────────────────
   const breedClassNames = [
@@ -346,34 +369,53 @@ async function seedShow(targetEntries: number) {
   console.log(`  ✓ ${sponsorRows.length} show sponsors`);
 
   // ── CLASS SPONSORSHIPS ────────────────────────────
-  const findClass = (name: string, sex: 'dog' | 'bitch' | null) =>
-    classes.find((c) => c.name === name && c.sex === sex);
-  const cls = {
-    openD: findClass('Open', 'dog')!.id,
-    openB: findClass('Open', 'bitch')!.id,
-    limD: findClass('Limit', 'dog')!.id,
-    limB: findClass('Limit', 'bitch')!.id,
-    pupD: findClass('Puppy', 'dog')!.id,
-    pupB: findClass('Puppy', 'bitch')!.id,
-    vetD: findClass('Veteran', 'dog')!.id,
-    vetB: findClass('Veteran', 'bitch')!.id,
-    jrD:  findClass('Junior', 'dog')!.id,
-  };
-  const classSponsorshipRows = [
-    { showClassId: cls.openD, showSponsorId: showSponsorIds[2], trophyName: 'The Skinner\u2019s Challenge Trophy', trophyDonor: 'Skinner\u2019s Field & Trial' },
-    { showClassId: cls.openB, showSponsorId: showSponsorIds[2], trophyName: 'The Skinner\u2019s Bitch Trophy', trophyDonor: 'Skinner\u2019s Field & Trial' },
-    { showClassId: cls.limD, showSponsorId: showSponsorIds[5], trophyName: 'The Dorado Memorial Trophy', trophyDonor: 'J. Dorado' },
-    { showClassId: cls.limB, showSponsorId: showSponsorIds[5], trophyName: 'The Dorado Bitch Trophy', trophyDonor: 'J. Dorado' },
-    { showClassId: cls.pupD, showSponsorId: showSponsorIds[3], trophyName: 'Highland Puppy Dog Cup', trophyDonor: null },
-    { showClassId: cls.pupB, showSponsorId: showSponsorIds[3], trophyName: 'Highland Puppy Bitch Cup', trophyDonor: null },
-    { showClassId: cls.vetD, showSponsorId: showSponsorIds[4], trophyName: 'The McTavish Veteran Trophy', trophyDonor: 'McTavish Grooming' },
-    { showClassId: cls.vetB, showSponsorId: showSponsorIds[4], trophyName: 'The McTavish Veteran Bitch Trophy', trophyDonor: 'McTavish Grooming' },
-    { showClassId: cls.jrD,  showSponsorId: showSponsorIds[1], trophyName: 'Arden Grange Junior Dog Rosette', trophyDonor: 'Arden Grange' },
+  // Amanda's spec: EVERY class gets two sponsorship rows — one for the
+  // class trophy, one for the rosettes. Rotate through the trophy-donor
+  // pool so sponsors get distributed evenly rather than one sponsor
+  // claiming everything.
+  const trophyDonorPool = [
+    { sponsor: 'Skinner\u2019s Field & Trial', donor: 'Skinner\u2019s' },
+    { sponsor: 'The Dorado Kennel', donor: 'Mr & Mrs J. Dorado' },
+    { sponsor: 'Arden Grange', donor: null },
+    { sponsor: 'Highland Pet Supplies', donor: null },
+    { sponsor: 'McTavish Grooming', donor: null },
+    { sponsor: 'The Hundark Kennel', donor: 'Mandy McAteer' },
+    { sponsor: 'Strathmore GSD Club', donor: null },
+    { sponsor: 'Lochdale Veterinary Group', donor: null },
   ];
-  for (const cs of classSponsorshipRows) {
-    await db.insert(s.classSponsorships).values(cs);
+  const rosetteDonorPool = [
+    'Royal Canin',
+    'Arden Grange',
+    'Highland Pet Supplies',
+    'Skinner\u2019s Field & Trial',
+    'McTavish Grooming',
+    'Strathmore Embroidery',
+  ];
+
+  let sponsorshipCount = 0;
+  for (let ci = 0; ci < classes.length; ci++) {
+    const cls = classes[ci];
+    const trophy = trophyDonorPool[ci % trophyDonorPool.length];
+    const rosette = rosetteDonorPool[ci % rosetteDonorPool.length];
+    const sexLabel = cls.sex === 'dog' ? 'Dog' : cls.sex === 'bitch' ? 'Bitch' : '';
+    const trophyBase = `${cls.name}${sexLabel ? ' ' + sexLabel : ''} Trophy`;
+
+    await db.insert(s.classSponsorships).values({
+      showClassId: cls.id,
+      trophyName: `The ${trophy.sponsor.replace(/\u2019s.*/, '\u2019s')} ${trophyBase}`,
+      trophyDonor: trophy.donor,
+      sponsorName: trophy.sponsor,
+    });
+    sponsorshipCount++;
+
+    await db.insert(s.classSponsorships).values({
+      showClassId: cls.id,
+      prizeDescription: 'Rosettes 1st \u2013 5th',
+      sponsorName: rosette,
+    });
+    sponsorshipCount++;
   }
-  console.log(`  ✓ ${classSponsorshipRows.length} class sponsorships`);
+  console.log(`  ✓ ${sponsorshipCount} class sponsorships (trophy + rosette for all ${classes.length} classes)`);
 
   // ── EXHIBITORS + DOGS + ENTRIES ───────────────────
   // Each exhibitor contributes ~2 dogs on average, each dog enters
