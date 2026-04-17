@@ -46,6 +46,7 @@ import { getStripe } from '@/server/services/stripe';
 import { penceToPoundsString } from '@/lib/date-utils';
 import { Resend } from 'resend';
 import { searchKcJudges, fetchKcJudgeProfile } from '@/server/services/kc-judges';
+import { ensureCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { CATALOGUE_NAME_PATTERN } from '@/lib/catalogue-utils';
 
 /** Build human-readable breed text for judge offer emails.
@@ -544,6 +545,11 @@ export const secretaryRouter = createTRPCRouter({
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      // Auto-assign catalogue numbers in class order the first time the
+      // secretary opens the catalogue page, so they don't have to hunt
+      // for a button. No-op if numbers already exist.
+      await ensureCatalogueNumbers(ctx.db, input.showId);
 
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),

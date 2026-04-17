@@ -7,6 +7,7 @@ import { JudgesBook } from '@/components/judges-book/judges-book';
 import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, makePdfResponse } from '@/lib/pdf-utils';
+import { ensureCatalogueNumbers } from '@/server/services/catalogue-numbering';
 
 export type JudgesBookClass = {
   classNumber: number | null;
@@ -50,6 +51,8 @@ export async function GET(
 
   const authResult = await authenticatePdfRequest(show.organisationId);
   if (authResult instanceof NextResponse) return authResult;
+
+  await ensureCatalogueNumbers(db, showId);
 
   // Run independent DB queries in parallel
   const [showClasses, judgeAssignments] = await Promise.all([

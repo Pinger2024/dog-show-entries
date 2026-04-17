@@ -16,6 +16,7 @@ import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, validateRasterLogoUrl, makePdfResponse } from '@/lib/pdf-utils';
 import { padPdfToMultiple } from '@/lib/pdf-pad';
+import { ensureCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
 
 export async function GET(
@@ -43,6 +44,12 @@ export async function GET(
 
   const authResult = await authenticatePdfRequest(show.organisationId, { showId, format });
   if (authResult instanceof NextResponse) return authResult;
+
+  // Auto-assign catalogue numbers in class order if the show doesn't
+  // have any yet. Amanda's UX ask 2026-04-17: she shouldn't have to
+  // find a button — opening a catalogue should just give you numbered
+  // entries. No-op when numbers already exist.
+  await ensureCatalogueNumbers(db, showId);
 
   // Run independent DB queries and logo validation in parallel.
   // The marked-catalogue achievements query only runs when it's needed; for
