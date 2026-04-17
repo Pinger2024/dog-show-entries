@@ -309,10 +309,13 @@ export function ShowInformationPage({ show }: FrontMatterProps) {
 export function FrontMatterContent({ show }: FrontMatterProps) {
   const hasJudges = Object.keys(show.judgesByBreedName ?? {}).length > 0
     || (show.judgeDisplayList?.length ?? 0) > 0;
-  // Section-between gap: large enough that a section banner never visually
-  // collides with the tail of the previous section's content (e.g. a judge
-  // bio flowing right up to the next SectionBand looks like a bug).
-  const SECTION_GAP = 16;
+  // Section-between gap. The sectionBand style uses marginTop: -20 to
+  // bleed into the page's top padding when it's first on a page; that
+  // negative margin also eats ~20pt when the band appears mid-flow, so
+  // the gap here has to include 20pt of compensation PLUS the visible
+  // separation we actually want (~14pt). Anything below ~30 and the
+  // Jurisdiction paragraph visually collides with the next band.
+  const SECTION_GAP = 34;
   return (
     <>
       <ShowParticularsContent show={show} />
@@ -479,6 +482,13 @@ export function BestAwardsContent({ show }: FrontMatterProps) {
     .map((s) => s.award);
   const allAwards = Array.from(new Set([...bestAwards, ...extraSponsorAwards]));
 
+  // Trophy/Sponsor columns are pure clutter when no sponsor has been
+  // assigned to any award — the rows just fill with em-dashes. Amanda's
+  // feedback: only render those columns when at least one award has a
+  // sponsor configured. Empty state becomes a clean single-column
+  // "award + winner line" list.
+  const hasAnySponsor = awardSponsors.length > 0;
+
   return (
     <>
       <SectionBand title="Best Awards" />
@@ -496,20 +506,33 @@ export function BestAwardsContent({ show }: FrontMatterProps) {
         ringside.
       </Text>
 
-      <View style={bestAwardsStyles.tableHeaderRow}>
-        <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.awardCol }}>
-          Award
-        </Text>
-        <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.trophyCol }}>
-          Trophy
-        </Text>
-        <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.sponsorCol }}>
-          Sponsor
-        </Text>
-      </View>
+      {hasAnySponsor && (
+        <View style={bestAwardsStyles.tableHeaderRow}>
+          <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.awardCol }}>
+            Award
+          </Text>
+          <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.trophyCol }}>
+            Trophy
+          </Text>
+          <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.sponsorCol }}>
+            Sponsor
+          </Text>
+        </View>
+      )}
 
       {allAwards.map((award, i) => {
         const sponsors = sponsorsByAward.get(normaliseAward(award)) ?? [];
+        if (!hasAnySponsor) {
+          return (
+            <View key={`${award}-${i}`} style={bestAwardsStyles.tableRow} wrap={false}>
+              <View style={{ width: '100%' }}>
+                <Text style={bestAwardsStyles.awardName}>{award}</Text>
+                <View style={bestAwardsStyles.winnerLine} />
+                <Text style={bestAwardsStyles.winnerLabel}>Winner</Text>
+              </View>
+            </View>
+          );
+        }
         return (
           <View key={`${award}-${i}`} style={bestAwardsStyles.tableRow} wrap={false}>
             <View style={bestAwardsStyles.awardCol}>
@@ -772,14 +795,21 @@ export function CoverPage({ show }: FrontMatterProps) {
           </View>
         )}
 
-        {/* On-call vet — last item on the cover. Show Manager,
-            sponsors, docking statement and Jurisdiction & Responsibilities
-            moved to ShowParticularsPage so the cover is consistent
+        {/* On-call vet and Show Manager are the last items on the cover.
+            Sponsors, docking statement and Jurisdiction & Responsibilities
+            moved to ShowParticularsPage so the cover stays consistent
             across shows regardless of which optional fields are set. */}
         {show.onCallVet && (
           <View style={{ width: '100%', marginTop: 2, marginBottom: 2 }}>
             <Text style={styles.coverSectionLabel}>On-Call Veterinary Surgeon</Text>
             <Text style={styles.coverSectionText}>{show.onCallVet}</Text>
+          </View>
+        )}
+
+        {show.showManager && (
+          <View style={{ width: '100%', marginTop: 2, marginBottom: 2 }}>
+            <Text style={styles.coverSectionLabel}>Show Manager</Text>
+            <Text style={styles.coverSectionText}>{show.showManager}</Text>
           </View>
         )}
 
@@ -812,12 +842,9 @@ export function ShowParticularsContent({ show }: FrontMatterProps) {
 
   return (
     <>
-      {show.showManager && (
-        <View wrap={false} style={{ marginBottom: 8 }}>
-          <Text style={styles.coverSectionLabel}>Show Manager</Text>
-          <Text style={styles.coverSectionText}>{show.showManager}</Text>
-        </View>
-      )}
+      {/* Show Manager rendered on the CoverPage (after On-Call Vet)
+          per Amanda's feedback that the cover should end with the
+          show manager. Deliberately not re-rendered here. */}
 
       {hasSponsors && (
         <View style={{ marginBottom: 10 }}>
