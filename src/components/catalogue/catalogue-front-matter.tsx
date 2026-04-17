@@ -341,7 +341,7 @@ export function FrontMatterContent({ show }: FrontMatterProps) {
       )}
 
       {hasBestAwards(show) && (
-        <View style={{ marginTop: SECTION_GAP }} minPresenceAhead={120}>
+        <View style={{ marginTop: SECTION_GAP }} minPresenceAhead={160}>
           <BestAwardsContent show={show} />
         </View>
       )}
@@ -496,57 +496,55 @@ export function BestAwardsContent({ show }: FrontMatterProps) {
   // "award + winner line" list.
   const hasAnySponsor = awardSponsors.length > 0;
 
-  return (
-    <>
-      <SectionBand title="Best Awards" />
+  const introText = (
+    <Text
+      style={{
+        fontFamily: 'Times',
+        fontSize: 8,
+        fontStyle: 'italic',
+        color: C.textMedium,
+        marginBottom: 8,
+      }}
+    >
+      Awarded at the discretion of the judges. Winners may be filled in
+      ringside.
+    </Text>
+  );
 
-      <Text
-        style={{
-          fontFamily: 'Times',
-          fontSize: 8,
-          fontStyle: 'italic',
-          color: C.textMedium,
-          marginBottom: 8,
-        }}
-      >
-        Awarded at the discretion of the judges. Winners may be filled in
-        ringside.
+  const headerRow = hasAnySponsor ? (
+    <View style={bestAwardsStyles.tableHeaderRow}>
+      <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.awardCol }}>
+        Award
       </Text>
+      <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.trophyCol }}>
+        Trophy
+      </Text>
+      <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.sponsorCol }}>
+        Sponsor
+      </Text>
+    </View>
+  ) : null;
 
-      {hasAnySponsor && (
-        <View style={bestAwardsStyles.tableHeaderRow}>
-          <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.awardCol }}>
-            Award
-          </Text>
-          <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.trophyCol }}>
-            Trophy
-          </Text>
-          <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.sponsorCol }}>
-            Sponsor
-          </Text>
+  const renderRow = (award: string, i: number) => {
+    const sponsors = sponsorsByAward.get(normaliseAward(award)) ?? [];
+    if (!hasAnySponsor) {
+      return (
+        <View key={`${award}-${i}`} style={bestAwardsStyles.tableRow} wrap={false}>
+          <View style={{ width: '100%' }}>
+            <Text style={bestAwardsStyles.awardName}>{award}</Text>
+            <View style={bestAwardsStyles.winnerLine} />
+            <Text style={bestAwardsStyles.winnerLabel}>Winner</Text>
+          </View>
         </View>
-      )}
-
-      {allAwards.map((award, i) => {
-        const sponsors = sponsorsByAward.get(normaliseAward(award)) ?? [];
-        if (!hasAnySponsor) {
-          return (
-            <View key={`${award}-${i}`} style={bestAwardsStyles.tableRow} wrap={false}>
-              <View style={{ width: '100%' }}>
-                <Text style={bestAwardsStyles.awardName}>{award}</Text>
-                <View style={bestAwardsStyles.winnerLine} />
-                <Text style={bestAwardsStyles.winnerLabel}>Winner</Text>
-              </View>
-            </View>
-          );
-        }
-        return (
-          <View key={`${award}-${i}`} style={bestAwardsStyles.tableRow} wrap={false}>
-            <View style={bestAwardsStyles.awardCol}>
-              <Text style={bestAwardsStyles.awardName}>{award}</Text>
-              <View style={bestAwardsStyles.winnerLine} />
-              <Text style={bestAwardsStyles.winnerLabel}>Winner</Text>
-            </View>
+      );
+    }
+    return (
+      <View key={`${award}-${i}`} style={bestAwardsStyles.tableRow} wrap={false}>
+        <View style={bestAwardsStyles.awardCol}>
+          <Text style={bestAwardsStyles.awardName}>{award}</Text>
+          <View style={bestAwardsStyles.winnerLine} />
+          <Text style={bestAwardsStyles.winnerLabel}>Winner</Text>
+        </View>
             <View style={bestAwardsStyles.trophyCol}>
               {sponsors.length === 0 ? (
                 <Text style={{ ...bestAwardsStyles.trophyName, color: C.textLight }}>—</Text>
@@ -574,7 +572,20 @@ export function BestAwardsContent({ show }: FrontMatterProps) {
             </View>
           </View>
         );
-      })}
+  };
+
+  return (
+    <>
+      {/* Keep banner + italic intro + header + first award row atomic so
+          the banner never sits alone at the foot of a page. Remaining
+          rows flow normally after that block. */}
+      <View wrap={false}>
+        <SectionBand title="Best Awards" />
+        {introText}
+        {headerRow}
+        {allAwards.length > 0 && renderRow(allAwards[0], 0)}
+      </View>
+      {allAwards.slice(1).map((award, i) => renderRow(award, i + 1))}
     </>
   );
 }
