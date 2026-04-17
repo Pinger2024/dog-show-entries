@@ -18,6 +18,7 @@ import { generateShowSlug } from '@/lib/slugify.js';
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { execFileSync } from 'child_process';
 import { generateCataloguePdf } from '@/server/services/pdf-generation.js';
+import { padPdfToMultiple } from '@/lib/pdf-pad.js';
 
 // Known IDs from the production DB (researched up front so the seeder
 // doesn't have to guess).
@@ -545,13 +546,19 @@ async function renderCatalogues(showId: string, entryCount: number) {
   for (const fmt of ['standard', 'by-class'] as const) {
     try {
       const t0 = Date.now();
-      const buf = await generateCataloguePdf(showId, fmt);
+      // Same pipeline the live download uses: generate → pad to the next
+      // multiple of 4 (booklet binding) so the back cover + Notes pages
+      // actually appear.
+      const raw = await generateCataloguePdf(showId, fmt);
+      const padded = Buffer.from(await padPdfToMultiple(raw, 4));
       const pdfPath = `${outDir}/${fmt}.pdf`;
-      writeFileSync(pdfPath, buf);
+      writeFileSync(pdfPath, padded);
       const info = execFileSync('pdfinfo', [pdfPath]).toString();
       const pages = Number(info.match(/Pages:\s+(\d+)/)?.[1] ?? 0);
-      console.log(`  ${fmt.padEnd(10)} → ${String(pages).padStart(3)} pp  ${Math.round(buf.length / 1024)} KB  ${Date.now() - t0}ms`);
-      execFileSync('pdftoppm', [pdfPath, `${outDir}/${fmt}`, '-png', '-r', '100', '-f', '1', '-l', '6']);
+      const rawPages = Math.ceil(raw.length);
+      const addedPages = pages - Number(execFileSync('pdfinfo', ['-'], { input: raw }).toString().match(/Pages:\s+(\d+)/)?.[1] ?? pages);
+      console.log(`  ${fmt.padEnd(10)} → ${String(pages).padStart(3)} pp  ${Math.round(padded.length / 1024)} KB  ${Date.now() - t0}ms  (+${addedPages} padding)`);
+      execFileSync('pdftoppm', [pdfPath, `${outDir}/${fmt}`, '-png', '-r', '100', '-f', String(Math.max(1, pages - 3)), '-l', String(pages)]);
     } catch (err) {
       console.error(`  ${fmt} FAILED:`, (err as Error).message);
     }
