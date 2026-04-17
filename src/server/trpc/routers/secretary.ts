@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, sql, isNull, inArray, asc, desc, ilike } from 'drizzle-orm';
+import { and, eq, sql, isNull, isNotNull, inArray, asc, desc, ilike } from 'drizzle-orm';
 import { secretaryProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { verifyShowAccess } from '../verify-show-access';
@@ -2509,6 +2509,36 @@ export const secretaryRouter = createTRPCRouter({
         })
         .returning();
 
+      // If the show already has catalogue numbers assigned to earlier
+      // entries, slot this new entry in at the next available number so
+      // Amanda doesn't have to remember to re-run the "Assign catalogue
+      // numbers" action every time she adds a late entry. This uses
+      // append-mode (max+1) so existing numbers stay stable — secretary
+      // can still run a full class-first re-sort explicitly if desired.
+      const existingNumbered = await ctx.db.query.entries.findFirst({
+        where: and(
+          eq(entries.showId, input.showId),
+          eq(entries.status, 'confirmed'),
+          isNotNull(entries.catalogueNumber),
+        ),
+      });
+      let nextCatalogueNumber: string | null = null;
+      if (existingNumbered) {
+        const allNumbered = await ctx.db.query.entries.findMany({
+          where: and(
+            eq(entries.showId, input.showId),
+            eq(entries.status, 'confirmed'),
+            isNotNull(entries.catalogueNumber),
+          ),
+          columns: { catalogueNumber: true },
+        });
+        const highest = allNumbered.reduce((max, e) => {
+          const n = Number(e.catalogueNumber);
+          return Number.isFinite(n) && n > max ? n : max;
+        }, 0);
+        nextCatalogueNumber = String(highest + 1);
+      }
+
       // Create entry — auto-confirmed for secretary entries
       const [entry] = await ctx.db
         .insert(entries)
@@ -2520,6 +2550,7 @@ export const secretaryRouter = createTRPCRouter({
           totalFee: classFee,
           orderId: order!.id,
           status: 'confirmed',
+          catalogueNumber: nextCatalogueNumber,
         })
         .returning();
 

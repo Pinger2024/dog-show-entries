@@ -44,24 +44,27 @@ export function formatPedigreeKC(
  * Per RKC regulations, when an owner is also the exhibitor the address
  * is replaced with "Exh." (short for "Exhibitor").
  *
- * If `withhold` is true, owner details are replaced with "Details withheld"
- * per the exhibitor's right under F(1).11.b.(6)/(8) to have their name and
- * address kept out of publication.
+ * If `withhold` is true, the owner NAME is still printed (exhibitors
+ * need to be identifiable by judges / attendees) but the address is
+ * replaced with "address withheld". Amanda 2026-04-17: F(1).11.b.(6)/(8)
+ * suppresses personal contact details, not exhibitor identity.
  */
 export function formatOwnerKC(
   owners: { name: string; address: string | null; userId: string | null }[],
   exhibitorId?: string | undefined,
   withhold?: boolean
 ): string {
-  if (withhold) return 'Details withheld';
-  if (owners.length === 0) return '';
+  if (owners.length === 0) return withhold ? 'Details withheld' : '';
   return owners
     .map((o) => {
       const name = uppercaseName(o.name);
       const isExhibitor = exhibitorId && o.userId && o.userId === exhibitorId;
-      // Always show the address. Append "Exh." when the owner is also the exhibitor.
       const parts = [name];
-      if (o.address) parts.push(o.address);
+      if (withhold) {
+        parts.push('address withheld');
+      } else if (o.address) {
+        parts.push(o.address);
+      }
       if (isExhibitor) parts.push('Exh.');
       return parts.join(', ');
     })
