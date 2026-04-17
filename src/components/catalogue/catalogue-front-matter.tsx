@@ -2,7 +2,6 @@ import type { ReactNode } from 'react';
 import { Page, View, Text, Image } from '@react-pdf/renderer';
 import { styles, C } from './catalogue-styles';
 import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
-import { pickDefaultBestAwards } from './catalogue-utils';
 
 const SHOW_TYPE_LABELS: Record<string, string> = {
   championship: 'Championship Show',
@@ -453,17 +452,25 @@ const bestAwardsStyles = {
   } as const,
 };
 
+/**
+ * True only if the society has opted in — either by configuring the
+ * best-awards list explicitly or by adding award sponsorships. We
+ * deliberately do NOT fall back to pickDefaultBestAwards here: Amanda
+ * flagged that the section was appearing on catalogues for shows where
+ * she hadn't added any awards, spilling blank pages for defaults the
+ * club hadn't actually pledged to list.
+ */
 function hasBestAwards(show: CatalogueShowInfo): boolean {
-  const awards = show.bestAwards && show.bestAwards.length > 0
-    ? show.bestAwards
-    : pickDefaultBestAwards(show);
-  return awards.length > 0 || (show.awardSponsors?.length ?? 0) > 0;
+  const hasExplicitAwards = (show.bestAwards?.length ?? 0) > 0;
+  const hasSponsors = (show.awardSponsors?.length ?? 0) > 0;
+  return hasExplicitAwards || hasSponsors;
 }
 
 export function BestAwardsContent({ show }: FrontMatterProps) {
-  const bestAwards = show.bestAwards && show.bestAwards.length > 0
-    ? show.bestAwards
-    : pickDefaultBestAwards(show);
+  // Only render configured awards — no default-list fallback. If the
+  // secretary didn't add any, the section shouldn't exist (see
+  // hasBestAwards above for the rationale).
+  const bestAwards = show.bestAwards ?? [];
   const awardSponsors = show.awardSponsors ?? [];
   if (bestAwards.length === 0 && awardSponsors.length === 0) return null;
 
