@@ -5473,6 +5473,30 @@ export const secretaryRouter = createTRPCRouter({
       const crypto = await import('crypto');
       const sharedToken = crypto.randomUUID();
 
+      // Send the email FIRST — if it fails, DB state doesn't change and the
+      // previous approval token (if any) remains valid for the judge to use.
+      const { sendJudgeApprovalRequestEmail } = await import('@/server/services/email');
+      try {
+        await sendJudgeApprovalRequestEmail({
+          judge: { name: judge.name, email: judge.contactEmail },
+          show: {
+            name: show.name,
+            startDate: show.startDate,
+            slug: show.slug,
+            id: show.id,
+            organisation: show.organisation,
+          },
+          approvalToken: sharedToken,
+          breeds: assignments.filter((a) => a.breedId).map((a) => a.breedId!),
+        });
+      } catch (error) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `Could not send approval email to ${judge.contactEmail}. Please check the address and try again.`,
+          cause: error,
+        });
+      }
+
       await ctx.db
         .update(judgeAssignments)
         .set({
@@ -5488,20 +5512,6 @@ export const secretaryRouter = createTRPCRouter({
             eq(judgeAssignments.judgeId, input.judgeId)
           )
         );
-
-      const { sendJudgeApprovalRequestEmail } = await import('@/server/services/email');
-      await sendJudgeApprovalRequestEmail({
-        judge: { name: judge.name, email: judge.contactEmail },
-        show: {
-          name: show.name,
-          startDate: show.startDate,
-          slug: show.slug,
-          id: show.id,
-          organisation: show.organisation,
-        },
-        approvalToken: sharedToken,
-        breeds: assignments.filter((a) => a.breedId).map((a) => a.breedId!),
-      });
 
       return { sent: true };
     }),

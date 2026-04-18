@@ -735,17 +735,17 @@ export async function sendJudgeApprovalRequestEmail(params: {
 </body>
 </html>`;
 
-  try {
-    const result = await resend.emails.send({
-      from: FROM,
-      to: judge.email,
-      replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
-      subject: `Results Approval — ${show.name}`,
-      html,
-    });
-    console.log(`[email] Judge approval request sent to ${judge.email}`, result);
-    return result;
-  } catch (error) {
-    console.error(`[email] Failed to send judge approval request to ${judge.email}:`, error);
+  const result = await resend.emails.send({
+    from: FROM,
+    to: judge.email,
+    replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+    subject: `Results Approval — ${show.name}`,
+    html,
+  });
+  if (result.error) {
+    console.error(`[email] Failed to send judge approval request to ${judge.email}:`, result.error);
+    throw new Error(`Failed to send approval email to ${judge.email}: ${result.error.message ?? 'unknown error'}`);
   }
+  console.log(`[email] Judge approval request sent to ${judge.email}`, result);
+  return result;
 }

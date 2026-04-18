@@ -902,7 +902,31 @@ export const stewardRouter = createTRPCRouter({
       const crypto = await import('crypto');
       const sharedToken = crypto.randomUUID();
 
-      // Update all assignment rows with the shared token
+      // Send approval email FIRST — if it fails, DB stays clean and steward can retry
+      try {
+        await sendJudgeApprovalRequestEmail({
+          judge: { name: judge.name, email: judge.contactEmail },
+          show: {
+            name: show.name,
+            startDate: show.startDate,
+            slug: show.slug,
+            id: show.id,
+            organisation: show.organisation,
+          },
+          approvalToken: sharedToken,
+          breeds: assignments
+            .filter((a) => a.breedId)
+            .map((a) => a.breedId!),
+        });
+      } catch (error) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `Could not send approval email to ${judge.contactEmail}. Please check the address and try again.`,
+          cause: error,
+        });
+      }
+
+      // Email went out — record it
       await ctx.db
         .update(judgeAssignments)
         .set({
@@ -916,22 +940,6 @@ export const stewardRouter = createTRPCRouter({
             eq(judgeAssignments.judgeId, input.judgeId)
           )
         );
-
-      // Send approval email
-      await sendJudgeApprovalRequestEmail({
-        judge: { name: judge.name, email: judge.contactEmail },
-        show: {
-          name: show.name,
-          startDate: show.startDate,
-          slug: show.slug,
-          id: show.id,
-          organisation: show.organisation,
-        },
-        approvalToken: sharedToken,
-        breeds: assignments
-          .filter((a) => a.breedId)
-          .map((a) => a.breedId!),
-      });
 
       return { sent: true, judgeEmail: judge.contactEmail };
     }),
