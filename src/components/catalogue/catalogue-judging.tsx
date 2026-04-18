@@ -45,8 +45,9 @@ const s = StyleSheet.create({
   },
   // Cover block
   coverLogo: {
-    width: 48,
-    height: 48,
+    maxWidth: 84,
+    maxHeight: 48,
+    objectFit: 'contain',
     alignSelf: 'center',
     marginBottom: 6,
   },
