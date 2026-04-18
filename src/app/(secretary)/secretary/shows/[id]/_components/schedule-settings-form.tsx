@@ -304,6 +304,13 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
         .then(() => {
           setLastAutoSavedAt(new Date());
           setAutoSaveStatus('saved');
+          // Keep the React Query cache in lockstep with what we just
+          // wrote. Without this, navigating to /sponsors and back
+          // rehydrates the form from stale cache → awards/prize-money
+          // appear blank → next autosave propagates the blanks back
+          // to the DB. See the matching setQueryData in the beacon
+          // unmount cleanup below.
+          utils.secretary.getScheduleData.setData({ showId }, payload.scheduleData);
           // Blocker views depend only on guarantor count from this
           // form — gate the invalidation so typing in other fields
           // doesn't refetch them repeatedly.
@@ -336,6 +343,18 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     return () => {
       const payload = latestPayloadRef.current;
       if (!payload) return;
+      // Critical: mirror the beacon write into the React Query cache
+      // synchronously. The beacon is fire-and-forget so we never get
+      // a callback to invalidate; without this, when the user comes
+      // back to /schedule the cached (stale) scheduleData wins the
+      // hydration race and overwrites whatever they just typed.
+      try {
+        utils.secretary.getScheduleData.setData({ showId }, payload.scheduleData);
+      } catch {
+        // setData on an unmounted utils ref shouldn't throw, but
+        // guard against edge cases — the beacon itself is what
+        // actually persists the data.
+      }
       if (typeof navigator === 'undefined' || !navigator.sendBeacon) return;
       try {
         const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
@@ -345,7 +364,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
         // navigated and we can't show anything anyway.
       }
     };
-  }, [showId]);
+  }, [showId, utils]);
 
   // ── Derived counts ──
   const officerCount = officers.filter((o) => o.name).length;
