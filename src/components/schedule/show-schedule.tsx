@@ -1559,6 +1559,7 @@ export function ShowSchedule({
             {show.subsequentEntryFee != null ? `, subsequent entries same dog ${formatCurrency(show.subsequentEntryFee)}` : ''}
             {show.nfcEntryFee != null ? `. NFC ${formatCurrency(show.nfcEntryFee)}` : ''}
             {show.juniorHandlerFee != null ? `. Junior Handler ${formatCurrency(show.juniorHandlerFee)}` : ''}.
+            {' '}A handling fee of £1.00 plus 1% of the order subtotal is added at checkout to cover online processing; this is shown to exhibitors before they pay.
           </Rule>
         )}
         <Rule num="6">ONLINE ENTRY can be found at remishowmanager.co.uk/shows/{show.slug}</Rule>

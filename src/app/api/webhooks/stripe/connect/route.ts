@@ -84,8 +84,46 @@ export async function POST(request: NextRequest) {
       break;
     }
 
+    // If a club disconnects Remi from their Stripe account we must stop
+    // trying to create PaymentIntents against it — otherwise every new
+    // entry payment will fail at Stripe with a permission error. Flip the
+    // org back to not_started and clear the account id so the Payments
+    // page prompts them to reconnect if they want to keep taking entries.
+    case 'account.application.deauthorized': {
+      // The event.data.object here is the Application (our platform),
+      // not the connected account. The connected account id lives on
+      // event.account for Connect-scoped events.
+      const accountId = event.account;
+      if (!accountId) {
+        console.warn('[webhook/connect] deauthorized event without event.account');
+        break;
+      }
+
+      const org = await db.query.organisations.findFirst({
+        where: eq(organisations.stripeAccountId, accountId),
+        columns: { id: true },
+      });
+      if (!org) {
+        console.warn(`[webhook/connect] account.application.deauthorized: no org for ${accountId}`);
+        break;
+      }
+
+      await db
+        .update(organisations)
+        .set({
+          stripeAccountId: null,
+          stripeAccountStatus: 'not_started',
+          stripeChargesEnabled: false,
+          stripeDetailsSubmitted: false,
+          stripePayoutsEnabled: false,
+          stripeOnboardingCompletedAt: null,
+        })
+        .where(eq(organisations.id, org.id));
+
+      break;
+    }
+
     // Other connect events we might care about later:
-    // - account.application.deauthorized — club disconnected their account
     // - payout.* — could power an admin "payouts" view
     // Ignore for now.
   }
