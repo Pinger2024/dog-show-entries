@@ -189,4 +189,60 @@ describe('secretary.resendJudgeOffer', () => {
   });
 });
 
+// ── Backlog #101 — time-ordering validation ────────────────
+describe('secretary.updateScheduleData time validation', () => {
+  it('rejects judging start before or equal to show-open time', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id });
+    await expect(
+      createTestCaller(user).secretary.updateScheduleData({
+        showId: show.id,
+        showOpenTime: '09:00',
+        judgingStartTime: '08:30',
+        scheduleData: { country: 'england' },
+      })
+    ).rejects.toThrow(/must be after/);
+  });
+
+  it('rejects latest arrival before show-open', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id });
+    await expect(
+      createTestCaller(user).secretary.updateScheduleData({
+        showId: show.id,
+        showOpenTime: '09:00',
+        judgingStartTime: '10:00',
+        scheduleData: { country: 'england', latestArrivalTime: '08:45' },
+      })
+    ).rejects.toThrow(/before the show opens/);
+  });
+
+  it('rejects latest arrival after judging starts', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id });
+    await expect(
+      createTestCaller(user).secretary.updateScheduleData({
+        showId: show.id,
+        showOpenTime: '09:00',
+        judgingStartTime: '10:00',
+        scheduleData: { country: 'england', latestArrivalTime: '10:30' },
+      })
+    ).rejects.toThrow(/must be before judging starts/);
+  });
+
+  it('accepts a sensible 09:00 / 09:30 / 10:00 ordering', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id });
+    await createTestCaller(user).secretary.updateScheduleData({
+      showId: show.id,
+      showOpenTime: '09:00',
+      judgingStartTime: '10:00',
+      scheduleData: { country: 'england', latestArrivalTime: '09:30' },
+    });
+    const dbShow = await testDb.query.shows.findFirst({ where: eq(shows.id, show.id) });
+    expect(dbShow?.showOpenTime).toBe('09:00');
+    expect(dbShow?.startTime).toBe('10:00');
+  });
+});
+
 void shows; void achievements; void makeUser; void makeEntry;
