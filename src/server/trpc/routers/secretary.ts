@@ -196,16 +196,33 @@ export const secretaryRouter = createTRPCRouter({
     };
   }),
 
-  getOrganisation: secretaryProcedure.query(async ({ ctx }) => {
-    const membership = await ctx.db.query.memberships.findFirst({
-      where: and(
-        eq(memberships.userId, ctx.session.user.id),
-        eq(memberships.status, 'active')
-      ),
-      with: { organisation: true },
-    });
-    return membership?.organisation ?? null;
-  }),
+  getOrganisation: secretaryProcedure
+    .input(z.object({ organisationId: z.string().uuid().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      // If an explicit org id is passed, return that one (gated on
+      // active membership). Otherwise fall back to the user's first
+      // active membership — legacy behaviour for callers that haven't
+      // been migrated to pass the active-org id yet.
+      if (input?.organisationId) {
+        const membership = await ctx.db.query.memberships.findFirst({
+          where: and(
+            eq(memberships.userId, ctx.session.user.id),
+            eq(memberships.organisationId, input.organisationId),
+            eq(memberships.status, 'active')
+          ),
+          with: { organisation: true },
+        });
+        return membership?.organisation ?? null;
+      }
+      const membership = await ctx.db.query.memberships.findFirst({
+        where: and(
+          eq(memberships.userId, ctx.session.user.id),
+          eq(memberships.status, 'active')
+        ),
+        with: { organisation: true },
+      });
+      return membership?.organisation ?? null;
+    }),
 
   /** List active members of an organisation (for secretary picker, etc.) */
   orgMembers: secretaryProcedure

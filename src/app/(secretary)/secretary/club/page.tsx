@@ -56,6 +56,7 @@ import {
 } from 'lucide-react';
 import { PostcodeLookup } from '@/components/postcode-lookup';
 import { PayoutDetailsCard } from './_components/payout-details-card';
+import { useActiveOrganisation } from '@/lib/use-active-organisation';
 
 const POSITION_OPTIONS = [
   'President',
@@ -98,7 +99,11 @@ const emptyForm: PersonFormData = {
 };
 
 export default function MyClubPage() {
-  const { data: org, isLoading: orgLoading } = trpc.secretary.getOrganisation.useQuery();
+  const { activeOrgId } = useActiveOrganisation();
+  const { data: org, isLoading: orgLoading } = trpc.secretary.getOrganisation.useQuery(
+    { organisationId: activeOrgId ?? undefined },
+    { enabled: activeOrgId !== null }
+  );
   const utils = trpc.useUtils();
 
   const [dialogOpen, setDialogOpen] = useState(false);

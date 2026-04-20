@@ -21,6 +21,8 @@ import { getBreadcrumbs } from '@/lib/nav-utils';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { RoleSwitcher, RoleSwitcherCompact } from '@/components/layout/role-switcher';
+import { OrgSwitcher } from '@/components/layout/org-switcher';
+import { useActiveOrganisation } from '@/lib/use-active-organisation';
 
 interface SecretaryShellProps {
   user: {
@@ -74,6 +76,8 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
   const parentPath = getParentPath(pathname);
   const mobileTitle = getMobileTitle(pathname);
   const hasExactMatch = sidebarNavItems.some((i) => i.href === pathname);
+  const { organisations } = useActiveOrganisation();
+  const showOrgSwitcher = organisations.length > 1;
 
   return (
     <div className="flex min-h-screen overflow-x-hidden">
@@ -99,6 +103,7 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
             </div>
           </div>
           <RoleSwitcher activeView="secretary" showSteward={user.role === 'secretary' || user.role === 'admin'} />
+          <OrgSwitcher />
         </div>
 
         <nav className="flex-1 space-y-1 p-3">
@@ -196,6 +201,13 @@ export function SecretaryShell({ user, children }: SecretaryShellProps) {
             </Button>
           </div>
         </header>
+
+        {/* Mobile org-switch bar — visible only when user manages >1 club */}
+        {showOrgSwitcher && (
+          <div className="border-b px-3 py-2 md:hidden">
+            <OrgSwitcher />
+          </div>
+        )}
 
         <main className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-7xl px-2 py-4 pb-28 sm:px-4 sm:py-6 sm:pb-28 md:pb-8 lg:px-8">
