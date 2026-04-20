@@ -93,22 +93,24 @@ src/
 
 ## Payments Architecture
 
-Two independent Stripe setups operate side by side — **do not mix them**:
+**Remi is merchant of record for entry payments.** Exhibitors pay Remi's Stripe account; Remi BACSes the net to each host club after entries close. No Stripe Connect, no club-side KYC.
 
-**Stripe Connect** (exhibitor → club entry payments)
-- Clubs are Standard connected accounts — `organisations.stripeAccountId`, etc.
-- Every entry/order payment is a destination charge via `createEntryPaymentIntent` in `src/server/services/stripe.ts`: `application_fee_amount` = Remi's £1 + 1% handling fee (`calculatePlatformFee`), `on_behalf_of` + `transfer_data.destination` = the club's connected account id.
-- Clubs do KYC on Stripe's own hosted onboarding (`accountLinks.create`, type `account_onboarding`). UX at `/secretary/payments`.
-- `account.updated` webhook at `/api/webhooks/stripe/connect` mirrors Stripe's flags into the `organisations` row. `deriveAccountStatus(account)` is the single source of truth for flags → `stripe_account_status` enum.
-- **Gate:** `shows.update` refuses to transition to `entries_open` unless the host org has `stripeChargesEnabled=true`.
-- Refunds/chargebacks land on the **club's** balance (not Remi's) because we set `on_behalf_of`.
+**Entry payments** (exhibitor → Remi → club)
+- Platform-mode `createPaymentIntent` in `src/server/services/stripe.ts`. Money lands in Remi's Stripe balance.
+- Exhibitor charged `totalAmount + platformFee` (£1 + 1% via `calculatePlatformFee`). `platform_fee_pence` column on `orders` records the split for reconciliation.
+- Club provides sort code + account number on `/secretary/club` (saved to `organisations.payout_{account_name,sort_code,account_number}`).
+- **Gate:** `shows.update` refuses `entries_open` unless all three payout fields are set. Checklist key `payout_details_set`.
+- After entries close, admin records the BACS payout via `/admin/payouts` → inserts a `payouts` row.
+- Chargeback liability is Remi's — T&Cs need to say so.
 
-**Stripe Billing** (club → Remi SaaS subscription)
-- Unchanged. `organisations.stripeCustomerId` / `stripeSubscriptionId`, plain Checkout session, not Connect.
+**Stripe Billing** (club → Remi SaaS subscription, separate)
+- Unchanged. `organisations.stripeCustomerId` / `stripeSubscriptionId`, plain Checkout session.
 - Lives at `/secretary/billing`.
 
-**Platform-mode PaymentIntents** (still used by `createPaymentIntent`)
-- Print orders only (`/api/webhooks/stripe` handles `payment_intent.succeeded` for these). Print orders are Remi-as-buyer, not club-as-merchant.
+**Print orders** (Remi → Mixam, separate)
+- Platform-mode `createPaymentIntent`, landing in Remi's balance — Remi is the buyer from Mixam.
+
+**Stripe Connect code still exists** (`src/server/trpc/routers/stripe-connect.ts`, `/api/stripe/connect/*`, `/api/webhooks/stripe/connect`, `stripe_*` columns on organisations) but is dormant — kept for future use if Remi ever needs a true marketplace model. See `project_stripe_connect_migration.md` memory for the shipped-and-retired saga (2026-04-20).
 
 ## User Roles
 

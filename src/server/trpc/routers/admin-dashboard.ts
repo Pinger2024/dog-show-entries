@@ -25,6 +25,7 @@ import {
   dogs,
   organisations,
   printOrders,
+  payouts,
 } from '@/server/db/schema';
 
 /** Compute a percentage-change delta for KPI cards. */
@@ -545,84 +546,122 @@ export const adminDashboardRouter = createTRPCRouter({
   }),
 
   /**
-   * Admin view of every club's Stripe Connect state. Drives the support
-   * dashboard at /admin/connect-accounts — lets us spot clubs stuck in
-   * onboarding without waiting for them to ask.
+   * Admin-side payout ledger — one row per org showing what we owe them
+   * vs. what we've already paid. Drives /admin/payouts.
    *
-   * Sourced entirely from our mirror of Stripe's Account flags (no direct
-   * Stripe call here — that's what `refreshConnectAccount` below is for
-   * when a specific row looks stale).
+   * "Owed" is computed from paid orders: sum of orders.total_amount
+   * (the CLUB's share, exclusive of Remi's handling fee) minus sum of
+   * past payouts for that org. Kept as a single SQL round-trip per side
+   * so we don't fire N queries on a page with many clubs.
    */
-  listConnectAccounts: adminProcedure.query(async ({ ctx }) => {
-    const rows = await ctx.db.query.organisations.findMany({
+  listPayouts: adminProcedure.query(async ({ ctx }) => {
+    // Sum paid entry fees per org. Join orders → shows → organisations
+    // because entry fees belong to the SHOW's host org.
+    const owedRows = await ctx.db
+      .select({
+        organisationId: shows.organisationId,
+        totalOwed: sql<number>`COALESCE(SUM(${orders.totalAmount}), 0)::int`,
+      })
+      .from(orders)
+      .innerJoin(shows, eq(orders.showId, shows.id))
+      .where(eq(orders.status, 'paid'))
+      .groupBy(shows.organisationId);
+
+    const paidRows = await ctx.db
+      .select({
+        organisationId: payouts.organisationId,
+        totalPaid: sql<number>`COALESCE(SUM(${payouts.amountPence}), 0)::int`,
+      })
+      .from(payouts)
+      .groupBy(payouts.organisationId);
+
+    const allOrgs = await ctx.db.query.organisations.findMany({
       columns: {
         id: true,
         name: true,
-        contactEmail: true,
-        stripeAccountId: true,
-        stripeAccountStatus: true,
-        stripeDetailsSubmitted: true,
-        stripeChargesEnabled: true,
-        stripePayoutsEnabled: true,
-        stripeOnboardingCompletedAt: true,
-        createdAt: true,
-        updatedAt: true,
+        payoutAccountName: true,
+        payoutSortCode: true,
+        payoutAccountNumber: true,
       },
       orderBy: [desc(organisations.updatedAt)],
     });
 
-    // Bucket by status so the UI can show summary counts without
-    // re-scanning on the client.
-    const buckets = {
-      active: 0,
-      pending: 0,
-      restricted: 0,
-      rejected: 0,
-      not_started: 0,
-    };
-    for (const r of rows) {
-      buckets[r.stripeAccountStatus] = (buckets[r.stripeAccountStatus] ?? 0) + 1;
-    }
+    const owedMap = new Map(owedRows.map((r) => [r.organisationId, Number(r.totalOwed)]));
+    const paidMap = new Map(paidRows.map((r) => [r.organisationId, Number(r.totalPaid)]));
 
-    return { rows, buckets, total: rows.length };
+    const rows = allOrgs.map((org) => {
+      const totalOwed = owedMap.get(org.id) ?? 0;
+      const totalPaid = paidMap.get(org.id) ?? 0;
+      return {
+        ...org,
+        totalOwedPence: totalOwed,
+        totalPaidPence: totalPaid,
+        outstandingPence: totalOwed - totalPaid,
+      };
+    });
+
+    // Only surface orgs with either money moving or bank details on
+    // file — clean clubs we've never taken money for are noise here.
+    const filtered = rows.filter(
+      (r) => r.totalOwedPence > 0 || r.totalPaidPence > 0 || r.payoutSortCode
+    );
+
+    const summary = filtered.reduce(
+      (acc, r) => ({
+        totalOwed: acc.totalOwed + r.totalOwedPence,
+        totalPaid: acc.totalPaid + r.totalPaidPence,
+        totalOutstanding: acc.totalOutstanding + r.outstandingPence,
+      }),
+      { totalOwed: 0, totalPaid: 0, totalOutstanding: 0 }
+    );
+
+    return { rows: filtered, summary };
   }),
 
   /**
-   * Force a re-sync of one org's Connect state from Stripe. Useful when
-   * the webhook hasn't delivered yet or we suspect drift.
+   * Record a manual BACS payout to a club. Doesn't actually move money —
+   * that happens in Michael's own bank app — this just books the payment
+   * so our "outstanding" figure reflects it.
    */
-  refreshConnectAccount: adminProcedure
-    .input(z.object({ organisationId: z.string().uuid() }))
+  recordPayout: adminProcedure
+    .input(
+      z.object({
+        organisationId: z.string().uuid(),
+        amountPence: z.number().int().positive(),
+        showId: z.string().uuid().optional(),
+        bankReference: z.string().max(200).optional(),
+        notes: z.string().max(1000).optional(),
+      })
+    )
     .mutation(async ({ ctx, input }) => {
-      const { retrieveConnectAccount, deriveAccountStatus } = await import(
-        '@/server/services/stripe'
-      );
-      const org = await ctx.db.query.organisations.findFirst({
-        where: eq(organisations.id, input.organisationId),
-        columns: {
-          id: true,
-          stripeAccountId: true,
-          stripeOnboardingCompletedAt: true,
-        },
-      });
-      if (!org?.stripeAccountId) {
-        return { status: 'not_started' as const, refreshed: false };
-      }
-      const account = await retrieveConnectAccount(org.stripeAccountId);
-      const status = deriveAccountStatus(account);
-      await ctx.db
-        .update(organisations)
-        .set({
-          stripeAccountStatus: status,
-          stripeDetailsSubmitted: account.details_submitted ?? false,
-          stripeChargesEnabled: account.charges_enabled ?? false,
-          stripePayoutsEnabled: account.payouts_enabled ?? false,
-          stripeOnboardingCompletedAt:
-            status === 'active' && !org.stripeOnboardingCompletedAt
-              ? new Date()
-              : org.stripeOnboardingCompletedAt,
+      const [row] = await ctx.db
+        .insert(payouts)
+        .values({
+          organisationId: input.organisationId,
+          showId: input.showId ?? null,
+          amountPence: input.amountPence,
+          bankReference: input.bankReference ?? null,
+          notes: input.notes ?? null,
+          paidByUserId: ctx.session.user.id,
         })
-        .where(eq(organisations.id, org.id));
-      return { status, refreshed: true };
+        .returning();
+      return row!;
+    }),
+
+  /**
+   * History of payouts for one org, newest first — drives the drill-down
+   * panel on the admin payouts page.
+   */
+  listPayoutHistory: adminProcedure
+    .input(z.object({ organisationId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.db.query.payouts.findMany({
+        where: eq(payouts.organisationId, input.organisationId),
+        with: {
+          show: { columns: { id: true, name: true } },
+          paidBy: { columns: { id: true, name: true, email: true } },
+        },
+        orderBy: [desc(payouts.paidAt)],
+      });
     }),
 });
