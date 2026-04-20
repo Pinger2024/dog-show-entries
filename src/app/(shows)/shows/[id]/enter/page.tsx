@@ -90,6 +90,10 @@ export default function EnterShowPage() {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState(0);
+  // Subtotal and handling-fee breakdown — the club gets subtotalAmount,
+  // Remi gets platformFeePence, exhibitor pays the sum (paymentAmount).
+  const [subtotalAmount, setSubtotalAmount] = useState(0);
+  const [platformFeePence, setPlatformFeePence] = useState(0);
   const [shareCopied, setShareCopied] = useState(false);
 
   // JH form state
@@ -446,7 +450,18 @@ export default function EnterShowPage() {
 
       setClientSecret(result.clientSecret);
       setOrderId(result.orderId);
-      setPaymentAmount(result.totalAmount);
+      // Paid branch of orders.checkout always returns totalAmount +
+      // grossAmount + platformFeePence — the cast is because the full
+      // union includes a free-entry variant without those fields, already
+      // handled by the early return above.
+      const paid = result as {
+        totalAmount: number;
+        platformFeePence: number;
+        grossAmount: number;
+      };
+      setSubtotalAmount(paid.totalAmount);
+      setPlatformFeePence(paid.platformFeePence);
+      setPaymentAmount(paid.grossAmount);
       cart.setStep('payment');
     } catch {
       // Error is handled by tRPC
@@ -1531,7 +1546,24 @@ export default function EnterShowPage() {
               </CardTitle>
               <CardDescription>Secure payment powered by Stripe</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              {platformFeePence > 0 && (
+                <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Entry fees</span>
+                    <span>{formatCurrency(subtotalAmount)}</span>
+                  </div>
+                  <div className="mt-1 flex justify-between text-muted-foreground">
+                    <span>Handling fee</span>
+                    <span>{formatCurrency(platformFeePence)}</span>
+                  </div>
+                  <div className="mt-2 flex justify-between border-t pt-2 font-semibold text-foreground">
+                    <span>Total</span>
+                    <span>{formatCurrency(paymentAmount)}</span>
+                  </div>
+                </div>
+              )}
+
               <StripeProvider clientSecret={clientSecret}>
                 <PaymentForm
                   amount={paymentAmount}
