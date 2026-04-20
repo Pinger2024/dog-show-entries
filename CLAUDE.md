@@ -116,6 +116,55 @@ The lettiva.com domain is no longer used — migrated to remishowmanager.co.uk o
 
 Use `npx drizzle-kit push` to sync schema changes to the database. No migration files — push mode.
 
+## Testing
+
+**411 integration tests across 39 files**, covering every user journey in `TESTING_MAP.md`.
+
+### Running tests
+
+```bash
+npm test              # full suite (pretest auto-pushes schema to remi_test DB)
+npx vitest run --run src/__tests__/integration/  # skip pretest hook (faster)
+npm run test:watch    # watch mode
+```
+
+### Test infrastructure
+
+- **Framework:** Vitest 3.2.4 with Postgres-backed integration tests
+- **Local DB:** Homebrew `postgresql@16` with `remi_test` database (not Docker)
+- **CI:** GitHub Actions with a Postgres service container (`.github/workflows/test.yml`)
+- **Config:** `vitest.config.ts` loads `.env.test` for test env vars; `singleFork: true` keeps all tests in one process
+
+### Test helpers (`src/__tests__/helpers/`)
+
+| File | Purpose |
+|------|---------|
+| `setup.ts` | Global mocks for Stripe, Resend, results-notifications, email senders, NextAuth. Runs `cleanDb()` before each test. |
+| `db.ts` | `testDb` (Drizzle instance against `remi_test`), `cleanDb()` (TRUNCATE CASCADE, refuses non-localhost URLs) |
+| `context.ts` | `createTestCaller(user)` — builds a tRPC caller with an injected session, bypasses NextAuth entirely |
+| `factories.ts` | `makeUser`, `makeOrg`, `makeShow`, `makeDog`, `makeEntry`, `makeResult`, `makeJudge`, `makeStewardAssignment`, `makeOrder`, `makePayment`, `makePlan`, `makeSponsor`, `makeFeedback`, `makeBacklogItem`, etc. + convenience builders like `makeSecretaryWithOrg()`, `makeSecretaryWithOrgAndBreed()` |
+| `stripe-event.ts` | `injectStripeEvent(event)`, `buildStripeWebhookRequest()` — for Stripe webhook route testing |
+| `resend-mocks.ts` | Shared `resendMocks.send` capture for email payload assertions |
+
+### Writing a new test
+
+```typescript
+const { user, org } = await makeSecretaryWithOrg();
+const show = await makeShow({ organisationId: org.id, status: 'in_progress' });
+const caller = createTestCaller(user);
+await caller.secretary.someMutation({ showId: show.id });
+expect(...).toBe(...);
+```
+
+### Testing rules
+
+- **Every bug Amanda reports becomes a test first, fix second.** The suite grows where it matters.
+- **New features include a journey test.** One test that strings multiple procedures together.
+- **Mock external services, not the DB.** Tests use real Postgres and real Drizzle queries. Stripe, Resend, S3/R2 are mocked at the service boundary.
+- **Don't mock the database.** Use transactions or `cleanDb()` between tests.
+- **Assert payload shapes, not email HTML.** For email tests, check `to`, `subject`, and key body content — not exact HTML.
+- **`TESTING_MAP.md` is the canonical coverage checklist.** Tick rows as tests land. Add new rows as features ship.
+
 ## Feature Development Workflow
 
 When building new features (not bug fixes), always follow this research-first approach:
