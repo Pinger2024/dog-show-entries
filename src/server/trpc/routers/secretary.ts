@@ -4957,6 +4957,32 @@ export const secretaryRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
+      // Backlog #101 — time ordering must be sane so the schedule doesn't
+      // print nonsense like "Judging starts 08:30, Show opens 09:00".
+      // Strings are "HH:MM" so lexical comparison works.
+      const showOpen = input.showOpenTime?.trim() || null;
+      const judgingStart = input.judgingStartTime?.trim() || null;
+      const latestArrival = input.scheduleData.latestArrivalTime?.trim() || null;
+
+      if (showOpen && judgingStart && judgingStart <= showOpen) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Judging start (${judgingStart}) must be after the show opens (${showOpen}).`,
+        });
+      }
+      if (latestArrival && showOpen && latestArrival < showOpen) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Latest arrival (${latestArrival}) can't be before the show opens (${showOpen}).`,
+        });
+      }
+      if (latestArrival && judgingStart && latestArrival > judgingStart) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Latest arrival (${latestArrival}) must be before judging starts (${judgingStart}).`,
+        });
+      }
+
       // Save show-level fields alongside scheduleData JSONB
       const showUpdates: Record<string, unknown> = { scheduleData: input.scheduleData };
       if (input.showOpenTime !== undefined) showUpdates.showOpenTime = input.showOpenTime || null;

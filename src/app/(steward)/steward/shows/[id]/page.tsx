@@ -412,8 +412,11 @@ function BestOfBreedSection({
         </div>
       ))}
 
-      {/* Show-level awards (BIS) */}
-      {allWinners.length > 1 && (
+      {/* Show-level awards (BIS). Gate on *breed count*, not winner count —
+          a single-breed show can have many class winners but BIS isn't
+          applicable; conversely even a 2-breed show with one class winner
+          each still has a meaningful BIS selection. */}
+      {classWinnersByBreed.size > 1 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 sm:p-4 space-y-3">
           <h3 className="text-xs sm:text-sm font-semibold uppercase tracking-wider text-amber-700">
             Show Awards
