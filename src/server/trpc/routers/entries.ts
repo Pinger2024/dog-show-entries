@@ -21,7 +21,11 @@ import {
   dogOwners,
   judgeAssignments,
 } from '@/server/db/schema';
-import { createPaymentIntent, getStripe } from '@/server/services/stripe';
+import {
+  createEntryPaymentIntent,
+  calculatePlatformFee,
+  getStripe,
+} from '@/server/services/stripe';
 
 export const entriesRouter = createTRPCRouter({
   create: protectedProcedure
@@ -556,7 +560,16 @@ export const entriesRouter = createTRPCRouter({
       const entry = await ctx.db.query.entries.findFirst({
         where: and(eq(entries.id, input.id), isNull(entries.deletedAt)),
         with: {
-          show: true,
+          show: {
+            with: {
+              organisation: {
+                columns: {
+                  stripeAccountId: true,
+                  stripeChargesEnabled: true,
+                },
+              },
+            },
+          },
           entryClasses: true,
           payments: true,
         },
@@ -653,18 +666,37 @@ export const entriesRouter = createTRPCRouter({
 
       // Handle fee difference
       if (feeDiff > 0) {
-        // Additional payment needed
-        const pi = await createPaymentIntent(feeDiff, {
-          entryId: input.id,
-          showId: entry.showId,
-          exhibitorId: ctx.session.user.id,
-          type: 'adjustment',
+        // Additional payment needed — same Connect + platform-fee model as a
+        // fresh checkout, but applied to the diff only.
+        if (!entry.show.organisation?.stripeAccountId || !entry.show.organisation.stripeChargesEnabled) {
+          throw new TRPCError({
+            code: 'PRECONDITION_FAILED',
+            message:
+              'This show is not currently accepting online payments. Please contact the show secretary.',
+          });
+        }
+
+        const platformFeePence = calculatePlatformFee(feeDiff);
+        const grossAmount = feeDiff + platformFeePence;
+
+        const pi = await createEntryPaymentIntent({
+          amount: grossAmount,
+          applicationFeeAmount: platformFeePence,
+          connectedAccountId: entry.show.organisation.stripeAccountId,
+          metadata: {
+            entryId: input.id,
+            showId: entry.showId,
+            exhibitorId: ctx.session.user.id,
+            type: 'adjustment',
+            platformFeePence: String(platformFeePence),
+            subtotalPence: String(feeDiff),
+          },
         });
 
         await ctx.db.insert(payments).values({
           entryId: input.id,
           stripePaymentId: pi.id,
-          amount: feeDiff,
+          amount: grossAmount,
           status: 'pending',
           type: 'adjustment',
         });

@@ -66,15 +66,23 @@ describe('payments.createIntent', () => {
       where: eq(payments.entryId, res.entryId),
     });
     expect(payment?.status).toBe('pending');
-    expect(payment?.amount).toBe(1200);
+    // payment.amount is now the GROSS the exhibitor is charged (subtotal +
+    // £1 + 1% platform fee) so the sum reconciles with Stripe's balance
+    // transactions. 1200 subtotal + (100 + round(1200 * 0.01)) = 1312.
+    expect(payment?.amount).toBe(1312);
+    expect(res.platformFeePence).toBe(112);
+    expect(res.grossAmount).toBe(1312);
 
-    expect(vi.mocked(stripeService.createPaymentIntent)).toHaveBeenCalledWith(
-      1200,
+    expect(vi.mocked(stripeService.createEntryPaymentIntent)).toHaveBeenCalledWith(
       expect.objectContaining({
-        showId: show.id,
-        dogId: dog.id,
-        exhibitorId: exhibitor.id,
-        entryId: res.entryId,
+        amount: 1312,
+        applicationFeeAmount: 112,
+        metadata: expect.objectContaining({
+          showId: show.id,
+          dogId: dog.id,
+          exhibitorId: exhibitor.id,
+          entryId: res.entryId,
+        }),
       }),
     );
   });

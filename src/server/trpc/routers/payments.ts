@@ -11,7 +11,10 @@ import {
   showClasses,
   payments,
 } from '@/server/db/schema';
-import { createPaymentIntent } from '@/server/services/stripe';
+import {
+  createEntryPaymentIntent,
+  calculatePlatformFee,
+} from '@/server/services/stripe';
 
 export const paymentsRouter = createTRPCRouter({
   createIntent: protectedProcedure
@@ -40,9 +43,18 @@ export const paymentsRouter = createTRPCRouter({
         });
       }
 
-      // Validate show is accepting entries
+      // Validate show is accepting entries. We also pull the host club's
+      // Connect account so we can route funds there.
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
+        with: {
+          organisation: {
+            columns: {
+              stripeAccountId: true,
+              stripeChargesEnabled: true,
+            },
+          },
+        },
       });
 
       if (!show) {
@@ -110,13 +122,30 @@ export const paymentsRouter = createTRPCRouter({
         }))
       );
 
-      // Create Stripe PaymentIntent
-      const paymentIntent = await createPaymentIntent(totalFee, {
-        showId: input.showId,
-        dogId: input.dogId,
-        exhibitorId: ctx.session.user.id,
-        classIds: input.classIds.join(','),
-        entryId: entry!.id,
+      if (!show.organisation?.stripeAccountId || !show.organisation.stripeChargesEnabled) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message:
+            'This show is not currently accepting online payments. Please try again later.',
+        });
+      }
+
+      const platformFeePence = calculatePlatformFee(totalFee);
+      const grossAmount = totalFee + platformFeePence;
+
+      const paymentIntent = await createEntryPaymentIntent({
+        amount: grossAmount,
+        applicationFeeAmount: platformFeePence,
+        connectedAccountId: show.organisation.stripeAccountId,
+        metadata: {
+          showId: input.showId,
+          dogId: input.dogId,
+          exhibitorId: ctx.session.user.id,
+          classIds: input.classIds.join(','),
+          entryId: entry!.id,
+          platformFeePence: String(platformFeePence),
+          subtotalPence: String(totalFee),
+        },
       });
 
       // Store payment intent ID on entry
@@ -125,11 +154,11 @@ export const paymentsRouter = createTRPCRouter({
         .set({ paymentIntentId: paymentIntent.id })
         .where(eq(entries.id, entry!.id));
 
-      // Create payment record
+      // Create payment record — gross amount so Stripe reconciliation works.
       await ctx.db.insert(payments).values({
         entryId: entry!.id,
         stripePaymentId: paymentIntent.id,
-        amount: totalFee,
+        amount: grossAmount,
         status: 'pending',
       });
 
@@ -137,6 +166,8 @@ export const paymentsRouter = createTRPCRouter({
         clientSecret: paymentIntent.client_secret!,
         entryId: entry!.id,
         amount: totalFee,
+        platformFeePence,
+        grossAmount,
       };
     }),
 });

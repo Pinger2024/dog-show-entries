@@ -21,7 +21,10 @@ import {
   users,
   achievements,
 } from '@/server/db/schema';
-import { createPaymentIntent } from '@/server/services/stripe';
+import {
+  createEntryPaymentIntent,
+  calculatePlatformFee,
+} from '@/server/services/stripe';
 
 const cartEntrySchema = z.object({
   entryType: z.enum(['standard', 'junior_handler']).default('standard'),
@@ -50,9 +53,19 @@ export const ordersRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // Validate show is accepting entries
+      // Validate show is accepting entries. We also need the host club's
+      // Stripe Connect account — entry payments flow through it.
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
+        with: {
+          organisation: {
+            columns: {
+              id: true,
+              stripeAccountId: true,
+              stripeChargesEnabled: true,
+            },
+          },
+        },
       });
 
       if (!show) {
@@ -446,6 +459,12 @@ export const ordersRouter = createTRPCRouter({
 
       totalAmount += sundryTotal;
 
+      // Platform handling fee (£1 + 1% of subtotal) — the exhibitor pays
+      // totalAmount + platformFee at Stripe. Fee is 0 for £0 orders so
+      // free entries bypass Stripe entirely.
+      const platformFeePence =
+        totalAmount === 0 ? 0 : calculatePlatformFee(totalAmount);
+
       // Create order
       const [order] = await ctx.db
         .insert(orders)
@@ -454,6 +473,7 @@ export const ordersRouter = createTRPCRouter({
           exhibitorId: ctx.session.user.id,
           status: 'pending_payment',
           totalAmount,
+          platformFeePence,
         })
         .returning();
 
@@ -579,12 +599,34 @@ export const ordersRouter = createTRPCRouter({
         };
       }
 
-      // Create Stripe PaymentIntent
-      const paymentIntent = await createPaymentIntent(totalAmount, {
-        orderId: order!.id,
-        showId: input.showId,
-        exhibitorId: ctx.session.user.id,
-        entryCount: String(input.entries.length),
+      // The show's club must have completed Stripe Connect onboarding
+      // before we can charge exhibitors — without a connected account the
+      // PaymentIntent can't route funds to the club, and without
+      // charges_enabled Stripe will reject the call.
+      if (!show.organisation?.stripeAccountId || !show.organisation.stripeChargesEnabled) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message:
+            'This show is not currently accepting online payments. Please try again later.',
+        });
+      }
+
+      // Gross = what the exhibitor is charged. application_fee_amount is
+      // what Remi keeps; the remainder lands in the club's Stripe balance.
+      const grossAmount = totalAmount + platformFeePence;
+
+      const paymentIntent = await createEntryPaymentIntent({
+        amount: grossAmount,
+        applicationFeeAmount: platformFeePence,
+        connectedAccountId: show.organisation.stripeAccountId,
+        metadata: {
+          orderId: order!.id,
+          showId: input.showId,
+          exhibitorId: ctx.session.user.id,
+          entryCount: String(input.entries.length),
+          platformFeePence: String(platformFeePence),
+          subtotalPence: String(totalAmount),
+        },
       });
 
       // Update order with Stripe PI ID
@@ -593,11 +635,13 @@ export const ordersRouter = createTRPCRouter({
         .set({ stripePaymentIntentId: paymentIntent.id })
         .where(eq(orders.id, order!.id));
 
-      // Create payment record
+      // Create payment record. amount here reflects what the exhibitor
+      // is being charged (gross) so the sum reconciles with Stripe's
+      // own balance transactions.
       await ctx.db.insert(payments).values({
         orderId: order!.id,
         stripePaymentId: paymentIntent.id,
-        amount: totalAmount,
+        amount: grossAmount,
         status: 'pending',
         type: 'initial',
       });
@@ -606,6 +650,8 @@ export const ordersRouter = createTRPCRouter({
         clientSecret: paymentIntent.client_secret!,
         orderId: order!.id,
         totalAmount,
+        platformFeePence,
+        grossAmount,
         entryCount: createdEntries.length,
         freeEntry: false,
       };

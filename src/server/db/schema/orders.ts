@@ -25,7 +25,16 @@ export const orders = pgTable(
       .notNull()
       .references(() => users.id),
     status: orderStatusEnum('status').notNull().default('draft'),
+    // Amount the CLUB receives — entry + sundry subtotal, in pence. The
+    // exhibitor is charged totalAmount + platformFeePence at Stripe; the
+    // fee is routed to Remi via application_fee_amount and the rest goes
+    // to the club's connected Standard account.
     totalAmount: integer('total_amount').notNull().default(0),
+    // Remi's handling fee for this order: £1 flat + 1% of totalAmount.
+    // Persisted for receipts + reconciliation — NOT derived on the fly
+    // because the formula could change and historical orders need their
+    // original fee preserved.
+    platformFeePence: integer('platform_fee_pence').notNull().default(0),
     stripePaymentIntentId: text('stripe_payment_intent_id'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
