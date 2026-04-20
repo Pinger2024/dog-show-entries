@@ -23,19 +23,23 @@ const SHOW_TYPE_LABELS: Record<string, string> = {
   championship: 'Championship Show',
 };
 
+// Row height is tuned so a judge can write a placement or critique comfortably
+// by hand — 28pt ≈ 10mm, enough for a single line of cursive. The A4 body area
+// after header/summary fits ~18 rows per page before overflow.
+const ROW_HEIGHT = 28;
+
 const s = StyleSheet.create({
   page: {
     fontFamily: 'Times',
-    fontSize: 9,
+    fontSize: 10,
     padding: '28 32 40 32',
-    lineHeight: 1.3,
   },
   // ── Class header ──
   classHeader: {
     borderBottomWidth: 2,
     borderBottomColor: '#000',
     paddingBottom: 6,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   showName: {
     fontSize: 8,
@@ -45,12 +49,12 @@ const s = StyleSheet.create({
     marginBottom: 2,
   },
   classTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: 'bold',
     textTransform: 'uppercase',
   },
   classSubtitle: {
-    fontSize: 10,
+    fontSize: 11,
     fontStyle: 'italic',
     color: '#333',
     marginTop: 2,
@@ -60,71 +64,112 @@ const s = StyleSheet.create({
     marginTop: 3,
     color: '#333',
   },
-  // ── Exhibit table ──
-  tableHeader: {
-    flexDirection: 'row',
-    borderBottomWidth: 1.5,
-    borderBottomColor: '#000',
-    paddingBottom: 3,
-    marginBottom: 2,
+  entryCount: {
+    fontSize: 8,
+    color: '#666',
+    marginBottom: 6,
+    fontStyle: 'italic',
   },
-  tableHeaderCell: {
+  // ── 4-column grid ──
+  gridHeader: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#000',
+    paddingVertical: 3,
+    backgroundColor: '#f0f0f0',
+  },
+  gridHeaderCell: {
     fontSize: 8,
     fontWeight: 'bold',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    textAlign: 'center',
+    color: '#333',
   },
-  tableRow: {
+  gridRow: {
     flexDirection: 'row',
+    minHeight: ROW_HEIGHT,
     borderBottomWidth: 0.5,
-    borderBottomColor: '#ccc',
-    minHeight: 22,
+    borderBottomColor: '#bbb',
+  },
+  colNumber: {
+    width: '14%',
+    borderRightWidth: 1,
+    borderRightColor: '#000',
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  tableRowAlt: {
-    flexDirection: 'row',
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#ccc',
-    minHeight: 22,
-    alignItems: 'center',
-    backgroundColor: '#f9f9f9',
+  colWrite: {
+    width: '28.66%',
+    borderRightWidth: 0.5,
+    borderRightColor: '#ddd',
   },
-  colExhibit: { width: '10%', paddingLeft: 4 },
-  colDogName: { width: '30%' },
-  colPlacement: { width: '12%', textAlign: 'center' },
-  colAbsent: { width: '8%', textAlign: 'center' },
-  colNotes: { width: '40%', paddingRight: 4 },
-  cellText: {
-    fontSize: 9,
+  // Last writing column has no right border (page edge).
+  colWriteLast: {
+    width: '28.66%',
   },
-  cellTextBold: {
-    fontSize: 10,
+  numberText: {
+    fontSize: 13,
     fontWeight: 'bold',
   },
-  // ── Summary area ──
+  // ── Results summary ──
   summarySection: {
-    marginTop: 16,
-    borderTopWidth: 1,
+    marginTop: 14,
+    borderTopWidth: 1.5,
     borderTopColor: '#000',
     paddingTop: 10,
   },
-  summaryRow: {
-    flexDirection: 'row',
-    marginBottom: 6,
-  },
-  summaryLabel: {
+  summaryHeading: {
     fontSize: 9,
     fontWeight: 'bold',
-    width: 120,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 8,
+    color: '#333',
   },
-  summaryLine: {
+  placementsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 8,
+  },
+  placementCell: {
+    width: '33.33%',
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    paddingRight: 8,
+    marginBottom: 10,
+  },
+  placementLabel: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    width: 38,
+  },
+  placementLine: {
     flex: 1,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#999',
-    marginBottom: 2,
+    borderBottomWidth: 1,
+    borderBottomColor: '#000',
+    height: 18,
   },
+  absentRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginTop: 2,
+  },
+  absentLabel: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    width: 60,
+  },
+  absentLine: {
+    flex: 1,
+    borderBottomWidth: 1,
+    borderBottomColor: '#000',
+    height: 18,
+  },
+  // ── Signature ──
   signatureSection: {
-    marginTop: 24,
+    marginTop: 18,
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
@@ -135,6 +180,9 @@ const s = StyleSheet.create({
     fontSize: 8,
     fontWeight: 'bold',
     marginBottom: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    color: '#444',
   },
   signatureLine: {
     borderBottomWidth: 1,
@@ -151,14 +199,9 @@ const s = StyleSheet.create({
     color: '#aaa',
     textAlign: 'center',
   },
-  // ── Entry count ──
-  entryCount: {
-    fontSize: 8,
-    color: '#666',
-    marginBottom: 8,
-    fontStyle: 'italic',
-  },
 });
+
+const PLACEMENTS = ['1st', '2nd', '3rd', '4th', 'VHC'] as const;
 
 export function JudgesBook({
   show,
@@ -190,8 +233,8 @@ export function JudgesBook({
 
         return (
           <Page key={classIdx} size="A4" style={s.page}>
-            {/* Class header */}
-            <View style={s.classHeader}>
+            {/* Class header — repeats at the top of continuation pages */}
+            <View style={s.classHeader} fixed>
               <Text style={s.showName}>
                 {show.organisation ? `${show.organisation} — ` : ''}
                 {show.name} — {showDate}
@@ -215,61 +258,53 @@ export function JudgesBook({
               {cls.exhibits.length} exhibit{cls.exhibits.length !== 1 ? 's' : ''} entered
             </Text>
 
-            {/* Exhibit table */}
-            <View style={s.tableHeader}>
-              <View style={s.colExhibit}>
-                <Text style={s.tableHeaderCell}>No.</Text>
+            {/* 4-column grid: ring numbers + 3 writing columns.
+                Grid header repeats on continuation pages so the judge always
+                sees the column meaning. */}
+            <View style={s.gridHeader} fixed>
+              <View style={s.colNumber}>
+                <Text style={s.gridHeaderCell}>Ring No.</Text>
               </View>
-              <View style={s.colDogName}>
-                <Text style={s.tableHeaderCell}>Exhibit</Text>
+              <View style={s.colWrite}>
+                <Text style={s.gridHeaderCell}> </Text>
               </View>
-              <View style={s.colPlacement}>
-                <Text style={s.tableHeaderCell}>Place</Text>
+              <View style={s.colWrite}>
+                <Text style={s.gridHeaderCell}> </Text>
               </View>
-              <View style={s.colAbsent}>
-                <Text style={s.tableHeaderCell}>Abs</Text>
-              </View>
-              <View style={s.colNotes}>
-                <Text style={s.tableHeaderCell}>Notes</Text>
+              <View style={s.colWriteLast}>
+                <Text style={s.gridHeaderCell}> </Text>
               </View>
             </View>
 
             {cls.exhibits.map((exhibit, i) => (
-              <View
-                key={i}
-                style={i % 2 === 0 ? s.tableRow : s.tableRowAlt}
-              >
-                <View style={s.colExhibit}>
-                  <Text style={s.cellTextBold}>
+              <View key={i} style={s.gridRow} wrap={false}>
+                <View style={s.colNumber}>
+                  <Text style={s.numberText}>
                     {exhibit.catalogueNumber ?? '—'}
                   </Text>
                 </View>
-                <View style={s.colDogName}>
-                  <Text style={s.cellText}>{exhibit.dogName}</Text>
-                </View>
-                <View style={s.colPlacement}>
-                  <Text style={s.cellText}> </Text>
-                </View>
-                <View style={s.colAbsent}>
-                  <Text style={s.cellText}>{exhibit.absent ? 'ABS' : ' '}</Text>
-                </View>
-                <View style={s.colNotes}>
-                  <Text style={s.cellText}> </Text>
-                </View>
+                <View style={s.colWrite} />
+                <View style={s.colWrite} />
+                <View style={s.colWriteLast} />
               </View>
             ))}
 
-            {/* Results summary */}
+            {/* Results summary — appears once, after the last row of the grid */}
             <View style={s.summarySection}>
-              {['1st', '2nd', '3rd', 'Reserve', 'VHC'].map((place) => (
-                <View key={place} style={s.summaryRow}>
-                  <Text style={s.summaryLabel}>{place}:</Text>
-                  <View style={s.summaryLine} />
-                </View>
-              ))}
-              <View style={s.summaryRow}>
-                <Text style={s.summaryLabel}>Best of Sex:</Text>
-                <View style={s.summaryLine} />
+              <Text style={s.summaryHeading}>Results</Text>
+
+              <View style={s.placementsGrid}>
+                {PLACEMENTS.map((place) => (
+                  <View key={place} style={s.placementCell}>
+                    <Text style={s.placementLabel}>{place}</Text>
+                    <View style={s.placementLine} />
+                  </View>
+                ))}
+              </View>
+
+              <View style={s.absentRow}>
+                <Text style={s.absentLabel}>Absent</Text>
+                <View style={s.absentLine} />
               </View>
             </View>
 
