@@ -68,6 +68,7 @@ export { payments, paymentsRelations } from './payments';
 export { dogOwners, dogOwnersRelations } from './dog-owners';
 export { dogTitles, dogTitlesRelations } from './dog-titles';
 export { orders, ordersRelations } from './orders';
+export { payouts, payoutsRelations } from './payouts';
 export { entryAuditLog, entryAuditLogRelations } from './entry-audit-log';
 export {
   juniorHandlerDetails,

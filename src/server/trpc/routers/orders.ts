@@ -22,7 +22,7 @@ import {
   achievements,
 } from '@/server/db/schema';
 import {
-  createEntryPaymentIntent,
+  createPaymentIntent,
   calculatePlatformFee,
 } from '@/server/services/stripe';
 
@@ -53,19 +53,12 @@ export const ordersRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // Validate show is accepting entries. We also need the host club's
-      // Stripe Connect account — entry payments flow through it.
+      // Validate show is accepting entries. Remi is merchant of record —
+      // exhibitor entry fees land in Remi's Stripe balance and are paid
+      // out to the club by BACS after the show. No need to fetch the
+      // host org's payment config here.
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
-        with: {
-          organisation: {
-            columns: {
-              id: true,
-              stripeAccountId: true,
-              stripeChargesEnabled: true,
-            },
-          },
-        },
       });
 
       if (!show) {
@@ -599,34 +592,20 @@ export const ordersRouter = createTRPCRouter({
         };
       }
 
-      // The show's club must have completed Stripe Connect onboarding
-      // before we can charge exhibitors — without a connected account the
-      // PaymentIntent can't route funds to the club, and without
-      // charges_enabled Stripe will reject the call.
-      if (!show.organisation?.stripeAccountId || !show.organisation.stripeChargesEnabled) {
-        throw new TRPCError({
-          code: 'PRECONDITION_FAILED',
-          message:
-            'This show is not currently accepting online payments. Please try again later.',
-        });
-      }
-
-      // Gross = what the exhibitor is charged. application_fee_amount is
-      // what Remi keeps; the remainder lands in the club's Stripe balance.
+      // Gross = what the exhibitor is charged (subtotal + £1+1% handling
+      // fee). Money lands in Remi's platform Stripe account; the
+      // subtotal is forwarded to the club by BACS after entries close.
+      // The platformFeePence column on orders + the metadata below keep
+      // the two components separable for reconciliation and payouts.
       const grossAmount = totalAmount + platformFeePence;
 
-      const paymentIntent = await createEntryPaymentIntent({
-        amount: grossAmount,
-        applicationFeeAmount: platformFeePence,
-        connectedAccountId: show.organisation.stripeAccountId,
-        metadata: {
-          orderId: order!.id,
-          showId: input.showId,
-          exhibitorId: ctx.session.user.id,
-          entryCount: String(input.entries.length),
-          platformFeePence: String(platformFeePence),
-          subtotalPence: String(totalAmount),
-        },
+      const paymentIntent = await createPaymentIntent(grossAmount, {
+        orderId: order!.id,
+        showId: input.showId,
+        exhibitorId: ctx.session.user.id,
+        entryCount: String(input.entries.length),
+        platformFeePence: String(platformFeePence),
+        subtotalPence: String(totalAmount),
       });
 
       // Update order with Stripe PI ID

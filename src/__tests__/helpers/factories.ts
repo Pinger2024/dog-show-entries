@@ -58,18 +58,17 @@ export async function makeUser(opts: Partial<typeof users.$inferInsert> = {}) {
 
 export async function makeOrg(opts: Partial<typeof organisations.$inferInsert> = {}) {
   const n = seq();
-  // Factories default the org to "Stripe Connect active" so existing
-  // payment journey tests don't all need to opt into Connect. Tests that
-  // specifically exercise the not-connected path should override these.
+  // Factories default the org to payment-ready — payout bank details set —
+  // so existing payment journey tests don't all need to opt in. Tests that
+  // specifically exercise the no-bank-details path should pass `null` for
+  // these fields explicitly.
   const [row] = await testDb
     .insert(organisations)
     .values({
       name: opts.name ?? `Test Club ${n}`,
-      stripeAccountId: opts.stripeAccountId ?? `acct_test_${shortId(8)}`,
-      stripeAccountStatus: opts.stripeAccountStatus ?? 'active',
-      stripeChargesEnabled: opts.stripeChargesEnabled ?? true,
-      stripeDetailsSubmitted: opts.stripeDetailsSubmitted ?? true,
-      stripePayoutsEnabled: opts.stripePayoutsEnabled ?? true,
+      payoutAccountName: opts.payoutAccountName ?? `Test Club ${n}`,
+      payoutSortCode: opts.payoutSortCode ?? '10-88-00',
+      payoutAccountNumber: opts.payoutAccountNumber ?? '00012345',
       ...opts,
     })
     .returning();

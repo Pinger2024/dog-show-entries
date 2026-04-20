@@ -12,7 +12,7 @@ import {
   payments,
 } from '@/server/db/schema';
 import {
-  createEntryPaymentIntent,
+  createPaymentIntent,
   calculatePlatformFee,
 } from '@/server/services/stripe';
 
@@ -43,18 +43,9 @@ export const paymentsRouter = createTRPCRouter({
         });
       }
 
-      // Validate show is accepting entries. We also pull the host club's
-      // Connect account so we can route funds there.
+      // Validate show is accepting entries.
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
-        with: {
-          organisation: {
-            columns: {
-              stripeAccountId: true,
-              stripeChargesEnabled: true,
-            },
-          },
-        },
       });
 
       if (!show) {
@@ -122,30 +113,17 @@ export const paymentsRouter = createTRPCRouter({
         }))
       );
 
-      if (!show.organisation?.stripeAccountId || !show.organisation.stripeChargesEnabled) {
-        throw new TRPCError({
-          code: 'PRECONDITION_FAILED',
-          message:
-            'This show is not currently accepting online payments. Please try again later.',
-        });
-      }
-
       const platformFeePence = calculatePlatformFee(totalFee);
       const grossAmount = totalFee + platformFeePence;
 
-      const paymentIntent = await createEntryPaymentIntent({
-        amount: grossAmount,
-        applicationFeeAmount: platformFeePence,
-        connectedAccountId: show.organisation.stripeAccountId,
-        metadata: {
-          showId: input.showId,
-          dogId: input.dogId,
-          exhibitorId: ctx.session.user.id,
-          classIds: input.classIds.join(','),
-          entryId: entry!.id,
-          platformFeePence: String(platformFeePence),
-          subtotalPence: String(totalFee),
-        },
+      const paymentIntent = await createPaymentIntent(grossAmount, {
+        showId: input.showId,
+        dogId: input.dogId,
+        exhibitorId: ctx.session.user.id,
+        classIds: input.classIds.join(','),
+        entryId: entry!.id,
+        platformFeePence: String(platformFeePence),
+        subtotalPence: String(totalFee),
       });
 
       // Store payment intent ID on entry

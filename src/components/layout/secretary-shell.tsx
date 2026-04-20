@@ -13,7 +13,6 @@ import {
   ChevronRight,
   ChevronLeft,
   Building2,
-  Banknote,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { isUuid } from '@/lib/slugify';
@@ -38,7 +37,6 @@ const sidebarNavItems = [
   { href: '/secretary/shows', label: 'My Shows', icon: CalendarDays },
   { href: '/secretary/club', label: 'My Club', icon: Building2 },
   { href: '/secretary/shows/new', label: 'Create Show', icon: PlusCircle },
-  { href: '/secretary/payments', label: 'Payments', icon: Banknote },
   { href: '/secretary/billing', label: 'Billing', icon: CreditCard },
   { href: '/secretary/settings', label: 'Settings', icon: Settings },
 ];
@@ -47,11 +45,11 @@ const mobileNavItems = [
   { href: '/secretary', label: 'Home', icon: LayoutDashboard },
   { href: '/secretary/shows', label: 'Shows', icon: CalendarDays },
   { href: '/secretary/club', label: 'Club', icon: Building2 },
-  { href: '/secretary/payments', label: 'Payments', icon: Banknote },
+  { href: '/secretary/billing', label: 'Billing', icon: CreditCard },
   { href: '/secretary/settings', label: 'Settings', icon: Settings },
 ];
 
-const rootPaths = new Set(['/secretary', '/secretary/shows', '/secretary/club', '/secretary/shows/new', '/secretary/payments', '/secretary/billing', '/secretary/settings']);
+const rootPaths = new Set(['/secretary', '/secretary/shows', '/secretary/club', '/secretary/shows/new', '/secretary/billing', '/secretary/settings']);
 
 function getParentPath(pathname: string): string | null {
   if (rootPaths.has(pathname)) return null;

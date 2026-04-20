@@ -55,6 +55,7 @@ import {
   Shield,
 } from 'lucide-react';
 import { PostcodeLookup } from '@/components/postcode-lookup';
+import { PayoutDetailsCard } from './_components/payout-details-card';
 
 const POSITION_OPTIONS = [
   'President',
@@ -327,6 +328,9 @@ export default function MyClubPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Section: Payout bank details — where entry money gets sent after each show */}
+      {org?.id && <PayoutDetailsCard organisationId={org.id} />}
 
       {/* Section 2: People & Officials */}
       <Card>

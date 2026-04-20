@@ -466,6 +466,74 @@ export const secretaryRouter = createTRPCRouter({
       return updated!;
     }),
 
+  /**
+   * Get the club's current payout bank details. Returned as the full
+   * sort code + account number — the secretary is a member of the club
+   * and is authorised to see these (auth check via verifyOrgAccess).
+   * If you ever expose this outside the secretary context, mask the
+   * middle of the account number.
+   */
+  getPayoutDetails: secretaryProcedure
+    .input(z.object({ organisationId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
+      const org = await ctx.db.query.organisations.findFirst({
+        where: eq(organisations.id, input.organisationId),
+        columns: {
+          payoutAccountName: true,
+          payoutSortCode: true,
+          payoutAccountNumber: true,
+        },
+      });
+      return {
+        accountName: org?.payoutAccountName ?? null,
+        sortCode: org?.payoutSortCode ?? null,
+        accountNumber: org?.payoutAccountNumber ?? null,
+      };
+    }),
+
+  /**
+   * Save the club's payout bank details. We validate the shape (UK sort
+   * code 6 digits, account number 8 digits) but don't verify the account
+   * exists — that gets confirmed the first time we send a payment and
+   * it either lands or bounces.
+   *
+   * All three fields must be provided together. Partial updates don't
+   * make sense for bank details — you either have a full set or you
+   * don't.
+   */
+  updatePayoutDetails: secretaryProcedure
+    .input(
+      z.object({
+        organisationId: z.string().uuid(),
+        accountName: z.string().min(1).max(140),
+        sortCode: z
+          .string()
+          .regex(/^\d{2}-?\d{2}-?\d{2}$/, 'Sort code must be 6 digits (e.g. 10-88-00)'),
+        accountNumber: z
+          .string()
+          .regex(/^\d{8}$/, 'Account number must be exactly 8 digits'),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
+      // Normalise the sort code to hyphenated form so storage matches
+      // what we render back.
+      const digits = input.sortCode.replace(/-/g, '');
+      const normalisedSortCode = `${digits.slice(0, 2)}-${digits.slice(2, 4)}-${digits.slice(4, 6)}`;
+
+      await ctx.db
+        .update(organisations)
+        .set({
+          payoutAccountName: input.accountName,
+          payoutSortCode: normalisedSortCode,
+          payoutAccountNumber: input.accountNumber,
+        })
+        .where(eq(organisations.id, input.organisationId));
+
+      return { success: true };
+    }),
+
   // ── Catalogue number assignment ────────────────────────────
 
   assignCatalogueNumbers: secretaryProcedure
@@ -2884,8 +2952,9 @@ export const secretaryRouter = createTRPCRouter({
         with: {
           organisation: {
             columns: {
-              stripeAccountStatus: true,
-              stripeChargesEnabled: true,
+              payoutSortCode: true,
+              payoutAccountNumber: true,
+              payoutAccountName: true,
             },
           },
         },
@@ -2947,11 +3016,14 @@ export const secretaryRouter = createTRPCRouter({
         judges_assigned: allJudgesCovered,
         stewards_assigned: Number(stewardCount?.count) > 0,
         rings_created: Number(ringCount?.count) > 0,
-        // Club's Stripe Connect account must be active before entries open —
-        // without charges_enabled, every exhibitor PaymentIntent errors out.
-        stripe_connected:
-          show.organisation?.stripeAccountStatus === 'active' &&
-          (show.organisation?.stripeChargesEnabled ?? false),
+        // Club needs payout bank details saved before we can open entries —
+        // entry fees land in Remi's balance and we pay out by BACS after
+        // the show.
+        payout_details_set: !!(
+          show.organisation?.payoutSortCode &&
+          show.organisation?.payoutAccountNumber &&
+          show.organisation?.payoutAccountName
+        ),
       };
 
       // Check if all assigned judges have been sent offer letters

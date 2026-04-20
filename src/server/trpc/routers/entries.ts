@@ -22,7 +22,7 @@ import {
   judgeAssignments,
 } from '@/server/db/schema';
 import {
-  createEntryPaymentIntent,
+  createPaymentIntent,
   calculatePlatformFee,
   getStripe,
 } from '@/server/services/stripe';
@@ -560,16 +560,7 @@ export const entriesRouter = createTRPCRouter({
       const entry = await ctx.db.query.entries.findFirst({
         where: and(eq(entries.id, input.id), isNull(entries.deletedAt)),
         with: {
-          show: {
-            with: {
-              organisation: {
-                columns: {
-                  stripeAccountId: true,
-                  stripeChargesEnabled: true,
-                },
-              },
-            },
-          },
+          show: true,
           entryClasses: true,
           payments: true,
         },
@@ -666,31 +657,19 @@ export const entriesRouter = createTRPCRouter({
 
       // Handle fee difference
       if (feeDiff > 0) {
-        // Additional payment needed — same Connect + platform-fee model as a
-        // fresh checkout, but applied to the diff only.
-        if (!entry.show.organisation?.stripeAccountId || !entry.show.organisation.stripeChargesEnabled) {
-          throw new TRPCError({
-            code: 'PRECONDITION_FAILED',
-            message:
-              'This show is not currently accepting online payments. Please contact the show secretary.',
-          });
-        }
-
+        // Additional payment needed. Platform-mode charge — money lands
+        // in Remi's balance, we include the diff in the next payout to
+        // the club.
         const platformFeePence = calculatePlatformFee(feeDiff);
         const grossAmount = feeDiff + platformFeePence;
 
-        const pi = await createEntryPaymentIntent({
-          amount: grossAmount,
-          applicationFeeAmount: platformFeePence,
-          connectedAccountId: entry.show.organisation.stripeAccountId,
-          metadata: {
-            entryId: input.id,
-            showId: entry.showId,
-            exhibitorId: ctx.session.user.id,
-            type: 'adjustment',
-            platformFeePence: String(platformFeePence),
-            subtotalPence: String(feeDiff),
-          },
+        const pi = await createPaymentIntent(grossAmount, {
+          entryId: input.id,
+          showId: entry.showId,
+          exhibitorId: ctx.session.user.id,
+          type: 'adjustment',
+          platformFeePence: String(platformFeePence),
+          subtotalPence: String(feeDiff),
         });
 
         await ctx.db.insert(payments).values({

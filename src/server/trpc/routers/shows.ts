@@ -741,11 +741,10 @@ export const showsRouter = createTRPCRouter({
 
       await verifyShowAccess(ctx.db, ctx.session.user.id, id, { callerIsAdmin: ctx.callerIsAdmin });
 
-      // Gate: can't open entries unless the host club has Stripe Connect
-      // active. Without charges_enabled the first exhibitor to click "Pay"
-      // gets a hard Stripe error — catching it here means a much clearer
-      // message to the secretary ("go to Payments and connect Stripe")
-      // than to the exhibitor ("something went wrong").
+      // Gate: can't open entries unless the host club has saved their
+      // payout bank details. Remi is merchant of record, so clubs don't
+      // need a Stripe account — but we do need their sort code + account
+      // number so we can BACS them the entry fees after the show.
       if (input.status === 'entries_open') {
         const row = await ctx.db.query.shows.findFirst({
           where: eq(shows.id, id),
@@ -753,17 +752,22 @@ export const showsRouter = createTRPCRouter({
           with: {
             organisation: {
               columns: {
-                stripeChargesEnabled: true,
-                stripeAccountStatus: true,
+                payoutSortCode: true,
+                payoutAccountNumber: true,
+                payoutAccountName: true,
               },
             },
           },
         });
-        if (!row?.organisation?.stripeChargesEnabled) {
+        if (
+          !row?.organisation?.payoutSortCode ||
+          !row.organisation.payoutAccountNumber ||
+          !row.organisation.payoutAccountName
+        ) {
           throw new TRPCError({
             code: 'PRECONDITION_FAILED',
             message:
-              'Connect your club to Stripe before opening entries — otherwise exhibitors can\'t pay. Visit the Payments page to finish setup.',
+              "Add your club's bank details before opening entries — we need them to send the entry fees on to you after the show. Visit the Club page to add them.",
           });
         }
       }
