@@ -38,7 +38,9 @@ Amanda sends feedback, bug reports, and feature requests by replying to Remi ema
 | `FEEDBACK_EMAIL` | Reply-To address (`feedback@inbound.remishowmanager.co.uk`) |
 | `EMAIL_FROM` | Sending address (`Remi <noreply@remishowmanager.co.uk>`) |
 | `FEEDBACK_NOTIFY_EMAIL` | Who gets notified of new feedback (`michael@prometheus-it.com`) |
-| `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret |
+| `STRIPE_WEBHOOK_SECRET` | Stripe platform webhook signing secret (payment events) |
+| `STRIPE_CONNECT_WEBHOOK_SECRET` | Stripe Connect webhook signing secret (`account.updated` etc.) |
+| `NEXT_PUBLIC_APP_URL` | Absolute base URL used for Stripe redirect return/refresh links |
 
 ## Tech Stack & Patterns
 
@@ -88,6 +90,25 @@ src/
     layout/          — DashboardShell, SecretaryShell
     ui/              — shadcn components
 ```
+
+## Payments Architecture
+
+Two independent Stripe setups operate side by side — **do not mix them**:
+
+**Stripe Connect** (exhibitor → club entry payments)
+- Clubs are Standard connected accounts — `organisations.stripeAccountId`, etc.
+- Every entry/order payment is a destination charge via `createEntryPaymentIntent` in `src/server/services/stripe.ts`: `application_fee_amount` = Remi's £1 + 1% handling fee (`calculatePlatformFee`), `on_behalf_of` + `transfer_data.destination` = the club's connected account id.
+- Clubs do KYC on Stripe's own hosted onboarding (`accountLinks.create`, type `account_onboarding`). UX at `/secretary/payments`.
+- `account.updated` webhook at `/api/webhooks/stripe/connect` mirrors Stripe's flags into the `organisations` row. `deriveAccountStatus(account)` is the single source of truth for flags → `stripe_account_status` enum.
+- **Gate:** `shows.update` refuses to transition to `entries_open` unless the host org has `stripeChargesEnabled=true`.
+- Refunds/chargebacks land on the **club's** balance (not Remi's) because we set `on_behalf_of`.
+
+**Stripe Billing** (club → Remi SaaS subscription)
+- Unchanged. `organisations.stripeCustomerId` / `stripeSubscriptionId`, plain Checkout session, not Connect.
+- Lives at `/secretary/billing`.
+
+**Platform-mode PaymentIntents** (still used by `createPaymentIntent`)
+- Print orders only (`/api/webhooks/stripe` handles `payment_intent.succeeded` for these). Print orders are Remi-as-buyer, not club-as-merchant.
 
 ## User Roles
 
