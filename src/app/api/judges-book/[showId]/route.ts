@@ -28,6 +28,10 @@ export type JudgesBookShowInfo = {
   showType: string;
   date: string;
   organisation: string | null;
+  /** Show-level best awards (BOB, CCs, Best Puppy in Show, etc.) that get
+   *  their own sign-off page at the back of the book. Combination of
+   *  defaults for the show type + whatever secretary added to schedule. */
+  bestAwards: string[];
 };
 
 export async function GET(
@@ -117,11 +121,58 @@ export async function GET(
     };
   });
 
+  // Default Best Awards set per show type. Championship shows get CCs +
+  // Reserve CCs + Best Puppies. Smaller show types get a tighter list.
+  // Whatever the secretary has added to scheduleData.bestAwards is
+  // unioned on top (order: defaults first, then custom additions).
+  const DEFAULT_BEST_AWARDS: Record<string, string[]> = {
+    championship: [
+      'Best of Breed',
+      'Dog Challenge Certificate',
+      'Reserve Dog Challenge Certificate',
+      'Bitch Challenge Certificate',
+      'Reserve Bitch Challenge Certificate',
+      'Best Puppy Dog',
+      'Best Puppy Bitch',
+      'Best Puppy in Show',
+    ],
+    premier_open: [
+      'Best of Breed',
+      'Best Dog',
+      'Best Bitch',
+      'Best Puppy Dog',
+      'Best Puppy Bitch',
+      'Best Puppy in Show',
+    ],
+    open: [
+      'Best of Breed',
+      'Best Dog',
+      'Best Bitch',
+      'Best Puppy in Show',
+      'Best Veteran in Show',
+    ],
+    limited: ['Best of Breed', 'Best Dog', 'Best Bitch', 'Best Puppy in Show'],
+    primary: ['Best in Show'],
+    companion: ['Best in Show'],
+  };
+
+  const scheduleData = (show.scheduleData ?? {}) as { bestAwards?: string[] };
+  const customAwards = Array.isArray(scheduleData.bestAwards) ? scheduleData.bestAwards : [];
+  const defaults = DEFAULT_BEST_AWARDS[show.showType] ?? ['Best in Show'];
+  // Union with order preserved: defaults first, then any custom awards that
+  // aren't already in the default list (case-insensitive dedupe).
+  const defaultsLower = new Set(defaults.map((a) => a.toLowerCase().trim()));
+  const bestAwards = [
+    ...defaults,
+    ...customAwards.filter((a) => !defaultsLower.has(a.toLowerCase().trim())),
+  ];
+
   const showInfo: JudgesBookShowInfo = {
     name: show.name,
     showType: show.showType,
     date: show.startDate,
     organisation: show.organisation?.name ?? null,
+    bestAwards,
   };
 
   try {

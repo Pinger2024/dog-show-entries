@@ -23,185 +23,305 @@ const SHOW_TYPE_LABELS: Record<string, string> = {
   championship: 'Championship Show',
 };
 
-// Row height is tuned so a judge can write a placement or critique comfortably
-// by hand — 28pt ≈ 10mm, enough for a single line of cursive. The A4 body area
-// after header/summary fits ~18 rows per page before overflow.
-const ROW_HEIGHT = 28;
+const PLACEMENTS = ['1st', '2nd', '3rd', '4th', 'VHC'] as const;
 
 const s = StyleSheet.create({
   page: {
     fontFamily: 'Times',
     fontSize: 10,
-    padding: '28 32 40 32',
+    padding: '28 28 36 28',
   },
-  // ── Class header ──
-  classHeader: {
-    borderBottomWidth: 2,
+  // ── Page header (club/show/judge/date) ──
+  pageHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    borderBottomWidth: 1.5,
     borderBottomColor: '#000',
     paddingBottom: 6,
-    marginBottom: 8,
+    marginBottom: 10,
   },
-  showName: {
-    fontSize: 8,
+  pageHeaderLeft: {
+    flex: 1,
+  },
+  clubName: {
+    fontSize: 9,
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 1.2,
     color: '#444',
     marginBottom: 2,
   },
-  classTitle: {
-    fontSize: 15,
+  showName: {
+    fontSize: 13,
     fontWeight: 'bold',
-    textTransform: 'uppercase',
-  },
-  classSubtitle: {
-    fontSize: 11,
-    fontStyle: 'italic',
-    color: '#333',
-    marginTop: 2,
   },
   judgeLine: {
-    fontSize: 9,
-    marginTop: 3,
-    color: '#333',
+    fontSize: 10,
+    marginTop: 2,
   },
-  entryCount: {
-    fontSize: 8,
-    color: '#666',
-    marginBottom: 6,
-    fontStyle: 'italic',
+  dateBlock: {
+    fontSize: 10,
+    textAlign: 'right',
   },
-  // ── 4-column grid ──
-  gridHeader: {
+  // ── Body layout — reference column + 3 triplicate columns ──
+  body: {
     flexDirection: 'row',
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
+    flex: 1,
+    borderWidth: 1,
     borderColor: '#000',
-    paddingVertical: 3,
-    backgroundColor: '#f0f0f0',
   },
-  gridHeaderCell: {
-    fontSize: 8,
+  // Left reference column showing every ring number entered in this class.
+  // Narrow so the placement columns get most of the width.
+  refColumn: {
+    width: '12%',
+    borderRightWidth: 1.5,
+    borderRightColor: '#000',
+    padding: 4,
+  },
+  refHeader: {
+    fontSize: 7,
     fontWeight: 'bold',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     textAlign: 'center',
-    color: '#333',
+    color: '#555',
+    marginBottom: 4,
   },
-  gridRow: {
-    flexDirection: 'row',
-    minHeight: ROW_HEIGHT,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#bbb',
-  },
-  colNumber: {
-    width: '14%',
-    borderRightWidth: 1,
-    borderRightColor: '#000',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  colWrite: {
-    width: '28.66%',
-    borderRightWidth: 0.5,
-    borderRightColor: '#ddd',
-  },
-  // Last writing column has no right border (page edge).
-  colWriteLast: {
-    width: '28.66%',
-  },
-  numberText: {
-    fontSize: 13,
+  refNumber: {
+    fontSize: 11,
     fontWeight: 'bold',
+    textAlign: 'center',
+    paddingVertical: 2,
   },
-  // ── Results summary ──
-  summarySection: {
-    marginTop: 14,
-    borderTopWidth: 1.5,
-    borderTopColor: '#000',
-    paddingTop: 10,
-  },
-  summaryHeading: {
-    fontSize: 9,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: 8,
-    color: '#333',
-  },
-  placementsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 8,
-  },
-  placementCell: {
-    width: '33.33%',
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    paddingRight: 8,
-    marginBottom: 10,
-  },
-  placementLabel: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    width: 38,
-  },
-  placementLine: {
+  // One of three identical placement columns. Carbon-triplicate: a judge
+  // fills in placements per column, the page is then physically split
+  // into strips — one for the judge's record, one for the secretary, one
+  // for the awards board.
+  placementColumn: {
     flex: 1,
+    borderRightWidth: 0.5,
+    borderRightColor: '#999',
+  },
+  placementColumnLast: {
+    flex: 1,
+  },
+  columnClassHeader: {
     borderBottomWidth: 1,
     borderBottomColor: '#000',
-    height: 18,
+    padding: 6,
+    backgroundColor: '#f4f4f4',
   },
+  columnClassNumber: {
+    fontSize: 9,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    color: '#666',
+  },
+  columnClassName: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+  },
+  columnClassBreed: {
+    fontSize: 9,
+    fontStyle: 'italic',
+    color: '#555',
+    marginTop: 1,
+  },
+  // Placement rows — pre-printed "1st", "2nd", etc. with a wide blank
+  // space next to them for the judge to write the winning ring number.
+  placementRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#ccc',
+    minHeight: 34,
+    paddingHorizontal: 6,
+    paddingBottom: 3,
+  },
+  placementLabel: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    width: 30,
+  },
+  // Slightly wider for "Withheld" which is longer than the placement abbrevs.
+  placementLabelNarrow: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    width: 52,
+  },
+  placementWriteLine: {
+    flex: 1,
+    borderBottomWidth: 1,
+    borderBottomColor: '#888',
+    marginLeft: 4,
+    marginBottom: 4,
+    height: 1,
+  },
+  // Absent row — slightly taller so the judge can note multiple absentees.
   absentRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    marginTop: 2,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#ccc',
+    minHeight: 42,
+    paddingHorizontal: 6,
+    paddingBottom: 3,
   },
-  absentLabel: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    width: 60,
-  },
-  absentLine: {
-    flex: 1,
-    borderBottomWidth: 1,
-    borderBottomColor: '#000',
-    height: 18,
-  },
-  // ── Signature ──
-  signatureSection: {
-    marginTop: 18,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
+  // Signature block at the bottom of each column.
   signatureBlock: {
-    width: '45%',
+    padding: 6,
+    paddingTop: 14,
   },
   signatureLabel: {
     fontSize: 8,
     fontWeight: 'bold',
-    marginBottom: 2,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     color: '#444',
+    marginBottom: 4,
   },
   signatureLine: {
     borderBottomWidth: 1,
     borderBottomColor: '#000',
-    height: 24,
+    height: 18,
   },
   // ── Footer ──
   footer: {
     position: 'absolute',
-    bottom: 16,
-    left: 32,
-    right: 32,
+    bottom: 14,
+    left: 28,
+    right: 28,
     fontSize: 7,
-    color: '#aaa',
+    color: '#999',
     textAlign: 'center',
   },
 });
 
-const PLACEMENTS = ['1st', '2nd', '3rd', '4th', 'VHC'] as const;
+// ── Best Awards page styles — same triplicate principle as class pages ──
+const bestAwardsStyles = StyleSheet.create({
+  columnHeader: {
+    padding: 6,
+    backgroundColor: '#f4f4f4',
+    borderBottomWidth: 1,
+    borderBottomColor: '#000',
+  },
+  columnHeaderLabel: {
+    fontSize: 9,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    color: '#666',
+  },
+  columnHeaderTitle: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+  },
+  awardRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#ccc',
+    minHeight: 32,
+    paddingHorizontal: 6,
+    paddingBottom: 3,
+  },
+  awardLabel: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    flexBasis: '50%',
+  },
+  awardWriteLine: {
+    flex: 1,
+    borderBottomWidth: 1,
+    borderBottomColor: '#888',
+    marginLeft: 4,
+    marginBottom: 4,
+    height: 1,
+  },
+});
+
+interface ColumnHeaderProps {
+  classNumber: number | null;
+  className: string;
+  sexLabel: string | null;
+  breedName: string | null;
+}
+
+function BestAwardsColumn({
+  awards,
+  isLast,
+}: {
+  awards: string[];
+  isLast?: boolean;
+}) {
+  return (
+    <View style={isLast ? s.placementColumnLast : s.placementColumn}>
+      <View style={bestAwardsStyles.columnHeader}>
+        <Text style={bestAwardsStyles.columnHeaderLabel}>Sign-off</Text>
+        <Text style={bestAwardsStyles.columnHeaderTitle}>Best Awards</Text>
+      </View>
+
+      {awards.map((award) => (
+        <View key={award} style={bestAwardsStyles.awardRow}>
+          <Text style={bestAwardsStyles.awardLabel}>{award}</Text>
+          <View style={bestAwardsStyles.awardWriteLine} />
+        </View>
+      ))}
+
+      <View style={s.signatureBlock}>
+        <Text style={s.signatureLabel}>Judge Signature</Text>
+        <View style={s.signatureLine} />
+      </View>
+    </View>
+  );
+}
+
+function ColumnHeader({ classNumber, className, sexLabel, breedName }: ColumnHeaderProps) {
+  return (
+    <View style={s.columnClassHeader}>
+      <Text style={s.columnClassNumber}>
+        Class {classNumber ?? '—'}
+      </Text>
+      <Text style={s.columnClassName}>
+        {className}{sexLabel ? ` (${sexLabel})` : ''}
+      </Text>
+      {breedName && <Text style={s.columnClassBreed}>{breedName}</Text>}
+    </View>
+  );
+}
+
+function PlacementColumn(props: ColumnHeaderProps & { isLast?: boolean }) {
+  return (
+    <View style={props.isLast ? s.placementColumnLast : s.placementColumn}>
+      <ColumnHeader {...props} />
+
+      {PLACEMENTS.map((place) => (
+        <View key={place} style={s.placementRow}>
+          <Text style={s.placementLabel}>{place}</Text>
+          <View style={s.placementWriteLine} />
+        </View>
+      ))}
+
+      {/* Withheld — for marking any placement the judge deemed unworthy
+          (e.g. "3rd" or "RCC"). Separate from Abs (exhibitor absent). */}
+      <View style={s.placementRow}>
+        <Text style={s.placementLabelNarrow}>Withheld</Text>
+        <View style={s.placementWriteLine} />
+      </View>
+
+      <View style={s.absentRow}>
+        <Text style={s.placementLabel}>Abs</Text>
+        <View style={s.placementWriteLine} />
+      </View>
+
+      <View style={s.signatureBlock}>
+        <Text style={s.signatureLabel}>Judge Signature</Text>
+        <View style={s.signatureLine} />
+      </View>
+    </View>
+  );
+}
 
 export function JudgesBook({
   show,
@@ -223,98 +343,45 @@ export function JudgesBook({
     >
       {classes.map((cls, classIdx) => {
         const sexLabel = cls.sex === 'dog' ? 'Dogs' : cls.sex === 'bitch' ? 'Bitches' : null;
-        const classLabel = [
-          cls.classNumber ? `Class ${cls.classNumber}` : null,
-          cls.className,
-          sexLabel ? `(${sexLabel})` : null,
-        ]
-          .filter(Boolean)
-          .join(' — ');
+        const columnProps: ColumnHeaderProps = {
+          classNumber: cls.classNumber,
+          className: cls.className,
+          sexLabel,
+          breedName: cls.breedName,
+        };
 
         return (
           <Page key={classIdx} size="A4" style={s.page}>
-            {/* Class header — repeats at the top of continuation pages */}
-            <View style={s.classHeader} fixed>
-              <Text style={s.showName}>
-                {show.organisation ? `${show.organisation} — ` : ''}
-                {show.name} — {showDate}
-              </Text>
-              <Text style={s.classTitle}>{classLabel}</Text>
-              {cls.breedName && (
-                <Text style={s.classSubtitle}>{cls.breedName}</Text>
-              )}
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 3 }}>
+            {/* Page header — shared across the three columns */}
+            <View style={s.pageHeader}>
+              <View style={s.pageHeaderLeft}>
+                {show.organisation && (
+                  <Text style={s.clubName}>{show.organisation}</Text>
+                )}
+                <Text style={s.showName}>{show.name}</Text>
                 {cls.judgeName && (
                   <Text style={s.judgeLine}>Judge: {cls.judgeName}</Text>
                 )}
-                {cls.ringNumber != null && (
-                  <Text style={s.judgeLine}>Ring {cls.ringNumber}</Text>
-                )}
               </View>
+              <Text style={s.dateBlock}>{showDate}</Text>
             </View>
 
-            {/* Entry count */}
-            <Text style={s.entryCount}>
-              {cls.exhibits.length} exhibit{cls.exhibits.length !== 1 ? 's' : ''} entered
-            </Text>
-
-            {/* 4-column grid: ring numbers + 3 writing columns.
-                Grid header repeats on continuation pages so the judge always
-                sees the column meaning. */}
-            <View style={s.gridHeader} fixed>
-              <View style={s.colNumber}>
-                <Text style={s.gridHeaderCell}>Ring No.</Text>
-              </View>
-              <View style={s.colWrite} />
-              <View style={s.colWrite} />
-              <View style={s.colWriteLast} />
-            </View>
-
-            {cls.exhibits.map((exhibit, i) => (
-              <View key={i} style={s.gridRow} wrap={false}>
-                <View style={s.colNumber}>
-                  <Text style={s.numberText}>
+            {/* Body: reference column + 3 identical placement columns. */}
+            <View style={s.body}>
+              <View style={s.refColumn}>
+                <Text style={s.refHeader}>Ring No.</Text>
+                {cls.exhibits.map((exhibit, i) => (
+                  <Text key={i} style={s.refNumber}>
                     {exhibit.catalogueNumber ?? '—'}
                   </Text>
-                </View>
-                <View style={s.colWrite} />
-                <View style={s.colWrite} />
-                <View style={s.colWriteLast} />
-              </View>
-            ))}
-
-            {/* Results summary — appears once, after the last row of the grid */}
-            <View style={s.summarySection}>
-              <Text style={s.summaryHeading}>Results</Text>
-
-              <View style={s.placementsGrid}>
-                {PLACEMENTS.map((place) => (
-                  <View key={place} style={s.placementCell}>
-                    <Text style={s.placementLabel}>{place}</Text>
-                    <View style={s.placementLine} />
-                  </View>
                 ))}
               </View>
 
-              <View style={s.absentRow}>
-                <Text style={s.absentLabel}>Absent</Text>
-                <View style={s.absentLine} />
-              </View>
+              <PlacementColumn {...columnProps} />
+              <PlacementColumn {...columnProps} />
+              <PlacementColumn {...columnProps} isLast />
             </View>
 
-            {/* Signature */}
-            <View style={s.signatureSection}>
-              <View style={s.signatureBlock}>
-                <Text style={s.signatureLabel}>Judge Signature</Text>
-                <View style={s.signatureLine} />
-              </View>
-              <View style={s.signatureBlock}>
-                <Text style={s.signatureLabel}>Date</Text>
-                <View style={s.signatureLine} />
-              </View>
-            </View>
-
-            {/* Footer */}
             <Text
               style={s.footer}
               render={({ pageNumber, totalPages }) =>
@@ -325,6 +392,36 @@ export function JudgesBook({
           </Page>
         );
       })}
+
+      {/* Final page — Best Awards sign-off. Triplicate columns match the
+          class pages so the secretary can tear the same way. */}
+      {show.bestAwards.length > 0 && (
+        <Page size="A4" style={s.page}>
+          <View style={s.pageHeader}>
+            <View style={s.pageHeaderLeft}>
+              {show.organisation && (
+                <Text style={s.clubName}>{show.organisation}</Text>
+              )}
+              <Text style={s.showName}>{show.name}</Text>
+            </View>
+            <Text style={s.dateBlock}>{showDate}</Text>
+          </View>
+
+          <View style={s.body}>
+            <BestAwardsColumn awards={show.bestAwards} />
+            <BestAwardsColumn awards={show.bestAwards} />
+            <BestAwardsColumn awards={show.bestAwards} isLast />
+          </View>
+
+          <Text
+            style={s.footer}
+            render={({ pageNumber, totalPages }) =>
+              `${SHOW_TYPE_LABELS[show.showType] ?? show.showType} — Best Awards sign-off — Page ${pageNumber} of ${totalPages} — Generated by Remi`
+            }
+            fixed
+          />
+        </Page>
+      )}
     </Document>
   );
 }

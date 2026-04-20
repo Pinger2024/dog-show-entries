@@ -18,6 +18,19 @@ const show: JudgesBookShowInfo = {
   showType: 'championship',
   date: '2026-05-16',
   organisation: 'Clyde Valley German Shepherd Dog Club',
+  bestAwards: [
+    'Best of Breed',
+    'Dog Challenge Certificate',
+    'Reserve Dog Challenge Certificate',
+    'Bitch Challenge Certificate',
+    'Reserve Bitch Challenge Certificate',
+    'Best Puppy Dog',
+    'Best Puppy Bitch',
+    'Best Puppy in Show',
+    // Breed-specific customs a secretary would add:
+    'Best Long Coat in Show',
+    'Best Veteran in Show',
+  ],
 };
 
 function makeExhibits(start: number, count: number): JudgesBookClass['exhibits'] {
