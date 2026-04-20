@@ -265,15 +265,9 @@ export function JudgesBook({
               <View style={s.colNumber}>
                 <Text style={s.gridHeaderCell}>Ring No.</Text>
               </View>
-              <View style={s.colWrite}>
-                <Text style={s.gridHeaderCell}> </Text>
-              </View>
-              <View style={s.colWrite}>
-                <Text style={s.gridHeaderCell}> </Text>
-              </View>
-              <View style={s.colWriteLast}>
-                <Text style={s.gridHeaderCell}> </Text>
-              </View>
+              <View style={s.colWrite} />
+              <View style={s.colWrite} />
+              <View style={s.colWriteLast} />
             </View>
 
             {cls.exhibits.map((exhibit, i) => (

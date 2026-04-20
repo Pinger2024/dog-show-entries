@@ -18,24 +18,14 @@ export const organisations = pgTable('organisations', {
   contactEmail: text('contact_email'),
   contactPhone: text('contact_phone'),
   website: text('website'),
-  // ── Club payout bank details ──
-  //
-  // Remi is the merchant of record — exhibitor entry fees land in Remi's
-  // Stripe balance, and we pay clubs out by BACS to these details. Kept
-  // simple on purpose: three plain-text fields, no Stripe Connect, no
-  // onboarding hoops. Amanda calibrated us on what "simple enough" looks
-  // like — this is it.
+  // Where we BACS exhibitor entry fees on to. Remi is merchant of record;
+  // these are the only bank details a club needs to give us.
   payoutAccountName: text('payout_account_name'),
   payoutSortCode: text('payout_sort_code'),
   payoutAccountNumber: text('payout_account_number'),
 
-  // ── Stripe Connect (RETIRED 2026-04-20) ──
-  //
-  // Shipped earlier today and pulled the same afternoon after user-test
-  // feedback showed the hosted onboarding was too heavy for our target
-  // user (60+ club secretaries with no Companies House registration).
-  // Columns kept to avoid a disruptive drop; code paths feature-flagged
-  // off. Can be resurrected if we ever need a true marketplace model.
+  // Legacy Stripe Connect columns — unused, kept to avoid a disruptive
+  // drop. Safe to remove once prod migrations can tolerate it.
   stripeAccountId: text('stripe_account_id'),
   stripeAccountStatus: stripeAccountStatusEnum('stripe_account_status')
     .notNull()

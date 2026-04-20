@@ -22,7 +22,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { formatCurrency } from '@/lib/date-utils';
+import { formatCurrency, poundsToPence, penceToPoundsString } from '@/lib/date-utils';
+import { format } from 'date-fns';
 import {
   ArrowLeft,
   Banknote,
@@ -106,7 +107,6 @@ export default function AdminPayoutsPage() {
         </p>
       </div>
 
-      {/* Summary cards */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
@@ -137,7 +137,6 @@ export default function AdminPayoutsPage() {
         </Card>
       </div>
 
-      {/* Per-club rows */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Club balances</CardTitle>
@@ -187,7 +186,7 @@ export default function AdminPayoutsPage() {
                       setRecordingOrgId(row.id);
                       setFormAmount(
                         row.outstandingPence > 0
-                          ? (row.outstandingPence / 100).toFixed(2)
+                          ? penceToPoundsString(row.outstandingPence)
                           : ''
                       );
                     }}
@@ -203,7 +202,6 @@ export default function AdminPayoutsPage() {
         </CardContent>
       </Card>
 
-      {/* Record-payout dialog */}
       <Dialog open={!!recordingOrgId} onOpenChange={(v) => { if (!v) setRecordingOrgId(null); }}>
         <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
@@ -261,11 +259,7 @@ export default function AdminPayoutsPage() {
                   {history.slice(0, 5).map((h) => (
                     <li key={h.id} className="flex items-center justify-between gap-2">
                       <span>
-                        {new Date(h.paidAt).toLocaleDateString('en-GB', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric',
-                        })}
+                        {format(new Date(h.paidAt), 'd MMM yyyy')}
                         {h.bankReference && ` · ${h.bankReference}`}
                       </span>
                       <span className="font-mono">
@@ -284,7 +278,7 @@ export default function AdminPayoutsPage() {
             </Button>
             <Button
               onClick={() => {
-                const pence = Math.round(parseFloat(formAmount) * 100);
+                const pence = poundsToPence(parseFloat(formAmount));
                 if (!recordingOrgId || Number.isNaN(pence) || pence <= 0) {
                   toast.error('Enter a valid amount.');
                   return;

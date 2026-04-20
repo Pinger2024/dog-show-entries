@@ -555,41 +555,70 @@ export const adminDashboardRouter = createTRPCRouter({
    * so we don't fire N queries on a page with many clubs.
    */
   listPayouts: adminProcedure.query(async ({ ctx }) => {
-    // Sum paid entry fees per org. Join orders → shows → organisations
-    // because entry fees belong to the SHOW's host org.
-    const owedRows = await ctx.db
-      .select({
-        organisationId: shows.organisationId,
-        totalOwed: sql<number>`COALESCE(SUM(${orders.totalAmount}), 0)::int`,
-      })
-      .from(orders)
-      .innerJoin(shows, eq(orders.showId, shows.id))
-      .where(eq(orders.status, 'paid'))
-      .groupBy(shows.organisationId);
-
-    const paidRows = await ctx.db
-      .select({
-        organisationId: payouts.organisationId,
-        totalPaid: sql<number>`COALESCE(SUM(${payouts.amountPence}), 0)::int`,
-      })
-      .from(payouts)
-      .groupBy(payouts.organisationId);
-
-    const allOrgs = await ctx.db.query.organisations.findMany({
-      columns: {
-        id: true,
-        name: true,
-        payoutAccountName: true,
-        payoutSortCode: true,
-        payoutAccountNumber: true,
-      },
-      orderBy: [desc(organisations.updatedAt)],
-    });
+    // The three queries are independent — fire them in parallel. Orgs
+    // with neither money in either direction nor bank details on file
+    // are noise for this view, so pull only the ones that qualify.
+    const [owedRows, paidRows, activeOrgs] = await Promise.all([
+      ctx.db
+        .select({
+          organisationId: shows.organisationId,
+          totalOwed: sql<number>`COALESCE(SUM(${orders.totalAmount}), 0)::int`,
+        })
+        .from(orders)
+        .innerJoin(shows, eq(orders.showId, shows.id))
+        .where(eq(orders.status, 'paid'))
+        .groupBy(shows.organisationId),
+      ctx.db
+        .select({
+          organisationId: payouts.organisationId,
+          totalPaid: sql<number>`COALESCE(SUM(${payouts.amountPence}), 0)::int`,
+        })
+        .from(payouts)
+        .groupBy(payouts.organisationId),
+      ctx.db.query.organisations.findMany({
+        where: isNotNull(organisations.payoutSortCode),
+        columns: {
+          id: true,
+          name: true,
+          payoutAccountName: true,
+          payoutSortCode: true,
+          payoutAccountNumber: true,
+        },
+        orderBy: [desc(organisations.updatedAt)],
+      }),
+    ]);
 
     const owedMap = new Map(owedRows.map((r) => [r.organisationId, Number(r.totalOwed)]));
     const paidMap = new Map(paidRows.map((r) => [r.organisationId, Number(r.totalPaid)]));
 
-    const rows = allOrgs.map((org) => {
+    // Union: orgs with bank details on file + any org with money in
+    // either direction (so a club with an owed balance still surfaces
+    // even if bank details haven't been added yet — Michael sees they
+    // need chasing).
+    const relevantOrgIds = new Set<string>([
+      ...activeOrgs.map((o) => o.id),
+      ...owedMap.keys(),
+      ...paidMap.keys(),
+    ]);
+
+    const orgsNeedingBankLookup = [...relevantOrgIds].filter(
+      (id) => !activeOrgs.some((o) => o.id === id)
+    );
+    const extraOrgs = orgsNeedingBankLookup.length
+      ? await ctx.db.query.organisations.findMany({
+          where: inArray(organisations.id, orgsNeedingBankLookup),
+          columns: {
+            id: true,
+            name: true,
+            payoutAccountName: true,
+            payoutSortCode: true,
+            payoutAccountNumber: true,
+          },
+        })
+      : [];
+
+    const allRelevantOrgs = [...activeOrgs, ...extraOrgs];
+    const filtered = allRelevantOrgs.map((org) => {
       const totalOwed = owedMap.get(org.id) ?? 0;
       const totalPaid = paidMap.get(org.id) ?? 0;
       return {
@@ -599,12 +628,6 @@ export const adminDashboardRouter = createTRPCRouter({
         outstandingPence: totalOwed - totalPaid,
       };
     });
-
-    // Only surface orgs with either money moving or bank details on
-    // file — clean clubs we've never taken money for are noise here.
-    const filtered = rows.filter(
-      (r) => r.totalOwedPence > 0 || r.totalPaidPence > 0 || r.payoutSortCode
-    );
 
     const summary = filtered.reduce(
       (acc, r) => ({
@@ -628,7 +651,6 @@ export const adminDashboardRouter = createTRPCRouter({
       z.object({
         organisationId: z.string().uuid(),
         amountPence: z.number().int().positive(),
-        showId: z.string().uuid().optional(),
         bankReference: z.string().max(200).optional(),
         notes: z.string().max(1000).optional(),
       })
@@ -638,14 +660,14 @@ export const adminDashboardRouter = createTRPCRouter({
         .insert(payouts)
         .values({
           organisationId: input.organisationId,
-          showId: input.showId ?? null,
           amountPence: input.amountPence,
           bankReference: input.bankReference ?? null,
           notes: input.notes ?? null,
           paidByUserId: ctx.session.user.id,
         })
         .returning();
-      return row!;
+      if (!row) throw new Error('Payout insert returned no row');
+      return row;
     }),
 
   /**

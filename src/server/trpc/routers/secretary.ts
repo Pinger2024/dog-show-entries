@@ -4957,9 +4957,9 @@ export const secretaryRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
-      // Backlog #101 — time ordering must be sane so the schedule doesn't
-      // print nonsense like "Judging starts 08:30, Show opens 09:00".
-      // Strings are "HH:MM" so lexical comparison works.
+      // Time ordering must be sane so the schedule doesn't print nonsense
+      // like "Judging starts 08:30, Show opens 09:00". Strings are "HH:MM"
+      // so lexical comparison works.
       const showOpen = input.showOpenTime?.trim() || null;
       const judgingStart = input.judgingStartTime?.trim() || null;
       const latestArrival = input.scheduleData.latestArrivalTime?.trim() || null;

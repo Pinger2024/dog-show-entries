@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -36,10 +36,13 @@ export function PayoutDetailsCard({ organisationId }: { organisationId: string }
   const [sortCode, setSortCode] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
 
-  // Hydrate inputs when the query resolves. We don't use `defaultValue` here
-  // because the data arrives after mount.
+  // Hydrate once, on first non-null data. A ref guard (rather than plain
+  // [data] dependency) means a background refetch — window focus, cache
+  // invalidation — won't clobber in-flight edits.
+  const hydratedRef = useRef(false);
   useEffect(() => {
-    if (!data) return;
+    if (hydratedRef.current || !data) return;
+    hydratedRef.current = true;
     setAccountName(data.accountName ?? '');
     setSortCode(data.sortCode ?? '');
     setAccountNumber(data.accountNumber ?? '');
