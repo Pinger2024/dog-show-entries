@@ -56,5 +56,22 @@ export async function runStartupMigrations() {
     CREATE INDEX IF NOT EXISTS payouts_show_id_idx ON payouts(show_id);
   `);
 
+  // ── 2026-04-20 evening: add Paula Ingham as active member of BAGSD so
+  // Amanda can set up the Monday go-live show with Paula as secretary.
+  // Idempotent: the inner SELECT returns no rows if the membership
+  // already exists, so re-runs are no-ops.
+  await db.execute(sql`
+    INSERT INTO memberships (user_id, organisation_id, status)
+    SELECT
+      '72293d40-8ea5-4bf3-b0b8-f458deed8e0d'::uuid,
+      '6f3b14d4-c0b8-4bca-bce6-706b8fc38ba5'::uuid,
+      'active'
+    WHERE NOT EXISTS (
+      SELECT 1 FROM memberships
+      WHERE user_id = '72293d40-8ea5-4bf3-b0b8-f458deed8e0d'::uuid
+        AND organisation_id = '6f3b14d4-c0b8-4bca-bce6-706b8fc38ba5'::uuid
+    );
+  `);
+
   console.log(`[startup-migrations] done in ${Date.now() - started}ms`);
 }
