@@ -223,6 +223,20 @@ function NotStartedCard({
           </div>
         </div>
 
+        <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
+          <p>
+            <span className="font-semibold text-foreground">A note on how we set this up:</span>{' '}
+            Stripe creates the account in <em>your</em> name (as the show
+            secretary), trading on behalf of the club. This is how almost
+            every small UK dog club does it — most clubs aren&apos;t a
+            registered Ltd company or Charity Commission entity, so the
+            cleanest route is to set you up as an individual (sole trader).
+            If your club <em>is</em> formally registered at Companies House
+            or with the Charity Commission, get in touch before you click
+            the button and we&apos;ll sort a different route.
+          </p>
+        </div>
+
         <Button
           onClick={onStart}
           disabled={isStarting}

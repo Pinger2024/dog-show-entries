@@ -84,6 +84,20 @@ export async function createEntryPaymentIntent(params: {
  * mean the club is the merchant of record — they log in at Stripe directly,
  * complete their own KYC, and we're charged no additional Connect fees per
  * payout. Best fit for small UK dog clubs.
+ *
+ * `business_type: 'individual'` is chosen deliberately. Most UK breed
+ * clubs are unincorporated associations — no Companies House number, no
+ * Charity Commission registration. If we leave business_type unset,
+ * Stripe's hosted onboarding asks the secretary to pick one, and both
+ * "Company" and "Non-profit" demand registration numbers the club
+ * doesn't have. Pre-setting "Individual" routes them through the
+ * sole-trader flow — the Stripe account ends up in the secretary's
+ * personal name, trading as the club. This is exactly how Fossedata and
+ * most other dog-show entry platforms handle the same constraint.
+ *
+ * Clubs that ARE properly incorporated (Ltd / LLP) can still switch
+ * business_type to "Company" manually inside the hosted flow — pre-
+ * setting it here is a default, not a lock.
  */
 export async function createConnectAccount(params: {
   email: string;
@@ -95,6 +109,7 @@ export async function createConnectAccount(params: {
     type: 'standard',
     country: 'GB',
     email: params.email,
+    business_type: 'individual',
     business_profile: {
       name: params.organisationName,
       mcc: '7941', // Commercial sports / athletic fields — closest MCC for a dog show.
