@@ -10,6 +10,7 @@ import {
   isNotNull,
   notInArray,
 } from 'drizzle-orm';
+import { z } from 'zod';
 import { adminProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { formatCurrency } from '@/lib/date-utils';
@@ -542,4 +543,86 @@ export const adminDashboardRouter = createTRPCRouter({
       },
     };
   }),
+
+  /**
+   * Admin view of every club's Stripe Connect state. Drives the support
+   * dashboard at /admin/connect-accounts — lets us spot clubs stuck in
+   * onboarding without waiting for them to ask.
+   *
+   * Sourced entirely from our mirror of Stripe's Account flags (no direct
+   * Stripe call here — that's what `refreshConnectAccount` below is for
+   * when a specific row looks stale).
+   */
+  listConnectAccounts: adminProcedure.query(async ({ ctx }) => {
+    const rows = await ctx.db.query.organisations.findMany({
+      columns: {
+        id: true,
+        name: true,
+        contactEmail: true,
+        stripeAccountId: true,
+        stripeAccountStatus: true,
+        stripeDetailsSubmitted: true,
+        stripeChargesEnabled: true,
+        stripePayoutsEnabled: true,
+        stripeOnboardingCompletedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: [desc(organisations.updatedAt)],
+    });
+
+    // Bucket by status so the UI can show summary counts without
+    // re-scanning on the client.
+    const buckets = {
+      active: 0,
+      pending: 0,
+      restricted: 0,
+      rejected: 0,
+      not_started: 0,
+    };
+    for (const r of rows) {
+      buckets[r.stripeAccountStatus] = (buckets[r.stripeAccountStatus] ?? 0) + 1;
+    }
+
+    return { rows, buckets, total: rows.length };
+  }),
+
+  /**
+   * Force a re-sync of one org's Connect state from Stripe. Useful when
+   * the webhook hasn't delivered yet or we suspect drift.
+   */
+  refreshConnectAccount: adminProcedure
+    .input(z.object({ organisationId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const { retrieveConnectAccount, deriveAccountStatus } = await import(
+        '@/server/services/stripe'
+      );
+      const org = await ctx.db.query.organisations.findFirst({
+        where: eq(organisations.id, input.organisationId),
+        columns: {
+          id: true,
+          stripeAccountId: true,
+          stripeOnboardingCompletedAt: true,
+        },
+      });
+      if (!org?.stripeAccountId) {
+        return { status: 'not_started' as const, refreshed: false };
+      }
+      const account = await retrieveConnectAccount(org.stripeAccountId);
+      const status = deriveAccountStatus(account);
+      await ctx.db
+        .update(organisations)
+        .set({
+          stripeAccountStatus: status,
+          stripeDetailsSubmitted: account.details_submitted ?? false,
+          stripeChargesEnabled: account.charges_enabled ?? false,
+          stripePayoutsEnabled: account.payouts_enabled ?? false,
+          stripeOnboardingCompletedAt:
+            status === 'active' && !org.stripeOnboardingCompletedAt
+              ? new Date()
+              : org.stripeOnboardingCompletedAt,
+        })
+        .where(eq(organisations.id, org.id));
+      return { status, refreshed: true };
+    }),
 });
