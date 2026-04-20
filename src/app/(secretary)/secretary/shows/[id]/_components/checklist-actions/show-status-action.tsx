@@ -77,7 +77,7 @@ export function ShowStatusAction({ showId }: ActionPanelProps & { actionKey?: st
           if (prereq === 'Classes created') met = autoDetect?.classes_created ?? false;
           if (prereq === 'Venue confirmed') met = autoDetect?.venue_set ?? false;
           if (prereq === 'Show published') met = autoDetect?.show_published ?? false;
-          if (prereq === 'Stripe connected') met = !!show.stripeAccountId;
+          if (prereq === 'Stripe connected') met = autoDetect?.stripe_connected ?? false;
           return { label: prereq, met };
         });
 

@@ -2881,6 +2881,14 @@ export const secretaryRouter = createTRPCRouter({
 
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
+        with: {
+          organisation: {
+            columns: {
+              stripeAccountStatus: true,
+              stripeChargesEnabled: true,
+            },
+          },
+        },
       });
 
       if (!show) return {};
@@ -2939,6 +2947,11 @@ export const secretaryRouter = createTRPCRouter({
         judges_assigned: allJudgesCovered,
         stewards_assigned: Number(stewardCount?.count) > 0,
         rings_created: Number(ringCount?.count) > 0,
+        // Club's Stripe Connect account must be active before entries open —
+        // without charges_enabled, every exhibitor PaymentIntent errors out.
+        stripe_connected:
+          show.organisation?.stripeAccountStatus === 'active' &&
+          (show.organisation?.stripeChargesEnabled ?? false),
       };
 
       // Check if all assigned judges have been sent offer letters
