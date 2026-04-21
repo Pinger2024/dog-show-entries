@@ -1434,17 +1434,28 @@ export const secretaryRouter = createTRPCRouter({
         orderBy: [asc(showClasses.sortOrder)],
       });
 
-      // Sort by: breed group name → breed name → sex (dog first) → class sort order
+      // Single-breed shows often have breed_id set inconsistently across
+      // classes (dog/bitch classes leave it null because breed is implied;
+      // add-on classes like Veteran/Special sometimes get it populated).
+      // If the distinct-breed count is ≤ 2 we treat the show as single-breed
+      // and skip breed in the sort — otherwise a "German Shepherd Dog" set
+      // alphabetically outranks the "ZZZ" null-breed fallback and bubbles
+      // the Veteran class to classNumber 1 instead of last.
+      const distinctBreeds = new Set(classes.filter((c) => c.breed).map((c) => c.breed!.name));
+      const isMultiBreed = distinctBreeds.size >= 3;
+
       const sorted = [...classes].sort((a, b) => {
-        const groupA = a.breed?.group?.name ?? 'ZZZ';
-        const groupB = b.breed?.group?.name ?? 'ZZZ';
-        if (groupA !== groupB) return groupA.localeCompare(groupB);
+        if (isMultiBreed) {
+          const groupA = a.breed?.group?.name ?? 'ZZZ';
+          const groupB = b.breed?.group?.name ?? 'ZZZ';
+          if (groupA !== groupB) return groupA.localeCompare(groupB);
 
-        const breedA = a.breed?.name ?? 'ZZZ';
-        const breedB = b.breed?.name ?? 'ZZZ';
-        if (breedA !== breedB) return breedA.localeCompare(breedB);
+          const breedA = a.breed?.name ?? 'ZZZ';
+          const breedB = b.breed?.name ?? 'ZZZ';
+          if (breedA !== breedB) return breedA.localeCompare(breedB);
+        }
 
-        // Dog before Bitch, null last
+        // Dog before Bitch, null last.
         const sexOrder = (s: string | null) => s === 'dog' ? 0 : s === 'bitch' ? 1 : 2;
         if (sexOrder(a.sex) !== sexOrder(b.sex)) return sexOrder(a.sex) - sexOrder(b.sex);
 
