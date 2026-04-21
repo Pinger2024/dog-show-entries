@@ -302,15 +302,15 @@ export async function POST(
       .set({ stage: 'offer_accepted', acceptedAt: new Date() })
       .where(eq(judgeContracts.id, contract.id));
 
-    // Archive a PDF snapshot of the fully-agreed contract for RKC audit.
-    // Wrapped in try/catch so a transient R2 blip doesn't break the judge's
-    // acceptance journey — the stage is already persisted, and the PDF can
-    // be regenerated via the retroactive path.
-    try {
-      await generateJudgeContractPdf(contract.id);
-    } catch (err) {
-      console.error('[judge-contract] Failed to archive PDF snapshot:', err);
-    }
+    // Fire-and-forget: render + R2 upload would make the judge wait 2–3s on
+    // Accept, and the stage transition is already persisted. If archiving
+    // fails, the backfill path in secretary.sendJudgeConfirmation covers it.
+    void generateJudgeContractPdf(contract.id).catch((err) => {
+      console.error(
+        `[judge-contract] Failed to archive PDF snapshot for contract ${contract.id} (show ${contract.showId}):`,
+        err,
+      );
+    });
 
     // Auto-update checklist: "Receive judge acceptance letters"
     await db

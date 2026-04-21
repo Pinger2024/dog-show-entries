@@ -47,6 +47,7 @@ import { penceToPoundsString } from '@/lib/date-utils';
 import { Resend } from 'resend';
 import { searchKcJudges, fetchKcJudgeProfile } from '@/server/services/kc-judges';
 import { ensureCatalogueNumbers } from '@/server/services/catalogue-numbering';
+import { generateJudgeContractPdf } from '@/server/services/judge-contract-pdf';
 import { CATALOGUE_NAME_PATTERN } from '@/lib/catalogue-utils';
 
 /** Build human-readable breed text for judge offer emails.
@@ -3785,15 +3786,15 @@ export const secretaryRouter = createTRPCRouter({
         .set({ stage: 'confirmed', confirmedAt: new Date() })
         .where(eq(judgeContracts.id, input.contractId));
 
-      // Backfill the archived PDF snapshot for any contract confirmed before
-      // the archive feature landed. Idempotent — no-ops when a key already
-      // exists. Errors are logged but do not break confirmation.
+      // Backfill for contracts confirmed before the archive feature landed.
       if (!contract.contractPdfKey) {
         try {
-          const { generateJudgeContractPdf } = await import('@/server/services/judge-contract-pdf');
           await generateJudgeContractPdf(input.contractId);
         } catch (err) {
-          console.error('[judge-contract] Failed to backfill PDF snapshot on confirmation:', err);
+          console.error(
+            `[judge-contract] Failed to backfill PDF snapshot for contract ${input.contractId} (show ${contract.showId}):`,
+            err,
+          );
         }
       }
 

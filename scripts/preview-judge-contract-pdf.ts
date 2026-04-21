@@ -14,7 +14,6 @@ import {
 
 const fixture: JudgeContractPdfData = {
   societyName: 'British Association for German Shepherd Dogs',
-  secretaryName: 'Mandy McAteer',
   secretaryEmail: 'mandy@hundarkgsd.co.uk',
   show: {
     name: 'BAGSD 18-Class Championship Show',

@@ -1,5 +1,6 @@
 import { Document, Page, Text, View, StyleSheet, Font } from '@react-pdf/renderer';
 import path from 'node:path';
+import { formatCurrency } from '@/lib/date-utils';
 
 const fontsDir = path.join(process.cwd(), 'public', 'fonts');
 Font.register({
@@ -23,7 +24,6 @@ const SHOW_TYPE_LABELS: Record<string, string> = {
 
 export type JudgeContractPdfData = {
   societyName: string;
-  secretaryName: string | null;
   secretaryEmail: string | null;
   show: {
     name: string;
@@ -213,8 +213,7 @@ const s = StyleSheet.create({
 
 function formatPence(pence: number | null): string {
   if (pence == null) return '—';
-  const pounds = (pence / 100).toFixed(2);
-  return `£${pounds}`;
+  return formatCurrency(pence);
 }
 
 function formatDate(d: Date | null): string {
@@ -383,9 +382,7 @@ export function JudgeContractPdf({ data }: { data: JudgeContractPdfData }) {
           <View style={s.signatureGrid}>
             <View style={s.signatureCell}>
               <Text style={s.signatureLabel}>For the Society</Text>
-              <Text style={s.signatureName}>
-                {data.secretaryName ?? data.societyName}
-              </Text>
+              <Text style={s.signatureName}>{data.societyName}</Text>
               <Text style={s.signatureStamp}>
                 Offer issued {formatDateShort(data.dates.offerSentAt ?? data.generatedAt)}
               </Text>

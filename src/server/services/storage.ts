@@ -93,11 +93,14 @@ export async function generatePresignedGetUrl(
   opts: { expiresIn?: number; filename?: string } = {},
 ): Promise<string> {
   const client = getS3Client();
+  // Strip quotes before embedding in the Content-Disposition header — a stray
+  // quote would otherwise terminate the filename field and corrupt the header.
+  const safeFilename = opts.filename?.replace(/"/g, '');
   const command = new GetObjectCommand({
     Bucket: BUCKET,
     Key: key,
-    ...(opts.filename
-      ? { ResponseContentDisposition: `attachment; filename="${opts.filename}"` }
+    ...(safeFilename
+      ? { ResponseContentDisposition: `attachment; filename="${safeFilename}"` }
       : {}),
   });
   return getSignedUrl(client, command, { expiresIn: opts.expiresIn ?? 300 });

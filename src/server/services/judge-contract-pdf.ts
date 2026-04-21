@@ -1,14 +1,12 @@
 /**
  * Generate and archive the PDF snapshot of a judge contract.
  *
- * Fired once — when the judge clicks "Accept Appointment" on the offer link.
- * The PDF captures the exact terms both parties agreed at that moment and is
- * stored in R2 against the judge_contracts row so the Society can produce it
- * for any RKC audit request.
+ * Fired when the judge accepts the offer. The PDF captures the exact terms
+ * both parties agreed at that moment and is stored in R2 against the
+ * judge_contracts row so the Society can produce it for an RKC audit.
  *
- * Idempotent: if a PDF key already exists on the row, returns without
- * regenerating. Re-generation is exposed via `force: true` for retroactive
- * backfill of contracts that were confirmed before this feature landed.
+ * Idempotent — a second call is a no-op unless `force: true`. Declined or
+ * still-pending contracts are skipped.
  */
 import { and, eq } from 'drizzle-orm';
 import { renderToBuffer } from '@react-pdf/renderer';
@@ -21,9 +19,8 @@ import {
 } from '@/components/judge-contract/judge-contract-pdf';
 
 export type GenerateResult =
-  | { status: 'generated'; key: string }
-  | { status: 'skipped'; key: string; reason: 'already-exists' }
-  | { status: 'skipped'; reason: 'not-accepted' };
+  | { status: 'generated' }
+  | { status: 'skipped'; reason: 'already-exists' | 'not-accepted' };
 
 export async function generateJudgeContractPdf(
   contractId: string,
@@ -41,14 +38,12 @@ export async function generateJudgeContractPdf(
 
   if (!contract) throw new Error(`Contract ${contractId} not found`);
 
-  // Only contracts the judge has actually agreed to — offer_sent has no
-  // executed agreement yet, and declined means there's nothing to archive.
   if (contract.stage !== 'offer_accepted' && contract.stage !== 'confirmed') {
     return { status: 'skipped', reason: 'not-accepted' };
   }
 
   if (contract.contractPdfKey && !opts.force) {
-    return { status: 'skipped', key: contract.contractPdfKey, reason: 'already-exists' };
+    return { status: 'skipped', reason: 'already-exists' };
   }
 
   const assignments = await db.query.judgeAssignments.findMany({
@@ -64,17 +59,10 @@ export async function generateJudgeContractPdf(
     .filter((name): name is string => Boolean(name));
 
   const show = contract.show;
-  const societyName = show.organisation?.name ?? 'The Show Society';
-
-  // Secretary name isn't snapshotted on the contract, so we pull the current
-  // show.secretaryEmail — it's the best proxy. A future enhancement could
-  // denormalise the secretary's name onto the contract row at offer-send time.
-  const secretaryEmail = show.secretaryEmail ?? null;
 
   const pdfData: JudgeContractPdfData = {
-    societyName,
-    secretaryName: null,
-    secretaryEmail,
+    societyName: show.organisation?.name ?? 'The Show Society',
+    secretaryEmail: show.secretaryEmail ?? null,
     show: {
       name: show.name,
       startDate: new Date(show.startDate),
@@ -113,5 +101,5 @@ export async function generateJudgeContractPdf(
     .set({ contractPdfKey: key, contractPdfGeneratedAt: new Date() })
     .where(eq(judgeContracts.id, contractId));
 
-  return { status: 'generated', key };
+  return { status: 'generated' };
 }

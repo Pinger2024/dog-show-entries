@@ -12,6 +12,7 @@ import { db } from '@/server/db';
 import { judgeContracts, memberships } from '@/server/db/schema';
 import { auth } from '@/lib/auth';
 import { generatePresignedGetUrl } from '@/server/services/storage';
+import { sanitizeFilename } from '@/lib/slugify';
 
 export async function GET(
   _req: NextRequest,
@@ -55,8 +56,10 @@ export async function GET(
     }
   }
 
-  const filename = `judging-contract-${contract.show.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-${contract.judgeName.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.pdf`;
+  const filename = `judging-contract-${sanitizeFilename(contract.show.name).toLowerCase()}-${sanitizeFilename(contract.judgeName).toLowerCase()}.pdf`;
 
+  // 300s TTL: enough for the browser to follow the 302 and start the
+  // download, short enough that a copied link won't leak as a stable URL.
   const url = await generatePresignedGetUrl(contract.contractPdfKey, {
     expiresIn: 300,
     filename,

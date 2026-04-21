@@ -74,6 +74,22 @@ import { contractStageConfig } from '../_lib/show-utils';
 import { JudgeCoverageDashboard } from '@/components/judges/judge-coverage-dashboard';
 import { AddJudgeWizard } from '@/components/judges/add-judge-wizard';
 
+function formatContractTimeline(contract: {
+  offerSentAt: Date | string | null;
+  acceptedAt: Date | string | null;
+  confirmedAt: Date | string | null;
+  declinedAt: Date | string | null;
+}): string {
+  const short = (d: Date | string) =>
+    new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  const parts: string[] = [];
+  if (contract.offerSentAt) parts.push(`Offer sent ${short(contract.offerSentAt)}`);
+  if (contract.acceptedAt) parts.push(`Accepted ${short(contract.acceptedAt)}`);
+  if (contract.confirmedAt) parts.push(`Confirmed ${short(contract.confirmedAt)}`);
+  if (contract.declinedAt) parts.push(`Declined ${short(contract.declinedAt)}`);
+  return parts.join(' · ');
+}
+
 export function JudgesSection({ showId }: { showId: string }) {
   const [adding, setAdding] = useState(false);
   const [judgeName, setJudgeName] = useState('');
@@ -422,10 +438,7 @@ export function JudgesSection({ showId }: { showId: string }) {
                         )}
                         {contract?.offerSentAt && (
                           <p className="mt-1 text-xs text-muted-foreground">
-                            Offer sent {new Date(contract.offerSentAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                            {contract.acceptedAt && ` · Accepted ${new Date(contract.acceptedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`}
-                            {contract.confirmedAt && ` · Confirmed ${new Date(contract.confirmedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`}
-                            {contract.declinedAt && ` · Declined ${new Date(contract.declinedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`}
+                            {formatContractTimeline(contract)}
                           </p>
                         )}
                         {contract?.contractPdfKey && (
