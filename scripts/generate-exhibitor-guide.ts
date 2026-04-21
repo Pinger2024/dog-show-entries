@@ -1,34 +1,36 @@
 /**
- * Exhibitor user guide generator.
+ * Exhibitor user-guide generator — produces two PDFs targeting two audiences:
  *
- * Walks through the full exhibitor journey on localhost:3000 (the dev server
- * must already be running), screenshots each step at a mobile viewport, then
- * stitches the captured frames into a PDF guide suitable for handing to new
- * exhibitors.
+ *   "new"       — brand-new exhibitor: create account → email check →
+ *                 onboarding welcome → fill profile → add first dog →
+ *                 find a show → enter → pay.
+ *   "returning" — exhibitor with an account + a dog on file: sign in →
+ *                 find a show → enter → pay.
  *
  * Usage:
- *   # in one terminal
+ *   # start the dev server in another terminal
  *   npm run dev
- *   # in another
- *   npx tsx scripts/generate-exhibitor-guide.ts
+ *
+ *   # pick a flow
+ *   GUIDE_BASE_URL=http://localhost:3001 npx tsx scripts/generate-exhibitor-guide.ts --flow=new
+ *   GUIDE_BASE_URL=http://localhost:3001 npx tsx scripts/generate-exhibitor-guide.ts --flow=returning
+ *
+ *   # or generate both in one command
+ *   GUIDE_BASE_URL=http://localhost:3001 npx tsx scripts/generate-exhibitor-guide.ts --flow=both
  *
  * Output:
- *   scripts/output/exhibitor-guide.pdf     — finished guide
- *   scripts/output/exhibitor-guide/*.png   — raw frames (inspect when iterating)
+ *   scripts/output/exhibitor-guide-new.pdf
+ *   scripts/output/exhibitor-guide-returning.pdf
  *
- * Seeds (idempotent):
- *   - Test exhibitor "Sarah Thompson" (sarah.thompson@example.com / Remi-Guide-2026!)
- *   - Relies on the Hundark GSD E2E Test Show already existing on the DB — if
- *     it's been cleaned up, rerun `npx tsx scripts/e2e-mandy-fulltest.ts` first.
- *
- * Design notes:
- *   - Uses the Credentials (password) provider so Playwright can sign in
- *     without hitting Google OAuth or a magic-link inbox.
- *   - Stripe still runs on test keys in production, so the "Pay" step uses the
- *     4242 test card and does actually clear — the created order is tagged so
- *     it's easy to sweep up during the production cleanup pass.
- *   - Screenshots capture the page viewport only (no browser chrome), so the
- *     "localhost:3000" URL never appears in the output PDF.
+ * Demo data (idempotent, seeded on prod DB):
+ *   - Org: "Thornfield Canine Society" with fake secretary email on
+ *     example.com — no trace of Hundark / Amanda anywhere.
+ *   - Show: "Thornfield Summer Open Show" in entries_open state, general
+ *     scope so any breed is eligible.
+ *   - For "returning" flow: pre-seeded exhibitor "Sarah Thompson"
+ *     (sarah.thompson@example.com) with password + a pre-registered dog.
+ *   - For "new" flow: wipes any prior Sarah Thompson + dogs so the
+ *     register→onboarding walk starts from true zero.
  */
 import 'dotenv/config';
 import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
@@ -39,6 +41,7 @@ import { eq, ilike, desc, inArray } from 'drizzle-orm';
 import { hash as bcryptHash } from 'bcryptjs';
 import { db } from '@/server/db/index.js';
 import * as s from '@/server/db/schema/index.js';
+import { generateShowSlug } from '@/lib/slugify.js';
 
 // ─── Config ──────────────────────────────────────────────────────────────
 
@@ -46,31 +49,26 @@ const BASE_URL = process.env.GUIDE_BASE_URL ?? 'http://localhost:3000';
 const GUIDE_EMAIL = 'sarah.thompson@example.com';
 const GUIDE_PASSWORD = 'Remi-Guide-2026!';
 const GUIDE_NAME = 'Sarah Thompson';
+const GUIDE_ADDRESS = '14 Primrose Lane, Bristol';
+const GUIDE_POSTCODE = 'BS1 4QA';
 
-// iPhone 13 Pro — representative of Amanda's exhibitor audience.
+const DEMO_ORG_NAME = 'Thornfield Canine Society';
+const DEMO_SHOW_NAME = 'Thornfield Summer Open Show';
+const DEMO_SECRETARY_NAME = 'Margaret Ashcroft';
+const DEMO_SECRETARY_EMAIL = 'secretary@thornfield.example.com';
+
 const VIEWPORT = { width: 390, height: 844 } as const;
-// Device pixel ratio of 2 gives us retina-quality screenshots for the PDF.
 const DEVICE_SCALE = 2;
 
 const OUT_DIR = join(process.cwd(), 'scripts', 'output');
-const FRAMES_DIR = join(OUT_DIR, 'exhibitor-guide');
-const PDF_PATH = join(OUT_DIR, 'exhibitor-guide.pdf');
+const FRAMES_ROOT = join(OUT_DIR, 'exhibitor-guide-frames');
 
-const SHOW_NAME = 'Hundark GSD E2E Test Show';
-// German Shepherd Dog breed id — from e2e-mandy-fulltest.ts. The Hundark show
-// is single-breed, so Sarah's dog must be a GSD to be eligible.
-const GSD_BREED_ID = '858b16ec-0b76-44e8-89a4-c332dd43c1dd';
-
-// Stripe test card that clears on test keys.
-const TEST_CARD = { number: '4242 4242 4242 4242', exp: '12 / 34', cvc: '123', postcode: 'G1 1AA' };
+type Flow = 'new' | 'returning';
 
 // ─── Step recorder ───────────────────────────────────────────────────────
 
 type Step = { name: string; file: string; caption: string; body: string };
-const steps: Step[] = [];
 
-// Hide fixed-position chrome that would otherwise float on every screenshot:
-// Next.js dev bubble, in-app help widget, anything labelled "feedback".
 const HIDE_CHROME_CSS = `
   nextjs-portal, [data-nextjs-scroll-focus-boundary],
   [aria-label*="Next.js" i], [data-nextjs-toast], [id^="__next-dev-tools"],
@@ -80,85 +78,175 @@ const HIDE_CHROME_CSS = `
   }
 `;
 
+function makeRecorder(framesDir: string) {
+  const steps: Step[] = [];
+
+  async function record(page: Page, name: string, caption: string, body: string) {
+    await page.addStyleTag({ content: HIDE_CHROME_CSS }).catch(() => {});
+    await page.evaluate(() => window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior }));
+    await page.waitForTimeout(350);
+    const file = `${String(steps.length + 1).padStart(2, '0')}-${name}.png`;
+    await page.screenshot({ path: join(framesDir, file), fullPage: false });
+    steps.push({ name, file, caption, body });
+    console.log(`  📸 ${file}  — ${caption}`);
+  }
+
+  return { steps, record };
+}
+
 async function dismissCookieBanner(page: Page) {
-  // Consent is cookie-backed, so one successful click sticks for the whole
-  // context. After that the Accept button is simply absent and the 500ms
-  // timeout below is the no-op cost per subsequent call.
   await page.getByRole('button', { name: /^accept/i }).click({ timeout: 500 }).catch(() => {});
 }
 
-async function record(page: Page, name: string, caption: string, body: string) {
-  // Re-inject the chrome-hiding stylesheet every capture — addStyleTag adds a
-  // <style> element that's dropped by navigation, and Next.js's dev-tools
-  // button can reappear mid-flow. Cheap and idempotent.
-  await page.addStyleTag({ content: HIDE_CHROME_CSS }).catch(() => {});
-  // Scroll to the top so captures lead with the page header. Without this,
-  // mid-flow screenshots show bottom-of-page content because the wizard
-  // keeps the primary action button in view.
-  await page.evaluate(() => window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior }));
-  await page.waitForTimeout(350);
-  const file = `${String(steps.length + 1).padStart(2, '0')}-${name}.png`;
-  const path = join(FRAMES_DIR, file);
-  await page.screenshot({ path, fullPage: false });
-  steps.push({ name, file, caption, body });
-  console.log(`  📸 ${file}  — ${caption}`);
+// Wrap load-bearing clicks so silent misses surface as warnings.
+async function mustClick(locator: ReturnType<Page['getByText']>, label: string) {
+  try {
+    await locator.click({ timeout: 5_000 });
+  } catch (err) {
+    console.warn(`  ⚠ Failed to click "${label}" — subsequent screenshot may be wrong. ${(err as Error).message}`);
+  }
 }
 
 // ─── Seeding ─────────────────────────────────────────────────────────────
 
-async function seedExhibitor() {
+async function ensureDemoOrgAndShow() {
   if (!db) throw new Error('No DB connection — is DATABASE_URL set in .env?');
 
+  // Org
+  let [org] = await db
+    .select({ id: s.organisations.id })
+    .from(s.organisations)
+    .where(eq(s.organisations.name, DEMO_ORG_NAME))
+    .limit(1);
+
+  if (!org) {
+    const id = crypto.randomUUID();
+    await db.insert(s.organisations).values({
+      id,
+      name: DEMO_ORG_NAME,
+      contactEmail: DEMO_SECRETARY_EMAIL,
+    });
+    org = { id };
+    console.log(`✓ Created demo org "${DEMO_ORG_NAME}"`);
+  }
+
+  // Show — 56 days out so the "closes in N days" badge stays sensible
+  let [show] = await db
+    .select({ id: s.shows.id, slug: s.shows.slug })
+    .from(s.shows)
+    .where(eq(s.shows.name, DEMO_SHOW_NAME))
+    .orderBy(desc(s.shows.createdAt))
+    .limit(1);
+
+  if (!show) {
+    const showId = crypto.randomUUID();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() + 56);
+    const startDateStr = startDate.toISOString().slice(0, 10);
+    const closeDate = new Date();
+    closeDate.setDate(closeDate.getDate() + 42);
+    const slug = generateShowSlug(DEMO_SHOW_NAME, startDateStr);
+
+    await db.insert(s.shows).values({
+      id: showId,
+      name: DEMO_SHOW_NAME,
+      slug,
+      showType: 'open',
+      showScope: 'general',
+      organisationId: org.id,
+      startDate: startDateStr,
+      endDate: startDateStr,
+      startTime: '10:00',
+      status: 'entries_open',
+      entriesOpenDate: new Date(),
+      entryCloseDate: closeDate,
+      postalCloseDate: closeDate,
+      kcLicenceNo: '2026/EXAMPLE',
+      description:
+        'An all-breeds open show hosted by Thornfield Canine Society. Puppy through Open classes, friendly atmosphere, new exhibitors welcome.',
+      secretaryName: DEMO_SECRETARY_NAME,
+      secretaryEmail: DEMO_SECRETARY_EMAIL,
+      showOpenTime: '08:30',
+      acceptsPostalEntries: false,
+      firstEntryFee: 800,       // £8
+      subsequentEntryFee: 500,  // £5
+      nfcEntryFee: 400,          // £4
+      classSexArrangement: 'separate_sex',
+    });
+
+    // A handful of generic classes covering the common age bands.
+    const classDefs = await db
+      .select()
+      .from(s.classDefinitions)
+      .where(inArray(s.classDefinitions.name, ['Puppy', 'Junior', 'Novice', 'Open']));
+
+    let sortOrder = 0;
+    for (const sex of ['dog', 'bitch'] as const) {
+      for (const def of classDefs) {
+        await db.insert(s.showClasses).values({
+          showId,
+          classDefinitionId: def.id,
+          sex,
+          entryFee: 800,
+          sortOrder: sortOrder++,
+        });
+      }
+    }
+
+    show = { id: showId, slug };
+    console.log(`✓ Seeded demo show "${DEMO_SHOW_NAME}" (slug=${slug})`);
+  }
+
+  if (!show.slug) throw new Error('Demo show has no slug — unexpected');
+  return { id: show.id, slug: show.slug };
+}
+
+async function wipeExhibitor() {
+  if (!db) throw new Error('no db');
   const [existing] = await db
-    .select()
+    .select({ id: s.users.id })
     .from(s.users)
     .where(ilike(s.users.email, GUIDE_EMAIL))
     .limit(1);
+  if (!existing) return;
 
-  const passwordHash = await bcryptHash(GUIDE_PASSWORD, 10);
-
-  if (existing) {
-    // Reset the user to a clean state every run: fresh password, no dogs, no
-    // entries, address nulled (so the profile-gate step always fires), and
-    // onboarding marked complete (the /onboarding redirect is out of scope
-    // for this guide — a separate account-setup guide can cover it).
-    await db
-      .update(s.users)
-      .set({
-        passwordHash,
-        name: GUIDE_NAME,
-        role: 'exhibitor',
-        address: null,
-        postcode: null,
-        onboardingCompletedAt: new Date(),
-      })
-      .where(eq(s.users.id, existing.id));
-
-    // FK-safe teardown of any prior-run state: dogs → entries → entry_classes
-    // (order matters because Drizzle doesn't auto-cascade in push mode).
-    const dogs = await db
-      .select({ id: s.dogs.id })
-      .from(s.dogs)
-      .where(eq(s.dogs.ownerId, existing.id));
-
-    if (dogs.length > 0) {
-      const dogIds = dogs.map((d) => d.id);
-      const entries = await db
-        .select({ id: s.entries.id })
-        .from(s.entries)
-        .where(inArray(s.entries.dogId, dogIds));
-      const entryIds = entries.map((e) => e.id);
-      if (entryIds.length > 0) {
-        await db.delete(s.entryClasses).where(inArray(s.entryClasses.entryId, entryIds));
-        await db.delete(s.entries).where(inArray(s.entries.id, entryIds));
-      }
-      await db.delete(s.dogs).where(inArray(s.dogs.id, dogIds));
+  // Dogs owned by Sarah → entries → entry_classes (entries cascade the
+  // latter via schema, but keep explicit for belt-and-braces on old rows).
+  const dogs = await db
+    .select({ id: s.dogs.id })
+    .from(s.dogs)
+    .where(eq(s.dogs.ownerId, existing.id));
+  if (dogs.length > 0) {
+    const dogIds = dogs.map((d) => d.id);
+    const entries = await db
+      .select({ id: s.entries.id })
+      .from(s.entries)
+      .where(inArray(s.entries.dogId, dogIds));
+    const entryIds = entries.map((e) => e.id);
+    if (entryIds.length > 0) {
+      await db.delete(s.entryClasses).where(inArray(s.entryClasses.entryId, entryIds));
+      await db.delete(s.entries).where(inArray(s.entries.id, entryIds));
     }
-
-    console.log(`✓ Reset exhibitor ${GUIDE_EMAIL} (userId=${existing.id})`);
-    return existing.id;
+    await db.delete(s.dogs).where(inArray(s.dogs.id, dogIds));
   }
 
+  // Entries where Sarah is the exhibitor but the dog isn't hers (shouldn't
+  // normally happen, but covers any edge from earlier guide runs).
+  await db.delete(s.entries).where(eq(s.entries.exhibitorId, existing.id));
+
+  // Orders placed by Sarah — cascades payments + order_sundry_items.
+  await db.delete(s.orders).where(eq(s.orders.exhibitorId, existing.id));
+
+  await db.delete(s.accounts).where(eq(s.accounts.userId, existing.id));
+  await db.delete(s.sessions).where(eq(s.sessions.userId, existing.id));
+  await db.delete(s.users).where(eq(s.users.id, existing.id));
+}
+
+async function seedReturningExhibitor() {
+  if (!db) throw new Error('no db');
+  await wipeExhibitor();
+
+  const passwordHash = await bcryptHash(GUIDE_PASSWORD, 10);
   const id = crypto.randomUUID();
   await db.insert(s.users).values({
     id,
@@ -168,140 +256,212 @@ async function seedExhibitor() {
     role: 'exhibitor',
     emailVerified: new Date(),
     onboardingCompletedAt: new Date(),
+    address: GUIDE_ADDRESS,
+    postcode: GUIDE_POSTCODE,
   });
-  console.log(`✓ Created exhibitor ${GUIDE_EMAIL} (userId=${id})`);
-  return id;
+
+  await seedGuideDogForExhibitor();
+  console.log(`✓ Seeded returning exhibitor ${GUIDE_EMAIL} with a pre-registered dog`);
 }
 
-async function seedBella(ownerId: string) {
-  if (!db) throw new Error('No DB connection — is DATABASE_URL set in .env?');
-  // On an existing user, seedExhibitor() already deleted Sarah's prior dogs.
-  // On a fresh user, there's nothing to delete. Either way, this is a new row.
-  const id = crypto.randomUUID();
-  await db.insert(s.dogs).values({
-    id,
-    registeredName: 'Thornfield Bella at Example',
-    breedId: GSD_BREED_ID,
-    sex: 'bitch',
-    dateOfBirth: '2023-05-14',
-    breederName: 'Example Kennels',
-    colour: 'Black & Tan',
-    ownerId,
-  });
-  console.log(`✓ Seeded dog Thornfield Bella at Example (dogId=${id})`);
-  return id;
-}
-
-async function findTargetShow() {
-  if (!db) throw new Error('No DB connection — is DATABASE_URL set in .env?');
-  const [show] = await db
-    .select({ id: s.shows.id, slug: s.shows.slug, name: s.shows.name })
-    .from(s.shows)
-    .where(eq(s.shows.name, SHOW_NAME))
-    .orderBy(desc(s.shows.createdAt))
+async function seedGuideDogForExhibitor() {
+  if (!db) throw new Error('no db');
+  const [user] = await db
+    .select({ id: s.users.id })
+    .from(s.users)
+    .where(ilike(s.users.email, GUIDE_EMAIL))
     .limit(1);
-  if (!show) {
-    throw new Error(
-      `Target show "${SHOW_NAME}" not found. Run \`npx tsx scripts/e2e-mandy-fulltest.ts\` first.`,
-    );
-  }
-  if (!show.slug) {
-    // Shouldn't happen — the e2e seeder always sets a slug — but typecheck it.
-    throw new Error(`Target show "${SHOW_NAME}" has no slug set; cannot address by URL.`);
-  }
-  console.log(`✓ Target show: ${show.name} (slug=${show.slug})`);
-  return { id: show.id, slug: show.slug, name: show.name };
+  if (!user) throw new Error(`Guide exhibitor ${GUIDE_EMAIL} not found — onboarding may not have completed`);
+
+  // Skip if Sarah already has a dog (idempotent re-runs).
+  const existingDog = await db
+    .select({ id: s.dogs.id })
+    .from(s.dogs)
+    .where(eq(s.dogs.ownerId, user.id))
+    .limit(1);
+  if (existingDog.length > 0) return;
+
+  const [lab] = await db
+    .select({ id: s.breeds.id })
+    .from(s.breeds)
+    .where(ilike(s.breeds.name, 'Labrador Retriever'))
+    .limit(1);
+  if (!lab) throw new Error('Labrador Retriever breed row missing — expected seeded');
+
+  await db.insert(s.dogs).values({
+    id: crypto.randomUUID(),
+    registeredName: 'Meadowbank Blue Belle',
+    breedId: lab.id,
+    sex: 'bitch',
+    dateOfBirth: '2023-06-20',
+    breederName: 'Example Kennels',
+    colour: 'Yellow',
+    ownerId: user.id,
+  });
 }
 
-// ─── Walk ─────────────────────────────────────────────────────────────────
+// ─── Flows ───────────────────────────────────────────────────────────────
 
-// Wrap load-bearing clicks — if one of these silently misses, the next
-// screenshot captures the wrong page. Warn loudly instead.
-async function mustClick(locator: ReturnType<Page['getByText']>, label: string) {
-  try {
-    await locator.click({ timeout: 5_000 });
-  } catch (err) {
-    console.warn(`  ⚠ Failed to click "${label}" — subsequent screenshot may be wrong. ${(err as Error).message}`);
-  }
-}
-
-async function walkFlow(context: BrowserContext, show: { slug: string }) {
+async function walkReturning(
+  context: BrowserContext,
+  show: { slug: string },
+  record: ReturnType<typeof makeRecorder>['record'],
+) {
   const page = await context.newPage();
   await page.goto(`${BASE_URL}/`);
   await page.waitForLoadState('domcontentloaded');
   await dismissCookieBanner(page);
 
   await record(page, 'home', 'Start at remishowmanager.co.uk',
-    'This is the Remi home page. Tap "Find a show" to browse upcoming events.');
+    'This is the Remi home page. Tap "Find a show" to browse what\'s coming up.');
 
   await page.goto(`${BASE_URL}/shows`);
   await page.waitForLoadState('domcontentloaded');
   await record(page, 'shows-list', 'Browse upcoming shows',
-    'Every show open for entries appears here. Tap a show card to see the full schedule and enter online.');
+    'Every show open for entries appears here. Tap a show card to read the full schedule and enter online.');
 
   await page.goto(`${BASE_URL}/shows/${show.slug}`);
   await page.waitForLoadState('domcontentloaded');
   await record(page, 'show-detail', 'Read the show details',
-    'Each show page carries the schedule, the judges, the classes on offer, and the closing date. When you\'re ready, scroll down and tap "Enter this show".');
+    'Each show page lists the schedule, judges, classes on offer, and the closing date. Scroll down and tap "Enter this show" when you\'re ready.');
 
-  // Jump straight to /login with callbackUrl — the middleware would redirect
-  // us there from /enter anyway, but going direct avoids a flash of the
-  // unauthenticated enter page.
   await page.goto(
     `${BASE_URL}/login?callbackUrl=${encodeURIComponent(`/shows/${show.slug}/enter`)}`,
   );
   await page.waitForLoadState('domcontentloaded');
-  await record(page, 'login', 'Sign in — or create an account',
-    'First time? Tap "Create a free account" at the bottom. Already have a Remi account? Enter your email and password (or use the magic-link option).');
+  await record(page, 'login', 'Sign in to your Remi account',
+    'Enter your email and password, or tap "Send sign-in link" to have Remi email you a one-tap link.');
 
   await page.getByRole('button', { name: /sign in with password/i }).click({ timeout: 5_000 }).catch(() => {});
   await page.getByLabel(/email address/i).fill(GUIDE_EMAIL);
   await page.waitForSelector('input[type="password"]:visible', { timeout: 5_000 });
   await page.getByLabel(/^password$/i).fill(GUIDE_PASSWORD);
-  await record(page, 'login-filled', 'Enter your email and password',
-    'Tap "Sign in" once your details are filled in. Remi will remember you on this device.');
+  await record(page, 'login-filled', 'Type in your details and tap Sign in',
+    'Remi remembers you on this device — you won\'t need to sign in again next time, unless you clear your browser.');
   await page.getByRole('button', { name: /^sign in$/i }).click();
 
   await page.waitForURL(new RegExp(`/shows/${show.slug}/enter`), { timeout: 15_000 });
   await page.waitForLoadState('networkidle');
+  await runEntryWizard(page, record);
+  await page.close();
+}
 
-  // Profile-completion gate — first-time users must give name + address
-  // before the wizard lets them start. The RKC requires both on every
-  // entry form, so we surface this as its own guide step.
-  const profileGate = page.getByText(/complete your profile/i).first();
-  if (await profileGate.isVisible().catch(() => false)) {
-    await record(page, 'profile-gate', 'Add your name and address',
-      'The RKC requires your full name and address on every entry. Remi will only ask once — your details are stored against your account and filled in automatically on future entries.');
-    await page.getByLabel(/full name/i).fill(GUIDE_NAME);
-    await page.getByLabel(/address/i).fill('14 Primrose Lane, Glasgow G1 1AA');
-    await record(page, 'profile-filled', 'Profile filled in',
-      'Tap "Save & Continue" when you\'re ready. You\'ll be taken straight to the first step of your entry.');
-    await page.getByRole('button', { name: /save.*continue/i }).click({ timeout: 10_000 });
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(500);
+async function walkNew(
+  context: BrowserContext,
+  show: { slug: string },
+  record: ReturnType<typeof makeRecorder>['record'],
+) {
+  const page = await context.newPage();
+
+  await page.goto(`${BASE_URL}/`);
+  await page.waitForLoadState('domcontentloaded');
+  await dismissCookieBanner(page);
+  await record(page, 'home', 'Start at remishowmanager.co.uk',
+    'This is the Remi home page. Tap "Create Your Free Account" to sign up.');
+
+  await page.goto(`${BASE_URL}/register`);
+  await page.waitForLoadState('domcontentloaded');
+  await record(page, 'register-empty', 'Create your free account',
+    'Enter your email address. You can choose to set a password (best for exhibitors who don\'t always have email to hand), or let Remi email you a sign-in link each time.');
+
+  await page.getByLabel(/email address/i).fill(GUIDE_EMAIL);
+  await page.getByLabel(/set a password/i).check({ force: true });
+  await page.waitForSelector('#password', { timeout: 3_000 });
+  await page.locator('#password').fill(GUIDE_PASSWORD);
+  await page.locator('#confirm-password').fill(GUIDE_PASSWORD);
+  await record(page, 'register-filled', 'Fill in your email and password',
+    'Passwords must be at least 8 characters. Tap "Create account" when you\'re ready — Remi will sign you in immediately and take you to the welcome screen.');
+
+  await mustClick(page.getByRole('button', { name: /^create account$/i }), 'Create account');
+  await page.waitForURL(/\/onboarding/, { timeout: 15_000 });
+  await page.waitForLoadState('networkidle');
+
+  await record(page, 'onboarding-welcome', 'Welcome to Remi',
+    'Tell Remi what you\'re here for. "Enter shows" is the right choice for exhibitors. (You can change this later in Settings if you decide to host shows too.)');
+
+  await mustClick(page.getByText(/i want to enter my dogs in shows|enter shows/i).first(), 'Enter shows');
+  await page.waitForLoadState('networkidle');
+  await page.waitForTimeout(600);
+
+  await record(page, 'onboarding-profile', 'Your details',
+    'The RKC requires your full name and address on every entry form, so Remi stores them once and fills them in for you. You can edit these any time from Settings.');
+
+  await page.getByLabel(/^full name$/i).first().fill(GUIDE_NAME).catch(() => {});
+  // Postcode lookup is an external API — click "Enter manually" to bypass.
+  const enterManuallyBtn = page.getByRole('button', { name: /enter manually|manual/i });
+  if (await enterManuallyBtn.isVisible().catch(() => false)) {
+    await enterManuallyBtn.click({ timeout: 2_000 }).catch(() => {});
   }
+  await page.getByLabel(/address/i).first().fill(GUIDE_ADDRESS).catch(() => {});
+  await page.getByLabel(/postcode/i).first().fill(GUIDE_POSTCODE).catch(() => {});
+  await record(page, 'onboarding-profile-filled', 'Fill in your details',
+    'Name, address, postcode — then tap Continue. Remi keeps these to hand so you never fill them in again.');
 
-  // Entry-type step — shown when the show has Junior Handler classes. Most
-  // exhibitors pick "Enter a Dog".
+  await mustClick(page.getByRole('button', { name: /save.*continue|continue|save/i }).first(), 'Save & Continue (profile)');
+  await page.waitForLoadState('networkidle');
+  await page.waitForTimeout(800);
+
+  await record(page, 'onboarding-dog-empty', 'Add your first dog',
+    'Enter your dog\'s RKC registered name, breed, date of birth and sex. If your dog is registered with the RKC, you can paste their registration number and tap "Lookup on RKC Website" to auto-fill the pedigree. You can also tap "Skip for now" and add your dogs later from the My Dogs page.');
+
+  // Skip the form — reliably filling the calendar + breed combobox + sex
+  // select in a headless walkthrough is fragile, and the "Skip for now"
+  // button here genuinely mirrors a real user's option. We inject the
+  // demo dog into the DB after onboarding completes so the Entry wizard
+  // has a dog to pick.
+  await mustClick(page.getByRole('button', { name: /skip for now/i }), 'Skip dog for now');
+  await page.waitForLoadState('networkidle');
+  await page.waitForTimeout(600);
+
+  await record(page, 'onboarding-done', 'You\'re all set',
+    'Account ready. Tap "Find a show" to start browsing. (Remember to add your dogs from the menu before you try to enter one!)');
+
+  // Seed the demo dog silently now that onboarding has finished — so the
+  // "returning user" section of the entry flow can proceed with a
+  // populated dog list.
+  await seedGuideDogForExhibitor();
+
+  await page.goto(`${BASE_URL}/shows`);
+  await page.waitForLoadState('domcontentloaded');
+  await record(page, 'shows-list', 'Browse upcoming shows',
+    'Every show open for entries appears here. Tap a show card to read the full schedule and enter online.');
+
+  await page.goto(`${BASE_URL}/shows/${show.slug}`);
+  await page.waitForLoadState('domcontentloaded');
+  await record(page, 'show-detail', 'Read the show details',
+    'Check the date, venue, judges, and the list of classes. Scroll down and tap "Enter this show" when you\'re ready.');
+
+  await page.goto(`${BASE_URL}/shows/${show.slug}/enter`);
+  await page.waitForLoadState('networkidle');
+  await runEntryWizard(page, record);
+  await page.close();
+}
+
+// The entry-wizard tail is shared by both flows from the /enter page onwards.
+async function runEntryWizard(
+  page: Page,
+  record: ReturnType<typeof makeRecorder>['record'],
+) {
   const typeHeading = page.getByText(/what type of entry/i).first();
   if (await typeHeading.isVisible().catch(() => false)) {
     await record(page, 'entry-type', 'Choose your entry type',
-      'Standard breed entry, or Junior Handler (handling-skill classes for young handlers). Most exhibitors pick "Enter a Dog".');
+      'Standard breed entry is the right answer for most exhibitors. Junior Handler is for young handlers being judged on handling skill rather than the dog.');
     await mustClick(page.getByText(/enter a dog/i).first(), 'Enter a Dog');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(400);
   }
 
   await record(page, 'dog-step', 'Pick the dog you\'re entering',
-    'Remi shows every dog registered to your account. Tap the one you\'re entering in this show. If your dog isn\'t listed, head to "My Dogs" from the menu to add them first.');
+    'Remi shows every dog registered to your account. Tap the one you\'re entering. Need to register another? "+ Add a new dog" takes you to the dog form.');
 
-  await mustClick(page.getByText(/Thornfield Bella|Bella/i).first(), 'Bella dog card');
+  await mustClick(page.getByText(/Meadowbank Blue Belle|Bella/i).first(), 'Dog card');
   await page.waitForTimeout(400);
   await page.getByRole('button', { name: /continue|next|pick classes|choose classes/i }).first()
     .click({ timeout: 5_000 }).catch(() => {});
   await page.waitForLoadState('networkidle');
+
   await record(page, 'classes-step', 'Choose the classes to enter',
-    'Tick every class you\'d like to enter. Remi lists the age and achievement classes your dog qualifies for based on their date of birth and show record.');
+    'Tick every class you\'d like to enter. Remi lists the age and achievement classes your dog qualifies for, based on their date of birth and show record.');
 
   const classCheckboxes = page.getByRole('checkbox');
   const classCount = Math.min(2, await classCheckboxes.count());
@@ -309,20 +469,18 @@ async function walkFlow(context: BrowserContext, show: { slug: string }) {
     try {
       await classCheckboxes.nth(i).check({ force: true });
     } catch (err) {
-      console.warn(`  ⚠ Could not tick class checkbox ${i + 1} — "classes-picked" screenshot may show fewer selections. ${(err as Error).message}`);
+      console.warn(`  ⚠ Could not tick class checkbox ${i + 1}: ${(err as Error).message}`);
     }
   }
   await record(page, 'classes-picked', 'Two classes selected',
-    'In this example, Bella is entered in two classes. The running total updates at the bottom of the screen.');
+    'In this example, Belle is entered in two classes. The running total updates at the bottom of the screen.');
 
   await mustClick(page.getByRole('button', { name: /add to cart|update/i }).first(), 'Add to Cart');
   await page.waitForLoadState('networkidle');
   await page.waitForTimeout(500);
   await record(page, 'cart-review', 'Review your entries',
-    'Last chance to check your entries before paying. Remi shows the full RKC declaration — tick to agree, then move to payment.');
+    'Last chance to check everything before paying. Remi shows the full RKC declaration — tick to agree, then move to payment.');
 
-  // RKC declaration is a combined health+terms checkbox; scroll it into
-  // view first because it sits below the fold on mobile.
   const declaration = page.getByText(/i agree to the above declaration/i);
   await declaration.scrollIntoViewIfNeeded().catch(() => {});
   await mustClick(declaration, 'RKC declaration checkbox');
@@ -332,71 +490,97 @@ async function walkFlow(context: BrowserContext, show: { slug: string }) {
     page.getByRole('button', { name: /proceed to payment|confirm entry/i }).first(),
     'Proceed to Payment',
   );
-  // Wait for the PaymentIntent to resolve + Stripe Elements iframe to mount.
   await page.waitForLoadState('networkidle');
   await page.waitForSelector('iframe[name^="__privateStripeFrame"]', { timeout: 15_000 }).catch(() => {});
   await page.waitForTimeout(500);
   await record(page, 'payment-step', 'Enter your card details',
-    'Your card is charged securely by Stripe. Remi never sees or stores your full card number. The £1 + 1% handling fee covers secure payment processing and the BACS transfer to the host club.');
-
-  await page.close();
+    'Your card is charged securely by Stripe. Remi never sees or stores your full card number. The £1 + 1% handling fee covers payment processing and the transfer to the host club.');
 }
 
 // ─── PDF stitching ───────────────────────────────────────────────────────
 
-async function stitchPdf() {
+const TITLES: Record<Flow, { headline: string; tagline: string; contents: string[] }> = {
+  new: {
+    headline: 'Getting started with Remi',
+    tagline: 'From signing up to entering your first show — step by step.',
+    contents: [
+      'Creating your free account',
+      'Adding your first dog',
+      'Finding a show',
+      'Choosing classes',
+      'Reviewing and paying',
+    ],
+  },
+  returning: {
+    headline: 'Entering a show',
+    tagline: 'For exhibitors with a Remi account and a dog already registered.',
+    contents: [
+      'Signing in',
+      'Finding a show',
+      'Picking your dog',
+      'Choosing classes',
+      'Reviewing and paying',
+    ],
+  },
+};
+
+async function stitchPdf(flow: Flow, steps: Step[], framesDir: string, outPath: string) {
   const pdf = await PDFDocument.create();
   const helv = await pdf.embedFont(StandardFonts.Helvetica);
   const helvBold = await pdf.embedFont(StandardFonts.HelveticaBold);
 
-  // A4 portrait, 72dpi (pdf-lib's default unit is points; 1pt = 1/72 in)
   const PAGE_W = 595;
   const PAGE_H = 842;
   const MARGIN = 48;
 
-  const primary = rgb(0x2d / 255, 0x5f / 255, 0x3f / 255); // Remi green
+  const primary = rgb(0x2d / 255, 0x5f / 255, 0x3f / 255);
   const ink = rgb(0.12, 0.12, 0.14);
   const muted = rgb(0.4, 0.4, 0.44);
+  const cream = rgb(0.96, 0.95, 0.92);
+  const { headline, tagline, contents } = TITLES[flow];
 
-  // ── Cover ────────────────────────────────────────────────────────────
+  const brandingDir = join(process.cwd(), 'public', 'branding');
+  const logo = await pdf.embedPng(readFileSync(join(brandingDir, 'remi-horizontal.png')));
+  const backCover = await pdf.embedJpg(readFileSync(join(brandingDir, 'remi-back-cover.jpg')));
+
+  // ── Cover ────────────────────────────────────────────────────────
   const cover = pdf.addPage([PAGE_W, PAGE_H]);
-  cover.drawRectangle({ x: 0, y: PAGE_H - 260, width: PAGE_W, height: 260, color: primary });
-  cover.drawText('Remi', {
-    x: MARGIN, y: PAGE_H - 110, size: 48, font: helvBold, color: rgb(1, 1, 1),
+  cover.drawRectangle({ x: 0, y: 0, width: PAGE_W, height: PAGE_H, color: cream });
+
+  // Logo — centred, scaled to 70% of content width
+  const logoMaxW = (PAGE_W - MARGIN * 2) * 0.75;
+  const logoScale = logoMaxW / logo.width;
+  const logoW = logo.width * logoScale;
+  const logoH = logo.height * logoScale;
+  cover.drawImage(logo, {
+    x: (PAGE_W - logoW) / 2,
+    y: PAGE_H - 80 - logoH,
+    width: logoW,
+    height: logoH,
   });
-  cover.drawText('Exhibitor Guide', {
-    x: MARGIN, y: PAGE_H - 160, size: 24, font: helv, color: rgb(1, 1, 1),
+
+  const headlineY = PAGE_H - 100 - logoH - 40;
+  cover.drawText(headline, {
+    x: MARGIN, y: headlineY, size: 28, font: helvBold, color: ink,
   });
-  cover.drawText('Entering a dog show with Remi — step by step.', {
-    x: MARGIN, y: PAGE_H - 200, size: 14, font: helv, color: rgb(1, 1, 1),
+  cover.drawText(tagline, {
+    x: MARGIN, y: headlineY - 32, size: 13, font: helv, color: muted,
   });
+
+  const tocY = headlineY - 90;
   cover.drawText('What\'s inside', {
-    x: MARGIN, y: PAGE_H - 320, size: 18, font: helvBold, color: ink,
+    x: MARGIN, y: tocY, size: 16, font: helvBold, color: ink,
   });
-  const toc = [
-    'Finding a show',
-    'Signing in to your Remi account',
-    'Adding your name and address',
-    'Choosing your entry type',
-    'Picking the dog you\'re entering',
-    'Choosing the classes to enter',
-    'Reviewing and paying securely',
-  ];
-  toc.forEach((line, i) => {
+  contents.forEach((line, i) => {
     cover.drawText(`${i + 1}.  ${line}`, {
-      x: MARGIN + 8, y: PAGE_H - 360 - i * 22, size: 13, font: helv, color: ink,
+      x: MARGIN + 8, y: tocY - 30 - i * 22, size: 13, font: helv, color: ink,
     });
   });
-  cover.drawText('remishowmanager.co.uk', {
-    x: MARGIN, y: 48, size: 11, font: helv, color: muted,
-  });
+  cover.drawText('remishowmanager.co.uk', { x: MARGIN, y: 48, size: 11, font: helv, color: muted });
 
-  // ── Step pages ───────────────────────────────────────────────────────
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
-    const pngBytes = readFileSync(join(FRAMES_DIR, step.file));
-    const image = await pdf.embedPng(pngBytes);
-
+    const image = await pdf.embedPng(readFileSync(join(framesDir, step.file)));
     const page = pdf.addPage([PAGE_W, PAGE_H]);
 
     page.drawRectangle({
@@ -429,25 +613,32 @@ async function stitchPdf() {
     const x = (PAGE_W - w) / 2;
     const y = MARGIN + (available.h - h) / 2;
 
-    // Light-grey frame gives the screenshot a subtle shadow against the page.
     page.drawRectangle({
-      x: x - 2, y: y - 2, width: w + 4, height: h + 4,
-      color: rgb(0.9, 0.9, 0.92),
+      x: x - 2, y: y - 2, width: w + 4, height: h + 4, color: rgb(0.9, 0.9, 0.92),
     });
     page.drawImage(image, { x, y, width: w, height: h });
 
     page.drawText(`${i + 1} of ${steps.length}`, {
       x: PAGE_W - MARGIN - 40, y: 24, size: 10, font: helv, color: muted,
     });
-    page.drawText('Remi — Exhibitor Guide', {
+    page.drawText(`Remi — ${headline}`, {
       x: MARGIN, y: 24, size: 10, font: helv, color: muted,
     });
   }
 
-  // ── Closing page ─────────────────────────────────────────────────────
+  // ── "Need a hand?" contact page ──────────────────────────────────
   const outro = pdf.addPage([PAGE_W, PAGE_H]);
+  outro.drawRectangle({ x: 0, y: 0, width: PAGE_W, height: PAGE_H, color: cream });
+  const smallLogoW = 180;
+  const smallLogoH = (logo.height / logo.width) * smallLogoW;
+  outro.drawImage(logo, {
+    x: (PAGE_W - smallLogoW) / 2,
+    y: PAGE_H - 80 - smallLogoH,
+    width: smallLogoW,
+    height: smallLogoH,
+  });
   outro.drawText('Need a hand?', {
-    x: MARGIN, y: PAGE_H - 140, size: 28, font: helvBold, color: primary,
+    x: MARGIN, y: PAGE_H - 180 - smallLogoH, size: 28, font: helvBold, color: ink,
   });
   const outroLines = [
     'If you get stuck at any point, we\'re here to help.',
@@ -455,18 +646,29 @@ async function stitchPdf() {
     'Email:  support@remishowmanager.co.uk',
     'Website:  remishowmanager.co.uk',
     '',
-    'Every Remi email has a reply-to that goes straight to our team.',
+    'Every Remi email has a reply-to address that goes straight to our team.',
     'Just reply — we read every one.',
   ];
   outroLines.forEach((line, i) => {
-    outro.drawText(line, {
-      x: MARGIN, y: PAGE_H - 200 - i * 20, size: 13, font: helv, color: ink,
-    });
+    outro.drawText(line, { x: MARGIN, y: PAGE_H - 240 - smallLogoH - i * 20, size: 13, font: helv, color: ink });
+  });
+
+  // ── Back cover — full brand artwork, fit-within so no text gets cropped ─
+  const back = pdf.addPage([PAGE_W, PAGE_H]);
+  back.drawRectangle({ x: 0, y: 0, width: PAGE_W, height: PAGE_H, color: rgb(0.08, 0.12, 0.09) });
+  const bcScale = Math.min(PAGE_W / backCover.width, PAGE_H / backCover.height);
+  const bcW = backCover.width * bcScale;
+  const bcH = backCover.height * bcScale;
+  back.drawImage(backCover, {
+    x: (PAGE_W - bcW) / 2,
+    y: (PAGE_H - bcH) / 2,
+    width: bcW,
+    height: bcH,
   });
 
   const bytes = await pdf.save();
-  writeFileSync(PDF_PATH, bytes);
-  console.log(`\n✓ Guide written to ${PDF_PATH} (${(bytes.length / 1024).toFixed(0)} KB, ${steps.length} steps)`);
+  writeFileSync(outPath, bytes);
+  console.log(`✓ Guide written to ${outPath} (${(bytes.length / 1024).toFixed(0)} KB, ${steps.length} steps)`);
 }
 
 function wrapText(text: string, maxChars: number): string[] {
@@ -487,18 +689,27 @@ function wrapText(text: string, maxChars: number): string[] {
 
 // ─── Main ────────────────────────────────────────────────────────────────
 
-async function main() {
-  if (existsSync(FRAMES_DIR)) rmSync(FRAMES_DIR, { recursive: true });
-  mkdirSync(FRAMES_DIR, { recursive: true });
-  mkdirSync(OUT_DIR, { recursive: true });
+function parseFlow(): Flow[] {
+  const arg = process.argv.find((a) => a.startsWith('--flow='))?.split('=')[1];
+  if (arg === 'new') return ['new'];
+  if (arg === 'returning') return ['returning'];
+  if (arg === 'both') return ['new', 'returning'];
+  return ['returning'];
+}
 
-  console.log('→ Seeding guide exhibitor…');
-  const userId = await seedExhibitor();
+async function runFlow(flow: Flow, show: { slug: string }) {
+  console.log(`\n═══ Flow: ${flow} ═══`);
+  const framesDir = join(FRAMES_ROOT, flow);
+  const outPath = join(OUT_DIR, `exhibitor-guide-${flow}.pdf`);
+  if (existsSync(framesDir)) rmSync(framesDir, { recursive: true });
+  mkdirSync(framesDir, { recursive: true });
 
-  console.log('→ Seeding dog + locating target show…');
-  const [, show] = await Promise.all([seedBella(userId), findTargetShow()]);
+  if (flow === 'new') {
+    await wipeExhibitor();
+  } else {
+    await seedReturningExhibitor();
+  }
 
-  console.log('→ Launching Chromium (mobile viewport)…');
   const browser = await chromium.launch({ headless: true });
   try {
     const context = await browser.newContext({
@@ -506,17 +717,32 @@ async function main() {
       deviceScaleFactor: DEVICE_SCALE,
       isMobile: true,
     });
+    const { steps, record } = makeRecorder(framesDir);
 
-    console.log('→ Walking exhibitor flow…');
-    await walkFlow(context, show);
+    if (flow === 'new') {
+      await walkNew(context, show, record);
+    } else {
+      await walkReturning(context, show, record);
+    }
 
-    console.log('→ Stitching PDF…');
-    await stitchPdf();
+    await stitchPdf(flow, steps, framesDir, outPath);
   } finally {
     await browser.close();
   }
+}
 
-  console.log('\nDone. Open scripts/output/exhibitor-guide.pdf to review.');
+async function main() {
+  const flows = parseFlow();
+  mkdirSync(OUT_DIR, { recursive: true });
+
+  console.log('→ Ensuring demo org + show…');
+  const show = await ensureDemoOrgAndShow();
+
+  for (const flow of flows) {
+    await runFlow(flow, show);
+  }
+
+  console.log('\nDone.');
 }
 
 main().catch((err) => {
