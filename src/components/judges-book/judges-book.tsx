@@ -88,10 +88,10 @@ const s = StyleSheet.create({
     marginBottom: 4,
   },
   refNumber: {
-    fontSize: 11,
+    fontSize: 16,
     fontWeight: 'bold',
     textAlign: 'center',
-    paddingVertical: 2,
+    paddingVertical: 3,
   },
   // One of three identical placement columns. Carbon-triplicate: a judge
   // fills in placements per column, the page is then physically split
@@ -158,15 +158,28 @@ const s = StyleSheet.create({
     marginBottom: 4,
     height: 1,
   },
-  // Absent row — slightly taller so the judge can note multiple absentees.
+  // Absent row — calibrated on Amanda's 2026-04-19 Open Bitch: 26 entries,
+  // 18 absent. Six stacked write-lines give the judge room for ~18-24
+  // ring numbers (3-4 per line), which covers all but the most freakish
+  // absentee counts. The row dominates the lower half of the column.
   absentRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
     borderBottomWidth: 0.5,
     borderBottomColor: '#ccc',
-    minHeight: 42,
+    minHeight: 180,
     paddingHorizontal: 6,
+    paddingTop: 6,
     paddingBottom: 3,
+  },
+  absentWriteArea: {
+    flex: 1,
+    marginLeft: 4,
+  },
+  absentWriteLine: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#888',
+    marginTop: 22,
   },
   // Signature block at the bottom of each column.
   signatureBlock: {
@@ -242,7 +255,7 @@ const bestAwardsStyles = StyleSheet.create({
 });
 
 interface ColumnHeaderProps {
-  classNumber: number | null;
+  classLabel: string;
   className: string;
   sexLabel: string | null;
   breedName: string | null;
@@ -277,11 +290,11 @@ function BestAwardsColumn({
   );
 }
 
-function ColumnHeader({ classNumber, className, sexLabel, breedName }: ColumnHeaderProps) {
+function ColumnHeader({ classLabel, className, sexLabel, breedName }: ColumnHeaderProps) {
   return (
     <View style={s.columnClassHeader}>
       <Text style={s.columnClassNumber}>
-        Class {classNumber ?? '—'}
+        Class {classLabel || '—'}
       </Text>
       <Text style={s.columnClassName}>
         {className}{sexLabel ? ` (${sexLabel})` : ''}
@@ -312,7 +325,11 @@ function PlacementColumn(props: ColumnHeaderProps & { isLast?: boolean }) {
 
       <View style={s.absentRow}>
         <Text style={s.placementLabel}>Abs</Text>
-        <View style={s.placementWriteLine} />
+        <View style={s.absentWriteArea}>
+          {Array.from({ length: 6 }, (_, i) => (
+            <View key={i} style={s.absentWriteLine} />
+          ))}
+        </View>
       </View>
 
       <View style={s.signatureBlock}>
@@ -344,7 +361,7 @@ export function JudgesBook({
       {classes.map((cls, classIdx) => {
         const sexLabel = cls.sex === 'dog' ? 'Dogs' : cls.sex === 'bitch' ? 'Bitches' : null;
         const columnProps: ColumnHeaderProps = {
-          classNumber: cls.classNumber,
+          classLabel: cls.classLabel,
           className: cls.className,
           sexLabel,
           breedName: cls.breedName,
@@ -369,7 +386,7 @@ export function JudgesBook({
             {/* Body: reference column + 3 identical placement columns. */}
             <View style={s.body}>
               <View style={s.refColumn}>
-                <Text style={s.refHeader}>Ring No.</Text>
+                <Text style={s.refHeader}>Exhibit No.</Text>
                 {cls.exhibits.map((exhibit, i) => (
                   <Text key={i} style={s.refNumber}>
                     {exhibit.catalogueNumber ?? '—'}

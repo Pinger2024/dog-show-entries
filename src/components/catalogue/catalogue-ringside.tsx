@@ -303,11 +303,14 @@ function buildExhibitorIndex(entries: CatalogueEntry[]): ExhibitorInfo[] {
       .sort((a, b) => {
         if (a.classNumber != null && b.classNumber != null)
           return a.classNumber - b.classNumber;
-        return 0;
+        if (a.classNumber != null) return -1;
+        if (b.classNumber != null) return 1;
+        return (a.classLabel ?? '').localeCompare(b.classLabel ?? '');
       })
-      .map((c) =>
-        c.classNumber != null ? `${c.classNumber}. ${c.name ?? ''}` : c.name ?? '',
-      )
+      .map((c) => {
+        const lbl = c.classLabel ?? (c.classNumber != null ? String(c.classNumber) : null);
+        return lbl ? `${lbl}. ${c.name ?? ''}` : c.name ?? '';
+      })
       .filter(Boolean)
       .join(', ');
 
@@ -377,13 +380,14 @@ export function CatalogueRingside({ show, entries }: Props) {
   const allClasses = groupByClass(entries, show);
   const isChampionship = show.showType === 'championship';
 
-  // Build sponsorship lookup
-  const sponsorsByClassNumber = new Map<number, ClassSponsorshipInfo[]>();
+  // Build sponsorship lookup keyed on classLabel so JH (JHA/JHB) resolves too.
+  const sponsorsByClassLabel = new Map<string, ClassSponsorshipInfo[]>();
   for (const sp of show.classSponsorships ?? []) {
-    if (sp.classNumber != null) {
-      const existing = sponsorsByClassNumber.get(sp.classNumber) ?? [];
+    const label = sp.classLabel ?? (sp.classNumber != null ? String(sp.classNumber) : '');
+    if (label) {
+      const existing = sponsorsByClassLabel.get(label) ?? [];
       existing.push(sp);
-      sponsorsByClassNumber.set(sp.classNumber, existing);
+      sponsorsByClassLabel.set(label, existing);
     }
   }
 
@@ -483,10 +487,9 @@ export function CatalogueRingside({ show, entries }: Props) {
               </Text>
               {chunkClasses.map((classGroup, classIdx) => {
               const sorted = sortEntries(classGroup.entries);
-              const sps =
-                classGroup.classNumber != null
-                  ? sponsorsByClassNumber.get(classGroup.classNumber) ?? []
-                  : [];
+              const sps = classGroup.classLabel
+                ? sponsorsByClassLabel.get(classGroup.classLabel) ?? []
+                : [];
               const sponsorLines = buildSponsorLines(sps);
 
               // Classes with ≤8 entries stay fully atomic (wrap=false on
@@ -506,15 +509,15 @@ export function CatalogueRingside({ show, entries }: Props) {
               const restEntries = sorted.slice(4);
               return (
                 <View
-                  key={`cls-${section.key}-${classGroup.classNumber ?? classGroup.className}-${classIdx}`}
+                  key={`cls-${section.key}-${classGroup.classLabel || classGroup.className}-${classIdx}`}
                   wrap={!keepAtomic}
                 >
                   {/* Header + sponsor lines + first entries kept atomic */}
                   <View wrap={false} minPresenceAhead={keepAtomic ? undefined : 100}>
                     <View style={s.classHeader}>
                       <Text style={s.classHeaderText}>
-                        {classGroup.classNumber != null
-                          ? `${classGroup.classNumber}. ${classGroup.className}`
+                        {classGroup.classLabel
+                          ? `${classGroup.classLabel}. ${classGroup.className}`
                           : classGroup.className}
                       </Text>
                       <Text style={s.classHeaderCount}>
@@ -530,7 +533,7 @@ export function CatalogueRingside({ show, entries }: Props) {
                       <View style={s.entriesGrid}>
                         {firstEntries.map((entry, entryIdx) => (
                           <View
-                            key={`${classGroup.classNumber ?? classGroup.className}-${entry.catalogueNumber ?? 'nocat'}-${entryIdx}`}
+                            key={`${classGroup.classLabel || classGroup.className}-${entry.catalogueNumber ?? 'nocat'}-${entryIdx}`}
                             style={s.entryCell}
                           >
                             <Text style={s.entryNumber}>{entry.catalogueNumber ?? '—'}</Text>
@@ -548,7 +551,7 @@ export function CatalogueRingside({ show, entries }: Props) {
                     <View style={s.entriesGrid}>
                       {restEntries.map((entry, entryIdx) => (
                         <View
-                          key={`rest-${classGroup.classNumber ?? classGroup.className}-${entry.catalogueNumber ?? 'nocat'}-${entryIdx}`}
+                          key={`rest-${classGroup.classLabel || classGroup.className}-${entry.catalogueNumber ?? 'nocat'}-${entryIdx}`}
                           style={s.entryCell}
                         >
                           <Text style={s.entryNumber}>{entry.catalogueNumber ?? '—'}</Text>

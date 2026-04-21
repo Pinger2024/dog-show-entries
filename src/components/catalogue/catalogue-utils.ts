@@ -235,6 +235,7 @@ export interface CatalogueEntryBase {
     name: string | undefined;
     sex: string | null | undefined;
     classNumber: number | null | undefined;
+    classLabel?: string;
     sortOrder: number | undefined;
   }[];
 }
@@ -244,6 +245,7 @@ export interface ShowClassesInfo {
   allShowClasses?: {
     className: string;
     classNumber: number | null;
+    classLabel?: string;
     sortOrder: number;
     sex: string | null;
   }[];
@@ -251,6 +253,7 @@ export interface ShowClassesInfo {
 
 export interface ClassGroup {
   classNumber: number | null | undefined;
+  classLabel?: string;
   className: string;
   sex: string | null | undefined;
   sortOrder: number | undefined;
@@ -264,15 +267,26 @@ export function groupByClass<T extends CatalogueEntryBase>(
 ): ClassGroup[] {
   const byKey = new Map<string, ClassGroup>();
 
+  // JH classes (classLabel='JHA'/'JHB') can all share classNumber=null, so
+  // key on classLabel when present to avoid collapsing distinct JH classes.
+  const keyFor = (
+    label: string | undefined,
+    num: number | null | undefined,
+    name: string | undefined,
+    sex: string | null | undefined,
+  ) => {
+    if (label) return `lbl:${label}`;
+    if (num != null) return `num:${num}`;
+    return `name:${name ?? ''}-${sex ?? 'any'}`;
+  };
+
   for (const entry of entries) {
     for (const cls of entry.classes) {
-      const key =
-        cls.classNumber != null
-          ? `num:${cls.classNumber}`
-          : `name:${cls.name ?? ''}-${cls.sex ?? 'any'}`;
+      const key = keyFor(cls.classLabel, cls.classNumber, cls.name, cls.sex);
       if (!byKey.has(key)) {
         byKey.set(key, {
           classNumber: cls.classNumber,
+          classLabel: cls.classLabel,
           className: cls.name ?? 'Unknown Class',
           sex: cls.sex,
           sortOrder: cls.sortOrder,
@@ -285,13 +299,11 @@ export function groupByClass<T extends CatalogueEntryBase>(
 
   if (show.allShowClasses) {
     for (const sc of show.allShowClasses) {
-      const key =
-        sc.classNumber != null
-          ? `num:${sc.classNumber}`
-          : `name:${sc.className}-${sc.sex ?? 'any'}`;
+      const key = keyFor(sc.classLabel, sc.classNumber, sc.className, sc.sex);
       if (!byKey.has(key)) {
         byKey.set(key, {
           classNumber: sc.classNumber,
+          classLabel: sc.classLabel,
           className: sc.className,
           sex: sc.sex,
           sortOrder: sc.sortOrder,
@@ -301,11 +313,14 @@ export function groupByClass<T extends CatalogueEntryBase>(
     }
   }
 
+  // Sort numbered classes first (by classNumber), then JH/unnumbered by
+  // classLabel (JHA, JHB, …), then anything else by sortOrder.
   return Array.from(byKey.values()).sort((a, b) => {
     if (a.classNumber != null && b.classNumber != null)
       return a.classNumber - b.classNumber;
     if (a.classNumber != null) return -1;
     if (b.classNumber != null) return 1;
+    if (a.classLabel && b.classLabel) return a.classLabel.localeCompare(b.classLabel);
     return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
   });
 }

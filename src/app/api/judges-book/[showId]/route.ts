@@ -8,9 +8,10 @@ import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, makePdfResponse } from '@/lib/pdf-utils';
 import { ensureCatalogueNumbers } from '@/server/services/catalogue-numbering';
+import { buildClassLabelMap } from '@/lib/class-labels';
 
 export type JudgesBookClass = {
-  classNumber: number | null;
+  classLabel: string;
   className: string;
   sex: string | null;
   breedName: string | null;
@@ -90,6 +91,8 @@ export async function GET(
     if (ja.ring?.number != null) ringByBreed.set(breedKey, ja.ring.number);
   }
 
+  const classLabelMap = buildClassLabelMap(showClasses);
+
   // Build the classes data for the judge's book
   const classes: JudgesBookClass[] = showClasses.map((sc) => {
     // Get confirmed entries for this class
@@ -111,7 +114,7 @@ export async function GET(
     const ringNumber = ringByBreed.get(sc.breedId) ?? ringByBreed.get(null) ?? null;
 
     return {
-      classNumber: sc.classNumber,
+      classLabel: classLabelMap.get(sc.id) ?? '',
       className: sc.classDefinition?.name ?? 'Unknown Class',
       sex: sc.sex,
       breedName: sc.breed?.name ?? null,

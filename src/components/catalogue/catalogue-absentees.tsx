@@ -85,7 +85,7 @@ export function CatalogueAbsentees({ show, entries }: Props) {
                 </Cell>
                 <Cell width={colWidths.classes}>
                   {entry.classes
-                    .map((c) => c.classNumber ? `${c.classNumber}` : c.name)
+                    .map((c) => c.classLabel || (c.classNumber != null ? String(c.classNumber) : c.name))
                     .filter(Boolean)
                     .join(', ')}
                 </Cell>

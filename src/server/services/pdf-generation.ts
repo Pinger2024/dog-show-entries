@@ -122,6 +122,8 @@ export async function generateCataloguePdf(
     judgeDisplayList.push(prefix ? `${prefix} — ${ja.judge.name}` : ja.judge.name);
   }
 
+  const classLabelMap = buildClassLabelMap(showClassRows);
+
   // Build class sponsorship list for the Trophies & Sponsorships page
   // AND the inline per-class sponsor lines. Mirrors route.ts so the two
   // pipelines produce the same catalogue for the same show.
@@ -133,6 +135,7 @@ export async function generateCataloguePdf(
         classSponsorshipInfos.push({
           className: sc.classDefinition?.name ?? 'Unknown Class',
           classNumber: sc.classNumber,
+          classLabel: classLabelMap.get(sc.id) ?? '',
           trophyName: cs.trophyName,
           trophyDonor: cs.trophyDonor,
           sponsorName,
@@ -154,6 +157,7 @@ export async function generateCataloguePdf(
   const allShowClasses = showClassRows.map((sc) => ({
     className: sc.classDefinition?.name ?? 'Unknown Class',
     classNumber: sc.classNumber,
+    classLabel: classLabelMap.get(sc.id) ?? '',
     sortOrder: sc.sortOrder,
     sex: sc.sex,
   }));
@@ -204,6 +208,7 @@ export async function generateCataloguePdf(
       name: ec.showClass?.classDefinition?.name,
       sex: ec.showClass?.sex,
       classNumber: ec.showClass?.classNumber,
+      classLabel: ec.showClass?.id ? classLabelMap.get(ec.showClass.id) : undefined,
       sortOrder: ec.showClass?.sortOrder,
       showClassId: ec.showClassId,
     })),
@@ -313,8 +318,9 @@ export async function generatePrizeCardsPdf(
     if (ja.judge?.name) judgeByBreed.set(ja.breedId, ja.judge.name);
   }
 
+  const prizeCardLabelMap = buildClassLabelMap(showClasses);
   const classes: PrizeCardClass[] = showClasses.map((sc) => ({
-    classNumber: sc.classNumber,
+    classLabel: prizeCardLabelMap.get(sc.id) ?? '',
     className: sc.classDefinition?.name ?? 'Unknown Class',
     sex: sc.sex,
     breedName: sc.breed?.name ?? null,
@@ -552,24 +558,44 @@ export async function generateRingBoardPdf(showId: string): Promise<Buffer> {
     if (ja.ringId && ja.judge?.name) ringJudgeMap.set(ja.ringId, ja.judge.name);
   }
 
+  const ringBoardLabelMap = buildClassLabelMap(showClasses);
+
   const ringData: RingBoardRing[] = rings.map((ring) => {
-    const ringClasses = showClasses
-      .filter((sc) => {
-        const assignedRingId = sc.breedId ? breedRingMap.get(sc.breedId) : null;
-        return assignedRingId === ring.id;
-      })
-      .map((sc) => ({
-        classNumber: sc.classNumber,
+    const ringClasses = showClasses.filter((sc) => {
+      const assignedRingId = sc.breedId ? breedRingMap.get(sc.breedId) : null;
+      return assignedRingId === ring.id;
+    });
+
+    // Group classes by breed to match RingBoardRing.breeds shape
+    const breedMap = new Map<string, {
+      breedName: string | null;
+      classes: { classLabel: string; className: string; sex: string | null; entryCount: number }[];
+      totalEntries: number;
+    }>();
+    for (const sc of ringClasses) {
+      const breedKey = sc.breed?.name ?? '__unspecified__';
+      if (!breedMap.has(breedKey)) {
+        breedMap.set(breedKey, {
+          breedName: sc.breed?.name ?? null,
+          classes: [],
+          totalEntries: 0,
+        });
+      }
+      const entryCount = entryCountMap.get(sc.id) ?? 0;
+      const grp = breedMap.get(breedKey)!;
+      grp.classes.push({
+        classLabel: ringBoardLabelMap.get(sc.id) ?? '',
         className: sc.classDefinition?.name ?? '',
         sex: sc.sex,
-        breedName: sc.breed?.name ?? null,
-        entryCount: entryCountMap.get(sc.id) ?? 0,
-      }));
+        entryCount,
+      });
+      grp.totalEntries += entryCount;
+    }
 
     return {
       ringNumber: ring.ringNumber,
       judgeName: ringJudgeMap.get(ring.id) ?? null,
-      classes: ringClasses,
+      breeds: Array.from(breedMap.values()),
     };
   });
 

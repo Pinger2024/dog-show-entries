@@ -8,6 +8,7 @@ import type { PrizeCardShowInfo, PrizeCardClass, PrizeCardStyle } from '@/compon
 import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, validateRasterLogoUrl, makePdfResponse } from '@/lib/pdf-utils';
+import { buildClassLabelMap } from '@/lib/class-labels';
 
 export async function GET(
   request: NextRequest,
@@ -59,8 +60,10 @@ export async function GET(
     if (ja.judge?.name) judgeByBreed.set(ja.breedId, ja.judge.name);
   }
 
+  const classLabelMap = buildClassLabelMap(showClasses);
+
   const classes: PrizeCardClass[] = showClasses.map((sc) => ({
-    classNumber: sc.classNumber,
+    classLabel: classLabelMap.get(sc.id) ?? '',
     className: sc.classDefinition?.name ?? 'Unknown Class',
     sex: sc.sex,
     breedName: sc.breed?.name ?? null,

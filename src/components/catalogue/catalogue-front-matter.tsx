@@ -1249,7 +1249,7 @@ export function ExhibitorIndexPage({ show, entries, breedName }: ExhibitorIndexP
       ex.catNos.push(entry.catalogueNumber);
     }
     for (const cls of entry.classes) {
-      const label = cls.classNumber != null ? `${cls.classNumber}` : cls.name ?? '';
+      const label = cls.classLabel ?? (cls.classNumber != null ? String(cls.classNumber) : cls.name ?? '');
       if (label && !ex.classes.includes(label)) ex.classes.push(label);
     }
   }
@@ -1353,11 +1353,12 @@ interface TrophiesPageProps {
 export function TrophiesPage({ show, sponsorships }: TrophiesPageProps) {
   if (sponsorships.length === 0) return null;
 
-  // Sort by class number, then class name
+  // Sort: numbered classes by classNumber, JH/unnumbered by classLabel, else name.
   const sorted = [...sponsorships].sort((a, b) => {
     if (a.classNumber != null && b.classNumber != null) return a.classNumber - b.classNumber;
     if (a.classNumber != null) return -1;
     if (b.classNumber != null) return 1;
+    if (a.classLabel && b.classLabel) return a.classLabel.localeCompare(b.classLabel);
     return a.className.localeCompare(b.className);
   });
 
@@ -1379,8 +1380,9 @@ export function TrophiesPage({ show, sponsorships }: TrophiesPageProps) {
       </View>
 
       {sorted.map((sp, idx) => {
-        const classLabel = sp.classNumber != null
-          ? `${sp.classNumber}. ${sp.className}`
+        const label = sp.classLabel ?? (sp.classNumber != null ? String(sp.classNumber) : '');
+        const classHeading = label
+          ? `${label}. ${sp.className}`
           : sp.className;
 
         // Build trophy + sponsor combined text
@@ -1398,7 +1400,7 @@ export function TrophiesPage({ show, sponsorships }: TrophiesPageProps) {
 
         return (
           <View
-            key={`${sp.classNumber}-${sp.className}-${idx}`}
+            key={`${label}-${sp.className}-${idx}`}
             wrap={false}
             style={{
               flexDirection: 'row',
@@ -1408,7 +1410,7 @@ export function TrophiesPage({ show, sponsorships }: TrophiesPageProps) {
             }}
           >
             <Text style={{ fontFamily: 'Inter', fontSize: 7, fontWeight: 'bold', width: '30%', color: C.textDark }}>
-              {classLabel}
+              {classHeading}
             </Text>
             <Text style={{ fontFamily: 'Times', fontSize: 6.5, fontStyle: 'italic', width: '35%', color: C.textMedium }}>
               {trophySponsorParts.join('\n') || '—'}

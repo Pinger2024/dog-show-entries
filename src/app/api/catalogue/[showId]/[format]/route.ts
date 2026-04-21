@@ -18,6 +18,7 @@ import { authenticatePdfRequest, validateRasterLogoUrl, makePdfResponse } from '
 import { padPdfToMultiple } from '@/lib/pdf-pad';
 import { ensureCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
+import { buildClassLabelMap } from '@/lib/class-labels';
 
 export async function GET(
   request: NextRequest,
@@ -173,8 +174,10 @@ export async function GET(
     }
   }
 
+  const classLabelMap = buildClassLabelMap(showClassRows);
+
   // Collect class sponsorship data for trophies page + inline display
-  const classSponsorships: { className: string; classNumber: number | null; trophyName: string | null; trophyDonor: string | null; sponsorName: string | null; sponsorAffix: string | null; prizeDescription: string | null }[] = [];
+  const classSponsorships: { className: string; classNumber: number | null; classLabel: string; trophyName: string | null; trophyDonor: string | null; sponsorName: string | null; sponsorAffix: string | null; prizeDescription: string | null }[] = [];
   for (const sc of showClassRows) {
     for (const cs of sc.classSponsorships ?? []) {
       // Sponsor name comes from either the free-text field or the linked sponsor
@@ -183,6 +186,7 @@ export async function GET(
         classSponsorships.push({
           className: sc.classDefinition?.name ?? 'Unknown Class',
           classNumber: sc.classNumber,
+          classLabel: classLabelMap.get(sc.id) ?? '',
           trophyName: cs.trophyName,
           trophyDonor: cs.trophyDonor,
           sponsorName,
@@ -227,6 +231,7 @@ export async function GET(
       name: ec.showClass?.classDefinition?.name,
       sex: ec.showClass?.sex,
       classNumber: ec.showClass?.classNumber,
+      classLabel: ec.showClass?.id ? classLabelMap.get(ec.showClass.id) : undefined,
       sortOrder: ec.showClass?.sortOrder,
       showClassId: ec.showClassId,
     })),
@@ -249,6 +254,7 @@ export async function GET(
   const allShowClasses: ShowClassInfo[] = showClassRows.map((sc) => ({
     className: sc.classDefinition?.name ?? 'Unknown Class',
     classNumber: sc.classNumber,
+    classLabel: classLabelMap.get(sc.id) ?? '',
     sortOrder: sc.sortOrder,
     sex: sc.sex,
   }));
