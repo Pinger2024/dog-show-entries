@@ -66,31 +66,36 @@ const TEST_CARD = { number: '4242 4242 4242 4242', exp: '12 / 34', cvc: '123', p
 
 // ─── Step recorder ───────────────────────────────────────────────────────
 
-type Step = { name: string; file: string; caption: string; body?: string };
+type Step = { name: string; file: string; caption: string; body: string };
 const steps: Step[] = [];
 
-async function record(page: Page, name: string, caption: string, body?: string) {
-  // Dismiss the sticky cookie banner if it's visible — it covers the
-  // bottom third of mobile viewports and ruins otherwise-clean screenshots.
+// Hide fixed-position chrome that would otherwise float on every screenshot:
+// Next.js dev bubble, in-app help widget, anything labelled "feedback".
+const HIDE_CHROME_CSS = `
+  nextjs-portal, [data-nextjs-scroll-focus-boundary],
+  [aria-label*="Next.js" i], [data-nextjs-toast], [id^="__next-dev-tools"],
+  [data-feedback-widget], [data-help-widget],
+  button[aria-label*="help" i], button[aria-label*="feedback" i] {
+    display: none !important; visibility: hidden !important;
+  }
+`;
+
+async function dismissCookieBanner(page: Page) {
+  // Consent is cookie-backed, so one successful click sticks for the whole
+  // context. After that the Accept button is simply absent and the 500ms
+  // timeout below is the no-op cost per subsequent call.
   await page.getByRole('button', { name: /^accept/i }).click({ timeout: 500 }).catch(() => {});
-  // Scroll to the top of the page so captures always lead with the page
-  // header. Without this, mid-flow screenshots show bottom-of-page content
-  // (the wizard keeps the primary action button in view, which scrolls us).
+}
+
+async function record(page: Page, name: string, caption: string, body: string) {
+  // Re-inject the chrome-hiding stylesheet every capture — addStyleTag adds a
+  // <style> element that's dropped by navigation, and Next.js's dev-tools
+  // button can reappear mid-flow. Cheap and idempotent.
+  await page.addStyleTag({ content: HIDE_CHROME_CSS }).catch(() => {});
+  // Scroll to the top so captures lead with the page header. Without this,
+  // mid-flow screenshots show bottom-of-page content because the wizard
+  // keeps the primary action button in view.
   await page.evaluate(() => window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior }));
-  // Hide Next.js dev chrome (the "N" bubble) and the in-app help widget —
-  // both are fixed-position and would otherwise float on every screenshot.
-  await page.addStyleTag({
-    content: `
-      nextjs-portal, [data-nextjs-scroll-focus-boundary],
-      [aria-label*="Next.js" i], [data-nextjs-toast], [id^="__next-dev-tools"],
-      [data-feedback-widget], [data-help-widget],
-      button[aria-label*="help" i], button[aria-label*="feedback" i] {
-        display: none !important; visibility: hidden !important;
-      }
-    `,
-  }).catch(() => {});
-  // Tiny wait for fonts/images to settle — Remi's shells have background
-  // blurs that take a frame to paint.
   await page.waitForTimeout(350);
   const file = `${String(steps.length + 1).padStart(2, '0')}-${name}.png`;
   const path = join(FRAMES_DIR, file);
@@ -169,8 +174,9 @@ async function seedExhibitor() {
 }
 
 async function seedBella(ownerId: string) {
-  if (!db) throw new Error('no db');
-  // Idempotent — seeder nukes all dogs per run, so this always runs as insert.
+  if (!db) throw new Error('No DB connection — is DATABASE_URL set in .env?');
+  // On an existing user, seedExhibitor() already deleted Sarah's prior dogs.
+  // On a fresh user, there's nothing to delete. Either way, this is a new row.
   const id = crypto.randomUUID();
   await db.insert(s.dogs).values({
     id,
@@ -187,7 +193,7 @@ async function seedBella(ownerId: string) {
 }
 
 async function findTargetShow() {
-  if (!db) throw new Error('no db');
+  if (!db) throw new Error('No DB connection — is DATABASE_URL set in .env?');
   const [show] = await db
     .select({ id: s.shows.id, slug: s.shows.slug, name: s.shows.name })
     .from(s.shows)
@@ -205,55 +211,59 @@ async function findTargetShow() {
 
 // ─── Walk ─────────────────────────────────────────────────────────────────
 
+// Wrap load-bearing clicks — if one of these silently misses, the next
+// screenshot captures the wrong page. Warn loudly instead.
+async function mustClick(locator: ReturnType<Page['getByText']>, label: string) {
+  try {
+    await locator.click({ timeout: 5_000 });
+  } catch (err) {
+    console.warn(`  ⚠ Failed to click "${label}" — subsequent screenshot may be wrong. ${(err as Error).message}`);
+  }
+}
+
 async function walkFlow(context: BrowserContext, show: { slug: string }) {
   const page = await context.newPage();
-
-  // 1. Home page
   await page.goto(`${BASE_URL}/`);
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
+  await dismissCookieBanner(page);
+
   await record(page, 'home', 'Start at remishowmanager.co.uk',
     'This is the Remi home page. Tap "Find a show" to browse upcoming events.');
 
-  // 2. Shows listing
   await page.goto(`${BASE_URL}/shows`);
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
   await record(page, 'shows-list', 'Browse upcoming shows',
     'Every show open for entries appears here. Tap a show card to see the full schedule and enter online.');
 
-  // 3. Show detail
   await page.goto(`${BASE_URL}/shows/${show.slug}`);
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
   await record(page, 'show-detail', 'Read the show details',
     'Each show page carries the schedule, the judges, the classes on offer, and the closing date. When you\'re ready, scroll down and tap "Enter this show".');
 
-  // 4. Sign in prompt → login page
-  // Navigate straight to /login with the callback URL set. The middleware
-  // would redirect us there anyway from /enter, but going direct avoids a
-  // flash of the unauthenticated enter page.
+  // Jump straight to /login with callbackUrl — the middleware would redirect
+  // us there from /enter anyway, but going direct avoids a flash of the
+  // unauthenticated enter page.
   await page.goto(
     `${BASE_URL}/login?callbackUrl=${encodeURIComponent(`/shows/${show.slug}/enter`)}`,
   );
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
   await record(page, 'login', 'Sign in — or create an account',
     'First time? Tap "Create a free account" at the bottom. Already have a Remi account? Enter your email and password (or use the magic-link option).');
 
-  // 5. Sign in — click the "Sign in with password" reveal, then fill
   await page.getByRole('button', { name: /sign in with password/i }).click({ timeout: 5_000 }).catch(() => {});
   await page.getByLabel(/email address/i).fill(GUIDE_EMAIL);
-  // The password field appears only after clicking the reveal button.
   await page.waitForSelector('input[type="password"]:visible', { timeout: 5_000 });
   await page.getByLabel(/^password$/i).fill(GUIDE_PASSWORD);
   await record(page, 'login-filled', 'Enter your email and password',
     'Tap "Sign in" once your details are filled in. Remi will remember you on this device.');
   await page.getByRole('button', { name: /^sign in$/i }).click();
 
-  // Wait for redirect to the enter page
   await page.waitForURL(new RegExp(`/shows/${show.slug}/enter`), { timeout: 15_000 });
   await page.waitForLoadState('networkidle');
 
-  // 6. Profile completion gate — first-time users must give name + address
-  // before the wizard lets them start. The RKC requires both fields on
-  // every entry form, so we surface this as its own guide step.
+  // Profile-completion gate — first-time users must give name + address
+  // before the wizard lets them start. The RKC requires both on every
+  // entry form, so we surface this as its own guide step.
   const profileGate = page.getByText(/complete your profile/i).first();
   if (await profileGate.isVisible().catch(() => false)) {
     await record(page, 'profile-gate', 'Add your name and address',
@@ -264,69 +274,64 @@ async function walkFlow(context: BrowserContext, show: { slug: string }) {
       'Tap "Save & Continue" when you\'re ready. You\'ll be taken straight to the first step of your entry.');
     await page.getByRole('button', { name: /save.*continue/i }).click({ timeout: 10_000 });
     await page.waitForLoadState('networkidle');
-    // Small settle after the profile mutation + re-render
     await page.waitForTimeout(500);
   }
 
-  // 7. Entry type — shown whenever the show has Junior Handler classes.
-  // Most shows (and most exhibitors) pick "Enter a Dog".
+  // Entry-type step — shown when the show has Junior Handler classes. Most
+  // exhibitors pick "Enter a Dog".
   const typeHeading = page.getByText(/what type of entry/i).first();
   if (await typeHeading.isVisible().catch(() => false)) {
     await record(page, 'entry-type', 'Choose your entry type',
       'Standard breed entry, or Junior Handler (handling-skill classes for young handlers). Most exhibitors pick "Enter a Dog".');
-    await page.getByText(/enter a dog/i).first().click({ timeout: 5_000 });
+    await mustClick(page.getByText(/enter a dog/i).first(), 'Enter a Dog');
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(400);
   }
 
-  // 8. Dog selection step — Bella is pre-registered, so she appears as a
-  // tappable card. (To add a new dog, exhibitors use "My Dogs" — a separate
-  // mini-guide can cover that flow.)
   await record(page, 'dog-step', 'Pick the dog you\'re entering',
     'Remi shows every dog registered to your account. Tap the one you\'re entering in this show. If your dog isn\'t listed, head to "My Dogs" from the menu to add them first.');
 
-  // Tap Bella — she's the only eligible dog.
-  const bellaCard = page.getByText(/Thornfield Bella|Bella/i).first();
-  await bellaCard.click({ timeout: 5_000 }).catch(() => {});
+  await mustClick(page.getByText(/Thornfield Bella|Bella/i).first(), 'Bella dog card');
   await page.waitForTimeout(400);
-  // Advance — the continue button label varies
   await page.getByRole('button', { name: /continue|next|pick classes|choose classes/i }).first()
     .click({ timeout: 5_000 }).catch(() => {});
   await page.waitForLoadState('networkidle');
   await record(page, 'classes-step', 'Choose the classes to enter',
     'Tick every class you\'d like to enter. Remi lists the age and achievement classes your dog qualifies for based on their date of birth and show record.');
 
-  // Pick the first two classes shown
   const classCheckboxes = page.getByRole('checkbox');
-  const count = await classCheckboxes.count();
-  for (let i = 0; i < Math.min(2, count); i++) {
-    await classCheckboxes.nth(i).check({ force: true }).catch(() => {});
+  const classCount = Math.min(2, await classCheckboxes.count());
+  for (let i = 0; i < classCount; i++) {
+    try {
+      await classCheckboxes.nth(i).check({ force: true });
+    } catch (err) {
+      console.warn(`  ⚠ Could not tick class checkbox ${i + 1} — "classes-picked" screenshot may show fewer selections. ${(err as Error).message}`);
+    }
   }
   await record(page, 'classes-picked', 'Two classes selected',
     'In this example, Bella is entered in two classes. The running total updates at the bottom of the screen.');
 
-  // 12. Add to Cart — advances to cart_review step
-  await page.getByRole('button', { name: /add to cart|update/i }).first().click({ timeout: 10_000 });
+  await mustClick(page.getByRole('button', { name: /add to cart|update/i }).first(), 'Add to Cart');
   await page.waitForLoadState('networkidle');
   await page.waitForTimeout(500);
   await record(page, 'cart-review', 'Review your entries',
     'Last chance to check your entries before paying. Remi shows the full RKC declaration — tick to agree, then move to payment.');
 
-  // 13. Tick the RKC declaration checkbox (single combined checkbox covers
-  // health + terms). Scroll into view first — the declaration sits below
-  // the fold on mobile.
+  // RKC declaration is a combined health+terms checkbox; scroll it into
+  // view first because it sits below the fold on mobile.
   const declaration = page.getByText(/i agree to the above declaration/i);
   await declaration.scrollIntoViewIfNeeded().catch(() => {});
-  await declaration.click({ timeout: 5_000 });
+  await mustClick(declaration, 'RKC declaration checkbox');
   await page.waitForTimeout(300);
 
-  // 14. Proceed to payment
-  await page.getByRole('button', { name: /proceed to payment|confirm entry/i }).first()
-    .click({ timeout: 10_000 });
-  // Stripe Elements lives inside an iframe — give it a moment to load and
-  // the PaymentIntent to resolve server-side.
+  await mustClick(
+    page.getByRole('button', { name: /proceed to payment|confirm entry/i }).first(),
+    'Proceed to Payment',
+  );
+  // Wait for the PaymentIntent to resolve + Stripe Elements iframe to mount.
   await page.waitForLoadState('networkidle');
-  await page.waitForTimeout(2_500);
+  await page.waitForSelector('iframe[name^="__privateStripeFrame"]', { timeout: 15_000 }).catch(() => {});
+  await page.waitForTimeout(500);
   await record(page, 'payment-step', 'Enter your card details',
     'Your card is charged securely by Stripe. Remi never sees or stores your full card number. The £1 + 1% handling fee covers secure payment processing and the BACS transfer to the host club.');
 
@@ -390,7 +395,6 @@ async function stitchPdf() {
 
     const page = pdf.addPage([PAGE_W, PAGE_H]);
 
-    // Step number pill
     page.drawRectangle({
       x: MARGIN, y: PAGE_H - MARGIN - 28, width: 60, height: 28,
       color: primary, borderColor: primary,
@@ -399,23 +403,18 @@ async function stitchPdf() {
       x: MARGIN + 10, y: PAGE_H - MARGIN - 20, size: 12, font: helvBold, color: rgb(1, 1, 1),
     });
 
-    // Caption (title)
     page.drawText(step.caption, {
       x: MARGIN, y: PAGE_H - MARGIN - 62, size: 18, font: helvBold, color: ink,
     });
 
-    // Body (sub-caption)
-    if (step.body) {
-      const wrapped = wrapText(step.body, 68);
-      wrapped.forEach((line, idx) => {
-        page.drawText(line, {
-          x: MARGIN, y: PAGE_H - MARGIN - 90 - idx * 16, size: 11, font: helv, color: muted,
-        });
+    const wrapped = wrapText(step.body, 68);
+    wrapped.forEach((line, idx) => {
+      page.drawText(line, {
+        x: MARGIN, y: PAGE_H - MARGIN - 90 - idx * 16, size: 11, font: helv, color: muted,
       });
-    }
+    });
 
-    // Screenshot, scaled to fit under the caption area
-    const captionHeight = 120 + (step.body ? wrapText(step.body, 68).length * 16 : 0);
+    const captionHeight = 120 + wrapped.length * 16;
     const available = {
       w: PAGE_W - MARGIN * 2,
       h: PAGE_H - MARGIN * 2 - captionHeight,
@@ -426,14 +425,13 @@ async function stitchPdf() {
     const x = (PAGE_W - w) / 2;
     const y = MARGIN + (available.h - h) / 2;
 
-    // Subtle drop-shadow frame around the screenshot
+    // Light-grey frame gives the screenshot a subtle shadow against the page.
     page.drawRectangle({
       x: x - 2, y: y - 2, width: w + 4, height: h + 4,
       color: rgb(0.9, 0.9, 0.92),
     });
     page.drawImage(image, { x, y, width: w, height: h });
 
-    // Footer
     page.drawText(`${i + 1} of ${steps.length}`, {
       x: PAGE_W - MARGIN - 40, y: 24, size: 10, font: helv, color: muted,
     });
@@ -486,7 +484,6 @@ function wrapText(text: string, maxChars: number): string[] {
 // ─── Main ────────────────────────────────────────────────────────────────
 
 async function main() {
-  // Prep output dirs
   if (existsSync(FRAMES_DIR)) rmSync(FRAMES_DIR, { recursive: true });
   mkdirSync(FRAMES_DIR, { recursive: true });
   mkdirSync(OUT_DIR, { recursive: true });
@@ -494,11 +491,8 @@ async function main() {
   console.log('→ Seeding guide exhibitor…');
   const userId = await seedExhibitor();
 
-  console.log('→ Seeding guide dog…');
-  await seedBella(userId);
-
-  console.log('→ Locating target show…');
-  const show = await findTargetShow();
+  console.log('→ Seeding dog + locating target show…');
+  const [, show] = await Promise.all([seedBella(userId), findTargetShow()]);
 
   console.log('→ Launching Chromium (mobile viewport)…');
   const browser = await chromium.launch({ headless: true });
@@ -507,7 +501,6 @@ async function main() {
       viewport: VIEWPORT,
       deviceScaleFactor: DEVICE_SCALE,
       isMobile: true,
-      hasTouch: true,
     });
 
     console.log('→ Walking exhibitor flow…');
