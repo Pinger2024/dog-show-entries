@@ -7,6 +7,7 @@ import {
   ChevronsUpDown,
   Download,
   FileCheck,
+  Pencil,
   Gavel,
   Loader2,
   Mail,
@@ -295,6 +296,35 @@ export function JudgesSection({ showId }: { showId: string }) {
     onError: (err) => toast.error(err.message ?? 'Failed to send confirmation'),
   });
 
+  // Edit judge — corrects a mis-entered email / phone / affix on an
+  // existing judge record without going through the add-judge wizard.
+  const [editJudgeId, setEditJudgeId] = useState<string | null>(null);
+  const [editJudgeForm, setEditJudgeForm] = useState({
+    name: '',
+    contactEmail: '',
+    contactPhone: '',
+    kennelClubAffix: '',
+  });
+  const updateJudgeMutation = trpc.secretary.updateJudge.useMutation({
+    onSuccess: () => {
+      toast.success('Judge details updated');
+      setEditJudgeId(null);
+      utils.secretary.getShowJudges.invalidate({ showId });
+      utils.secretary.searchJudges.invalidate();
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to update judge'),
+  });
+
+  function openEditJudge(judge: { judgeId: string; name: string; contactEmail: string | null; contactPhone: string | null; kennelClubAffix?: string | null }) {
+    setEditJudgeForm({
+      name: judge.name,
+      contactEmail: judge.contactEmail ?? '',
+      contactPhone: judge.contactPhone ?? '',
+      kennelClubAffix: judge.kennelClubAffix ?? '',
+    });
+    setEditJudgeId(judge.judgeId);
+  }
+
   // Build a map of judgeId -> latest contract for quick lookups
   const contractsByJudge = useMemo(() => {
     const map = new Map<string, NonNullable<typeof contracts>[number]>();
@@ -314,6 +344,8 @@ export function JudgesSection({ showId }: { showId: string }) {
       name: string;
       kcNumber: string | null;
       contactEmail: string | null;
+      contactPhone: string | null;
+      kennelClubAffix: string | null;
       breeds: string[];
       rings: string[];
       assignmentIds: string[];
@@ -334,6 +366,8 @@ export function JudgesSection({ showId }: { showId: string }) {
           name: a.judge.name,
           kcNumber: a.judge.kcNumber,
           contactEmail: a.judge.contactEmail,
+          contactPhone: a.judge.contactPhone,
+          kennelClubAffix: a.judge.kennelClubAffix,
           breeds: a.breed ? [a.breed.name] : [],
           rings: a.ring ? [`Ring ${a.ring.number}`] : [],
           assignmentIds: [a.id],
@@ -507,6 +541,15 @@ export function JudgesSection({ showId }: { showId: string }) {
                             New Offer
                           </Button>
                         )}
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-11 text-muted-foreground hover:text-foreground"
+                          onClick={() => openEditJudge(j)}
+                          aria-label={`Edit ${j.name}`}
+                        >
+                          <Pencil className="size-3.5" />
+                        </Button>
                         <Button
                           size="icon"
                           variant="ghost"
@@ -811,6 +854,85 @@ export function JudgesSection({ showId }: { showId: string }) {
                 <Send className="size-4" />
               )}
               Send Offer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Judge Dialog — corrects mis-entered contact details */}
+      <Dialog
+        open={editJudgeId !== null}
+        onOpenChange={(open) => { if (!open) setEditJudgeId(null); }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit judge details</DialogTitle>
+            <DialogDescription>
+              Update the judge&apos;s name, contact details, or affix. Changes
+              apply to every show this judge is on.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label htmlFor="edit-judge-name" className="text-sm">Name</Label>
+              <Input
+                id="edit-judge-name"
+                value={editJudgeForm.name}
+                onChange={(e) => setEditJudgeForm((f) => ({ ...f, name: e.target.value }))}
+                className="mt-1 h-11"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-judge-email" className="text-sm">Email</Label>
+              <Input
+                id="edit-judge-email"
+                type="email"
+                placeholder="Leave blank to clear"
+                value={editJudgeForm.contactEmail}
+                onChange={(e) => setEditJudgeForm((f) => ({ ...f, contactEmail: e.target.value }))}
+                className="mt-1 h-11"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-judge-phone" className="text-sm">Phone</Label>
+              <Input
+                id="edit-judge-phone"
+                type="tel"
+                value={editJudgeForm.contactPhone}
+                onChange={(e) => setEditJudgeForm((f) => ({ ...f, contactPhone: e.target.value }))}
+                className="mt-1 h-11"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-judge-affix" className="text-sm">Kennel Club affix</Label>
+              <Input
+                id="edit-judge-affix"
+                value={editJudgeForm.kennelClubAffix}
+                onChange={(e) => setEditJudgeForm((f) => ({ ...f, kennelClubAffix: e.target.value }))}
+                placeholder="e.g. Sadira"
+                className="mt-1 h-11"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditJudgeId(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!editJudgeId) return;
+                updateJudgeMutation.mutate({
+                  judgeId: editJudgeId,
+                  name: editJudgeForm.name.trim() || undefined,
+                  contactEmail: editJudgeForm.contactEmail.trim(),
+                  contactPhone: editJudgeForm.contactPhone.trim(),
+                  kennelClubAffix: editJudgeForm.kennelClubAffix.trim(),
+                });
+              }}
+              disabled={updateJudgeMutation.isPending || !editJudgeForm.name.trim()}
+            >
+              {updateJudgeMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+              Save changes
             </Button>
           </DialogFooter>
         </DialogContent>

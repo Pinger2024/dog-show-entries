@@ -2091,10 +2091,13 @@ export const secretaryRouter = createTRPCRouter({
       judgeId: z.string().uuid(),
       name: z.string().min(1).max(255).optional(),
       kcNumber: z.string().max(50).optional(),
-      contactEmail: z.string().email().optional(),
+      // Allow an empty string so secretaries can clear a mis-entered
+      // email — the mutation normalises '' → null below. Non-empty values
+      // must still look like an email.
+      contactEmail: z.union([z.string().email().max(255), z.literal('')]).optional(),
       contactPhone: z.string().max(50).optional(),
       bio: z.string().max(2000).optional(),
-      photoUrl: z.string().url().max(500).optional(),
+      photoUrl: z.union([z.string().url().max(500), z.literal('')]).optional(),
       kennelClubAffix: z.string().max(100).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
