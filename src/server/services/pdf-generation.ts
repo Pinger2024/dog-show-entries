@@ -25,6 +25,7 @@ import type { RingNumberShowInfo, RingNumberFormat } from '@/components/ring-num
 import React from 'react';
 import { uploadToR2, getPublicUrl } from '@/server/services/storage';
 import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
+import { buildClassLabelMap } from '@/lib/class-labels';
 
 // ── Catalogue PDF ──
 
@@ -408,12 +409,15 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     };
   });
 
+  const classLabelMap = buildClassLabelMap(showClasses);
   const classes: ScheduleClass[] = showClasses.map((sc) => ({
     classNumber: sc.classNumber,
+    classLabel: classLabelMap.get(sc.id) ?? '',
     className: sc.classDefinition?.name ?? 'Unknown',
-    description: sc.classDefinition?.description ?? null,
+    classDescription: sc.classDefinition?.description ?? null,
     sex: sc.sex,
     breedName: sc.breed?.name ?? null,
+    classType: sc.classDefinition?.type ?? null,
   }));
 
   // Build class sponsorships grouped by show sponsor (loaded via showClasses relation)

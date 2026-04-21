@@ -1451,15 +1451,29 @@ export const secretaryRouter = createTRPCRouter({
         return a.sortOrder - b.sortOrder;
       });
 
-      // Assign sequential numbers
-      for (let i = 0; i < sorted.length; i++) {
-        await ctx.db
-          .update(showClasses)
-          .set({ classNumber: i + 1 })
-          .where(eq(showClasses.id, sorted[i]!.id));
+      // RKC show licences count only breed classes, not Junior Handler —
+      // so JH classes stay unnumbered (classNumber = null) and are
+      // rendered as JHA, JHB, … at display time. Numbered sequence is
+      // reserved for the RKC-licensed breed classes.
+      let numbered = 0;
+      let skipped = 0;
+      for (const cls of sorted) {
+        if (cls.classDefinition?.type === 'junior_handler') {
+          await ctx.db
+            .update(showClasses)
+            .set({ classNumber: null })
+            .where(eq(showClasses.id, cls.id));
+          skipped++;
+        } else {
+          numbered++;
+          await ctx.db
+            .update(showClasses)
+            .set({ classNumber: numbered })
+            .where(eq(showClasses.id, cls.id));
+        }
       }
 
-      return { assigned: sorted.length };
+      return { assigned: numbered, jhSkipped: skipped };
     }),
 
   resortShowClasses: secretaryProcedure

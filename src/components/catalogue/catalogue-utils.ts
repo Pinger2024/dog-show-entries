@@ -71,19 +71,40 @@ export function formatOwnerKC(
     .join(' & ');
 }
 
-/** Format class list with numbers: "1. Minor Puppy, 3. Novice" */
+/**
+ * Format class list with labels: "1. Minor Puppy, 3. Novice, JHA. Junior Handler 6-11"
+ * When the caller can supply an `id` per class + a label map, JH classes
+ * render as JHA/JHB rather than a number. Falls back to `classNumber`
+ * when no map is provided (legacy callers).
+ */
 export function formatClassList(
-  classes: { name: string | undefined; classNumber: number | null | undefined; sortOrder: number | undefined }[]
+  classes: {
+    id?: string | null;
+    name: string | undefined;
+    classNumber: number | null | undefined;
+    sortOrder: number | undefined;
+  }[],
+  labelMap?: Map<string, string>,
 ): string {
+  const getLabel = (c: (typeof classes)[number]): string | null => {
+    if (c.id && labelMap?.get(c.id)) return labelMap.get(c.id)!;
+    if (c.classNumber != null) return String(c.classNumber);
+    return null;
+  };
+  const sortKey = (c: (typeof classes)[number]): number => {
+    const mapped = c.id ? labelMap?.get(c.id) : undefined;
+    // JH labels sort after all numbered classes (position in map already
+    // puts them in JHA → JHB → JHC order).
+    if (mapped && mapped.startsWith('JH')) {
+      return 1_000_000 + mapped.charCodeAt(2);
+    }
+    return c.classNumber ?? c.sortOrder ?? 999;
+  };
   return classes
-    .sort((a, b) => {
-      if (a.classNumber != null && b.classNumber != null) return a.classNumber - b.classNumber;
-      if (a.classNumber != null) return -1;
-      if (b.classNumber != null) return 1;
-      return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
-    })
+    .sort((a, b) => sortKey(a) - sortKey(b))
     .map((c) => {
-      if (c.classNumber != null && c.name) return `${c.classNumber}. ${c.name}`;
+      const label = getLabel(c);
+      if (label && c.name) return `${label}. ${c.name}`;
       return c.name;
     })
     .filter(Boolean)

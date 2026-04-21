@@ -78,6 +78,9 @@ export interface ScheduleShowInfo {
 
 export interface ScheduleClass {
   classNumber: number | null;
+  /** Display label — "1" for numbered classes, "JHA"/"JHB" for Junior
+   *  Handler classes which sit outside the RKC-licensed class count. */
+  classLabel: string;
   className: string;
   classDescription: string | null;
   sex: string | null;
@@ -1362,7 +1365,7 @@ export function ShowSchedule({
                 </View>
                 {dogClasses.map((cls, i) => (
                   <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
-                    <Text style={s.twoColNum}>{cls.classNumber ?? ''}</Text>
+                    <Text style={s.twoColNum}>{cls.classLabel}</Text>
                     <Text style={s.twoColName}>{cls.className}</Text>
                   </View>
                 ))}
@@ -1375,7 +1378,7 @@ export function ShowSchedule({
                 </View>
                 {bitchClasses.map((cls, i) => (
                   <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
-                    <Text style={s.twoColNum}>{cls.classNumber ?? ''}</Text>
+                    <Text style={s.twoColNum}>{cls.classLabel}</Text>
                     <Text style={s.twoColName}>{cls.className}</Text>
                   </View>
                 ))}
@@ -1392,7 +1395,7 @@ export function ShowSchedule({
                 </View>
                 {mixedClasses.map((cls, i) => (
                   <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
-                    <Text style={s.twoColNum}>{cls.classNumber ?? ''}</Text>
+                    <Text style={s.twoColNum}>{cls.classLabel}</Text>
                     <Text style={s.twoColName}>{cls.className}</Text>
                   </View>
                 ))}
@@ -1422,7 +1425,7 @@ export function ShowSchedule({
               return (
                 <View key={i} style={[s.classRow, i % 2 !== 0 && s.classRowAlt]} wrap={false}>
                   <View style={s.colNo}>
-                    <Text style={s.cellBold}>{cls.classNumber ?? ''}</Text>
+                    <Text style={s.cellBold}>{cls.classLabel}</Text>
                   </View>
                   <View style={s.colClass}>
                     <Text style={s.cellBold}>{cls.className}</Text>
