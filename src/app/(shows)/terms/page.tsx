@@ -10,108 +10,217 @@ export default function TermsPage() {
         Terms of Service
       </h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        Last updated: February 2026
+        Last updated: 21 April 2026
       </p>
 
       <div className="mt-8 space-y-8 text-sm leading-relaxed text-muted-foreground">
         <section>
-          <h2 className="text-lg font-semibold text-foreground">
-            1. About Remi
-          </h2>
+          <h2 className="text-lg font-semibold text-foreground">1. About Remi</h2>
           <p className="mt-2">
-            Remi is an online platform that facilitates dog show entries in the
-            United Kingdom. We connect exhibitors with show societies, making
-            it easy to browse, enter, and manage show entries online.
+            Remi is an online platform for UK Royal Kennel Club (RKC) dog show
+            entry management. It is operated from the United Kingdom. These terms
+            form a legally binding agreement between you and Remi when you use
+            the Remi website, apps, or services (together, the &ldquo;Service&rdquo;).
+          </p>
+          <p className="mt-2">
+            Different sections apply depending on how you use Remi: Sections
+            4&ndash;6 apply if you enter shows as an exhibitor. Section 7 applies
+            if you run shows for a show society or club.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-semibold text-foreground">2. Your account</h2>
+          <p className="mt-2">
+            You must be at least 16 years old to hold a Remi account. You are
+            responsible for keeping your login details secure and for anything
+            done through your account. Provide accurate information about
+            yourself and your dogs &mdash; misleading information may cause
+            entries to be rejected by show societies and breaches Section 8.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-semibold text-foreground">3. The service</h2>
+          <p className="mt-2">
+            Remi provides tools for exhibitors to browse and enter dog shows,
+            and for show societies to manage entries, schedules, catalogues, and
+            results. We aim for the Service to be available at all times but
+            do not guarantee uninterrupted access.
           </p>
         </section>
 
         <section>
           <h2 className="text-lg font-semibold text-foreground">
-            2. Your Account
+            4. Entering shows &mdash; how payments work
           </h2>
           <p className="mt-2">
-            You are responsible for maintaining the security of your account
-            and for all activities that occur under your account. You must
-            provide accurate information about yourself and your dogs when
-            creating entries.
+            When you enter a show through Remi, you pay Remi directly. Remi is
+            the merchant of record for your payment. We collect the entry fees
+            on behalf of the show society and pass the net amount on to them
+            after entries close, less any platform fees shown at checkout.
+          </p>
+          <p className="mt-2">
+            Payment is processed by Stripe. By submitting an entry you
+            authorise Remi (via Stripe) to charge the card or payment method
+            you provide for the total shown at checkout.
+          </p>
+          <p className="mt-2">
+            Your contract for the entry itself &mdash; eligibility, judging,
+            conduct of the show, prizes &mdash; is with the show society. Remi
+            is not the show organiser and is not responsible for how the show
+            is run.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-semibold text-foreground">5. Fees</h2>
+          <p className="mt-2">
+            A platform fee of &pound;1.00 plus 1% of the entry total is added
+            at checkout and paid by you, the exhibitor. The fee covers payment
+            processing and use of the Service. The breakdown is shown before
+            you confirm payment.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-semibold text-foreground">6. Refunds, cancellations and chargebacks</h2>
+          <p className="mt-2">
+            <strong className="text-foreground">Refund policy is set by each show society.</strong>{' '}
+            The policy for a given show is published on the show&rsquo;s page.
+            Most RKC shows do not refund entries once closing date has passed.
+            Remi processes refunds on behalf of the show society in line with
+            their published policy.
+          </p>
+          <p className="mt-2">
+            If a show is cancelled or abandoned, the refund position follows
+            RKC rules and the society&rsquo;s own policy. Contact the show
+            secretary first; Remi will assist with processing an authorised
+            refund.
+          </p>
+          <p className="mt-2">
+            If you raise a chargeback with your card issuer, Remi (as merchant
+            of record) handles the dispute and may recover any lost amount
+            plus dispute fees from you if the chargeback is found to be
+            without basis.
           </p>
         </section>
 
         <section>
           <h2 className="text-lg font-semibold text-foreground">
-            3. Show Entries
+            7. Show societies using Remi
           </h2>
           <p className="mt-2">
-            When you submit a show entry through Remi, you are entering into
-            an agreement with the show society. Remi acts as an intermediary
-            to process your entry and payment. Entry rules, eligibility, and
-            refund policies are set by each individual show society.
+            If you manage a show society, club, or organisation on Remi, the
+            following also applies:
+          </p>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            <li>
+              You must provide accurate show information (dates, venue,
+              classes, judges, fees) and keep it up to date.
+            </li>
+            <li>
+              You must provide accurate UK bank account details for payout.
+              Remi transfers the net collected entry fees to that account by
+              BACS after entries close.
+            </li>
+            <li>
+              You are the data controller for entry data relating to your
+              show. Remi processes that data on your behalf. See the{' '}
+              <a className="text-primary hover:underline" href="/privacy">
+                Privacy Policy
+              </a>{' '}
+              for details.
+            </li>
+            <li>
+              You are responsible for compliance with RKC rules, show
+              licensing, and all laws applying to running a dog show.
+            </li>
+            <li>
+              You must not instruct Remi to pay any person or bank account
+              other than your own society&rsquo;s registered account.
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-semibold text-foreground">8. Acceptable use</h2>
+          <p className="mt-2">You must not:</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            <li>submit fraudulent entries or false information about dogs</li>
+            <li>attempt to interfere with the Service, access other users&rsquo; accounts, or scrape data at scale</li>
+            <li>use the Service to send unsolicited marketing</li>
+            <li>re-use exhibitor contact details provided through the Service for any purpose other than running the show</li>
+          </ul>
+          <p className="mt-2">
+            We may suspend or close accounts that breach these terms, and
+            report serious misuse to the RKC or law enforcement.
           </p>
         </section>
 
         <section>
-          <h2 className="text-lg font-semibold text-foreground">
-            4. Payments
-          </h2>
+          <h2 className="text-lg font-semibold text-foreground">9. Intellectual property</h2>
           <p className="mt-2">
-            Entry fees are processed through Stripe. By submitting an entry,
-            you authorise the charge for the applicable entry fees. Refunds
-            are subject to the individual show society&apos;s refund policy.
+            Remi&rsquo;s branding, software, and site content are ours. You
+            keep the rights to content you upload (logos, photos, show
+            documents) and grant Remi a licence to host and display that
+            content as needed to run the Service.
           </p>
         </section>
 
         <section>
-          <h2 className="text-lg font-semibold text-foreground">
-            5. Show Society Responsibilities
-          </h2>
+          <h2 className="text-lg font-semibold text-foreground">10. Limitation of liability</h2>
           <p className="mt-2">
-            Show societies using Remi are responsible for the accuracy of
-            their show information, including dates, classes, venues, and
-            entry fees. Remi is not responsible for changes or cancellations
-            made by show societies.
+            Nothing in these terms limits liability for death, personal injury
+            caused by negligence, fraud, or anything else that cannot be
+            limited in law.
+          </p>
+          <p className="mt-2">
+            Subject to that, Remi&rsquo;s total liability to you in connection
+            with the Service in any 12-month period is limited to the greater
+            of (a) the platform fees you paid to Remi in that period, or (b)
+            &pound;100.
+          </p>
+          <p className="mt-2">
+            We are not liable for: show cancellation or changes by the
+            society; disputes between exhibitors and societies; indirect or
+            consequential losses; loss of profit, revenue, or reputation; or
+            anything outside our reasonable control.
           </p>
         </section>
 
         <section>
-          <h2 className="text-lg font-semibold text-foreground">
-            6. Acceptable Use
-          </h2>
+          <h2 className="text-lg font-semibold text-foreground">11. Suspension and termination</h2>
           <p className="mt-2">
-            You agree not to misuse the platform, submit fraudulent entries,
-            or provide false information about your dogs. We reserve the right
-            to suspend accounts that violate these terms.
+            You can close your account at any time from your account settings.
+            We may suspend or close an account in response to a breach of
+            these terms, a chargeback dispute, or a regulatory requirement.
           </p>
         </section>
 
         <section>
-          <h2 className="text-lg font-semibold text-foreground">
-            7. Limitation of Liability
-          </h2>
+          <h2 className="text-lg font-semibold text-foreground">12. Changes to these terms</h2>
           <p className="mt-2">
-            Remi provides the platform &ldquo;as is&rdquo;. We are not liable
-            for show cancellations, changes, or disputes between exhibitors
-            and show societies. Our liability is limited to the fees paid to
-            Remi for the service.
+            We may update these terms from time to time. Material changes will
+            be notified by email to affected users or on your next sign-in.
+            The &ldquo;Last updated&rdquo; date above always reflects the
+            current version.
           </p>
         </section>
 
         <section>
-          <h2 className="text-lg font-semibold text-foreground">
-            8. Changes to Terms
-          </h2>
+          <h2 className="text-lg font-semibold text-foreground">13. Governing law</h2>
           <p className="mt-2">
-            We may update these terms from time to time. Continued use of
-            Remi after changes are posted constitutes acceptance of the
-            updated terms.
+            These terms are governed by the laws of England and Wales, and
+            disputes are subject to the exclusive jurisdiction of the courts
+            of England and Wales.
           </p>
         </section>
 
         <section>
-          <h2 className="text-lg font-semibold text-foreground">
-            9. Contact
-          </h2>
+          <h2 className="text-lg font-semibold text-foreground">14. Contact</h2>
           <p className="mt-2">
-            For questions about these terms, contact us at{' '}
+            Questions about these terms:{' '}
             <a
               href="mailto:hello@remishowmanager.co.uk"
               className="text-primary hover:underline"
