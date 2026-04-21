@@ -12,7 +12,6 @@ import {
   CalendarDays,
   Shield,
   Zap,
-  Star,
   Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -160,8 +159,8 @@ export default async function HomePage() {
           <div className="mx-auto max-w-5xl px-3 py-8 sm:px-4 sm:py-10 lg:px-6">
             <div className="grid grid-cols-3 gap-4 sm:gap-8">
               {[
-                { label: 'Shows Listed', value: liveStats.shows > 0 ? String(liveStats.shows) : '6+', icon: CalendarDays },
-                { label: 'RKC Breeds', value: liveStats.breeds > 0 ? `${liveStats.breeds}+` : '220+', icon: Dog },
+                { label: 'Shows Listed', value: liveStats.shows > 0 ? String(liveStats.shows) : '—', icon: CalendarDays },
+                { label: 'RKC Breeds', value: liveStats.breeds > 0 ? `${liveStats.breeds}+` : '—', icon: Dog },
                 { label: 'Entries Processed', value: liveStats.entries > 0 ? liveStats.entries.toLocaleString() : '—', icon: Zap },
               ].map((stat, i) => (
                 <AnimateIn key={stat.label} delay={i * 80} className="text-center">
@@ -241,31 +240,6 @@ export default async function HomePage() {
                 </AnimateIn>
               ))}
             </div>
-          </div>
-        </section>
-
-        {/* Testimonial */}
-        <section className="border-t">
-          <div className="mx-auto max-w-7xl px-3 py-16 sm:px-4 sm:py-24 lg:px-6">
-            <AnimateIn className="mx-auto max-w-3xl text-center">
-              <div className="mb-6 flex justify-center gap-1">
-                {[...Array(5)].map((_, i) => (
-                  <Star key={i} className="size-4 sm:size-5 fill-gold text-gold" />
-                ))}
-              </div>
-              <blockquote className="font-serif text-xl leading-relaxed sm:text-2xl lg:text-3xl">
-                &ldquo;Remi has completely transformed how we manage our shows.
-                What used to take weeks of admin now happens automatically.
-                The exhibitors love it too — they can enter from their phones
-                and get confirmation straight away.&rdquo;
-              </blockquote>
-              <div className="mt-6">
-                <p className="font-semibold">Amanda Sheridan</p>
-                <p className="text-sm text-muted-foreground">
-                  Show Secretary, Clyde Valley GSD Club
-                </p>
-              </div>
-            </AnimateIn>
           </div>
         </section>
 

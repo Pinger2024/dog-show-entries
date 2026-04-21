@@ -13,7 +13,6 @@ import {
   ArrowRight,
   CheckCircle2,
   Zap,
-  Star,
 } from 'lucide-react';
 import { AnimateIn } from '@/components/animate-in';
 
@@ -251,31 +250,6 @@ export default function AboutPage() {
               </div>
             </AnimateIn>
           </div>
-        </div>
-      </section>
-
-      {/* ── Social proof ────────────────────────── */}
-      <section className="border-b">
-        <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
-          <AnimateIn className="mx-auto max-w-3xl text-center">
-            <div className="mb-6 flex justify-center gap-1">
-              {[...Array(5)].map((_, i) => (
-                <Star key={i} className="size-5 fill-amber-400 text-amber-400" />
-              ))}
-            </div>
-            <blockquote className="font-serif text-xl leading-relaxed sm:text-2xl">
-              &ldquo;Remi has completely transformed how we manage our shows.
-              What used to take weeks of admin now happens automatically.
-              The exhibitors love it too — they can enter from their phones
-              and get confirmation straight away.&rdquo;
-            </blockquote>
-            <div className="mt-6">
-              <p className="font-semibold">Amanda Sheridan</p>
-              <p className="text-sm text-muted-foreground">
-                Show Secretary, Clyde Valley GSD Club
-              </p>
-            </div>
-          </AnimateIn>
         </div>
       </section>
 
