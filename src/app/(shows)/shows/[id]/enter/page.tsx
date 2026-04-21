@@ -1554,7 +1554,10 @@ export default function EnterShowPage() {
                     <span>{formatCurrency(subtotalAmount)}</span>
                   </div>
                   <div className="mt-1 flex justify-between text-muted-foreground">
-                    <span>Handling fee</span>
+                    <span>
+                      Platform fee{' '}
+                      <span className="text-xs opacity-75">(£1 + 1%)</span>
+                    </span>
                     <span>{formatCurrency(platformFeePence)}</span>
                   </div>
                   <div className="mt-2 flex justify-between border-t pt-2 font-semibold text-foreground">
