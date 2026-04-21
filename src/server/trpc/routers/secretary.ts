@@ -2293,7 +2293,8 @@ export const secretaryRouter = createTRPCRouter({
 
       // Check which requirements are covered by assignments
       const coverage = Array.from(requirementsMap.values()).map((req) => {
-        // Find ALL matching assignments, preferring sex-specific over catch-all
+        // Find ALL matching assignments. breed=null or sex=null on an
+        // assignment is treated as a catch-all — "any breed" / "any sex".
         const matching = assignments.filter((a) => {
           const breedMatch = req.breedId
             ? a.breedId === req.breedId || a.breedId === null
@@ -2304,8 +2305,17 @@ export const secretaryRouter = createTRPCRouter({
           return breedMatch && sexMatch;
         });
 
-        // Prefer exact sex match over catch-all (sex: null)
-        const exact = matching.filter((a) => a.sex === req.sex);
+        // Prefer assignments that match BOTH breed and sex exactly over
+        // catch-all matches. Without this, a null-breed null-sex assignment
+        // (e.g. Junior Handling) wrongly claims coverage of a breed-
+        // specific mixed-sex class like Veteran — they have the same
+        // shape in the DB. Exact breed + exact sex wins; catch-alls
+        // only appear when nothing more specific exists.
+        const exact = matching.filter(
+          (a) =>
+            a.sex === req.sex &&
+            (req.breedId ? a.breedId === req.breedId : a.breedId === null),
+        );
         const best = exact.length > 0 ? exact : matching;
 
         // Deduplicate by judge
