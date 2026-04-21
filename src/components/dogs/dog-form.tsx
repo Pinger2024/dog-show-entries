@@ -448,7 +448,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                   <FormLabel>Registered Name</FormLabel>
                   <FormControl>
                     <Input
-                      placeholder="e.g. Dorabella Dancing Queen"
+                      placeholder="e.g. Thornfield Silver Dream"
                       {...field}
                     />
                   </FormControl>

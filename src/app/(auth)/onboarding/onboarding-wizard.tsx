@@ -811,7 +811,7 @@ function DogStep({
                     lookup.
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground/70">
-                    Tip: type the name exactly as it appears on your RKC registration certificate, including affixes (e.g. &quot;Dorabella Dancing Queen At Hundark&quot;).
+                    Tip: type the name exactly as it appears on your RKC registration certificate, including affixes (e.g. &quot;Thornfield Silver Dream At Ashcroft&quot;).
                   </p>
                   <Button
                     type="button"
