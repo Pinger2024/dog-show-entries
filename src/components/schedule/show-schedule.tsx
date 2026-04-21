@@ -762,11 +762,16 @@ export function ShowSchedule({
 
   const classCount = deduplicatedClasses.length;
 
-  // Split classes by sex for single breed two-column layout
+  // Split classes by sex for single breed two-column layout. Mixed classes
+  // split further: non-JH (Veteran, etc.) render ABOVE Dog/Bitch because
+  // RKC ordering requires them judged before the per-sex challenges.
+  // JH-only Mixed renders BELOW as the "Junior Handling" section.
   const isSingleBreed = show.showScope === 'single_breed';
   const dogClasses = deduplicatedClasses.filter((c) => c.sex === 'dog');
   const bitchClasses = deduplicatedClasses.filter((c) => c.sex === 'bitch');
   const mixedClasses = deduplicatedClasses.filter((c) => c.sex !== 'dog' && c.sex !== 'bitch');
+  const mixedTopClasses = mixedClasses.filter((c) => c.classType !== 'junior_handler');
+  const mixedBottomClasses = mixedClasses.filter((c) => c.classType === 'junior_handler');
 
   const footerRender = ({ pageNumber, totalPages }: { pageNumber: number; totalPages: number }) =>
     `${show.name}  ·  Schedule  ·  Page ${pageNumber} of ${totalPages}`;
@@ -1355,8 +1360,25 @@ export function ShowSchedule({
         )}
 
         {isSingleBreed ? (
-          /* ── Single breed: Dogs | Bitches two-column layout ── */
+          /* ── Single breed: Dogs | Bitches two-column layout ──
+              Mixed non-JH classes (Veteran, etc.) render at the top so
+              class 1 is visible first. JH Mixed classes render at the
+              bottom as a separate "Junior Handling" section. */
           <>
+            {mixedTopClasses.length > 0 && (
+              <View style={{ marginBottom: 8 }}>
+                <View style={s.twoColMixedHeader}>
+                  <Text style={s.twoColHeaderText}>Mixed</Text>
+                </View>
+                {mixedTopClasses.map((cls, i) => (
+                  <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
+                    <Text style={s.twoColNum}>{cls.classLabel}</Text>
+                    <Text style={s.twoColName}>{cls.className}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
             <View style={s.twoColContainer}>
               {/* Dogs column */}
               <View style={[s.twoColHalf, { paddingRight: 4 }]}>
@@ -1385,15 +1407,12 @@ export function ShowSchedule({
               </View>
             </View>
 
-            {/* Non-sex-specific classes below (e.g. Junior Handling) */}
-            {mixedClasses.length > 0 && (
-              <View>
+            {mixedBottomClasses.length > 0 && (
+              <View style={{ marginTop: 8 }}>
                 <View style={s.twoColMixedHeader}>
-                  <Text style={s.twoColHeaderText}>
-                    {mixedClasses.every((c) => c.classType === 'junior_handler') ? 'Junior Handling' : 'Mixed'}
-                  </Text>
+                  <Text style={s.twoColHeaderText}>Junior Handling</Text>
                 </View>
-                {mixedClasses.map((cls, i) => (
+                {mixedBottomClasses.map((cls, i) => (
                   <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
                     <Text style={s.twoColNum}>{cls.classLabel}</Text>
                     <Text style={s.twoColName}>{cls.className}</Text>

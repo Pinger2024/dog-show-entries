@@ -1435,14 +1435,27 @@ export const secretaryRouter = createTRPCRouter({
       });
 
       // Single-breed shows often have breed_id set inconsistently across
-      // classes (dog/bitch classes leave it null because breed is implied;
-      // add-on classes like Veteran/Special sometimes get it populated).
-      // If the distinct-breed count is ≤ 2 we treat the show as single-breed
-      // and skip breed in the sort — otherwise a "German Shepherd Dog" set
-      // alphabetically outranks the "ZZZ" null-breed fallback and bubbles
-      // the Veteran class to classNumber 1 instead of last.
+      // classes. Skip breed in the sort unless there are genuinely ≥3
+      // distinct breeds — otherwise a "German Shepherd Dog" value sorts
+      // before the "ZZZ" null-breed fallback and bubbles mixed-breed
+      // classes to the wrong position.
       const distinctBreeds = new Set(classes.filter((c) => c.breed).map((c) => c.breed!.name));
       const isMultiBreed = distinctBreeds.size >= 3;
+
+      // Sex tier for numbering order:
+      //   0 = non-JH Mixed (Veteran etc.) — class 1, rendered at the top
+      //   1 = Dog
+      //   2 = Bitch
+      //   3 = JH (excluded from numbering below)
+      // Non-JH Mixed classes go first because RKC ordering places Veteran
+      // before the per-sex classes — a Veteran-winning dog must still be
+      // eligible for the Dog Challenge, which hasn't been judged yet.
+      const sexTier = (cls: (typeof classes)[number]): number => {
+        if (cls.classDefinition?.type === 'junior_handler') return 3;
+        if (cls.sex === 'dog') return 1;
+        if (cls.sex === 'bitch') return 2;
+        return 0;
+      };
 
       const sorted = [...classes].sort((a, b) => {
         if (isMultiBreed) {
@@ -1455,9 +1468,9 @@ export const secretaryRouter = createTRPCRouter({
           if (breedA !== breedB) return breedA.localeCompare(breedB);
         }
 
-        // Dog before Bitch, null last.
-        const sexOrder = (s: string | null) => s === 'dog' ? 0 : s === 'bitch' ? 1 : 2;
-        if (sexOrder(a.sex) !== sexOrder(b.sex)) return sexOrder(a.sex) - sexOrder(b.sex);
+        const tierA = sexTier(a);
+        const tierB = sexTier(b);
+        if (tierA !== tierB) return tierA - tierB;
 
         return a.sortOrder - b.sortOrder;
       });

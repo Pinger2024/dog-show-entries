@@ -13,6 +13,7 @@ import type {
 import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, makePdfResponse } from '@/lib/pdf-utils';
+import { buildClassLabelMap } from '@/lib/class-labels';
 
 export async function GET(
   request: NextRequest,
@@ -65,9 +66,12 @@ export async function GET(
     }),
   ]);
 
-  // Build classes data
+  // Build classes data — classLabel is what the PDF actually renders
+  // (non-JH classes show their classNumber, JH classes show JHA/JHB…).
+  const classLabelMap = buildClassLabelMap(showClasses);
   const classes: ScheduleClass[] = showClasses.map((sc) => ({
     classNumber: sc.classNumber,
+    classLabel: classLabelMap.get(sc.id) ?? '',
     className: sc.classDefinition?.name ?? 'Unknown Class',
     classDescription: sc.classDefinition?.description ?? null,
     sex: sc.sex,
