@@ -81,48 +81,5 @@ export async function runStartupMigrations() {
       ADD COLUMN IF NOT EXISTS contract_pdf_generated_at TIMESTAMPTZ;
   `);
 
-  // ── 2026-04-21: Merge Paula Ingham's legacy org into the real BAGSD.
-  // The Settings page wasn't passing the active-org id (fixed in dac1550),
-  // so when Amanda impersonated Paula and edited Settings, the changes
-  // landed on Paula's oldest membership — a leftover "Clyde Valley Gsd
-  // Club" she created when signing up, since renamed to "BAGSD" with the
-  // real contact details + logo. Copy those over to the real BAGSD org,
-  // then drop the duplicate. Each statement is idempotent: once the
-  // legacy row is gone, the UPDATE's FROM clause matches nothing, and the
-  // DELETEs WHERE-clause matches nothing.
-  await db.execute(sql`
-    UPDATE organisations r SET
-      name = 'BAGSD',
-      contact_email = l.contact_email,
-      contact_phone = l.contact_phone,
-      website = l.website,
-      logo_url = l.logo_url,
-      subscription_status = l.subscription_status,
-      subscription_current_period_end = l.subscription_current_period_end
-    FROM organisations l
-    WHERE r.id = '6f3b14d4-c0b8-4bca-bce6-706b8fc38ba5'
-      AND l.id = '1490501d-0080-4edf-8827-09fef56c88af';
-  `);
-  await db.execute(sql`
-    DELETE FROM memberships
-    WHERE organisation_id = '1490501d-0080-4edf-8827-09fef56c88af';
-  `);
-  // Clear remaining FK references so the final org delete can succeed.
-  // The legacy org never had shows/sponsors/venues/etc., but an invitation
-  // Paula accepted back in March is blocking the delete. Clear all
-  // known FK-holders for robustness.
-  await db.execute(sql`
-    DELETE FROM invitations
-    WHERE organisation_id = '1490501d-0080-4edf-8827-09fef56c88af';
-  `);
-  await db.execute(sql`
-    DELETE FROM organisation_people
-    WHERE organisation_id = '1490501d-0080-4edf-8827-09fef56c88af';
-  `);
-  await db.execute(sql`
-    DELETE FROM organisations
-    WHERE id = '1490501d-0080-4edf-8827-09fef56c88af';
-  `);
-
   console.log(`[startup-migrations] done in ${Date.now() - started}ms`);
 }

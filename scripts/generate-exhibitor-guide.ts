@@ -492,12 +492,16 @@ async function runEntryWizard(
     'In this example, Belle is entered in two classes. The running total updates at the bottom of the screen.');
 
   await mustClick(page.getByRole('button', { name: /add to cart|update/i }).first(), 'Add to Cart');
-  await page.waitForLoadState('networkidle');
-  await page.waitForTimeout(500);
+  // Wait for the review page itself to render rather than just networkidle
+  // — the RKC declaration text only exists on cart_review, so its
+  // appearance is the signal the wizard has actually advanced. Previously
+  // this step was flaky ~1 in 5 runs because networkidle fired on a
+  // still-loading page and the screenshot caught the classes step.
+  const declaration = page.getByText(/i agree to the above declaration/i);
+  await declaration.waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {});
   await record(page, 'cart-review', 'Review your entries',
     'Last chance to check everything before paying. Remi shows the full RKC declaration — tick to agree, then move to payment.');
 
-  const declaration = page.getByText(/i agree to the above declaration/i);
   await declaration.scrollIntoViewIfNeeded().catch(() => {});
   await mustClick(declaration, 'RKC declaration checkbox');
   await page.waitForTimeout(300);
