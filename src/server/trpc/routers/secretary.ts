@@ -2152,7 +2152,11 @@ export const secretaryRouter = createTRPCRouter({
       // Judge details
       name: z.string().min(1).max(255),
       kcNumber: z.string().max(50).optional(),
-      contactEmail: z.string().email(),
+      // Required for breed-judge assignments (needed to email the offer)
+      // but optional for JH-only assignments — we don't send offers for JH.
+      // The wizard enforces the "required when breed assignment present"
+      // rule client-side; server stays tolerant of a blank string.
+      contactEmail: z.union([z.string().email(), z.literal('')]).optional(),
       contactPhone: z.string().max(50).optional(),
       kcJudgeId: z.string().max(100).optional(),
       kennelClubAffix: z.string().max(100).optional(),
