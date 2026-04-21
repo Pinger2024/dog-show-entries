@@ -107,6 +107,18 @@ export async function runStartupMigrations() {
     DELETE FROM memberships
     WHERE organisation_id = '1490501d-0080-4edf-8827-09fef56c88af';
   `);
+  // Clear remaining FK references so the final org delete can succeed.
+  // The legacy org never had shows/sponsors/venues/etc., but an invitation
+  // Paula accepted back in March is blocking the delete. Clear all
+  // known FK-holders for robustness.
+  await db.execute(sql`
+    DELETE FROM invitations
+    WHERE organisation_id = '1490501d-0080-4edf-8827-09fef56c88af';
+  `);
+  await db.execute(sql`
+    DELETE FROM organisation_people
+    WHERE organisation_id = '1490501d-0080-4edf-8827-09fef56c88af';
+  `);
   await db.execute(sql`
     DELETE FROM organisations
     WHERE id = '1490501d-0080-4edf-8827-09fef56c88af';
