@@ -349,9 +349,15 @@ export function JudgesSection({ showId }: { showId: string }) {
       breeds: string[];
       rings: string[];
       assignmentIds: string[];
+      // True when every one of this judge's assignments has breed=null AND
+      // sex=null — the shape JH-only assignments take in the DB.
+      // Used so the offer preview says "Junior Handling" rather than
+      // falling back to the show's default breed.
+      isJuniorHandlingOnly: boolean;
     }>();
     for (const a of assignments ?? []) {
       const existing = seen.get(a.judgeId);
+      const isJhShape = a.breed === null && a.sex === null;
       if (existing) {
         if (a.breed && !existing.breeds.includes(a.breed.name)) {
           existing.breeds.push(a.breed.name);
@@ -360,6 +366,7 @@ export function JudgesSection({ showId }: { showId: string }) {
           existing.rings.push(`Ring ${a.ring.number}`);
         }
         existing.assignmentIds.push(a.id);
+        if (!isJhShape) existing.isJuniorHandlingOnly = false;
       } else {
         seen.set(a.judgeId, {
           judgeId: a.judgeId,
@@ -371,6 +378,7 @@ export function JudgesSection({ showId }: { showId: string }) {
           breeds: a.breed ? [a.breed.name] : [],
           rings: a.ring ? [`Ring ${a.ring.number}`] : [],
           assignmentIds: [a.id],
+          isJuniorHandlingOnly: isJhShape,
         });
       }
     }
@@ -697,9 +705,14 @@ export function JudgesSection({ showId }: { showId: string }) {
               (showData?.showClasses ?? []).filter((sc) => sc.breed).map((sc) => sc.breed!.name)
             )];
             const fallbackBreed = showBreedName ?? (classBreedNames.length > 0 ? classBreedNames.join(', ') : (showData?.name ?? 'All breeds'));
-            const breedsText = judge?.breeds.length
-              ? judge.breeds.join(', ')
-              : fallbackBreed;
+            // JH-only judges aren't judging a breed — the offer should
+            // say "Junior Handling" so the letter reads correctly and
+            // the judge knows what they've been asked to do.
+            const breedsText = judge?.isJuniorHandlingOnly
+              ? 'Junior Handling'
+              : judge?.breeds.length
+                ? judge.breeds.join(', ')
+                : fallbackBreed;
             const showDate = showData?.startDate
               ? new Date(showData.startDate).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
               : 'TBC';
