@@ -589,6 +589,11 @@ function DogStep({
   const { data: breeds, isLoading: breedsLoading } =
     trpc.breeds.list.useQuery();
 
+  // Owner name + address are mandatory on dog creation. The profile step
+  // runs before this one so the user always has them on file — pull them
+  // here and attach to the createDog payload.
+  const { data: userProfile } = trpc.users.getProfile.useQuery();
+
   const utils = trpc.useUtils();
 
   const createDog = trpc.dogs.create.useMutation({
@@ -746,7 +751,30 @@ function DogStep({
       <CardContent>
         <Form {...form}>
           <form
-            onSubmit={form.handleSubmit((data) => createDog.mutate(data))}
+            onSubmit={form.handleSubmit((data) => {
+              const ownerAddress = [userProfile?.address, userProfile?.postcode]
+                .filter(Boolean)
+                .join(', ');
+              if (!userProfile?.name || !ownerAddress) {
+                toast.error('Please finish your profile first', {
+                  description:
+                    'Owner name and full address are required — add them in the previous step.',
+                });
+                return;
+              }
+              createDog.mutate({
+                ...data,
+                owners: [
+                  {
+                    ownerName: userProfile.name,
+                    ownerAddress,
+                    ownerEmail: userProfile.email ?? '',
+                    ownerPhone: userProfile.phone ?? undefined,
+                    isPrimary: true,
+                  },
+                ],
+              });
+            })}
             className="space-y-4"
           >
             {/* RKC Reg + Name + Lookup */}

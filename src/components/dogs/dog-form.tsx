@@ -77,7 +77,9 @@ const dogFormSchema = z.object({
   damName: z.string().optional(),
   breederName: z.string().optional(),
   bio: z.string().optional(),
-  owners: z.array(ownerSchema).optional(),
+  owners: z
+    .array(ownerSchema)
+    .min(1, 'At least one owner with name and address is required'),
 });
 
 type DogFormValues = z.infer<typeof dogFormSchema>;
@@ -908,7 +910,8 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
           <CardHeader>
             <CardTitle>Owners</CardTitle>
             <CardDescription>
-              Add up to 4 owners. At least one owner with name, address, and email is required for show entries.
+              Owner name and full postal address are required — RKC catalogues
+              must list them. Add up to 4 owners.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -975,9 +978,12 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                   name={`owners.${index}.ownerAddress`}
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Address</FormLabel>
+                      <FormLabel>Full postal address</FormLabel>
                       <FormControl>
-                        <Input placeholder="Full postal address" {...field} />
+                        <Input
+                          placeholder="House, street, town, postcode"
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
