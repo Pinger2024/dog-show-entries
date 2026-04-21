@@ -5,6 +5,7 @@ import {
   Check,
   ChevronDown,
   ChevronsUpDown,
+  Download,
   FileCheck,
   Gavel,
   Loader2,
@@ -426,6 +427,15 @@ export function JudgesSection({ showId }: { showId: string }) {
                             {contract.confirmedAt && ` · Confirmed ${new Date(contract.confirmedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`}
                             {contract.declinedAt && ` · Declined ${new Date(contract.declinedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`}
                           </p>
+                        )}
+                        {contract?.contractPdfKey && (
+                          <a
+                            href={`/api/judge-contract-pdf/${contract.id}`}
+                            className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                          >
+                            <Download className="size-3.5" />
+                            Download signed contract (PDF)
+                          </a>
                         )}
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">

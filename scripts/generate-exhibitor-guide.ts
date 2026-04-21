@@ -205,8 +205,12 @@ async function findTargetShow() {
       `Target show "${SHOW_NAME}" not found. Run \`npx tsx scripts/e2e-mandy-fulltest.ts\` first.`,
     );
   }
+  if (!show.slug) {
+    // Shouldn't happen — the e2e seeder always sets a slug — but typecheck it.
+    throw new Error(`Target show "${SHOW_NAME}" has no slug set; cannot address by URL.`);
+  }
   console.log(`✓ Target show: ${show.name} (slug=${show.slug})`);
-  return show;
+  return { id: show.id, slug: show.slug, name: show.name };
 }
 
 // ─── Walk ─────────────────────────────────────────────────────────────────

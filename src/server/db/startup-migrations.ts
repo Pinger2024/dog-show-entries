@@ -73,5 +73,13 @@ export async function runStartupMigrations() {
     );
   `);
 
+  // ── 2026-04-21: judge-contract PDF archive for RKC audit compliance.
+  // Snapshots the agreed contract to R2 at judge-acceptance time.
+  await db.execute(sql`
+    ALTER TABLE judge_contracts
+      ADD COLUMN IF NOT EXISTS contract_pdf_key TEXT,
+      ADD COLUMN IF NOT EXISTS contract_pdf_generated_at TIMESTAMPTZ;
+  `);
+
   console.log(`[startup-migrations] done in ${Date.now() - started}ms`);
 }

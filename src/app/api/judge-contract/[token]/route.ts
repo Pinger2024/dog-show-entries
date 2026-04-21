@@ -4,6 +4,7 @@ import { db } from '@/server/db';
 import { judgeContracts, judgeAssignments, showChecklistItems } from '@/server/db/schema';
 import { getBaseUrl } from '@/server/lib/utils';
 import { Resend } from 'resend';
+import { generateJudgeContractPdf } from '@/server/services/judge-contract-pdf';
 
 function renderPage(title: string, body: string) {
   return `
@@ -300,6 +301,16 @@ export async function POST(
       .update(judgeContracts)
       .set({ stage: 'offer_accepted', acceptedAt: new Date() })
       .where(eq(judgeContracts.id, contract.id));
+
+    // Archive a PDF snapshot of the fully-agreed contract for RKC audit.
+    // Wrapped in try/catch so a transient R2 blip doesn't break the judge's
+    // acceptance journey — the stage is already persisted, and the PDF can
+    // be regenerated via the retroactive path.
+    try {
+      await generateJudgeContractPdf(contract.id);
+    } catch (err) {
+      console.error('[judge-contract] Failed to archive PDF snapshot:', err);
+    }
 
     // Auto-update checklist: "Receive judge acceptance letters"
     await db

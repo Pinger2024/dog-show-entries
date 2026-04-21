@@ -3785,6 +3785,18 @@ export const secretaryRouter = createTRPCRouter({
         .set({ stage: 'confirmed', confirmedAt: new Date() })
         .where(eq(judgeContracts.id, input.contractId));
 
+      // Backfill the archived PDF snapshot for any contract confirmed before
+      // the archive feature landed. Idempotent — no-ops when a key already
+      // exists. Errors are logged but do not break confirmation.
+      if (!contract.contractPdfKey) {
+        try {
+          const { generateJudgeContractPdf } = await import('@/server/services/judge-contract-pdf');
+          await generateJudgeContractPdf(input.contractId);
+        } catch (err) {
+          console.error('[judge-contract] Failed to backfill PDF snapshot on confirmation:', err);
+        }
+      }
+
       // Auto-update checklist items for this judge
       await ctx.db
         .update(showChecklistItems)
