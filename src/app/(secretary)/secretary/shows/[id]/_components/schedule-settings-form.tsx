@@ -960,8 +960,34 @@ function PeopleSection({
                     placeholder="Name"
                     value={officer.name}
                     onChange={(e) => updateOfficer(idx, 'name', e.target.value)}
+                    onBlur={(e) => {
+                      // Soft-merge from Club Roster: if a manually-typed name
+                      // matches someone in the club roster who is flagged as a
+                      // guarantor, pre-tick the Guarantor box (and fill address
+                      // if blank). Only promotes false→true and empty→filled;
+                      // never overwrites explicit user choices.
+                      if (!clubPeople) return;
+                      const typed = e.target.value.trim().toLowerCase();
+                      if (!typed) return;
+                      const match = clubPeople.find((p) => p.name.trim().toLowerCase() === typed);
+                      if (!match) return;
+                      if (!officer.isGuarantor && match.isGuarantor) {
+                        updateOfficer(idx, 'isGuarantor', true);
+                      }
+                      if (!officer.address && match.address) {
+                        updateOfficer(idx, 'address', match.address);
+                      }
+                    }}
+                    list={`club-people-${idx}`}
                     className="h-10 text-sm"
                   />
+                  {clubPeople && clubPeople.length > 0 && (
+                    <datalist id={`club-people-${idx}`}>
+                      {clubPeople.map((p) => (
+                        <option key={p.id} value={p.name} />
+                      ))}
+                    </datalist>
+                  )}
                   <Select value={officer.position} onValueChange={(v) => updateOfficer(idx, 'position', v)}>
                     <SelectTrigger className="h-10 text-sm"><SelectValue placeholder="Position" /></SelectTrigger>
                     <SelectContent>
