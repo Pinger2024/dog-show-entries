@@ -81,7 +81,7 @@ function loadBackCover(): Uint8Array | null {
   }
 }
 
-async function drawBackCoverPage(
+export async function drawBackCoverPage(
   doc: PDFDocument,
   page: PDFPage,
   opts: { width: number; height: number },

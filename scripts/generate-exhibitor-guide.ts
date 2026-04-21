@@ -42,6 +42,7 @@ import { hash as bcryptHash } from 'bcryptjs';
 import { db } from '@/server/db/index.js';
 import * as s from '@/server/db/schema/index.js';
 import { generateShowSlug } from '@/lib/slugify.js';
+import { drawBackCoverPage } from '@/lib/pdf-pad.js';
 
 // ─── Config ──────────────────────────────────────────────────────────────
 
@@ -56,6 +57,11 @@ const DEMO_ORG_NAME = 'Thornfield Canine Society';
 const DEMO_SHOW_NAME = 'Thornfield Summer Open Show';
 const DEMO_SECRETARY_NAME = 'Margaret Ashcroft';
 const DEMO_SECRETARY_EMAIL = 'secretary@thornfield.example.com';
+
+// Must match in both the seed insert (so the row exists) and the click
+// selector (so Playwright can pick the card). Rename here once.
+const GUIDE_DOG_NAME = 'Meadowbank Blue Belle';
+const GUIDE_DOG_BREED = 'Labrador Retriever';
 
 const VIEWPORT = { width: 390, height: 844 } as const;
 const DEVICE_SCALE = 2;
@@ -98,12 +104,23 @@ async function dismissCookieBanner(page: Page) {
   await page.getByRole('button', { name: /^accept/i }).click({ timeout: 500 }).catch(() => {});
 }
 
-// Wrap load-bearing clicks so silent misses surface as warnings.
+// Wrap load-bearing clicks/fills so silent misses surface as warnings.
+// Previous screenshot already captured the screen before the action, so the
+// step where the failure mattered is still in the output — this just tells
+// the operator to check.
 async function mustClick(locator: ReturnType<Page['getByText']>, label: string) {
   try {
     await locator.click({ timeout: 5_000 });
   } catch (err) {
     console.warn(`  ⚠ Failed to click "${label}" — subsequent screenshot may be wrong. ${(err as Error).message}`);
+  }
+}
+
+async function mustFill(locator: ReturnType<Page['getByLabel']>, value: string, label: string) {
+  try {
+    await locator.fill(value, { timeout: 5_000 });
+  } catch (err) {
+    console.warn(`  ⚠ Failed to fill "${label}" — subsequent screenshot may be missing that value. ${(err as Error).message}`);
   }
 }
 
@@ -230,15 +247,14 @@ async function wipeExhibitor() {
     await db.delete(s.dogs).where(inArray(s.dogs.id, dogIds));
   }
 
-  // Entries where Sarah is the exhibitor but the dog isn't hers (shouldn't
-  // normally happen, but covers any edge from earlier guide runs).
-  await db.delete(s.entries).where(eq(s.entries.exhibitorId, existing.id));
-
-  // Orders placed by Sarah — cascades payments + order_sundry_items.
-  await db.delete(s.orders).where(eq(s.orders.exhibitorId, existing.id));
-
-  await db.delete(s.accounts).where(eq(s.accounts.userId, existing.id));
-  await db.delete(s.sessions).where(eq(s.sessions.userId, existing.id));
+  // Remaining user-scoped rows have no FK dependency on each other, so
+  // batch in parallel. Must finish before the users DELETE.
+  await Promise.all([
+    db.delete(s.entries).where(eq(s.entries.exhibitorId, existing.id)),
+    db.delete(s.orders).where(eq(s.orders.exhibitorId, existing.id)),
+    db.delete(s.accounts).where(eq(s.accounts.userId, existing.id)),
+    db.delete(s.sessions).where(eq(s.sessions.userId, existing.id)),
+  ]);
   await db.delete(s.users).where(eq(s.users.id, existing.id));
 }
 
@@ -284,13 +300,13 @@ async function seedGuideDogForExhibitor() {
   const [lab] = await db
     .select({ id: s.breeds.id })
     .from(s.breeds)
-    .where(ilike(s.breeds.name, 'Labrador Retriever'))
+    .where(ilike(s.breeds.name, GUIDE_DOG_BREED))
     .limit(1);
-  if (!lab) throw new Error('Labrador Retriever breed row missing — expected seeded');
+  if (!lab) throw new Error(`${GUIDE_DOG_BREED} breed row missing — expected seeded`);
 
   await db.insert(s.dogs).values({
     id: crypto.randomUUID(),
-    registeredName: 'Meadowbank Blue Belle',
+    registeredName: GUIDE_DOG_NAME,
     breedId: lab.id,
     sex: 'bitch',
     dateOfBirth: '2023-06-20',
@@ -386,14 +402,15 @@ async function walkNew(
   await record(page, 'onboarding-profile', 'Your details',
     'The RKC requires your full name and address on every entry form, so Remi stores them once and fills them in for you. You can edit these any time from Settings.');
 
-  await page.getByLabel(/^full name$/i).first().fill(GUIDE_NAME).catch(() => {});
-  // Postcode lookup is an external API — click "Enter manually" to bypass.
+  await mustFill(page.getByLabel(/^full name$/i).first(), GUIDE_NAME, 'Full name');
+  // Postcode lookup is an external API — click "Enter manually" to bypass
+  // if the form offers it (optional — direct-input fallback works either way).
   const enterManuallyBtn = page.getByRole('button', { name: /enter manually|manual/i });
   if (await enterManuallyBtn.isVisible().catch(() => false)) {
     await enterManuallyBtn.click({ timeout: 2_000 }).catch(() => {});
   }
-  await page.getByLabel(/address/i).first().fill(GUIDE_ADDRESS).catch(() => {});
-  await page.getByLabel(/postcode/i).first().fill(GUIDE_POSTCODE).catch(() => {});
+  await mustFill(page.getByLabel(/address/i).first(), GUIDE_ADDRESS, 'Address');
+  await mustFill(page.getByLabel(/postcode/i).first(), GUIDE_POSTCODE, 'Postcode');
   await record(page, 'onboarding-profile-filled', 'Fill in your details',
     'Name, address, postcode — then tap Continue. Remi keeps these to hand so you never fill them in again.');
 
@@ -454,10 +471,9 @@ async function runEntryWizard(
   await record(page, 'dog-step', 'Pick the dog you\'re entering',
     'Remi shows every dog registered to your account. Tap the one you\'re entering. Need to register another? "+ Add a new dog" takes you to the dog form.');
 
-  await mustClick(page.getByText(/Meadowbank Blue Belle|Bella/i).first(), 'Dog card');
-  await page.waitForTimeout(400);
-  await page.getByRole('button', { name: /continue|next|pick classes|choose classes/i }).first()
-    .click({ timeout: 5_000 }).catch(() => {});
+  // Selecting the dog card auto-advances the wizard via the cart's
+  // step-transition on selection — no separate "Continue" tap needed.
+  await mustClick(page.getByText(GUIDE_DOG_NAME).first(), 'Dog card');
   await page.waitForLoadState('networkidle');
 
   await record(page, 'classes-step', 'Choose the classes to enter',
@@ -541,24 +557,26 @@ async function stitchPdf(flow: Flow, steps: Step[], framesDir: string, outPath: 
 
   const brandingDir = join(process.cwd(), 'public', 'branding');
   const logo = await pdf.embedPng(readFileSync(join(brandingDir, 'remi-horizontal.png')));
-  const backCover = await pdf.embedJpg(readFileSync(join(brandingDir, 'remi-back-cover.jpg')));
+
+  // Returns the rendered height so callers can position elements below.
+  function drawCenteredLogo(page: ReturnType<typeof pdf.addPage>, maxWidth: number, topY: number) {
+    const scale = maxWidth / logo.width;
+    const w = logo.width * scale;
+    const h = logo.height * scale;
+    page.drawImage(logo, {
+      x: (PAGE_W - w) / 2,
+      y: topY - h,
+      width: w,
+      height: h,
+    });
+    return h;
+  }
 
   // ── Cover ────────────────────────────────────────────────────────
   const cover = pdf.addPage([PAGE_W, PAGE_H]);
   cover.drawRectangle({ x: 0, y: 0, width: PAGE_W, height: PAGE_H, color: cream });
 
-  // Logo — centred, scaled to 70% of content width
-  const logoMaxW = (PAGE_W - MARGIN * 2) * 0.75;
-  const logoScale = logoMaxW / logo.width;
-  const logoW = logo.width * logoScale;
-  const logoH = logo.height * logoScale;
-  cover.drawImage(logo, {
-    x: (PAGE_W - logoW) / 2,
-    y: PAGE_H - 80 - logoH,
-    width: logoW,
-    height: logoH,
-  });
-
+  const logoH = drawCenteredLogo(cover, (PAGE_W - MARGIN * 2) * 0.75, PAGE_H - 80);
   const headlineY = PAGE_H - 100 - logoH - 40;
   cover.drawText(headline, {
     x: MARGIN, y: headlineY, size: 28, font: helvBold, color: ink,
@@ -629,14 +647,7 @@ async function stitchPdf(flow: Flow, steps: Step[], framesDir: string, outPath: 
   // ── "Need a hand?" contact page ──────────────────────────────────
   const outro = pdf.addPage([PAGE_W, PAGE_H]);
   outro.drawRectangle({ x: 0, y: 0, width: PAGE_W, height: PAGE_H, color: cream });
-  const smallLogoW = 180;
-  const smallLogoH = (logo.height / logo.width) * smallLogoW;
-  outro.drawImage(logo, {
-    x: (PAGE_W - smallLogoW) / 2,
-    y: PAGE_H - 80 - smallLogoH,
-    width: smallLogoW,
-    height: smallLogoH,
-  });
+  const smallLogoH = drawCenteredLogo(outro, 180, PAGE_H - 80);
   outro.drawText('Need a hand?', {
     x: MARGIN, y: PAGE_H - 180 - smallLogoH, size: 28, font: helvBold, color: ink,
   });
@@ -653,18 +664,11 @@ async function stitchPdf(flow: Flow, steps: Step[], framesDir: string, outPath: 
     outro.drawText(line, { x: MARGIN, y: PAGE_H - 240 - smallLogoH - i * 20, size: 13, font: helv, color: ink });
   });
 
-  // ── Back cover — full brand artwork, fit-within so no text gets cropped ─
+  // ── Back cover — shared brand artwork page from pdf-pad.ts ───────
+  // Gives us the cached JPEG load + the consistent letterbox layout we
+  // use on catalogues and schedules.
   const back = pdf.addPage([PAGE_W, PAGE_H]);
-  back.drawRectangle({ x: 0, y: 0, width: PAGE_W, height: PAGE_H, color: rgb(0.08, 0.12, 0.09) });
-  const bcScale = Math.min(PAGE_W / backCover.width, PAGE_H / backCover.height);
-  const bcW = backCover.width * bcScale;
-  const bcH = backCover.height * bcScale;
-  back.drawImage(backCover, {
-    x: (PAGE_W - bcW) / 2,
-    y: (PAGE_H - bcH) / 2,
-    width: bcW,
-    height: bcH,
-  });
+  await drawBackCoverPage(pdf, back, { width: PAGE_W, height: PAGE_H });
 
   const bytes = await pdf.save();
   writeFileSync(outPath, bytes);
