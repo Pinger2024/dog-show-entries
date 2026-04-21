@@ -211,9 +211,18 @@ export default function TermsPage() {
         <section>
           <h2 className="text-lg font-semibold text-foreground">13. Governing law</h2>
           <p className="mt-2">
-            These terms are governed by the laws of England and Wales, and
-            disputes are subject to the exclusive jurisdiction of the courts
-            of England and Wales.
+            These terms are governed by the laws of England and Wales.
+          </p>
+          <p className="mt-2">
+            If you are a consumer resident in Scotland or Northern Ireland,
+            you may bring court proceedings about these terms in either the
+            courts of England and Wales or the courts of the part of the
+            United Kingdom where you live. Business users may only bring
+            proceedings in the courts of England and Wales.
+          </p>
+          <p className="mt-2">
+            Nothing in this section affects the statutory consumer rights you
+            have under the law of your country of residence.
           </p>
         </section>
 
