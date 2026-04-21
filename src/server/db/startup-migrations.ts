@@ -81,5 +81,38 @@ export async function runStartupMigrations() {
       ADD COLUMN IF NOT EXISTS contract_pdf_generated_at TIMESTAMPTZ;
   `);
 
+  // ── 2026-04-21: Merge Paula Ingham's legacy org into the real BAGSD.
+  // The Settings page wasn't passing the active-org id (fixed in dac1550),
+  // so when Amanda impersonated Paula and edited Settings, the changes
+  // landed on Paula's oldest membership — a leftover "Clyde Valley Gsd
+  // Club" she created when signing up, since renamed to "BAGSD" with the
+  // real contact details + logo. Copy those over to the real BAGSD org,
+  // then drop the duplicate. Idempotent: if the legacy org is already
+  // gone, the IF block exits early.
+  await db.execute(sql`
+    DO $$
+    DECLARE
+      legacy_id UUID := '1490501d-0080-4edf-8827-09fef56c88af';
+      real_id   UUID := '6f3b14d4-c0b8-4bca-bce6-706b8fc38ba5';
+      legacy_row organisations%ROWTYPE;
+    BEGIN
+      SELECT * INTO legacy_row FROM organisations WHERE id = legacy_id;
+      IF NOT FOUND THEN RETURN; END IF;
+
+      UPDATE organisations SET
+        name = 'BAGSD',
+        contact_email = legacy_row.contact_email,
+        contact_phone = legacy_row.contact_phone,
+        website = legacy_row.website,
+        logo_url = legacy_row.logo_url,
+        subscription_status = legacy_row.subscription_status,
+        subscription_current_period_end = legacy_row.subscription_current_period_end
+      WHERE id = real_id;
+
+      DELETE FROM memberships WHERE organisation_id = legacy_id;
+      DELETE FROM organisations WHERE id = legacy_id;
+    END $$;
+  `);
+
   console.log(`[startup-migrations] done in ${Date.now() - started}ms`);
 }
