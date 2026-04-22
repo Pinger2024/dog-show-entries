@@ -223,7 +223,7 @@ export default function FinancialPage() {
       {/* Summary cards — paid only, sundries included, net of refunds */}
       <div className="grid gap-4 grid-cols-2 sm:grid-cols-4">
         <StatCard
-          label="Paid to Club"
+          label="Total Income"
           value={<span className="text-green-600 dark:text-green-400">{formatCurrency(stats?.clubReceivablePence ?? 0)}</span>}
           subtext={`${stats?.confirmedEntries ?? 0} paid entries + sundries`}
         />
@@ -238,7 +238,7 @@ export default function FinancialPage() {
           subtext={`${stats?.pendingEntries ?? 0} started checkout`}
         />
         <StatCard
-          label="Catalogues"
+          label="Catalogues ordered"
           value={(stats?.paidPrintedCatalogueCount ?? 0) + (stats?.paidOnlineCatalogueCount ?? 0)}
           subtext={`${stats?.paidPrintedCatalogueCount ?? 0} printed · ${stats?.paidOnlineCatalogueCount ?? 0} online`}
         />

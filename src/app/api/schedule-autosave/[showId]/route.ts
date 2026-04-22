@@ -84,7 +84,23 @@ export async function POST(
   }
 
   const updates: Record<string, unknown> = {};
-  if (body.scheduleData !== undefined) updates.scheduleData = body.scheduleData;
+  if (body.scheduleData !== undefined) {
+    // MERGE semantics rather than REPLACE. The beacon path is
+    // inherently partial-snapshot prone: the client's React Query
+    // cache may be stale, or an older tab may fire with an
+    // incomplete form state. By merging the incoming object with
+    // the current DB value, any field the client omits stays
+    // intact. This avoids cascade-wipes where one field goes
+    // missing and drags unrelated fields out with it.
+    //
+    // Trade-off: clearing a field via beacon now requires sending
+    // it as an explicit empty value (e.g. `welcomeNote: ''`)
+    // rather than omitting it. All current client sites on this
+    // route already send every field from loaded state, so this
+    // matches actual usage.
+    const existing = (show.scheduleData ?? {}) as Record<string, unknown>;
+    updates.scheduleData = { ...existing, ...body.scheduleData };
+  }
   if (body.showOpenTime !== undefined) updates.showOpenTime = body.showOpenTime || null;
   if (body.judgingStartTime !== undefined) updates.startTime = body.judgingStartTime || null;
   if (body.onCallVet !== undefined) updates.onCallVet = body.onCallVet || null;

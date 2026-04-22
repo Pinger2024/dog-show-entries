@@ -5,7 +5,7 @@ import { POST as autosavePOST } from '@/app/api/schedule-autosave/[showId]/route
 import { shows } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
 import { makeSecretaryWithOrg, makeShow } from '../helpers/factories';
-import type { ScheduleData } from '@/server/db/schema';
+import type { ScheduleData } from '@/server/db/schema/shows';
 
 /**
  * Regression coverage for the 2026-04-22 incident where the
@@ -105,6 +105,45 @@ describe('POST /api/schedule-autosave/[showId] — wipe protection', () => {
     const body = await res.json();
     expect(body.ok).toBe(true);
     expect(body.skipped).toBeUndefined();
+  });
+
+  it('merges (not replaces) scheduleData — fields omitted from incoming are preserved', async () => {
+    // Regression for the 2026-04-22 awardsDescription wipe: a stale
+    // browser tab fired the beacon with a payload that included
+    // restored officers but omitted awardsDescription. Under REPLACE
+    // semantics, that dropped awardsDescription even though the
+    // incoming payload was otherwise "real" content and passed the
+    // suspicious-wipe guard. Merge semantics preserve it.
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id, scheduleData: POPULATED_EXISTING });
+    mockAuthedAs(user);
+
+    const res = await autosavePOST(
+      beaconRequest(show.id, {
+        scheduleData: {
+          ...BLANK_DEFAULT_PAYLOAD.scheduleData,
+          showManager: 'Mr Andrew Winfrow',
+          officers: [
+            { name: 'Mrs D Gater', position: 'President' },
+            { name: 'Mr Bob Honey', position: 'Chairman' },
+          ],
+          guarantors: [
+            { name: 'Mrs D Gater' },
+            { name: 'Mr Bob Honey' },
+          ],
+          // awardsDescription deliberately absent — simulating stale cache
+        },
+      }) as never,
+      params(show.id),
+    );
+    expect(res.status).toBe(200);
+
+    const dbShow = await testDb.query.shows.findFirst({ where: eq(shows.id, show.id) });
+    // Incoming fields overrode existing:
+    expect(dbShow?.scheduleData?.showManager).toBe('Mr Andrew Winfrow');
+    expect(dbShow?.scheduleData?.officers).toHaveLength(2);
+    // Field omitted from incoming is preserved from DB:
+    expect(dbShow?.scheduleData?.awardsDescription).toBe('Trophies 1st to 3rd in all classes');
   });
 
   it('accepts a payload with real user content (one officer) even if most fields are default', async () => {

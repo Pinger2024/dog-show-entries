@@ -406,13 +406,13 @@ function PaymentReportContent({ showId }: { showId: string }) {
   const [search, setSearch] = useState('');
 
   const filtered = useMemo(() => {
-    if (!data?.entries) return [];
-    if (!search) return data.entries;
+    if (!data?.rows) return [];
+    if (!search) return data.rows;
     const q = search.toLowerCase();
-    return data.entries.filter(
-      (e) =>
-        e.exhibitor?.name?.toLowerCase().includes(q) ||
-        e.dog?.registeredName?.toLowerCase().includes(q)
+    return data.rows.filter(
+      (r) =>
+        r.exhibitor?.name?.toLowerCase().includes(q) ||
+        r.itemLabel.toLowerCase().includes(q)
     );
   }, [data, search]);
 
@@ -421,20 +421,22 @@ function PaymentReportContent({ showId }: { showId: string }) {
     const headers = [
       'Exhibitor',
       'Email',
-      'Dog',
+      'Item',
+      'Entry Fee (£)',
+      'Add-ons (£)',
+      'Total (£)',
       'Status',
-      'Fee (£)',
-      'Payment Method',
       'Payments',
     ];
-    const rows = filtered.map((e) => [
-      e.exhibitor?.name ?? '',
-      e.exhibitor?.email ?? '',
-      e.dog?.registeredName ?? 'Junior Handler',
-      e.status,
-      (e.totalFee / 100).toFixed(2),
-      e.paymentMethod ?? '',
-      e.payments.map((p) => `${p.status}: £${(p.amount / 100).toFixed(2)}`).join('; '),
+    const rows = filtered.map((r) => [
+      r.exhibitor?.name ?? '',
+      r.exhibitor?.email ?? '',
+      r.itemDetail ? `${r.itemLabel} (${r.itemDetail})` : r.itemLabel,
+      (r.entryFee / 100).toFixed(2),
+      (r.addons / 100).toFixed(2),
+      (r.total / 100).toFixed(2),
+      r.status,
+      r.payments.map((p) => `${p.status}: £${(p.amount / 100).toFixed(2)}`).join('; '),
     ]);
 
     downloadCsv(headers, rows, `payment-report-${showId}`);
@@ -506,48 +508,46 @@ function PaymentReportContent({ showId }: { showId: string }) {
             <>
               {/* Mobile card view */}
               <div className="space-y-3 sm:hidden">
-                {filtered.map((entry) => {
-                  const entryTotal = entry.totalFee + (entry.sundryTotal ?? 0);
-                  return (
-                    <div key={entry.id} className="rounded-lg border p-3 space-y-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <p className="font-medium text-sm truncate">{entry.exhibitor?.name ?? '—'}</p>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {entry.dog?.registeredName ?? 'Junior Handler'}
+                {filtered.map((row) => (
+                  <div key={row.id} className="rounded-lg border p-3 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-sm truncate">{row.exhibitor?.name ?? '—'}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {row.itemLabel}
+                        </p>
+                        {row.itemDetail && (
+                          <p className="text-[11px] text-muted-foreground/80 truncate">
+                            {row.itemDetail}
                           </p>
-                        </div>
-                        <Badge
-                          variant={entryStatusConfig[entry.status]?.variant ?? 'outline'}
-                          className="shrink-0"
-                        >
-                          {entryStatusConfig[entry.status]?.label ?? entry.status}
-                        </Badge>
+                        )}
                       </div>
-                      <div className="flex items-center justify-between text-xs">
-                        <div>
-                          <span className="font-medium">{formatCurrency(entryTotal)}</span>
-                          {(entry.sundryTotal ?? 0) > 0 && (
-                            <span className="ml-1 text-muted-foreground">
-                              (incl. {formatCurrency(entry.sundryTotal ?? 0)} add-ons)
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap gap-1 justify-end">
-                          {entry.payments.map((p, i) => (
-                            <Badge
-                              key={i}
-                              variant={p.status === 'succeeded' ? 'default' : 'outline'}
-                              className="text-xs"
-                            >
-                              £{(p.amount / 100).toFixed(2)} ({p.status})
-                            </Badge>
-                          ))}
-                        </div>
+                      <Badge
+                        variant={entryStatusConfig[row.status]?.variant ?? 'outline'}
+                        className="shrink-0"
+                      >
+                        {entryStatusConfig[row.status]?.label ?? row.status}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="text-muted-foreground">
+                        {row.kind === 'entry' ? 'Entry fee' : 'Add-ons'}{' '}
+                        <span className="font-medium text-foreground">{formatCurrency(row.total)}</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1 justify-end">
+                        {row.payments.map((p, i) => (
+                          <Badge
+                            key={i}
+                            variant={p.status === 'succeeded' ? 'default' : 'outline'}
+                            className="text-xs"
+                          >
+                            £{(p.amount / 100).toFixed(2)} ({p.status})
+                          </Badge>
+                        ))}
                       </div>
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
               {/* Desktop table */}
               <div className="hidden sm:block">
@@ -555,7 +555,7 @@ function PaymentReportContent({ showId }: { showId: string }) {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Exhibitor</TableHead>
-                      <TableHead>Dog</TableHead>
+                      <TableHead>Item</TableHead>
                       <TableHead>Entry Fee</TableHead>
                       <TableHead>Add-ons</TableHead>
                       <TableHead>Total</TableHead>
@@ -564,49 +564,55 @@ function PaymentReportContent({ showId }: { showId: string }) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filtered.map((entry) => {
-                      const entryTotal = entry.totalFee + (entry.sundryTotal ?? 0);
-                      return (
-                        <TableRow key={entry.id}>
-                          <TableCell>
-                            <div>
-                              <p className="font-medium">{entry.exhibitor?.name ?? '—'}</p>
-                              <p className="text-xs text-muted-foreground">{entry.exhibitor?.email ?? ''}</p>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            {entry.dog?.registeredName ?? 'Junior Handler'}
-                          </TableCell>
-                          <TableCell>{formatCurrency(entry.totalFee)}</TableCell>
-                          <TableCell>
-                            {(entry.sundryTotal ?? 0) > 0
-                              ? formatCurrency(entry.sundryTotal ?? 0)
-                              : <span className="text-muted-foreground">—</span>}
-                          </TableCell>
-                          <TableCell className="font-medium">{formatCurrency(entryTotal)}</TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={entryStatusConfig[entry.status]?.variant ?? 'outline'}
-                            >
-                              {entryStatusConfig[entry.status]?.label ?? entry.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-wrap gap-1">
-                              {entry.payments.map((p, i) => (
-                                <Badge
-                                  key={i}
-                                  variant={p.status === 'succeeded' ? 'default' : 'outline'}
-                                  className="text-xs"
-                                >
-                                  £{(p.amount / 100).toFixed(2)} ({p.status})
-                                </Badge>
-                              ))}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
+                    {filtered.map((row) => (
+                      <TableRow key={row.id}>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{row.exhibitor?.name ?? '—'}</p>
+                            <p className="text-xs text-muted-foreground">{row.exhibitor?.email ?? ''}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <p>{row.itemLabel}</p>
+                            {row.itemDetail && (
+                              <p className="text-xs text-muted-foreground">{row.itemDetail}</p>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {row.entryFee > 0
+                            ? formatCurrency(row.entryFee)
+                            : <span className="text-muted-foreground">—</span>}
+                        </TableCell>
+                        <TableCell>
+                          {row.addons > 0
+                            ? formatCurrency(row.addons)
+                            : <span className="text-muted-foreground">—</span>}
+                        </TableCell>
+                        <TableCell className="font-medium">{formatCurrency(row.total)}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={entryStatusConfig[row.status]?.variant ?? 'outline'}
+                          >
+                            {entryStatusConfig[row.status]?.label ?? row.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {row.payments.map((p, i) => (
+                              <Badge
+                                key={i}
+                                variant={p.status === 'succeeded' ? 'default' : 'outline'}
+                                className="text-xs"
+                              >
+                                £{(p.amount / 100).toFixed(2)} ({p.status})
+                              </Badge>
+                            ))}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
                   </TableBody>
                 </Table>
               </div>

@@ -16,6 +16,42 @@ import {
 } from '../helpers/factories';
 
 describe('secretary.updateScheduleData', () => {
+  it('merges scheduleData — a partial payload does not wipe unrelated fields', async () => {
+    // Regression for the 2026-04-22 awardsDescription wipe: the
+    // sponsors/catalogue-settings pages send a partial scheduleData
+    // payload by spreading their React Query cache of show.scheduleData.
+    // If that cache was stale (e.g. missing a field that was written by
+    // another path), a REPLACE-semantics server would drag that field
+    // out of the DB. Merge semantics preserve it.
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({
+      organisationId: org.id,
+      scheduleData: {
+        country: 'england',
+        showManager: 'Keep Me',
+        awardsDescription: 'Trophies 1st to 3rd in all classes',
+        officers: [{ name: 'Keep Me', position: 'President' }],
+      },
+    });
+
+    // Client sends a partial payload missing awardsDescription + officers
+    // (e.g. a stale cache from before those fields were written).
+    await createTestCaller(user).secretary.updateScheduleData({
+      showId: show.id,
+      scheduleData: {
+        country: 'england',
+        welcomeNote: 'Welcome!',
+      },
+    });
+
+    const dbShow = await testDb.query.shows.findFirst({ where: eq(shows.id, show.id) });
+    expect(dbShow?.scheduleData?.welcomeNote).toBe('Welcome!');
+    // Crucially, fields NOT in the incoming payload are preserved:
+    expect(dbShow?.scheduleData?.showManager).toBe('Keep Me');
+    expect(dbShow?.scheduleData?.awardsDescription).toBe('Trophies 1st to 3rd in all classes');
+    expect(dbShow?.scheduleData?.officers).toEqual([{ name: 'Keep Me', position: 'President' }]);
+  });
+
   it('saves scheduleData JSONB + show-level showOpenTime/judgingStartTime/onCallVet', async () => {
     const { user, org } = await makeSecretaryWithOrg();
     const show = await makeShow({ organisationId: org.id });

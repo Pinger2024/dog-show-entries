@@ -730,15 +730,10 @@ export const secretaryRouter = createTRPCRouter({
           where: and(eq(entries.showId, input.showId), isNull(entries.deletedAt)),
           with: { payments: true, exhibitor: true, dog: true },
         }),
-        ctx.db
-          .select({
-            id: orders.id,
-            status: orders.status,
-            totalAmount: orders.totalAmount,
-            platformFeePence: orders.platformFeePence,
-          })
-          .from(orders)
-          .where(eq(orders.showId, input.showId)),
+        ctx.db.query.orders.findMany({
+          where: eq(orders.showId, input.showId),
+          with: { exhibitor: true, payments: true },
+        }),
         ctx.db
           .select({
             orderId: orderSundryItems.orderId,
@@ -760,21 +755,100 @@ export const secretaryRouter = createTRPCRouter({
           .where(and(eq(orders.showId, input.showId), isNotNull(payments.refundAmount))),
       ]);
 
+      // Aggregate sundries per order (one "Sundry items" row per order,
+      // not per line item — matches what secretaries reconcile against
+      // their bank).
       const sundryTotalsByOrder = new Map<string, number>();
-      for (const s of sundryLines) {
+      const sundryBreakdownByOrder = new Map<string, string[]>();
+      for (const line of sundryLines) {
+        const total = line.quantity * line.unitPrice;
         sundryTotalsByOrder.set(
-          s.orderId,
-          (sundryTotalsByOrder.get(s.orderId) ?? 0) + s.quantity * s.unitPrice
+          line.orderId,
+          (sundryTotalsByOrder.get(line.orderId) ?? 0) + total
         );
+        const arr = sundryBreakdownByOrder.get(line.orderId) ?? [];
+        arr.push(`${line.itemName}${line.quantity > 1 ? ` ×${line.quantity}` : ''}`);
+        sundryBreakdownByOrder.set(line.orderId, arr);
       }
 
-      const enrichedEntries = showEntries.map((e) => ({
-        ...e,
-        sundryTotal: (e.orderId ? sundryTotalsByOrder.get(e.orderId) : undefined) ?? 0,
-      }));
+      type ReportRow = {
+        kind: 'entry' | 'sundry';
+        id: string;
+        orderId: string | null;
+        exhibitor: { name: string | null; email: string | null } | null;
+        itemLabel: string;
+        itemDetail?: string;  // tooltip/secondary line (sundry breakdown)
+        entryFee: number;
+        addons: number;
+        total: number;
+        status: string;
+        payments: Array<{ amount: number; status: string }>;
+      };
+
+      const rows: ReportRow[] = [];
+
+      // One row per entry (entry fee only, no add-ons — add-ons are
+      // split out as separate sundry rows below).
+      for (const e of showEntries) {
+        rows.push({
+          kind: 'entry',
+          id: `entry-${e.id}`,
+          orderId: e.orderId,
+          exhibitor: e.exhibitor
+            ? { name: e.exhibitor.name, email: e.exhibitor.email }
+            : null,
+          itemLabel: e.dog?.registeredName ?? 'Junior Handler',
+          entryFee: e.totalFee,
+          addons: 0,
+          total: e.totalFee,
+          status: e.status,
+          payments: e.payments.map((p) => ({ amount: p.amount, status: p.status })),
+        });
+      }
+
+      // Map order status → the same label vocabulary the frontend uses
+      // for entry statuses so the Status column reads consistently
+      // across entry and sundry rows.
+      const orderStatusToDisplay: Record<string, string> = {
+        paid: 'confirmed',
+        pending_payment: 'pending',
+        draft: 'pending',
+        failed: 'cancelled',
+        cancelled: 'cancelled',
+      };
+
+      // One row per order that had sundry items. Status comes from the
+      // order (not any entry) because sundries are order-scoped — the
+      // exhibitor paid for them as part of the checkout, not against a
+      // specific dog.
+      for (const o of orderRows) {
+        const sundryTotal = sundryTotalsByOrder.get(o.id) ?? 0;
+        if (sundryTotal === 0) continue;
+        const breakdown = sundryBreakdownByOrder.get(o.id) ?? [];
+        rows.push({
+          kind: 'sundry',
+          id: `sundry-${o.id}`,
+          orderId: o.id,
+          exhibitor: o.exhibitor
+            ? { name: o.exhibitor.name, email: o.exhibitor.email }
+            : null,
+          itemLabel: 'Sundry items',
+          itemDetail: breakdown.join(', '),
+          entryFee: 0,
+          addons: sundryTotal,
+          total: sundryTotal,
+          status: orderStatusToDisplay[o.status] ?? o.status,
+          payments: o.payments.map((p) => ({ amount: p.amount, status: p.status })),
+        });
+      }
 
       const metrics = aggregateShowMetrics({
-        orders: orderRows,
+        orders: orderRows.map((o) => ({
+          id: o.id,
+          status: o.status,
+          totalAmount: o.totalAmount,
+          platformFeePence: o.platformFeePence,
+        })),
         entries: showEntries.map((e) => ({
           id: e.id,
           orderId: e.orderId,
@@ -787,12 +861,12 @@ export const secretaryRouter = createTRPCRouter({
       });
 
       return {
-        entries: enrichedEntries,
+        rows,
         summary: {
           totalRevenue: metrics.clubReceivablePence,
           paidCount: metrics.confirmedEntryCount,
           pendingCount: metrics.pendingEntryCount,
-          totalEntries: enrichedEntries.length,
+          totalEntries: showEntries.length,
         },
       };
     }),
@@ -5155,8 +5229,24 @@ export const secretaryRouter = createTRPCRouter({
         });
       }
 
-      // Save show-level fields alongside scheduleData JSONB
-      const showUpdates: Record<string, unknown> = { scheduleData: input.scheduleData };
+      // Merge (rather than replace) scheduleData against the current
+      // DB value. The mutation is called from several places (schedule
+      // form autosave, sponsors page, catalogue-settings page), all
+      // of which build their payload by spreading the client-side
+      // React Query cache — a cache that can go stale. Merging
+      // against the authoritative DB state makes partial payloads
+      // safe: a stale client missing a field no longer drags that
+      // field out when it saves. Clearing a field via this mutation
+      // still works — send the field explicitly as empty string or
+      // null — but omission means "leave alone", not "erase".
+      const currentShow = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+        columns: { scheduleData: true },
+      });
+      const existingScheduleData = (currentShow?.scheduleData ?? {}) as Record<string, unknown>;
+      const mergedScheduleData = { ...existingScheduleData, ...input.scheduleData };
+
+      const showUpdates: Record<string, unknown> = { scheduleData: mergedScheduleData };
       if (input.showOpenTime !== undefined) showUpdates.showOpenTime = input.showOpenTime || null;
       if (input.judgingStartTime !== undefined) showUpdates.startTime = input.judgingStartTime || null;
       if (input.onCallVet !== undefined) showUpdates.onCallVet = input.onCallVet || null;
