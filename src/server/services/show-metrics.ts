@@ -10,6 +10,26 @@ import type { Database } from '@/server/db';
 import { isCatalogueItem } from '@/lib/catalogue-utils';
 
 /**
+ * Materialise the list of paid-order IDs for a show. Callers use this to
+ * scope entry/sundry/payment queries to "real" orders — abandoned
+ * pending_payment orders generate ghost entries that shouldn't appear in
+ * reports, absentee lists, or refund UIs.
+ *
+ * The three duplicated sites that used to inline this query are now the
+ * one place where "what counts as paid" is defined.
+ */
+export async function getPaidOrderIdsForShow(
+  db: Database,
+  showId: string
+): Promise<string[]> {
+  const rows = await db
+    .select({ id: orders.id })
+    .from(orders)
+    .where(and(eq(orders.showId, showId), eq(orders.status, 'paid')));
+  return rows.map((o) => o.id);
+}
+
+/**
  * Canonical financial + entry-count shape for a show. The whole system pulls
  * its numbers from this single calculation so every stat card, report, and
  * payout row agrees on what "revenue" means.

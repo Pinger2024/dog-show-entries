@@ -62,6 +62,7 @@ export default function FinancialPage() {
     utils.secretary.getRefundableOrders.invalidate({ showId });
     utils.secretary.getEntryReport.invalidate({ showId });
     utils.secretary.getShowEntryStats.invalidate({ showId });
+    utils.secretary.getCatalogueOrders.invalidate({ showId });
   };
 
   const orderRefund = trpc.secretary.refundOrder.useMutation({
@@ -602,7 +603,15 @@ export default function FinancialPage() {
       </Card>
 
       {/* Full-order refund confirmation */}
-      <Dialog open={!!orderToRefund} onOpenChange={(open) => !open && setOrderToRefund(null)}>
+      <Dialog
+        open={!!orderToRefund}
+        onOpenChange={(open) => {
+          if (!open) {
+            setOrderToRefund(null);
+            setRefundReason('');
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Refund entire order?</DialogTitle>
@@ -655,7 +664,15 @@ export default function FinancialPage() {
       </Dialog>
 
       {/* Partial refund on a single entry */}
-      <Dialog open={!!partialRefundEntry} onOpenChange={(open) => !open && setPartialRefundEntry(null)}>
+      <Dialog
+        open={!!partialRefundEntry}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPartialRefundEntry(null);
+            setRefundReason('');
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Refund entry fee</DialogTitle>

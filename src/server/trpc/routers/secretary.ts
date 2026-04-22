@@ -43,13 +43,19 @@ import {
   calculateDueDate,
 } from '@/lib/default-checklist';
 import { getStripe } from '@/server/services/stripe';
+import { executeStripeRefund } from '@/server/services/stripe-refunds';
 import { penceToPoundsString } from '@/lib/date-utils';
 import { Resend } from 'resend';
 import { searchKcJudges, fetchKcJudgeProfile } from '@/server/services/kc-judges';
 import { ensureCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { generateJudgeContractPdf } from '@/server/services/judge-contract-pdf';
 import { CATALOGUE_NAME_PATTERN, isCatalogueItem } from '@/lib/catalogue-utils';
-import { aggregateShowMetrics, computeShowMetrics, computeShowsMetrics } from '@/server/services/show-metrics';
+import {
+  aggregateShowMetrics,
+  computeShowMetrics,
+  computeShowsMetrics,
+  getPaidOrderIdsForShow,
+} from '@/server/services/show-metrics';
 
 /** Build human-readable breed text for judge offer emails.
  *  When assignments have breedId=null, falls back to showBreedNames, then showName. */
@@ -647,13 +653,8 @@ export const secretaryRouter = createTRPCRouter({
 
       // An absentee is only meaningful for entries that were actually paid
       // for. Withdrawn entries from abandoned checkouts (order still in
-      // pending_payment) are not absentees — no money changed hands, they
-      // never made the catalogue.
-      const paidOrderRows = await ctx.db
-        .select({ id: orders.id })
-        .from(orders)
-        .where(and(eq(orders.showId, input.showId), eq(orders.status, 'paid')));
-      const paidOrderIds = paidOrderRows.map((o) => o.id);
+      // pending_payment) never made the catalogue.
+      const paidOrderIds = await getPaidOrderIdsForShow(ctx.db, input.showId);
       if (paidOrderIds.length === 0) return [];
 
       return ctx.db.query.entries.findMany({
@@ -691,11 +692,7 @@ export const secretaryRouter = createTRPCRouter({
       // Only entries on paid orders belong in reports — abandoned
       // pending_payment checkouts produce ghost entries that inflate
       // "Total Entries" and leak non-paying exhibitors into the tally.
-      const paidOrderRows = await ctx.db
-        .select({ id: orders.id })
-        .from(orders)
-        .where(and(eq(orders.showId, input.showId), eq(orders.status, 'paid')));
-      const paidOrderIds = paidOrderRows.map((o) => o.id);
+      const paidOrderIds = await getPaidOrderIdsForShow(ctx.db, input.showId);
       if (paidOrderIds.length === 0) return [];
 
       return ctx.db.query.entries.findMany({
@@ -2461,8 +2458,14 @@ export const secretaryRouter = createTRPCRouter({
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only paid orders can be refunded' });
       }
 
+      // Match any payment that still has money to give back — succeeded AND
+      // partially_refunded both qualify. A pure 'succeeded' filter here would
+      // break after any prior entry-level partial refund flipped the status.
       const originalPayment = await ctx.db.query.payments.findFirst({
-        where: and(eq(payments.orderId, input.orderId), eq(payments.status, 'succeeded')),
+        where: and(
+          eq(payments.orderId, input.orderId),
+          inArray(payments.status, ['succeeded', 'partially_refunded'])
+        ),
       });
       if (!originalPayment?.stripePaymentId) {
         throw new TRPCError({
@@ -2480,28 +2483,10 @@ export const secretaryRouter = createTRPCRouter({
         });
       }
 
-      const stripe = getStripe();
-      await stripe.refunds.create({
-        payment_intent: originalPayment.stripePaymentId,
-        amount: remainingPence,
-        ...(input.reason ? { reason: 'requested_by_customer' as const } : {}),
+      const result = await executeStripeRefund(ctx.db, originalPayment, {
+        amountPence: remainingPence,
+        reason: input.reason,
       });
-
-      await ctx.db.insert(payments).values({
-        orderId: input.orderId,
-        stripePaymentId: originalPayment.stripePaymentId,
-        amount: remainingPence,
-        status: 'refunded',
-        type: 'refund',
-      });
-
-      await ctx.db
-        .update(payments)
-        .set({
-          refundAmount: originalPayment.amount,
-          status: 'refunded',
-        })
-        .where(eq(payments.id, originalPayment.id));
 
       // Cancel every live entry on this order — exhibitor has pulled out
       await ctx.db
@@ -2514,7 +2499,7 @@ export const secretaryRouter = createTRPCRouter({
           )
         );
 
-      return { refunded: true, amount: remainingPence };
+      return { refunded: true, amount: result.amount };
     }),
 
   issueRefund: secretaryProcedure
@@ -2574,37 +2559,15 @@ export const secretaryRouter = createTRPCRouter({
         });
       }
 
-      // Issue refund via Stripe
-      const stripe = getStripe();
-      await stripe.refunds.create({
-        payment_intent: originalPayment.stripePaymentId,
-        amount: refundAmount,
-        ...(input.reason ? { reason: 'requested_by_customer' as const } : {}),
-      });
-
-      // Record the refund payment
-      await ctx.db.insert(payments).values({
+      const result = await executeStripeRefund(ctx.db, originalPayment, {
+        amountPence: refundAmount,
+        reason: input.reason,
         entryId: input.entryId,
-        orderId: originalPayment.orderId,
-        stripePaymentId: originalPayment.stripePaymentId,
-        amount: refundAmount,
-        status: 'refunded',
-        type: 'refund',
       });
 
-      // Update original payment's refund tracking
-      const newRefundTotal = alreadyRefunded + refundAmount;
-      const isFullyRefunded = newRefundTotal >= originalPayment.amount;
-      await ctx.db
-        .update(payments)
-        .set({
-          refundAmount: newRefundTotal,
-          status: isFullyRefunded ? 'refunded' : 'partially_refunded',
-        })
-        .where(eq(payments.id, originalPayment.id));
-
-      // If fully refunded, cancel the entry
-      if (isFullyRefunded) {
+      // If this refund cleared the remaining balance, the whole order is
+      // gone — cancel this entry so it drops out of the catalogue.
+      if (result.fullyRefunded) {
         await ctx.db
           .update(entries)
           .set({ status: 'cancelled' })
@@ -2613,8 +2576,8 @@ export const secretaryRouter = createTRPCRouter({
 
       return {
         refunded: true,
-        amount: refundAmount,
-        fullyRefunded: isFullyRefunded,
+        amount: result.amount,
+        fullyRefunded: result.fullyRefunded,
       };
     }),
 

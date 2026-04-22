@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/server/db';
 import { and, eq, isNull, asc, or, inArray, sql } from 'drizzle-orm';
+import { getPaidOrderIdsForShow } from '@/server/services/show-metrics';
 import * as schema from '@/server/db/schema';
 import { formatDogName, formatDogNameForCatalogue } from '@/lib/utils';
 import { renderToBuffer } from '@react-pdf/renderer';
@@ -57,12 +58,7 @@ export async function GET(
   // subquery inside the relational findMany builder generates a type graph
   // that makes Turbopack's dev-mode type resolver grind on every request.
   const paidOrderIds =
-    format === 'absentees'
-      ? (await db
-          .select({ id: schema.orders.id })
-          .from(schema.orders)
-          .where(and(eq(schema.orders.showId, showId), eq(schema.orders.status, 'paid')))).map((o) => o.id)
-      : null;
+    format === 'absentees' ? await getPaidOrderIdsForShow(db, showId) : null;
 
   // Run independent DB queries and logo validation in parallel.
   // The marked-catalogue achievements query only runs when it's needed; for
