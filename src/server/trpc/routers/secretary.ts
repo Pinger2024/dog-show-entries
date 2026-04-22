@@ -782,18 +782,65 @@ export const secretaryRouter = createTRPCRouter({
         addons: number;
         total: number;
         status: string;
+        // Payments live on the order. We attach them to the LAST row of
+        // each order group so they read as the order's single total
+        // payment in the UI rather than repeating on every line.
         payments: Array<{ amount: number; status: string }>;
       };
 
+      // Group visible entries by orderId so we can attach sundries and
+      // payments correctly. Orders whose entries are all deleted
+      // (cancelled & soft-deleted) never appear in showEntries and are
+      // therefore invisible here — exactly what we want: no ghost
+      // "Sundry items — Cancelled" rows for abandoned checkouts.
+      const entriesByOrder = new Map<string, typeof showEntries>();
+      for (const e of showEntries) {
+        if (!e.orderId) continue;
+        const arr = entriesByOrder.get(e.orderId) ?? [];
+        arr.push(e);
+        entriesByOrder.set(e.orderId, arr);
+      }
+
+      /**
+       * Derive a sundry row's status from the entries in the same
+       * order rather than the order's payment status. The order might
+       * be 'pending_payment' because the exhibitor abandoned checkout,
+       * but if the entry itself was withdrawn the sundries were
+       * withdrawn with it — showing "Pending" would misrepresent the
+       * state. Preference: confirmed > withdrawn > pending.
+       */
+      function statusFromEntries(orderEntries: typeof showEntries): string {
+        if (orderEntries.some((e) => e.status === 'confirmed')) return 'confirmed';
+        if (orderEntries.every((e) => e.status === 'withdrawn')) return 'withdrawn';
+        return orderEntries[0]?.status ?? 'pending';
+      }
+
+      // Orders that are visible (i.e. have at least one non-deleted
+      // entry), in the order they first appear in showEntries. We use
+      // this ordering to group the output so each order's entries +
+      // sundry row appear contiguous on screen.
+      const visibleOrderIds: string[] = [];
+      const seen = new Set<string>();
+      for (const e of showEntries) {
+        const oid = e.orderId;
+        if (oid && !seen.has(oid)) {
+          visibleOrderIds.push(oid);
+          seen.add(oid);
+        }
+      }
+
+      const orderById = new Map(orderRows.map((o) => [o.id, o] as const));
       const rows: ReportRow[] = [];
 
-      // One row per entry (entry fee only, no add-ons — add-ons are
-      // split out as separate sundry rows below).
+      // Also include entries with no orderId (unusual) as their own
+      // rows without grouping. Preserve the historical behaviour that
+      // every non-deleted entry shows up.
       for (const e of showEntries) {
+        if (e.orderId) continue;
         rows.push({
           kind: 'entry',
           id: `entry-${e.id}`,
-          orderId: e.orderId,
+          orderId: null,
           exhibitor: e.exhibitor
             ? { name: e.exhibitor.name, email: e.exhibitor.email }
             : null,
@@ -806,40 +853,57 @@ export const secretaryRouter = createTRPCRouter({
         });
       }
 
-      // Map order status → the same label vocabulary the frontend uses
-      // for entry statuses so the Status column reads consistently
-      // across entry and sundry rows.
-      const orderStatusToDisplay: Record<string, string> = {
-        paid: 'confirmed',
-        pending_payment: 'pending',
-        draft: 'pending',
-        failed: 'cancelled',
-        cancelled: 'cancelled',
-      };
+      for (const orderId of visibleOrderIds) {
+        const orderEntries = entriesByOrder.get(orderId) ?? [];
+        const order = orderById.get(orderId);
+        const sundryTotal = sundryTotalsByOrder.get(orderId) ?? 0;
+        const hasSundry = sundryTotal > 0;
+        const orderStatus = statusFromEntries(orderEntries);
+        const orderPayments = (order?.payments ?? []).map((p) => ({
+          amount: p.amount,
+          status: p.status,
+        }));
 
-      // One row per order that had sundry items. Status comes from the
-      // order (not any entry) because sundries are order-scoped — the
-      // exhibitor paid for them as part of the checkout, not against a
-      // specific dog.
-      for (const o of orderRows) {
-        const sundryTotal = sundryTotalsByOrder.get(o.id) ?? 0;
-        if (sundryTotal === 0) continue;
-        const breakdown = sundryBreakdownByOrder.get(o.id) ?? [];
-        rows.push({
-          kind: 'sundry',
-          id: `sundry-${o.id}`,
-          orderId: o.id,
-          exhibitor: o.exhibitor
-            ? { name: o.exhibitor.name, email: o.exhibitor.email }
-            : null,
-          itemLabel: 'Sundry items',
-          itemDetail: breakdown.join(', '),
-          entryFee: 0,
-          addons: sundryTotal,
-          total: sundryTotal,
-          status: orderStatusToDisplay[o.status] ?? o.status,
-          payments: o.payments.map((p) => ({ amount: p.amount, status: p.status })),
+        // Emit entry rows for this order. Payments are attached only
+        // to the LAST row of the group (sundry if present, otherwise
+        // the last entry).
+        orderEntries.forEach((e, idx) => {
+          const isLastRowOfGroup = !hasSundry && idx === orderEntries.length - 1;
+          rows.push({
+            kind: 'entry',
+            id: `entry-${e.id}`,
+            orderId,
+            exhibitor: e.exhibitor
+              ? { name: e.exhibitor.name, email: e.exhibitor.email }
+              : null,
+            itemLabel: e.dog?.registeredName ?? 'Junior Handler',
+            entryFee: e.totalFee,
+            addons: 0,
+            total: e.totalFee,
+            status: e.status,
+            payments: isLastRowOfGroup ? orderPayments : [],
+          });
         });
+
+        if (hasSundry) {
+          const breakdown = sundryBreakdownByOrder.get(orderId) ?? [];
+          const firstExhibitor = orderEntries[0]?.exhibitor;
+          rows.push({
+            kind: 'sundry',
+            id: `sundry-${orderId}`,
+            orderId,
+            exhibitor: firstExhibitor
+              ? { name: firstExhibitor.name, email: firstExhibitor.email }
+              : null,
+            itemLabel: 'Sundry items',
+            itemDetail: breakdown.join(', '),
+            entryFee: 0,
+            addons: sundryTotal,
+            total: sundryTotal,
+            status: orderStatus,
+            payments: orderPayments,
+          });
+        }
       }
 
       const metrics = aggregateShowMetrics({

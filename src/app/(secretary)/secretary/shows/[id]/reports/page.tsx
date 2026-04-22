@@ -506,50 +506,66 @@ function PaymentReportContent({ showId }: { showId: string }) {
             </p>
           ) : (
             <>
-              {/* Mobile card view */}
+              {/* Mobile: group rows by order so each order reads as a
+                  single "receipt" — entries and sundry together, with
+                  the order's single payment badge at the bottom. */}
               <div className="space-y-3 sm:hidden">
-                {filtered.map((row) => (
-                  <div key={row.id} className="rounded-lg border p-3 space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium text-sm truncate">{row.exhibitor?.name ?? '—'}</p>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {row.itemLabel}
-                        </p>
-                        {row.itemDetail && (
-                          <p className="text-[11px] text-muted-foreground/80 truncate">
-                            {row.itemDetail}
-                          </p>
+                {groupByOrder(filtered).map((group) => (
+                  <div
+                    key={group.key}
+                    className="rounded-lg border overflow-hidden divide-y"
+                  >
+                    {group.rows.map((row, idx) => (
+                      <div key={row.id} className="p-3 space-y-1.5">
+                        {idx === 0 && (
+                          <p className="font-medium text-sm truncate">{row.exhibitor?.name ?? '—'}</p>
                         )}
-                      </div>
-                      <Badge
-                        variant={entryStatusConfig[row.status]?.variant ?? 'outline'}
-                        className="shrink-0"
-                      >
-                        {entryStatusConfig[row.status]?.label ?? row.status}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="text-muted-foreground">
-                        {row.kind === 'entry' ? 'Entry fee' : 'Add-ons'}{' '}
-                        <span className="font-medium text-foreground">{formatCurrency(row.total)}</span>
-                      </div>
-                      <div className="flex flex-wrap gap-1 justify-end">
-                        {row.payments.map((p, i) => (
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm truncate">{row.itemLabel}</p>
+                            {row.itemDetail && (
+                              <p className="text-[11px] text-muted-foreground truncate">
+                                {row.itemDetail}
+                              </p>
+                            )}
+                          </div>
                           <Badge
-                            key={i}
-                            variant={p.status === 'succeeded' ? 'default' : 'outline'}
-                            className="text-xs"
+                            variant={entryStatusConfig[row.status]?.variant ?? 'outline'}
+                            className="shrink-0"
                           >
-                            £{(p.amount / 100).toFixed(2)} ({p.status})
+                            {entryStatusConfig[row.status]?.label ?? row.status}
                           </Badge>
-                        ))}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {row.kind === 'entry' ? 'Entry fee' : 'Add-ons'}{' '}
+                          <span className="font-medium text-foreground">{formatCurrency(row.total)}</span>
+                        </div>
                       </div>
-                    </div>
+                    ))}
+                    {group.payments.length > 0 && (
+                      <div className="flex items-center justify-between gap-2 bg-muted/40 px-3 py-2 text-xs">
+                        <span className="text-muted-foreground">Payment</span>
+                        <div className="flex flex-wrap gap-1 justify-end">
+                          {group.payments.map((p, i) => (
+                            <Badge
+                              key={i}
+                              variant={p.status === 'succeeded' ? 'default' : 'outline'}
+                              className="text-xs"
+                            >
+                              £{(p.amount / 100).toFixed(2)} ({p.status})
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
-              {/* Desktop table */}
+              {/* Desktop table — rows grouped by order with a thicker
+                  divider between orders, and the payment column is
+                  vertically spanned so one payment badge reads as the
+                  total for the whole group (matching how exhibitors
+                  actually paid: one transaction per order). */}
               <div className="hidden sm:block">
                 <Table>
                   <TableHeader>
@@ -560,58 +576,83 @@ function PaymentReportContent({ showId }: { showId: string }) {
                       <TableHead>Add-ons</TableHead>
                       <TableHead>Total</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Payments</TableHead>
+                      <TableHead>Payment</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filtered.map((row) => (
-                      <TableRow key={row.id}>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium">{row.exhibitor?.name ?? '—'}</p>
-                            <p className="text-xs text-muted-foreground">{row.exhibitor?.email ?? ''}</p>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div>
-                            <p>{row.itemLabel}</p>
-                            {row.itemDetail && (
-                              <p className="text-xs text-muted-foreground">{row.itemDetail}</p>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {row.entryFee > 0
-                            ? formatCurrency(row.entryFee)
-                            : <span className="text-muted-foreground">—</span>}
-                        </TableCell>
-                        <TableCell>
-                          {row.addons > 0
-                            ? formatCurrency(row.addons)
-                            : <span className="text-muted-foreground">—</span>}
-                        </TableCell>
-                        <TableCell className="font-medium">{formatCurrency(row.total)}</TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={entryStatusConfig[row.status]?.variant ?? 'outline'}
-                          >
-                            {entryStatusConfig[row.status]?.label ?? row.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {row.payments.map((p, i) => (
+                    {groupByOrder(filtered).map((group) => (
+                      group.rows.map((row, idx) => {
+                        const isFirst = idx === 0;
+                        const isLast = idx === group.rows.length - 1;
+                        // Thicker bottom border on the final row of each
+                        // group creates a clear visual break between orders.
+                        const borderClass = isLast ? 'border-b-2 border-border' : 'border-b-0';
+                        return (
+                          <TableRow key={row.id} className={borderClass}>
+                            <TableCell className="align-top">
+                              {isFirst ? (
+                                <div>
+                                  <p className="font-medium">{row.exhibitor?.name ?? '—'}</p>
+                                  <p className="text-xs text-muted-foreground">{row.exhibitor?.email ?? ''}</p>
+                                </div>
+                              ) : null}
+                            </TableCell>
+                            <TableCell>
+                              <div>
+                                <p>{row.itemLabel}</p>
+                                {row.itemDetail && (
+                                  <p className="text-xs text-muted-foreground">{row.itemDetail}</p>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {row.entryFee > 0
+                                ? formatCurrency(row.entryFee)
+                                : <span className="text-muted-foreground">—</span>}
+                            </TableCell>
+                            <TableCell>
+                              {row.addons > 0
+                                ? formatCurrency(row.addons)
+                                : <span className="text-muted-foreground">—</span>}
+                            </TableCell>
+                            <TableCell className="font-medium">{formatCurrency(row.total)}</TableCell>
+                            <TableCell>
                               <Badge
-                                key={i}
-                                variant={p.status === 'succeeded' ? 'default' : 'outline'}
-                                className="text-xs"
+                                variant={entryStatusConfig[row.status]?.variant ?? 'outline'}
                               >
-                                £{(p.amount / 100).toFixed(2)} ({p.status})
+                                {entryStatusConfig[row.status]?.label ?? row.status}
                               </Badge>
-                            ))}
-                          </div>
-                        </TableCell>
-                      </TableRow>
+                            </TableCell>
+                            <TableCell
+                              rowSpan={isFirst ? group.rows.length : undefined}
+                              className={isFirst ? 'align-middle' : 'hidden'}
+                            >
+                              {isFirst && (
+                                <div className="space-y-1">
+                                  {group.payments.length > 0 ? (
+                                    group.payments.map((p, i) => (
+                                      <Badge
+                                        key={i}
+                                        variant={p.status === 'succeeded' ? 'default' : 'outline'}
+                                        className="text-xs block w-fit"
+                                      >
+                                        £{(p.amount / 100).toFixed(2)} ({p.status})
+                                      </Badge>
+                                    ))
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">—</span>
+                                  )}
+                                  {group.rows.length > 1 && (
+                                    <p className="text-[11px] text-muted-foreground">
+                                      Order total {formatCurrency(group.rows.reduce((sum, r) => sum + r.total, 0))}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
                     ))}
                   </TableBody>
                 </Table>
@@ -622,6 +663,43 @@ function PaymentReportContent({ showId }: { showId: string }) {
       </Card>
     </div>
   );
+}
+
+import type { RouterOutputs } from '@/server/trpc/router';
+type ReportRow = RouterOutputs['secretary']['getPaymentReport']['rows'][number];
+
+/**
+ * Groups consecutive rows by `orderId` so the UI can render each
+ * order as one "receipt" (entries + sundry together) with a single
+ * payment attached at the group level. Preserves row order within
+ * each group. Rows with no orderId each land in their own group so
+ * they still render.
+ */
+function groupByOrder(rows: ReportRow[]): Array<{
+  key: string;
+  rows: ReportRow[];
+  payments: ReportRow['payments'];
+}> {
+  const groups: Array<{ key: string; rows: ReportRow[]; payments: ReportRow['payments'] }> = [];
+  const byOrder = new Map<string, { key: string; rows: ReportRow[]; payments: ReportRow['payments'] }>();
+  for (const row of rows) {
+    if (!row.orderId) {
+      groups.push({ key: row.id, rows: [row], payments: row.payments });
+      continue;
+    }
+    const existing = byOrder.get(row.orderId);
+    if (existing) {
+      existing.rows.push(row);
+      // The backend attaches payments only to the last row of a group,
+      // but for safety union any non-empty payments we see.
+      if (row.payments.length > 0) existing.payments = row.payments;
+    } else {
+      const group = { key: row.orderId, rows: [row], payments: row.payments };
+      byOrder.set(row.orderId, group);
+      groups.push(group);
+    }
+  }
+  return groups;
 }
 
 function CatalogueOrdersContent({ showId }: { showId: string }) {
