@@ -289,12 +289,16 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       onCallVet: onCallVet || undefined,
       scheduleData: data,
     };
-    // Always update the ref, even before initial hydration finishes —
-    // the unmount beacon reads from here and we want it to fire with
-    // whatever the user typed regardless of load order.
-    latestPayloadRef.current = payload;
-
     if (!hasLoaded) return;
+
+    // Only populate the ref AFTER initial hydration. If we set it
+    // earlier, the unmount beacon can fire with the blank default
+    // form state (officers=[], no showManager, etc.) when a user
+    // navigates away mid-load — wiping their saved data. This bit
+    // everyone on 2026-04-22 when Amanda's championship show lost
+    // its officers list despite her having generated the schedule
+    // PDF hours earlier.
+    latestPayloadRef.current = payload;
 
     setAutoSaveStatus('pending');
     const guarantorCount = payload.scheduleData.guarantors?.length ?? 0;

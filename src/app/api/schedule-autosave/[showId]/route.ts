@@ -36,7 +36,7 @@ export async function POST(
 
   const show = await db.query.shows.findFirst({
     where: eq(shows.id, showId),
-    columns: { id: true, organisationId: true },
+    columns: { id: true, organisationId: true, scheduleData: true },
   });
   if (!show) return NextResponse.json({ error: 'not found' }, { status: 404 });
 
@@ -68,6 +68,21 @@ export async function POST(
     return NextResponse.json({ error: 'invalid json' }, { status: 400 });
   }
 
+  // Defence in depth against wipe-on-mount bugs: if the incoming
+  // payload is the default-form shape (no showManager, no officers,
+  // no user-entered text fields) AND the show already has meaningful
+  // content, refuse the write. The only legitimate way to land here
+  // is a freshly-opened form that the user never edited before
+  // navigating away — in which case the current DB is also blank and
+  // this guard is a no-op.
+  if (body.scheduleData && isLikelyUnintentionalWipe(body.scheduleData, show.scheduleData)) {
+    console.warn(
+      `[schedule-autosave] Refused suspicious wipe for show ${showId} ` +
+      `(incoming payload looks like unhydrated form defaults)`
+    );
+    return NextResponse.json({ ok: true, skipped: 'suspicious-wipe' });
+  }
+
   const updates: Record<string, unknown> = {};
   if (body.scheduleData !== undefined) updates.scheduleData = body.scheduleData;
   if (body.showOpenTime !== undefined) updates.showOpenTime = body.showOpenTime || null;
@@ -80,4 +95,40 @@ export async function POST(
 
   await db.update(shows).set(updates).where(eq(shows.id, showId));
   return NextResponse.json({ ok: true });
+}
+
+/**
+ * True when `incoming` looks like an unhydrated-form snapshot (no
+ * user-entered content) AND `existing` has meaningful content that
+ * the write would erase. Used to block the pre-load beacon path.
+ */
+function isLikelyUnintentionalWipe(
+  incoming: Record<string, unknown>,
+  existing: unknown,
+): boolean {
+  const incomingOfficers = Array.isArray(incoming.officers) ? incoming.officers : [];
+  const incomingGuarantors = Array.isArray(incoming.guarantors) ? incoming.guarantors : [];
+  const textFields = [
+    'showManager', 'awardsDescription', 'prizeMoney', 'what3words',
+    'directions', 'catering', 'futureShowDates', 'additionalNotes',
+    'welcomeNote', 'benchingRemovalTime', 'latestArrivalTime',
+  ];
+  const incomingHasText = textFields.some((k) => {
+    const v = incoming[k];
+    return typeof v === 'string' && v.trim().length > 0;
+  });
+  const incomingIsBlank =
+    !incomingHasText &&
+    incomingOfficers.length === 0 &&
+    incomingGuarantors.length === 0;
+  if (!incomingIsBlank) return false;
+
+  const ex = (existing ?? {}) as Record<string, unknown>;
+  const existingOfficers = Array.isArray(ex.officers) ? ex.officers : [];
+  const existingGuarantors = Array.isArray(ex.guarantors) ? ex.guarantors : [];
+  const existingHasText = textFields.some((k) => {
+    const v = ex[k];
+    return typeof v === 'string' && v.trim().length > 0;
+  });
+  return existingHasText || existingOfficers.length > 0 || existingGuarantors.length > 0;
 }
