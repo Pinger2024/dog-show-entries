@@ -126,6 +126,55 @@ describe('aggregateShowMetrics — refund accounting', () => {
     expect(metrics.refundedPence).toBe(2000);
     expect(metrics.clubReceivablePence).toBe(3000); // 5000 − 2000 refund
   });
+
+  it('counts entry fees of refund-cancelled entries in gross revenue (so a full refund lands at £0 not negative)', () => {
+    // 2026-04-22: Michael refunded his £48.47 test payment; the report
+    // displayed Total Income of −£19.47. Root cause: `refundOrder`
+    // flips entries to status='cancelled', which fell through the
+    // aggregator's `confirmed | withdrawn` filter and dropped the
+    // entry fee out of gross revenue. Sundries stayed in, refund
+    // stayed in → 0 + 29 − 48.47 = −19.47. Correct behaviour: treat
+    // refund-cancelled entries the same as withdrawn ones (fees stay
+    // in gross revenue, refund offset happens separately) AND cap
+    // the refund offset at gross revenue so the platform fee doesn't
+    // push the receivable negative.
+    const metrics = aggregateShowMetrics({
+      orders: [{ id: 'o1', status: 'paid', totalAmount: 4700, platformFeePence: 147 }],
+      entries: [
+        { id: 'e1', orderId: 'o1', status: 'cancelled', totalFee: 1800, deletedAt: null },
+        { id: 'e2', orderId: 'o1', status: 'cancelled', totalFee: 0, deletedAt: null },
+      ],
+      sundries: [
+        { orderId: 'o1', itemName: 'Printed Catalogue', quantity: 1, unitPrice: 400 },
+        { orderId: 'o1', itemName: 'Donation', quantity: 1, unitPrice: 500 },
+        { orderId: 'o1', itemName: 'Sponsorship - Banners', quantity: 1, unitPrice: 2000 },
+      ],
+      payments: [{ orderId: 'o1', refundAmount: 4847 }], // full refund including platform fee
+    });
+
+    expect(metrics.paidEntryFeesPence).toBe(1800);
+    expect(metrics.paidSundryRevenuePence).toBe(2900);
+    expect(metrics.refundedPence).toBe(4847);
+    expect(metrics.clubReceivablePence).toBe(0);
+  });
+
+  it('caps the club refund offset at club gross revenue (platform fee is Remi\'s loss, not the club\'s)', () => {
+    // Exhibitor paid £48.47 (£47 for the club + £1.47 platform fee).
+    // Remi refunds the full £48.47 via Stripe. The club's receivable
+    // drops to £0, not −£1.47 — the club never received the platform
+    // fee, so it can't "owe it back".
+    const metrics = aggregateShowMetrics({
+      orders: [{ id: 'o1', status: 'paid', totalAmount: 4700, platformFeePence: 147 }],
+      entries: [
+        { id: 'e1', orderId: 'o1', status: 'confirmed', totalFee: 4700, deletedAt: null },
+      ],
+      sundries: [],
+      payments: [{ orderId: 'o1', refundAmount: 4847 }],
+    });
+
+    expect(metrics.refundedPence).toBe(4847);
+    expect(metrics.clubReceivablePence).toBe(0);
+  });
 });
 
 describe('aggregateShowMetrics — online catalogue splitting', () => {

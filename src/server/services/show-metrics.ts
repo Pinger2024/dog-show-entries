@@ -154,10 +154,12 @@ export function aggregateShowMetrics(data: {
       if (e.status === 'confirmed') {
         confirmedEntryCount += 1;
         paidEntryFeesPence += e.totalFee;
-      } else if (e.status === 'withdrawn') {
-        withdrawnEntryCount += 1;
-        // Withdrawn entries were paid for; keep the fee in revenue until a
-        // refund is recorded (which shows up in refundedPence separately).
+      } else if (e.status === 'withdrawn' || e.status === 'cancelled') {
+        if (e.status === 'withdrawn') withdrawnEntryCount += 1;
+        // Entries on a paid order whose status has since been flipped to
+        // withdrawn or cancelled (via a refund) were still paid for. Keep
+        // the fee in GROSS revenue; the refund shows up separately in
+        // refundedPence so clubReceivablePence comes out right.
         paidEntryFeesPence += e.totalFee;
       }
     } else if (pendingOrderIds.has(e.orderId)) {
@@ -204,8 +206,16 @@ export function aggregateShowMetrics(data: {
     }
   }
 
-  const clubReceivablePence =
-    paidEntryFeesPence + paidSundryRevenuePence - refundedPence;
+  // Refunds charged on Stripe include the platform fee (the exhibitor
+  // paid gross = club revenue + platform fee, and Stripe refunds on
+  // the gross payment amount). But clubReceivablePence is the club's
+  // slice only — the platform fee was never part of it. Cap the
+  // refund offset at the club's gross revenue so a full refund lands
+  // at £0 receivable, not a negative number that implies the club
+  // owes Remi money.
+  const clubGrossRevenuePence = paidEntryFeesPence + paidSundryRevenuePence;
+  const clubRefundedPence = Math.min(refundedPence, clubGrossRevenuePence);
+  const clubReceivablePence = clubGrossRevenuePence - clubRefundedPence;
   const grossChargedPence =
     paidEntryFeesPence + paidSundryRevenuePence + paidPlatformFeePence;
   const pendingClubReceivablePence =
