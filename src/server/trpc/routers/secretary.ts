@@ -645,9 +645,19 @@ export const secretaryRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
+      // An absentee is only meaningful for entries that were actually paid
+      // for. Withdrawn entries from abandoned checkouts (order still in
+      // pending_payment) are not absentees — no money changed hands, they
+      // never made the catalogue.
+      const paidOrderIds = ctx.db
+        .select({ id: orders.id })
+        .from(orders)
+        .where(and(eq(orders.showId, input.showId), eq(orders.status, 'paid')));
+
       return ctx.db.query.entries.findMany({
         where: and(
           eq(entries.showId, input.showId),
+          inArray(entries.orderId, paidOrderIds),
           sql`(${entries.status} = 'withdrawn' OR ${entries.absent} = true)`,
           isNull(entries.deletedAt)
         ),

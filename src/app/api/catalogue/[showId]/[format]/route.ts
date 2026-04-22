@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/server/db';
-import { and, eq, isNull, asc, or } from 'drizzle-orm';
+import { and, eq, isNull, asc, or, inArray } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
 import { formatDogName, formatDogNameForCatalogue } from '@/lib/utils';
 import { renderToBuffer } from '@react-pdf/renderer';
@@ -76,9 +76,22 @@ export async function GET(
       where: and(
         eq(schema.entries.showId, showId),
         format === 'absentees'
-          ? or(
-              eq(schema.entries.status, 'withdrawn'),
-              and(eq(schema.entries.status, 'confirmed'), eq(schema.entries.absent, true))
+          ? and(
+              // Absentees only exist on paid orders. Withdrawn entries from
+              // abandoned checkouts never made the catalogue — excluding
+              // them keeps the absentees list matched to what actually
+              // appeared in the book.
+              inArray(
+                schema.entries.orderId,
+                db
+                  .select({ id: schema.orders.id })
+                  .from(schema.orders)
+                  .where(and(eq(schema.orders.showId, showId), eq(schema.orders.status, 'paid')))
+              ),
+              or(
+                eq(schema.entries.status, 'withdrawn'),
+                and(eq(schema.entries.status, 'confirmed'), eq(schema.entries.absent, true))
+              )
             )
           : eq(schema.entries.status, 'confirmed'),
         isNull(schema.entries.deletedAt)
