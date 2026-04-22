@@ -113,6 +113,23 @@ export async function POST(
   return NextResponse.json({ ok: true });
 }
 
+const SCHEDULE_TEXT_FIELDS = [
+  'showManager', 'awardsDescription', 'prizeMoney', 'what3words',
+  'directions', 'catering', 'futureShowDates', 'additionalNotes',
+  'welcomeNote', 'benchingRemovalTime', 'latestArrivalTime',
+] as const;
+
+function hasUserContent(scheduleData: unknown): boolean {
+  const sd = (scheduleData ?? {}) as Record<string, unknown>;
+  const officers = Array.isArray(sd.officers) ? sd.officers : [];
+  const guarantors = Array.isArray(sd.guarantors) ? sd.guarantors : [];
+  if (officers.length > 0 || guarantors.length > 0) return true;
+  return SCHEDULE_TEXT_FIELDS.some((k) => {
+    const v = sd[k];
+    return typeof v === 'string' && v.trim().length > 0;
+  });
+}
+
 /**
  * True when `incoming` looks like an unhydrated-form snapshot (no
  * user-entered content) AND `existing` has meaningful content that
@@ -122,29 +139,5 @@ function isLikelyUnintentionalWipe(
   incoming: Record<string, unknown>,
   existing: unknown,
 ): boolean {
-  const incomingOfficers = Array.isArray(incoming.officers) ? incoming.officers : [];
-  const incomingGuarantors = Array.isArray(incoming.guarantors) ? incoming.guarantors : [];
-  const textFields = [
-    'showManager', 'awardsDescription', 'prizeMoney', 'what3words',
-    'directions', 'catering', 'futureShowDates', 'additionalNotes',
-    'welcomeNote', 'benchingRemovalTime', 'latestArrivalTime',
-  ];
-  const incomingHasText = textFields.some((k) => {
-    const v = incoming[k];
-    return typeof v === 'string' && v.trim().length > 0;
-  });
-  const incomingIsBlank =
-    !incomingHasText &&
-    incomingOfficers.length === 0 &&
-    incomingGuarantors.length === 0;
-  if (!incomingIsBlank) return false;
-
-  const ex = (existing ?? {}) as Record<string, unknown>;
-  const existingOfficers = Array.isArray(ex.officers) ? ex.officers : [];
-  const existingGuarantors = Array.isArray(ex.guarantors) ? ex.guarantors : [];
-  const existingHasText = textFields.some((k) => {
-    const v = ex[k];
-    return typeof v === 'string' && v.trim().length > 0;
-  });
-  return existingHasText || existingOfficers.length > 0 || existingGuarantors.length > 0;
+  return !hasUserContent(incoming) && hasUserContent(existing);
 }

@@ -37,6 +37,43 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { entryStatusConfig, formatDate, downloadCsv } from '../_lib/show-utils';
 import { useShowId } from '../_lib/show-context';
+import type { RouterOutputs } from '@/server/trpc/router';
+
+type ReportRow = RouterOutputs['secretary']['getPaymentReport']['rows'][number];
+
+/**
+ * Groups consecutive rows by `orderId` so the UI can render each
+ * order as one "receipt" (entries + sundry together) with a single
+ * payment attached at the group level. Preserves row order within
+ * each group. Rows with no orderId each land in their own group so
+ * they still render.
+ */
+function groupByOrder(rows: ReportRow[]): Array<{
+  key: string;
+  rows: ReportRow[];
+  payments: ReportRow['payments'];
+  orderTotal: number;
+}> {
+  const groups: Array<{ key: string; rows: ReportRow[]; payments: ReportRow['payments']; orderTotal: number }> = [];
+  const byOrder = new Map<string, { key: string; rows: ReportRow[]; payments: ReportRow['payments']; orderTotal: number }>();
+  for (const row of rows) {
+    if (!row.orderId) {
+      groups.push({ key: row.id, rows: [row], payments: row.payments, orderTotal: row.total });
+      continue;
+    }
+    const existing = byOrder.get(row.orderId);
+    if (existing) {
+      existing.rows.push(row);
+      existing.orderTotal += row.total;
+      if (row.payments.length > 0) existing.payments = row.payments;
+    } else {
+      const group = { key: row.orderId, rows: [row], payments: row.payments, orderTotal: row.total };
+      byOrder.set(row.orderId, group);
+      groups.push(group);
+    }
+  }
+  return groups;
+}
 
 export default function ReportsPage() {
   const showId = useShowId();
@@ -416,6 +453,8 @@ function PaymentReportContent({ showId }: { showId: string }) {
     );
   }, [data, search]);
 
+  const grouped = useMemo(() => groupByOrder(filtered), [filtered]);
+
   function exportCsv() {
     if (!filtered) return;
     const headers = [
@@ -510,7 +549,7 @@ function PaymentReportContent({ showId }: { showId: string }) {
                   single "receipt" — entries and sundry together, with
                   the order's single payment badge at the bottom. */}
               <div className="space-y-3 sm:hidden">
-                {groupByOrder(filtered).map((group) => (
+                {grouped.map((group) => (
                   <div
                     key={group.key}
                     className="rounded-lg border overflow-hidden divide-y"
@@ -580,7 +619,7 @@ function PaymentReportContent({ showId }: { showId: string }) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {groupByOrder(filtered).map((group) => (
+                    {grouped.map((group) => (
                       group.rows.map((row, idx) => {
                         const isFirst = idx === 0;
                         const isLast = idx === group.rows.length - 1;
@@ -623,11 +662,11 @@ function PaymentReportContent({ showId }: { showId: string }) {
                                 {entryStatusConfig[row.status]?.label ?? row.status}
                               </Badge>
                             </TableCell>
-                            <TableCell
-                              rowSpan={isFirst ? group.rows.length : undefined}
-                              className={isFirst ? 'align-middle' : 'hidden'}
-                            >
-                              {isFirst && (
+                            {isFirst && (
+                              <TableCell
+                                rowSpan={group.rows.length}
+                                className="align-middle"
+                              >
                                 <div className="space-y-1">
                                   {group.payments.length > 0 ? (
                                     group.payments.map((p, i) => (
@@ -644,12 +683,12 @@ function PaymentReportContent({ showId }: { showId: string }) {
                                   )}
                                   {group.rows.length > 1 && (
                                     <p className="text-[11px] text-muted-foreground">
-                                      Order total {formatCurrency(group.rows.reduce((sum, r) => sum + r.total, 0))}
+                                      Order total {formatCurrency(group.orderTotal)}
                                     </p>
                                   )}
                                 </div>
-                              )}
-                            </TableCell>
+                              </TableCell>
+                            )}
                           </TableRow>
                         );
                       })
@@ -663,43 +702,6 @@ function PaymentReportContent({ showId }: { showId: string }) {
       </Card>
     </div>
   );
-}
-
-import type { RouterOutputs } from '@/server/trpc/router';
-type ReportRow = RouterOutputs['secretary']['getPaymentReport']['rows'][number];
-
-/**
- * Groups consecutive rows by `orderId` so the UI can render each
- * order as one "receipt" (entries + sundry together) with a single
- * payment attached at the group level. Preserves row order within
- * each group. Rows with no orderId each land in their own group so
- * they still render.
- */
-function groupByOrder(rows: ReportRow[]): Array<{
-  key: string;
-  rows: ReportRow[];
-  payments: ReportRow['payments'];
-}> {
-  const groups: Array<{ key: string; rows: ReportRow[]; payments: ReportRow['payments'] }> = [];
-  const byOrder = new Map<string, { key: string; rows: ReportRow[]; payments: ReportRow['payments'] }>();
-  for (const row of rows) {
-    if (!row.orderId) {
-      groups.push({ key: row.id, rows: [row], payments: row.payments });
-      continue;
-    }
-    const existing = byOrder.get(row.orderId);
-    if (existing) {
-      existing.rows.push(row);
-      // The backend attaches payments only to the last row of a group,
-      // but for safety union any non-empty payments we see.
-      if (row.payments.length > 0) existing.payments = row.payments;
-    } else {
-      const group = { key: row.orderId, rows: [row], payments: row.payments };
-      byOrder.set(row.orderId, group);
-      groups.push(group);
-    }
-  }
-  return groups;
 }
 
 function CatalogueOrdersContent({ showId }: { showId: string }) {

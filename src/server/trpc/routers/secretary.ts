@@ -76,6 +76,20 @@ function buildJudgeBreedText(
   return [...new Set(parts)].join(', ') || 'All breeds';
 }
 
+/**
+ * Derive a sundry row's status from the entries in the same order
+ * rather than the order's payment status. The order might be
+ * 'pending_payment' because the exhibitor abandoned checkout, but
+ * if the entry itself was withdrawn the sundries were withdrawn
+ * with it — showing "Pending" would misrepresent the state.
+ * Preference: confirmed > withdrawn > pending.
+ */
+function statusFromEntries(orderEntries: ReadonlyArray<{ status: string }>): string {
+  if (orderEntries.some((e) => e.status === 'confirmed')) return 'confirmed';
+  if (orderEntries.every((e) => e.status === 'withdrawn')) return 'withdrawn';
+  return orderEntries[0]?.status ?? 'pending';
+}
+
 export const secretaryRouter = createTRPCRouter({
   getDashboard: secretaryProcedure.query(async ({ ctx }) => {
     // Get organisations the user is a member of
@@ -799,20 +813,6 @@ export const secretaryRouter = createTRPCRouter({
         const arr = entriesByOrder.get(e.orderId) ?? [];
         arr.push(e);
         entriesByOrder.set(e.orderId, arr);
-      }
-
-      /**
-       * Derive a sundry row's status from the entries in the same
-       * order rather than the order's payment status. The order might
-       * be 'pending_payment' because the exhibitor abandoned checkout,
-       * but if the entry itself was withdrawn the sundries were
-       * withdrawn with it — showing "Pending" would misrepresent the
-       * state. Preference: confirmed > withdrawn > pending.
-       */
-      function statusFromEntries(orderEntries: typeof showEntries): string {
-        if (orderEntries.some((e) => e.status === 'confirmed')) return 'confirmed';
-        if (orderEntries.every((e) => e.status === 'withdrawn')) return 'withdrawn';
-        return orderEntries[0]?.status ?? 'pending';
       }
 
       // Orders that are visible (i.e. have at least one non-deleted
@@ -5305,7 +5305,7 @@ export const secretaryRouter = createTRPCRouter({
       // null — but omission means "leave alone", not "erase".
       const currentShow = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
-        columns: { scheduleData: true },
+        columns: { scheduleData: true, organisationId: true },
       });
       const existingScheduleData = (currentShow?.scheduleData ?? {}) as Record<string, unknown>;
       const mergedScheduleData = { ...existingScheduleData, ...input.scheduleData };
@@ -5322,14 +5322,10 @@ export const secretaryRouter = createTRPCRouter({
 
       // Sync new officers into organisation_people so they're available for future shows
       const scheduleOfficers = input.scheduleData.officers;
-      if (scheduleOfficers && scheduleOfficers.length > 0) {
-        const show = await ctx.db.query.shows.findFirst({
-          where: eq(shows.id, input.showId),
-          columns: { organisationId: true },
-        });
-        if (show) {
+      if (scheduleOfficers && scheduleOfficers.length > 0 && currentShow) {
+        {
           const existingPeople = await ctx.db.query.organisationPeople.findMany({
-            where: eq(organisationPeople.organisationId, show.organisationId),
+            where: eq(organisationPeople.organisationId, currentShow.organisationId),
             columns: { name: true },
           });
           const existingNames = new Set(
@@ -5347,7 +5343,7 @@ export const secretaryRouter = createTRPCRouter({
           const newPeople = scheduleOfficers
             .filter((o) => o.name.trim() && !existingNames.has(o.name.toLowerCase().trim()))
             .map((o) => ({
-              organisationId: show.organisationId,
+              organisationId: currentShow.organisationId,
               name: o.name.trim(),
               position: o.position || null,
               isGuarantor: guarantorNames.has(o.name.toLowerCase().trim()),
