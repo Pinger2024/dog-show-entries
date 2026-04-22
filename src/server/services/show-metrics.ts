@@ -97,11 +97,10 @@ export function aggregateShowMetrics(data: {
 }): ShowMetrics {
   const paidOrderIds = new Set<string>();
   const pendingOrderIds = new Set<string>();
+  const pendingOrderPlatformFees = new Map<string, number>();
   let paidOrderCount = 0;
-  let pendingOrderCount = 0;
   let cancelledOrderCount = 0;
   let paidPlatformFeePence = 0;
-  let pendingPlatformFeePence = 0;
 
   for (const o of data.orders) {
     if (o.status === 'paid') {
@@ -110,13 +109,18 @@ export function aggregateShowMetrics(data: {
       paidPlatformFeePence += o.platformFeePence;
     } else if (o.status === 'pending_payment') {
       pendingOrderIds.add(o.id);
-      pendingOrderCount += 1;
-      pendingPlatformFeePence += o.platformFeePence;
+      pendingOrderPlatformFees.set(o.id, o.platformFeePence);
     } else if (o.status === 'cancelled' || o.status === 'failed') {
       cancelledOrderCount += 1;
     }
   }
 
+  // A pending order is "live" only if it still has at least one entry in
+  // status='pending'. If every entry is withdrawn/cancelled the order is a
+  // dead checkout — it won't clear, so its sundries/platform fee shouldn't
+  // show up in "Awaiting Payment" even though the row is still
+  // pending_payment.
+  const livePendingOrderIds = new Set<string>();
   let confirmedEntryCount = 0;
   let withdrawnEntryCount = 0;
   let pendingEntryCount = 0;
@@ -140,8 +144,15 @@ export function aggregateShowMetrics(data: {
       if (e.status === 'pending') {
         pendingEntryCount += 1;
         pendingEntryFeesPence += e.totalFee;
+        livePendingOrderIds.add(e.orderId);
       }
     }
+  }
+
+  const pendingOrderCount = livePendingOrderIds.size;
+  let pendingPlatformFeePence = 0;
+  for (const id of livePendingOrderIds) {
+    pendingPlatformFeePence += pendingOrderPlatformFees.get(id) ?? 0;
   }
 
   let paidSundryRevenuePence = 0;
@@ -160,7 +171,7 @@ export function aggregateShowMetrics(data: {
           paidOnlineCatalogueCount += s.quantity;
         }
       }
-    } else if (pendingOrderIds.has(s.orderId)) {
+    } else if (livePendingOrderIds.has(s.orderId)) {
       pendingSundryRevenuePence += lineTotal;
     }
   }

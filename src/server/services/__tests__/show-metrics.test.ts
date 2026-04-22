@@ -69,7 +69,8 @@ describe('aggregateShowMetrics — BAGSD live fixture', () => {
 
   it('counts orders by status', () => {
     expect(metrics.paidOrderCount).toBe(1);
-    expect(metrics.pendingOrderCount).toBe(1);
+    // The pending_payment order's entry is withdrawn → dead checkout → 0
+    expect(metrics.pendingOrderCount).toBe(0);
     expect(metrics.cancelledOrderCount).toBe(1);
   });
 
@@ -101,10 +102,12 @@ describe('aggregateShowMetrics — BAGSD live fixture', () => {
   });
 
   it('leaves pending revenue in its own bucket so it never inflates "active revenue"', () => {
-    // Entry fees: 0 (entry is withdrawn, so not counted as pending)
-    // Sundry lines on the pending order: still in flight, still pending = £29
-    expect(metrics.pendingClubReceivablePence).toBe(2900);
-    expect(metrics.pendingPlatformFeePence).toBe(147);
+    // The pending_payment order's only entry is withdrawn — so this is a
+    // dead checkout. No entry fees, no sundries, no platform fee count
+    // toward "Awaiting Payment" because the money won't clear.
+    expect(metrics.pendingClubReceivablePence).toBe(0);
+    expect(metrics.pendingPlatformFeePence).toBe(0);
+    expect(metrics.pendingOrderCount).toBe(0);
   });
 });
 

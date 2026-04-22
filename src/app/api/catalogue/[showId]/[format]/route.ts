@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/server/db';
-import { and, eq, isNull, asc, or, inArray } from 'drizzle-orm';
+import { and, eq, isNull, asc, or, inArray, sql } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
 import { formatDogName, formatDogNameForCatalogue } from '@/lib/utils';
 import { renderToBuffer } from '@react-pdf/renderer';
@@ -52,6 +52,18 @@ export async function GET(
   // entries. No-op when numbers already exist.
   await ensureCatalogueNumbers(db, showId);
 
+  // For the absentees format, materialise the paid-order IDs first so the
+  // entries query can filter on a plain array — embedding a Drizzle select
+  // subquery inside the relational findMany builder generates a type graph
+  // that makes Turbopack's dev-mode type resolver grind on every request.
+  const paidOrderIds =
+    format === 'absentees'
+      ? (await db
+          .select({ id: schema.orders.id })
+          .from(schema.orders)
+          .where(and(eq(schema.orders.showId, showId), eq(schema.orders.status, 'paid')))).map((o) => o.id)
+      : null;
+
   // Run independent DB queries and logo validation in parallel.
   // The marked-catalogue achievements query only runs when it's needed; for
   // every other format it short-circuits to an empty array so the Promise.all
@@ -76,23 +88,17 @@ export async function GET(
       where: and(
         eq(schema.entries.showId, showId),
         format === 'absentees'
-          ? and(
-              // Absentees only exist on paid orders. Withdrawn entries from
-              // abandoned checkouts never made the catalogue — excluding
-              // them keeps the absentees list matched to what actually
-              // appeared in the book.
-              inArray(
-                schema.entries.orderId,
-                db
-                  .select({ id: schema.orders.id })
-                  .from(schema.orders)
-                  .where(and(eq(schema.orders.showId, showId), eq(schema.orders.status, 'paid')))
-              ),
-              or(
-                eq(schema.entries.status, 'withdrawn'),
-                and(eq(schema.entries.status, 'confirmed'), eq(schema.entries.absent, true))
+          ? paidOrderIds && paidOrderIds.length > 0
+            ? and(
+                // Absentees only exist on paid orders. Withdrawn entries from
+                // abandoned checkouts never made the catalogue.
+                inArray(schema.entries.orderId, paidOrderIds),
+                or(
+                  eq(schema.entries.status, 'withdrawn'),
+                  and(eq(schema.entries.status, 'confirmed'), eq(schema.entries.absent, true))
+                )
               )
-            )
+            : sql`false`
           : eq(schema.entries.status, 'confirmed'),
         isNull(schema.entries.deletedAt)
       ),

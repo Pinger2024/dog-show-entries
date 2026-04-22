@@ -649,10 +649,12 @@ export const secretaryRouter = createTRPCRouter({
       // for. Withdrawn entries from abandoned checkouts (order still in
       // pending_payment) are not absentees — no money changed hands, they
       // never made the catalogue.
-      const paidOrderIds = ctx.db
+      const paidOrderRows = await ctx.db
         .select({ id: orders.id })
         .from(orders)
         .where(and(eq(orders.showId, input.showId), eq(orders.status, 'paid')));
+      const paidOrderIds = paidOrderRows.map((o) => o.id);
+      if (paidOrderIds.length === 0) return [];
 
       return ctx.db.query.entries.findMany({
         where: and(
@@ -686,9 +688,20 @@ export const secretaryRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
+      // Only entries on paid orders belong in reports — abandoned
+      // pending_payment checkouts produce ghost entries that inflate
+      // "Total Entries" and leak non-paying exhibitors into the tally.
+      const paidOrderRows = await ctx.db
+        .select({ id: orders.id })
+        .from(orders)
+        .where(and(eq(orders.showId, input.showId), eq(orders.status, 'paid')));
+      const paidOrderIds = paidOrderRows.map((o) => o.id);
+      if (paidOrderIds.length === 0) return [];
+
       return ctx.db.query.entries.findMany({
         where: and(
           eq(entries.showId, input.showId),
+          inArray(entries.orderId, paidOrderIds),
           isNull(entries.deletedAt)
         ),
         with: {
@@ -2383,6 +2396,127 @@ export const secretaryRouter = createTRPCRouter({
     }),
 
   // ─── Refund Management ────────────────────────────────
+
+  /**
+   * Every paid order on a show with the full line-item breakdown needed to
+   * render a refund card: exhibitor, entries (with dog + JH handler), sundry
+   * lines (with item names), and the original Stripe payment + refund
+   * history. Paid-only — draft/pending/cancelled orders never appear.
+   */
+  getRefundableOrders: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      return ctx.db.query.orders.findMany({
+        where: and(eq(orders.showId, input.showId), eq(orders.status, 'paid')),
+        with: {
+          exhibitor: { columns: { id: true, name: true, email: true } },
+          entries: {
+            where: isNull(entries.deletedAt),
+            with: {
+              dog: true,
+              juniorHandlerDetails: true,
+              entryClasses: {
+                with: {
+                  showClass: { with: { classDefinition: true } },
+                },
+              },
+            },
+          },
+          orderSundryItems: {
+            with: { sundryItem: true },
+          },
+          payments: true,
+        },
+        orderBy: [desc(orders.createdAt)],
+      });
+    }),
+
+  /**
+   * Full-order refund: refunds every remaining penny on the order's Stripe
+   * PaymentIntent (entry fees + sundries + platform fee all come back to the
+   * exhibitor), cancels every live entry, and marks the payment refunded.
+   *
+   * Use this when the exhibitor pulls out entirely. For "refund one entry
+   * but keep the catalogue", use issueRefund with an entryId instead.
+   */
+  refundOrder: secretaryProcedure
+    .input(
+      z.object({
+        orderId: z.string().uuid(),
+        reason: z.string().max(500).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const order = await ctx.db.query.orders.findFirst({
+        where: eq(orders.id, input.orderId),
+      });
+      if (!order) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Order not found' });
+      }
+      await verifyShowAccess(ctx.db, ctx.session.user.id, order.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      if (order.status !== 'paid') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only paid orders can be refunded' });
+      }
+
+      const originalPayment = await ctx.db.query.payments.findFirst({
+        where: and(eq(payments.orderId, input.orderId), eq(payments.status, 'succeeded')),
+      });
+      if (!originalPayment?.stripePaymentId) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'No completed payment found for this order',
+        });
+      }
+
+      const alreadyRefunded = originalPayment.refundAmount ?? 0;
+      const remainingPence = originalPayment.amount - alreadyRefunded;
+      if (remainingPence <= 0) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Order has already been fully refunded',
+        });
+      }
+
+      const stripe = getStripe();
+      await stripe.refunds.create({
+        payment_intent: originalPayment.stripePaymentId,
+        amount: remainingPence,
+        ...(input.reason ? { reason: 'requested_by_customer' as const } : {}),
+      });
+
+      await ctx.db.insert(payments).values({
+        orderId: input.orderId,
+        stripePaymentId: originalPayment.stripePaymentId,
+        amount: remainingPence,
+        status: 'refunded',
+        type: 'refund',
+      });
+
+      await ctx.db
+        .update(payments)
+        .set({
+          refundAmount: originalPayment.amount,
+          status: 'refunded',
+        })
+        .where(eq(payments.id, originalPayment.id));
+
+      // Cancel every live entry on this order — exhibitor has pulled out
+      await ctx.db
+        .update(entries)
+        .set({ status: 'cancelled' })
+        .where(
+          and(
+            eq(entries.orderId, input.orderId),
+            inArray(entries.status, ['pending', 'confirmed'])
+          )
+        );
+
+      return { refunded: true, amount: remainingPence };
+    }),
+
   issueRefund: secretaryProcedure
     .input(
       z.object({

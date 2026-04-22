@@ -33,52 +33,68 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { type EntryItem, entryStatusConfig, downloadCsv } from '../_lib/show-utils';
+import { entryStatusConfig, downloadCsv } from '../_lib/show-utils';
 import { useShowId } from '../_lib/show-context';
+import type { RouterOutputs } from '@/server/trpc/router';
+
+type RefundableOrder = RouterOutputs['secretary']['getRefundableOrders'][number];
+type RefundableEntry = RefundableOrder['entries'][number];
 
 export default function FinancialPage() {
   const showId = useShowId();
   const { data: show } = trpc.shows.getById.useQuery({ id: showId });
   const { data: stats } = trpc.secretary.getShowStats.useQuery({ showId });
-  const { data: entriesData } = trpc.entries.getForShow.useQuery({ showId, limit: 500 });
   const { data: entryReport } = trpc.secretary.getEntryReport.useQuery({ showId });
   const { data: catalogueOrders } = trpc.secretary.getCatalogueOrders.useQuery({ showId });
   const { data: sundryReport } = trpc.secretary.getSundryItemReport.useQuery({ showId });
-  const entries: EntryItem[] = entriesData?.items ?? [];
+  const { data: refundableOrders } = trpc.secretary.getRefundableOrders.useQuery({ showId });
 
-  const [refundEntry, setRefundEntry] = useState<EntryItem | null>(null);
-  const [refundAmount, setRefundAmount] = useState('');
+  const entries = entryReport ?? [];
+
+  const [orderToRefund, setOrderToRefund] = useState<RefundableOrder | null>(null);
   const [refundReason, setRefundReason] = useState('');
+  const [partialRefundEntry, setPartialRefundEntry] = useState<RefundableEntry | null>(null);
+  const [partialAmount, setPartialAmount] = useState('');
   const utils = trpc.useUtils();
 
-  const refundMutation = trpc.secretary.issueRefund.useMutation({
+  const invalidateAll = () => {
+    utils.secretary.getShowStats.invalidate({ showId });
+    utils.secretary.getRefundableOrders.invalidate({ showId });
+    utils.secretary.getEntryReport.invalidate({ showId });
+    utils.secretary.getShowEntryStats.invalidate({ showId });
+  };
+
+  const orderRefund = trpc.secretary.refundOrder.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Order refunded: ${formatCurrency(data.amount)} returned to exhibitor`);
+      setOrderToRefund(null);
+      setRefundReason('');
+      invalidateAll();
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to refund order'),
+  });
+
+  const partialRefund = trpc.secretary.issueRefund.useMutation({
     onSuccess: (data) => {
       toast.success(
         data.fullyRefunded
-          ? `Full refund of ${formatCurrency(data.amount)} issued — entry cancelled`
+          ? `Refund of ${formatCurrency(data.amount)} issued — entry cancelled`
           : `Partial refund of ${formatCurrency(data.amount)} issued`
       );
-      setRefundEntry(null);
-      setRefundAmount('');
+      setPartialRefundEntry(null);
+      setPartialAmount('');
       setRefundReason('');
-      utils.entries.getForShow.invalidate({ showId });
-      utils.secretary.getShowStats.invalidate({ showId });
+      invalidateAll();
     },
     onError: (err) => toast.error(err.message ?? 'Failed to issue refund'),
   });
 
+  // Entry-type split comes from entryReport (paid-only). We distinguish
+  // junior-handler entries from standard because JH entries typically carry
+  // no dog and may have £0 fee, so lumping them under "Standard" is noise.
   const nfcEntries = entries.filter((e) => e.isNfc);
-  const standardEntries = entries.filter((e) => !e.isNfc);
-
-  const confirmedEntries = entries.filter((e) => e.status === 'confirmed');
-  // An entry is refundable when its ORDER has a succeeded Stripe payment.
-  // Individual payments.entry_id isn't populated in the merchant-of-record
-  // flow (one order → one Stripe charge → many entries share it).
-  const refundableEntries = confirmedEntries.filter((e) =>
-    e.order?.payments?.some(
-      (p) => p.status === 'succeeded' && p.stripePaymentId
-    )
-  );
+  const jhEntries = entries.filter((e) => !e.isNfc && e.entryType === 'junior_handler');
+  const standardEntries = entries.filter((e) => !e.isNfc && e.entryType !== 'junior_handler');
 
   type ClassBreakdownItem = { name: string; entries: number; revenue: number };
   type ClassTotals = { entries: number; revenue: number };
@@ -426,7 +442,7 @@ export default function FinancialPage() {
         </Card>
       )}
 
-      {/* Breakdown by entry type */}
+      {/* Breakdown by entry type — paid orders only */}
       <Card>
         <CardHeader>
           <CardTitle>Breakdown by Entry Type</CardTitle>
@@ -450,6 +466,15 @@ export default function FinancialPage() {
                   )}
                 </TableCell>
               </TableRow>
+              {jhEntries.length > 0 && (
+                <TableRow>
+                  <TableCell className="font-medium">Junior Handler</TableCell>
+                  <TableCell>{jhEntries.length}</TableCell>
+                  <TableCell>
+                    {formatCurrency(jhEntries.reduce((s, e) => s + e.totalFee, 0))}
+                  </TableCell>
+                </TableRow>
+              )}
               <TableRow>
                 <TableCell className="font-medium">NFC Entries</TableCell>
                 <TableCell>{nfcEntries.length}</TableCell>
@@ -464,10 +489,11 @@ export default function FinancialPage() {
         </CardContent>
       </Card>
 
-      {/* Payment status breakdown */}
+      {/* Payment status breakdown — all entries from paid orders only */}
       <Card>
         <CardHeader>
-          <CardTitle>Payment Status Breakdown</CardTitle>
+          <CardTitle>Entry Status Breakdown</CardTitle>
+          <CardDescription>Entries on paid orders only</CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <Table>
@@ -479,29 +505,23 @@ export default function FinancialPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(['confirmed', 'pending', 'withdrawn', 'cancelled'] as const).map(
-                (status) => {
-                  const statusEntries = entries.filter(
-                    (e) => e.status === status
-                  );
-                  const statusTotal = statusEntries.reduce(
-                    (s, e) => s + e.totalFee,
-                    0
-                  );
-                  const config = entryStatusConfig[status];
-                  return (
-                    <TableRow key={status}>
-                      <TableCell>
-                        <Badge variant={config?.variant ?? 'outline'}>
-                          {config?.label ?? status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{statusEntries.length}</TableCell>
-                      <TableCell>{formatCurrency(statusTotal)}</TableCell>
-                    </TableRow>
-                  );
-                }
-              )}
+              {(['confirmed', 'withdrawn', 'cancelled'] as const).map((status) => {
+                const statusEntries = entries.filter((e) => e.status === status);
+                if (statusEntries.length === 0) return null;
+                const statusTotal = statusEntries.reduce((s, e) => s + e.totalFee, 0);
+                const config = entryStatusConfig[status];
+                return (
+                  <TableRow key={status}>
+                    <TableCell>
+                      <Badge variant={config?.variant ?? 'outline'}>
+                        {config?.label ?? status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{statusEntries.length}</TableCell>
+                    <TableCell>{formatCurrency(statusTotal)}</TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </CardContent>
@@ -547,145 +567,117 @@ export default function FinancialPage() {
         </Card>
       )}
 
-      {/* Refund Management */}
+      {/* Orders & Refunds — one card per paid order, full line-item view */}
       <Card>
         <CardHeader>
-          <div className="flex items-start justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <RotateCcw className="size-5" />
-                Issue Refund
-              </CardTitle>
-              <CardDescription>
-                Refund a confirmed entry via Stripe. Full refunds auto-cancel the entry.
-              </CardDescription>
-            </div>
-          </div>
+          <CardTitle className="flex items-center gap-2">
+            <RotateCcw className="size-5" />
+            Orders &amp; Refunds
+          </CardTitle>
+          <CardDescription>
+            Each paid order shows every line the exhibitor was charged for.
+            &ldquo;Refund entire order&rdquo; returns everything to the exhibitor
+            and cancels all entries on the order.
+          </CardDescription>
         </CardHeader>
-        <CardContent>
-          {refundableEntries.length === 0 ? (
+        <CardContent className="space-y-4">
+          {(refundableOrders?.length ?? 0) === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
-              No confirmed entries with Stripe payments available for refund.
+              No paid orders yet.
             </p>
           ) : (
-            <>
-            {/* Mobile card view */}
-            <div className="space-y-2 sm:hidden">
-              {refundableEntries.map((entry) => (
-                <div key={entry.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium truncate">
-                      {entry.dog ? formatDogName(entry.dog) : 'Unknown'}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Cat #{entry.catalogueNumber ?? '—'} &middot; {formatCurrency(entry.totalFee)}
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="min-h-[2.75rem] shrink-0"
-                    onClick={() => {
-                      setRefundEntry(entry);
-                      setRefundAmount((entry.totalFee / 100).toFixed(2));
-                    }}
-                  >
-                    <RotateCcw className="size-3.5" />
-                    Refund
-                  </Button>
-                </div>
-              ))}
-            </div>
-            {/* Desktop table */}
-            <div className="hidden sm:block">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Cat #</TableHead>
-                    <TableHead>Dog</TableHead>
-                    <TableHead>Fee</TableHead>
-                    <TableHead className="w-10" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {refundableEntries.map((entry) => (
-                    <TableRow key={entry.id}>
-                      <TableCell className="font-medium">
-                        {entry.catalogueNumber ?? '—'}
-                      </TableCell>
-                      <TableCell>{entry.dog ? formatDogName(entry.dog) : 'Unknown'}</TableCell>
-                      <TableCell>{formatCurrency(entry.totalFee)}</TableCell>
-                      <TableCell>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setRefundEntry(entry);
-                            setRefundAmount((entry.totalFee / 100).toFixed(2));
-                          }}
-                        >
-                          <RotateCcw className="size-3.5" />
-                          Refund
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-            </>
+            refundableOrders!.map((order) => (
+              <OrderRefundCard
+                key={order.id}
+                order={order}
+                onRefundOrder={() => setOrderToRefund(order)}
+                onRefundEntry={(entry) => {
+                  setPartialRefundEntry(entry);
+                  setPartialAmount((entry.totalFee / 100).toFixed(2));
+                }}
+              />
+            ))
           )}
         </CardContent>
       </Card>
 
-      {/* Refund dialog */}
-      <Dialog open={!!refundEntry} onOpenChange={(open) => !open && setRefundEntry(null)}>
+      {/* Full-order refund confirmation */}
+      <Dialog open={!!orderToRefund} onOpenChange={(open) => !open && setOrderToRefund(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Issue Refund</DialogTitle>
+            <DialogTitle>Refund entire order?</DialogTitle>
             <DialogDescription>
-              Refunding {refundEntry?.dog ? formatDogName(refundEntry.dog) : ''} — entry fee {formatCurrency(refundEntry?.totalFee ?? 0)}
+              {orderToRefund && (() => {
+                const succeeded = orderToRefund.payments.find(
+                  (p) => p.status === 'succeeded' || p.status === 'partially_refunded'
+                );
+                const remaining =
+                  (succeeded?.amount ?? 0) - (succeeded?.refundAmount ?? 0);
+                return (
+                  <>
+                    This will return <strong>{formatCurrency(remaining)}</strong> to{' '}
+                    {orderToRefund.exhibitor?.name ?? 'the exhibitor'} via Stripe and
+                    cancel every entry on this order. The club&apos;s share, sundry
+                    items, and the platform fee all come back.
+                  </>
+                );
+              })()}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            {/* Full Refund shortcut */}
+          <div className="space-y-2 py-2">
+            <label className="text-sm font-medium">Reason (optional)</label>
+            <Input
+              value={refundReason}
+              onChange={(e) => setRefundReason(e.target.value)}
+              placeholder="e.g. Exhibitor withdrew from show"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOrderToRefund(null)}>
+              Cancel
+            </Button>
             <Button
               variant="destructive"
-              className="w-full min-h-[2.75rem]"
-              disabled={refundMutation.isPending}
+              disabled={orderRefund.isPending}
               onClick={() => {
-                if (!refundEntry) return;
-                refundMutation.mutate({
-                  entryId: refundEntry.id,
-                  amount: refundEntry.totalFee,
-                  reason: 'Full refund',
+                if (!orderToRefund) return;
+                orderRefund.mutate({
+                  orderId: orderToRefund.id,
+                  reason: refundReason || undefined,
                 });
               }}
             >
-              {refundMutation.isPending && <Loader2 className="size-4 animate-spin" />}
-              Full Refund — {formatCurrency(refundEntry?.totalFee ?? 0)}
+              {orderRefund.isPending && <Loader2 className="size-4 animate-spin" />}
+              Refund entire order
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">or partial refund</span>
-              </div>
-            </div>
-
+      {/* Partial refund on a single entry */}
+      <Dialog open={!!partialRefundEntry} onOpenChange={(open) => !open && setPartialRefundEntry(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Refund entry fee</DialogTitle>
+            <DialogDescription>
+              {partialRefundEntry?.dog
+                ? formatDogName(partialRefundEntry.dog)
+                : partialRefundEntry?.juniorHandlerDetails?.handlerName ?? 'Entry'}{' '}
+              — entry fee {formatCurrency(partialRefundEntry?.totalFee ?? 0)}.
+              Sundry items on this order (catalogue, donations, sponsorships) stay with the exhibitor.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Amount (GBP)</label>
+              <label className="text-sm font-medium">Refund amount (GBP)</label>
               <Input
                 type="number"
                 inputMode="decimal"
                 step="0.01"
                 min="0.01"
-                max={(refundEntry?.totalFee ?? 0) / 100}
-                value={refundAmount}
-                onChange={(e) => setRefundAmount(e.target.value)}
-                placeholder="e.g. 5.00"
+                max={(partialRefundEntry?.totalFee ?? 0) / 100}
+                value={partialAmount}
+                onChange={(e) => setPartialAmount(e.target.value)}
               />
             </div>
             <div className="space-y-2">
@@ -693,33 +685,179 @@ export default function FinancialPage() {
               <Input
                 value={refundReason}
                 onChange={(e) => setRefundReason(e.target.value)}
-                placeholder="e.g. Exhibitor withdrew"
+                placeholder="e.g. Withdrew one dog"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRefundEntry(null)}>
+            <Button variant="outline" onClick={() => setPartialRefundEntry(null)}>
               Cancel
             </Button>
             <Button
               variant="destructive"
-              disabled={refundMutation.isPending || !refundAmount}
+              disabled={partialRefund.isPending || !partialAmount}
               onClick={() => {
-                if (!refundEntry) return;
-                const amountPence = Math.round(parseFloat(refundAmount) * 100);
-                refundMutation.mutate({
-                  entryId: refundEntry.id,
+                if (!partialRefundEntry) return;
+                const amountPence = Math.round(parseFloat(partialAmount) * 100);
+                partialRefund.mutate({
+                  entryId: partialRefundEntry.id,
                   amount: amountPence,
                   reason: refundReason || undefined,
                 });
               }}
             >
-              {refundMutation.isPending && <Loader2 className="size-4 animate-spin" />}
-              Partial Refund
+              {partialRefund.isPending && <Loader2 className="size-4 animate-spin" />}
+              Refund entry fee
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ─── OrderRefundCard ────────────────────────────────────────
+
+function OrderRefundCard({
+  order,
+  onRefundOrder,
+  onRefundEntry,
+}: {
+  order: RefundableOrder;
+  onRefundOrder: () => void;
+  onRefundEntry: (entry: RefundableEntry) => void;
+}) {
+  const succeeded = order.payments.find(
+    (p) => p.status === 'succeeded' || p.status === 'partially_refunded' || p.status === 'refunded'
+  );
+  const paid = succeeded?.amount ?? order.totalAmount + order.platformFeePence;
+  const refunded = succeeded?.refundAmount ?? 0;
+  const remaining = paid - refunded;
+  const fullyRefunded = remaining <= 0;
+
+  const entryFeesTotal = order.entries.reduce((s, e) => s + e.totalFee, 0);
+  const sundryTotal = order.orderSundryItems.reduce(
+    (s, i) => s + i.quantity * i.unitPrice,
+    0
+  );
+
+  return (
+    <div className="rounded-lg border p-4 space-y-3">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+        <div className="min-w-0">
+          <p className="font-semibold truncate">
+            {order.exhibitor?.name ?? 'Unknown exhibitor'}
+          </p>
+          <p className="text-xs text-muted-foreground truncate">
+            {order.exhibitor?.email}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {fullyRefunded ? (
+            <Badge variant="outline">Fully refunded</Badge>
+          ) : refunded > 0 ? (
+            <Badge variant="outline">Partially refunded</Badge>
+          ) : null}
+          <p className="text-sm font-semibold">{formatCurrency(paid)}</p>
+        </div>
+      </div>
+
+      {/* Line items */}
+      <div className="space-y-1 text-sm">
+        {order.entries.map((entry) => {
+          const dogName = entry.dog
+            ? formatDogName(entry.dog)
+            : entry.juniorHandlerDetails?.handlerName
+              ? `${entry.juniorHandlerDetails.handlerName} (Junior Handler)`
+              : 'Unnamed entry';
+          const className = entry.entryClasses
+            .map((ec) => ec.showClass?.classDefinition?.name)
+            .filter(Boolean)
+            .join(', ');
+          return (
+            <div key={entry.id} className="flex items-center justify-between gap-3 py-1">
+              <div className="min-w-0 flex-1">
+                <p className="truncate">
+                  {entry.catalogueNumber && (
+                    <span className="font-mono text-xs text-muted-foreground mr-2">
+                      #{entry.catalogueNumber}
+                    </span>
+                  )}
+                  {dogName}
+                  {entry.status !== 'confirmed' && (
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      ({entry.status})
+                    </span>
+                  )}
+                </p>
+                {className && (
+                  <p className="text-xs text-muted-foreground truncate">{className}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-sm">{formatCurrency(entry.totalFee)}</span>
+                {!fullyRefunded && entry.totalFee > 0 && entry.status === 'confirmed' && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => onRefundEntry(entry)}
+                    className="h-7 px-2 text-xs"
+                  >
+                    Refund fee
+                  </Button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+        {order.orderSundryItems.map((line) => (
+          <div key={line.id} className="flex items-center justify-between gap-3 py-1 text-muted-foreground">
+            <p className="truncate">
+              {line.sundryItem.name}
+              {line.quantity > 1 && ` × ${line.quantity}`}
+            </p>
+            <span>{formatCurrency(line.quantity * line.unitPrice)}</span>
+          </div>
+        ))}
+        {order.platformFeePence > 0 && (
+          <div className="flex items-center justify-between gap-3 py-1 text-muted-foreground text-xs">
+            <p>Platform fee (£1 + 1%)</p>
+            <span>{formatCurrency(order.platformFeePence)}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Totals + actions */}
+      <div className="border-t pt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div className="text-sm text-muted-foreground">
+          {refunded > 0 && (
+            <span>
+              Refunded: {formatCurrency(refunded)} of {formatCurrency(paid)}
+              {' · '}
+              Remaining: {formatCurrency(remaining)}
+            </span>
+          )}
+          {refunded === 0 && (
+            <span>
+              Entry fees {formatCurrency(entryFeesTotal)}
+              {sundryTotal > 0 && ` + sundries ${formatCurrency(sundryTotal)}`}
+              {' + platform fee'}
+            </span>
+          )}
+        </div>
+        {!fullyRefunded && (
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={onRefundOrder}
+            className="min-h-[2.75rem] sm:min-h-0"
+          >
+            <RotateCcw className="size-3.5" />
+            Refund entire order ({formatCurrency(remaining)})
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
