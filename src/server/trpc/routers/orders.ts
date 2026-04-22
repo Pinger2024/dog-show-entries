@@ -512,11 +512,18 @@ export const ordersRouter = createTRPCRouter({
           dogId: entryInput.dogId ?? null,
         });
 
-        // Create entry classes with tiered fees
+        // Create entry classes with per-class fees. The sum of these must
+        // match entries.total_fee above — the JH and NFC branches have to
+        // stay aligned between the two loops or the financial "Entries by
+        // Class" breakdown disagrees with the order-level revenue.
         await ctx.db.insert(entryClasses).values(
           entryInput.classIds.map((cid, idx) => {
             let classFee: number;
-            if (entryInput.isNfc && show.nfcEntryFee != null) {
+            if (entryInput.entryType === 'junior_handler' && show.juniorHandlerFee != null) {
+              // JH fee is a flat per-entry charge — attribute to the first
+              // class, zero for the rest. Typically only one class anyway.
+              classFee = idx === 0 ? show.juniorHandlerFee : 0;
+            } else if (entryInput.isNfc && show.nfcEntryFee != null) {
               classFee = show.nfcEntryFee;
             } else if (show.firstEntryFee != null) {
               classFee = idx === 0 ? show.firstEntryFee : (show.subsequentEntryFee ?? show.firstEntryFee);
