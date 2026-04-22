@@ -40,8 +40,10 @@ export async function POST(request: NextRequest) {
       const { entryId, orderId, printOrderId } = paymentIntent.metadata;
 
       // Print order payment. Stripe retries on any 5xx or timeout, so we
-      // must gate the Mixam submission on a state transition: only submit
-      // if the order was not already marked paid.
+      // must gate both the Mixam submission AND the status write on a
+      // state transition — otherwise a retry/replay for an order that
+      // has already moved on to `submitted` / `in_production` /
+      // `dispatched` / `delivered` would regress it back to `paid`.
       if (paymentIntent.metadata.type === 'print_order' && printOrderId) {
         const existing = await db.query.printOrders.findFirst({
           where: eq(printOrders.id, printOrderId),
@@ -49,12 +51,17 @@ export async function POST(request: NextRequest) {
         });
         const wasAlreadyPaid = existing?.status === 'paid' || existing?.status === 'submitted' || existing?.status === 'in_production' || existing?.status === 'dispatched' || existing?.status === 'delivered';
 
+        // stripePaymentStatus is idempotent: the second succeeded event
+        // sets the same value. Write it unconditionally so any future
+        // status-tracking bug surfaces on the first webhook delivery
+        // rather than hiding behind a stale column.
         await db
           .update(printOrders)
-          .set({
-            status: 'paid',
-            stripePaymentStatus: 'succeeded',
-          })
+          .set(
+            wasAlreadyPaid
+              ? { stripePaymentStatus: 'succeeded' }
+              : { status: 'paid', stripePaymentStatus: 'succeeded' }
+          )
           .where(eq(printOrders.id, printOrderId));
 
         if (!wasAlreadyPaid) {
