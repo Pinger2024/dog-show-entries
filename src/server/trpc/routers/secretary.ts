@@ -48,7 +48,8 @@ import { Resend } from 'resend';
 import { searchKcJudges, fetchKcJudgeProfile } from '@/server/services/kc-judges';
 import { ensureCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { generateJudgeContractPdf } from '@/server/services/judge-contract-pdf';
-import { CATALOGUE_NAME_PATTERN } from '@/lib/catalogue-utils';
+import { CATALOGUE_NAME_PATTERN, isCatalogueItem } from '@/lib/catalogue-utils';
+import { aggregateShowMetrics, computeShowMetrics, computeShowsMetrics } from '@/server/services/show-metrics';
 
 /** Build human-readable breed text for judge offer emails.
  *  When assignments have breedId=null, falls back to showBreedNames, then showName. */
@@ -114,76 +115,34 @@ export const secretaryRouter = createTRPCRouter({
       inactiveStatuses.includes(s.status)
     );
 
-    // Get entries/revenue for active shows only
+    // Canonical metrics for all org shows — one batched call, paid-only
+    // revenue (sundries included, net of refunds).
     const activeShowIds = activeShows.map((s) => s.id);
     const allShowIds = orgShows.map((s) => s.id);
+    const metricsByShow = await computeShowsMetrics(ctx.db, allShowIds);
+
     let totalEntries = 0;
     let activeRevenue = 0;
     let totalRevenue = 0;
-
-    if (allShowIds.length > 0) {
-      const allStats = await ctx.db
-        .select({
-          count: sql<number>`count(*)`,
-          revenue: sql<number>`coalesce(sum(${entries.totalFee}), 0)`,
-        })
-        .from(entries)
-        .where(
-          and(inArray(entries.showId, allShowIds), isNull(entries.deletedAt))
-        );
-
-      totalEntries = Number(allStats[0]?.count ?? 0);
-      totalRevenue = Number(allStats[0]?.revenue ?? 0);
-    }
-
-    if (activeShowIds.length > 0) {
-      const activeStats = await ctx.db
-        .select({
-          revenue: sql<number>`coalesce(sum(${entries.totalFee}), 0)`,
-        })
-        .from(entries)
-        .where(
-          and(
-            inArray(entries.showId, activeShowIds),
-            isNull(entries.deletedAt)
-          )
-        );
-
-      activeRevenue = Number(activeStats[0]?.revenue ?? 0);
-    }
-
-    // Per-show entry counts (single query, grouped)
-    const perShowStats: Record<string, { entryCount: number; revenue: number }> = {};
-    if (allShowIds.length > 0) {
-      const perShow = await ctx.db
-        .select({
-          showId: entries.showId,
-          entryCount: sql<number>`count(*)`,
-          revenue: sql<number>`coalesce(sum(${entries.totalFee}), 0)`,
-        })
-        .from(entries)
-        .where(
-          and(
-            inArray(entries.showId, allShowIds),
-            isNull(entries.deletedAt),
-            inArray(entries.status, ['pending', 'confirmed'])
-          )
-        )
-        .groupBy(entries.showId);
-
-      for (const row of perShow) {
-        perShowStats[row.showId] = {
-          entryCount: Number(row.entryCount),
-          revenue: Number(row.revenue),
-        };
+    for (const showId of allShowIds) {
+      const m = metricsByShow.get(showId);
+      if (!m) continue;
+      const entryCount = m.confirmedEntryCount + m.pendingEntryCount;
+      totalEntries += entryCount;
+      totalRevenue += m.clubReceivablePence;
+      if (activeShowIds.includes(showId)) {
+        activeRevenue += m.clubReceivablePence;
       }
     }
 
-    const enrichShow = (s: (typeof orgShows)[number]) => ({
-      ...s,
-      entryCount: perShowStats[s.id]?.entryCount ?? 0,
-      showRevenue: perShowStats[s.id]?.revenue ?? 0,
-    });
+    const enrichShow = (s: (typeof orgShows)[number]) => {
+      const m = metricsByShow.get(s.id);
+      return {
+        ...s,
+        entryCount: m ? m.confirmedEntryCount + m.pendingEntryCount : 0,
+        showRevenue: m?.clubReceivablePence ?? 0,
+      };
+    };
 
     return {
       organisations: userMemberships.map((m) => m.organisation),
@@ -279,32 +238,39 @@ export const secretaryRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
-      const entryCounts = await ctx.db
-        .select({
-          count: sql<number>`count(*)`,
-          revenue: sql<number>`coalesce(sum(${entries.totalFee}), 0)`,
-          confirmed: sql<number>`count(*) filter (where ${entries.status} = 'confirmed')`,
-          pending: sql<number>`count(*) filter (where ${entries.status} = 'pending')`,
-        })
-        .from(entries)
-        .where(
-          and(
-            eq(entries.showId, input.showId),
-            isNull(entries.deletedAt)
-          )
-        );
+      const [metrics, classCount] = await Promise.all([
+        computeShowMetrics(ctx.db, input.showId),
+        ctx.db
+          .select({ count: sql<number>`count(*)` })
+          .from(showClasses)
+          .where(eq(showClasses.showId, input.showId)),
+      ]);
 
-      const classCount = await ctx.db
-        .select({ count: sql<number>`count(*)` })
-        .from(showClasses)
-        .where(eq(showClasses.showId, input.showId));
-
+      // "Active" revenue is paid-orders-only, net of refunds, INCLUDING
+      // sundry items (catalogues, donations, sponsorships). See the
+      // show-metrics service for the canonical definition.
       return {
-        totalEntries: Number(entryCounts[0]?.count ?? 0),
-        totalRevenue: Number(entryCounts[0]?.revenue ?? 0),
-        confirmedEntries: Number(entryCounts[0]?.confirmed ?? 0),
-        pendingEntries: Number(entryCounts[0]?.pending ?? 0),
+        // Revenue (paid only, sundry-inclusive)
+        clubReceivablePence: metrics.clubReceivablePence,
+        paidEntryFeesPence: metrics.paidEntryFeesPence,
+        paidSundryRevenuePence: metrics.paidSundryRevenuePence,
+        paidPlatformFeePence: metrics.paidPlatformFeePence,
+        grossChargedPence: metrics.grossChargedPence,
+        refundedPence: metrics.refundedPence,
+        pendingClubReceivablePence: metrics.pendingClubReceivablePence,
+        pendingPlatformFeePence: metrics.pendingPlatformFeePence,
+        // Entry counts
+        confirmedEntries: metrics.confirmedEntryCount,
+        pendingEntries: metrics.pendingEntryCount,
+        withdrawnEntries: metrics.withdrawnEntryCount,
+        totalEntries: metrics.confirmedEntryCount + metrics.pendingEntryCount + metrics.withdrawnEntryCount,
+        // Catalogue counts (paid only)
+        paidPrintedCatalogueCount: metrics.paidPrintedCatalogueCount,
+        paidOnlineCatalogueCount: metrics.paidOnlineCatalogueCount,
+        // Class count
         totalClasses: Number(classCount[0]?.count ?? 0),
+        // Back-compat alias — totalRevenue now means "club receivable, paid-only"
+        totalRevenue: metrics.clubReceivablePence,
       };
     }),
 
@@ -739,53 +705,73 @@ export const secretaryRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
-      const showEntries = await ctx.db.query.entries.findMany({
-        where: and(
-          eq(entries.showId, input.showId),
-          isNull(entries.deletedAt)
-        ),
-        with: {
-          payments: true,
-          exhibitor: true,
-          dog: true,
-        },
-      });
-
-      // Compute sundry totals per order so we can include them in per-entry totals
-      const orderIds = showEntries.map((e) => e.orderId).filter(Boolean) as string[];
-      const sundryTotalsMap = new Map<string, number>();
-      if (orderIds.length > 0) {
-        const sundryTotals = await ctx.db
+      const [showEntries, orderRows, sundryLines, paymentRefundRows] = await Promise.all([
+        ctx.db.query.entries.findMany({
+          where: and(eq(entries.showId, input.showId), isNull(entries.deletedAt)),
+          with: { payments: true, exhibitor: true, dog: true },
+        }),
+        ctx.db
+          .select({
+            id: orders.id,
+            status: orders.status,
+            totalAmount: orders.totalAmount,
+            platformFeePence: orders.platformFeePence,
+          })
+          .from(orders)
+          .where(eq(orders.showId, input.showId)),
+        ctx.db
           .select({
             orderId: orderSundryItems.orderId,
-            total: sql<number>`sum(${orderSundryItems.quantity} * ${orderSundryItems.unitPrice})`,
+            itemName: sundryItems.name,
+            quantity: orderSundryItems.quantity,
+            unitPrice: orderSundryItems.unitPrice,
           })
           .from(orderSundryItems)
-          .where(inArray(orderSundryItems.orderId, orderIds))
-          .groupBy(orderSundryItems.orderId);
-        for (const row of sundryTotals) {
-          sundryTotalsMap.set(row.orderId, Number(row.total));
-        }
+          .innerJoin(orders, eq(orderSundryItems.orderId, orders.id))
+          .innerJoin(sundryItems, eq(orderSundryItems.sundryItemId, sundryItems.id))
+          .where(eq(orders.showId, input.showId)),
+        ctx.db
+          .select({
+            orderId: payments.orderId,
+            refundAmount: payments.refundAmount,
+          })
+          .from(payments)
+          .innerJoin(orders, eq(payments.orderId, orders.id))
+          .where(and(eq(orders.showId, input.showId), isNotNull(payments.refundAmount))),
+      ]);
+
+      const sundryTotalsByOrder = new Map<string, number>();
+      for (const s of sundryLines) {
+        sundryTotalsByOrder.set(
+          s.orderId,
+          (sundryTotalsByOrder.get(s.orderId) ?? 0) + s.quantity * s.unitPrice
+        );
       }
 
       const enrichedEntries = showEntries.map((e) => ({
         ...e,
-        sundryTotal: (e.orderId ? sundryTotalsMap.get(e.orderId) : undefined) ?? 0,
+        sundryTotal: (e.orderId ? sundryTotalsByOrder.get(e.orderId) : undefined) ?? 0,
       }));
 
-      const totalRevenue = enrichedEntries.reduce(
-        (sum, e) => sum + e.totalFee + e.sundryTotal,
-        0
-      );
-      const paidEntries = enrichedEntries.filter((e) => e.status === 'confirmed');
-      const pendingEntries = enrichedEntries.filter((e) => e.status === 'pending');
+      const metrics = aggregateShowMetrics({
+        orders: orderRows,
+        entries: showEntries.map((e) => ({
+          id: e.id,
+          orderId: e.orderId,
+          status: e.status,
+          totalFee: e.totalFee,
+          deletedAt: e.deletedAt,
+        })),
+        sundries: sundryLines,
+        payments: paymentRefundRows,
+      });
 
       return {
         entries: enrichedEntries,
         summary: {
-          totalRevenue,
-          paidCount: paidEntries.length,
-          pendingCount: pendingEntries.length,
+          totalRevenue: metrics.clubReceivablePence,
+          paidCount: metrics.confirmedEntryCount,
+          pendingCount: metrics.pendingEntryCount,
           totalEntries: enrichedEntries.length,
         },
       };
@@ -811,7 +797,8 @@ export const secretaryRouter = createTRPCRouter({
 
       const catalogueItemIds = catalogueItems.map((i) => i.id);
 
-      // Find all orders for these catalogue items with exhibitor info
+      // Only paid orders count — a catalogue "order" that never paid
+      // isn't an order the club needs to fulfil.
       const catalogueOrders = await ctx.db
         .select({
           itemName: sundryItems.name,
@@ -823,9 +810,13 @@ export const secretaryRouter = createTRPCRouter({
         .innerJoin(sundryItems, eq(orderSundryItems.sundryItemId, sundryItems.id))
         .innerJoin(orders, eq(orderSundryItems.orderId, orders.id))
         .innerJoin(users, eq(orders.exhibitorId, users.id))
-        .where(inArray(orderSundryItems.sundryItemId, catalogueItemIds));
+        .where(
+          and(
+            inArray(orderSundryItems.sundryItemId, catalogueItemIds),
+            eq(orders.status, 'paid')
+          )
+        );
 
-      // Split into printed vs online
       const printed: { name: string; email: string; quantity: number }[] = [];
       const online: { name: string; email: string; quantity: number }[] = [];
 
@@ -2403,13 +2394,23 @@ export const secretaryRouter = createTRPCRouter({
 
       await verifyShowAccess(ctx.db, ctx.session.user.id, entry.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
-      // Find the original succeeded payment with a Stripe payment ID
-      const originalPayment = await ctx.db.query.payments.findFirst({
-        where: and(
-          eq(payments.entryId, input.entryId),
-          eq(payments.status, 'succeeded'),
-        ),
-      });
+      // Payments on new (merchant-of-record) orders are linked by orderId —
+      // multiple entries share one order + one Stripe charge. Fall back to
+      // the legacy per-entry payment linkage for older test/data rows where
+      // payment.entryId is populated instead.
+      const originalPayment = entry.orderId
+        ? await ctx.db.query.payments.findFirst({
+            where: and(
+              eq(payments.orderId, entry.orderId),
+              eq(payments.status, 'succeeded'),
+            ),
+          })
+        : await ctx.db.query.payments.findFirst({
+            where: and(
+              eq(payments.entryId, input.entryId),
+              eq(payments.status, 'succeeded'),
+            ),
+          });
 
       if (!originalPayment?.stripePaymentId) {
         throw new TRPCError({
@@ -4861,65 +4862,44 @@ export const secretaryRouter = createTRPCRouter({
   getShowEntryStats: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      // Entry counts by status
-      const statusCounts = await ctx.db
-        .select({
-          status: entries.status,
-          count: sql<number>`count(*)`,
-        })
-        .from(entries)
-        .where(eq(entries.showId, input.showId))
-        .groupBy(entries.status);
-
-      // Revenue from paid orders
-      const revenueResult = await ctx.db
-        .select({
-          totalRevenue: sql<number>`coalesce(sum(${orders.totalAmount}), 0)`,
-          orderCount: sql<number>`count(*)`,
-        })
-        .from(orders)
-        .where(
-          and(
-            eq(orders.showId, input.showId),
-            eq(orders.status, 'paid')
-          )
-        );
-
-      // Unique exhibitors
-      const exhibitorResult = await ctx.db
-        .select({
-          count: sql<number>`count(distinct ${entries.exhibitorId})`,
-        })
-        .from(entries)
-        .where(
-          and(
-            eq(entries.showId, input.showId),
-            inArray(entries.status, ['pending', 'confirmed'])
-          )
-        );
-
-      // Most recent entry date
-      const latestEntry = await ctx.db
-        .select({ createdAt: entries.createdAt })
-        .from(entries)
-        .where(eq(entries.showId, input.showId))
-        .orderBy(desc(entries.createdAt))
-        .limit(1);
-
-      const counts: Record<string, number> = {};
-      for (const row of statusCounts) {
-        counts[row.status] = Number(row.count);
-      }
+      const [metrics, exhibitorResult, latestEntry] = await Promise.all([
+        computeShowMetrics(ctx.db, input.showId),
+        // Unique exhibitors across alive, not-cancelled entries
+        ctx.db
+          .select({
+            count: sql<number>`count(distinct ${entries.exhibitorId})`,
+          })
+          .from(entries)
+          .where(
+            and(
+              eq(entries.showId, input.showId),
+              isNull(entries.deletedAt),
+              inArray(entries.status, ['pending', 'confirmed'])
+            )
+          ),
+        ctx.db
+          .select({ createdAt: entries.createdAt })
+          .from(entries)
+          .where(and(eq(entries.showId, input.showId), isNull(entries.deletedAt)))
+          .orderBy(desc(entries.createdAt))
+          .limit(1),
+      ]);
 
       return {
-        totalEntries: Object.values(counts).reduce((a, b) => a + b, 0),
-        confirmed: counts.confirmed ?? 0,
-        pending: counts.pending ?? 0,
-        withdrawn: counts.withdrawn ?? 0,
-        cancelled: counts.cancelled ?? 0,
-        transferred: counts.transferred ?? 0,
-        totalRevenue: Number(revenueResult[0]?.totalRevenue ?? 0),
-        paidOrders: Number(revenueResult[0]?.orderCount ?? 0),
+        // Entry counts — live (not soft-deleted) entries, bucketed by order state
+        totalEntries:
+          metrics.confirmedEntryCount +
+          metrics.pendingEntryCount +
+          metrics.withdrawnEntryCount,
+        confirmed: metrics.confirmedEntryCount,
+        pending: metrics.pendingEntryCount,
+        withdrawn: metrics.withdrawnEntryCount,
+        // Legacy shape — we don't separately track transferred/cancelled here
+        cancelled: 0,
+        transferred: 0,
+        // Revenue is club receivable (entries + sundries, net of refunds)
+        totalRevenue: metrics.clubReceivablePence,
+        paidOrders: metrics.paidOrderCount,
         uniqueExhibitors: Number(exhibitorResult[0]?.count ?? 0),
         lastEntryAt: latestEntry[0]?.createdAt ?? null,
       };

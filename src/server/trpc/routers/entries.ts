@@ -479,7 +479,15 @@ export const entriesRouter = createTRPCRouter({
               },
             },
           },
+          // Payments are linked at the order level (one Stripe charge per
+          // multi-entry order). entries.payments (via payments.entry_id) is
+          // currently always empty; order.payments is the live link.
           payments: true,
+          order: {
+            with: {
+              payments: true,
+            },
+          },
         },
         orderBy: [asc(entries.createdAt)],
         limit: input.limit,

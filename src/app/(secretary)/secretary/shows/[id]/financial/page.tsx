@@ -67,20 +67,17 @@ export default function FinancialPage() {
     onError: (err) => toast.error(err.message ?? 'Failed to issue refund'),
   });
 
-  const confirmedRevenue = entries
-    .filter((e) => e.status === 'confirmed')
-    .reduce((sum, e) => sum + e.totalFee, 0);
-
-  const pendingRevenue = entries
-    .filter((e) => e.status === 'pending')
-    .reduce((sum, e) => sum + e.totalFee, 0);
-
   const nfcEntries = entries.filter((e) => e.isNfc);
   const standardEntries = entries.filter((e) => !e.isNfc);
 
   const confirmedEntries = entries.filter((e) => e.status === 'confirmed');
-  const refundableEntries = confirmedEntries.filter(
-    (e) => e.paymentIntentId || e.payments?.some((p) => p.stripePaymentId)
+  // An entry is refundable when its ORDER has a succeeded Stripe payment.
+  // Individual payments.entry_id isn't populated in the merchant-of-record
+  // flow (one order → one Stripe charge → many entries share it).
+  const refundableEntries = confirmedEntries.filter((e) =>
+    e.order?.payments?.some(
+      (p) => p.status === 'succeeded' && p.stripePaymentId
+    )
   );
 
   type ClassBreakdownItem = { name: string; entries: number; revenue: number };
@@ -206,27 +203,27 @@ export default function FinancialPage() {
 
   return (
     <div className="space-y-6">
-      {/* Summary cards */}
+      {/* Summary cards — paid only, sundries included, net of refunds */}
       <div className="grid gap-4 grid-cols-2 sm:grid-cols-4">
         <StatCard
-          label="Total Fees"
-          value={formatCurrency(stats?.totalRevenue ?? 0)}
-          subtext={`from ${stats?.totalEntries ?? 0} entries`}
+          label="Paid to Club"
+          value={<span className="text-green-600 dark:text-green-400">{formatCurrency(stats?.clubReceivablePence ?? 0)}</span>}
+          subtext={`${stats?.confirmedEntries ?? 0} paid entries + sundries`}
         />
         <StatCard
-          label="Confirmed"
-          value={<span className="text-green-600 dark:text-green-400">{formatCurrency(confirmedRevenue)}</span>}
+          label="Entry Fees"
+          value={formatCurrency(stats?.paidEntryFeesPence ?? 0)}
           subtext={`${stats?.confirmedEntries ?? 0} entries`}
         />
         <StatCard
-          label="Pending"
-          value={<span className="text-amber-600 dark:text-amber-400">{formatCurrency(pendingRevenue)}</span>}
-          subtext={`${stats?.pendingEntries ?? 0} entries`}
+          label="Awaiting Payment"
+          value={<span className="text-amber-600 dark:text-amber-400">{formatCurrency(stats?.pendingClubReceivablePence ?? 0)}</span>}
+          subtext={`${stats?.pendingEntries ?? 0} started checkout`}
         />
         <StatCard
           label="Catalogues"
-          value={(catalogueOrders?.printed?.length ?? 0) + (catalogueOrders?.online?.length ?? 0)}
-          subtext={`${catalogueOrders?.printed?.length ?? 0} printed · ${catalogueOrders?.online?.length ?? 0} online`}
+          value={(stats?.paidPrintedCatalogueCount ?? 0) + (stats?.paidOnlineCatalogueCount ?? 0)}
+          subtext={`${stats?.paidPrintedCatalogueCount ?? 0} printed · ${stats?.paidOnlineCatalogueCount ?? 0} online`}
         />
       </div>
 
