@@ -16,9 +16,11 @@ const CARDS = [
   'public/prize-cards/4-reserve.jpg',
 ];
 
-// A3 at 150 DPI = 2480 × 1754 px (landscape) — proof-quality, fast.
-const A3_W = 2480;
-const A3_H = 1754;
+// A3 at 300 DPI = 4960 × 3508 px (landscape). Each A5 quadrant 2480 × 1754.
+// Source artwork is 2480 × 1766 — essentially A5 @ 300 DPI already, so we
+// preserve pixel-for-pixel fidelity (12px vertical overhang is cropped).
+const A3_W = 4960;
+const A3_H = 3508;
 const CARD_W = A3_W / 2;
 const CARD_H = A3_H / 2;
 
