@@ -25,7 +25,6 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { StripeProvider } from '@/components/providers/stripe-provider';
-import { PostcodeLookup } from '@/components/postcode-lookup';
 import { PrintPaymentForm } from './_components/print-payment-form';
 import { PrintOrderList } from './_components/print-order-list';
 
@@ -679,17 +678,6 @@ export default function PrintShopPage() {
                 Use {profile.name ? `${profile.name.split(' ')[0]}'s` : 'my'} address
               </Button>
             )}
-            <PostcodeLookup
-              compact
-              onSelect={(result) => {
-                setDelivery((d) => ({
-                  ...d,
-                  address1: result.address,
-                  town: result.town,
-                  postcode: result.postcode,
-                }));
-              }}
-            />
             <div className="space-y-1.5">
               <Label htmlFor="delivery-name">Recipient Name *</Label>
               <Input

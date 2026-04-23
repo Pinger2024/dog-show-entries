@@ -54,7 +54,6 @@ import {
   Users,
   Shield,
 } from 'lucide-react';
-import { PostcodeLookup } from '@/components/postcode-lookup';
 import { PayoutDetailsCard } from './_components/payout-details-card';
 import { useActiveOrganisation } from '@/lib/use-active-organisation';
 
@@ -517,22 +516,14 @@ export default function MyClubPage() {
               </div>
             </div>
 
-            {/* Address with PostcodeLookup */}
             <div className="space-y-1.5">
               <Label htmlFor="person-address">Address</Label>
-              <PostcodeLookup
-                compact
-                onSelect={(result) =>
-                  setForm((f) => ({ ...f, address: result.fullAddress }))
-                }
-              />
               <Textarea
                 id="person-address"
                 value={form.address}
                 onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
-                placeholder="Full address"
-                rows={2}
-                className="mt-1.5"
+                placeholder="House/flat, street, town, postcode"
+                rows={3}
               />
             </div>
 

@@ -65,7 +65,6 @@ import {
 } from '@/components/ui/dialog';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
-import { PostcodeLookup, formatAddress } from '@/components/postcode-lookup';
 import {
   Form,
   FormControl,
@@ -1192,13 +1191,6 @@ export default function NewShowPage() {
                         </FormItem>
                       )}
                     />
-                    <PostcodeLookup
-                      compact
-                      onSelect={(result) => {
-                        form.setValue('newVenueAddress', formatAddress(result));
-                        form.setValue('newVenuePostcode', result.postcode);
-                      }}
-                    />
                     <FormField
                       control={form.control}
                       name="newVenueAddress"
@@ -1207,7 +1199,7 @@ export default function NewShowPage() {
                           <FormLabel>Address</FormLabel>
                           <FormControl>
                             <Input
-                              placeholder="Full address"
+                              placeholder="Street, town"
                               {...field}
                             />
                           </FormControl>

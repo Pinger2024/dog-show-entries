@@ -35,7 +35,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { PostcodeLookup, formatAddress } from '@/components/postcode-lookup';
 import type { RouterOutputs } from '@/server/trpc/router';
 import { ClassManager, BulkClassCreator } from './class-manager';
 import { JudgesSection } from './judge-section';
@@ -473,11 +472,7 @@ function SecretaryDetails({
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="wiz-sec-address" className="text-xs">Address</Label>
-          <PostcodeLookup
-            compact
-            onSelect={(result) => set.address(`${formatAddress(result)}, ${result.postcode}`)}
-          />
-          <Input id="wiz-sec-address" placeholder="Full address" className="min-h-[2.75rem]" value={val.address} onChange={(e) => set.address(e.target.value)} />
+          <Input id="wiz-sec-address" placeholder="House/flat, street, town, postcode" className="min-h-[2.75rem]" value={val.address} onChange={(e) => set.address(e.target.value)} />
         </div>
         {editing && (
           <Button size="sm" className="min-h-[2.75rem]" onClick={saveEdits}>
