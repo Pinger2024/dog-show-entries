@@ -248,3 +248,39 @@ describe('partial refund → order stays paid, counts remain', () => {
     expect(stats.clubReceivablePence).toBe(2500); // 5000 − 2500 partial refund
   });
 });
+
+describe('withdrawn entries stay out of the printed catalogue', () => {
+  it('getCatalogueData excludes entries with status=withdrawn even when the order is paid', async () => {
+    // Amanda's 2026-04-23 question: "worth running a test to ensure
+    // withdrawn don't populate into the catalogue roguely?". Pinning
+    // the invariant.
+    const { user: secretary, org, breed } = await makeSecretaryWithOrgAndBreed();
+    const show = await makeShow({ organisationId: org.id, breedId: breed.id });
+    const showClass = await makeShowClass({ showId: show.id, breedId: breed.id });
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const dogConfirmed = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+    const dogWithdrawn = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+
+    const order = await makeOrder({
+      showId: show.id, exhibitorId: exhibitor.id, status: 'paid', totalAmount: 5000,
+    });
+    const entryConfirmed = await makeEntry({
+      showId: show.id, dogId: dogConfirmed.id, exhibitorId: exhibitor.id,
+      orderId: order.id, status: 'confirmed', totalFee: 2500,
+    });
+    const entryWithdrawn = await makeEntry({
+      showId: show.id, dogId: dogWithdrawn.id, exhibitorId: exhibitor.id,
+      orderId: order.id, status: 'withdrawn', totalFee: 2500,
+    });
+    await makeEntryClass({ entryId: entryConfirmed.id, showClassId: showClass.id });
+    await makeEntryClass({ entryId: entryWithdrawn.id, showClassId: showClass.id });
+
+    const data = await createTestCaller(secretary).secretary.getCatalogueData({
+      showId: show.id,
+    });
+
+    const ids = data.entries.map((e) => e.id);
+    expect(ids).toContain(entryConfirmed.id);
+    expect(ids).not.toContain(entryWithdrawn.id);
+  });
+});
