@@ -740,8 +740,17 @@ export const secretaryRouter = createTRPCRouter({
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
       const [showEntries, orderRows, sundryLines, paymentRefundRows] = await Promise.all([
+        // Exclude entries on refunded orders — they'd otherwise show up
+        // as "cancelled" ghost rows in the report. Refund history lives
+        // on the Financial tab's refund UI.
         ctx.db.query.entries.findMany({
-          where: and(eq(entries.showId, input.showId), isNull(entries.deletedAt)),
+          where: and(
+            eq(entries.showId, input.showId),
+            isNull(entries.deletedAt),
+            sql`(${entries.orderId} IS NULL OR ${entries.orderId} NOT IN (
+              SELECT id FROM ${orders} WHERE show_id = ${input.showId} AND status = 'refunded'
+            ))`
+          ),
           with: { payments: true, exhibitor: true, dog: true },
         }),
         ctx.db.query.orders.findMany({

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, isNull, inArray, asc, desc, sql } from 'drizzle-orm';
+import { and, eq, isNull, inArray, notInArray, asc, desc, sql } from 'drizzle-orm';
 import { differenceInMonths, differenceInWeeks } from 'date-fns';
 import {
   protectedProcedure,
@@ -15,6 +15,7 @@ import {
   dogPhotos,
   shows,
   showClasses,
+  orders,
   payments,
   entryAuditLog,
   users,
@@ -450,10 +451,24 @@ export const entriesRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
+      // Entries on a fully-refunded order don't belong in the entries list
+      // — the exhibitor pulled out and got their money back. Their entry
+      // rows stay in the DB for audit; the Financial tab's refund history
+      // is where they surface.
+      const refundedOrderRows = await ctx.db
+        .select({ id: orders.id })
+        .from(orders)
+        .where(and(eq(orders.showId, input.showId), eq(orders.status, 'refunded')));
+      const refundedOrderIds = refundedOrderRows.map((r) => r.id);
+
       const conditions = [
         eq(entries.showId, input.showId),
         isNull(entries.deletedAt),
       ];
+
+      if (refundedOrderIds.length > 0) {
+        conditions.push(notInArray(entries.orderId, refundedOrderIds));
+      }
 
       if (input.status) {
         conditions.push(eq(entries.status, input.status));

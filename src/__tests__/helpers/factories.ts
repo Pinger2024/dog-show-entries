@@ -186,6 +186,7 @@ export async function makeEntry(opts: {
   showId: string;
   dogId: string;
   exhibitorId: string;
+  orderId?: string;
   status?: EntryStatus;
   totalFee?: number;
 }) {
@@ -195,6 +196,7 @@ export async function makeEntry(opts: {
       showId: opts.showId,
       dogId: opts.dogId,
       exhibitorId: opts.exhibitorId,
+      orderId: opts.orderId,
       status: opts.status ?? 'confirmed',
       totalFee: opts.totalFee ?? 500,
     })

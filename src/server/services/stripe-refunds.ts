@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { payments } from '@/server/db/schema';
+import { orders, payments } from '@/server/db/schema';
 import type { Database } from '@/server/db';
 import { getStripe } from './stripe';
 
@@ -61,6 +61,17 @@ export async function executeStripeRefund(
       status: fullyRefunded ? 'refunded' : 'partially_refunded',
     })
     .where(eq(payments.id, originalPayment.id));
+
+  // Flip the order itself to 'refunded' once the payment is fully refunded,
+  // so every downstream count (catalogues to print, entries to include, club
+  // receivable) naturally excludes it. Partial refunds leave the order in
+  // 'paid' — only the refund amount is tracked at the payment row.
+  if (fullyRefunded && originalPayment.orderId) {
+    await db
+      .update(orders)
+      .set({ status: 'refunded' })
+      .where(eq(orders.id, originalPayment.orderId));
+  }
 
   return { amount: opts.amountPence, fullyRefunded };
 }

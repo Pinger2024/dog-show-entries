@@ -88,6 +88,7 @@ export const orderStatusEnum = pgEnum('order_status', [
   'paid',
   'failed',
   'cancelled',
+  'refunded',
 ]);
 
 export const entryAuditActionEnum = pgEnum('entry_audit_action', [

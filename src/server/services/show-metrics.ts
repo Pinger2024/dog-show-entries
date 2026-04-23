@@ -43,6 +43,8 @@ export type ShowMetrics = {
   paidOrderCount: number;
   pendingOrderCount: number;
   cancelledOrderCount: number;
+  /** Orders that were paid then fully refunded — no longer count as revenue. */
+  refundedOrderCount: number;
 
   // ── Entry counts (non-deleted only) ──
   /** Alive entries in a paid order with status='confirmed'. The authoritative "paid entries" count. */
@@ -52,17 +54,17 @@ export type ShowMetrics = {
   /** Alive entries in a pending_payment order — awaiting Stripe confirmation. */
   pendingEntryCount: number;
 
-  // ── Paid revenue (what Remi has actually collected, gross of refunds) ──
-  /** Sum of entries.total_fee across all alive entries in paid orders. */
+  // ── Paid revenue (active paid orders only — refunded orders are excluded entirely) ──
+  /** Sum of entries.total_fee across alive entries in paid orders. */
   paidEntryFeesPence: number;
   /** Sum of qty × unit_price across sundry lines in paid orders. */
   paidSundryRevenuePence: number;
   /** Sum of orders.platform_fee_pence across paid orders. */
   paidPlatformFeePence: number;
-  /** Sum of payments.refund_amount across paid orders. */
+  /** Sum of payments.refund_amount on refunded orders — for display ("£X refunded") only, not subtracted from anything. */
   refundedPence: number;
 
-  /** What the club is due post-refund: paid entry fees + sundry − refunds (which come out of the club's share). */
+  /** What the club is due: paid entry fees + paid sundry. Refunded orders are excluded upstream. */
   clubReceivablePence: number;
   /** What Remi charged the exhibitor in total on paid orders (entries + sundry + platform fee). */
   grossChargedPence: number;
@@ -80,7 +82,7 @@ export type ShowMetrics = {
 
 export type OrderRow = {
   id: string;
-  status: 'draft' | 'pending_payment' | 'paid' | 'failed' | 'cancelled';
+  status: 'draft' | 'pending_payment' | 'paid' | 'failed' | 'cancelled' | 'refunded';
   totalAmount: number;
   platformFeePence: number;
 };
@@ -117,9 +119,11 @@ export function aggregateShowMetrics(data: {
 }): ShowMetrics {
   const paidOrderIds = new Set<string>();
   const pendingOrderIds = new Set<string>();
+  const refundedOrderIds = new Set<string>();
   const pendingOrderPlatformFees = new Map<string, number>();
   let paidOrderCount = 0;
   let cancelledOrderCount = 0;
+  let refundedOrderCount = 0;
   let paidPlatformFeePence = 0;
 
   for (const o of data.orders) {
@@ -130,6 +134,9 @@ export function aggregateShowMetrics(data: {
     } else if (o.status === 'pending_payment') {
       pendingOrderIds.add(o.id);
       pendingOrderPlatformFees.set(o.id, o.platformFeePence);
+    } else if (o.status === 'refunded') {
+      refundedOrderIds.add(o.id);
+      refundedOrderCount += 1;
     } else if (o.status === 'cancelled' || o.status === 'failed') {
       cancelledOrderCount += 1;
     }
@@ -154,12 +161,14 @@ export function aggregateShowMetrics(data: {
       if (e.status === 'confirmed') {
         confirmedEntryCount += 1;
         paidEntryFeesPence += e.totalFee;
-      } else if (e.status === 'withdrawn' || e.status === 'cancelled') {
-        if (e.status === 'withdrawn') withdrawnEntryCount += 1;
-        // Entries on a paid order whose status has since been flipped to
-        // withdrawn or cancelled (via a refund) were still paid for. Keep
-        // the fee in GROSS revenue; the refund shows up separately in
-        // refundedPence so clubReceivablePence comes out right.
+      } else if (e.status === 'withdrawn') {
+        // Exhibitor paid then pulled out without a refund — fee stays with the club.
+        withdrawnEntryCount += 1;
+        paidEntryFeesPence += e.totalFee;
+      } else if (e.status === 'cancelled') {
+        // Per-entry partial refund on an otherwise paid order: the entry
+        // was cancelled but the rest of the order still stands. The
+        // refunded amount shows up via payments.refundAmount separately.
         paidEntryFeesPence += e.totalFee;
       }
     } else if (pendingOrderIds.has(e.orderId)) {
@@ -198,26 +207,30 @@ export function aggregateShowMetrics(data: {
     }
   }
 
+  // Two buckets for refund amounts:
+  //  - `refundedPence` = every refund, for secretary-facing display
+  //    ("£X was refunded on this show").
+  //  - `partialRefundsOnPaidOrdersPence` = refunds on orders still in
+  //    'paid' state (i.e. per-entry partial refunds). These come out of
+  //    the club's share; fully-refunded orders are already excluded
+  //    from the paid buckets entirely.
   let refundedPence = 0;
+  let partialRefundsOnPaidOrdersPence = 0;
   for (const p of data.payments) {
     if (!p.orderId || !p.refundAmount) continue;
+    refundedPence += p.refundAmount;
     if (paidOrderIds.has(p.orderId)) {
-      refundedPence += p.refundAmount;
+      partialRefundsOnPaidOrdersPence += p.refundAmount;
     }
   }
 
-  // Refunds charged on Stripe include the platform fee (the exhibitor
-  // paid gross = club revenue + platform fee, and Stripe refunds on
-  // the gross payment amount). But clubReceivablePence is the club's
-  // slice only — the platform fee was never part of it. Cap the
-  // refund offset at the club's gross revenue so a full refund lands
-  // at £0 receivable, not a negative number that implies the club
-  // owes Remi money.
-  const clubGrossRevenuePence = paidEntryFeesPence + paidSundryRevenuePence;
-  const clubRefundedPence = Math.min(refundedPence, clubGrossRevenuePence);
-  const clubReceivablePence = clubGrossRevenuePence - clubRefundedPence;
+  const paidRevenuePence = paidEntryFeesPence + paidSundryRevenuePence;
+  const clubReceivablePence = Math.max(
+    0,
+    paidRevenuePence - partialRefundsOnPaidOrdersPence
+  );
   const grossChargedPence =
-    paidEntryFeesPence + paidSundryRevenuePence + paidPlatformFeePence;
+    paidRevenuePence + paidPlatformFeePence;
   const pendingClubReceivablePence =
     pendingEntryFeesPence + pendingSundryRevenuePence;
 
@@ -225,6 +238,7 @@ export function aggregateShowMetrics(data: {
     paidOrderCount,
     pendingOrderCount,
     cancelledOrderCount,
+    refundedOrderCount,
     confirmedEntryCount,
     withdrawnEntryCount,
     pendingEntryCount,
