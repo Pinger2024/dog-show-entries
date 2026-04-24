@@ -48,6 +48,13 @@ export function ShowShareDropdown({
 
   const shareUrl = shareUrlProp
     ?? (typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : '');
+  // Append a channel-specific query param to the URLs we send out via social
+  // share. This gives each channel a distinct URL so platform link-preview
+  // caches (WhatsApp's in particular — it has no public debugger) re-scrape
+  // and pick up the current OG image. It also doubles as a lightweight
+  // attribution breadcrumb when we later want to see where entries came from.
+  const withSource = (channel: string) =>
+    `${shareUrl}${shareUrl.includes('?') ? '&' : '?'}src=${channel}`;
   const messageText = `Check out ${showName} — a ${showType} by ${organisationName}${venueName ? ` at ${venueName}` : ''} on ${showDate}. Enter online on Remi!`;
 
   const isMobile =
@@ -60,30 +67,32 @@ export function ShowShareDropdown({
     // to share. The native share sheet hands off to the FB app correctly, so
     // prefer navigator.share on mobile; on desktop, where Facebook is never
     // installed as an app, open the web sharer in a new tab.
+    const fbShareUrl = withSource('facebook');
     if (isMobile && navigator.share) {
       try {
-        await navigator.share({ title: showName, text: messageText, url: shareUrl });
+        await navigator.share({ title: showName, text: messageText, url: fbShareUrl });
         return;
       } catch (e) {
         if ((e as Error).name === 'AbortError') return;
       }
     }
-    const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
+    const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(fbShareUrl)}`;
     window.open(fbUrl, '_blank', 'noopener,noreferrer');
   }
 
   async function shareInstagram() {
     // Instagram has no web share URL — use the native OS share sheet on mobile,
     // fall back to clipboard on desktop.
+    const igShareUrl = withSource('instagram');
     if (navigator.share) {
       try {
-        await navigator.share({ title: showName, text: messageText, url: shareUrl });
+        await navigator.share({ title: showName, text: messageText, url: igShareUrl });
         return;
       } catch (e) {
         if ((e as Error).name === 'AbortError') return;
       }
     }
-    await navigator.clipboard.writeText(shareUrl);
+    await navigator.clipboard.writeText(igShareUrl);
     toast.success('Link copied — paste it into Instagram to share');
   }
 
@@ -97,7 +106,7 @@ export function ShowShareDropdown({
     <div className={cn('flex items-center gap-1.5', className)}>
       {/* WhatsApp — most-used share channel for this audience */}
       {typeof window !== 'undefined' && (
-        <WhatsappShareButton url={shareUrl} title={messageText}>
+        <WhatsappShareButton url={withSource('whatsapp')} title={messageText}>
           <Button variant="outline" className="h-9 gap-1.5 shadow-sm bg-[#25D366]/10 border-[#25D366]/30 text-[#25D366] hover:bg-[#25D366]/20 hover:text-[#20BD5A]" asChild>
             <span>
               <WhatsappIcon size={16} round />
