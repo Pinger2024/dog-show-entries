@@ -59,6 +59,10 @@ export function TellAFriend({
 }: TellAFriendProps) {
   const [copied, setCopied] = useState(false);
 
+  const isMobile =
+    typeof navigator !== 'undefined' &&
+    /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
   // Cache-bust the URL per channel so platform link-preview caches re-scrape.
   const withSource = (channel: string) =>
     `${shareUrl}${shareUrl.includes('?') ? '&' : '?'}src=${channel}`;
@@ -67,14 +71,25 @@ export function TellAFriend({
     venueName ? ` at ${venueName}` : ''
   } on ${showDate}. Enter online on Remi!`;
 
-  function shareFacebook() {
+  async function shareFacebook() {
     onShare?.('facebook');
-    // Open Facebook's web sharer in a new tab. The button is explicitly
-    // labelled "Facebook" so users expect Facebook, not a generic OS share
-    // sheet. On iOS with the FB app installed this may app-intercept
-    // (Meta bug, not ours); on everything else users land on a proper
-    // compose window.
     const fbShareUrl = withSource('facebook');
+    // Mobile: Facebook's app hijacks every facebook.com URL via iOS
+    // Universal Links and can't translate sharer.php into a compose window,
+    // so tapping "Facebook" opens a blank FB app screen. Years-old Meta bug
+    // with no client-side workaround. Copy the link instead and tell the
+    // user to paste it — same pattern as Instagram, and it's what most
+    // people were doing manually anyway.
+    if (isMobile) {
+      try {
+        await navigator.clipboard.writeText(fbShareUrl);
+        toast.success('Link copied — paste it into your Facebook post or group');
+      } catch {
+        toast.error('Could not copy the link. Long-press to copy it manually.');
+      }
+      return;
+    }
+    // Desktop: no FB app to intercept, web sharer opens a real compose window.
     window.open(
       `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(fbShareUrl)}`,
       '_blank',

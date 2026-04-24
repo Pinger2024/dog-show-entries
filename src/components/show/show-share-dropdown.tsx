@@ -57,14 +57,27 @@ export function ShowShareDropdown({
     `${shareUrl}${shareUrl.includes('?') ? '&' : '?'}src=${channel}`;
   const messageText = `Check out ${showName} — a ${showType} by ${organisationName}${venueName ? ` at ${venueName}` : ''} on ${showDate}. Enter online on Remi!`;
 
-  function shareFacebook() {
-    // Always open Facebook's web sharer in a new tab — the button is
-    // explicitly labelled "Facebook", so piping it through navigator.share
-    // (which shows a generic OS share sheet) surprised users who expected
-    // the Facebook app or site. On iOS with the FB app installed, Facebook
-    // may still intercept and show a blank screen (their bug), but the
-    // button at least does what it says.
+  const isMobile =
+    typeof navigator !== 'undefined' &&
+    /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+  async function shareFacebook() {
     const fbShareUrl = withSource('facebook');
+    // Mobile: Facebook's app hijacks every facebook.com URL via iOS
+    // Universal Links and can't translate sharer.php into a compose window,
+    // so tapping "Facebook" opens a blank FB app screen. Years-old Meta bug
+    // with no client-side workaround. Copy the link and tell the user to
+    // paste it — what most people were doing manually anyway.
+    if (isMobile) {
+      try {
+        await navigator.clipboard.writeText(fbShareUrl);
+        toast.success('Link copied — paste it into your Facebook post or group');
+      } catch {
+        toast.error('Could not copy the link. Long-press to copy it manually.');
+      }
+      return;
+    }
+    // Desktop: no FB app to intercept, web sharer opens a real compose window.
     window.open(
       `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(fbShareUrl)}`,
       '_blank',

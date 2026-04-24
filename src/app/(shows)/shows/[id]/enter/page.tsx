@@ -1704,8 +1704,24 @@ export default function EnterShowPage() {
                     <Button
                       variant="outline"
                       className="min-h-[2.75rem] gap-2 border-[#1877F2]/30 bg-white text-[#1877F2]"
-                      onClick={() => {
+                      onClick={async () => {
                         trackShare('facebook');
+                        // Mobile: FB app hijacks facebook.com URLs and shows
+                        // a blank screen — copy the link instead (years-old
+                        // Meta bug, no client-side fix). Desktop: no app to
+                        // intercept so the web sharer works fine.
+                        const mobile =
+                          typeof navigator !== 'undefined' &&
+                          /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+                        if (mobile) {
+                          try {
+                            await navigator.clipboard.writeText(fbShareUrl);
+                            toast.success('Link copied — paste it into your Facebook post or group');
+                          } catch {
+                            toast.error('Could not copy the link. Long-press to copy it manually.');
+                          }
+                          return;
+                        }
                         window.open(
                           `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(fbShareUrl)}`,
                           '_blank',
