@@ -817,6 +817,8 @@ export async function generatePrizeCardsA3Jpeg(showId: string): Promise<Buffer> 
       { input: resized[2], left: BLEED_PX, top: BLEED_PX + CARD_SLOT_H },
       { input: resized[3], left: BLEED_PX + CARD_SLOT_W, top: BLEED_PX + CARD_SLOT_H },
     ])
+    // Embed 300 DPI in JFIF headers so Mixam's resolution checker recognises the spec.
+    .withMetadata({ density: 300 })
     .jpeg({ quality: 92, mozjpeg: true })
     .toBuffer();
 

@@ -168,8 +168,9 @@ async function main() {
   await fs.writeFile('/tmp/a3-4up-bagsd-bleed.png', sheet);
   console.log(`Wrote /tmp/a3-4up-bagsd-bleed.png (${(sheet.length / 1024 / 1024).toFixed(1)} MB)`);
 
-  // JPEG at 92% quality for Mixam upload (smaller file, same bleed)
-  const jpg = await sharp(sheet).jpeg({ quality: 92, mozjpeg: true }).toBuffer();
+  // JPEG at 92% quality for Mixam upload — withMetadata({density:300}) embeds
+  // 300 DPI in the JFIF headers so Mixam's resolution checker doesn't flag it.
+  const jpg = await sharp(sheet).withMetadata({ density: 300 }).jpeg({ quality: 92, mozjpeg: true }).toBuffer();
   await fs.writeFile('/tmp/a3-4up-bagsd-bleed.jpg', jpg);
   console.log(`Wrote /tmp/a3-4up-bagsd-bleed.jpg (${(jpg.length / 1024 / 1024).toFixed(1)} MB)`);
 
