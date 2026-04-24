@@ -551,8 +551,45 @@ export function ShowDetailClient() {
     }
   }
 
-  /* Unique judges */
-  const uniqueJudges = [...new Set((show.judgeAssignments ?? []).map((ja) => ja.judge?.name).filter(Boolean))];
+  /* Judges with roles — same aggregation logic as the schedule PDF route */
+  const judgesWithRoles = (() => {
+    const assignments = show.judgeAssignments ?? [];
+    const classes = show.showClasses ?? [];
+    const hasJHClasses = classes.some((sc) => sc.classDefinition?.type === 'junior_handler');
+    const juniorBreedSet = new Set<string>();
+    const breedBreedSet = new Set<string>();
+    for (const sc of classes) {
+      const b = sc.breed?.name;
+      if (!b) continue;
+      if (sc.classDefinition?.type === 'junior_handler') juniorBreedSet.add(b);
+      else breedBreedSet.add(b);
+    }
+    type Agg = { name: string; affix: string | null; breeds: Set<string>; sexes: Set<string>; hasNullSex: boolean };
+    const judgeMap = new Map<string, Agg>();
+    for (const ja of assignments) {
+      if (!ja.judge?.id || !ja.judge?.name) continue;
+      if (!judgeMap.has(ja.judge.id)) {
+        judgeMap.set(ja.judge.id, { name: ja.judge.name, affix: (ja.judge as { kennelClubAffix?: string | null }).kennelClubAffix ?? null, breeds: new Set(), sexes: new Set(), hasNullSex: false });
+      }
+      const agg = judgeMap.get(ja.judge.id)!;
+      if (ja.breed?.name) agg.breeds.add(ja.breed.name);
+      if (ja.sex) agg.sexes.add(ja.sex);
+      else agg.hasNullSex = true;
+    }
+    return Array.from(judgeMap.values()).map((agg) => {
+      const breedArr = Array.from(agg.breeds).sort();
+      const onlyJhBreeds = breedArr.length > 0 && breedArr.every((b) => juniorBreedSet.has(b) && !breedBreedSet.has(b));
+      const isJH = onlyJhBreeds || (hasJHClasses && agg.hasNullSex && agg.sexes.size === 0);
+      let role: string;
+      if (isJH) role = 'Junior Handling';
+      else if (agg.sexes.has('dog') && agg.sexes.has('bitch')) role = 'Dogs & Bitches';
+      else if (agg.sexes.has('dog')) role = 'Dogs';
+      else if (agg.sexes.has('bitch')) role = 'Bitches';
+      else if (breedArr.length > 0) role = breedArr.join(', ');
+      else role = (show as { showScope?: string }).showScope === 'single_breed' ? 'Breed Classes' : 'All Breeds';
+      return { name: agg.name, affix: agg.affix, role, isJH };
+    }).sort((a, b) => (a.isJH !== b.isJH ? (a.isJH ? 1 : -1) : a.name.localeCompare(b.name)));
+  })();
 
   const hasBanner = !!show.bannerImageUrl;
 
@@ -569,7 +606,6 @@ export function ShowDetailClient() {
         metaIcon:    'text-stone-500',
         judgeLabel:  'text-stone-400',
         judgeName:   'text-stone-200',
-        midDot:      'text-stone-600',
         statsCard:   'border-stone-700/50 bg-stone-800/50',
         statsDog:    'text-gold/60',
         statsNum:    'text-white',
@@ -592,7 +628,6 @@ export function ShowDetailClient() {
         metaIcon:    'text-stone-400',
         judgeLabel:  'text-stone-600',
         judgeName:   'text-stone-800',
-        midDot:      'text-stone-400',
         statsCard:   'border-stone-200 bg-white/70 backdrop-blur-sm',
         statsDog:    'text-amber-500',
         statsNum:    'text-stone-900',
@@ -730,28 +765,18 @@ export function ShowDetailClient() {
               )}
 
               {/* Judge names — judges sell entries */}
-              {uniqueJudges.length > 0 && (
-                <div className="mt-3 text-sm">
-                  <div className="flex items-center gap-1.5">
-                    <User className={`size-4 shrink-0 ${t.metaIcon}`} />
-                    <span className={t.judgeLabel}>
-                      {uniqueJudges.length === 1 ? 'Judge:' : 'Judges:'}
-                    </span>
-                    {uniqueJudges.length <= 2 && (
-                      <span className={`font-serif font-medium ${t.judgeName}`}>{uniqueJudges.join(', ')}</span>
-                    )}
-                  </div>
-                  {uniqueJudges.length > 2 && (
-                    <div className="mt-1 flex flex-wrap items-center gap-x-1 gap-y-0.5 pl-[1.375rem]">
-                      {uniqueJudges.map((name, i) => (
-                        <span key={name} className={`font-serif font-medium ${t.judgeName}`}>
-                          {name}{i < uniqueJudges.length - 1 && (
-                            <span className={`ml-1 ${t.midDot}`}>&middot;</span>
-                          )}
-                        </span>
-                      ))}
+              {judgesWithRoles.length > 0 && (
+                <div className="mt-3 flex flex-col gap-1 text-sm">
+                  {judgesWithRoles.map(({ name, affix, role }) => (
+                    <div key={name} className="flex items-center gap-1.5">
+                      <User className={`size-4 shrink-0 ${t.metaIcon}`} />
+                      <span className={`font-serif font-medium ${t.judgeName}`}>
+                        {affix ? `${name} (${affix})` : name}
+                      </span>
+                      <span className={t.metaIcon}>—</span>
+                      <span className={t.judgeLabel}>{role}</span>
                     </div>
-                  )}
+                  ))}
                 </div>
               )}
 
