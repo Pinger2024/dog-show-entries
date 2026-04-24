@@ -625,8 +625,8 @@ export default function EnterShowPage() {
           <div className="flex items-center gap-2 text-xs sm:text-sm">
             <ShoppingCart className="size-4" />
             <span>
-              {cart.entries.filter((e) => e.classIds.length > 0).length} entr
-              {cart.entries.filter((e) => e.classIds.length > 0).length !== 1 ? 'ies' : 'y'} in cart
+              {cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length} entr
+              {cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length !== 1 ? 'ies' : 'y'} in cart
             </span>
             {cart.grandTotal > 0 && (
               <Badge variant="secondary">{formatCurrency(cart.grandTotal)}</Badge>
@@ -636,7 +636,7 @@ export default function EnterShowPage() {
             variant="ghost"
             size="sm"
             onClick={() => cart.setStep('cart_review')}
-            disabled={cart.entries.filter((e) => e.classIds.length > 0).length === 0}
+            disabled={cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length === 0}
           >
             View Cart
           </Button>
@@ -1226,7 +1226,7 @@ export default function EnterShowPage() {
 
           {/* Cart entries */}
           {cart.entries
-            .filter((e) => e.classIds.length > 0)
+            .filter((e) => e.classIds.length > 0 || e.isNfc)
             .map((entry) => (
               <Card key={entry.id}>
                 <CardHeader className="pb-3">
@@ -1409,8 +1409,8 @@ export default function EnterShowPage() {
             <div className="space-y-1.5">
               <div className="flex justify-between text-sm text-muted-foreground">
                 <span>
-                  {cart.entries.filter((e) => e.classIds.length > 0).length} entr
-                  {cart.entries.filter((e) => e.classIds.length > 0).length !== 1 ? 'ies' : 'y'}
+                  {cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length} entr
+                  {cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length !== 1 ? 'ies' : 'y'}
                 </span>
                 <span>{formatCurrency(cart.entriesTotal)}</span>
               </div>
@@ -1521,7 +1521,12 @@ export default function EnterShowPage() {
                 !healthDeclared ||
                 !termsAccepted ||
                 checkoutMutation.isPending ||
-                cart.entries.filter((e) => e.classIds.length > 0).length === 0
+                // An entry is submittable if it has at least one class OR it's
+                // an NFC ("not for competition") entry — those deliberately have
+                // no classes. Mirrors the filter in handleProceedToPayment's
+                // mutation payload; previously they diverged and NFC-only carts
+                // were silently blocked here.
+                cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length === 0
               }
             >
               {checkoutMutation.isPending ? (
@@ -1616,10 +1621,10 @@ export default function EnterShowPage() {
               )}
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Entries</span>
-                <span>{cart.entries.filter((e) => e.classIds.length > 0).length}</span>
+                <span>{cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length}</span>
               </div>
               {cart.entries
-                .filter((e) => e.classIds.length > 0)
+                .filter((e) => e.classIds.length > 0 || e.isNfc)
                 .map((entry) => (
                   <div key={entry.id} className="space-y-1 text-sm">
                     <div className="flex justify-between">
