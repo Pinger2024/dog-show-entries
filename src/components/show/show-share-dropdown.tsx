@@ -1,9 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Share2, Check, ExternalLink, Copy } from 'lucide-react';
+import { Share2, Check, Copy } from 'lucide-react';
 import {
-  FacebookShareButton,
   WhatsappShareButton,
   FacebookIcon,
   WhatsappIcon,
@@ -50,6 +49,28 @@ export function ShowShareDropdown({
   const shareUrl = shareUrlProp
     ?? (typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : '');
   const messageText = `Check out ${showName} — a ${showType} by ${organisationName}${venueName ? ` at ${venueName}` : ''} on ${showDate}. Enter online on Remi!`;
+
+  const isMobile =
+    typeof navigator !== 'undefined' &&
+    /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+  async function shareFacebook() {
+    // The Facebook mobile app intercepts sharer.php URLs and lands on a blank
+    // screen — tapping "Share to Facebook" takes you to the app with nothing
+    // to share. The native share sheet hands off to the FB app correctly, so
+    // prefer navigator.share on mobile; on desktop, where Facebook is never
+    // installed as an app, open the web sharer in a new tab.
+    if (isMobile && navigator.share) {
+      try {
+        await navigator.share({ title: showName, text: messageText, url: shareUrl });
+        return;
+      } catch (e) {
+        if ((e as Error).name === 'AbortError') return;
+      }
+    }
+    const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
+    window.open(fbUrl, '_blank', 'noopener,noreferrer');
+  }
 
   async function shareInstagram() {
     // Instagram has no web share URL — use the native OS share sheet on mobile,
@@ -106,11 +127,9 @@ export function ShowShareDropdown({
         <DropdownMenuContent align="end" className="w-48">
           {typeof window !== 'undefined' && (
             <>
-              <DropdownMenuItem asChild>
-                <FacebookShareButton url={shareUrl} className="!flex w-full cursor-pointer items-center gap-2 !rounded-sm !px-2 !py-1.5 !text-sm">
-                  <FacebookIcon size={18} round />
-                  Facebook
-                </FacebookShareButton>
+              <DropdownMenuItem onClick={shareFacebook} className="cursor-pointer gap-2">
+                <FacebookIcon size={18} round />
+                Facebook
               </DropdownMenuItem>
               <DropdownMenuItem onClick={shareInstagram} className="cursor-pointer gap-2">
                 <InstagramIcon size={18} />
