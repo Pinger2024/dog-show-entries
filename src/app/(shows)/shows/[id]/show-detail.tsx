@@ -595,48 +595,50 @@ export function ShowDetailClient() {
 
   const t = hasBanner
     ? {
-        heroBg:      'bg-stone-900',
-        backLink:    'text-stone-400 hover:text-stone-200',
-        orgName:     'text-gold/80',
-        heading:     'text-white',
-        showType:    'border-gold/30 bg-gold/10 text-gold',
-        mutedChip:   'bg-stone-700 text-stone-300',
-        closedBadge: 'border-stone-600 text-stone-300',
-        meta:        'text-stone-400',
-        metaIcon:    'text-stone-500',
-        judgeLabel:  'text-stone-400',
-        judgeName:   'text-stone-200',
-        statsCard:   'border-stone-700/50 bg-stone-800/50',
-        statsDog:    'text-gold/60',
-        statsNum:    'text-white',
-        statsMuted:  'text-stone-400',
-        statsDivider:'bg-stone-700',
-        sponsorName: 'text-stone-200',
-        sponsorLogo: 'brightness-0 invert',
-        outlineBtn:  'border-stone-600 bg-transparent text-stone-300 shadow-none hover:bg-stone-700/50 hover:text-white',
-        description: 'text-stone-300',
+        heroBg:       'bg-stone-900',
+        backLink:     'text-stone-400 hover:text-stone-200',
+        orgName:      'text-stone-200',
+        orgInitials:  'bg-white/15 text-white/80 ring-1 ring-white/20',
+        heading:      'text-white',
+        showType:     'border-gold/30 bg-gold/10 text-gold',
+        mutedChip:    'bg-stone-700 text-stone-300',
+        closedBadge:  'border-stone-600 text-stone-300',
+        meta:         'text-stone-400',
+        metaIcon:     'text-stone-500',
+        judgeLabel:   'text-stone-400',
+        judgeName:    'text-stone-200',
+        statsCard:    'border-stone-700/50 bg-stone-800/50',
+        statsDog:     'text-gold/60',
+        statsNum:     'text-white',
+        statsMuted:   'text-stone-400',
+        statsDivider: 'bg-stone-700',
+        sponsorName:  'text-stone-200',
+        sponsorLogo:  'brightness-0 invert',
+        outlineBtn:   'border-stone-600 bg-transparent text-stone-300 shadow-none hover:bg-stone-700/50 hover:text-white',
+        description:  'text-stone-300',
       }
     : {
-        heroBg:      'bg-gradient-to-br from-amber-100 via-amber-50 to-stone-50',
-        backLink:    'text-stone-500 hover:text-stone-700',
-        orgName:     'text-amber-700',
-        heading:     'text-stone-900',
-        showType:    'border-amber-300 bg-amber-100 text-amber-800',
-        mutedChip:   'bg-stone-200 text-stone-700',
-        closedBadge: 'border-stone-300 text-stone-500',
-        meta:        'text-stone-600',
-        metaIcon:    'text-stone-400',
-        judgeLabel:  'text-stone-600',
-        judgeName:   'text-stone-800',
-        statsCard:   'border-stone-200 bg-white/70 backdrop-blur-sm',
-        statsDog:    'text-amber-500',
-        statsNum:    'text-stone-900',
-        statsMuted:  'text-stone-500',
-        statsDivider:'bg-stone-200',
-        sponsorName: 'text-stone-700',
-        sponsorLogo: '',
-        outlineBtn:  'border-stone-300 bg-white/60 text-stone-600 shadow-none hover:bg-stone-100 hover:text-stone-800',
-        description: 'text-stone-700',
+        heroBg:       'bg-gradient-to-br from-amber-100 via-amber-50 to-stone-50',
+        backLink:     'text-stone-500 hover:text-stone-700',
+        orgName:      'text-stone-700',
+        orgInitials:  'bg-amber-200/80 text-amber-800 ring-1 ring-amber-300/60',
+        heading:      'text-stone-900',
+        showType:     'border-amber-300 bg-amber-100 text-amber-800',
+        mutedChip:    'bg-stone-200 text-stone-700',
+        closedBadge:  'border-stone-300 text-stone-500',
+        meta:         'text-stone-600',
+        metaIcon:     'text-stone-400',
+        judgeLabel:   'text-stone-600',
+        judgeName:    'text-stone-800',
+        statsCard:    'border-stone-200 bg-white/70 backdrop-blur-sm',
+        statsDog:     'text-amber-500',
+        statsNum:     'text-stone-900',
+        statsMuted:   'text-stone-500',
+        statsDivider: 'bg-stone-200',
+        sponsorName:  'text-stone-700',
+        sponsorLogo:  '',
+        outlineBtn:   'border-stone-300 bg-white/60 text-stone-600 shadow-none hover:bg-stone-100 hover:text-stone-800',
+        description:  'text-stone-700',
       };
 
   return (
@@ -660,7 +662,7 @@ export function ShowDetailClient() {
         {/* Bottom gold accent line */}
         <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-amber-300/40 to-transparent" />
 
-        <div className="relative mx-auto max-w-4xl px-3 pb-8 pt-6 sm:px-4 sm:pb-14 sm:pt-10 lg:px-6">
+        <div className="relative mx-auto max-w-4xl px-3 pb-10 pt-6 sm:px-4 sm:pb-16 sm:pt-10 lg:px-6">
           <Link
             href="/shows"
             className={`inline-flex items-center gap-1 py-2 text-sm transition-colors ${t.backLink}`}
@@ -669,31 +671,37 @@ export function ShowDetailClient() {
             All shows
           </Link>
 
-          <div className="mt-4 flex flex-wrap items-start justify-between gap-4 sm:mt-6">
+          <div className="mt-5 flex flex-wrap items-start justify-between gap-4 sm:mt-7">
             <div className="min-w-0 flex-1">
-              {/* Org name + logo */}
+              {/* Club identity — logo prominent, name below */}
               {show.organisation && (
-                <div className="flex items-center gap-2.5">
-                  {(show.organisation as Record<string, unknown>).logoUrl && (
+                <div className="mb-5">
+                  {(show.organisation as Record<string, unknown>).logoUrl ? (
                     <img
                       src={(show.organisation as Record<string, unknown>).logoUrl as string}
-                      alt=""
-                      className="size-7 rounded object-contain sm:size-8"
+                      alt={show.organisation.name}
+                      className="h-16 w-auto max-w-[280px] object-contain drop-shadow-sm sm:h-20"
                     />
+                  ) : (
+                    <div className={`flex size-16 items-center justify-center rounded-2xl sm:size-20 ${t.orgInitials}`}>
+                      <span className="font-serif text-2xl font-bold">
+                        {show.organisation.name.charAt(0)}
+                      </span>
+                    </div>
                   )}
-                  <p className={`text-xs font-semibold uppercase tracking-[0.2em] ${t.orgName}`}>
+                  <p className={`mt-2 text-sm font-semibold leading-snug sm:text-base ${t.orgName}`}>
                     {show.organisation.name}
                   </p>
                 </div>
               )}
 
               {/* Show name — billboard sized */}
-              <h1 className={`mt-3 font-serif text-3xl font-bold tracking-tight sm:text-4xl lg:text-5xl ${t.heading}`}>
+              <h1 className={`font-serif text-3xl font-bold tracking-tight sm:text-4xl lg:text-5xl ${t.heading}`}>
                 {show.name}
               </h1>
 
-              {/* Gold rule — wider, gradient */}
-              <div className="mt-4 h-[2px] w-20 bg-gradient-to-r from-gold to-gold/20" />
+              {/* Gold rule */}
+              <div className="mt-4 h-[2px] w-24 bg-gradient-to-r from-gold to-gold/20 sm:w-32" />
 
               {/* Badges */}
               <div className="mt-5 flex flex-wrap items-center gap-2">
