@@ -556,18 +556,65 @@ export function ShowDetailClient() {
 
   const hasBanner = !!show.bannerImageUrl;
 
+  const t = hasBanner
+    ? {
+        heroBg:      'bg-stone-900',
+        backLink:    'text-stone-400 hover:text-stone-200',
+        orgName:     'text-gold/80',
+        heading:     'text-white',
+        showType:    'border-gold/30 bg-gold/10 text-gold',
+        mutedChip:   'bg-stone-700 text-stone-300',
+        closedBadge: 'border-stone-600 text-stone-300',
+        meta:        'text-stone-400',
+        metaIcon:    'text-stone-500',
+        judgeLabel:  'text-stone-400',
+        judgeName:   'text-stone-200',
+        midDot:      'text-stone-600',
+        statsCard:   'border-stone-700/50 bg-stone-800/50',
+        statsDog:    'text-gold/60',
+        statsNum:    'text-white',
+        statsMuted:  'text-stone-400',
+        statsDivider:'bg-stone-700',
+        sponsorName: 'text-stone-200',
+        sponsorLogo: 'brightness-0 invert',
+        outlineBtn:  'border-stone-600 bg-transparent text-stone-300 shadow-none hover:bg-stone-700/50 hover:text-white',
+        description: 'text-stone-300',
+      }
+    : {
+        heroBg:      'bg-gradient-to-br from-amber-100 via-amber-50 to-stone-50',
+        backLink:    'text-stone-500 hover:text-stone-700',
+        orgName:     'text-amber-700',
+        heading:     'text-stone-900',
+        showType:    'border-amber-300 bg-amber-100 text-amber-800',
+        mutedChip:   'bg-stone-200 text-stone-700',
+        closedBadge: 'border-stone-300 text-stone-500',
+        meta:        'text-stone-600',
+        metaIcon:    'text-stone-400',
+        judgeLabel:  'text-stone-600',
+        judgeName:   'text-stone-800',
+        midDot:      'text-stone-400',
+        statsCard:   'border-stone-200 bg-white/70 backdrop-blur-sm',
+        statsDog:    'text-amber-500',
+        statsNum:    'text-stone-900',
+        statsMuted:  'text-stone-500',
+        statsDivider:'bg-stone-200',
+        sponsorName: 'text-stone-700',
+        sponsorLogo: '',
+        outlineBtn:  'border-stone-300 bg-white/60 text-stone-600 shadow-none hover:bg-stone-100 hover:text-stone-800',
+        description: 'text-stone-700',
+      };
+
   return (
     <div className="min-h-screen">
       {/* ─── Hero header ──────────────────────── */}
-      <div
-        className={`relative overflow-hidden ${hasBanner ? 'bg-stone-900' : 'bg-gradient-to-br from-amber-50 via-stone-50 to-white'}`}
-      >
+      <div className={`relative overflow-hidden ${t.heroBg}`}>
         {/* Banner image — full bleed when uploaded, dark overlay for readability */}
         {hasBanner && (
           <>
             <img
               src={show.bannerImageUrl!}
               alt=""
+              fetchPriority="high"
               className="absolute inset-0 size-full object-cover opacity-30"
             />
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-stone-900 via-stone-900/80 to-stone-900/60" />
@@ -581,7 +628,7 @@ export function ShowDetailClient() {
         <div className="relative mx-auto max-w-4xl px-3 pb-8 pt-6 sm:px-4 sm:pb-14 sm:pt-10 lg:px-6">
           <Link
             href="/shows"
-            className={`inline-flex items-center gap-1 py-2 text-sm transition-colors ${hasBanner ? 'text-stone-400 hover:text-stone-200' : 'text-stone-500 hover:text-stone-700'}`}
+            className={`inline-flex items-center gap-1 py-2 text-sm transition-colors ${t.backLink}`}
           >
             <ChevronLeft className="size-4" />
             All shows
@@ -599,14 +646,14 @@ export function ShowDetailClient() {
                       className="size-7 rounded object-contain sm:size-8"
                     />
                   )}
-                  <p className={`text-xs font-semibold uppercase tracking-[0.2em] ${hasBanner ? 'text-gold/80' : 'text-amber-700'}`}>
+                  <p className={`text-xs font-semibold uppercase tracking-[0.2em] ${t.orgName}`}>
                     {show.organisation.name}
                   </p>
                 </div>
               )}
 
               {/* Show name — billboard sized */}
-              <h1 className={`mt-3 font-serif text-3xl font-bold tracking-tight sm:text-4xl lg:text-5xl ${hasBanner ? 'text-white' : 'text-stone-900'}`}>
+              <h1 className={`mt-3 font-serif text-3xl font-bold tracking-tight sm:text-4xl lg:text-5xl ${t.heading}`}>
                 {show.name}
               </h1>
 
@@ -617,12 +664,12 @@ export function ShowDetailClient() {
               <div className="mt-5 flex flex-wrap items-center gap-2">
                 <Badge
                   variant="outline"
-                  className={`text-[11px] font-semibold uppercase tracking-wide ${hasBanner ? 'border-gold/30 bg-gold/10 text-gold' : 'border-amber-300 bg-amber-100 text-amber-800'}`}
+                  className={`text-[11px] font-semibold uppercase tracking-wide ${t.showType}`}
                 >
                   {showTypeLabels[show.showType] ?? show.showType}
                 </Badge>
                 {isCompleted && (
-                  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${hasBanner ? 'bg-stone-700 text-stone-300' : 'bg-stone-200 text-stone-700'}`}>
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${t.mutedChip}`}>
                     <Trophy className="size-3" />
                     Show Complete — Results Available
                   </span>
@@ -641,7 +688,7 @@ export function ShowDetailClient() {
                       if (daysLeft <= 0) return null;
                       const isUrgent = daysLeft <= 3;
                       return (
-                        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${isUrgent ? 'bg-red-600 text-white' : hasBanner ? 'bg-stone-700 text-stone-300' : 'bg-stone-200 text-stone-600'}`}>
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${isUrgent ? 'bg-red-600 text-white' : t.mutedChip}`}>
                           <Clock className="size-3" />
                           {daysLeft === 1 ? 'Closes tomorrow!' : `${daysLeft} days left`}
                         </span>
@@ -650,7 +697,7 @@ export function ShowDetailClient() {
                   </>
                 )}
                 {!isOpen && (
-                  <Badge variant="outline" className={`text-[11px] capitalize ${hasBanner ? 'border-stone-600 text-stone-300' : 'border-stone-300 text-stone-500'}`}>
+                  <Badge variant="outline" className={`text-[11px] capitalize ${t.closedBadge}`}>
                     {(show.status === 'entries_open' && closeDatePast
                       ? 'Entries Closed'
                       : show.status
@@ -660,23 +707,23 @@ export function ShowDetailClient() {
               </div>
 
               {/* Date, time, venue */}
-              <div className={`mt-5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm ${hasBanner ? 'text-stone-400' : 'text-stone-600'}`}>
+              <div className={`mt-5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm ${t.meta}`}>
                 <span className="flex items-center gap-1.5">
-                  <CalendarDays className={`size-4 ${hasBanner ? 'text-stone-500' : 'text-stone-400'}`} />
+                  <CalendarDays className={`size-4 ${t.metaIcon}`} />
                   {format(parseISO(show.startDate), 'EEEE d MMMM yyyy')}
                   {show.startDate !== show.endDate &&
                     ` – ${format(parseISO(show.endDate), 'EEEE d MMMM yyyy')}`}
                 </span>
                 {showAny.startTime && (
                   <span className="flex items-center gap-1.5">
-                    <Clock className={`size-4 ${hasBanner ? 'text-stone-500' : 'text-stone-400'}`} />
+                    <Clock className={`size-4 ${t.metaIcon}`} />
                     {showAny.startTime}
                   </span>
                 )}
               </div>
               {venue && (
-                <div className={`mt-1.5 flex items-center gap-1.5 text-sm ${hasBanner ? 'text-stone-400' : 'text-stone-600'}`}>
-                  <MapPin className={`size-4 ${hasBanner ? 'text-stone-500' : 'text-stone-400'}`} />
+                <div className={`mt-1.5 flex items-center gap-1.5 text-sm ${t.meta}`}>
+                  <MapPin className={`size-4 ${t.metaIcon}`} />
                   {venue.name}
                   {venue.postcode && `, ${venue.postcode}`}
                 </div>
@@ -686,20 +733,20 @@ export function ShowDetailClient() {
               {uniqueJudges.length > 0 && (
                 <div className="mt-3 text-sm">
                   <div className="flex items-center gap-1.5">
-                    <User className={`size-4 shrink-0 ${hasBanner ? 'text-stone-500' : 'text-stone-400'}`} />
-                    <span className={hasBanner ? 'text-stone-400' : 'text-stone-600'}>
+                    <User className={`size-4 shrink-0 ${t.metaIcon}`} />
+                    <span className={t.judgeLabel}>
                       {uniqueJudges.length === 1 ? 'Judge:' : 'Judges:'}
                     </span>
                     {uniqueJudges.length <= 2 && (
-                      <span className={`font-serif font-medium ${hasBanner ? 'text-stone-200' : 'text-stone-800'}`}>{uniqueJudges.join(', ')}</span>
+                      <span className={`font-serif font-medium ${t.judgeName}`}>{uniqueJudges.join(', ')}</span>
                     )}
                   </div>
                   {uniqueJudges.length > 2 && (
                     <div className="mt-1 flex flex-wrap items-center gap-x-1 gap-y-0.5 pl-[1.375rem]">
                       {uniqueJudges.map((name, i) => (
-                        <span key={name} className={`font-serif font-medium ${hasBanner ? 'text-stone-200' : 'text-stone-800'}`}>
+                        <span key={name} className={`font-serif font-medium ${t.judgeName}`}>
                           {name}{i < uniqueJudges.length - 1 && (
-                            <span className={`ml-1 ${hasBanner ? 'text-stone-600' : 'text-stone-400'}`}>&middot;</span>
+                            <span className={`ml-1 ${t.midDot}`}>&middot;</span>
                           )}
                         </span>
                       ))}
@@ -710,23 +757,23 @@ export function ShowDetailClient() {
 
               {/* Hero stats strip — social proof */}
               {publicStats && publicStats.totalDogs > 0 && (
-                <div className={`mt-6 inline-flex items-center gap-4 rounded-lg border px-4 py-2.5 sm:gap-6 sm:px-5 sm:py-3 ${hasBanner ? 'border-stone-700/50 bg-stone-800/50' : 'border-stone-200 bg-white/70 backdrop-blur-sm'}`}>
+                <div className={`mt-6 inline-flex items-center gap-4 rounded-lg border px-4 py-2.5 sm:gap-6 sm:px-5 sm:py-3 ${t.statsCard}`}>
                   <div className="flex items-center gap-2">
-                    <Dog className={`size-4 ${hasBanner ? 'text-gold/60' : 'text-amber-500'}`} />
-                    <span className={`font-serif text-xl font-bold sm:text-2xl ${hasBanner ? 'text-white' : 'text-stone-900'}`}>{publicStats.totalDogs}</span>
-                    <span className={`text-xs ${hasBanner ? 'text-stone-400' : 'text-stone-500'}`}>{publicStats.totalDogs === 1 ? 'dog' : 'dogs'}</span>
+                    <Dog className={`size-4 ${t.statsDog}`} />
+                    <span className={`font-serif text-xl font-bold sm:text-2xl ${t.statsNum}`}>{publicStats.totalDogs}</span>
+                    <span className={`text-xs ${t.statsMuted}`}>{publicStats.totalDogs === 1 ? 'dog' : 'dogs'}</span>
                   </div>
-                  <div className={`h-5 w-px ${hasBanner ? 'bg-stone-700' : 'bg-stone-200'}`} />
+                  <div className={`h-5 w-px ${t.statsDivider}`} />
                   <div className="flex items-center gap-2">
-                    <span className={`font-serif text-xl font-bold sm:text-2xl ${hasBanner ? 'text-white' : 'text-stone-900'}`}>{publicStats.totalExhibitors}</span>
-                    <span className={`text-xs ${hasBanner ? 'text-stone-400' : 'text-stone-500'}`}>{publicStats.totalExhibitors === 1 ? 'exhibitor' : 'exhibitors'}</span>
+                    <span className={`font-serif text-xl font-bold sm:text-2xl ${t.statsNum}`}>{publicStats.totalExhibitors}</span>
+                    <span className={`text-xs ${t.statsMuted}`}>{publicStats.totalExhibitors === 1 ? 'exhibitor' : 'exhibitors'}</span>
                   </div>
                   {breeds.length > 1 && (
                     <>
-                      <div className={`h-5 w-px ${hasBanner ? 'bg-stone-700' : 'bg-stone-200'}`} />
+                      <div className={`h-5 w-px ${t.statsDivider}`} />
                       <div className="flex items-center gap-2">
-                        <span className={`font-serif text-xl font-bold sm:text-2xl ${hasBanner ? 'text-white' : 'text-stone-900'}`}>{breeds.length}</span>
-                        <span className={`text-xs ${hasBanner ? 'text-stone-400' : 'text-stone-500'}`}>{breeds.length === 1 ? 'breed' : 'breeds'}</span>
+                        <span className={`font-serif text-xl font-bold sm:text-2xl ${t.statsNum}`}>{breeds.length}</span>
+                        <span className={`text-xs ${t.statsMuted}`}>{breeds.length === 1 ? 'breed' : 'breeds'}</span>
                       </div>
                     </>
                   )}
@@ -744,11 +791,11 @@ export function ShowDetailClient() {
                       src={titleSponsors[0].sponsor.logoUrl}
                       alt={titleSponsors[0].sponsor.name}
                       href={titleSponsors[0].sponsor.website}
-                      className={`h-7 ${hasBanner ? 'brightness-0 invert' : ''}`}
+                      className={`h-7 ${t.sponsorLogo}`}
                       fallbackName={titleSponsors[0].sponsor.name}
                     />
                   ) : (
-                    <span className={`font-serif text-sm font-medium ${hasBanner ? 'text-stone-200' : 'text-stone-700'}`}>
+                    <span className={`font-serif text-sm font-medium ${t.sponsorName}`}>
                       {titleSponsors[0].sponsor.name}
                     </span>
                   )}
@@ -778,7 +825,7 @@ export function ShowDetailClient() {
                 {hasResults && !isCompleted && (
                   <Button
                     variant={isOpen ? 'outline' : 'default'}
-                    className={isOpen ? (hasBanner ? 'border-stone-600 bg-transparent text-stone-300 shadow-none hover:bg-stone-700/50 hover:text-white' : 'border-stone-300 bg-white/60 text-stone-600 shadow-none hover:bg-stone-100 hover:text-stone-800') : ''}
+                    className={isOpen ? t.outlineBtn : ''}
                     asChild
                   >
                     <Link href={`/shows/${showSlug}/results`}>
@@ -790,7 +837,7 @@ export function ShowDetailClient() {
                 {(show.showClasses?.length ?? 0) > 0 && (
                   <Button
                     variant="outline"
-                    className={hasBanner ? 'border-stone-600 bg-transparent text-stone-300 shadow-none hover:bg-stone-700/50 hover:text-white' : 'border-stone-300 bg-white/60 text-stone-600 shadow-none hover:bg-stone-100 hover:text-stone-800'}
+                    className={t.outlineBtn}
                     asChild
                   >
                     <a href={`/api/schedule/${show.id}`} target="_blank" rel="noopener noreferrer">
@@ -802,7 +849,7 @@ export function ShowDetailClient() {
                 {show.status !== 'draft' && show.status !== 'cancelled' && (
                   <Button
                     variant="outline"
-                    className={`h-9 ${hasBanner ? 'border-stone-600 bg-transparent text-stone-300 shadow-none hover:bg-stone-700/50 hover:text-white' : 'border-stone-300 bg-white/60 text-stone-600 shadow-none hover:bg-stone-100 hover:text-stone-800'}`}
+                    className={`h-9 ${t.outlineBtn}`}
                     onClick={() => {
                       window.location.href = `/api/shows/${show.id}/calendar`;
                     }}
@@ -818,7 +865,7 @@ export function ShowDetailClient() {
                   organisationName={show.organisation?.name ?? ''}
                   venueName={show.venue?.name}
                   shareUrl={typeof window !== 'undefined' ? `${window.location.origin}/shows/${showSlug}` : ''}
-                  className={`h-9 ${hasBanner ? 'border-stone-600 bg-transparent text-stone-300 shadow-none hover:bg-stone-700/50 hover:text-white' : 'border-stone-300 bg-white/60 text-stone-600 shadow-none hover:bg-stone-100 hover:text-stone-800'}`}
+                  className={`h-9 ${t.outlineBtn}`}
                 />
               </div>
             </div>
@@ -827,7 +874,7 @@ export function ShowDetailClient() {
           {/* Description — editorial treatment */}
           {show.description && (
             <div className="mt-6 border-l-2 border-gold/30 pl-4 sm:pl-5">
-              <p className={`max-w-2xl leading-relaxed ${hasBanner ? 'text-stone-300' : 'text-stone-700'} ${!descExpanded ? 'line-clamp-3 sm:line-clamp-none' : ''}`}>
+              <p className={`max-w-2xl leading-relaxed ${t.description} ${!descExpanded ? 'line-clamp-3 sm:line-clamp-none' : ''}`}>
                 {show.description}
               </p>
               {show.description.length > 120 && (
