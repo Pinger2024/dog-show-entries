@@ -294,16 +294,6 @@ export function ShowPreviewClient() {
     { showId: show?.id ?? '' },
     { enabled: !!show?.id }
   );
-  const showHasEntries =
-    !!show && ['entries_open', 'entries_closed', 'in_progress', 'completed'].includes(show.status);
-  const { data: publicStats } = trpc.shows.getPublicStats.useQuery(
-    { showId: show?.id ?? '' },
-    { enabled: !!show?.id && showHasEntries, refetchInterval: 60_000 }
-  );
-  const { data: breedEntryStats } = trpc.shows.getBreedEntryStats.useQuery(
-    { showId: show?.id ?? '' },
-    { enabled: !!show?.id && showHasEntries, refetchInterval: 60_000 }
-  );
   const { data: shareCount } = trpc.shows.getShareCount.useQuery(
     { showId: show?.id ?? '' },
     { enabled: !!show?.id, refetchInterval: 120_000 }
@@ -419,11 +409,6 @@ export function ShowPreviewClient() {
     }
     return items.slice(0, 8);
   }, [showSponsors]);
-
-  /* Most entered breeds (must run before early return) */
-  const topBreeds = useMemo(() => {
-    return [...(breedEntryStats ?? [])].sort((a, b) => b.dogCount - a.dogCount).slice(0, 3);
-  }, [breedEntryStats]);
 
   /* Resolve a fallback breed name for single-breed shows where individual classes
      may not carry a breed FK. */
@@ -550,8 +535,6 @@ export function ShowPreviewClient() {
   const dayNum = format(parseISO(show.startDate), 'd');
   const monthYear = format(parseISO(show.startDate), 'MMMM yyyy');
   const showType = showTypeLabels[show.showType] ?? show.showType;
-  const totalDogs = publicStats?.totalDogs ?? 0;
-  const totalExhibitors = publicStats?.totalExhibitors ?? 0;
   const totalClasses = (show.showClasses ?? []).length;
   const titleSponsor = showSponsors?.find((s) => s.tier === 'title');
 
@@ -726,27 +709,17 @@ export function ShowPreviewClient() {
             </div>
           )}
 
-          {/* Stats — editorial row with hairline separators */}
-          {showHasEntries && totalDogs > 0 && (
+          {/* Stats — editorial row with hairline separators. Entry counts
+              (dogs, exhibitors) are intentionally omitted — secretaries
+              want the option to hold those back from the public until
+              after the close date. Classes and Breeds come from the
+              published card and are safe to show. */}
+          {totalClasses > 0 && (
             <div className="mt-10 sm:mt-12">
-              <div className="mx-auto grid max-w-3xl grid-cols-2 gap-y-4 divide-amber-500/20 text-center sm:grid-cols-4 sm:divide-x">
-                <EditorialStat label="Dogs" value={totalDogs} highlight />
-                <EditorialStat label="Exhibitors" value={totalExhibitors} />
-                <EditorialStat label="Classes" value={totalClasses} />
+              <div className="mx-auto grid max-w-xl grid-cols-2 divide-amber-500/20 text-center sm:divide-x">
+                <EditorialStat label="Classes" value={totalClasses} highlight />
                 <EditorialStat label="Breeds" value={breedGroups.length} />
               </div>
-              {topBreeds.length > 0 && (
-                <p className="mt-5 text-center text-xs italic text-stone-600">
-                  Leading the card:{' '}
-                  {topBreeds.map((b, i) => (
-                    <span key={b.breedName}>
-                      {i > 0 && <span className="text-amber-500"> · </span>}
-                      <span className="font-semibold not-italic text-stone-800">{b.breedName}</span>
-                      <span className="text-stone-500"> ({b.dogCount})</span>
-                    </span>
-                  ))}
-                </p>
-              )}
             </div>
           )}
 
@@ -1097,7 +1070,6 @@ export function ShowPreviewClient() {
             <Crown className="mx-auto size-8 text-amber-700" />
             <h2 className="mt-4 font-serif text-3xl font-bold text-stone-900 sm:text-4xl">Ready for the ring?</h2>
             <p className="mx-auto mt-3 max-w-xl text-stone-700">
-              {totalDogs > 0 ? `Join ${totalDogs} dog${totalDogs === 1 ? '' : 's'} already entered. ` : ''}
               Entries take two minutes on your phone.
             </p>
             <div className="mt-8">
