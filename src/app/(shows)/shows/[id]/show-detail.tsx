@@ -355,7 +355,6 @@ export function ShowDetailClient() {
   const params = useParams();
   const idOrSlug = params.id as string;
 
-  const [showStickyBar, setShowStickyBar] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
 
 
@@ -388,16 +387,6 @@ export function ShowDetailClient() {
     typeof window !== 'undefined' ? window.location.hash.replace('#', '') : ''
   );
   const scrolledToHash = useRef(false);
-
-  // Show sticky CTA bar after scrolling past the hero
-  useEffect(() => {
-    function handleScroll() {
-      const next = window.scrollY > 300;
-      setShowStickyBar((prev) => (prev === next ? prev : next));
-    }
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
 
   // Auto-expand and scroll to breed section from URL hash
   useEffect(() => {
@@ -671,8 +660,7 @@ export function ShowDetailClient() {
             All shows
           </Link>
 
-          <div className="mt-5 flex flex-wrap items-start justify-between gap-4 sm:mt-7">
-            <div className="min-w-0 flex-1">
+          <div className="mt-5 sm:mt-7">
               {/* Club identity — logo prominent, name below */}
               {show.organisation && (
                 <div className="mb-5">
@@ -834,74 +822,6 @@ export function ShowDetailClient() {
                   )}
                 </div>
               )}
-            </div>
-
-            {/* CTA buttons */}
-            <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto">
-              {isOpen && (
-                <Button size="lg" className="h-12 w-full bg-primary text-base shadow-lg shadow-primary/25 sm:w-auto" asChild>
-                  <Link href={`/shows/${showSlug}/enter`}>
-                    <Ticket className="size-5" />
-                    Enter This Show
-                  </Link>
-                </Button>
-              )}
-              {isCompleted && (
-                <Button size="lg" className="h-12 w-full text-base sm:w-auto" asChild>
-                  <Link href={`/shows/${showSlug}/results`}>
-                    <Trophy className="size-5" />
-                    View Results &amp; Critiques
-                  </Link>
-                </Button>
-              )}
-              <div className="flex gap-2 [&>*]:flex-1 sm:[&>*]:flex-initial">
-                {hasResults && !isCompleted && (
-                  <Button
-                    variant={isOpen ? 'outline' : 'default'}
-                    className={isOpen ? t.outlineBtn : ''}
-                    asChild
-                  >
-                    <Link href={`/shows/${showSlug}/results`}>
-                      <Trophy className="size-4" />
-                      {show.status === 'in_progress' ? 'Live Results' : 'Results'}
-                    </Link>
-                  </Button>
-                )}
-                {(show.showClasses?.length ?? 0) > 0 && (
-                  <Button
-                    variant="outline"
-                    className={t.outlineBtn}
-                    asChild
-                  >
-                    <a href={`/api/schedule/${show.id}`} target="_blank" rel="noopener noreferrer">
-                      <FileText className="size-4" />
-                      Schedule
-                    </a>
-                  </Button>
-                )}
-                {show.status !== 'draft' && show.status !== 'cancelled' && (
-                  <Button
-                    variant="outline"
-                    className={`h-9 ${t.outlineBtn}`}
-                    onClick={() => {
-                      window.location.href = `/api/shows/${show.id}/calendar`;
-                    }}
-                  >
-                    <CalendarPlus className="size-4" />
-                    <span className="hidden sm:inline">Calendar</span>
-                  </Button>
-                )}
-                <ShowShareDropdown
-                  showName={show.name}
-                  showType={showTypeLabels[show.showType] ?? show.showType}
-                  showDate={format(parseISO(show.startDate), 'd MMMM yyyy')}
-                  organisationName={show.organisation?.name ?? ''}
-                  venueName={show.venue?.name}
-                  shareUrl={typeof window !== 'undefined' ? `${window.location.origin}/shows/${showSlug}` : ''}
-                  className={`h-9 ${t.outlineBtn}`}
-                />
-              </div>
-            </div>
           </div>
 
           {/* Description — editorial treatment */}
@@ -920,6 +840,67 @@ export function ShowDetailClient() {
               )}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* ─── Action bar — sticky below site header ── */}
+      <div className="sticky top-[4.5rem] z-40 border-b bg-background/95 shadow-sm backdrop-blur-md">
+        <div className="mx-auto flex max-w-4xl items-center gap-2 px-3 py-2.5 sm:px-4 lg:px-6">
+          {isOpen && (
+            <Button size="sm" className="h-10 flex-1 bg-primary px-4 text-sm shadow-sm shadow-primary/20 sm:flex-initial sm:shrink-0" asChild>
+              <Link href={`/shows/${showSlug}/enter`}>
+                <Ticket className="size-4" />
+                Enter This Show
+              </Link>
+            </Button>
+          )}
+          {isCompleted && (
+            <Button size="sm" className="h-10 flex-1 px-4 text-sm sm:flex-initial sm:shrink-0" asChild>
+              <Link href={`/shows/${showSlug}/results`}>
+                <Trophy className="size-4" />
+                <span className="hidden sm:inline">Results &amp; Critiques</span>
+                <span className="sm:hidden">Results</span>
+              </Link>
+            </Button>
+          )}
+          {hasResults && !isCompleted && (
+            <Button size="sm" variant={isOpen ? 'outline' : 'default'} className="h-10 flex-1 px-4 text-sm sm:flex-initial sm:shrink-0" asChild>
+              <Link href={`/shows/${showSlug}/results`}>
+                <Trophy className="size-4" />
+                <span className="hidden sm:inline">{show.status === 'in_progress' ? 'Live Results' : 'Results'}</span>
+                <span className="sm:hidden">Results</span>
+              </Link>
+            </Button>
+          )}
+          <div className="ml-auto flex items-center gap-0.5 sm:gap-1">
+            {(show.showClasses?.length ?? 0) > 0 && (
+              <Button variant="ghost" size="sm" className="hidden h-9 gap-1.5 text-xs text-muted-foreground hover:text-foreground sm:flex" asChild>
+                <a href={`/api/schedule/${show.id}`} target="_blank" rel="noopener noreferrer">
+                  <FileText className="size-4" />
+                  <span className="hidden sm:inline">Schedule</span>
+                </a>
+              </Button>
+            )}
+            {show.status !== 'draft' && show.status !== 'cancelled' && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="hidden h-9 gap-1.5 text-xs text-muted-foreground hover:text-foreground sm:flex"
+                onClick={() => { window.location.href = `/api/shows/${show.id}/calendar`; }}
+              >
+                <CalendarPlus className="size-4" />
+                <span className="hidden sm:inline">Add to Calendar</span>
+              </Button>
+            )}
+            <ShowShareDropdown
+              showName={show.name}
+              showType={showTypeLabels[show.showType] ?? show.showType}
+              showDate={format(parseISO(show.startDate), 'd MMMM yyyy')}
+              organisationName={show.organisation?.name ?? ''}
+              venueName={show.venue?.name}
+              shareUrl={typeof window !== 'undefined' ? `${window.location.origin}/shows/${showSlug}` : ''}
+            />
+          </div>
         </div>
       </div>
 
@@ -1233,7 +1214,7 @@ export function ShowDetailClient() {
                           {ts.specialPrizes}
                         </p>
                       )}
-                      {(ts as Record<string, unknown>).adImageUrl && (
+                      {!!(ts as Record<string, unknown>).adImageUrl && (
                         <div className="mt-4 flex justify-center">
                           <img
                             src={(ts as Record<string, unknown>).adImageUrl as string}
@@ -1378,34 +1359,7 @@ export function ShowDetailClient() {
           </div>
         )}
 
-        {/* Bottom spacer for sticky bar */}
-        {isOpen && <div className="h-20 sm:hidden" />}
       </div>
-
-      {/* ─── Sticky mobile CTA bar ──────────────── */}
-      {isOpen && showStickyBar && (
-        <div
-          className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 p-3 pr-16 backdrop-blur-lg sm:hidden"
-          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
-        >
-          <Button size="lg" className="h-12 w-full text-base shadow-lg" asChild>
-            <Link href={`/shows/${showSlug}/enter`}>
-              <Ticket className="size-5" />
-              Enter This Show
-              {show.entryCloseDate && (() => {
-                const daysLeft = Math.ceil((new Date(show.entryCloseDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-                if (daysLeft > 0 && daysLeft <= 7) {
-                  return <span className="ml-1 text-xs opacity-80">· {daysLeft === 1 ? 'Closes tomorrow!' : `${daysLeft} days left`}</span>;
-                }
-                if (publicStats && publicStats.totalExhibitors > 5) {
-                  return <span className="ml-1 text-xs opacity-70">· {publicStats.totalExhibitors} entered</span>;
-                }
-                return null;
-              })()}
-            </Link>
-          </Button>
-        </div>
-      )}
     </div>
   );
 }
