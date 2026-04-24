@@ -57,27 +57,19 @@ export function ShowShareDropdown({
     `${shareUrl}${shareUrl.includes('?') ? '&' : '?'}src=${channel}`;
   const messageText = `Check out ${showName} — a ${showType} by ${organisationName}${venueName ? ` at ${venueName}` : ''} on ${showDate}. Enter online on Remi!`;
 
-  const isMobile =
-    typeof navigator !== 'undefined' &&
-    /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
-  async function shareFacebook() {
-    // The Facebook mobile app intercepts sharer.php URLs and lands on a blank
-    // screen — tapping "Share to Facebook" takes you to the app with nothing
-    // to share. The native share sheet hands off to the FB app correctly, so
-    // prefer navigator.share on mobile; on desktop, where Facebook is never
-    // installed as an app, open the web sharer in a new tab.
+  function shareFacebook() {
+    // Always open Facebook's web sharer in a new tab — the button is
+    // explicitly labelled "Facebook", so piping it through navigator.share
+    // (which shows a generic OS share sheet) surprised users who expected
+    // the Facebook app or site. On iOS with the FB app installed, Facebook
+    // may still intercept and show a blank screen (their bug), but the
+    // button at least does what it says.
     const fbShareUrl = withSource('facebook');
-    if (isMobile && navigator.share) {
-      try {
-        await navigator.share({ title: showName, text: messageText, url: fbShareUrl });
-        return;
-      } catch (e) {
-        if ((e as Error).name === 'AbortError') return;
-      }
-    }
-    const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(fbShareUrl)}`;
-    window.open(fbUrl, '_blank', 'noopener,noreferrer');
+    window.open(
+      `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(fbShareUrl)}`,
+      '_blank',
+      'noopener,noreferrer'
+    );
   }
 
   async function shareInstagram() {

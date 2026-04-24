@@ -59,10 +59,6 @@ export function TellAFriend({
 }: TellAFriendProps) {
   const [copied, setCopied] = useState(false);
 
-  const isMobile =
-    typeof navigator !== 'undefined' &&
-    /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
   // Cache-bust the URL per channel so platform link-preview caches re-scrape.
   const withSource = (channel: string) =>
     `${shareUrl}${shareUrl.includes('?') ? '&' : '?'}src=${channel}`;
@@ -71,17 +67,14 @@ export function TellAFriend({
     venueName ? ` at ${venueName}` : ''
   } on ${showDate}. Enter online on Remi!`;
 
-  async function shareFacebook() {
+  function shareFacebook() {
     onShare?.('facebook');
+    // Open Facebook's web sharer in a new tab. The button is explicitly
+    // labelled "Facebook" so users expect Facebook, not a generic OS share
+    // sheet. On iOS with the FB app installed this may app-intercept
+    // (Meta bug, not ours); on everything else users land on a proper
+    // compose window.
     const fbShareUrl = withSource('facebook');
-    if (isMobile && navigator.share) {
-      try {
-        await navigator.share({ title: showName, text: messageText, url: fbShareUrl });
-        return;
-      } catch (e) {
-        if ((e as Error).name === 'AbortError') return;
-      }
-    }
     window.open(
       `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(fbShareUrl)}`,
       '_blank',
