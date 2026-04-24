@@ -25,6 +25,7 @@ import { showTypeLabels } from '@/lib/show-types';
 import { formatCurrency } from '@/lib/date-utils';
 import { ShowShareDropdown } from '@/components/show/show-share-dropdown';
 import { cn } from '@/lib/utils';
+import { captureReferralSource } from '@/lib/referral-source';
 
 /* ─── Decorative components ─────────────────────── */
 
@@ -279,6 +280,12 @@ export function ShowPreviewClient() {
   const idOrSlug = params.id as string;
   const [widgetVisible, setWidgetVisible] = useState(false);
   const [widgetDismissed, setWidgetDismissed] = useState(false);
+
+  // Capture ?src=<channel> from share URLs into sessionStorage so it survives
+  // the trip through the Enter flow and lands on the order row at checkout.
+  useEffect(() => {
+    captureReferralSource(idOrSlug);
+  }, [idOrSlug]);
 
   const { data: show, isLoading } = trpc.shows.getById.useQuery({ id: idOrSlug });
   const { data: showSponsors } = trpc.shows.getShowSponsors.useQuery(

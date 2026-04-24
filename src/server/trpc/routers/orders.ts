@@ -50,6 +50,12 @@ export const ordersRouter = createTRPCRouter({
           sundryItemId: z.string().uuid(),
           quantity: z.number().int().min(1),
         })).default([]),
+        /** Channel the exhibitor arrived from (from the show page's ?src= param). */
+        referralSource: z
+          .string()
+          .regex(/^[a-z0-9_-]+$/i, 'invalid source')
+          .max(32)
+          .optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -467,6 +473,7 @@ export const ordersRouter = createTRPCRouter({
           status: 'pending_payment',
           totalAmount,
           platformFeePence,
+          referralSource: input.referralSource?.toLowerCase() ?? null,
         })
         .returning();
 

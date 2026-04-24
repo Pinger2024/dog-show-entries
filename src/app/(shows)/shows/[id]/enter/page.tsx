@@ -35,6 +35,7 @@ import { toast } from 'sonner';
 import { isWithinAgeRange, handlerAgeYearsOnDate, formatCurrency } from '@/lib/date-utils';
 import { trpc } from '@/lib/trpc/client';
 import { formatDogName } from '@/lib/utils';
+import { readReferralSource } from '@/lib/referral-source';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -420,6 +421,10 @@ export default function EnterShowPage() {
 
   async function handleProceedToPayment() {
     try {
+      // Read the referral channel captured on the show page (if any) so the
+      // resulting order row carries its provenance.
+      const referralSource = readReferralSource(idOrSlug) ?? undefined;
+
       const result = await checkoutMutation.mutateAsync({
         showId,
         catalogueRequested: false,
@@ -439,6 +444,7 @@ export default function EnterShowPage() {
           sundryItemId: s.sundryItemId,
           quantity: s.quantity,
         })),
+        referralSource,
       });
 
       // Free entries (£0) — skip payment, go straight to success

@@ -686,4 +686,62 @@ export const adminDashboardRouter = createTRPCRouter({
         orderBy: [desc(payouts.paidAt)],
       });
     }),
+
+  /**
+   * Referral-source attribution: group paid orders by the `referralSource`
+   * captured from share URLs (?src=whatsapp|facebook|instagram|…). Used by
+   * the admin referrals report to see which channel drives most entries.
+   */
+  getReferralSourceBreakdown: adminProcedure
+    .input(
+      z
+        .object({
+          days: z.number().int().min(1).max(730).default(90),
+        })
+        .default({ days: 90 })
+    )
+    .query(async ({ ctx, input }) => {
+      const sinceMs = Date.now() - input.days * 24 * 60 * 60 * 1000;
+      const since = new Date(sinceMs);
+
+      // Only paid orders count toward attribution — pending/failed/cancelled
+      // were never actually conversions.
+      const rows = await ctx.db
+        .select({
+          source: orders.referralSource,
+          orderCount: sql<number>`count(*)`.as('order_count'),
+          grossAmount: sql<number>`coalesce(sum(${orders.totalAmount}), 0)`.as('gross_amount'),
+          firstSeen: sql<Date>`min(${orders.createdAt})`.as('first_seen'),
+          lastSeen: sql<Date>`max(${orders.createdAt})`.as('last_seen'),
+        })
+        .from(orders)
+        .where(and(eq(orders.status, 'paid'), gte(orders.createdAt, since)))
+        .groupBy(orders.referralSource)
+        .orderBy(desc(sql`count(*)`));
+
+      const totals = rows.reduce(
+        (acc, r) => ({
+          orderCount: acc.orderCount + Number(r.orderCount),
+          grossAmount: acc.grossAmount + Number(r.grossAmount),
+        }),
+        { orderCount: 0, grossAmount: 0 }
+      );
+
+      return {
+        since: since.toISOString(),
+        days: input.days,
+        totals,
+        rows: rows.map((r) => ({
+          source: r.source, // null = direct (no ?src)
+          orderCount: Number(r.orderCount),
+          grossAmount: Number(r.grossAmount),
+          firstSeen: r.firstSeen,
+          lastSeen: r.lastSeen,
+          sharePct:
+            totals.orderCount === 0
+              ? 0
+              : Math.round((Number(r.orderCount) / totals.orderCount) * 1000) / 10,
+        })),
+      };
+    }),
 });
