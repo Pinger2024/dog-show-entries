@@ -223,7 +223,6 @@ type JudgeData = {
 };
 
 function JudgeCard({ judge, classCount }: { judge: JudgeData; classCount?: number }) {
-  const [open, setOpen] = useState(false);
   const initials = getInitials(judge.name);
   return (
     <article className="group relative overflow-hidden rounded-2xl border border-amber-200/60 bg-gradient-to-b from-white to-amber-50/30 shadow-sm transition-shadow hover:shadow-md">
@@ -231,7 +230,7 @@ function JudgeCard({ judge, classCount }: { judge: JudgeData; classCount?: numbe
       <span aria-hidden="true" className="absolute left-3 top-3 text-[8px] text-amber-500/50">◆</span>
       <span aria-hidden="true" className="absolute right-3 top-3 text-[8px] text-amber-500/50">◆</span>
 
-      <div className="flex flex-col items-center gap-4 px-5 pb-4 pt-8 text-center sm:pt-10">
+      <div className="flex flex-col items-center gap-4 px-5 pb-5 pt-8 text-center sm:pt-10">
         {/* Medallion */}
         <div className="relative">
           <div aria-hidden="true" className="absolute inset-0 rounded-full bg-gradient-to-br from-amber-300 via-amber-500/80 to-amber-600 p-[2px]">
@@ -291,21 +290,6 @@ function JudgeCard({ judge, classCount }: { judge: JudgeData; classCount?: numbe
           <p className="mt-1 font-serif text-sm italic text-stone-700">{judge.breeds.join(' · ')}</p>
         </div>
       )}
-
-      <div className="border-t border-amber-200/50 px-5 py-3 text-center">
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="inline-flex items-center gap-1 font-serif text-xs italic tracking-wider text-amber-700 hover:text-amber-900"
-        >
-          {open ? '— hide bio —' : '— read bio —'}
-        </button>
-        {open && (
-          <p className="mt-3 text-left text-sm italic leading-relaxed text-stone-600">
-            {judge.bio ?? 'Bio coming soon. Judges will be invited to add a short biography so exhibitors can learn more about their appointments.'}
-          </p>
-        )}
-      </div>
     </article>
   );
 }
@@ -962,15 +946,40 @@ export function ShowPreviewClient() {
         <section className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
           <SectionHeading eyebrow="Where" title="The Venue" />
           <div className="mt-8 grid gap-6 lg:grid-cols-[1.2fr_1fr]">
-            <div className="overflow-hidden rounded-2xl border bg-stone-100">
-              {venue.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={venue.imageUrl} alt={venue.name} className="aspect-[16/10] w-full object-cover" />
-              ) : (
-                <div className="flex aspect-[16/10] w-full items-center justify-center bg-gradient-to-br from-stone-100 to-amber-50/50">
-                  <MapPin className="size-10 text-stone-300" />
+            <div className="space-y-4">
+              {venue.imageUrl && (
+                <div className="overflow-hidden rounded-2xl border bg-stone-100">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={venue.imageUrl} alt={venue.name} className="aspect-[16/10] w-full object-cover" />
                 </div>
               )}
+              {venue.lat && venue.lng ? (
+                <div className="overflow-hidden rounded-2xl border bg-stone-100">
+                  <iframe
+                    title={`Map of ${venue.name}`}
+                    width="100%"
+                    height="320"
+                    style={{ border: 0 }}
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                    src={`https://www.google.com/maps?q=${venue.lat},${venue.lng}&z=14&output=embed`}
+                    allowFullScreen
+                  />
+                </div>
+              ) : venue.postcode ? (
+                <div className="overflow-hidden rounded-2xl border bg-stone-100">
+                  <iframe
+                    title={`Map of ${venue.name}`}
+                    width="100%"
+                    height="320"
+                    style={{ border: 0 }}
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                    src={`https://www.google.com/maps?q=${encodeURIComponent(venue.postcode)}&z=14&output=embed`}
+                    allowFullScreen
+                  />
+                </div>
+              ) : null}
             </div>
             <div>
               <h3 className="font-serif text-2xl font-bold text-stone-900">{venue.name}</h3>
@@ -978,10 +987,14 @@ export function ShowPreviewClient() {
                 {[venue.address, venue.postcode].filter(Boolean).join('\n')}
               </address>
               <div className="mt-5 flex flex-wrap gap-2">
-                {venue.lat && venue.lng && (
+                {(venue.lat && venue.lng) || venue.postcode ? (
                   <Button variant="outline" size="sm" asChild>
                     <a
-                      href={`https://www.google.com/maps/dir/?api=1&destination=${venue.lat},${venue.lng}`}
+                      href={
+                        venue.lat && venue.lng
+                          ? `https://www.google.com/maps/dir/?api=1&destination=${venue.lat},${venue.lng}`
+                          : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(venue.postcode ?? '')}`
+                      }
                       target="_blank"
                       rel="noopener"
                     >
@@ -989,7 +1002,7 @@ export function ShowPreviewClient() {
                       Get directions
                     </a>
                   </Button>
-                )}
+                ) : null}
               </div>
               <div className="mt-6 grid grid-cols-2 gap-3 text-sm">
                 <Facility label="Parking" value="Free on-site" />
