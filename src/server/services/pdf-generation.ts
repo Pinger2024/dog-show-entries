@@ -7,6 +7,7 @@
 
 import path from 'node:path';
 import sharp from 'sharp';
+import { format, parseISO } from 'date-fns';
 import { db } from '@/server/db';
 import { and, eq, isNull, asc, sql } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
@@ -719,12 +720,7 @@ function escapeXml(s: string): string {
 }
 
 function formatShowDate(isoDate: string): string {
-  // isoDate is e.g. "2026-07-04" — parse at noon UTC to avoid DST boundary issues
-  const d = new Date(`${isoDate}T12:00:00Z`);
-  const raw = d.toLocaleDateString('en-GB', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
-  });
-  return raw.replace(',', ''); // "Saturday, 4 July 2026" → "Saturday 4 July 2026"
+  return format(parseISO(isoDate), 'EEEE d MMMM yyyy'); // "Saturday 4 July 2026"
 }
 
 async function composeOneCard(
@@ -790,7 +786,6 @@ export async function generatePrizeCardsA3Jpeg(showId: string): Promise<Buffer> 
     judgeName,
   };
 
-  const templateRoot = path.join(process.cwd(), 'public', 'prize-cards');
   const cards = await Promise.all(
     PRIZE_CARD_TEMPLATES.map((tpl, i) =>
       composeOneCard(path.join(process.cwd(), tpl), i, overlayOpts, logoBuffer)
@@ -802,8 +797,6 @@ export async function generatePrizeCardsA3Jpeg(showId: string): Promise<Buffer> 
       sharp(buf).resize(CARD_SLOT_W, CARD_SLOT_H, { fit: 'cover', position: 'top' }).png().toBuffer()
     )
   );
-
-  void templateRoot; // used via path.join(process.cwd(), tpl) above
 
   const canvasW = A3_W + BLEED_PX * 2;
   const canvasH = A3_H + BLEED_PX * 2;
