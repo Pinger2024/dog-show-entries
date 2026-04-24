@@ -37,11 +37,18 @@ const TEMPLATE_W = 2480;
 const TEMPLATE_H = 1766;
 const LOGO_HEIGHT = 280; // target height for the club logo (bigger per Amanda 2026-04-23)
 
-// A3 landscape @ 300 DPI = 4960 × 3508 px
+// A3 landscape @ 300 DPI = 4960 × 3508 px (trimmed/finished size)
 const A3_W = 4960;
 const A3_H = 3508;
 const CARD_SLOT_W = A3_W / 2;  // 2480
 const CARD_SLOT_H = A3_H / 2;  // 1754
+
+// 3mm bleed on every edge (standard commercial print requirement).
+// Mixam crops inward to the trim line — without bleed, it eats into corner logos.
+// At 300 DPI: 3mm × (300 / 25.4) ≈ 35px
+const BLEED_PX = 35;
+const CANVAS_W = A3_W + BLEED_PX * 2;  // 5030
+const CANVAS_H = A3_H + BLEED_PX * 2;  // 3578
 
 function overlaySvg(placementColour: string): string {
   // Centered text + space for a logo. The logo is composited separately by
@@ -144,26 +151,35 @@ async function main() {
     )
   );
 
-  console.log(`Tiling onto A3 ${A3_W} × ${A3_H}...`);
+  console.log(`Tiling onto A3+bleed canvas ${CANVAS_W} × ${CANVAS_H}...`);
   const sheet = await sharp({
-    create: { width: A3_W, height: A3_H, channels: 3, background: '#fff' },
+    create: { width: CANVAS_W, height: CANVAS_H, channels: 3, background: '#fff' },
   })
     .composite([
-      { input: resized[0], left: 0, top: 0 },
-      { input: resized[1], left: CARD_SLOT_W, top: 0 },
-      { input: resized[2], left: 0, top: CARD_SLOT_H },
-      { input: resized[3], left: CARD_SLOT_W, top: CARD_SLOT_H },
+      { input: resized[0], left: BLEED_PX, top: BLEED_PX },
+      { input: resized[1], left: BLEED_PX + CARD_SLOT_W, top: BLEED_PX },
+      { input: resized[2], left: BLEED_PX, top: BLEED_PX + CARD_SLOT_H },
+      { input: resized[3], left: BLEED_PX + CARD_SLOT_W, top: BLEED_PX + CARD_SLOT_H },
     ])
     .png()
     .toBuffer();
 
-  await fs.writeFile('/tmp/a3-4up-bagsd.png', sheet);
-  console.log(`Wrote /tmp/a3-4up-bagsd.png (${(sheet.length / 1024 / 1024).toFixed(1)} MB)`);
+  // Full-bleed PNG for Mixam upload (5030 × 3578, A3 + 3mm bleed all round)
+  await fs.writeFile('/tmp/a3-4up-bagsd-bleed.png', sheet);
+  console.log(`Wrote /tmp/a3-4up-bagsd-bleed.png (${(sheet.length / 1024 / 1024).toFixed(1)} MB)`);
 
-  // Also JPEG for Telegram delivery
+  // JPEG at 92% quality for Mixam upload (smaller file, same bleed)
   const jpg = await sharp(sheet).jpeg({ quality: 92, mozjpeg: true }).toBuffer();
-  await fs.writeFile('/tmp/a3-4up-bagsd.jpg', jpg);
-  console.log(`Wrote /tmp/a3-4up-bagsd.jpg (${(jpg.length / 1024 / 1024).toFixed(1)} MB)`);
+  await fs.writeFile('/tmp/a3-4up-bagsd-bleed.jpg', jpg);
+  console.log(`Wrote /tmp/a3-4up-bagsd-bleed.jpg (${(jpg.length / 1024 / 1024).toFixed(1)} MB)`);
+
+  // Preview crop at exact A3 (no bleed border) for quick visual check
+  const preview = await sharp(sheet)
+    .extract({ left: BLEED_PX, top: BLEED_PX, width: A3_W, height: A3_H })
+    .jpeg({ quality: 85, mozjpeg: true })
+    .toBuffer();
+  await fs.writeFile('/tmp/a3-4up-bagsd-preview.jpg', preview);
+  console.log(`Wrote /tmp/a3-4up-bagsd-preview.jpg (${(preview.length / 1024 / 1024).toFixed(1)} MB) — trimmed to A3, no bleed`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
