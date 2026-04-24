@@ -619,10 +619,10 @@ export function ShowPreviewClient() {
           {/* Remi hallmark — silversmith-style stamp, subtle but present */}
           <Link
             href="/"
-            className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-white/60 px-2.5 py-1 font-serif text-[10px] uppercase tracking-[0.2em] text-amber-900 backdrop-blur-sm transition-colors hover:border-amber-500 hover:bg-white sm:right-6 sm:top-6"
+            className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-white/70 px-2.5 py-1 font-serif text-[10px] uppercase tracking-[0.2em] text-primary backdrop-blur-sm transition-colors hover:border-primary hover:bg-white sm:right-6 sm:top-6"
             aria-label="Listed on Remi"
           >
-            <span aria-hidden="true" className="text-[8px] text-amber-600">◆</span>
+            <span aria-hidden="true" className="text-[8px] text-primary/70">◆</span>
             <span className="font-semibold">Remi</span>
           </Link>
 
@@ -1054,8 +1054,9 @@ export function ShowPreviewClient() {
                       <p>{judges.slice(0, 3).map((j) => j.name).join(' · ')}</p>
                     </div>
                   )}
-                  <div className="mt-auto flex items-center justify-between border-t border-amber-300/40 pt-3">
-                    <div className="flex size-8 items-center justify-center rounded bg-stone-900 font-serif text-[10px] font-bold text-amber-300">R</div>
+                  <div className="mt-auto flex items-center justify-between gap-3 border-t border-amber-300/40 pt-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/branding/remi-horizontal.png" alt="Remi" className="h-6 w-auto" />
                     <div className="text-right">
                       <p className="text-[9px] uppercase tracking-wider text-amber-800">Enter at</p>
                       <p className="font-mono text-[10px] text-stone-900">remishowmanager.co.uk</p>
@@ -1176,17 +1177,17 @@ export function ShowPreviewClient() {
       <footer className="border-t bg-[#fbf7ef]">
         <div className="mx-auto max-w-4xl px-4 py-12 text-center sm:px-6 sm:py-16 lg:px-8">
           <OrnamentalDivider className="mb-8" />
-          <Link href="/" className="inline-flex items-center gap-3 transition-opacity hover:opacity-80">
-            <span aria-hidden="true" className="flex size-10 items-center justify-center rounded-sm bg-stone-900 font-serif text-lg font-bold text-amber-300 shadow-sm">R</span>
-            <span className="font-serif text-3xl font-bold tracking-tight text-stone-900 sm:text-4xl">Remi</span>
+          <Link href="/" className="inline-block transition-opacity hover:opacity-80" aria-label="Remi">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/branding/remi-horizontal.png" alt="Remi" className="mx-auto h-14 w-auto sm:h-16" />
           </Link>
-          <p className="mt-3 font-serif text-sm italic text-stone-600">Show management, reimagined.</p>
+          <p className="mt-4 font-serif text-sm italic text-stone-600">Show management, reimagined.</p>
           <div className="mt-6 flex items-center justify-center gap-4 text-xs text-stone-500">
-            <Link href="/shows" className="hover:text-stone-800">Find a show</Link>
+            <Link href="/shows" className="hover:text-primary">Find a show</Link>
             <DividerDiamond />
-            <Link href="/about" className="hover:text-stone-800">About Remi</Link>
+            <Link href="/about" className="hover:text-primary">About Remi</Link>
             <DividerDiamond />
-            <Link href="/terms" className="hover:text-stone-800">Terms</Link>
+            <Link href="/terms" className="hover:text-primary">Terms</Link>
           </div>
           <p className="mt-6 text-[11px] text-stone-400">
             &copy; {new Date().getFullYear()} Remi · Lovingly built for the UK dog-show community.
