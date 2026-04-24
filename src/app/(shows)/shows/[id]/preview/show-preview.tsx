@@ -304,6 +304,10 @@ export function ShowPreviewClient() {
     { showId: show?.id ?? '' },
     { enabled: !!show?.id && showHasEntries, refetchInterval: 60_000 }
   );
+  const { data: shareCount } = trpc.shows.getShareCount.useQuery(
+    { showId: show?.id ?? '' },
+    { enabled: !!show?.id, refetchInterval: 120_000 }
+  );
 
   useEffect(() => {
     if (widgetDismissed) return;
@@ -835,6 +839,7 @@ export function ShowPreviewClient() {
           showDate={showDate}
           organisationName={org?.name ?? ''}
           venueName={venue?.name}
+          weeklyShareCount={shareCount?.weekly}
           shareUrl={
             typeof window !== 'undefined'
               ? `${window.location.origin}/shows/${slug}`

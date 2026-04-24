@@ -33,6 +33,8 @@ interface TellAFriendProps {
   shareUrl: string;
   /** Optional "share clicked" hook — used by Tier 3 to log attribution events. */
   onShare?: (channel: 'whatsapp' | 'facebook' | 'instagram' | 'copy') => void;
+  /** Weekly share count for social-proof chip. >=5 shows the chip. */
+  weeklyShareCount?: number;
   className?: string;
   id?: string;
 }
@@ -51,6 +53,7 @@ export function TellAFriend({
   venueName,
   shareUrl,
   onShare,
+  weeklyShareCount,
   className,
   id,
 }: TellAFriendProps) {
@@ -134,6 +137,12 @@ export function TellAFriend({
             Send them the show details — it takes two seconds and helps {organisationName}
             fill the rings.
           </p>
+          {weeklyShareCount !== undefined && weeklyShareCount >= 5 && (
+            <p className="mx-auto mt-3 inline-flex items-center gap-1.5 rounded-full border border-amber-300/60 bg-white px-3 py-1 text-xs font-medium text-amber-900 shadow-sm">
+              <Share2 className="size-3" />
+              Shared {weeklyShareCount} {weeklyShareCount === 1 ? 'time' : 'times'} this week
+            </p>
+          )}
 
           <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
             {/* WhatsApp — the dominant channel for this audience */}

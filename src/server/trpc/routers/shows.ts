@@ -22,6 +22,7 @@ import {
   classDefinitions,
   orders,
   orderSundryItems,
+  shareEvents,
 } from '@/server/db/schema';
 import { verifyShowAccess } from '../verify-show-access';
 import { isUuid, generateShowSlug } from '@/lib/slugify';
@@ -880,6 +881,28 @@ export const showsRouter = createTRPCRouter({
         startDate: show.startDate,
         status: show.status,
       };
+    }),
+
+  /**
+   * How many times this show has been shared in the last 7 days. Feeds the
+   * "Shared N times this week" social-proof chip on the show page.
+   * Returns 0 when there's nothing to brag about yet — the client chooses
+   * whether to show it.
+   */
+  getShareCount: publicProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const rows = await ctx.db
+        .select({ n: sql<number>`count(*)` })
+        .from(shareEvents)
+        .where(
+          and(
+            eq(shareEvents.showId, input.showId),
+            gte(shareEvents.createdAt, sevenDaysAgo)
+          )
+        );
+      return { weekly: Number(rows[0]?.n ?? 0) };
     }),
 
   getShowSponsors: publicProcedure

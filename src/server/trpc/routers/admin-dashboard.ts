@@ -26,6 +26,7 @@ import {
   organisations,
   printOrders,
   payouts,
+  shareEvents,
 } from '@/server/db/schema';
 
 /** Compute a percentage-change delta for KPI cards. */
@@ -741,6 +742,53 @@ export const adminDashboardRouter = createTRPCRouter({
             totals.orderCount === 0
               ? 0
               : Math.round((Number(r.orderCount) / totals.orderCount) * 1000) / 10,
+        })),
+      };
+    }),
+
+  /**
+   * Share activity breakdown: how many shares per channel over the window.
+   * Sibling of getReferralSourceBreakdown — this counts OUTGOING shares,
+   * the other counts INCOMING paid conversions. Both together tell us
+   * which channels drive activity AND which convert.
+   */
+  getShareEventBreakdown: adminProcedure
+    .input(
+      z
+        .object({
+          days: z.number().int().min(1).max(730).default(90),
+        })
+        .default({ days: 90 })
+    )
+    .query(async ({ ctx, input }) => {
+      const sinceMs = Date.now() - input.days * 24 * 60 * 60 * 1000;
+      const since = new Date(sinceMs);
+
+      const rows = await ctx.db
+        .select({
+          channel: shareEvents.channel,
+          count: sql<number>`count(*)`.as('share_count'),
+          firstSeen: sql<Date>`min(${shareEvents.createdAt})`.as('first_seen'),
+          lastSeen: sql<Date>`max(${shareEvents.createdAt})`.as('last_seen'),
+        })
+        .from(shareEvents)
+        .where(gte(shareEvents.createdAt, since))
+        .groupBy(shareEvents.channel)
+        .orderBy(desc(sql`count(*)`));
+
+      const total = rows.reduce((n, r) => n + Number(r.count), 0);
+
+      return {
+        since: since.toISOString(),
+        days: input.days,
+        total,
+        rows: rows.map((r) => ({
+          channel: r.channel,
+          count: Number(r.count),
+          firstSeen: r.firstSeen,
+          lastSeen: r.lastSeen,
+          sharePct:
+            total === 0 ? 0 : Math.round((Number(r.count) / total) * 1000) / 10,
         })),
       };
     }),

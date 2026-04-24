@@ -24,11 +24,14 @@ const SOURCE_LABELS: Record<string, { label: string; emoji: string }> = {
   whatsapp: { label: 'WhatsApp', emoji: '💬' },
   facebook: { label: 'Facebook', emoji: '📘' },
   instagram: { label: 'Instagram', emoji: '📸' },
+  copy: { label: 'Copy link', emoji: '🔗' },
+  hero: { label: 'Hero share button', emoji: '⭐' },
 };
 
 export default function AdminReferralsPage() {
   const [days, setDays] = useState(90);
   const { data, isLoading } = trpc.adminDashboard.getReferralSourceBreakdown.useQuery({ days });
+  const { data: shareData } = trpc.adminDashboard.getShareEventBreakdown.useQuery({ days });
 
   return (
     <div className="space-y-6">
@@ -142,6 +145,64 @@ export default function AdminReferralsPage() {
               )}
             </CardContent>
           </Card>
+
+          {shareData && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Share activity</CardTitle>
+                <CardDescription>
+                  Every tap of a share button over the same {data.days}-day window.
+                  These are outgoing shares — the &ldquo;By channel&rdquo; table above
+                  is the conversions they produce.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {shareData.rows.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-muted-foreground">
+                    No shares logged yet in this window.
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead className="border-b text-xs uppercase tracking-wider text-muted-foreground">
+                        <tr>
+                          <th className="py-2 pr-4 font-medium">Channel</th>
+                          <th className="py-2 pr-4 text-right font-medium">Shares</th>
+                          <th className="py-2 pr-4 text-right font-medium">Share of total</th>
+                          <th className="py-2 pr-4 font-medium">First seen</th>
+                          <th className="py-2 font-medium">Last seen</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {shareData.rows.map((row) => {
+                          const label = SOURCE_LABELS[row.channel]?.label ?? row.channel;
+                          const emoji = SOURCE_LABELS[row.channel]?.emoji ?? '🔗';
+                          return (
+                            <tr key={row.channel}>
+                              <td className="py-3 pr-4">
+                                <span className="mr-2">{emoji}</span>
+                                <span className="font-medium">{label}</span>
+                              </td>
+                              <td className="py-3 pr-4 text-right tabular-nums">{row.count}</td>
+                              <td className="py-3 pr-4 text-right tabular-nums text-muted-foreground">
+                                {row.sharePct}%
+                              </td>
+                              <td className="py-3 pr-4 text-muted-foreground">
+                                {row.firstSeen ? format(new Date(row.firstSeen), 'd MMM yyyy') : '—'}
+                              </td>
+                              <td className="py-3 text-muted-foreground">
+                                {row.lastSeen ? format(new Date(row.lastSeen), 'd MMM yyyy') : '—'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </>
       )}
     </div>
