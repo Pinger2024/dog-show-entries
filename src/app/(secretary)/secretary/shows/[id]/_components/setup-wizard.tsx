@@ -359,6 +359,7 @@ function StepClasses({ showId, show }: { showId: string; show: Show }) {
     <ClassManager
       showId={showId}
       showType={show.showType}
+      showScope={show.showScope}
       classes={show.showClasses ?? []}
     />
   );

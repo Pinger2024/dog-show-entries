@@ -59,6 +59,7 @@ import {
 interface ClassManagerProps {
   showId: string;
   showType: string;
+  showScope?: string;
   classes: {
     id: string;
     entryFee: number;
@@ -70,7 +71,7 @@ interface ClassManagerProps {
   }[];
 }
 
-export function ClassManager({ showId, showType, classes }: ClassManagerProps) {
+export function ClassManager({ showId, showType, showScope, classes }: ClassManagerProps) {
   const [editingFees, setEditingFees] = useState<Record<string, string>>({});
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [hasInitializedCollapse, setHasInitializedCollapse] = useState(false);
@@ -258,13 +259,21 @@ export function ClassManager({ showId, showType, classes }: ClassManagerProps) {
     setHasInitializedCollapse(true);
   }, [grouped, hasInitializedCollapse]);
 
-  // Championship shows: compute which breeds are missing required Open + Limit classes
+  // Championship shows: compute which breeds are missing required Open + Limit classes.
+  // For single-breed shows, classes may not carry an explicit breed FK — the breed is
+  // implicit via the show's scope. Resolve a fallback breed name so those classes still
+  // count toward their (single) breed's requirement.
   const championshipWarnings = useMemo(() => {
     if (showType !== 'championship') return [];
+
+    const fallbackBreedName = showScope === 'single_breed'
+      ? classes.find((c) => c.breed?.name)?.breed?.name ?? null
+      : null;
+
     const breedMap = new Map<string, { name: string; hasOpenDog: boolean; hasOpenBitch: boolean; hasLimitDog: boolean; hasLimitBitch: boolean }>();
     for (const sc of classes) {
-      if (!sc.breed) continue;
-      const breedName = sc.breed.name;
+      const breedName = sc.breed?.name ?? fallbackBreedName;
+      if (!breedName) continue;
       if (!breedMap.has(breedName)) {
         breedMap.set(breedName, { name: breedName, hasOpenDog: false, hasOpenBitch: false, hasLimitDog: false, hasLimitBitch: false });
       }
@@ -285,7 +294,7 @@ export function ClassManager({ showId, showType, classes }: ClassManagerProps) {
       if (missing.length > 0) warnings.push({ breed: entry.name, missing });
     }
     return warnings;
-  }, [showType, classes]);
+  }, [showType, showScope, classes]);
 
   if (classes.length === 0) {
     return (

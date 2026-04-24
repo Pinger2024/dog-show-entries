@@ -60,6 +60,11 @@ const ownerSchema = z.object({
   isPrimary: z.boolean(),
 });
 
+// Owners are required at create-time (RKC catalogue listing), but in edit
+// mode the form only updates top-level dog fields — the submit handler
+// strips `owners` before mutating. Baking `.min(1)` into the schema silently
+// blocked edit saves when the form loaded with no owners. We enforce the
+// create-mode requirement at submission time instead.
 const dogFormSchema = z.object({
   registeredName: z
     .string()
@@ -76,9 +81,7 @@ const dogFormSchema = z.object({
   damName: z.string().optional(),
   breederName: z.string().optional(),
   bio: z.string().optional(),
-  owners: z
-    .array(ownerSchema)
-    .min(1, 'At least one owner with name and address is required'),
+  owners: z.array(ownerSchema),
 });
 
 type DogFormValues = z.infer<typeof dogFormSchema>;
@@ -389,6 +392,14 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
 
   function onSubmit(data: DogFormValues) {
     if (mode === 'create') {
+      if (!data.owners || data.owners.length === 0) {
+        form.setError('owners', {
+          type: 'manual',
+          message: 'At least one owner with name and address is required',
+        });
+        toast.error('Please add at least one owner');
+        return;
+      }
       createDog.mutate(data);
     } else if (dogId) {
       const { owners: _owners, ...dogFields } = data;
