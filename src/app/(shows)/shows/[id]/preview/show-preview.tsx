@@ -616,6 +616,16 @@ export function ShowPreviewClient() {
         <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-amber-600/40 to-transparent" />
 
         <div className="relative mx-auto max-w-4xl px-4 pb-14 pt-12 sm:px-6 sm:pb-20 sm:pt-16 lg:px-8 lg:pb-24 lg:pt-24">
+          {/* Remi hallmark — silversmith-style stamp, subtle but present */}
+          <Link
+            href="/"
+            className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-white/60 px-2.5 py-1 font-serif text-[10px] uppercase tracking-[0.2em] text-amber-900 backdrop-blur-sm transition-colors hover:border-amber-500 hover:bg-white sm:right-6 sm:top-6"
+            aria-label="Listed on Remi"
+          >
+            <span aria-hidden="true" className="text-[8px] text-amber-600">◆</span>
+            <span className="font-semibold">Remi</span>
+          </Link>
+
           {/* Tiny notice label — heritage programme feel */}
           <p className="text-center text-[10px] font-semibold uppercase tracking-[0.4em] text-amber-800/70">
             Notice of Show
@@ -1145,9 +1155,24 @@ export function ShowPreviewClient() {
       )}
 
       {/* ──────────────────────────── Footer ────────────────────────────── */}
-      <footer className="border-t bg-white">
-        <div className="mx-auto max-w-6xl px-4 py-8 text-center text-xs text-stone-500 sm:px-6 lg:px-8">
-          <p>Powered by <Link href="/" className="font-semibold text-stone-700 hover:text-stone-900">Remi</Link> — show management, reimagined.</p>
+      <footer className="border-t bg-[#fbf7ef]">
+        <div className="mx-auto max-w-4xl px-4 py-12 text-center sm:px-6 sm:py-16 lg:px-8">
+          <OrnamentalDivider className="mb-8" />
+          <Link href="/" className="inline-flex items-center gap-3 transition-opacity hover:opacity-80">
+            <span aria-hidden="true" className="flex size-10 items-center justify-center rounded-sm bg-stone-900 font-serif text-lg font-bold text-amber-300 shadow-sm">R</span>
+            <span className="font-serif text-3xl font-bold tracking-tight text-stone-900 sm:text-4xl">Remi</span>
+          </Link>
+          <p className="mt-3 font-serif text-sm italic text-stone-600">Show management, reimagined.</p>
+          <div className="mt-6 flex items-center justify-center gap-4 text-xs text-stone-500">
+            <Link href="/shows" className="hover:text-stone-800">Find a show</Link>
+            <DividerDiamond />
+            <Link href="/about" className="hover:text-stone-800">About Remi</Link>
+            <DividerDiamond />
+            <Link href="/terms" className="hover:text-stone-800">Terms</Link>
+          </div>
+          <p className="mt-6 text-[11px] text-stone-400">
+            &copy; {new Date().getFullYear()} Remi · Lovingly built for the UK dog-show community.
+          </p>
         </div>
       </footer>
 
