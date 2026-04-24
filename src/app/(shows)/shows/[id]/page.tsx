@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { db } from '@/server/db';
 import { eq } from 'drizzle-orm';
 import { shows } from '@/server/db/schema';
-import { ShowDetailClient } from './show-detail';
+import { ShowPreviewClient } from './preview/show-preview';
 import { buildShowJsonLd } from '@/lib/show-json-ld';
 import { isUuid } from '@/lib/slugify';
 
@@ -133,7 +133,7 @@ export default async function ShowDetailPage({
           dangerouslySetInnerHTML={{ __html: jsonLd }}
         />
       )}
-      <ShowDetailClient />
+      <ShowPreviewClient />
     </>
   );
 }

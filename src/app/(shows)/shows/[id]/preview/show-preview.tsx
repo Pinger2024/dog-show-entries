@@ -13,10 +13,7 @@ import {
   Crown,
   FileText,
   CalendarPlus,
-  Sparkles,
   ShieldCheck,
-  Instagram,
-  Download,
   X,
   Info,
   PoundSterling,
@@ -127,25 +124,6 @@ function getInitials(name: string) {
   if (parts.length === 0) return '?';
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
-
-/* ─── Preview banner ─────────────────────────────── */
-
-function PreviewBanner({ realHref }: { realHref: string }) {
-  return (
-    <div className="sticky top-[4.5rem] z-50 border-b border-amber-400/40 bg-amber-100/90 backdrop-blur-md">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs sm:px-4 sm:text-sm lg:px-6">
-        <span className="inline-flex items-center gap-1.5 font-medium text-amber-900">
-          <Sparkles className="size-3.5" />
-          Design preview — no live actions, your data is read-only
-        </span>
-        <Link href={realHref} className="inline-flex items-center gap-1 font-semibold text-amber-900 underline-offset-4 hover:underline">
-          View live page
-          <ExternalLink className="size-3" />
-        </Link>
-      </div>
-    </div>
-  );
 }
 
 /* ─── Live countdown (ticking) ───────────────────── */
@@ -563,8 +541,6 @@ export function ShowPreviewClient() {
 
   return (
     <div className="min-h-screen bg-white">
-      <PreviewBanner realHref={liveHref} />
-
       {/* ──────────────────────────── Breadcrumb ──────────────────────────── */}
       <nav aria-label="Breadcrumb" className="border-b bg-stone-50/50">
         <ol className="mx-auto flex max-w-6xl items-center gap-1.5 px-3 py-2.5 text-xs sm:px-4 sm:text-sm lg:px-6">
@@ -621,16 +597,14 @@ export function ShowPreviewClient() {
             <h2 className="mt-7 max-w-2xl text-center font-serif text-2xl font-bold uppercase leading-tight tracking-[0.05em] text-stone-900 sm:text-3xl lg:text-[2rem]">
               {org?.name}
             </h2>
-            <div className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] font-medium text-stone-600 sm:text-xs">
-              <span className="inline-flex items-center gap-1.5">
-                <ShieldCheck className="size-3.5 text-amber-700" />
-                RKC Registered
-              </span>
-              <DividerDiamond />
-              <span>Established 1985</span>
-              <DividerDiamond />
-              <span>Breed Specialist</span>
-            </div>
+            {(org as { kcRegNumber?: string | null } | null | undefined)?.kcRegNumber && (
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] font-medium text-stone-600 sm:text-xs">
+                <span className="inline-flex items-center gap-1.5">
+                  <ShieldCheck className="size-3.5 text-amber-700" />
+                  RKC Registered
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Ornate 'presents' divider */}
@@ -921,22 +895,25 @@ export function ShowPreviewClient() {
             <SectionHeading eyebrow="The card" title={breedGroups.length === 1 ? 'Classes on Offer' : `${breedGroups.length} Breeds`} />
             <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {breedGroups.map(({ breed, classes, judgeName }) => (
-                <a
+                <div
                   key={breed}
-                  href={`${liveHref}#breed-${breed.toLowerCase().replace(/\s+/g, '-')}`}
-                  className="group flex items-center justify-between rounded-xl border border-stone-200 bg-white px-4 py-3 transition-shadow hover:shadow-md"
+                  className="rounded-xl border border-stone-200 bg-white px-4 py-3"
                 >
-                  <div className="min-w-0">
-                    <p className="truncate font-serif font-semibold text-stone-900">{breed}</p>
-                    <p className="text-xs text-stone-500">
-                      {classes} {classes === 1 ? 'class' : 'classes'}
-                      {judgeName ? ` · ${judgeName}` : ''}
-                    </p>
-                  </div>
-                  <ChevronRight className="size-4 shrink-0 text-stone-400 transition-transform group-hover:translate-x-0.5" />
-                </a>
+                  <p className="truncate font-serif font-semibold text-stone-900">{breed}</p>
+                  <p className="text-xs text-stone-500">
+                    {classes} {classes === 1 ? 'class' : 'classes'}
+                    {judgeName ? ` · ${judgeName}` : ''}
+                  </p>
+                </div>
               ))}
             </div>
+            <p className="mt-4 text-center text-xs italic text-stone-500">
+              Full class list available in the{' '}
+              <a href={`/api/schedule/${show.id}`} target="_blank" rel="noopener" className="font-semibold text-primary hover:underline">
+                schedule PDF
+              </a>
+              .
+            </p>
           </div>
         </section>
       )}
@@ -1015,146 +992,29 @@ export function ShowPreviewClient() {
         </section>
       )}
 
-      {/* ──────────────────────────── Show Pass concept ─────────────────── */}
-      <section className="border-y bg-gradient-to-br from-amber-50 via-white to-amber-50/50">
-        <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20 lg:px-8">
-          <div className="grid items-center gap-10 lg:grid-cols-2">
-            <div>
-              <span className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-900">
-                <Sparkles className="size-3" />
-                Coming soon
-              </span>
-              <h2 className="mt-4 font-serif text-3xl font-bold leading-tight text-stone-900 sm:text-4xl">Every show, a Show Pass.</h2>
-              <p className="mt-4 max-w-lg text-stone-700">
-                Auto-generated marketing graphics for every show on Remi — printable posters for your training halls,
-                a judge-announcement image for Facebook, and a ready-to-post Instagram story. One tap to download, shared straight from your show page.
-              </p>
-              <div className="mt-6 flex flex-wrap gap-3">
-                <Button size="lg" disabled>
-                  <Download className="size-4" />
-                  Download Show Pass
-                </Button>
-                <Button size="lg" variant="outline" disabled>
-                  <Instagram className="size-4" />
-                  Instagram story
-                </Button>
-              </div>
-              <p className="mt-3 text-xs italic text-stone-500">Mockup only — not yet functional</p>
-            </div>
-
-            {/* Mock poster visual */}
-            <div className="relative">
-              <div className="relative mx-auto aspect-[3/4] w-full max-w-sm overflow-hidden rounded-2xl bg-gradient-to-br from-amber-100 via-amber-50 to-stone-100 p-6 shadow-2xl ring-1 ring-amber-200/60">
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(250,204,21,0.15),transparent_50%)]" />
-                <div className="relative flex h-full flex-col">
-                  <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-800">
-                    <Crown className="size-3" />
-                    {showType}
-                  </div>
-                  <h3 className="mt-3 font-serif text-2xl font-bold leading-tight text-stone-900">{show.name}</h3>
-                  <p className="mt-1 text-xs italic text-stone-600">Hosted by {org?.name}</p>
-                  <div className="mt-5 flex items-end gap-2">
-                    <span className="font-serif text-5xl font-bold leading-none text-stone-900">{dayNum}</span>
-                    <div className="pb-1 text-xs text-stone-600">
-                      <p className="font-semibold">{dayName}</p>
-                      <p>{monthYear}</p>
-                    </div>
-                  </div>
-                  {venue && <p className="mt-4 text-xs text-stone-700">{venue.name}</p>}
-                  {judges.length > 0 && (
-                    <div className="mt-4 text-xs text-stone-700">
-                      <p className="font-semibold uppercase tracking-wider text-[9px] text-amber-800">Judges</p>
-                      <p>{judges.slice(0, 3).map((j) => j.name).join(' · ')}</p>
-                    </div>
-                  )}
-                  <div className="mt-auto flex items-center justify-between gap-3 border-t border-amber-300/40 pt-3">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="/branding/remi-horizontal.png" alt="Remi" className="h-6 w-auto" />
-                    <div className="text-right">
-                      <p className="text-[9px] uppercase tracking-wider text-amber-800">Enter at</p>
-                      <p className="font-mono text-[10px] text-stone-900">remishowmanager.co.uk</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <p className="mt-4 text-center text-xs text-stone-500">Mock preview — Show Pass A4 poster</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ──────────────────────────── Club spotlight ─────────────────────── */}
-      <section className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
-        <SectionHeading eyebrow="About the hosts" title={org?.name ?? 'The Club'} />
-        <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_1.2fr]">
-          <div className="rounded-2xl border bg-gradient-to-br from-amber-50/50 to-white p-6 sm:p-8">
-            {org?.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={org.logoUrl} alt={org.name} className="h-20 object-contain" />
-            ) : (
-              <div className="flex size-20 items-center justify-center rounded-full bg-amber-200/60 font-serif text-2xl font-bold text-amber-900">
-                {getInitials(org?.name ?? '?')}
-              </div>
-            )}
-            <dl className="mt-6 space-y-3 text-sm">
-              <div className="flex justify-between gap-2">
-                <dt className="text-stone-500">Established</dt>
-                <dd className="font-semibold text-stone-900">1985</dd>
-              </div>
-              <div className="flex justify-between gap-2">
-                <dt className="text-stone-500">Registration</dt>
-                <dd className="font-semibold text-stone-900">RKC Approved</dd>
-              </div>
-              <div className="flex justify-between gap-2">
-                <dt className="text-stone-500">Shows hosted</dt>
-                <dd className="font-semibold text-stone-900">2+ this year</dd>
-              </div>
-              {showAny.scheduleData?.futureShowDates && (
-                <div className="border-t pt-3">
-                  <dt className="mb-1 text-stone-500">Upcoming</dt>
-                  <dd className="whitespace-pre-wrap text-xs text-stone-700">{showAny.scheduleData.futureShowDates}</dd>
-                </div>
-              )}
-            </dl>
-            <p className="mt-6 text-xs italic text-stone-500">Placeholder data — real club profiles to follow</p>
-          </div>
-          <div className="space-y-4">
-            <p className="leading-relaxed text-stone-700">
-              {show.description ?? `${org?.name} has been at the heart of its dog-show community for decades — running shows, mentoring exhibitors, and championing responsible breeding. Today, that work continues with every well-run show on the card.`}
+      {/* ──────────────────────────── Additional notes (if present) ─────── */}
+      {showAny.scheduleData?.additionalNotes && (
+        <section className="mx-auto max-w-4xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
+          <SectionHeading eyebrow="Please note" title="From the organisers" />
+          <div className="mt-6 rounded-2xl border-l-4 border-amber-500 bg-amber-50/50 p-6 sm:p-7">
+            <p className="whitespace-pre-line leading-relaxed text-stone-800">
+              {showAny.scheduleData.additionalNotes}
             </p>
-            <div className="rounded-xl border bg-white p-5">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-700">Other shows by this club</p>
-              <div className="mt-3 space-y-2">
-                <div className="flex items-center justify-between rounded-lg bg-stone-50 px-3 py-2 text-sm">
-                  <span className="text-stone-700">Autumn Open Show</span>
-                  <span className="text-xs text-stone-500">Placeholder</span>
-                </div>
-                <div className="flex items-center justify-between rounded-lg bg-stone-50 px-3 py-2 text-sm">
-                  <span className="text-stone-700">Winter Championship Show</span>
-                  <span className="text-xs text-stone-500">Placeholder</span>
-                </div>
-              </div>
-              <p className="mt-3 text-xs italic text-stone-500">When club pages ship, this will list every upcoming and past show.</p>
-            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
-      {/* ──────────────────────────── FAQ (mocked) ──────────────────────── */}
-      <section className="border-t bg-stone-50/60">
-        <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
-          <SectionHeading eyebrow="Before you enter" title="Frequently Asked" />
-          <div className="mt-8 space-y-3">
-            <FAQItem q="Do I need to print anything on the day?" a="No — just turn up. Ring numbers will be at the ring or available at the secretary's table. Your confirmation email is all you need." />
-            <FAQItem q="Can I enter more than one dog?" a="Yes. Each dog is entered separately but all combined into a single payment at checkout. The subsequent-entry fee applies to each additional class for the same dog." />
-            <FAQItem q="Are postal entries accepted?" a={showAny.acceptsPostalEntries ? 'Yes. Contact the secretary for the address. Online is faster.' : 'Online only — it\'s faster, gives instant confirmation and reduces admin for the club.'} />
-            <FAQItem q="What if I need to withdraw?" a="Contact the secretary before entries close. Full refunds are available until close; after that, please see the show T&Cs." />
-            <FAQItem q="Is the venue wheelchair accessible?" a="Step-free access, on-site parking, and accessible toilets. Contact the secretary for specific requirements." />
-            <FAQItem q="When are results published?" a="Live to this page throughout the day as each class is judged. No waiting for a newsletter." />
+      {/* ──────────────────────────── Future shows (if present) ─────────── */}
+      {showAny.scheduleData?.futureShowDates && (
+        <section className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
+          <SectionHeading eyebrow="Save the date" title={`More from ${org?.name ?? 'this club'}`} />
+          <div className="mt-6 rounded-2xl border bg-white p-6 shadow-sm">
+            <p className="whitespace-pre-line leading-relaxed text-stone-700">
+              {showAny.scheduleData.futureShowDates}
+            </p>
           </div>
-          <p className="mt-6 text-xs italic text-stone-500">FAQ content is currently illustrative — we&apos;ll add a proper editable FAQ section per show.</p>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* ──────────────────────────── Footer CTA ────────────────────────── */}
       {isOpen && (
@@ -1339,19 +1199,3 @@ function Facility({ label, value }: { label: string; value: string }) {
   );
 }
 
-function FAQItem({ q, a }: { q: string; a: string }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <details
-      className="group rounded-xl border bg-white"
-      open={open}
-      onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}
-    >
-      <summary className="flex cursor-pointer items-center justify-between gap-3 px-5 py-4 font-serif text-base font-semibold text-stone-900 [&::-webkit-details-marker]:hidden">
-        <span>{q}</span>
-        <ChevronRight className={cn('size-4 shrink-0 text-stone-400 transition-transform', open && 'rotate-90')} />
-      </summary>
-      <div className="border-t px-5 py-4 text-sm leading-relaxed text-stone-700">{a}</div>
-    </details>
-  );
-}
