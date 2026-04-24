@@ -435,89 +435,92 @@ export function ShowPreviewClient() {
       </nav>
 
       {/* ──────────────────────────── Hero ─────────────────────────────────── */}
-      <header className="relative overflow-hidden">
-        {/* Background layers */}
-        {showAny.bannerImageUrl ? (
-          <>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={showAny.bannerImageUrl}
-              alt=""
-              aria-hidden="true"
-              className="absolute inset-0 size-full object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-b from-stone-950/85 via-stone-900/80 to-stone-950" />
-          </>
-        ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-stone-950 via-stone-900 to-stone-800" />
-        )}
+      {showAny.bannerImageUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={showAny.bannerImageUrl}
+          alt={`${show.name} banner`}
+          className="h-40 w-full object-cover sm:h-56 lg:h-72"
+        />
+      )}
+      <header className="relative overflow-hidden bg-gradient-to-br from-amber-100/80 via-amber-50/60 to-stone-50">
+        {/* Subtle paper texture via radial highlight */}
+        <div aria-hidden="true" className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(250,204,21,0.15),transparent_55%)]" />
         {/* Gold accent lines */}
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-400/50 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-amber-400/50 to-transparent" />
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-500/60 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent" />
 
-        <div className="relative mx-auto max-w-6xl px-4 pb-12 pt-10 sm:px-6 sm:pb-16 sm:pt-12 lg:px-8 lg:pb-20 lg:pt-16">
-          {/* Hosted-by treatment */}
-          <div className="flex items-center gap-3">
+        <div className="relative mx-auto max-w-6xl px-4 pb-12 pt-10 sm:px-6 sm:pb-16 sm:pt-14 lg:px-8 lg:pb-20 lg:pt-20">
+          {/* Club crest — the club IS the brand */}
+          <div className="flex flex-col items-center text-center">
             {org?.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={org.logoUrl}
                 alt={org.name}
-                className="size-12 rounded-full bg-white/10 object-contain p-1.5 ring-1 ring-white/20 backdrop-blur-sm sm:size-14"
+                className="h-28 w-auto object-contain drop-shadow-sm sm:h-36 lg:h-40"
               />
             ) : (
-              <div className="flex size-12 items-center justify-center rounded-full bg-amber-400/20 font-serif text-sm font-bold text-amber-200 ring-1 ring-amber-400/30 sm:size-14 sm:text-base">
+              <div className="flex size-28 items-center justify-center rounded-full bg-white font-serif text-3xl font-bold text-amber-900 shadow-md ring-2 ring-amber-300/60 sm:size-36 sm:text-4xl">
                 {getInitials(org?.name ?? '?')}
               </div>
             )}
-            <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-300/80">Hosted by</p>
-              <p className="truncate font-serif text-sm font-semibold text-white sm:text-base">{org?.name}</p>
-              <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-stone-400">
-                <span className="inline-flex items-center gap-1">
-                  <ShieldCheck className="size-3 text-amber-400/80" />
-                  RKC Registered
-                </span>
-                <span className="text-stone-600">·</span>
-                <span>Est. 1985</span>
-              </div>
+            <h2 className="mt-5 max-w-2xl font-serif text-xl font-bold leading-tight text-stone-900 sm:text-2xl lg:text-3xl">
+              {org?.name}
+            </h2>
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] font-medium text-stone-600 sm:text-xs">
+              <span className="inline-flex items-center gap-1">
+                <ShieldCheck className="size-3.5 text-amber-700" />
+                RKC Registered
+              </span>
+              <span className="text-stone-300">·</span>
+              <span>Established 1985</span>
+              <span className="text-stone-300">·</span>
+              <span>Breed Specialist</span>
             </div>
           </div>
 
+          {/* Ornamental divider — club presents this show */}
+          <div className="mx-auto mt-10 flex max-w-sm items-center gap-3 sm:mt-12">
+            <span className="h-px flex-1 bg-gradient-to-r from-transparent to-amber-400/50" />
+            <span className="font-serif text-xs italic tracking-widest text-amber-800">presents</span>
+            <span className="h-px flex-1 bg-gradient-to-l from-transparent to-amber-400/50" />
+          </div>
+
           {/* Show type chip */}
-          <div className="mt-8">
-            <span className="inline-flex items-center gap-2 rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-300">
+          <div className="mt-6 flex justify-center">
+            <span className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-900">
               <Crown className="size-3" />
               {showType}
             </span>
           </div>
 
-          {/* Show name — the hero */}
-          <h1 className="mt-3 font-serif text-4xl font-bold leading-[1.05] text-white sm:text-5xl lg:text-6xl">
+          {/* Show name — the event itself */}
+          <h1 className="mt-4 text-center font-serif text-4xl font-bold leading-[1.05] text-stone-900 sm:text-5xl lg:text-6xl">
             {show.name}
           </h1>
 
           {/* Date block — editorial treatment */}
-          <div className="mt-8 flex flex-wrap items-end gap-x-8 gap-y-4">
+          <div className="mt-10 flex flex-wrap items-end justify-center gap-x-8 gap-y-4 text-left">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-300/70">The Occasion</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-800/80">The Occasion</p>
               <div className="mt-1 flex items-baseline gap-3">
-                <span className="font-serif text-5xl font-bold leading-none text-white sm:text-6xl">{dayNum}</span>
+                <span className="font-serif text-5xl font-bold leading-none text-stone-900 sm:text-6xl">{dayNum}</span>
                 <div className="flex flex-col">
-                  <span className="font-serif text-lg font-semibold text-white">{dayName}</span>
-                  <span className="text-sm text-stone-400">{monthYear}</span>
+                  <span className="font-serif text-lg font-semibold text-stone-900">{dayName}</span>
+                  <span className="text-sm text-stone-500">{monthYear}</span>
                 </div>
               </div>
             </div>
 
             {venue && (
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-300/70">The Venue</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-800/80">The Venue</p>
                 <div className="mt-1 flex items-start gap-2">
                   <MapPin className="mt-1 size-4 shrink-0 text-stone-400" />
                   <div>
-                    <p className="font-serif text-base font-semibold text-white">{venue.name}</p>
-                    <p className="text-sm text-stone-400">{venue.postcode ?? venue.address ?? ''}</p>
+                    <p className="font-serif text-base font-semibold text-stone-900">{venue.name}</p>
+                    <p className="text-sm text-stone-500">{venue.postcode ?? venue.address ?? ''}</p>
                   </div>
                 </div>
               </div>
@@ -525,10 +528,10 @@ export function ShowPreviewClient() {
 
             {(showAny.showOpenTime || showAny.startTime) && (
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-300/70">The Rhythm</p>
-                <div className="mt-1 space-y-0.5 text-sm text-stone-300">
-                  {showAny.showOpenTime && <p><span className="text-stone-500">Doors</span> {showAny.showOpenTime}</p>}
-                  {showAny.startTime && <p><span className="text-stone-500">Judging</span> {showAny.startTime}</p>}
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-800/80">The Rhythm</p>
+                <div className="mt-1 space-y-0.5 text-sm text-stone-700">
+                  {showAny.showOpenTime && <p><span className="text-stone-400">Doors</span> {showAny.showOpenTime}</p>}
+                  {showAny.startTime && <p><span className="text-stone-400">Judging</span> {showAny.startTime}</p>}
                 </div>
               </div>
             )}
@@ -536,13 +539,13 @@ export function ShowPreviewClient() {
 
           {/* Countdown — only when entries open */}
           {isOpen && entryCloseDate && (
-            <div className="mt-10 rounded-2xl border border-amber-400/20 bg-gradient-to-br from-stone-900/60 to-stone-950/40 p-5 backdrop-blur-sm sm:p-6">
+            <div className="mt-10 rounded-2xl border border-amber-200 bg-white/80 p-5 shadow-sm backdrop-blur-sm sm:p-6">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-300">Entries Close</p>
-                  <p className="mt-0.5 text-sm text-stone-300">{format(entryCloseDate, 'EEEE d MMMM · HH:mm')}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-800">Entries Close</p>
+                  <p className="mt-0.5 text-sm text-stone-600">{format(entryCloseDate, 'EEEE d MMMM · HH:mm')}</p>
                 </div>
-                <div className="rounded-xl bg-white/5 px-4 py-3 ring-1 ring-white/10">
+                <div className="rounded-xl bg-amber-50 px-4 py-3 ring-1 ring-amber-100">
                   <HeroCountdown target={entryCloseDate} />
                 </div>
               </div>
@@ -551,15 +554,15 @@ export function ShowPreviewClient() {
 
           {/* Live entry pulse */}
           {showHasEntries && totalDogs > 0 && (
-            <div className="mt-6 flex flex-wrap items-center gap-6 border-t border-white/10 pt-6">
-              <Stat label="Dogs Entered" value={totalDogs} accent highlight />
-              <Stat label="Exhibitors" value={totalExhibitors} accent />
-              <Stat label="Classes" value={totalClasses} accent />
-              <Stat label="Breeds" value={breedGroups.length} accent />
+            <div className="mt-6 flex flex-wrap items-center gap-6 border-t border-amber-200/60 pt-6">
+              <Stat label="Dogs Entered" value={totalDogs} highlight />
+              <Stat label="Exhibitors" value={totalExhibitors} />
+              <Stat label="Classes" value={totalClasses} />
+              <Stat label="Breeds" value={breedGroups.length} />
               {topBreeds.length > 0 && (
                 <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-300/80">Most Entered</p>
-                  <p className="mt-1 text-sm text-stone-300">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-800/80">Most Entered</p>
+                  <p className="mt-1 text-sm text-stone-700">
                     {topBreeds.map((b) => `${b.breedName} (${b.dogCount})`).join(' · ')}
                   </p>
                 </div>
@@ -568,13 +571,13 @@ export function ShowPreviewClient() {
           )}
 
           {titleSponsor && (
-            <div className="mt-6 flex items-center gap-3 border-t border-white/10 pt-6">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-300/80">In association with</span>
+            <div className="mt-6 flex items-center gap-3 border-t border-amber-200/60 pt-6">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-800/80">In association with</span>
               {titleSponsor.sponsor.logoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={titleSponsor.sponsor.logoUrl} alt={titleSponsor.sponsor.name} className="h-8 brightness-0 invert" />
+                <img src={titleSponsor.sponsor.logoUrl} alt={titleSponsor.sponsor.name} className="h-8 object-contain" />
               ) : (
-                <span className="font-serif text-sm font-semibold text-white">{titleSponsor.sponsor.name}</span>
+                <span className="font-serif text-sm font-semibold text-stone-900">{titleSponsor.sponsor.name}</span>
               )}
             </div>
           )}
@@ -792,30 +795,30 @@ export function ShowPreviewClient() {
       )}
 
       {/* ──────────────────────────── Show Pass concept ─────────────────── */}
-      <section className="border-y bg-gradient-to-br from-stone-950 via-stone-900 to-stone-950 text-white">
+      <section className="border-y bg-gradient-to-br from-amber-50 via-white to-amber-50/50">
         <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20 lg:px-8">
           <div className="grid items-center gap-10 lg:grid-cols-2">
             <div>
-              <span className="inline-flex items-center gap-2 rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-300">
+              <span className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-900">
                 <Sparkles className="size-3" />
                 Coming soon
               </span>
-              <h2 className="mt-4 font-serif text-3xl font-bold leading-tight sm:text-4xl">Every show, a Show Pass.</h2>
-              <p className="mt-4 max-w-lg text-stone-300">
+              <h2 className="mt-4 font-serif text-3xl font-bold leading-tight text-stone-900 sm:text-4xl">Every show, a Show Pass.</h2>
+              <p className="mt-4 max-w-lg text-stone-700">
                 Auto-generated marketing graphics for every show on Remi — printable posters for your training halls,
                 a judge-announcement image for Facebook, and a ready-to-post Instagram story. One tap to download, shared straight from your show page.
               </p>
               <div className="mt-6 flex flex-wrap gap-3">
-                <Button size="lg" className="bg-amber-400 text-stone-950 hover:bg-amber-300" disabled>
+                <Button size="lg" disabled>
                   <Download className="size-4" />
                   Download Show Pass
                 </Button>
-                <Button size="lg" variant="outline" className="border-white/20 bg-transparent text-white hover:bg-white/10" disabled>
+                <Button size="lg" variant="outline" disabled>
                   <Instagram className="size-4" />
                   Instagram story
                 </Button>
               </div>
-              <p className="mt-3 text-xs text-stone-500">Mockup only — not yet functional</p>
+              <p className="mt-3 text-xs italic text-stone-500">Mockup only — not yet functional</p>
             </div>
 
             {/* Mock poster visual */}
@@ -933,16 +936,16 @@ export function ShowPreviewClient() {
 
       {/* ──────────────────────────── Footer CTA ────────────────────────── */}
       {isOpen && (
-        <section className="bg-gradient-to-br from-stone-950 via-stone-900 to-stone-950 text-white">
+        <section className="border-t bg-gradient-to-br from-amber-100 via-amber-50 to-stone-50">
           <div className="mx-auto max-w-4xl px-4 py-16 text-center sm:px-6 sm:py-20 lg:px-8">
-            <Crown className="mx-auto size-8 text-amber-400" />
-            <h2 className="mt-4 font-serif text-3xl font-bold sm:text-4xl">Ready for the ring?</h2>
-            <p className="mx-auto mt-3 max-w-xl text-stone-300">
+            <Crown className="mx-auto size-8 text-amber-700" />
+            <h2 className="mt-4 font-serif text-3xl font-bold text-stone-900 sm:text-4xl">Ready for the ring?</h2>
+            <p className="mx-auto mt-3 max-w-xl text-stone-700">
               {totalDogs > 0 ? `Join ${totalDogs} dog${totalDogs === 1 ? '' : 's'} already entered. ` : ''}
               Entries take two minutes on your phone.
             </p>
             <div className="mt-8">
-              <Button size="lg" className="h-14 bg-amber-400 px-8 text-base font-bold text-stone-950 shadow-2xl shadow-amber-400/30 hover:bg-amber-300" asChild>
+              <Button size="lg" className="h-14 px-8 text-base font-bold shadow-lg shadow-primary/30" asChild>
                 <Link href={liveHref}>
                   <Ticket className="size-5" />
                   Enter This Show
@@ -950,10 +953,10 @@ export function ShowPreviewClient() {
               </Button>
             </div>
             {entryCloseDate && (
-              <p className="mt-4 text-xs text-stone-400">
-                Entries close <strong>{format(entryCloseDate, 'EEEE d MMMM · HH:mm')}</strong>
+              <p className="mt-4 text-xs text-stone-500">
+                Entries close <strong className="text-stone-700">{format(entryCloseDate, 'EEEE d MMMM · HH:mm')}</strong>
                 {daysToClose !== null && daysToClose <= 7 && (
-                  <span className="ml-1 text-amber-300">({daysToClose}d left)</span>
+                  <span className="ml-1 font-semibold text-amber-700">({daysToClose}d left)</span>
                 )}
               </p>
             )}
@@ -1028,11 +1031,11 @@ function SectionHeading({ eyebrow, title }: { eyebrow?: string; title: string })
   );
 }
 
-function Stat({ label, value, accent, highlight }: { label: string; value: number; accent?: boolean; highlight?: boolean }) {
+function Stat({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
   return (
     <div>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-300/80">{label}</p>
-      <p className={cn('mt-1 font-serif text-3xl font-bold leading-none', highlight ? 'text-amber-300' : accent ? 'text-white' : 'text-stone-900')}>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-800/80">{label}</p>
+      <p className={cn('mt-1 font-serif text-3xl font-bold leading-none', highlight ? 'text-amber-700' : 'text-stone-900')}>
         {value}
       </p>
     </div>
@@ -1043,17 +1046,17 @@ function HeroCountdown({ target }: { target: Date }) {
   const c = useCountdown(target);
   if (!c) return null;
   return (
-    <div className="flex items-baseline gap-1 font-mono tabular-nums text-white">
+    <div className="flex items-baseline gap-1 font-mono tabular-nums text-stone-900">
       {c.d > 0 && (
         <>
           <span className="font-serif text-2xl font-bold sm:text-3xl">{c.d}</span>
-          <span className="mr-1.5 text-[10px] uppercase tracking-wider text-stone-400">days</span>
+          <span className="mr-1.5 text-[10px] uppercase tracking-wider text-stone-500">days</span>
         </>
       )}
       <span className="font-serif text-2xl font-bold sm:text-3xl">{String(c.h).padStart(2, '0')}</span>
-      <span className="text-stone-500">:</span>
+      <span className="text-amber-600">:</span>
       <span className="font-serif text-2xl font-bold sm:text-3xl">{String(c.m).padStart(2, '0')}</span>
-      <span className="text-stone-500">:</span>
+      <span className="text-amber-600">:</span>
       <span className="font-serif text-2xl font-bold sm:text-3xl">{String(c.s).padStart(2, '0')}</span>
     </div>
   );
