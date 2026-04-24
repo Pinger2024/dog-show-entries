@@ -873,30 +873,48 @@ export function ShowPreviewClient() {
       {/* ──────────────────────────── Prize & Trophy story ──────────────── */}
       {(trophyList.length > 0 || showAny.scheduleData?.prizeMoney || showAny.scheduleData?.awardsDescription) && (
         <section className="mx-auto max-w-4xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
-          <SectionHeading centered eyebrow="The silverware" title="Prizes & Trophies" />
+          <SectionHeading eyebrow="The silverware" title="Awards & Prizes" />
+
+          {/* Awards description — clean readable card, NOT stylised */}
           {showAny.scheduleData?.awardsDescription && (
-            <p className="mx-auto mt-4 max-w-2xl text-center font-serif text-base italic leading-relaxed text-stone-700">
-              {showAny.scheduleData.awardsDescription}
-            </p>
+            <div className="mt-6 rounded-2xl border bg-white p-6 shadow-sm sm:p-7">
+              <div className="flex items-center gap-2 border-b border-amber-200/60 pb-3">
+                <Trophy className="size-5 text-amber-600" />
+                <h3 className="font-serif text-lg font-bold text-stone-900">On offer</h3>
+              </div>
+              <p className="mt-4 whitespace-pre-line leading-relaxed text-stone-800">
+                {showAny.scheduleData.awardsDescription}
+              </p>
+              {showAny.scheduleData.prizeMoney && (
+                <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-4 py-1.5 text-sm font-semibold text-amber-900">
+                  <PoundSterling className="size-4" />
+                  {showAny.scheduleData.prizeMoney}
+                </div>
+              )}
+            </div>
           )}
-          {showAny.scheduleData?.prizeMoney && (
-            <div className="mt-5 flex justify-center">
+
+          {/* Prize money only (when no description) */}
+          {!showAny.scheduleData?.awardsDescription && showAny.scheduleData?.prizeMoney && (
+            <div className="mt-6 flex justify-center">
               <div className="inline-flex items-center gap-2 rounded-full border border-amber-400 bg-amber-50 px-5 py-2 font-serif text-sm font-semibold text-amber-900">
                 <PoundSterling className="size-4" />
                 {showAny.scheduleData.prizeMoney}
               </div>
             </div>
           )}
+
+          {/* Honour roll of sponsored trophies — only when we actually have some */}
           {trophyList.length > 0 && (
-            <div className="mt-10 rounded-2xl border border-amber-300/60 bg-gradient-to-b from-[#fbf7ef] to-white p-6 shadow-sm sm:p-10">
+            <div className="mt-6 rounded-2xl border border-amber-300/60 bg-gradient-to-b from-[#fbf7ef] to-white p-6 shadow-sm sm:p-8">
               <p className="text-center font-serif text-[11px] uppercase italic tracking-[0.35em] text-amber-800">
-                ◆ Honour Roll ◆
+                ◆ Trophy Honour Roll ◆
               </p>
-              <ul className="mt-6 divide-y divide-amber-200/60">
+              <ul className="mt-5 divide-y divide-amber-200/60">
                 {trophyList.map((t, i) => (
                   <li key={i} className="flex flex-col gap-1 py-4 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
                     <div className="min-w-0 flex-1">
-                      <p className="font-serif text-lg font-bold leading-tight text-stone-900">{t.trophyName}</p>
+                      <p className="font-serif text-base font-bold leading-tight text-stone-900">{t.trophyName}</p>
                       <p className="mt-0.5 font-serif text-sm italic text-stone-600">For the {t.className}</p>
                     </div>
                     <div className="flex shrink-0 items-center gap-2 text-xs">
