@@ -356,7 +356,7 @@ export function ShowDetailClient() {
   const idOrSlug = params.id as string;
 
   const [descExpanded, setDescExpanded] = useState(false);
-
+  const [showWidget, setShowWidget] = useState(false);
 
   const { data: show, isLoading } = trpc.shows.getById.useQuery({
     id: idOrSlug,
@@ -387,6 +387,17 @@ export function ShowDetailClient() {
     typeof window !== 'undefined' ? window.location.hash.replace('#', '') : ''
   );
   const scrolledToHash = useRef(false);
+
+  // Slide up entry widget after user scrolls past the hero area
+  useEffect(() => {
+    const threshold = window.innerHeight * 0.7;
+    function handleScroll() {
+      const next = window.scrollY > threshold;
+      setShowWidget((prev) => (prev === next ? prev : next));
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // Auto-expand and scroll to breed section from URL hash
   useEffect(() => {
@@ -1360,7 +1371,49 @@ export function ShowDetailClient() {
           </div>
         )}
 
+        {/* Bottom spacer so last content isn't hidden behind the entry widget */}
+        {isOpen && <div className="h-24 sm:hidden" />}
       </div>
+
+      {/* ─── Entry widget — slides up from bottom on mobile after scroll ── */}
+      {isOpen && (
+        <div
+          className={`fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 backdrop-blur-lg transition-all duration-300 ease-out sm:hidden ${
+            showWidget ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'
+          }`}
+          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+        >
+          <div className="flex items-center gap-3 px-4 pt-3">
+            <div className="min-w-0 flex-1">
+              {show.firstEntryFee != null && show.firstEntryFee > 0 ? (
+                <>
+                  <p className="font-serif text-xl font-bold text-primary">{formatCurrency(show.firstEntryFee)}</p>
+                  <p className="text-xs text-muted-foreground">entry fee</p>
+                </>
+              ) : (
+                <p className="text-sm font-semibold">Enter This Show</p>
+              )}
+              {show.entryCloseDate && (() => {
+                const daysLeft = Math.ceil((new Date(show.entryCloseDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                if (daysLeft > 0 && daysLeft <= 14) {
+                  return (
+                    <p className={`text-xs font-medium ${daysLeft <= 3 ? 'text-red-600' : 'text-amber-600'}`}>
+                      {daysLeft === 1 ? 'Closes tomorrow!' : `Closes in ${daysLeft} days`}
+                    </p>
+                  );
+                }
+                return null;
+              })()}
+            </div>
+            <Button className="h-12 shrink-0 px-6 text-base font-semibold shadow-lg shadow-primary/30" asChild>
+              <Link href={`/shows/${showSlug}/enter`}>
+                <Ticket className="size-5" />
+                Enter Now
+              </Link>
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
