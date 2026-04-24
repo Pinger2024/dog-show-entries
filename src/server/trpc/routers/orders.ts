@@ -523,27 +523,32 @@ export const ordersRouter = createTRPCRouter({
         // match entries.total_fee above — the JH and NFC branches have to
         // stay aligned between the two loops or the financial "Entries by
         // Class" breakdown disagrees with the order-level revenue.
-        await ctx.db.insert(entryClasses).values(
-          entryInput.classIds.map((cid, idx) => {
-            let classFee: number;
-            if (entryInput.entryType === 'junior_handler' && show.juniorHandlerFee != null) {
-              // JH fee is a flat per-entry charge — attribute to the first
-              // class, zero for the rest. Typically only one class anyway.
-              classFee = idx === 0 ? show.juniorHandlerFee : 0;
-            } else if (entryInput.isNfc && show.nfcEntryFee != null) {
-              classFee = show.nfcEntryFee;
-            } else if (show.firstEntryFee != null) {
-              classFee = idx === 0 ? show.firstEntryFee : (show.subsequentEntryFee ?? show.firstEntryFee);
-            } else {
-              classFee = classMap.get(cid)!.entryFee;
-            }
-            return {
-              entryId: entry!.id,
-              showClassId: cid,
-              fee: classFee,
-            };
-          })
-        );
+        // NFC entries can legitimately have zero classes — skip the insert
+        // in that case (Drizzle's .values([]) throws "values() must be
+        // called with at least one value").
+        if (entryInput.classIds.length > 0) {
+          await ctx.db.insert(entryClasses).values(
+            entryInput.classIds.map((cid, idx) => {
+              let classFee: number;
+              if (entryInput.entryType === 'junior_handler' && show.juniorHandlerFee != null) {
+                // JH fee is a flat per-entry charge — attribute to the first
+                // class, zero for the rest. Typically only one class anyway.
+                classFee = idx === 0 ? show.juniorHandlerFee : 0;
+              } else if (entryInput.isNfc && show.nfcEntryFee != null) {
+                classFee = show.nfcEntryFee;
+              } else if (show.firstEntryFee != null) {
+                classFee = idx === 0 ? show.firstEntryFee : (show.subsequentEntryFee ?? show.firstEntryFee);
+              } else {
+                classFee = classMap.get(cid)!.entryFee;
+              }
+              return {
+                entryId: entry!.id,
+                showClassId: cid,
+                fee: classFee,
+              };
+            })
+          );
+        }
 
         // Create junior handler details if applicable
         if (
