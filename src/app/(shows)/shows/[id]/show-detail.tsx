@@ -847,24 +847,24 @@ export function ShowDetailClient() {
       <div className="sticky top-[4.5rem] z-40 border-b bg-background/95 shadow-sm backdrop-blur-md">
         <div className="mx-auto flex max-w-4xl items-center gap-2 px-3 py-2.5 sm:px-4 lg:px-6">
           {isOpen && (
-            <Button size="sm" className="h-10 flex-1 bg-primary px-4 text-sm shadow-sm shadow-primary/20 sm:flex-initial sm:shrink-0" asChild>
+            <Button className="h-12 flex-1 px-5 text-base font-semibold shadow-lg shadow-primary/30 sm:h-11 sm:flex-initial sm:shrink-0 sm:px-5 sm:shadow-md sm:shadow-primary/25" asChild>
               <Link href={`/shows/${showSlug}/enter`}>
-                <Ticket className="size-4" />
+                <Ticket className="size-5 sm:size-4" />
                 Enter This Show
               </Link>
             </Button>
           )}
           {isCompleted && (
-            <Button size="sm" className="h-10 flex-1 px-4 text-sm sm:flex-initial sm:shrink-0" asChild>
+            <Button className="h-12 flex-1 px-5 text-base font-semibold shadow-lg sm:h-10 sm:flex-initial sm:shrink-0 sm:px-4 sm:text-sm sm:font-medium sm:shadow-sm" asChild>
               <Link href={`/shows/${showSlug}/results`}>
-                <Trophy className="size-4" />
+                <Trophy className="size-5 sm:size-4" />
                 <span className="hidden sm:inline">Results &amp; Critiques</span>
                 <span className="sm:hidden">Results</span>
               </Link>
             </Button>
           )}
           {hasResults && !isCompleted && (
-            <Button size="sm" variant={isOpen ? 'outline' : 'default'} className="h-10 flex-1 px-4 text-sm sm:flex-initial sm:shrink-0" asChild>
+            <Button variant={isOpen ? 'outline' : 'default'} className="h-12 flex-1 px-5 text-base font-semibold sm:h-10 sm:flex-initial sm:shrink-0 sm:px-4 sm:text-sm sm:font-medium" asChild>
               <Link href={`/shows/${showSlug}/results`}>
                 <Trophy className="size-4" />
                 <span className="hidden sm:inline">{show.status === 'in_progress' ? 'Live Results' : 'Results'}</span>
