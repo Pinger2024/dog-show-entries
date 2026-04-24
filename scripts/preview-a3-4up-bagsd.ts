@@ -27,7 +27,7 @@ const CLUB = {
 const SHOW = {
   name: '19 Class Single Breed Championship Show',
   date: 'Saturday 4 July 2026',
-  judge: 'Mr John Smith',
+  judge: 'Mrs Helen Pegg (Dahlmann)',
 };
 
 // Template source is 2480 × 1766 px. We overlay into the cream central area —
