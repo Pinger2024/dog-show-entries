@@ -1319,11 +1319,9 @@ function FeeRow({
           <span className="text-sm text-stone-600">{custom}</span>
         ) : unavailable ? (
           <span className="text-sm italic text-stone-400">Not offered</span>
-        ) : value == null || value === 0 ? (
-          <span className="text-sm text-stone-400">—</span>
         ) : (
           <>
-            <p className="font-serif text-lg font-bold text-stone-900">{formatCurrency(value)}</p>
+            <p className="font-serif text-lg font-bold text-stone-900">{formatCurrency(value ?? 0)}</p>
             {note && <p className="text-[10px] text-stone-500">{note}</p>}
           </>
         )}
