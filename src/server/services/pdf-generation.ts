@@ -5,6 +5,8 @@
  * server-side and upload them to R2 for Tradeprint.
  */
 
+import path from 'node:path';
+import sharp from 'sharp';
 import { db } from '@/server/db';
 import { and, eq, isNull, asc, sql } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
@@ -661,6 +663,166 @@ export async function generateRingNumbersPdf(
   return Buffer.from(await renderToBuffer(pdfDocument));
 }
 
+// ── Prize Cards A3 4-up (Mixam flyer model) ──
+
+const PRIZE_CARD_TEMPLATES = [
+  'public/prize-cards/1-first.jpg',
+  'public/prize-cards/2-second.jpg',
+  'public/prize-cards/3-third.jpg',
+  'public/prize-cards/4-reserve.jpg',
+] as const;
+
+const PLACEMENT_COLOURS = ['#8A0F25', '#12315A', '#6B5A1A', '#104A22'] as const;
+
+// Trimmed A3 landscape @ 300 DPI
+const A3_W = 4960;
+const A3_H = 3508;
+const CARD_SLOT_W = A3_W / 2; // 2480
+const CARD_SLOT_H = A3_H / 2; // 1754
+const TEMPLATE_W = 2480;
+const TEMPLATE_H = 1766;
+const LOGO_HEIGHT = 280;
+// 3mm bleed (standard Mixam requirement): 3 × (300/25.4) ≈ 35px
+const BLEED_PX = 35;
+
+function buildOverlaySvg(opts: {
+  orgName: string;
+  showName: string;
+  dateStr: string;
+  judgeName: string | null;
+  placementColour: string;
+}): Buffer {
+  const { orgName, showName, dateStr, judgeName, placementColour } = opts;
+  const cx = TEMPLATE_W / 2;
+  const judgeText = judgeName
+    ? `<text x="${cx}" y="1055" class="judgeName">Judge: ${escapeXml(judgeName)}</text>`
+    : '';
+  return Buffer.from(`
+    <svg xmlns="http://www.w3.org/2000/svg" width="${TEMPLATE_W}" height="${TEMPLATE_H}">
+      <style>
+        .clubName { font-family: 'Times New Roman', serif; font-weight: 700; font-size: 82px; fill: #1a1a1a; text-anchor: middle; letter-spacing: 1px; }
+        .showName { font-family: 'Times New Roman', serif; font-style: italic; font-size: 60px; fill: #333; text-anchor: middle; }
+        .showDate { font-family: 'Times New Roman', serif; font-size: 50px; fill: #555; text-anchor: middle; letter-spacing: 2px; }
+        .judgeName { font-family: 'Times New Roman', serif; font-style: italic; font-size: 58px; fill: #444; text-anchor: middle; }
+        .divider { stroke: ${placementColour}; stroke-width: 2; opacity: 0.5; }
+      </style>
+      <text x="${cx}" y="760" class="clubName">${escapeXml(orgName)}</text>
+      <line x1="${cx - 500}" y1="810" x2="${cx + 500}" y2="810" class="divider" />
+      <text x="${cx}" y="895" class="showName">${escapeXml(showName)}</text>
+      <text x="${cx}" y="975" class="showDate">${escapeXml(dateStr)}</text>
+      ${judgeText}
+    </svg>`);
+}
+
+function escapeXml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function formatShowDate(isoDate: string): string {
+  // isoDate is e.g. "2026-07-04" — parse at noon UTC to avoid DST boundary issues
+  const d = new Date(`${isoDate}T12:00:00Z`);
+  const raw = d.toLocaleDateString('en-GB', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
+  });
+  return raw.replace(',', ''); // "Saturday, 4 July 2026" → "Saturday 4 July 2026"
+}
+
+async function composeOneCard(
+  templatePath: string,
+  placementIdx: number,
+  overlayOpts: Omit<Parameters<typeof buildOverlaySvg>[0], 'placementColour'>,
+  logoBuffer: Buffer | null,
+): Promise<Buffer> {
+  const svg = buildOverlaySvg({ ...overlayOpts, placementColour: PLACEMENT_COLOURS[placementIdx] });
+  const composites: sharp.OverlayOptions[] = [];
+
+  if (logoBuffer) {
+    const resizedLogo = await sharp(logoBuffer)
+      .resize({ height: LOGO_HEIGHT, fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
+      .png()
+      .toBuffer();
+    const { width: lw = LOGO_HEIGHT } = await sharp(resizedLogo).metadata();
+    composites.push({ input: resizedLogo, top: 420, left: Math.round((TEMPLATE_W - lw) / 2) });
+  }
+
+  composites.push({ input: svg, top: 0, left: 0 });
+
+  return sharp(templatePath).composite(composites).toBuffer();
+}
+
+/**
+ * Generates an A3 landscape 4-up prize card sheet (JPEG, 300 DPI, +3mm bleed)
+ * suitable for uploading to Mixam as flyer artwork. Returns a JPEG Buffer.
+ */
+export async function generatePrizeCardsA3Jpeg(showId: string): Promise<Buffer> {
+  const show = await db.query.shows.findFirst({
+    where: eq(schema.shows.id, showId),
+    with: { organisation: true },
+  });
+  if (!show) throw new Error(`Show ${showId} not found`);
+
+  const judgeAssignments = await db.query.judgeAssignments.findMany({
+    where: eq(schema.judgeAssignments.showId, showId),
+    with: { judge: true },
+  });
+
+  const uniqueNames = [...new Set(
+    judgeAssignments.map((ja) => ja.judge?.name).filter((n): n is string => !!n)
+  )];
+  const judgeName = uniqueNames.length === 1 ? uniqueNames[0] : uniqueNames.length > 1 ? 'Various Judges' : null;
+
+  // Fetch club logo if present
+  let logoBuffer: Buffer | null = null;
+  const logoUrl = show.organisation?.logoUrl;
+  if (logoUrl) {
+    try {
+      const res = await fetch(logoUrl);
+      if (res.ok) logoBuffer = Buffer.from(await res.arrayBuffer());
+    } catch {
+      // proceed without logo
+    }
+  }
+
+  const overlayOpts = {
+    orgName: show.organisation?.name ?? '',
+    showName: show.name,
+    dateStr: formatShowDate(show.startDate),
+    judgeName,
+  };
+
+  const templateRoot = path.join(process.cwd(), 'public', 'prize-cards');
+  const cards = await Promise.all(
+    PRIZE_CARD_TEMPLATES.map((tpl, i) =>
+      composeOneCard(path.join(process.cwd(), tpl), i, overlayOpts, logoBuffer)
+    )
+  );
+
+  const resized = await Promise.all(
+    cards.map((buf) =>
+      sharp(buf).resize(CARD_SLOT_W, CARD_SLOT_H, { fit: 'cover', position: 'top' }).png().toBuffer()
+    )
+  );
+
+  void templateRoot; // used via path.join(process.cwd(), tpl) above
+
+  const canvasW = A3_W + BLEED_PX * 2;
+  const canvasH = A3_H + BLEED_PX * 2;
+
+  const sheet = await sharp({
+    create: { width: canvasW, height: canvasH, channels: 3, background: '#ffffff' },
+  })
+    .composite([
+      { input: resized[0], left: BLEED_PX, top: BLEED_PX },
+      { input: resized[1], left: BLEED_PX + CARD_SLOT_W, top: BLEED_PX },
+      { input: resized[2], left: BLEED_PX, top: BLEED_PX + CARD_SLOT_H },
+      { input: resized[3], left: BLEED_PX + CARD_SLOT_W, top: BLEED_PX + CARD_SLOT_H },
+    ])
+    .jpeg({ quality: 92, mozjpeg: true })
+    .toBuffer();
+
+  return sheet;
+}
+
 // ── Upload helper for print pipeline ──
 
 export async function generateAndUploadForPrint(
@@ -668,14 +830,22 @@ export async function generateAndUploadForPrint(
   documentType: string,
   documentFormat?: string
 ): Promise<{ storageKey: string; publicUrl: string }> {
-  let buffer: Buffer;
+  const timestamp = Date.now();
+  const formatSuffix = documentFormat ? `-${documentFormat}` : '';
 
+  // Prize cards use the sharp-based A3 4-up compositor (JPEG artwork for Mixam).
+  // All other types generate PDFs via @react-pdf/renderer.
+  if (documentType === 'prize_cards') {
+    const jpegBuf = await generatePrizeCardsA3Jpeg(showId);
+    const storageKey = `print-orders/${showId}/prize_cards${formatSuffix}-${timestamp}.jpg`;
+    await uploadToR2(storageKey, jpegBuf, 'image/jpeg');
+    return { storageKey, publicUrl: getPublicUrl(storageKey) };
+  }
+
+  let buffer: Buffer;
   switch (documentType) {
     case 'catalogue':
       buffer = await generateCataloguePdf(showId, (documentFormat as 'standard' | 'by-class') ?? 'standard');
-      break;
-    case 'prize_cards':
-      buffer = await generatePrizeCardsPdf(showId);
       break;
     case 'schedule':
       buffer = await generateSchedulePdf(showId);
@@ -690,12 +860,7 @@ export async function generateAndUploadForPrint(
       throw new Error(`Unsupported document type: ${documentType}`);
   }
 
-  const timestamp = Date.now();
-  const formatSuffix = documentFormat ? `-${documentFormat}` : '';
   const storageKey = `print-orders/${showId}/${documentType}${formatSuffix}-${timestamp}.pdf`;
-
   await uploadToR2(storageKey, buffer, 'application/pdf');
-  const publicUrl = getPublicUrl(storageKey);
-
-  return { storageKey, publicUrl };
+  return { storageKey, publicUrl: getPublicUrl(storageKey) };
 }

@@ -55,7 +55,7 @@ function getPreviewUrl(showId: string, documentType: string, documentFormat?: st
     case 'schedule':
       return `/api/schedule/${showId}?preview${documentFormat && documentFormat !== 'standard' ? `&format=${documentFormat}` : ''}`;
     case 'prize_cards':
-      return `/api/prize-cards/${showId}?preview`;
+      return `/api/prize-cards-a3/${showId}?preview`;
     case 'ring_board':
       return `/api/ring-board/${showId}?preview`;
     case 'ring_numbers':
