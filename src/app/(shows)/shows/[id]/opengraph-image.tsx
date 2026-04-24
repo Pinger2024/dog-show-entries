@@ -1,5 +1,7 @@
 import { ImageResponse } from 'next/og';
 import { eq, and, isNull, sql } from 'drizzle-orm';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { db } from '@/server/db';
 import { shows, entries, showSponsors } from '@/server/db/schema';
 import { isUuid } from '@/lib/slugify';
@@ -19,7 +21,10 @@ const SHOW_TYPE_LABELS: Record<string, string> = {
 };
 
 /** Simple fallback image — just the show name on a dark background */
-function fallbackImage(showName: string, fonts: { name: string; data: ArrayBuffer; weight: number }[]) {
+function fallbackImage(
+  showName: string,
+  fonts: { name: string; data: ArrayBuffer; weight: 400 | 600 | 700 }[]
+) {
   return new ImageResponse(
     (
       <div
@@ -90,23 +95,23 @@ export default async function OGImage({
 }) {
   const { id } = await params;
 
-  // Load fonts first — these are local files and should always work
+  // Load fonts first — node fs on the project root is reliable across dev and prod
+  // (the `new URL('../../../../../public/fonts/...', import.meta.url)` pattern silently
+  // fails under Next 15's prod bundler, dropping us into the "Remi Show Manager"
+  // fallback on every social share).
   let baskervilleBold: ArrayBuffer;
   let interRegular: ArrayBuffer;
   let interSemibold: ArrayBuffer;
 
   try {
-    [baskervilleBold, interRegular, interSemibold] = await Promise.all([
-      fetch(new URL('../../../../../public/fonts/libre-baskerville-bold.ttf', import.meta.url)).then(
-        (r) => r.arrayBuffer()
-      ),
-      fetch(new URL('../../../../../public/fonts/inter-regular.ttf', import.meta.url)).then(
-        (r) => r.arrayBuffer()
-      ),
-      fetch(new URL('../../../../../public/fonts/inter-semibold.ttf', import.meta.url)).then(
-        (r) => r.arrayBuffer()
-      ),
-    ]);
+    const fontsDir = join(process.cwd(), 'public', 'fonts');
+    const readFont = (name: string): ArrayBuffer => {
+      const buf = readFileSync(join(fontsDir, name));
+      return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+    };
+    baskervilleBold = readFont('libre-baskerville-bold.ttf');
+    interRegular = readFont('inter-regular.ttf');
+    interSemibold = readFont('inter-semibold.ttf');
   } catch (err) {
     console.error('OG image: font loading failed:', err);
     // Return a minimal image with default fonts
