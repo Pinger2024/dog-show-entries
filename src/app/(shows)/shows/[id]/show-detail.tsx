@@ -874,8 +874,8 @@ export function ShowDetailClient() {
           )}
           <div className="ml-auto flex items-center gap-0.5 sm:gap-1">
             {(show.showClasses?.length ?? 0) > 0 && (
-              <Button variant="ghost" size="sm" className="hidden h-9 gap-1.5 text-xs text-muted-foreground hover:text-foreground sm:flex" asChild>
-                <a href={`/api/schedule/${show.id}`} target="_blank" rel="noopener noreferrer">
+              <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs" asChild>
+                <a href={`/api/schedule/${show.id}`} target="_blank" rel="noopener noreferrer" aria-label="Download schedule">
                   <FileText className="size-4" />
                   <span className="hidden sm:inline">Schedule</span>
                 </a>
@@ -883,9 +883,10 @@ export function ShowDetailClient() {
             )}
             {show.status !== 'draft' && show.status !== 'cancelled' && (
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
-                className="hidden h-9 gap-1.5 text-xs text-muted-foreground hover:text-foreground sm:flex"
+                className="h-9 gap-1.5 text-xs"
+                aria-label="Add to calendar"
                 onClick={() => { window.location.href = `/api/shows/${show.id}/calendar`; }}
               >
                 <CalendarPlus className="size-4" />
