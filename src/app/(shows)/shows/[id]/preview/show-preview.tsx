@@ -29,6 +29,94 @@ import { formatCurrency } from '@/lib/date-utils';
 import { ShowShareDropdown } from '@/components/show/show-share-dropdown';
 import { cn } from '@/lib/utils';
 
+/* ─── Decorative components ─────────────────────── */
+
+function RosetteWatermark() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 200 200"
+      className="pointer-events-none absolute left-1/2 top-8 -translate-x-1/2 opacity-[0.06] sm:top-14"
+      width="340"
+      height="340"
+    >
+      <g fill="currentColor" className="text-amber-800">
+        {Array.from({ length: 16 }).map((_, i) => {
+          const angle = (i * 360) / 16;
+          return (
+            <ellipse
+              key={i}
+              cx="100"
+              cy="60"
+              rx="12"
+              ry="34"
+              transform={`rotate(${angle} 100 100)`}
+            />
+          );
+        })}
+        <circle cx="100" cy="100" r="22" />
+        <circle cx="100" cy="100" r="14" fill="#fbf7ef" />
+      </g>
+    </svg>
+  );
+}
+
+function ClubMedallion({ logoUrl, initials }: { logoUrl?: string | null; initials: string }) {
+  return (
+    <div className="relative">
+      {/* Decorative outer gold ring */}
+      <div aria-hidden="true" className="absolute inset-0 rounded-full bg-gradient-to-br from-amber-300 via-amber-500/70 to-amber-600 p-[2px] shadow-[0_4px_30px_rgba(217,119,6,0.15)]">
+        <div className="size-full rounded-full bg-[#fbf7ef]" />
+      </div>
+      {/* Inner medallion */}
+      <div className="relative flex size-36 items-center justify-center rounded-full bg-white p-4 shadow-inner ring-1 ring-amber-100 sm:size-44 sm:p-5">
+        {logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={logoUrl} alt="" className="size-full object-contain" />
+        ) : (
+          <span className="font-serif text-4xl font-bold text-amber-900 sm:text-5xl">{initials}</span>
+        )}
+      </div>
+      {/* Corner dots — certificate-style */}
+      <span aria-hidden="true" className="absolute -left-3 top-1/2 -translate-y-1/2 text-amber-500/40">◆</span>
+      <span aria-hidden="true" className="absolute -right-3 top-1/2 -translate-y-1/2 text-amber-500/40">◆</span>
+    </div>
+  );
+}
+
+function DividerDiamond() {
+  return (
+    <span aria-hidden="true" className="text-[8px] text-amber-500/60">◆</span>
+  );
+}
+
+function OrnamentalDivider({ label, className }: { label?: string; className?: string }) {
+  return (
+    <div className={cn('mx-auto flex max-w-md items-center gap-3', className)}>
+      <span className="h-px flex-1 bg-gradient-to-r from-transparent via-amber-500/40 to-amber-500/70" />
+      <span aria-hidden="true" className="text-amber-600">◆</span>
+      {label && (
+        <span className="font-serif text-[11px] italic tracking-[0.35em] text-amber-800">
+          {label}
+        </span>
+      )}
+      <span aria-hidden="true" className="text-amber-600">◆</span>
+      <span className="h-px flex-1 bg-gradient-to-l from-transparent via-amber-500/40 to-amber-500/70" />
+    </div>
+  );
+}
+
+function EditorialStat({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
+  return (
+    <div className="px-2 sm:px-4">
+      <p className={cn('font-serif text-4xl font-bold leading-none sm:text-5xl', highlight ? 'text-amber-700' : 'text-stone-900')}>
+        {value}
+      </p>
+      <p className="mt-1.5 font-serif text-[10px] uppercase tracking-[0.3em] text-stone-500">{label}</p>
+    </div>
+  );
+}
+
 /* ─── Utility: initials from a name ─────────────── */
 
 function getInitials(name: string) {
@@ -134,65 +222,86 @@ type JudgeData = {
   kcNumber?: string | null;
 };
 
-function JudgeCard({ judge }: { judge: JudgeData }) {
+function JudgeCard({ judge, classCount }: { judge: JudgeData; classCount?: number }) {
   const [open, setOpen] = useState(false);
   const initials = getInitials(judge.name);
   return (
-    <article className="group overflow-hidden rounded-2xl border border-stone-200 bg-white transition-shadow hover:shadow-md">
-      <div className="flex items-start gap-4 p-5 sm:p-6">
-        {judge.photoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={judge.photoUrl}
-            alt={judge.name}
-            className="size-16 shrink-0 rounded-full object-cover ring-2 ring-amber-200 sm:size-20"
-          />
-        ) : (
-          <div
-            aria-hidden="true"
-            className="flex size-16 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-200 via-amber-100 to-stone-100 font-serif text-xl font-bold text-amber-900 ring-2 ring-amber-300/60 sm:size-20 sm:text-2xl"
-          >
-            {initials}
+    <article className="group relative overflow-hidden rounded-2xl border border-amber-200/60 bg-gradient-to-b from-white to-amber-50/30 shadow-sm transition-shadow hover:shadow-md">
+      {/* Certificate-style corner marks */}
+      <span aria-hidden="true" className="absolute left-3 top-3 text-[8px] text-amber-500/50">◆</span>
+      <span aria-hidden="true" className="absolute right-3 top-3 text-[8px] text-amber-500/50">◆</span>
+
+      <div className="flex flex-col items-center gap-4 px-5 pb-4 pt-8 text-center sm:pt-10">
+        {/* Medallion */}
+        <div className="relative">
+          <div aria-hidden="true" className="absolute inset-0 rounded-full bg-gradient-to-br from-amber-300 via-amber-500/80 to-amber-600 p-[2px]">
+            <div className="size-full rounded-full bg-white" />
           </div>
-        )}
-        <div className="min-w-0 flex-1">
+          {judge.photoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={judge.photoUrl}
+              alt={judge.name}
+              className="relative size-20 rounded-full object-cover sm:size-24"
+            />
+          ) : (
+            <div
+              aria-hidden="true"
+              className="relative flex size-20 items-center justify-center rounded-full bg-gradient-to-br from-amber-50 to-amber-100 font-serif text-2xl font-bold text-amber-900 sm:size-24 sm:text-3xl"
+            >
+              {initials}
+            </div>
+          )}
+        </div>
+
+        <div>
           <h3 className="font-serif text-lg font-bold leading-tight text-stone-900 sm:text-xl">{judge.name}</h3>
           {judge.affix && (
-            <p className="text-sm italic text-amber-700">({judge.affix})</p>
+            <p className="mt-0.5 text-sm italic text-amber-700">({judge.affix})</p>
           )}
-          <p className="mt-0.5 text-sm text-stone-600">{judge.role}</p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {judge.jepLevel && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
-                <ShieldCheck className="size-3" />
-                JEP {judge.jepLevel}
-              </span>
-            )}
-            {judge.kcNumber && (
-              <span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[11px] font-medium text-stone-600">
-                RKC · {judge.kcNumber}
-              </span>
-            )}
-          </div>
+          <OrnamentalDivider className="mt-3" />
+          <p className="mt-3 font-serif text-sm italic text-stone-700">{judge.role}</p>
+          {classCount !== undefined && classCount > 0 && (
+            <p className="mt-1 text-xs font-semibold uppercase tracking-[0.2em] text-amber-800">
+              {classCount} {classCount === 1 ? 'Class' : 'Classes'}
+            </p>
+          )}
         </div>
       </div>
-      {judge.breeds.length > 0 && (
-        <div className="border-t border-stone-100 bg-stone-50/50 px-5 py-3 sm:px-6">
-          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-stone-500">Judging</p>
-          <p className="text-sm text-stone-700">{judge.breeds.join(' · ')}</p>
+
+      {(judge.jepLevel || judge.kcNumber) && (
+        <div className="flex flex-wrap items-center justify-center gap-1.5 border-t border-amber-200/50 bg-amber-50/40 px-5 py-2.5">
+          {judge.jepLevel && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+              <ShieldCheck className="size-3" />
+              JEP {judge.jepLevel}
+            </span>
+          )}
+          {judge.kcNumber && (
+            <span className="rounded-full border border-stone-200 bg-white px-2 py-0.5 text-[11px] font-medium text-stone-600">
+              RKC · {judge.kcNumber}
+            </span>
+          )}
         </div>
       )}
-      <div className="border-t border-stone-100 px-5 py-3 sm:px-6">
+
+      {judge.breeds.length > 0 && judge.breeds.length <= 5 && (
+        <div className="border-t border-amber-200/50 px-5 py-3 text-center">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-stone-500">Judging</p>
+          <p className="mt-1 font-serif text-sm italic text-stone-700">{judge.breeds.join(' · ')}</p>
+        </div>
+      )}
+
+      <div className="border-t border-amber-200/50 px-5 py-3 text-center">
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-amber-700 hover:text-amber-900"
+          className="inline-flex items-center gap-1 font-serif text-xs italic tracking-wider text-amber-700 hover:text-amber-900"
         >
-          {open ? 'Hide bio' : 'Read bio'}
-          <ChevronRight className={cn('size-3 transition-transform', open && 'rotate-90')} />
+          {open ? '— hide bio —' : '— read bio —'}
         </button>
         {open && (
-          <p className="mt-3 text-sm italic leading-relaxed text-stone-600">
+          <p className="mt-3 text-left text-sm italic leading-relaxed text-stone-600">
             {judge.bio ?? 'Bio coming soon. Judges will be invited to add a short biography so exhibitors can learn more about their appointments.'}
           </p>
         )}
@@ -338,24 +447,77 @@ export function ShowPreviewClient() {
     return [...(breedEntryStats ?? [])].sort((a, b) => b.dogCount - a.dogCount).slice(0, 3);
   }, [breedEntryStats]);
 
+  /* Resolve a fallback breed name for single-breed shows where individual classes
+     may not carry a breed FK. */
+  const singleBreedName = useMemo(() => {
+    if (!show) return null;
+    const isSingleBreed = (show as { showScope?: string }).showScope === 'single_breed';
+    if (!isSingleBreed) return null;
+    const scWithBreed = (show.showClasses ?? []).find(
+      (sc): sc is typeof sc & { breed: { name: string } } =>
+        !!(sc as { breed?: { name?: string } | null }).breed?.name
+    );
+    if (scWithBreed) return scWithBreed.breed.name;
+    const jaWithBreed = (show.judgeAssignments ?? []).find(
+      (ja): ja is typeof ja & { breed: { name: string } } =>
+        !!(ja as { breed?: { name?: string } | null }).breed?.name
+    );
+    return jaWithBreed?.breed.name ?? null;
+  }, [show]);
+
   /* ─── Breed aggregation ─── */
   const breedGroups = useMemo(() => {
-    if (!show) return [];
-    const m = new Map<string, { classes: number; judgeName?: string }>();
+    if (!show) return [] as { breed: string; classes: number; isJH: boolean; judgeName?: string }[];
+
+    const m = new Map<string, { classes: number; isJH: boolean; judgeName?: string }>();
     for (const sc of (show.showClasses ?? [])) {
-      const name = (sc as { breed?: { name?: string } }).breed?.name ?? 'Classes';
-      if (!m.has(name)) m.set(name, { classes: 0 });
-      m.get(name)!.classes += 1;
+      const scAny = sc as { breed?: { name?: string } | null; classDefinition?: { type?: string } };
+      const isJH = scAny.classDefinition?.type === 'junior_handler';
+      const breedName = scAny.breed?.name;
+      let groupName: string;
+      if (isJH) groupName = 'Junior Handling';
+      else if (breedName) groupName = breedName;
+      else if (singleBreedName) groupName = singleBreedName;
+      else groupName = 'Breed Classes';
+
+      if (!m.has(groupName)) m.set(groupName, { classes: 0, isJH });
+      const entry = m.get(groupName)!;
+      entry.classes += 1;
     }
-    for (const ja of (show.judgeAssignments ?? [])) {
-      const bname = (ja as { breed?: { name?: string } }).breed?.name;
-      const jname = (ja as { judge?: { name?: string } }).judge?.name;
-      if (bname && jname && m.has(bname) && !m.get(bname)!.judgeName) {
-        m.get(bname)!.judgeName = jname;
+
+    // Attach judges: use the pre-aggregated `judges` list with its resolved roles
+    for (const [groupName, entry] of m) {
+      if (entry.isJH) {
+        const jh = judges.find((j) => j.role === 'Junior Handling');
+        if (jh) entry.judgeName = jh.name;
+      } else {
+        // Prefer a judge explicitly tied to this breed, otherwise the main breed judge
+        // (Dogs & Bitches / Dogs / Bitches) for a single-breed show
+        const breedJudge = judges.find((j) => j.breeds.includes(groupName));
+        const mainJudge = judges.find((j) => ['Dogs & Bitches', 'Dogs', 'Bitches'].includes(j.role));
+        entry.judgeName = breedJudge?.name ?? mainJudge?.name;
       }
     }
-    return Array.from(m.entries()).map(([breed, v]) => ({ breed, ...v }));
-  }, [show]);
+
+    // Sort: main breed(s) first, Junior Handling last
+    return Array.from(m.entries())
+      .map(([breed, v]) => ({ breed, ...v }))
+      .sort((a, b) => {
+        if (a.isJH !== b.isJH) return a.isJH ? 1 : -1;
+        return a.breed.localeCompare(b.breed);
+      });
+  }, [show, judges, singleBreedName]);
+
+  /* Derive total class counts per judge for display */
+  const judgeClassCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const g of breedGroups) {
+      if (g.judgeName) {
+        map.set(g.judgeName, (map.get(g.judgeName) ?? 0) + g.classes);
+      }
+    }
+    return map;
+  }, [breedGroups]);
 
   if (isLoading || !show) {
     return (
@@ -440,144 +602,150 @@ export function ShowPreviewClient() {
         <img
           src={showAny.bannerImageUrl}
           alt={`${show.name} banner`}
-          className="h-40 w-full object-cover sm:h-56 lg:h-72"
+          className="h-44 w-full object-cover sm:h-60 lg:h-80"
         />
       )}
-      <header className="relative overflow-hidden bg-gradient-to-br from-amber-100/80 via-amber-50/60 to-stone-50">
-        {/* Subtle paper texture via radial highlight */}
-        <div aria-hidden="true" className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(250,204,21,0.15),transparent_55%)]" />
-        {/* Gold accent lines */}
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-500/60 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent" />
+      <header className="relative overflow-hidden bg-[#fbf7ef]">
+        {/* Layered background — warm cream + rosette watermark + radial highlight */}
+        <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-br from-amber-50/50 via-white/30 to-amber-50/30" />
+        <div aria-hidden="true" className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(217,119,6,0.08),transparent_55%)]" />
+        <RosetteWatermark />
+        {/* Gold hairlines */}
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-600/50 to-transparent" />
+        <div className="absolute inset-x-0 top-[2px] h-px bg-gradient-to-r from-transparent via-amber-400/30 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-amber-600/40 to-transparent" />
 
-        <div className="relative mx-auto max-w-6xl px-4 pb-12 pt-10 sm:px-6 sm:pb-16 sm:pt-14 lg:px-8 lg:pb-20 lg:pt-20">
-          {/* Club crest — the club IS the brand */}
-          <div className="flex flex-col items-center text-center">
-            {org?.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={org.logoUrl}
-                alt={org.name}
-                className="h-28 w-auto object-contain drop-shadow-sm sm:h-36 lg:h-40"
-              />
-            ) : (
-              <div className="flex size-28 items-center justify-center rounded-full bg-white font-serif text-3xl font-bold text-amber-900 shadow-md ring-2 ring-amber-300/60 sm:size-36 sm:text-4xl">
-                {getInitials(org?.name ?? '?')}
-              </div>
-            )}
-            <h2 className="mt-5 max-w-2xl font-serif text-xl font-bold leading-tight text-stone-900 sm:text-2xl lg:text-3xl">
+        <div className="relative mx-auto max-w-4xl px-4 pb-14 pt-12 sm:px-6 sm:pb-20 sm:pt-16 lg:px-8 lg:pb-24 lg:pt-24">
+          {/* Tiny notice label — heritage programme feel */}
+          <p className="text-center text-[10px] font-semibold uppercase tracking-[0.4em] text-amber-800/70">
+            Notice of Show
+          </p>
+
+          {/* Club crest — on an ornamented medallion */}
+          <div className="mt-6 flex flex-col items-center">
+            <ClubMedallion logoUrl={org?.logoUrl} initials={getInitials(org?.name ?? '?')} />
+            <h2 className="mt-7 max-w-2xl text-center font-serif text-2xl font-bold uppercase leading-tight tracking-[0.05em] text-stone-900 sm:text-3xl lg:text-[2rem]">
               {org?.name}
             </h2>
-            <div className="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] font-medium text-stone-600 sm:text-xs">
-              <span className="inline-flex items-center gap-1">
+            <div className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] font-medium text-stone-600 sm:text-xs">
+              <span className="inline-flex items-center gap-1.5">
                 <ShieldCheck className="size-3.5 text-amber-700" />
                 RKC Registered
               </span>
-              <span className="text-stone-300">·</span>
+              <DividerDiamond />
               <span>Established 1985</span>
-              <span className="text-stone-300">·</span>
+              <DividerDiamond />
               <span>Breed Specialist</span>
             </div>
           </div>
 
-          {/* Ornamental divider — club presents this show */}
-          <div className="mx-auto mt-10 flex max-w-sm items-center gap-3 sm:mt-12">
-            <span className="h-px flex-1 bg-gradient-to-r from-transparent to-amber-400/50" />
-            <span className="font-serif text-xs italic tracking-widest text-amber-800">presents</span>
-            <span className="h-px flex-1 bg-gradient-to-l from-transparent to-amber-400/50" />
-          </div>
+          {/* Ornate 'presents' divider */}
+          <OrnamentalDivider label="presents" className="mt-10 sm:mt-12" />
 
-          {/* Show type chip */}
+          {/* Show type */}
           <div className="mt-6 flex justify-center">
-            <span className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-900">
+            <span className="inline-flex items-center gap-2 rounded-full border border-amber-400/60 bg-amber-50 px-3.5 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-amber-900">
               <Crown className="size-3" />
               {showType}
             </span>
           </div>
 
           {/* Show name — the event itself */}
-          <h1 className="mt-4 text-center font-serif text-4xl font-bold leading-[1.05] text-stone-900 sm:text-5xl lg:text-6xl">
+          <h1 className="mt-5 text-center font-serif text-[2.5rem] font-bold leading-[1.02] text-stone-900 sm:text-5xl lg:text-6xl">
             {show.name}
           </h1>
 
-          {/* Date block — editorial treatment */}
-          <div className="mt-10 flex flex-wrap items-end justify-center gap-x-8 gap-y-4 text-left">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-800/80">The Occasion</p>
-              <div className="mt-1 flex items-baseline gap-3">
-                <span className="font-serif text-5xl font-bold leading-none text-stone-900 sm:text-6xl">{dayNum}</span>
-                <div className="flex flex-col">
-                  <span className="font-serif text-lg font-semibold text-stone-900">{dayName}</span>
-                  <span className="text-sm text-stone-500">{monthYear}</span>
-                </div>
-              </div>
+          {/* Thin rule + year */}
+          <div className="mt-6 flex items-center justify-center gap-3">
+            <span className="h-px w-12 bg-amber-500/50" />
+            <span className="font-serif text-xs italic tracking-[0.3em] text-stone-500">
+              {format(parseISO(show.startDate), 'yyyy')}
+            </span>
+            <span className="h-px w-12 bg-amber-500/50" />
+          </div>
+
+          {/* Editorial date / venue / rhythm */}
+          <div className="mt-10 grid gap-6 text-center sm:mt-12 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-10">
+            {/* Date column */}
+            <div className="flex flex-col items-center">
+              <span className="font-serif text-[11px] uppercase tracking-[0.3em] text-stone-500">{dayName}</span>
+              <span className="mt-1 font-serif text-7xl font-bold leading-none text-stone-900 sm:text-[5.5rem]">{dayNum}</span>
+              <span className="mt-1 font-serif text-sm italic tracking-[0.15em] text-stone-600">{monthYear}</span>
             </div>
 
+            {/* Center: venue */}
             {venue && (
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-800/80">The Venue</p>
-                <div className="mt-1 flex items-start gap-2">
-                  <MapPin className="mt-1 size-4 shrink-0 text-stone-400" />
-                  <div>
-                    <p className="font-serif text-base font-semibold text-stone-900">{venue.name}</p>
-                    <p className="text-sm text-stone-500">{venue.postcode ?? venue.address ?? ''}</p>
-                  </div>
-                </div>
+              <div className="border-y border-amber-500/20 py-4 sm:border-x sm:border-y-0 sm:px-10">
+                <p className="font-serif text-[10px] uppercase tracking-[0.3em] text-amber-800/70">At</p>
+                <p className="mt-1.5 font-serif text-lg font-bold leading-tight text-stone-900 sm:text-xl">{venue.name}</p>
+                <p className="mt-0.5 text-sm text-stone-600">{venue.postcode ?? venue.address ?? ''}</p>
               </div>
             )}
 
+            {/* Right: rhythm */}
             {(showAny.showOpenTime || showAny.startTime) && (
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-800/80">The Rhythm</p>
-                <div className="mt-1 space-y-0.5 text-sm text-stone-700">
-                  {showAny.showOpenTime && <p><span className="text-stone-400">Doors</span> {showAny.showOpenTime}</p>}
-                  {showAny.startTime && <p><span className="text-stone-400">Judging</span> {showAny.startTime}</p>}
-                </div>
+              <div className="flex flex-col items-center gap-1 text-sm text-stone-700">
+                {showAny.showOpenTime && (
+                  <div>
+                    <p className="font-serif text-[10px] uppercase tracking-[0.3em] text-stone-500">Doors</p>
+                    <p className="mt-0.5 font-serif text-lg font-semibold text-stone-900">{showAny.showOpenTime}</p>
+                  </div>
+                )}
+                {showAny.startTime && (
+                  <div className="mt-2">
+                    <p className="font-serif text-[10px] uppercase tracking-[0.3em] text-stone-500">Judging</p>
+                    <p className="mt-0.5 font-serif text-lg font-semibold text-stone-900">{showAny.startTime}</p>
+                  </div>
+                )}
               </div>
             )}
           </div>
 
-          {/* Countdown — only when entries open */}
+          {/* Countdown — elegant, inline */}
           {isOpen && entryCloseDate && (
-            <div className="mt-10 rounded-2xl border border-amber-200 bg-white/80 p-5 shadow-sm backdrop-blur-sm sm:p-6">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-800">Entries Close</p>
-                  <p className="mt-0.5 text-sm text-stone-600">{format(entryCloseDate, 'EEEE d MMMM · HH:mm')}</p>
-                </div>
-                <div className="rounded-xl bg-amber-50 px-4 py-3 ring-1 ring-amber-100">
-                  <HeroCountdown target={entryCloseDate} />
-                </div>
+            <div className="mt-12 flex flex-col items-center gap-3 sm:flex-row sm:justify-center sm:gap-6">
+              <p className="font-serif text-[10px] uppercase tracking-[0.3em] text-amber-800/80">
+                Entries close in
+              </p>
+              <div className="inline-flex items-center gap-2 rounded-full border border-amber-400/50 bg-white/70 px-4 py-2 shadow-sm ring-1 ring-amber-100 backdrop-blur-sm">
+                <HeroCountdown target={entryCloseDate} />
               </div>
+              <p className="hidden text-xs text-stone-500 sm:block">{format(entryCloseDate, 'EEE d MMM · HH:mm')}</p>
             </div>
           )}
 
-          {/* Live entry pulse */}
+          {/* Stats — editorial row with hairline separators */}
           {showHasEntries && totalDogs > 0 && (
-            <div className="mt-6 flex flex-wrap items-center gap-6 border-t border-amber-200/60 pt-6">
-              <Stat label="Dogs Entered" value={totalDogs} highlight />
-              <Stat label="Exhibitors" value={totalExhibitors} />
-              <Stat label="Classes" value={totalClasses} />
-              <Stat label="Breeds" value={breedGroups.length} />
+            <div className="mt-10 sm:mt-12">
+              <div className="mx-auto grid max-w-3xl grid-cols-2 gap-y-4 divide-amber-500/20 text-center sm:grid-cols-4 sm:divide-x">
+                <EditorialStat label="Dogs" value={totalDogs} highlight />
+                <EditorialStat label="Exhibitors" value={totalExhibitors} />
+                <EditorialStat label="Classes" value={totalClasses} />
+                <EditorialStat label="Breeds" value={breedGroups.length} />
+              </div>
               {topBreeds.length > 0 && (
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-800/80">Most Entered</p>
-                  <p className="mt-1 text-sm text-stone-700">
-                    {topBreeds.map((b) => `${b.breedName} (${b.dogCount})`).join(' · ')}
-                  </p>
-                </div>
+                <p className="mt-5 text-center text-xs italic text-stone-600">
+                  Leading the card:{' '}
+                  {topBreeds.map((b, i) => (
+                    <span key={b.breedName}>
+                      {i > 0 && <span className="text-amber-500"> · </span>}
+                      <span className="font-semibold not-italic text-stone-800">{b.breedName}</span>
+                      <span className="text-stone-500"> ({b.dogCount})</span>
+                    </span>
+                  ))}
+                </p>
               )}
             </div>
           )}
 
           {titleSponsor && (
-            <div className="mt-6 flex items-center gap-3 border-t border-amber-200/60 pt-6">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-800/80">In association with</span>
+            <div className="mt-12 flex flex-col items-center gap-2 border-t border-amber-500/20 pt-8">
+              <span className="font-serif text-[10px] uppercase tracking-[0.3em] text-amber-800/80">In association with</span>
               {titleSponsor.sponsor.logoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={titleSponsor.sponsor.logoUrl} alt={titleSponsor.sponsor.name} className="h-8 object-contain" />
+                <img src={titleSponsor.sponsor.logoUrl} alt={titleSponsor.sponsor.name} className="h-10 object-contain" />
               ) : (
-                <span className="font-serif text-sm font-semibold text-stone-900">{titleSponsor.sponsor.name}</span>
+                <span className="font-serif text-base font-semibold text-stone-900">{titleSponsor.sponsor.name}</span>
               )}
             </div>
           )}
@@ -644,7 +812,7 @@ export function ShowPreviewClient() {
           </p>
           <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {judges.map((j) => (
-              <JudgeCard key={j.id} judge={j} />
+              <JudgeCard key={j.id} judge={j} classCount={judgeClassCounts.get(j.name)} />
             ))}
           </div>
         </section>
@@ -683,9 +851,9 @@ export function ShowPreviewClient() {
                 available={showAny.acceptsPostalEntries ?? false}
                 custom={showAny.acceptsPostalEntries ? 'Accepted — same rates' : 'Online only'}
               />
-              <div className="flex flex-wrap items-center justify-between gap-2 bg-stone-50 px-5 py-3 text-xs text-stone-500 sm:px-6">
-                <span className="inline-flex items-center gap-1"><Info className="size-3" /> Card processing fee applies at checkout</span>
-                <span>All prices in GBP</span>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-amber-200 bg-amber-50 px-5 py-3.5 text-sm font-medium text-stone-800 sm:px-6">
+                <span className="inline-flex items-center gap-1.5"><Info className="size-4 text-amber-700" /> A card processing fee is added at checkout</span>
+                <span className="text-xs text-stone-600">All prices in GBP</span>
               </div>
             </dl>
           </div>
@@ -694,29 +862,41 @@ export function ShowPreviewClient() {
 
       {/* ──────────────────────────── Prize & Trophy story ──────────────── */}
       {(trophyList.length > 0 || showAny.scheduleData?.prizeMoney || showAny.scheduleData?.awardsDescription) && (
-        <section className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
-          <SectionHeading eyebrow="The silverware" title="Prizes & Trophies" />
+        <section className="mx-auto max-w-4xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
+          <SectionHeading centered eyebrow="The silverware" title="Prizes & Trophies" />
           {showAny.scheduleData?.awardsDescription && (
-            <p className="mt-3 max-w-3xl whitespace-pre-wrap text-stone-700">{showAny.scheduleData.awardsDescription}</p>
+            <p className="mx-auto mt-4 max-w-2xl text-center font-serif text-base italic leading-relaxed text-stone-700">
+              {showAny.scheduleData.awardsDescription}
+            </p>
           )}
           {showAny.scheduleData?.prizeMoney && (
-            <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-900">
-              <PoundSterling className="size-4" />
-              {showAny.scheduleData.prizeMoney}
+            <div className="mt-5 flex justify-center">
+              <div className="inline-flex items-center gap-2 rounded-full border border-amber-400 bg-amber-50 px-5 py-2 font-serif text-sm font-semibold text-amber-900">
+                <PoundSterling className="size-4" />
+                {showAny.scheduleData.prizeMoney}
+              </div>
             </div>
           )}
           {trophyList.length > 0 && (
-            <div className="mt-8 grid gap-3 sm:grid-cols-2">
-              {trophyList.map((t, i) => (
-                <div key={i} className="flex items-start gap-3 rounded-xl border border-stone-200 bg-gradient-to-br from-white to-amber-50/40 p-4">
-                  <Trophy className="mt-0.5 size-5 shrink-0 text-amber-600" />
-                  <div className="min-w-0">
-                    <p className="font-serif text-sm font-bold text-stone-900">{t.trophyName}</p>
-                    <p className="text-xs text-stone-600">{t.className}</p>
-                    <p className="mt-1 text-[11px] italic text-stone-500">Presented by {t.sponsorName}</p>
-                  </div>
-                </div>
-              ))}
+            <div className="mt-10 rounded-2xl border border-amber-300/60 bg-gradient-to-b from-[#fbf7ef] to-white p-6 shadow-sm sm:p-10">
+              <p className="text-center font-serif text-[11px] uppercase italic tracking-[0.35em] text-amber-800">
+                ◆ Honour Roll ◆
+              </p>
+              <ul className="mt-6 divide-y divide-amber-200/60">
+                {trophyList.map((t, i) => (
+                  <li key={i} className="flex flex-col gap-1 py-4 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-serif text-lg font-bold leading-tight text-stone-900">{t.trophyName}</p>
+                      <p className="mt-0.5 font-serif text-sm italic text-stone-600">For the {t.className}</p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2 text-xs">
+                      <Trophy className="size-3.5 text-amber-600" />
+                      <span className="text-stone-500">presented by</span>
+                      <span className="font-serif font-semibold text-stone-800">{t.sponsorName}</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </section>
@@ -1019,25 +1199,18 @@ export function ShowPreviewClient() {
 
 /* ─── Small composable building blocks ────────────── */
 
-function SectionHeading({ eyebrow, title }: { eyebrow?: string; title: string }) {
+function SectionHeading({ eyebrow, title, centered }: { eyebrow?: string; title: string; centered?: boolean }) {
   return (
-    <div>
+    <div className={cn(centered && 'text-center')}>
       {eyebrow && (
-        <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-amber-700">{eyebrow}</p>
+        <p className="font-serif text-[11px] uppercase italic tracking-[0.3em] text-amber-800">{eyebrow}</p>
       )}
-      <h2 className="mt-1 font-serif text-3xl font-bold text-stone-900 sm:text-4xl">{title}</h2>
-      <div className="mt-3 h-px w-16 bg-gradient-to-r from-amber-400 to-transparent" />
-    </div>
-  );
-}
-
-function Stat({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
-  return (
-    <div>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-800/80">{label}</p>
-      <p className={cn('mt-1 font-serif text-3xl font-bold leading-none', highlight ? 'text-amber-700' : 'text-stone-900')}>
-        {value}
-      </p>
+      <h2 className="mt-2 font-serif text-3xl font-bold leading-tight text-stone-900 sm:text-[2.25rem]">{title}</h2>
+      <div className={cn('mt-3 flex items-center gap-2', centered && 'justify-center')}>
+        <span className="h-px w-10 bg-amber-500/60" />
+        <span aria-hidden="true" className="text-[10px] text-amber-500">◆</span>
+        <span className="h-px w-10 bg-amber-500/30" />
+      </div>
     </div>
   );
 }
