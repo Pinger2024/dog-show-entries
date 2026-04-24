@@ -314,7 +314,10 @@ export function ShowPreviewClient() {
   }, [widgetDismissed]);
 
   const slug = show?.slug ?? idOrSlug;
-  const liveHref = `/shows/${slug}`;
+  // Where the big "Enter This Show" CTAs point. (This file used to be a
+  // /preview mockup where enterHref pointed back at the real show page; now
+  // that this IS the live show page, we need the actual entry flow.)
+  const enterHref = `/shows/${slug}/enter`;
 
   /* ─── Judge aggregation (mirror of live page) ─── */
   const judges = useMemo<JudgeData[]>(() => {
@@ -732,7 +735,7 @@ export function ShowPreviewClient() {
         <div className="mx-auto flex max-w-6xl items-center gap-2 px-3 py-2.5 sm:px-4 lg:px-6">
           {isOpen ? (
             <Button className="h-12 flex-1 px-5 text-base font-semibold shadow-lg shadow-primary/30 sm:h-11 sm:flex-initial sm:shrink-0 sm:px-5" asChild>
-              <Link href={liveHref}>
+              <Link href={enterHref}>
                 <Ticket className="size-5 sm:size-4" />
                 Enter This Show
               </Link>
@@ -1035,7 +1038,7 @@ export function ShowPreviewClient() {
             </p>
             <div className="mt-8">
               <Button size="lg" className="h-14 px-8 text-base font-bold shadow-lg shadow-primary/30" asChild>
-                <Link href={liveHref}>
+                <Link href={enterHref}>
                   <Ticket className="size-5" />
                   Enter This Show
                 </Link>
@@ -1109,7 +1112,7 @@ export function ShowPreviewClient() {
               )}
             </div>
             <Button className="h-12 shrink-0 px-6 text-base font-semibold shadow-lg shadow-primary/30" asChild>
-              <Link href={liveHref}>
+              <Link href={enterHref}>
                 <Ticket className="size-5" />
                 Enter Now
               </Link>
