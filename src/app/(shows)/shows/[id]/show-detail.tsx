@@ -554,40 +554,34 @@ export function ShowDetailClient() {
   /* Unique judges */
   const uniqueJudges = [...new Set((show.judgeAssignments ?? []).map((ja) => ja.judge?.name).filter(Boolean))];
 
+  const hasBanner = !!show.bannerImageUrl;
+
   return (
     <div className="min-h-screen">
       {/* ─── Hero header ──────────────────────── */}
-      <div className="relative overflow-hidden bg-stone-900">
-        {/* Banner image background (if uploaded) */}
-        {show.bannerImageUrl && (
-          <img
-            src={show.bannerImageUrl}
-            alt=""
-            className="absolute inset-0 size-full object-cover opacity-30"
-          />
+      <div
+        className={`relative overflow-hidden ${hasBanner ? 'bg-stone-900' : 'bg-gradient-to-br from-amber-50 via-stone-50 to-white'}`}
+      >
+        {/* Banner image — full bleed when uploaded, dark overlay for readability */}
+        {hasBanner && (
+          <>
+            <img
+              src={show.bannerImageUrl!}
+              alt=""
+              className="absolute inset-0 size-full object-cover opacity-30"
+            />
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-stone-900 via-stone-900/80 to-stone-900/60" />
+          </>
         )}
-        {/* Gradient layers for depth + warmth */}
-        <div className="pointer-events-none absolute inset-0">
-          {show.bannerImageUrl ? (
-            /* Stronger overlay when banner exists for text readability */
-            <div className="absolute inset-0 bg-gradient-to-t from-stone-900 via-stone-900/80 to-stone-900/60" />
-          ) : (
-            <>
-              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_60%_30%,rgba(180,130,60,0.08),transparent_70%)]" />
-              <div className="absolute -right-32 -top-32 h-96 w-96 rounded-full bg-gold/[0.06] blur-3xl" />
-              <div className="absolute -left-20 bottom-0 h-64 w-64 rounded-full bg-primary/[0.03] blur-3xl" />
-            </>
-          )}
-        </div>
         {/* Top gold accent line */}
-        <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
+        <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-gold/60 to-transparent" />
         {/* Bottom gold accent line */}
-        <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-gold/20 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-amber-300/40 to-transparent" />
 
         <div className="relative mx-auto max-w-4xl px-3 pb-8 pt-6 sm:px-4 sm:pb-14 sm:pt-10 lg:px-6">
           <Link
             href="/shows"
-            className="inline-flex items-center gap-1 py-2 text-sm text-stone-400 transition-colors hover:text-stone-200"
+            className={`inline-flex items-center gap-1 py-2 text-sm transition-colors ${hasBanner ? 'text-stone-400 hover:text-stone-200' : 'text-stone-500 hover:text-stone-700'}`}
           >
             <ChevronLeft className="size-4" />
             All shows
@@ -605,14 +599,14 @@ export function ShowDetailClient() {
                       className="size-7 rounded object-contain sm:size-8"
                     />
                   )}
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold/80">
+                  <p className={`text-xs font-semibold uppercase tracking-[0.2em] ${hasBanner ? 'text-gold/80' : 'text-amber-700'}`}>
                     {show.organisation.name}
                   </p>
                 </div>
               )}
 
               {/* Show name — billboard sized */}
-              <h1 className="mt-3 font-serif text-3xl font-bold tracking-tight text-white sm:text-4xl lg:text-5xl">
+              <h1 className={`mt-3 font-serif text-3xl font-bold tracking-tight sm:text-4xl lg:text-5xl ${hasBanner ? 'text-white' : 'text-stone-900'}`}>
                 {show.name}
               </h1>
 
@@ -623,12 +617,12 @@ export function ShowDetailClient() {
               <div className="mt-5 flex flex-wrap items-center gap-2">
                 <Badge
                   variant="outline"
-                  className="border-gold/30 bg-gold/10 text-[11px] font-semibold uppercase tracking-wide text-gold"
+                  className={`text-[11px] font-semibold uppercase tracking-wide ${hasBanner ? 'border-gold/30 bg-gold/10 text-gold' : 'border-amber-300 bg-amber-100 text-amber-800'}`}
                 >
                   {showTypeLabels[show.showType] ?? show.showType}
                 </Badge>
                 {isCompleted && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-stone-700 px-2.5 py-0.5 text-[11px] font-semibold text-stone-300">
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${hasBanner ? 'bg-stone-700 text-stone-300' : 'bg-stone-200 text-stone-700'}`}>
                     <Trophy className="size-3" />
                     Show Complete — Results Available
                   </span>
@@ -647,7 +641,7 @@ export function ShowDetailClient() {
                       if (daysLeft <= 0) return null;
                       const isUrgent = daysLeft <= 3;
                       return (
-                        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${isUrgent ? 'bg-red-600 text-white' : 'bg-stone-700 text-stone-300'}`}>
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${isUrgent ? 'bg-red-600 text-white' : hasBanner ? 'bg-stone-700 text-stone-300' : 'bg-stone-200 text-stone-600'}`}>
                           <Clock className="size-3" />
                           {daysLeft === 1 ? 'Closes tomorrow!' : `${daysLeft} days left`}
                         </span>
@@ -656,7 +650,7 @@ export function ShowDetailClient() {
                   </>
                 )}
                 {!isOpen && (
-                  <Badge variant="outline" className="border-stone-600 text-[11px] capitalize text-stone-300">
+                  <Badge variant="outline" className={`text-[11px] capitalize ${hasBanner ? 'border-stone-600 text-stone-300' : 'border-stone-300 text-stone-500'}`}>
                     {(show.status === 'entries_open' && closeDatePast
                       ? 'Entries Closed'
                       : show.status
@@ -666,23 +660,23 @@ export function ShowDetailClient() {
               </div>
 
               {/* Date, time, venue */}
-              <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-stone-400">
+              <div className={`mt-5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm ${hasBanner ? 'text-stone-400' : 'text-stone-600'}`}>
                 <span className="flex items-center gap-1.5">
-                  <CalendarDays className="size-4 text-stone-500" />
+                  <CalendarDays className={`size-4 ${hasBanner ? 'text-stone-500' : 'text-stone-400'}`} />
                   {format(parseISO(show.startDate), 'EEEE d MMMM yyyy')}
                   {show.startDate !== show.endDate &&
                     ` – ${format(parseISO(show.endDate), 'EEEE d MMMM yyyy')}`}
                 </span>
                 {showAny.startTime && (
                   <span className="flex items-center gap-1.5">
-                    <Clock className="size-4 text-stone-500" />
+                    <Clock className={`size-4 ${hasBanner ? 'text-stone-500' : 'text-stone-400'}`} />
                     {showAny.startTime}
                   </span>
                 )}
               </div>
               {venue && (
-                <div className="mt-1.5 flex items-center gap-1.5 text-sm text-stone-400">
-                  <MapPin className="size-4 text-stone-500" />
+                <div className={`mt-1.5 flex items-center gap-1.5 text-sm ${hasBanner ? 'text-stone-400' : 'text-stone-600'}`}>
+                  <MapPin className={`size-4 ${hasBanner ? 'text-stone-500' : 'text-stone-400'}`} />
                   {venue.name}
                   {venue.postcode && `, ${venue.postcode}`}
                 </div>
@@ -692,20 +686,20 @@ export function ShowDetailClient() {
               {uniqueJudges.length > 0 && (
                 <div className="mt-3 text-sm">
                   <div className="flex items-center gap-1.5">
-                    <User className="size-4 shrink-0 text-stone-500" />
-                    <span className="text-stone-400">
+                    <User className={`size-4 shrink-0 ${hasBanner ? 'text-stone-500' : 'text-stone-400'}`} />
+                    <span className={hasBanner ? 'text-stone-400' : 'text-stone-600'}>
                       {uniqueJudges.length === 1 ? 'Judge:' : 'Judges:'}
                     </span>
                     {uniqueJudges.length <= 2 && (
-                      <span className="font-serif font-medium text-stone-200">{uniqueJudges.join(', ')}</span>
+                      <span className={`font-serif font-medium ${hasBanner ? 'text-stone-200' : 'text-stone-800'}`}>{uniqueJudges.join(', ')}</span>
                     )}
                   </div>
                   {uniqueJudges.length > 2 && (
                     <div className="mt-1 flex flex-wrap items-center gap-x-1 gap-y-0.5 pl-[1.375rem]">
                       {uniqueJudges.map((name, i) => (
-                        <span key={name} className="font-serif font-medium text-stone-200">
+                        <span key={name} className={`font-serif font-medium ${hasBanner ? 'text-stone-200' : 'text-stone-800'}`}>
                           {name}{i < uniqueJudges.length - 1 && (
-                            <span className="ml-1 text-stone-600">&middot;</span>
+                            <span className={`ml-1 ${hasBanner ? 'text-stone-600' : 'text-stone-400'}`}>&middot;</span>
                           )}
                         </span>
                       ))}
@@ -716,23 +710,23 @@ export function ShowDetailClient() {
 
               {/* Hero stats strip — social proof */}
               {publicStats && publicStats.totalDogs > 0 && (
-                <div className="mt-6 inline-flex items-center gap-4 rounded-lg border border-stone-700/50 bg-stone-800/50 px-4 py-2.5 sm:gap-6 sm:px-5 sm:py-3">
+                <div className={`mt-6 inline-flex items-center gap-4 rounded-lg border px-4 py-2.5 sm:gap-6 sm:px-5 sm:py-3 ${hasBanner ? 'border-stone-700/50 bg-stone-800/50' : 'border-stone-200 bg-white/70 backdrop-blur-sm'}`}>
                   <div className="flex items-center gap-2">
-                    <Dog className="size-4 text-gold/60" />
-                    <span className="font-serif text-xl font-bold text-white sm:text-2xl">{publicStats.totalDogs}</span>
-                    <span className="text-xs text-stone-400">{publicStats.totalDogs === 1 ? 'dog' : 'dogs'}</span>
+                    <Dog className={`size-4 ${hasBanner ? 'text-gold/60' : 'text-amber-500'}`} />
+                    <span className={`font-serif text-xl font-bold sm:text-2xl ${hasBanner ? 'text-white' : 'text-stone-900'}`}>{publicStats.totalDogs}</span>
+                    <span className={`text-xs ${hasBanner ? 'text-stone-400' : 'text-stone-500'}`}>{publicStats.totalDogs === 1 ? 'dog' : 'dogs'}</span>
                   </div>
-                  <div className="h-5 w-px bg-stone-700" />
+                  <div className={`h-5 w-px ${hasBanner ? 'bg-stone-700' : 'bg-stone-200'}`} />
                   <div className="flex items-center gap-2">
-                    <span className="font-serif text-xl font-bold text-white sm:text-2xl">{publicStats.totalExhibitors}</span>
-                    <span className="text-xs text-stone-400">{publicStats.totalExhibitors === 1 ? 'exhibitor' : 'exhibitors'}</span>
+                    <span className={`font-serif text-xl font-bold sm:text-2xl ${hasBanner ? 'text-white' : 'text-stone-900'}`}>{publicStats.totalExhibitors}</span>
+                    <span className={`text-xs ${hasBanner ? 'text-stone-400' : 'text-stone-500'}`}>{publicStats.totalExhibitors === 1 ? 'exhibitor' : 'exhibitors'}</span>
                   </div>
                   {breeds.length > 1 && (
                     <>
-                      <div className="h-5 w-px bg-stone-700" />
+                      <div className={`h-5 w-px ${hasBanner ? 'bg-stone-700' : 'bg-stone-200'}`} />
                       <div className="flex items-center gap-2">
-                        <span className="font-serif text-xl font-bold text-white sm:text-2xl">{breeds.length}</span>
-                        <span className="text-xs text-stone-400">{breeds.length === 1 ? 'breed' : 'breeds'}</span>
+                        <span className={`font-serif text-xl font-bold sm:text-2xl ${hasBanner ? 'text-white' : 'text-stone-900'}`}>{breeds.length}</span>
+                        <span className={`text-xs ${hasBanner ? 'text-stone-400' : 'text-stone-500'}`}>{breeds.length === 1 ? 'breed' : 'breeds'}</span>
                       </div>
                     </>
                   )}
@@ -750,11 +744,11 @@ export function ShowDetailClient() {
                       src={titleSponsors[0].sponsor.logoUrl}
                       alt={titleSponsors[0].sponsor.name}
                       href={titleSponsors[0].sponsor.website}
-                      className="h-7 brightness-0 invert"
+                      className={`h-7 ${hasBanner ? 'brightness-0 invert' : ''}`}
                       fallbackName={titleSponsors[0].sponsor.name}
                     />
                   ) : (
-                    <span className="font-serif text-sm font-medium text-stone-200">
+                    <span className={`font-serif text-sm font-medium ${hasBanner ? 'text-stone-200' : 'text-stone-700'}`}>
                       {titleSponsors[0].sponsor.name}
                     </span>
                   )}
@@ -784,7 +778,7 @@ export function ShowDetailClient() {
                 {hasResults && !isCompleted && (
                   <Button
                     variant={isOpen ? 'outline' : 'default'}
-                    className={isOpen ? 'border-stone-600 bg-transparent text-stone-300 shadow-none hover:bg-stone-700/50 hover:text-white' : ''}
+                    className={isOpen ? (hasBanner ? 'border-stone-600 bg-transparent text-stone-300 shadow-none hover:bg-stone-700/50 hover:text-white' : 'border-stone-300 bg-white/60 text-stone-600 shadow-none hover:bg-stone-100 hover:text-stone-800') : ''}
                     asChild
                   >
                     <Link href={`/shows/${showSlug}/results`}>
@@ -796,7 +790,7 @@ export function ShowDetailClient() {
                 {(show.showClasses?.length ?? 0) > 0 && (
                   <Button
                     variant="outline"
-                    className="border-stone-600 bg-transparent text-stone-300 shadow-none hover:bg-stone-700/50 hover:text-white"
+                    className={hasBanner ? 'border-stone-600 bg-transparent text-stone-300 shadow-none hover:bg-stone-700/50 hover:text-white' : 'border-stone-300 bg-white/60 text-stone-600 shadow-none hover:bg-stone-100 hover:text-stone-800'}
                     asChild
                   >
                     <a href={`/api/schedule/${show.id}`} target="_blank" rel="noopener noreferrer">
@@ -808,7 +802,7 @@ export function ShowDetailClient() {
                 {show.status !== 'draft' && show.status !== 'cancelled' && (
                   <Button
                     variant="outline"
-                    className="h-9 border-stone-600 bg-transparent text-stone-300 shadow-none hover:bg-stone-700/50 hover:text-white"
+                    className={`h-9 ${hasBanner ? 'border-stone-600 bg-transparent text-stone-300 shadow-none hover:bg-stone-700/50 hover:text-white' : 'border-stone-300 bg-white/60 text-stone-600 shadow-none hover:bg-stone-100 hover:text-stone-800'}`}
                     onClick={() => {
                       window.location.href = `/api/shows/${show.id}/calendar`;
                     }}
@@ -824,7 +818,7 @@ export function ShowDetailClient() {
                   organisationName={show.organisation?.name ?? ''}
                   venueName={show.venue?.name}
                   shareUrl={typeof window !== 'undefined' ? `${window.location.origin}/shows/${showSlug}` : ''}
-                  className="h-9 border-stone-600 bg-transparent text-stone-300 shadow-none hover:bg-stone-700/50 hover:text-white"
+                  className={`h-9 ${hasBanner ? 'border-stone-600 bg-transparent text-stone-300 shadow-none hover:bg-stone-700/50 hover:text-white' : 'border-stone-300 bg-white/60 text-stone-600 shadow-none hover:bg-stone-100 hover:text-stone-800'}`}
                 />
               </div>
             </div>
@@ -833,7 +827,7 @@ export function ShowDetailClient() {
           {/* Description — editorial treatment */}
           {show.description && (
             <div className="mt-6 border-l-2 border-gold/30 pl-4 sm:pl-5">
-              <p className={`max-w-2xl leading-relaxed text-stone-300 ${!descExpanded ? 'line-clamp-3 sm:line-clamp-none' : ''}`}>
+              <p className={`max-w-2xl leading-relaxed ${hasBanner ? 'text-stone-300' : 'text-stone-700'} ${!descExpanded ? 'line-clamp-3 sm:line-clamp-none' : ''}`}>
                 {show.description}
               </p>
               {show.description.length > 120 && (
