@@ -62,7 +62,7 @@ export async function generateMetadata({
   const venue = show.venue?.name;
   const org = show.organisation?.name;
 
-  const title = `${show.name} — ${showType}`;
+  const title = org ? `${show.name} — ${org}` : `${show.name} — ${showType}`;
   const description = [
     showDate,
     venue,
