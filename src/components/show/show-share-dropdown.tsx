@@ -116,21 +116,49 @@ export function ShowShareDropdown({
         </WhatsappShareButton>
       )}
 
-      {/* More options */}
+      {/* Desktop (sm+): channels inline, no dropdown — faster access */}
+      <Button
+        variant="outline"
+        className="hidden h-9 gap-1.5 border-[#1877F2]/30 bg-[#1877F2]/10 text-[#1877F2] shadow-sm hover:bg-[#1877F2]/20 hover:text-[#1877F2] sm:inline-flex"
+        onClick={shareFacebook}
+        aria-label="Share on Facebook"
+      >
+        <FacebookIcon size={16} round />
+        <span>Facebook</span>
+      </Button>
+      <Button
+        variant="outline"
+        className="hidden h-9 gap-1.5 border-[#E1306C]/30 bg-[#E1306C]/10 text-[#E1306C] shadow-sm hover:bg-[#E1306C]/20 hover:text-[#E1306C] sm:inline-flex"
+        onClick={shareInstagram}
+        aria-label="Share on Instagram"
+      >
+        <InstagramIcon size={16} />
+        <span>Instagram</span>
+      </Button>
+      <Button
+        variant="outline"
+        className="hidden h-9 gap-1.5 shadow-sm sm:inline-flex"
+        onClick={copyLink}
+        aria-label="Copy link"
+      >
+        {copied ? (
+          <>
+            <Check className="size-4 text-emerald-600" />
+            <span>Copied!</span>
+          </>
+        ) : (
+          <>
+            <Copy className="size-4" />
+            <span>Copy link</span>
+          </>
+        )}
+      </Button>
+
+      {/* Mobile (narrow): keep a compact dropdown */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="h-9 shadow-sm">
-            {copied ? (
-              <>
-                <Check className="size-4" />
-                <span className="hidden sm:inline">Copied!</span>
-              </>
-            ) : (
-              <>
-                <Share2 className="size-4" />
-                <span className="hidden sm:inline">Share</span>
-              </>
-            )}
+          <Button variant="outline" className="h-9 shadow-sm sm:hidden" aria-label="Share">
+            {copied ? <Check className="size-4" /> : <Share2 className="size-4" />}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">

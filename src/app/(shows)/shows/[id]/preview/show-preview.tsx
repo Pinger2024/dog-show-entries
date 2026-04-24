@@ -18,12 +18,14 @@ import {
   Info,
   PoundSterling,
   ExternalLink,
+  Share2,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
 import { Button } from '@/components/ui/button';
 import { showTypeLabels } from '@/lib/show-types';
 import { formatCurrency } from '@/lib/date-utils';
 import { ShowShareDropdown } from '@/components/show/show-share-dropdown';
+import { TellAFriend } from '@/components/show/tell-a-friend';
 import { cn } from '@/lib/utils';
 import { captureReferralSource } from '@/lib/referral-source';
 
@@ -586,15 +588,43 @@ export function ShowPreviewClient() {
         <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-amber-600/40 to-transparent" />
 
         <div className="relative mx-auto max-w-4xl px-4 pb-14 pt-12 sm:px-6 sm:pb-20 sm:pt-16 lg:px-8 lg:pb-24 lg:pt-24">
-          {/* Remi hallmark — silversmith-style stamp, subtle but present */}
-          <Link
-            href="/"
-            className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-white/70 px-2.5 py-1 font-serif text-[10px] uppercase tracking-[0.2em] text-primary backdrop-blur-sm transition-colors hover:border-primary hover:bg-white sm:right-6 sm:top-6"
-            aria-label="Listed on Remi"
-          >
-            <span aria-hidden="true" className="text-[8px] text-primary/70">◆</span>
-            <span className="font-semibold">Remi</span>
-          </Link>
+          {/* Top-right cluster: Share + Remi hallmark */}
+          <div className="absolute right-4 top-4 flex items-center gap-2 sm:right-6 sm:top-6">
+            <button
+              type="button"
+              onClick={async () => {
+                const url =
+                  typeof window !== 'undefined'
+                    ? `${window.location.origin}/shows/${slug}?src=hero`
+                    : `https://remishowmanager.co.uk/shows/${slug}?src=hero`;
+                if (typeof navigator !== 'undefined' && navigator.share) {
+                  try {
+                    await navigator.share({ title: show.name, url });
+                    return;
+                  } catch (e) {
+                    if ((e as Error).name === 'AbortError') return;
+                  }
+                }
+                // Fallback on desktop without Web Share: scroll to the
+                // "Tell a fellow exhibitor" section where the big buttons live.
+                document
+                  .getElementById('share-invitation')
+                  ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+              aria-label="Share this show"
+              className="flex size-7 items-center justify-center rounded-full border border-amber-400/50 bg-white/80 text-amber-800 shadow-sm backdrop-blur-sm transition-colors hover:border-amber-600 hover:bg-white hover:text-amber-900"
+            >
+              <Share2 className="size-3.5" />
+            </button>
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-white/70 px-2.5 py-1 font-serif text-[10px] uppercase tracking-[0.2em] text-primary backdrop-blur-sm transition-colors hover:border-primary hover:bg-white"
+              aria-label="Listed on Remi"
+            >
+              <span aria-hidden="true" className="text-[8px] text-primary/70">◆</span>
+              <span className="font-semibold">Remi</span>
+            </Link>
+          </div>
 
           {/* Tiny notice label — heritage programme feel */}
           <p className="text-center text-[10px] font-semibold uppercase tracking-[0.4em] text-amber-800/70">
@@ -794,6 +824,35 @@ export function ShowPreviewClient() {
             ))}
           </div>
         </section>
+      )}
+
+      {/* ──────────────────────────── Tell a friend (share invitation) ──── */}
+      {show.status !== 'cancelled' && (
+        <TellAFriend
+          id="share-invitation"
+          showName={show.name}
+          showType={showType}
+          showDate={showDate}
+          organisationName={org?.name ?? ''}
+          venueName={venue?.name}
+          shareUrl={
+            typeof window !== 'undefined'
+              ? `${window.location.origin}/shows/${slug}`
+              : `https://remishowmanager.co.uk/shows/${slug}`
+          }
+          onShare={(channel) => {
+            // Tier 3 hook — logs share events server-side. Safe no-op until
+            // the endpoint exists.
+            fetch('/api/share-events', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ showId: show.id, channel }),
+              keepalive: true,
+            }).catch(() => {
+              // Fire-and-forget — never block the share UX.
+            });
+          }}
+        />
       )}
 
       {/* ──────────────────────────── Entry fees (transparent) ───────────── */}
