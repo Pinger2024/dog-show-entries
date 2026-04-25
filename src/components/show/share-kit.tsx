@@ -18,7 +18,6 @@ import {
   Loader2,
   Share2,
 } from 'lucide-react';
-import { WhatsappIcon } from 'react-share';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -28,11 +27,8 @@ type ShareChannel =
   | 'native'
   | 'instagram_story'
   | 'instagram_post'
-  | 'more_apps'
-  | 'whatsapp'
   | 'image_saved'
-  | 'copy_post'
-  | 'copy';
+  | 'copy_post';
 
 interface ShareKitProps {
   showId: string;
@@ -80,7 +76,7 @@ export function ShareKit({
   // pick).
   const [previewVariant, setPreviewVariant] = useState<'portrait' | 'story'>('portrait');
   const [busy, setBusy] = useState<ShareChannel | null>(null);
-  const [copyState, setCopyState] = useState<'idle' | 'post' | 'link'>('idle');
+  const [captionCopied, setCaptionCopied] = useState(false);
   const [showPosterTools, setShowPosterTools] = useState(false);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -166,9 +162,9 @@ export function ShareKit({
     return new File([blob], `${baseFilename}-${variant}.png`, { type: 'image/png' });
   }
 
-  async function shareShowLink(channel: 'native' | 'more_apps' = 'native') {
-    setBusy(channel);
-    onShare?.(channel);
+  async function shareShowLink() {
+    setBusy('native');
+    onShare?.('native');
     try {
       if (typeof navigator !== 'undefined' && navigator.share) {
         await navigator.share({
@@ -178,11 +174,13 @@ export function ShareKit({
         });
         return;
       }
-      if (await copyLink()) toast.success('Link copied');
+      await copyText(shareUrl);
+      toast.success('Link copied');
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
         try {
-          if (await copyLink()) toast.success('Link copied');
+          await copyText(shareUrl);
+          toast.success('Link copied');
         } catch {
           toast.error('Could not share this show.');
         }
@@ -261,20 +259,6 @@ export function ShareKit({
     }
   }
 
-  function shareToWhatsapp() {
-    setBusy('whatsapp');
-    onShare?.('whatsapp');
-    try {
-      const whatsappUrl = `${shareUrl}${shareUrl.includes('?') ? '&' : '?'}src=whatsapp`;
-      const text = `${nativeShareText}\n\n${whatsappUrl}`;
-      const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
-      window.open(url, '_blank', 'noopener,noreferrer');
-    } finally {
-      // Quick reset — wa.me opens immediately, no async work to wait for.
-      window.setTimeout(() => setBusy(null), 400);
-    }
-  }
-
   async function saveImage() {
     setBusy('image_saved');
     onShare?.('image_saved');
@@ -309,32 +293,20 @@ export function ShareKit({
     }
   }
 
-  function flashCopy(which: 'post' | 'link') {
-    setCopyState(which);
+  function flashCaptionCopied() {
+    setCaptionCopied(true);
     if (copyTimer.current) clearTimeout(copyTimer.current);
-    copyTimer.current = setTimeout(() => setCopyState('idle'), 2000);
+    copyTimer.current = setTimeout(() => setCaptionCopied(false), 2000);
   }
 
   async function copyCaption() {
     onShare?.('copy_post');
     try {
       await copyText(sharePost);
-      flashCopy('post');
+      flashCaptionCopied();
       toast.success('Caption copied — paste it anywhere');
     } catch {
       toast.error('Could not copy. Long-press the preview to copy manually.');
-    }
-  }
-
-  async function copyLink() {
-    onShare?.('copy');
-    try {
-      await copyText(shareUrl);
-      flashCopy('link');
-      return true;
-    } catch {
-      toast.error('Could not copy the link.');
-      return false;
     }
   }
 
@@ -349,45 +321,13 @@ export function ShareKit({
     >
       <Button
         type="button"
-        onClick={() => shareShowLink()}
+        onClick={shareShowLink}
         disabled={busy !== null}
         className="h-12 w-full gap-2 text-base font-semibold"
       >
         {busy === 'native' ? <Loader2 className="size-5 animate-spin" /> : <Share2 className="size-5" />}
         Share with phone apps
       </Button>
-
-      <div className="grid grid-cols-3 gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => shareShowLink('more_apps')}
-          disabled={busy !== null}
-          className="h-11 gap-1.5"
-        >
-          {busy === 'more_apps' ? <Loader2 className="size-4 animate-spin" /> : <Share2 className="size-4" />}
-          More apps
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={shareToWhatsapp}
-          disabled={busy !== null}
-          className="h-11 gap-1.5"
-        >
-          {busy === 'whatsapp' ? <Loader2 className="size-4 animate-spin" /> : <WhatsappIcon size={18} round />}
-          WhatsApp
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={copyLink}
-          className="h-11 gap-1.5"
-        >
-          {copyState === 'link' ? <Check className="size-4 text-emerald-600" /> : <Copy className="size-4" />}
-          Copy
-        </Button>
-      </div>
 
       <div className="border-t border-stone-200 pt-4">
         <Button
@@ -488,7 +428,7 @@ export function ShareKit({
                 onClick={copyCaption}
                 className="h-9 gap-1.5 text-stone-700"
               >
-                {copyState === 'post' ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
+                {captionCopied ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
                 Copy caption
               </Button>
             </div>
