@@ -1,48 +1,20 @@
 'use client';
 
 /**
- * Share Kit — per-destination share UX.
+ * Share Kit — link-first sharing with optional poster assets.
  *
- * Replaces the lying "click Facebook, get a copy-link toast" pattern with
- * destination-specific buttons that take the shortest reliable path on
- * each platform. The user's mental model is "I want to put this on
- * Instagram Story", not "I want to download a 1080×1920 PNG", so we
- * surface destinations directly.
- *
- * What each destination actually does:
- *
- *   Instagram Story (instagram-stories://share + share-sheet fallback)
- *     2-tap when the IG Story scheme engages: opens IG Stories with our
- *     image as the backdrop. Falls back to the iOS share sheet (3-tap)
- *     on devices/contexts where the scheme doesn't engage.
- *
- *   Instagram Post (navigator.share with file)
- *     iOS share sheet with image pre-attached + caption auto-copied to
- *     clipboard. User picks Instagram → IG opens with image already
- *     loaded → user pastes caption → user taps Share. 3-tap, no shorter
- *     path exists for IG Feed (Meta blocks third-party composer access).
- *
- *   Facebook (navigator.share file on mobile, sharer.php on desktop)
- *     Mobile: share sheet → FB composer with image attached. Desktop:
- *     direct sharer.php compose window. Caption auto-copied either way.
- *     3-tap on mobile, 2-tap on desktop. No shorter path — same Meta
- *     constraint.
- *
- *   WhatsApp (wa.me/?text=URL)
- *     Text + URL pre-filled, OG card unfurls beautifully when sent. No
- *     image binary attachment via this path, but the unfurled card is
- *     itself the artifact. 2-tap to send (Remi → pick chat → Send).
- *
- * The single overarching design principle: caption is ALWAYS on the
- * clipboard before any destination opens, so wherever the user lands,
- * they can paste-and-post in one tap. That's the difference between
- * "share kit" and "share buttons" UX.
+ * The normal mobile expectation is "tap Share, choose an app, send".
+ * That works best when we share the show URL and let Open Graph create
+ * the rich card inside WhatsApp, Messages, Facebook, etc. Poster images
+ * remain available for Instagram or club publicity, but they are no
+ * longer the main route through the UI.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
   Copy,
   Download,
+  Image as ImageIcon,
   Loader2,
   Share2,
 } from 'lucide-react';
@@ -53,6 +25,7 @@ import { cn } from '@/lib/utils';
 import { buildSharePost } from '@/lib/share-caption';
 
 type ShareChannel =
+  | 'native'
   | 'instagram_story'
   | 'instagram_post'
   | 'facebook'
@@ -77,21 +50,6 @@ interface ShareKitProps {
   className?: string;
   id?: string;
 }
-
-/**
- * Shape of the platform tile rendered in the destinations grid. Keeping
- * this typed rather than inline so adding a destination later is a
- * single-array-entry change.
- */
-type DestinationTile = {
-  key: ShareChannel;
-  label: string;
-  sublabel: string;
-  icon: React.ReactNode;
-  /** Tailwind classes for the tile background + text. */
-  className: string;
-  onClick: () => void | Promise<void>;
-};
 
 /** Small Instagram glyph — lucide doesn't ship one. */
 function InstagramGlyph({ size = 18 }: { size?: number }) {
@@ -123,6 +81,7 @@ export function ShareKit({
   const [previewVariant, setPreviewVariant] = useState<'portrait' | 'story'>('portrait');
   const [busy, setBusy] = useState<ShareChannel | null>(null);
   const [copyState, setCopyState] = useState<'idle' | 'post' | 'link'>('idle');
+  const [showPosterTools, setShowPosterTools] = useState(false);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -157,27 +116,52 @@ export function ShareKit({
     .replace(/^-+|-+$/g, '')
     .slice(0, 60) || 'show';
 
+  const nativeShareText = `${showName} is now open for entries on Remi.`;
+  const isMobile =
+    typeof navigator !== 'undefined' &&
+    /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+  async function copyText(text: string): Promise<void> {
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return;
+      } catch {
+        // Fall through to the legacy copy path below. Local phone testing
+        // over http://192.168.x.x often blocks the modern Clipboard API.
+      }
+    }
+
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.top = '0';
+    textarea.style.left = '-9999px';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, text.length);
+    const copied = document.execCommand('copy');
+    document.body.removeChild(textarea);
+
+    if (!copied) throw new Error('copy failed');
+  }
+
   /**
-   * Best-effort clipboard copy of the caption. Used before invoking any
-   * destination so when the user lands in the destination app they can
-   * paste in one tap. Failures are swallowed — clipboard write can fail
-   * on insecure contexts (iOS plain HTTP, embedded webviews) and we'd
-   * rather still open the destination than abort.
+   * Best-effort clipboard copy of the poster caption. Used only for
+   * image-post flows where destination apps commonly ignore Web Share text.
    */
   async function ensureCaptionOnClipboard(): Promise<boolean> {
     try {
-      await navigator.clipboard.writeText(sharePost);
+      await copyText(sharePost);
       return true;
     } catch {
       return false;
     }
   }
 
-  /**
-   * Fetch the current preview as a blob, wrapped in a File so iOS share
-   * sheet treats it as an image attachment. Used by Instagram Post,
-   * Facebook (mobile), and the long-tail "Save image" path.
-   */
   async function fetchVariantAsFile(variant: 'portrait' | 'story'): Promise<File> {
     const res = await fetch(`/api/shares/${showId}/${variant}`);
     if (!res.ok) throw new Error(`share image fetch failed: ${res.status}`);
@@ -185,20 +169,36 @@ export function ShareKit({
     return new File([blob], `${baseFilename}-${variant}.png`, { type: 'image/png' });
   }
 
-  // Feature flags computed once per render.
-  const isMobile =
-    typeof navigator !== 'undefined' &&
-    /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  const canShareFiles =
-    typeof navigator !== 'undefined' &&
-    typeof (navigator as Navigator & { canShare?: (data: { files?: File[] }) => boolean }).canShare === 'function';
+  async function shareShowLink() {
+    setBusy('native');
+    onShare?.('native');
+    try {
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        await navigator.share({
+          title: showName,
+          text: nativeShareText,
+          url: shareUrl,
+        });
+        return;
+      }
+      if (await copyLink()) toast.success('Link copied');
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        try {
+          if (await copyLink()) toast.success('Link copied');
+        } catch {
+          toast.error('Could not share this show.');
+        }
+      }
+    } finally {
+      setBusy(null);
+    }
+  }
 
   /**
-   * Instagram Story — try the dedicated URL scheme first, fall back to
-   * the iOS share sheet. The deep-link engagement varies by iOS version
-   * and Safari's privacy heuristics, so we time-box detection: if the
-   * page is still visible 1.5s after we attempted to navigate, the
-   * scheme didn't catch and we open the share sheet instead.
+   * Instagram Story — browsers cannot pre-populate Instagram's native
+   * story composer. We prepare the story-sized image and hand it to the
+   * share sheet where supported, otherwise the image is saved.
    */
   async function shareToInstagramStory() {
     setPreviewVariant('story');
@@ -206,46 +206,18 @@ export function ShareKit({
     onShare?.('instagram_story');
     try {
       await ensureCaptionOnClipboard();
-      // The instagram-stories scheme is a registered Universal Link.
-      // Triggering it via window.location preserves the back-stack and
-      // works inside Safari without a "follow link?" prompt.
-      const before = Date.now();
-      const wasVisible = document.visibilityState === 'visible';
-
-      // Set up a watchdog FIRST so the timer is armed before we trigger.
-      const watchdog = window.setTimeout(async () => {
-        // Still visible → scheme didn't engage. Fall back to share sheet
-        // with the story-formatted image and caption.
-        if (wasVisible && document.visibilityState === 'visible' && Date.now() - before > 1200) {
-          await openShareSheet('story', 'instagram_story');
-        }
-      }, 1500);
-
-      // Cancel the watchdog if the page goes hidden (the scheme worked
-      // and the user is now in the IG app).
-      const onVisChange = () => {
-        if (document.visibilityState === 'hidden') {
-          window.clearTimeout(watchdog);
-          document.removeEventListener('visibilitychange', onVisChange);
-        }
-      };
-      document.addEventListener('visibilitychange', onVisChange);
-
-      // Best-effort scheme invocation. Empty source_application is fine —
-      // IG accepts it from web contexts even without a registered FB App ID.
-      window.location.href = 'instagram-stories://share?source_application=remishowmanager';
+      await openShareSheet('story', 'instagram_story');
+    } catch (err) {
+      console.error(err);
+      toast.error('Could not prepare the story image. Try Save image instead.');
     } finally {
-      // Re-enable after the watchdog has run (success path: page hidden,
-      // user is in IG; failure path: share sheet opened, can re-tap).
-      window.setTimeout(() => setBusy(null), 1800);
+      setBusy(null);
     }
   }
 
   /**
-   * Generic "open the iOS share sheet with the image attached" — used by
-   * the IG Post button, the FB mobile path, and the IG Story fallback.
-   * Tries to use the structured Web Share API (with files) and falls
-   * back to a download anchor if the platform refuses files.
+   * Generic "open the share sheet with the image attached" for poster
+   * workflows. Falls back to a download if the platform refuses files.
    */
   async function openShareSheet(variant: 'portrait' | 'story', channel: ShareChannel) {
     const file = await fetchVariantAsFile(variant);
@@ -296,36 +268,49 @@ export function ShareKit({
     setBusy('facebook');
     onShare?.('facebook');
     try {
-      await ensureCaptionOnClipboard();
-      if (isMobile && canShareFiles) {
-        await openShareSheet(previewVariant, 'facebook');
-      } else {
-        // Desktop: sharer.php opens a real compose window with the URL
-        // pre-pasted (the OG card unfurls). Reliable, no Meta-app
-        // interception risk because there's no FB-app on desktop.
-        const url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(`${shareUrl}${shareUrl.includes('?') ? '&' : '?'}src=facebook`)}`;
-        window.open(url, '_blank', 'noopener,noreferrer');
+      const facebookUrl = `${shareUrl}${shareUrl.includes('?') ? '&' : '?'}src=facebook`;
+      // Mobile: the Facebook app often intercepts facebook.com/sharer URLs
+      // and opens to a blank/no-op screen. The native share sheet is the
+      // reliable path for installed apps on phones.
+      if (isMobile) {
+        if (navigator.share) {
+          await navigator.share({
+            title: showName,
+            text: nativeShareText,
+            url: facebookUrl,
+          });
+          return;
+        }
+        await copyText(facebookUrl);
+        flashCopy('link');
+        toast.success('Link copied — paste it into Facebook');
+        return;
       }
+
+      const url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(facebookUrl)}`;
+      window.open(url, '_blank', 'noopener,noreferrer');
     } catch (err) {
-      console.error(err);
-      toast.error('Could not open Facebook. Try Save image instead.');
+      if ((err as Error).name !== 'AbortError') {
+        try {
+          const facebookUrl = `${shareUrl}${shareUrl.includes('?') ? '&' : '?'}src=facebook`;
+          await copyText(facebookUrl);
+          flashCopy('link');
+          toast.success('Link copied — paste it into Facebook');
+        } catch {
+          toast.error('Could not copy the link. Long-press the page address to copy it.');
+        }
+      }
     } finally {
       setBusy(null);
     }
   }
 
-  /**
-   * WhatsApp — wa.me with the caption + URL. No image binary, but the
-   * URL unfurls into our 1200×630 OG card on receipt, so the visual
-   * payload is still rich. Truly fast: 2 taps to land in a chat picker.
-   */
   function shareToWhatsapp() {
     setBusy('whatsapp');
     onShare?.('whatsapp');
     try {
-      const text = `${sharePost}`; // sharePost already includes the URL
-      // wa.me works on mobile and desktop. On mobile it deep-links into
-      // the WhatsApp app; on desktop into web.whatsapp.com.
+      const whatsappUrl = `${shareUrl}${shareUrl.includes('?') ? '&' : '?'}src=whatsapp`;
+      const text = `${nativeShareText}\n\n${whatsappUrl}`;
       const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
       window.open(url, '_blank', 'noopener,noreferrer');
     } finally {
@@ -334,11 +319,6 @@ export function ShareKit({
     }
   }
 
-  /**
-   * Long-tail "save image" — for when the user wants the asset for
-   * something we don't have a dedicated button for (Snapchat, Telegram,
-   * email, Threads, posting to a private group's website, etc).
-   */
   async function saveImage() {
     setBusy('image_saved');
     onShare?.('image_saved');
@@ -382,7 +362,7 @@ export function ShareKit({
   async function copyCaption() {
     onShare?.('copy_post');
     try {
-      await navigator.clipboard.writeText(sharePost);
+      await copyText(sharePost);
       flashCopy('post');
       toast.success('Caption copied — paste it anywhere');
     } catch {
@@ -393,49 +373,14 @@ export function ShareKit({
   async function copyLink() {
     onShare?.('copy');
     try {
-      await navigator.clipboard.writeText(shareUrl);
+      await copyText(shareUrl);
       flashCopy('link');
+      return true;
     } catch {
       toast.error('Could not copy the link.');
+      return false;
     }
   }
-
-  const destinations: DestinationTile[] = [
-    {
-      key: 'instagram_story',
-      label: 'Instagram Story',
-      sublabel: '9:16',
-      icon: <InstagramGlyph size={20} />,
-      className:
-        'bg-gradient-to-br from-[#F58529] via-[#DD2A7B] to-[#8134AF] text-white hover:opacity-95',
-      onClick: shareToInstagramStory,
-    },
-    {
-      key: 'instagram_post',
-      label: 'Instagram Post',
-      sublabel: '4:5',
-      icon: <InstagramGlyph size={20} />,
-      className:
-        'bg-gradient-to-br from-[#FFC837] via-[#FF8008] to-[#DD2A7B] text-white hover:opacity-95',
-      onClick: shareToInstagramPost,
-    },
-    {
-      key: 'facebook',
-      label: 'Facebook',
-      sublabel: isMobile ? 'Image post' : 'Compose post',
-      icon: <FacebookIcon size={20} round />,
-      className: 'bg-[#1877F2] text-white hover:bg-[#1664CC]',
-      onClick: shareToFacebook,
-    },
-    {
-      key: 'whatsapp',
-      label: 'WhatsApp',
-      sublabel: 'Send chat',
-      icon: <WhatsappIcon size={20} round />,
-      className: 'bg-[#25D366] text-white hover:bg-[#1FB853]',
-      onClick: shareToWhatsapp,
-    },
-  ];
 
   return (
     <div
@@ -446,130 +391,153 @@ export function ShareKit({
         className
       )}
     >
-      {/* Image preview */}
-      <div
-        className={cn(
-          'mx-auto w-full overflow-hidden rounded-xl border border-amber-300/40 bg-stone-50 shadow-sm transition-all',
-          previewVariant === 'portrait' ? 'max-w-[280px] sm:max-w-[320px]' : 'max-w-[200px] sm:max-w-[240px]'
-        )}
-        style={{ aspectRatio: previewVariant === 'portrait' ? '4 / 5' : '9 / 16' }}
+      <Button
+        type="button"
+        onClick={shareShowLink}
+        disabled={busy !== null}
+        className="h-12 w-full gap-2 text-base font-semibold"
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          key={previewVariant}
-          src={previewUrl}
-          alt={`${showName} share image preview`}
-          className="size-full object-cover"
-          loading="lazy"
-        />
-      </div>
+        {busy === 'native' ? <Loader2 className="size-5 animate-spin" /> : <Share2 className="size-5" />}
+        Share show link
+      </Button>
 
-      {/* Format peek toggle — small, secondary; lets the user switch the
-          preview without committing to a destination. The destination
-          buttons override this anyway. */}
-      <div className="flex items-center justify-center gap-2">
-        <button
-          type="button"
-          onClick={() => setPreviewVariant('portrait')}
-          className={cn(
-            'rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wider transition',
-            previewVariant === 'portrait'
-              ? 'bg-stone-900 text-white'
-              : 'bg-stone-100 text-stone-500 hover:bg-stone-200'
-          )}
-        >
-          Post 4:5
-        </button>
-        <button
-          type="button"
-          onClick={() => setPreviewVariant('story')}
-          className={cn(
-            'rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wider transition',
-            previewVariant === 'story'
-              ? 'bg-stone-900 text-white'
-              : 'bg-stone-100 text-stone-500 hover:bg-stone-200'
-          )}
-        >
-          Story 9:16
-        </button>
-      </div>
-
-      <p className="text-center text-xs text-stone-500">
-        Pick a destination — the image attaches and the caption goes on your clipboard.
-      </p>
-
-      {/* Per-destination grid */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {destinations.map((dest) => (
-          <button
-            key={dest.key}
-            type="button"
-            onClick={dest.onClick}
-            disabled={busy !== null}
-            aria-label={`Share to ${dest.label}`}
-            className={cn(
-              'flex min-h-[4.5rem] flex-col items-center justify-center gap-1 rounded-xl px-2 py-3 text-sm font-semibold shadow-sm transition disabled:cursor-not-allowed disabled:opacity-60',
-              dest.className
-            )}
-          >
-            {busy === dest.key ? (
-              <Loader2 className="size-5 animate-spin" />
-            ) : (
-              dest.icon
-            )}
-            <span className="leading-tight">{dest.label}</span>
-            <span className="text-[10px] font-medium uppercase tracking-wider opacity-80">
-              {dest.sublabel}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      {/* Other ways — utility row */}
-      <div className="grid grid-cols-3 gap-2 border-t border-stone-200 pt-4 text-xs">
+      <div className="grid grid-cols-3 gap-2">
         <Button
           type="button"
-          variant="ghost"
-          size="sm"
-          onClick={saveImage}
+          variant="outline"
+          onClick={shareToWhatsapp}
           disabled={busy !== null}
-          className="h-9 gap-1.5 text-stone-700"
+          className="h-11 gap-1.5"
         >
-          {busy === 'image_saved' ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : (
-            <Download className="size-3.5" />
-          )}
-          Save image
+          {busy === 'whatsapp' ? <Loader2 className="size-4 animate-spin" /> : <WhatsappIcon size={18} round />}
+          WhatsApp
         </Button>
         <Button
           type="button"
-          variant="ghost"
-          size="sm"
-          onClick={copyCaption}
-          className="h-9 gap-1.5 text-stone-700"
+          variant="outline"
+          onClick={shareToFacebook}
+          disabled={busy !== null}
+          className="h-11 gap-1.5"
         >
-          {copyState === 'post' ? (
-            <Check className="size-3.5 text-emerald-600" />
-          ) : (
-            <Share2 className="size-3.5" />
-          )}
-          Copy caption
+          {busy === 'facebook' ? <Loader2 className="size-4 animate-spin" /> : <FacebookIcon size={18} round />}
+          Facebook
         </Button>
         <Button
           type="button"
-          variant="ghost"
-          size="sm"
+          variant="outline"
           onClick={copyLink}
-          className="h-9 gap-1.5 text-stone-700"
+          className="h-11 gap-1.5"
         >
-          {copyState === 'link' ? (
-            <Check className="size-3.5 text-emerald-600" />
-          ) : (
-            <Copy className="size-3.5" />
-          )}
-          Copy link
+          {copyState === 'link' ? <Check className="size-4 text-emerald-600" /> : <Copy className="size-4" />}
+          Copy
         </Button>
+      </div>
+
+      <div className="border-t border-stone-200 pt-4">
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => setShowPosterTools((value) => !value)}
+          className="h-10 w-full gap-2 text-stone-700"
+        >
+          <ImageIcon className="size-4" />
+          {showPosterTools ? 'Hide poster tools' : 'Create Instagram poster'}
+        </Button>
+
+        {showPosterTools && (
+          <div className="mt-4 flex flex-col gap-4">
+            <div
+              className={cn(
+                'mx-auto w-full overflow-hidden rounded-xl border border-amber-300/40 bg-stone-50 shadow-sm transition-all',
+                previewVariant === 'portrait' ? 'max-w-[280px] sm:max-w-[320px]' : 'max-w-[200px] sm:max-w-[240px]'
+              )}
+              style={{ aspectRatio: previewVariant === 'portrait' ? '4 / 5' : '9 / 16' }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                key={previewVariant}
+                src={previewUrl}
+                alt={`${showName} share image preview`}
+                className="size-full object-cover"
+                loading="lazy"
+              />
+            </div>
+
+            <div className="flex items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPreviewVariant('portrait')}
+                className={cn(
+                  'rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wider transition',
+                  previewVariant === 'portrait'
+                    ? 'bg-stone-900 text-white'
+                    : 'bg-stone-100 text-stone-500 hover:bg-stone-200'
+                )}
+              >
+                Post 4:5
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewVariant('story')}
+                className={cn(
+                  'rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wider transition',
+                  previewVariant === 'story'
+                    ? 'bg-stone-900 text-white'
+                    : 'bg-stone-100 text-stone-500 hover:bg-stone-200'
+                )}
+              >
+                Story 9:16
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={shareToInstagramPost}
+                disabled={busy !== null}
+                className="h-11 gap-1.5"
+              >
+                {busy === 'instagram_post' ? <Loader2 className="size-4 animate-spin" /> : <InstagramGlyph size={18} />}
+                Instagram Post
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={shareToInstagramStory}
+                disabled={busy !== null}
+                className="h-11 gap-1.5"
+              >
+                {busy === 'instagram_story' ? <Loader2 className="size-4 animate-spin" /> : <InstagramGlyph size={18} />}
+                Story
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={saveImage}
+                disabled={busy !== null}
+                className="h-9 gap-1.5 text-stone-700"
+              >
+                {busy === 'image_saved' ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+                Save image
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={copyCaption}
+                className="h-9 gap-1.5 text-stone-700"
+              >
+                {copyState === 'post' ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
+                Copy caption
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -600,10 +568,10 @@ export function ShareKitCard(props: ShareKitProps) {
             Share this show
           </p>
           <h3 className="mt-2 font-serif text-2xl font-bold leading-tight text-stone-900 sm:text-3xl">
-            One tap to your network
+            Share the link in one tap
           </h3>
           <p className="mx-auto mt-3 max-w-lg text-stone-700">
-            Pick your platform — we&apos;ll attach the poster and pre-fill the caption. Most paths land in the destination app with everything ready; you just hit Send.
+            Send the show link by WhatsApp, Facebook, Messages or email. The preview card appears automatically.
           </p>
 
           <div className="mt-8">
