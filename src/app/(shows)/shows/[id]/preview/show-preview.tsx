@@ -24,8 +24,8 @@ import { trpc } from '@/lib/trpc/client';
 import { Button } from '@/components/ui/button';
 import { showTypeLabels } from '@/lib/show-types';
 import { formatCurrency } from '@/lib/date-utils';
-import { ShowShareDropdown } from '@/components/show/show-share-dropdown';
-import { TellAFriend } from '@/components/show/tell-a-friend';
+import { ShareKitDialog } from '@/components/show/share-kit-dialog';
+import { ShareKitCard } from '@/components/show/share-kit';
 import { cn } from '@/lib/utils';
 import { captureReferralSource } from '@/lib/referral-source';
 
@@ -293,10 +293,6 @@ export function ShowPreviewClient() {
   const { data: showSponsors } = trpc.shows.getShowSponsors.useQuery(
     { showId: show?.id ?? '' },
     { enabled: !!show?.id }
-  );
-  const { data: shareCount } = trpc.shows.getShareCount.useQuery(
-    { showId: show?.id ?? '' },
-    { enabled: !!show?.id, refetchInterval: 120_000 }
   );
 
   useEffect(() => {
@@ -775,12 +771,27 @@ export function ShowPreviewClient() {
                 <span className="hidden sm:inline">Add to Calendar</span>
               </a>
             </Button>
-            <ShowShareDropdown
+            <ShareKitDialog
+              showId={show.id}
               showName={show.name}
               showType={showType}
               showDate={showDate}
               organisationName={org?.name ?? ''}
               venueName={venue?.name}
+              entryCloseDate={show.entryCloseDate ?? null}
+              shareUrl={
+                typeof window !== 'undefined'
+                  ? `${window.location.origin}/shows/${slug}`
+                  : `https://remishowmanager.co.uk/shows/${slug}`
+              }
+              onShare={(channel) => {
+                fetch('/api/share-events', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ showId: show.id, channel }),
+                  keepalive: true,
+                }).catch(() => {});
+              }}
             />
           </div>
         </div>
@@ -803,32 +814,30 @@ export function ShowPreviewClient() {
         </section>
       )}
 
-      {/* ──────────────────────────── Tell a friend (share invitation) ──── */}
+      {/* ──────────────────────────── Share kit (Save & Post) ──── */}
       {show.status !== 'cancelled' && (
-        <TellAFriend
+        <ShareKitCard
           id="share-invitation"
+          showId={show.id}
           showName={show.name}
           showType={showType}
           showDate={showDate}
           organisationName={org?.name ?? ''}
           venueName={venue?.name}
-          weeklyShareCount={shareCount?.weekly}
+          entryCloseDate={show.entryCloseDate ?? null}
           shareUrl={
             typeof window !== 'undefined'
               ? `${window.location.origin}/shows/${slug}`
               : `https://remishowmanager.co.uk/shows/${slug}`
           }
           onShare={(channel) => {
-            // Tier 3 hook — logs share events server-side. Safe no-op until
-            // the endpoint exists.
+            // Fire-and-forget — never block the share UX.
             fetch('/api/share-events', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ showId: show.id, channel }),
               keepalive: true,
-            }).catch(() => {
-              // Fire-and-forget — never block the share UX.
-            });
+            }).catch(() => {});
           }}
         />
       )}

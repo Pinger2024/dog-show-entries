@@ -7,6 +7,7 @@ import { shows, entries, showSponsors } from '@/server/db/schema';
 import { isUuid } from '@/lib/slugify';
 
 export const runtime = 'nodejs';
+export const alt = 'Preview card for a dog show listing on Remi';
 export const contentType = 'image/png';
 export const size = { width: 1200, height: 630 };
 export const revalidate = 900;
