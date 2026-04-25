@@ -54,7 +54,7 @@ export function ShareKitDialog(props: ShareKitDialogProps) {
         <DialogHeader>
           <DialogTitle className="font-serif">Share this show</DialogTitle>
           <DialogDescription>
-            Send the show link, or create a poster for Instagram.
+            Open your phone share sheet, or create a poster for Instagram.
           </DialogDescription>
         </DialogHeader>
         <ShareKit

@@ -18,7 +18,7 @@ import {
   Loader2,
   Share2,
 } from 'lucide-react';
-import { FacebookIcon, WhatsappIcon } from 'react-share';
+import { WhatsappIcon } from 'react-share';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -28,7 +28,7 @@ type ShareChannel =
   | 'native'
   | 'instagram_story'
   | 'instagram_post'
-  | 'facebook'
+  | 'more_apps'
   | 'whatsapp'
   | 'image_saved'
   | 'copy_post'
@@ -117,9 +117,6 @@ export function ShareKit({
     .slice(0, 60) || 'show';
 
   const nativeShareText = `${showName} is now open for entries on Remi.`;
-  const isMobile =
-    typeof navigator !== 'undefined' &&
-    /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
   async function copyText(text: string): Promise<void> {
     if (navigator.clipboard?.writeText) {
@@ -169,9 +166,9 @@ export function ShareKit({
     return new File([blob], `${baseFilename}-${variant}.png`, { type: 'image/png' });
   }
 
-  async function shareShowLink() {
-    setBusy('native');
-    onShare?.('native');
+  async function shareShowLink(channel: 'native' | 'more_apps' = 'native') {
+    setBusy(channel);
+    onShare?.(channel);
     try {
       if (typeof navigator !== 'undefined' && navigator.share) {
         await navigator.share({
@@ -259,47 +256,6 @@ export function ShareKit({
     } catch (err) {
       console.error(err);
       toast.error('Could not open the share sheet. Try Save image instead.');
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function shareToFacebook() {
-    setBusy('facebook');
-    onShare?.('facebook');
-    try {
-      const facebookUrl = `${shareUrl}${shareUrl.includes('?') ? '&' : '?'}src=facebook`;
-      // Mobile: the Facebook app often intercepts facebook.com/sharer URLs
-      // and opens to a blank/no-op screen. The native share sheet is the
-      // reliable path for installed apps on phones.
-      if (isMobile) {
-        if (navigator.share) {
-          await navigator.share({
-            title: showName,
-            text: nativeShareText,
-            url: facebookUrl,
-          });
-          return;
-        }
-        await copyText(facebookUrl);
-        flashCopy('link');
-        toast.success('Link copied — paste it into Facebook');
-        return;
-      }
-
-      const url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(facebookUrl)}`;
-      window.open(url, '_blank', 'noopener,noreferrer');
-    } catch (err) {
-      if ((err as Error).name !== 'AbortError') {
-        try {
-          const facebookUrl = `${shareUrl}${shareUrl.includes('?') ? '&' : '?'}src=facebook`;
-          await copyText(facebookUrl);
-          flashCopy('link');
-          toast.success('Link copied — paste it into Facebook');
-        } catch {
-          toast.error('Could not copy the link. Long-press the page address to copy it.');
-        }
-      }
     } finally {
       setBusy(null);
     }
@@ -393,15 +349,25 @@ export function ShareKit({
     >
       <Button
         type="button"
-        onClick={shareShowLink}
+        onClick={() => shareShowLink()}
         disabled={busy !== null}
         className="h-12 w-full gap-2 text-base font-semibold"
       >
         {busy === 'native' ? <Loader2 className="size-5 animate-spin" /> : <Share2 className="size-5" />}
-        Share show link
+        Share with phone apps
       </Button>
 
       <div className="grid grid-cols-3 gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => shareShowLink('more_apps')}
+          disabled={busy !== null}
+          className="h-11 gap-1.5"
+        >
+          {busy === 'more_apps' ? <Loader2 className="size-4 animate-spin" /> : <Share2 className="size-4" />}
+          More apps
+        </Button>
         <Button
           type="button"
           variant="outline"
@@ -411,16 +377,6 @@ export function ShareKit({
         >
           {busy === 'whatsapp' ? <Loader2 className="size-4 animate-spin" /> : <WhatsappIcon size={18} round />}
           WhatsApp
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={shareToFacebook}
-          disabled={busy !== null}
-          className="h-11 gap-1.5"
-        >
-          {busy === 'facebook' ? <Loader2 className="size-4 animate-spin" /> : <FacebookIcon size={18} round />}
-          Facebook
         </Button>
         <Button
           type="button"
@@ -568,10 +524,10 @@ export function ShareKitCard(props: ShareKitProps) {
             Share this show
           </p>
           <h3 className="mt-2 font-serif text-2xl font-bold leading-tight text-stone-900 sm:text-3xl">
-            Share the link in one tap
+            Share with the apps on your phone
           </h3>
           <p className="mx-auto mt-3 max-w-lg text-stone-700">
-            Send the show link by WhatsApp, Facebook, Messages or email. The preview card appears automatically.
+            Open the phone share sheet, then choose Facebook, Instagram, Messages, email or anything else installed.
           </p>
 
           <div className="mt-8">
