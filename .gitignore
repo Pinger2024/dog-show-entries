@@ -48,3 +48,8 @@ research/tradeprint-csvs/
 
 # generated script artefacts (PDFs, screenshots, etc.)
 /scripts/output/
+
+# secrets — service account JSON keys, etc.
+/secrets/
+*-service-account.json
+*-service-account*.json
