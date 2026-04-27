@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { notFound } from 'next/navigation';
 import { db } from '@/server/db';
 import { eq } from 'drizzle-orm';
 import { shows } from '@/server/db/schema';
@@ -27,9 +28,7 @@ export async function generateMetadata({
     with: { venue: true, organisation: true },
   });
 
-  if (!show) {
-    return { title: 'Results Not Found' };
-  }
+  if (!show) notFound();
 
   const showDate = new Date(show.startDate).toLocaleDateString('en-GB', {
     day: 'numeric',

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { redirect } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { db } from '@/server/db';
 import { eq } from 'drizzle-orm';
 import { shows } from '@/server/db/schema';
@@ -117,22 +117,18 @@ export default async function ShowDetailPage({
 
   const show = await resolveShow(id);
 
-  const showUrl = `https://remishowmanager.co.uk/shows/${show?.slug ?? id}`;
+  if (!show) notFound();
 
-  // JSON-LD is safe here: content is from our own database and
-  // JSON.stringify escapes all special characters, preventing XSS.
-  const jsonLd = show
-    ? JSON.stringify(buildShowJsonLd(show, showUrl, show.showSponsors))
-    : null;
+  const showUrl = `https://remishowmanager.co.uk/shows/${show.slug ?? id}`;
+
+  const jsonLd = JSON.stringify(buildShowJsonLd(show, showUrl, show.showSponsors));
 
   return (
     <>
-      {jsonLd && (
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: jsonLd }}
-        />
-      )}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLd }}
+      />
       <ShowPreviewClient />
     </>
   );

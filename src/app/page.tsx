@@ -98,10 +98,44 @@ async function getStats() {
   }
 }
 
+const BASE_URL = 'https://remishowmanager.co.uk';
+
+// JSON-LD content is fully static and built from string literals — no user input.
+const homepageJsonLd = JSON.stringify([
+  {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: 'Remi Show Manager',
+    alternateName: 'Remi',
+    url: BASE_URL,
+    logo: `${BASE_URL}/icon-512.png`,
+    description:
+      'Online entry management for UK Royal Kennel Club (RKC) dog shows. Enter shows, manage dogs, and run shows from one platform.',
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: 'Remi Show Manager',
+    url: BASE_URL,
+    potentialAction: {
+      '@type': 'SearchAction',
+      target: {
+        '@type': 'EntryPoint',
+        urlTemplate: `${BASE_URL}/shows?q={search_term_string}`,
+      },
+      'query-input': 'required name=search_term_string',
+    },
+  },
+]);
+
 export default async function HomePage() {
   const liveStats = await getStats();
   return (
     <div className="flex min-h-screen flex-col">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: homepageJsonLd }}
+      />
       <Header />
 
       <main className="flex-1">
