@@ -25,8 +25,8 @@ export default function TermsPage() {
             <strong className="text-foreground">
               Michael James and Amanda McAteer
             </strong>
-            , a partnership trading from 115 Lime Avenue, Lowestoft, Suffolk,
-            NR32 3FH, United Kingdom. General contact:{' '}
+            , a partnership trading from William House, Mobbs Way,
+            Lowestoft, NR32 3AL, United Kingdom. General contact:{' '}
             <a
               className="text-primary hover:underline"
               href="mailto:hello@remishowmanager.co.uk"
@@ -98,7 +98,11 @@ export default function TermsPage() {
               We pay the net entry fees to the host show society by BACS
               within 21 days of the close-of-entries date for the show.
             </strong>{' '}
-            The dashboard shows the exact target payout date for each show.
+            Remi&rsquo;s platform fee is deducted from the total collected
+            for the show. The secretary dashboard shows the running net
+            payout to the club at all times &mdash; updated as each entry
+            comes in &mdash; alongside the exact target payout date, so
+            there are no surprises.
           </p>
           <p className="mt-2">
             Your contract for the entry itself &mdash; eligibility, judging,
@@ -121,23 +125,28 @@ export default function TermsPage() {
         <section>
           <h2 className="text-lg font-semibold text-foreground">6. Refunds, cancellations and chargebacks</h2>
           <p className="mt-2">
-            <strong className="text-foreground">Refund policy is set by each show society.</strong>{' '}
-            The policy for a given show is published on the show&rsquo;s page.
-            Most RKC shows do not refund entries once closing date has passed.
-            Remi processes refunds on behalf of the show society in line with
-            their published policy.
+            <strong className="text-foreground">
+              Whether to grant a refund is at the show society&rsquo;s
+              discretion.
+            </strong>{' '}
+            The general convention across RKC shows is that entries are not
+            refundable once the closing date has passed; some societies are
+            more flexible than others. If you want a refund (full or
+            partial), contact the show secretary first. If they authorise
+            it, Remi processes the refund through Stripe back to the
+            original payment method.
           </p>
           <p className="mt-2">
-            If a show is cancelled or abandoned, the refund position follows
-            RKC rules and the society&rsquo;s own policy. Contact the show
-            secretary first; Remi will assist with processing an authorised
-            refund.
+            If a show is cancelled by the society, Remi will work with the
+            secretary to deliver the desired outcome &mdash; whether that
+            is refunding affected entries, deferring them to a later show,
+            or another agreed resolution.
           </p>
           <p className="mt-2">
-            If you raise a chargeback with your card issuer, Remi (as merchant
-            of record) handles the dispute and may recover any lost amount
-            plus dispute fees from you if the chargeback is found to be
-            without basis.
+            If you raise a chargeback with your card issuer, Remi (as
+            merchant of record) handles the dispute. If the chargeback is
+            found to be without basis, you may be liable for the disputed
+            amount plus any dispute fees Remi incurs.
           </p>
         </section>
 

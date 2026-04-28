@@ -22,8 +22,13 @@ export default function PrivacyPage() {
             <strong className="text-foreground">
               Michael James and Amanda McAteer
             </strong>
-            , a partnership trading from 115 Lime Avenue, Lowestoft, Suffolk,
-            NR32 3FH, United Kingdom.
+            , a partnership trading from William House, Mobbs Way,
+            Lowestoft, NR32 3AL, United Kingdom.
+          </p>
+          <p className="mt-2">
+            We are registered with the UK Information Commissioner&rsquo;s
+            Office, registration number{' '}
+            <strong className="text-foreground">C1920187</strong>.
           </p>
           <p className="mt-2">
             For the purposes of UK GDPR and the Data Protection Act 2018 the
@@ -240,12 +245,12 @@ export default function PrivacyPage() {
           <p className="mt-2">
             We protect your data with HTTPS/TLS in transit, encryption at
             rest, hashed passwords, role-based access controls, and restricted
-            access to production systems. No system is perfect &mdash; if you
-            suspect a security issue, email{' '}
+            access to production systems. If you ever spot something that
+            looks like a security issue, please let us know at{' '}
             <a className="text-primary hover:underline" href="mailto:privacy@remishowmanager.co.uk">
               privacy@remishowmanager.co.uk
-            </a>
-            .
+            </a>{' '}
+            and we&rsquo;ll investigate promptly.
           </p>
         </section>
 

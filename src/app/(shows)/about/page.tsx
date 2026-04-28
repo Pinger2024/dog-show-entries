@@ -73,20 +73,21 @@ const FEATURES = [
 ];
 
 const EXHIBITOR_BENEFITS = [
-  'Enter multiple dogs across multiple classes in minutes',
+  'Connects to the RKC — type your dog\'s registered name and the pedigree details pre-populate',
+  'Enter any show with a single click once your dogs are on Remi',
+  'Add multiple dogs across multiple classes in seconds',
   'Instant email confirmation with full entry details',
-  'Edit entries and manage handlers before close of entries',
-  'Track your entries and results across all shows',
-  'No account setup required — sign in with Google or email',
+  'Edit entries and manage handlers right up to close of entries',
+  'Track your entries and results across every show you enter',
 ];
 
 const SECRETARY_BENEFITS = [
-  'Publish shows with custom classes, fees, and eligibility rules',
-  'Accept online entries with automatic payment reconciliation',
-  'Assign catalogue numbers in canonical RKC breed group order',
-  'Generate four catalogue PDF formats at the click of a button',
-  'Financial reports: income by class, VAT summary, refund tracking',
-  'Manage stewards and ringside judging on show day',
+  'Set up a complete show in around 20 minutes — schedule ready to publish at the end',
+  'Full autonomy over the schedule using our standardised format',
+  'Catalogue your way — whole-show sponsorship, class sponsorship, your branding, your layout',
+  'Set your own pricing for entries, catalogues and memberships, all collected in one online journey',
+  'Live financial dashboard with class-by-class entry and revenue breakdowns',
+  'Online results if you want them — published live as classes are judged',
 ];
 
 const STATS = [
@@ -280,20 +281,25 @@ export default function AboutPage() {
                   Co-founder &mdash; Industry
                 </div>
                 <h3 className="font-serif text-xl font-bold sm:text-2xl">
-                  Amanda McAteer
+                  Mandy McAteer
                 </h3>
                 <p className="mt-3 leading-relaxed text-muted-foreground">
-                  Amanda has been involved in German Shepherd Dogs for over
+                  Mandy has been involved in German Shepherd Dogs for over
                   forty years and brings the show-side knowledge that shapes
-                  every feature in Remi. She is currently Secretary of Clyde
-                  Valley GSD Club and co-founded Remi to drag the entry
-                  process out of the 1990s.
+                  every feature in Remi. She is currently Chair of Clyde
+                  Valley GSD Club and Treasurer of the GSD Club of Scotland,
+                  the GSDL-BRG, and the Scottish Progressive GSD Group.
+                  She co-founded Remi to make the exhibitor&rsquo;s journey
+                  &mdash; registering dogs and entering shows &mdash; far
+                  simpler, and to give show secretaries the autonomy to set
+                  up their own shows and publish online schedules within
+                  minutes.
                 </p>
                 <ul className="mt-6 space-y-2.5">
                   {[
                     'International championship show judge',
                     'Royal Kennel Club championship show judge',
-                    'RKC-approved breed surveyor',
+                    'Approved breed surveyor',
                     'Standing for Vice Chair of her breed council',
                     '40+ years in the GSD show world',
                   ].map((credential) => (
@@ -321,7 +327,7 @@ export default function AboutPage() {
                 </h3>
                 <p className="mt-3 leading-relaxed text-muted-foreground">
                   Michael builds and runs the Remi platform hands-on from
-                  Lowestoft, Suffolk, working alongside Amanda on every
+                  Lowestoft, Suffolk, working alongside Mandy on every
                   release.
                 </p>
                 <ul className="mt-6 space-y-2.5">
