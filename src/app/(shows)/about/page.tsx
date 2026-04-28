@@ -13,13 +13,18 @@ import {
   ArrowRight,
   CheckCircle2,
   Zap,
+  Award,
+  Code2,
+  Landmark,
+  Lock,
+  CalendarClock,
 } from 'lucide-react';
 import { AnimateIn } from '@/components/animate-in';
 
 export const metadata = {
   title: 'About Remi — Modern Dog Show Management',
   description:
-    'The trusted platform for entering RKC-licensed dog shows. Online entries, secure payments, live results, and automatic catalogues — built for exhibitors and show secretaries.',
+    'A modern entry-management platform for the UK RKC dog show circuit. Online entries, secure payments, live results, and automatic catalogues — built for exhibitors and show secretaries.',
 };
 
 const FEATURES = [
@@ -111,10 +116,10 @@ export default function AboutPage() {
             </AnimateIn>
             <AnimateIn delay={200}>
               <p className="gold-rule-center mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl">
-                Remi is the trusted platform for the UK Royal Kennel Club circuit.
-                Online entries, secure payments, live results, and automatic
-                catalogues — everything exhibitors and secretaries need, in
-                one place.
+                Remi is a modern entry-management platform built by people
+                who run RKC shows themselves. Online entries, secure payments,
+                live results, and automatic catalogues — everything exhibitors
+                and secretaries need, in one place.
               </p>
             </AnimateIn>
             <AnimateIn delay={300}>
@@ -250,6 +255,177 @@ export default function AboutPage() {
               </div>
             </AnimateIn>
           </div>
+        </div>
+      </section>
+
+      {/* ── Founders ─────────────────────────────── */}
+      <section id="who-we-are" className="border-b">
+        <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
+          <AnimateIn className="mx-auto max-w-2xl text-center">
+            <h2 className="gold-rule-center font-serif text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
+              Who we are
+            </h2>
+            <p className="mt-5 text-lg text-muted-foreground">
+              Remi is a small UK partnership — not a faceless platform.
+              Built by people who actually run shows and judge them.
+            </p>
+          </AnimateIn>
+
+          <div className="mx-auto mt-14 grid max-w-5xl gap-8 lg:grid-cols-2">
+            {/* Amanda */}
+            <AnimateIn>
+              <div className="h-full rounded-2xl border bg-card p-8 sm:p-10">
+                <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-amber-50 px-4 py-1.5 text-sm font-medium text-amber-700">
+                  <Award className="size-4" />
+                  Co-founder &mdash; Industry
+                </div>
+                <h3 className="font-serif text-xl font-bold sm:text-2xl">
+                  Amanda McAteer
+                </h3>
+                <p className="mt-3 leading-relaxed text-muted-foreground">
+                  Amanda has been involved in German Shepherd Dogs for over
+                  forty years and brings the show-side knowledge that shapes
+                  every feature in Remi. She is currently Secretary of Clyde
+                  Valley GSD Club and co-founded Remi to drag the entry
+                  process out of the 1990s.
+                </p>
+                <ul className="mt-6 space-y-2.5">
+                  {[
+                    'International championship show judge',
+                    'Royal Kennel Club championship show judge',
+                    'RKC-approved breed surveyor',
+                    '40+ years in the GSD show world',
+                  ].map((credential) => (
+                    <li
+                      key={credential}
+                      className="flex items-start gap-3 text-sm"
+                    >
+                      <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-amber-600" />
+                      <span>{credential}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </AnimateIn>
+
+            {/* Michael */}
+            <AnimateIn delay={120}>
+              <div className="h-full rounded-2xl border bg-card p-8 sm:p-10">
+                <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-blue-50 px-4 py-1.5 text-sm font-medium text-blue-700">
+                  <Code2 className="size-4" />
+                  Co-founder &mdash; Technology
+                </div>
+                <h3 className="font-serif text-xl font-bold sm:text-2xl">
+                  Michael James
+                </h3>
+                <p className="mt-3 leading-relaxed text-muted-foreground">
+                  Michael builds and runs the Remi platform hands-on from
+                  Lowestoft, Suffolk, working alongside Amanda on every
+                  release.
+                </p>
+                <ul className="mt-6 space-y-2.5">
+                  {[
+                    'Software engineer building Remi day-to-day',
+                    'Responds to feedback from secretaries and exhibitors directly',
+                    'Same email address since 2008 — easy to find, easy to reach',
+                  ].map((point) => (
+                    <li
+                      key={point}
+                      className="flex items-start gap-3 text-sm"
+                    >
+                      <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-blue-600" />
+                      <span>{point}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </AnimateIn>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Where your money is held ─────────────── */}
+      <section id="your-money" className="border-b bg-card">
+        <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
+          <AnimateIn className="mx-auto max-w-2xl text-center">
+            <h2 className="gold-rule-center font-serif text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
+              Where your money is held
+            </h2>
+            <p className="mt-5 text-lg text-muted-foreground">
+              Remi is the merchant of record for entry payments. We&apos;ve
+              tried to make the money-handling side as boring and predictable
+              as possible.
+            </p>
+          </AnimateIn>
+
+          <div className="mx-auto mt-14 grid max-w-5xl gap-6 sm:grid-cols-3">
+            <AnimateIn>
+              <div className="h-full rounded-2xl border bg-background p-7">
+                <div className="mb-4 inline-flex rounded-xl bg-emerald-50 p-3 text-emerald-700">
+                  <Lock className="size-6" />
+                </div>
+                <h3 className="font-serif text-lg font-bold">
+                  Your card details never touch us
+                </h3>
+                <p className="mt-2 leading-relaxed text-muted-foreground">
+                  All card payments are taken directly by{' '}
+                  <strong className="text-foreground">
+                    Stripe Payments UK, Ltd.
+                  </strong>
+                  , an authorised payment institution regulated by the
+                  Financial Conduct Authority. Remi never sees or stores your
+                  card number.
+                </p>
+              </div>
+            </AnimateIn>
+
+            <AnimateIn delay={120}>
+              <div className="h-full rounded-2xl border bg-background p-7">
+                <div className="mb-4 inline-flex rounded-xl bg-blue-50 p-3 text-blue-700">
+                  <Landmark className="size-6" />
+                </div>
+                <h3 className="font-serif text-lg font-bold">
+                  How the money flows
+                </h3>
+                <p className="mt-2 leading-relaxed text-muted-foreground">
+                  Card payments clear via Stripe. Once cleared, Remi
+                  receives the funds and holds them on the host
+                  club&rsquo;s behalf until they are paid out by BACS to
+                  the club&rsquo;s registered bank account.
+                </p>
+              </div>
+            </AnimateIn>
+
+            <AnimateIn delay={240}>
+              <div className="h-full rounded-2xl border bg-background p-7">
+                <div className="mb-4 inline-flex rounded-xl bg-amber-50 p-3 text-amber-700">
+                  <CalendarClock className="size-6" />
+                </div>
+                <h3 className="font-serif text-lg font-bold">
+                  Clubs paid within 21 days
+                </h3>
+                <p className="mt-2 leading-relaxed text-muted-foreground">
+                  After entries close for a show we transfer the net entry
+                  fees to the host club&rsquo;s registered bank account by
+                  BACS, within 21 days. We tell you the exact date in your
+                  secretary dashboard.
+                </p>
+              </div>
+            </AnimateIn>
+          </div>
+
+          <p className="mx-auto mt-10 max-w-3xl text-center text-sm text-muted-foreground">
+            Full detail on payments, refunds and chargeback liability is in
+            our{' '}
+            <Link href="/terms" className="text-primary hover:underline">
+              Terms of Service
+            </Link>
+            . Data protection is covered in our{' '}
+            <Link href="/privacy" className="text-primary hover:underline">
+              Privacy Policy
+            </Link>
+            .
+          </p>
         </div>
       </section>
 

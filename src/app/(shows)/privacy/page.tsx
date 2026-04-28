@@ -10,7 +10,7 @@ export default function PrivacyPage() {
         Privacy Policy
       </h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        Last updated: 21 April 2026
+        Last updated: 28 April 2026
       </p>
 
       <div className="mt-8 space-y-8 text-sm leading-relaxed text-muted-foreground">
@@ -18,8 +18,16 @@ export default function PrivacyPage() {
           <h2 className="text-lg font-semibold text-foreground">1. Who we are</h2>
           <p className="mt-2">
             Remi is an online platform for UK Royal Kennel Club dog show entry
-            management, operated from the United Kingdom. For the purposes of
-            UK GDPR and the Data Protection Act 2018 we are the{' '}
+            management. Remi is a trading name of{' '}
+            <strong className="text-foreground">
+              Michael James and Amanda McAteer
+            </strong>
+            , a partnership trading from 115 Lime Avenue, Lowestoft, Suffolk,
+            NR32 3FH, United Kingdom.
+          </p>
+          <p className="mt-2">
+            For the purposes of UK GDPR and the Data Protection Act 2018 the
+            partners are jointly the{' '}
             <strong className="text-foreground">data controller</strong> for
             the personal data of our exhibitor account holders.
           </p>

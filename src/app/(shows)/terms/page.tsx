@@ -10,7 +10,7 @@ export default function TermsPage() {
         Terms of Service
       </h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        Last updated: 21 April 2026
+        Last updated: 28 April 2026
       </p>
 
       <div className="mt-8 space-y-8 text-sm leading-relaxed text-muted-foreground">
@@ -18,9 +18,27 @@ export default function TermsPage() {
           <h2 className="text-lg font-semibold text-foreground">1. About Remi</h2>
           <p className="mt-2">
             Remi is an online platform for UK Royal Kennel Club (RKC) dog show
-            entry management. It is operated from the United Kingdom. These terms
-            form a legally binding agreement between you and Remi when you use
-            the Remi website, apps, or services (together, the &ldquo;Service&rdquo;).
+            entry management.
+          </p>
+          <p className="mt-2">
+            Remi is a trading name of{' '}
+            <strong className="text-foreground">
+              Michael James and Amanda McAteer
+            </strong>
+            , a partnership trading from 115 Lime Avenue, Lowestoft, Suffolk,
+            NR32 3FH, United Kingdom. General contact:{' '}
+            <a
+              className="text-primary hover:underline"
+              href="mailto:hello@remishowmanager.co.uk"
+            >
+              hello@remishowmanager.co.uk
+            </a>
+            .
+          </p>
+          <p className="mt-2">
+            These terms form a legally binding agreement between you and Remi
+            when you use the Remi website, apps, or services (together, the
+            &ldquo;Service&rdquo;).
           </p>
           <p className="mt-2">
             Different sections apply depending on how you use Remi: Sections
@@ -61,9 +79,26 @@ export default function TermsPage() {
             after entries close, less any platform fees shown at checkout.
           </p>
           <p className="mt-2">
-            Payment is processed by Stripe. By submitting an entry you
-            authorise Remi (via Stripe) to charge the card or payment method
-            you provide for the total shown at checkout.
+            Payments are processed by{' '}
+            <strong className="text-foreground">
+              Stripe Payments UK, Ltd.
+            </strong>
+            , regulated by the Financial Conduct Authority. Your card details
+            are handled by Stripe and are never seen or stored by Remi. By
+            submitting an entry you authorise Remi (via Stripe) to charge
+            the card or payment method you provide for the total shown at
+            checkout.
+          </p>
+          <p className="mt-2">
+            Once card payments clear, Remi receives the funds and holds
+            them on the host show society&rsquo;s behalf pending payout.
+          </p>
+          <p className="mt-2">
+            <strong className="text-foreground">
+              We pay the net entry fees to the host show society by BACS
+              within 21 days of the close-of-entries date for the show.
+            </strong>{' '}
+            The dashboard shows the exact target payout date for each show.
           </p>
           <p className="mt-2">
             Your contract for the entry itself &mdash; eligibility, judging,
@@ -122,7 +157,7 @@ export default function TermsPage() {
             <li>
               You must provide accurate UK bank account details for payout.
               Remi transfers the net collected entry fees to that account by
-              BACS after entries close.
+              BACS within 21 days of the close-of-entries date for the show.
             </li>
             <li>
               You are the data controller for entry data relating to your

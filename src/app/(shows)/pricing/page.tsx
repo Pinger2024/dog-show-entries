@@ -53,7 +53,7 @@ const faqs = [
   {
     question: 'What payment methods do exhibitors use?',
     answer:
-      'Exhibitors pay by credit or debit card via Stripe at the point of entry. Payments are processed securely and funds are transferred directly to your club\'s bank account.',
+      'Exhibitors pay by credit or debit card via Stripe at the point of entry. Card details are handled by Stripe (regulated by the FCA) and never touch us. Remi collects the entry fees as merchant of record and transfers the net amount to your club by BACS within 21 days of entries closing.',
   },
   {
     question: 'Do you support Championship shows?',
@@ -194,7 +194,7 @@ export default async function PricingPage() {
                 icon: CreditCard,
                 title: 'Secure Payments',
                 description:
-                  'Stripe handles all payments. Funds go straight to your club account, minus the platform fee.',
+                  'Stripe takes card payments securely. We collect the entry fees and BACS the net to your club within 21 days of entries closing.',
               },
               {
                 icon: FileText,
