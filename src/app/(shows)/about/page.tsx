@@ -294,6 +294,7 @@ export default function AboutPage() {
                     'International championship show judge',
                     'Royal Kennel Club championship show judge',
                     'RKC-approved breed surveyor',
+                    'Standing for Vice Chair of her breed council',
                     '40+ years in the GSD show world',
                   ].map((credential) => (
                     <li
