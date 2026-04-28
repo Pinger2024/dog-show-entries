@@ -326,15 +326,24 @@ export default function AboutPage() {
                   Michael James
                 </h3>
                 <p className="mt-3 leading-relaxed text-muted-foreground">
-                  Michael builds and runs the Remi platform hands-on from
-                  Lowestoft, Suffolk, working alongside Mandy on every
-                  release.
+                  Michael has spent more than twenty years building
+                  enterprise-grade software systems. He started in 2002 with
+                  information-sharing platforms for sensitive areas like
+                  addiction recovery and domestic abuse support, and later
+                  helped build the social-enterprise systems still used by
+                  UK police forces and partner agencies today. He co-founded
+                  Remi after Mandy reached out about her frustrations
+                  entering shows through Google Docs spreadsheets. Her four
+                  decades in the show world and his depth in enterprise
+                  software turned out to be the right partnership.
                 </p>
                 <ul className="mt-6 space-y-2.5">
                   {[
-                    'Software engineer building Remi day-to-day',
-                    'Responds to feedback from secretaries and exhibitors directly',
-                    'Same email address since 2008 — easy to find, easy to reach',
+                    'Twenty-five years building enterprise software systems',
+                    'Has built UK government-commissioned platforms now used across the UK, US and Australia',
+                    'Builds, hosts and supports Remi day-to-day',
+                    'Responds personally to every secretary and exhibitor who gets in touch',
+                    'Based in Lowestoft, Suffolk',
                   ].map((point) => (
                     <li
                       key={point}
