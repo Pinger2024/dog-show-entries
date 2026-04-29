@@ -202,45 +202,17 @@ export default function ForSecretariesPage() {
 
               <AnimateIn className="relative">
                 <div className="relative mx-auto w-full max-w-sm overflow-hidden rounded-3xl border bg-card shadow-2xl shadow-primary/10">
-                  <div className="flex items-center gap-3 bg-primary px-5 py-4 text-primary-foreground">
-                    <div className="size-2 animate-pulse rounded-full bg-gold" />
-                    <p className="font-serif text-sm font-bold tracking-wide">
-                      North-West Open Show
-                    </p>
-                    <span className="ml-auto rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider">
-                      Live
-                    </span>
-                  </div>
-                  <div className="space-y-5 p-6">
-                    <div>
-                      <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                        Today’s entries
-                      </p>
-                      <p className="mt-1 font-serif text-5xl font-bold tracking-tight">
-                        147
-                      </p>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        132 paid · 8 NFC · 7 JH
-                      </p>
-                    </div>
-                    <hr />
-                    <ul className="space-y-3 text-sm">
-                      {[
-                        ['Schedule', 'Generated'],
-                        ['Catalogue', 'Ready'],
-                        ['Payments', 'Open'],
-                        ['Results portal', 'Live'],
-                      ].map(([label, value]) => (
-                        <li key={label} className="flex items-center justify-between">
-                          <span className="text-muted-foreground">{label}</span>
-                          <span className="inline-flex items-center gap-1.5 font-semibold">
-                            <CheckCircle2 className="size-3.5 text-primary" />
-                            {value}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                  <video
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    poster="/promo/poster.png"
+                    className="h-auto w-full"
+                  >
+                    <source src="/promo/remi-demo.mp4" type="video/mp4" />
+                    <source src="/promo/remi-promo.mp4" type="video/mp4" />
+                  </video>
                 </div>
                 <div className="pointer-events-none absolute -bottom-6 left-1/2 z-10 -translate-x-1/2 rounded-full border bg-background/95 px-4 py-2 text-xs font-medium shadow-md backdrop-blur">
                   Run your show from the phone in your pocket
