@@ -78,6 +78,9 @@ export interface ScheduleShowInfo {
 
 export interface ScheduleClass {
   classNumber: number | null;
+  /** Display label — "1" for numbered classes, "JHA"/"JHB" for Junior
+   *  Handler classes which sit outside the RKC-licensed class count. */
+  classLabel: string;
   className: string;
   classDescription: string | null;
   sex: string | null;
@@ -225,8 +228,10 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   coverLogo: {
-    width: 80,
-    height: 80,
+    maxWidth: 140,
+    maxHeight: 80,
+    objectFit: 'contain',
+    alignSelf: 'center',
     marginBottom: 10,
   },
   coverShowName: {
@@ -757,11 +762,16 @@ export function ShowSchedule({
 
   const classCount = deduplicatedClasses.length;
 
-  // Split classes by sex for single breed two-column layout
+  // Split classes by sex for single breed two-column layout. Mixed classes
+  // split further: non-JH (Veteran, etc.) render ABOVE Dog/Bitch because
+  // RKC ordering requires them judged before the per-sex challenges.
+  // JH-only Mixed renders BELOW as the "Junior Handling" section.
   const isSingleBreed = show.showScope === 'single_breed';
   const dogClasses = deduplicatedClasses.filter((c) => c.sex === 'dog');
   const bitchClasses = deduplicatedClasses.filter((c) => c.sex === 'bitch');
   const mixedClasses = deduplicatedClasses.filter((c) => c.sex !== 'dog' && c.sex !== 'bitch');
+  const mixedTopClasses = mixedClasses.filter((c) => c.classType !== 'junior_handler');
+  const mixedBottomClasses = mixedClasses.filter((c) => c.classType === 'junior_handler');
 
   const footerRender = ({ pageNumber, totalPages }: { pageNumber: number; totalPages: number }) =>
     `${show.name}  ·  Schedule  ·  Page ${pageNumber} of ${totalPages}`;
@@ -1350,8 +1360,25 @@ export function ShowSchedule({
         )}
 
         {isSingleBreed ? (
-          /* ── Single breed: Dogs | Bitches two-column layout ── */
+          /* ── Single breed: Dogs | Bitches two-column layout ──
+              Mixed non-JH classes (Veteran, etc.) render at the top so
+              class 1 is visible first. JH Mixed classes render at the
+              bottom as a separate "Junior Handling" section. */
           <>
+            {mixedTopClasses.length > 0 && (
+              <View style={{ marginBottom: 8 }}>
+                <View style={s.twoColMixedHeader}>
+                  <Text style={s.twoColHeaderText}>Mixed</Text>
+                </View>
+                {mixedTopClasses.map((cls, i) => (
+                  <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
+                    <Text style={s.twoColNum}>{cls.classLabel}</Text>
+                    <Text style={s.twoColName}>{cls.className}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
             <View style={s.twoColContainer}>
               {/* Dogs column */}
               <View style={[s.twoColHalf, { paddingRight: 4 }]}>
@@ -1360,7 +1387,7 @@ export function ShowSchedule({
                 </View>
                 {dogClasses.map((cls, i) => (
                   <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
-                    <Text style={s.twoColNum}>{cls.classNumber ?? ''}</Text>
+                    <Text style={s.twoColNum}>{cls.classLabel}</Text>
                     <Text style={s.twoColName}>{cls.className}</Text>
                   </View>
                 ))}
@@ -1373,24 +1400,21 @@ export function ShowSchedule({
                 </View>
                 {bitchClasses.map((cls, i) => (
                   <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
-                    <Text style={s.twoColNum}>{cls.classNumber ?? ''}</Text>
+                    <Text style={s.twoColNum}>{cls.classLabel}</Text>
                     <Text style={s.twoColName}>{cls.className}</Text>
                   </View>
                 ))}
               </View>
             </View>
 
-            {/* Non-sex-specific classes below (e.g. Junior Handling) */}
-            {mixedClasses.length > 0 && (
-              <View>
+            {mixedBottomClasses.length > 0 && (
+              <View style={{ marginTop: 8 }}>
                 <View style={s.twoColMixedHeader}>
-                  <Text style={s.twoColHeaderText}>
-                    {mixedClasses.every((c) => c.classType === 'junior_handler') ? 'Junior Handling' : 'Mixed'}
-                  </Text>
+                  <Text style={s.twoColHeaderText}>Junior Handling</Text>
                 </View>
-                {mixedClasses.map((cls, i) => (
+                {mixedBottomClasses.map((cls, i) => (
                   <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
-                    <Text style={s.twoColNum}>{cls.classNumber ?? ''}</Text>
+                    <Text style={s.twoColNum}>{cls.classLabel}</Text>
                     <Text style={s.twoColName}>{cls.className}</Text>
                   </View>
                 ))}
@@ -1420,7 +1444,7 @@ export function ShowSchedule({
               return (
                 <View key={i} style={[s.classRow, i % 2 !== 0 && s.classRowAlt]} wrap={false}>
                   <View style={s.colNo}>
-                    <Text style={s.cellBold}>{cls.classNumber ?? ''}</Text>
+                    <Text style={s.cellBold}>{cls.classLabel}</Text>
                   </View>
                   <View style={s.colClass}>
                     <Text style={s.cellBold}>{cls.className}</Text>
@@ -1557,6 +1581,7 @@ export function ShowSchedule({
             {show.subsequentEntryFee != null ? `, subsequent entries same dog ${formatCurrency(show.subsequentEntryFee)}` : ''}
             {show.nfcEntryFee != null ? `. NFC ${formatCurrency(show.nfcEntryFee)}` : ''}
             {show.juniorHandlerFee != null ? `. Junior Handler ${formatCurrency(show.juniorHandlerFee)}` : ''}.
+            {' '}A handling fee of £1.00 plus 1% of the order subtotal is added at checkout to cover online processing; this is shown to exhibitors before they pay.
           </Rule>
         )}
         <Rule num="6">ONLINE ENTRY can be found at remishowmanager.co.uk/shows/{show.slug}</Rule>

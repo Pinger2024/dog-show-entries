@@ -3,11 +3,8 @@ import { Document, Page, View, Text } from '@react-pdf/renderer';
 import { styles } from './catalogue-styles';
 import {
   CoverPage,
-  ShowInformationPage,
-  JudgesListPage,
-  ClassDefinitionsPage,
+  FrontMatterPage,
   TrophiesPage,
-  BestAwardsPage,
   createBreedIndexRenderer,
   isMultiBreedChampionship,
 } from './catalogue-front-matter';
@@ -26,6 +23,7 @@ interface BreedSexGroup {
   classes: Map<string, {
     className: string;
     classNumber: number | null | undefined;
+    classLabel: string;
     sortOrder: number | undefined;
     catalogueNumbers: string[];
   }>;
@@ -77,11 +75,13 @@ function groupEntriesByBreed(entries: CatalogueEntry[]) {
       }
 
       const className = cls.name ?? 'Unknown Class';
-      const classKey = `${cls.classNumber ?? ''}-${className}`;
+      const label = cls.classLabel ?? (cls.classNumber != null ? String(cls.classNumber) : '');
+      const classKey = `${label}-${className}`;
       if (!sexGroup.classes.has(classKey)) {
         sexGroup.classes.set(classKey, {
           className,
           classNumber: cls.classNumber,
+          classLabel: label,
           sortOrder: cls.sortOrder,
           catalogueNumbers: [],
         });
@@ -111,20 +111,21 @@ function groupEntriesByBreed(entries: CatalogueEntry[]) {
   return groups;
 }
 
-/** Sort class summaries by classNumber then sortOrder */
+/** Sort class summaries: numbered first (by classNumber), JH/unnumbered after (by classLabel), then sortOrder. */
 function sortedClassSummaries(classes: BreedSexGroup['classes']) {
   return [...classes.values()].sort((a, b) => {
     if (a.classNumber != null && b.classNumber != null) return a.classNumber - b.classNumber;
     if (a.classNumber != null) return -1;
     if (b.classNumber != null) return 1;
+    if (a.classLabel && b.classLabel) return a.classLabel.localeCompare(b.classLabel);
     return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
   });
 }
 
-/** Build class summary line: "Minor Puppy Dog (2 entries): 1, 2" */
-function classLabel(cls: { className: string; classNumber: number | null | undefined; catalogueNumbers: string[] }, sex: string) {
+/** Build class summary line: "Class 1. Minor Puppy Dog (2 entries): 1, 2" */
+function classSummaryLine(cls: { className: string; classLabel: string; catalogueNumbers: string[] }, sex: string) {
   const parts: string[] = [];
-  if (cls.classNumber != null) parts.push(`Class ${cls.classNumber}.`);
+  if (cls.classLabel) parts.push(`Class ${cls.classLabel}.`);
   parts.push(cls.className);
   if (sex === 'dog') parts.push('Dog');
   else if (sex === 'bitch') parts.push('Bitch');
@@ -135,25 +136,25 @@ function classLabel(cls: { className: string; classNumber: number | null | undef
 }
 
 export function CatalogueByBreed({ show, entries }: Props) {
-  // Build a lookup: classNumber -> sponsorship info for inline display
-  const sponsorByClassNumber = new Map<number, ClassSponsorshipInfo>();
+  // Build a lookup: classLabel -> sponsorship info for inline display. Keyed
+  // on label rather than classNumber so JH sponsorships (JHA/JHB) resolve.
+  const sponsorByClassLabel = new Map<string, ClassSponsorshipInfo>();
   for (const sp of show.classSponsorships ?? []) {
-    if (sp.classNumber != null) {
-      sponsorByClassNumber.set(sp.classNumber, sp);
-    }
+    const label = sp.classLabel ?? (sp.classNumber != null ? String(sp.classNumber) : '');
+    if (label) sponsorByClassLabel.set(label, sp);
   }
 
   const grouped = groupEntriesByBreed(entries);
 
   // Inject empty classes from allShowClasses that have no entries
   if (show.allShowClasses && show.allShowClasses.length > 0) {
-    // Collect existing class numbers across all breed/sex groups
-    const existingClassNumbers = new Set<number>();
+    // Collect existing class labels across all breed/sex groups
+    const existingClassLabels = new Set<string>();
     for (const [, groupBucket] of grouped) {
       for (const [, breedBucket] of groupBucket.breeds) {
         for (const sex of Object.keys(breedBucket.sexes)) {
           for (const [, cls] of breedBucket.sexes[sex].classes) {
-            if (cls.classNumber != null) existingClassNumbers.add(cls.classNumber);
+            if (cls.classLabel) existingClassLabels.add(cls.classLabel);
           }
         }
       }
@@ -161,7 +162,8 @@ export function CatalogueByBreed({ show, entries }: Props) {
 
     // Add missing classes as empty entries in the first breed's sex group
     for (const sc of show.allShowClasses) {
-      if (sc.classNumber != null && !existingClassNumbers.has(sc.classNumber)) {
+      const label = sc.classLabel ?? (sc.classNumber != null ? String(sc.classNumber) : '');
+      if (label && !existingClassLabels.has(label)) {
         const sex = sc.sex ?? 'unknown';
 
         // Find the first breed bucket to inject into
@@ -178,11 +180,12 @@ export function CatalogueByBreed({ show, entries }: Props) {
         }
 
         if (targetSexGroup) {
-          const classKey = `${sc.classNumber}-${sc.className}`;
+          const classKey = `${label}-${sc.className}`;
           if (!targetSexGroup.classes.has(classKey)) {
             targetSexGroup.classes.set(classKey, {
               className: sc.className,
               classNumber: sc.classNumber,
+              classLabel: label,
               sortOrder: sc.sortOrder,
               catalogueNumbers: [],
             });
@@ -228,15 +231,13 @@ export function CatalogueByBreed({ show, entries }: Props) {
 
   return (
     <Document>
-      {/* Front matter pages */}
+      {/* Front matter — cover is its own Page; the rest flows in a
+          single consolidated FrontMatterPage. */}
       <CoverPage show={show} />
-      <ShowInformationPage show={show} />
-      <JudgesListPage show={show} />
-      <ClassDefinitionsPage show={show} />
+      <FrontMatterPage show={show} />
       {!show.skipTrophiesPage && (
         <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />
       )}
-      <BestAwardsPage show={show} />
 
       {/* One <Page> per breed — resets coordinate system */}
       {breedPages.map(({ groupName, breedName, judge, breedBucket }) => (
@@ -368,8 +369,8 @@ export function CatalogueByBreed({ show, entries }: Props) {
                   <View style={{ marginTop: 4, marginBottom: 6 }}>
                     {sortedClassSummaries(sexGroup.classes).map((cls) => {
                       // Look up sponsorship for this class
-                      const sp = cls.classNumber != null
-                        ? sponsorByClassNumber.get(cls.classNumber)
+                      const sp = cls.classLabel
+                        ? sponsorByClassLabel.get(cls.classLabel)
                         : undefined;
                       const sponsorParts: string[] = [];
                       if (sp?.trophyName) {
@@ -386,9 +387,9 @@ export function CatalogueByBreed({ show, entries }: Props) {
                       }
 
                       return (
-                        <View key={`${cls.classNumber}-${cls.className}`}>
+                        <View key={`${cls.classLabel}-${cls.className}`}>
                           <Text style={styles.classListSummary}>
-                            {classLabel(cls, sex)}
+                            {classSummaryLine(cls, sex)}
                           </Text>
                           {sponsorParts.map((line, i) => (
                             <Text key={i} style={{ ...styles.sponsorLine, fontSize: 7, marginBottom: 1 }}>

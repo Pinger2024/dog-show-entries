@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle,
@@ -208,6 +208,21 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     setHasLoaded(true);
   }, [effectiveExisting, showData, previousData, hasLoaded]);
 
+  // Belt-and-braces: if the main load useEffect raced past showData
+  // (hasLoaded flipped true before the server column values arrived
+  // from shows.getById), adopt the server values for show-level
+  // fields on first showData tick. Uses a functional update so user
+  // edits made in the meantime are preserved.
+  const initialShowLevelHydratedRef = useRef(false);
+  useEffect(() => {
+    if (initialShowLevelHydratedRef.current) return;
+    if (!showData) return;
+    if (showData.showOpenTime) setShowOpenTime((prev) => prev || showData.showOpenTime!);
+    if (showData.startTime) setJudgingStartTime((prev) => prev || showData.startTime!);
+    if (showData.onCallVet) setOnCallVet((prev) => prev || showData.onCallVet!);
+    initialShowLevelHydratedRef.current = true;
+  }, [showData]);
+
   // ── Autosave ──
   // Two-pronged save:
   //   1. Debounced tRPC mutation while the form is mounted — gives us
@@ -229,9 +244,15 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     onCallVet: string | undefined;
     scheduleData: ScheduleData;
   } | null>(null);
+  // Track the last guarantor count we invalidated blockers for.
+  // getPhaseBlockers / getChecklistAutoDetect are DB-heavy (5+ queries
+  // each) and the only form field that actually moves the needle on
+  // those queries is guarantor count. Without this gate, every 350ms
+  // debounce tick re-invalidates and refetches both views while the
+  // user types.
+  const prevGuarantorCountRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!hasLoaded) return;
     const data: ScheduleData = {
       ...effectiveExisting,
       country: country as ScheduleData['country'],
@@ -268,17 +289,40 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       onCallVet: onCallVet || undefined,
       scheduleData: data,
     };
-    // Always update the ref so the unmount beacon has the latest
-    // snapshot to send, regardless of whether the debounce has fired.
+    if (!hasLoaded) return;
+
+    // Only populate the ref AFTER initial hydration. If we set it
+    // earlier, the unmount beacon can fire with the blank default
+    // form state (officers=[], no showManager, etc.) when a user
+    // navigates away mid-load — wiping their saved data. This bit
+    // everyone on 2026-04-22 when Amanda's championship show lost
+    // its officers list despite her having generated the schedule
+    // PDF hours earlier.
     latestPayloadRef.current = payload;
 
     setAutoSaveStatus('pending');
+    const guarantorCount = payload.scheduleData.guarantors?.length ?? 0;
     const timer = setTimeout(() => {
       setAutoSaveStatus('saving');
       updateMutation.mutateAsync({ showId, ...payload })
         .then(() => {
           setLastAutoSavedAt(new Date());
           setAutoSaveStatus('saved');
+          // Keep the React Query cache in lockstep with what we just
+          // wrote. Without this, navigating to /sponsors and back
+          // rehydrates the form from stale cache → awards/prize-money
+          // appear blank → next autosave propagates the blanks back
+          // to the DB. See the matching setQueryData in the beacon
+          // unmount cleanup below.
+          utils.secretary.getScheduleData.setData({ showId }, payload.scheduleData);
+          // Blocker views depend only on guarantor count from this
+          // form — gate the invalidation so typing in other fields
+          // doesn't refetch them repeatedly.
+          if (prevGuarantorCountRef.current !== guarantorCount) {
+            prevGuarantorCountRef.current = guarantorCount;
+            utils.secretary.getPhaseBlockers.invalidate({ showId });
+            utils.secretary.getChecklistAutoDetect.invalidate({ showId });
+          }
         })
         .catch(() => {
           setAutoSaveStatus('error');
@@ -303,6 +347,18 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     return () => {
       const payload = latestPayloadRef.current;
       if (!payload) return;
+      // Critical: mirror the beacon write into the React Query cache
+      // synchronously. The beacon is fire-and-forget so we never get
+      // a callback to invalidate; without this, when the user comes
+      // back to /schedule the cached (stale) scheduleData wins the
+      // hydration race and overwrites whatever they just typed.
+      try {
+        utils.secretary.getScheduleData.setData({ showId }, payload.scheduleData);
+      } catch {
+        // setData on an unmounted utils ref shouldn't throw, but
+        // guard against edge cases — the beacon itself is what
+        // actually persists the data.
+      }
       if (typeof navigator === 'undefined' || !navigator.sendBeacon) return;
       try {
         const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
@@ -312,7 +368,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
         // navigated and we can't show anything anyway.
       }
     };
-  }, [showId]);
+  }, [showId, utils]);
 
   // ── Derived counts ──
   const officerCount = officers.filter((o) => o.name).length;
@@ -333,18 +389,10 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     return { showday, people, awards, venue, regulations };
   }, [hasBeenSaved, showOpenTime, judgingStartTime, showManager, officerCount, awardsDescription, directions, what3words, catering, country]);
 
-  async function handleSave() {
-    if (!showOpenTime) {
-      toast.error('Show opens at time is required');
-      setEditingSection('showday');
-      return;
-    }
-    if (!judgingStartTime) {
-      toast.error('Judging commences time is required');
-      setEditingSection('showday');
-      return;
-    }
-
+  // Build the payload from current form state. Extracted so
+  // both the explicit "Save Settings" button and the silent
+  // save-on-section-close path can share it.
+  const buildPayload = useCallback(() => {
     const data: ScheduleData = {
       ...effectiveExisting,
       country: country as ScheduleData['country'],
@@ -375,15 +423,59 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
         ? customStatements.filter((s) => s.trim())
         : undefined,
     };
+    return {
+      showId,
+      showOpenTime: showOpenTime || undefined,
+      judgingStartTime: judgingStartTime || undefined,
+      onCallVet: onCallVet || undefined,
+      scheduleData: data,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    effectiveExisting, country, publicAdmission, wetWeather, isBenched,
+    benchingRemovalTime, acceptsNfc, judgedOnGroupSystem, latestArrivalTime,
+    showOpenTime, judgingStartTime, onCallVet, what3words, showManager,
+    officers, awardsDescription, prizeMoney, directions, catering,
+    futureShowDates, additionalNotes, welcomeNote, outsideAttraction,
+    customStatements, showId,
+  ]);
+
+  /** Silent commit used when the user collapses / switches section.
+   *  No toasts, no validation — just persists whatever they've entered
+   *  so nothing is lost if they navigate to Sponsors next. */
+  const saveSectionSilent = useCallback(async () => {
+    if (!hasLoaded) return;
+    try {
+      const payload = buildPayload();
+      await updateMutation.mutateAsync(payload);
+      utils.secretary.getScheduleData.invalidate({ showId });
+      utils.shows.getById.invalidate({ id: showId });
+      const newGuarantorCount = payload.scheduleData.guarantors?.length ?? 0;
+      if (prevGuarantorCountRef.current !== newGuarantorCount) {
+        prevGuarantorCountRef.current = newGuarantorCount;
+        utils.secretary.getPhaseBlockers.invalidate({ showId });
+        utils.secretary.getChecklistAutoDetect.invalidate({ showId });
+      }
+    } catch {
+      // swallow — user sees the in-form autosave indicator; a real
+      // failure will also surface on the explicit Save Settings click
+    }
+  }, [hasLoaded, buildPayload, updateMutation, utils, showId]);
+
+  async function handleSave() {
+    if (!showOpenTime) {
+      toast.error('Show opens at time is required');
+      setEditingSection('showday');
+      return;
+    }
+    if (!judgingStartTime) {
+      toast.error('Judging commences time is required');
+      setEditingSection('showday');
+      return;
+    }
 
     try {
-      await updateMutation.mutateAsync({
-        showId,
-        showOpenTime: showOpenTime || undefined,
-        judgingStartTime: judgingStartTime || undefined,
-        onCallVet: onCallVet || undefined,
-        scheduleData: data,
-      });
+      await updateMutation.mutateAsync(buildPayload());
       await Promise.all([
         utils.secretary.getScheduleData.invalidate({ showId }),
         utils.shows.getById.invalidate({ id: showId }),
@@ -478,7 +570,11 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
               <button
                 type="button"
                 className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-muted/50"
-                onClick={() => setEditingSection(isEditing ? null : section.id)}
+                onClick={async () => {
+                  // Commit current section before collapsing or switching.
+                  if (editingSection) await saveSectionSilent();
+                  setEditingSection(isEditing ? null : section.id);
+                }}
               >
                 <div className={cn(
                   'flex size-8 items-center justify-center rounded-full',
@@ -868,8 +964,34 @@ function PeopleSection({
                     placeholder="Name"
                     value={officer.name}
                     onChange={(e) => updateOfficer(idx, 'name', e.target.value)}
+                    onBlur={(e) => {
+                      // Soft-merge from Club Roster: if a manually-typed name
+                      // matches someone in the club roster who is flagged as a
+                      // guarantor, pre-tick the Guarantor box (and fill address
+                      // if blank). Only promotes false→true and empty→filled;
+                      // never overwrites explicit user choices.
+                      if (!clubPeople) return;
+                      const typed = e.target.value.trim().toLowerCase();
+                      if (!typed) return;
+                      const match = clubPeople.find((p) => p.name.trim().toLowerCase() === typed);
+                      if (!match) return;
+                      if (!officer.isGuarantor && match.isGuarantor) {
+                        updateOfficer(idx, 'isGuarantor', true);
+                      }
+                      if (!officer.address && match.address) {
+                        updateOfficer(idx, 'address', match.address);
+                      }
+                    }}
+                    list={`club-people-${idx}`}
                     className="h-10 text-sm"
                   />
+                  {clubPeople && clubPeople.length > 0 && (
+                    <datalist id={`club-people-${idx}`}>
+                      {clubPeople.map((p) => (
+                        <option key={p.id} value={p.name} />
+                      ))}
+                    </datalist>
+                  )}
                   <Select value={officer.position} onValueChange={(v) => updateOfficer(idx, 'position', v)}>
                     <SelectTrigger className="h-10 text-sm"><SelectValue placeholder="Position" /></SelectTrigger>
                     <SelectContent>

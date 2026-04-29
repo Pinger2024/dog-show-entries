@@ -8,6 +8,7 @@ import {
   Download,
   ExternalLink,
   Hash,
+  Info,
   List,
   Save,
   Users,
@@ -58,6 +59,8 @@ export default function CataloguePage() {
   const entries = catalogueData?.entries ?? [];
   const hasNumbers = entries.some((e) => e.catalogueNumber);
   const resultsFinalised = Boolean(catalogueData?.show?.resultsPublishedAt);
+  const entriesStillOpen = catalogueData?.show?.status === 'entries_open';
+  const entryCloseDate = catalogueData?.show?.entryCloseDate;
 
   // Auto-assign catalogue numbers the first time a secretary lands on the
   // page with confirmed entries but no numbers yet. There is no manual
@@ -76,6 +79,20 @@ export default function CataloguePage() {
 
   return (
     <div className="space-y-6">
+      {entriesStillOpen && (
+        <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200">
+          <Info className="size-5 shrink-0" />
+          <div className="space-y-1">
+            <p className="font-medium">The catalogue won&apos;t be generated until entries close.</p>
+            <p className="text-blue-800/80 dark:text-blue-300/80">
+              {entryCloseDate
+                ? `Entries close on ${new Date(entryCloseDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}. Anything you download before then shows the entries received so far.`
+                : 'Anything you download before entries close shows the entries received so far.'}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Actions — appear once catalogue numbers have been auto-assigned.
           Each button opens the PDF inside an in-Remi dialog viewer rather
           than navigating away. Amanda's mobile testing showed that

@@ -334,12 +334,12 @@ export const dogsRouter = createTRPCRouter({
         breederName: z.string().optional(),
         colour: z.string().optional(),
         owners: z.array(z.object({
-          ownerName: z.string().min(1),
-          ownerAddress: z.string().min(1),
+          ownerName: z.string().min(1, 'Owner name is required'),
+          ownerAddress: z.string().min(1, 'Owner address is required'),
           ownerEmail: z.string().email(),
           ownerPhone: z.string().optional(),
           isPrimary: z.boolean().default(false),
-        })).optional(),
+        })).min(1, 'At least one owner with name and address is required'),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -358,36 +358,18 @@ export const dogsRouter = createTRPCRouter({
         })
         .returning();
 
-      // Create owner records — auto-create primary from user if not provided
-      if (owners && owners.length > 0) {
-        await ctx.db.insert(dogOwners).values(
-          owners.map((o, i) => ({
-            dogId: dog!.id,
-            userId: i === 0 ? ctx.session.user.id : null,
-            ownerName: o.ownerName,
-            ownerAddress: o.ownerAddress,
-            ownerEmail: o.ownerEmail,
-            ownerPhone: o.ownerPhone ?? null,
-            isPrimary: o.isPrimary || i === 0,
-            sortOrder: i,
-          }))
-        );
-      } else {
-        // Default: create primary owner from session user
-        const user = await ctx.db.query.users.findFirst({
-          where: eq(users.id, ctx.session.user.id),
-        });
-        await ctx.db.insert(dogOwners).values({
+      await ctx.db.insert(dogOwners).values(
+        owners.map((o, i) => ({
           dogId: dog!.id,
-          userId: ctx.session.user.id,
-          ownerName: ctx.session.user.name,
-          ownerAddress: user?.address ?? '',
-          ownerEmail: ctx.session.user.email,
-          ownerPhone: user?.phone ?? null,
-          isPrimary: true,
-          sortOrder: 0,
-        });
-      }
+          userId: i === 0 ? ctx.session.user.id : null,
+          ownerName: o.ownerName,
+          ownerAddress: o.ownerAddress,
+          ownerEmail: o.ownerEmail,
+          ownerPhone: o.ownerPhone ?? null,
+          isPrimary: o.isPrimary || i === 0,
+          sortOrder: i,
+        }))
+      );
 
       return dog!;
     }),
@@ -679,11 +661,11 @@ export const dogsRouter = createTRPCRouter({
     .input(z.object({ query: z.string().min(2).max(255) }))
     .mutation(async ({ input }) => {
       // Require at least a space in the query to prevent overly broad searches
-      // (e.g. just "Hundark" returns hundreds — need "Hundark D" or "Hundark Phantom")
+      // — a bare kennel name can match hundreds of dogs.
       if (!input.query.trim().includes(' ')) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
-          message: 'Please enter at least the kennel name and the first letter of the dog\'s name (e.g. "Hundark D") for a more accurate search.',
+          message: 'Please enter at least the kennel name and the first letter of the dog\'s name (e.g. "Thornfield S") for a more accurate search.',
         });
       }
       const results = await searchKcDogs(input.query);

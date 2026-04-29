@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { Document, Page, View, Text, StyleSheet } from '@react-pdf/renderer';
 import './catalogue-styles'; // side-effect: registers Inter + LibreBaskerville fonts
 import { C } from './catalogue-styles';
@@ -16,11 +17,9 @@ import {
 import type { ClassGroup } from './catalogue-utils';
 import {
   CoverPage,
-  ShowInformationPage,
-  JudgesListPage,
-  ClassDefinitionsPage,
+  FrontMatterContent,
   TrophiesPage,
-  BestAwardsPage,
+  JurisdictionBlock,
 } from './catalogue-front-matter';
 import type { ClassSponsorshipInfo } from './catalogue-types';
 
@@ -62,7 +61,7 @@ const s = StyleSheet.create({
     backgroundColor: C.primary,
     paddingVertical: 2,
     paddingHorizontal: 8,
-    marginTop: 5,
+    marginTop: 3,
   },
   classHeaderText: {
     fontFamily: 'Inter',
@@ -91,8 +90,8 @@ const s = StyleSheet.create({
   entriesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingTop: 3,
-    paddingBottom: 2,
+    paddingTop: 2,
+    paddingBottom: 1,
     paddingHorizontal: 6,
   },
   entryCell: {
@@ -120,8 +119,8 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 6,
-    paddingTop: 3,
-    paddingBottom: 4,
+    paddingTop: 2,
+    paddingBottom: 3,
     borderBottomWidth: 0.5,
     borderBottomColor: C.ruleLight,
   },
@@ -177,23 +176,26 @@ const s = StyleSheet.create({
     fontWeight: 'bold',
     color: C.textDark,
     textTransform: 'uppercase',
+    lineHeight: 1.3,
   },
   exhibitorAddress: {
     fontFamily: 'Inter',
     fontSize: 7,
     color: C.textMedium,
-    marginBottom: 2,
+    marginBottom: 3,
+    lineHeight: 1.3,
   },
   exhibitorDogRow: {
     paddingLeft: 12,
-    marginBottom: 3,
+    marginBottom: 5,
   },
   exhibitorDogName: {
     fontFamily: 'Inter',
     fontSize: 7.5,
     fontWeight: 'bold',
     color: C.textDark,
-    lineHeight: 1.3,
+    lineHeight: 1.4,
+    marginBottom: 1,
   },
   // NOTE: lineHeight is set explicitly here because long pedigree /
   // multi-class detail lines wrap to 2 visual lines inside a single
@@ -204,8 +206,8 @@ const s = StyleSheet.create({
     fontSize: 6.5,
     color: C.textMedium,
     paddingLeft: 16,
-    marginBottom: 0.5,
-    lineHeight: 1.3,
+    marginBottom: 1,
+    lineHeight: 1.4,
   },
   emptyClass: {
     fontFamily: 'Inter',
@@ -301,11 +303,14 @@ function buildExhibitorIndex(entries: CatalogueEntry[]): ExhibitorInfo[] {
       .sort((a, b) => {
         if (a.classNumber != null && b.classNumber != null)
           return a.classNumber - b.classNumber;
-        return 0;
+        if (a.classNumber != null) return -1;
+        if (b.classNumber != null) return 1;
+        return (a.classLabel ?? '').localeCompare(b.classLabel ?? '');
       })
-      .map((c) =>
-        c.classNumber != null ? `${c.classNumber}. ${c.name ?? ''}` : c.name ?? '',
-      )
+      .map((c) => {
+        const lbl = c.classLabel ?? (c.classNumber != null ? String(c.classNumber) : null);
+        return lbl ? `${lbl}. ${c.name ?? ''}` : c.name ?? '';
+      })
       .filter(Boolean)
       .join(', ');
 
@@ -341,15 +346,15 @@ function buildExhibitorIndex(entries: CatalogueEntry[]): ExhibitorInfo[] {
 
 // ── Page chunking (module-scope to avoid re-creation per render) ──
 
-// Chunk threshold: high enough to let small/medium shows render a
-// section in one chunk (avoids artificial page breaks with trailing
-// whitespace), low enough to dodge the pdfkit coordinate-overflow
-// crash that hits when a single <Page wrap> has hundreds of entry
-// nodes. The by-class catalogue has much heavier per-entry markup
-// and crashes around 250 entries; ringside entries are simpler
-// (cat# + name in a 2-col grid) so it can take more, but staying
-// well below by-class's crash threshold is the safe play.
-const PAGE_ENTRY_THRESHOLD = 100;
+// Chunk threshold. Ringside entries are VERY simple (just cat# +
+// dog name in a 2-col grid) so vertical page extent stays small
+// per entry — much smaller than by-class's 3-line detail blocks
+// that hit the pdfkit coordinate-overflow crash at ~250 entries.
+// For ringside we can safely fit a typical championship show
+// (180-220 entries) in a single <Page wrap>, which eliminates the
+// artificial page breaks Amanda flagged on her 188-entry test.
+// Threshold kept below 300 as a safety margin.
+const PAGE_ENTRY_THRESHOLD = 250;
 
 function chunkClasses(classes: ClassGroup[]): ClassGroup[][] {
   const chunks: ClassGroup[][] = [];
@@ -375,13 +380,14 @@ export function CatalogueRingside({ show, entries }: Props) {
   const allClasses = groupByClass(entries, show);
   const isChampionship = show.showType === 'championship';
 
-  // Build sponsorship lookup
-  const sponsorsByClassNumber = new Map<number, ClassSponsorshipInfo[]>();
+  // Build sponsorship lookup keyed on classLabel so JH (JHA/JHB) resolves too.
+  const sponsorsByClassLabel = new Map<string, ClassSponsorshipInfo[]>();
   for (const sp of show.classSponsorships ?? []) {
-    if (sp.classNumber != null) {
-      const existing = sponsorsByClassNumber.get(sp.classNumber) ?? [];
+    const label = sp.classLabel ?? (sp.classNumber != null ? String(sp.classNumber) : '');
+    if (label) {
+      const existing = sponsorsByClassLabel.get(label) ?? [];
       existing.push(sp);
-      sponsorsByClassNumber.set(sp.classNumber, existing);
+      sponsorsByClassLabel.set(label, existing);
     }
   }
 
@@ -454,85 +460,105 @@ export function CatalogueRingside({ show, entries }: Props) {
 
   return (
     <Document title={`Ringside Catalogue — ${show.name}`} author="Remi Show Manager">
-      {/* Front matter */}
+      {/* Everything after the cover flows inside a single <Page wrap>
+          so front matter and body share pages — a partial front-matter
+          page can absorb the start of the body rather than leaving
+          trailing whitespace. Cover stays its own Page (different
+          styling / branded layout).
+          Safety: this relies on total entries staying under pdfkit's
+          coordinate-overflow ceiling (~250 entries per wrapped Page).
+          Shows above that threshold will need re-chunking — raise a
+          diagnostic or fall back to per-section pages if it becomes
+          a problem. */}
       <CoverPage show={show} />
-      <ShowInformationPage show={show} />
-      <JudgesListPage show={show} />
-      <ClassDefinitionsPage show={show} />
       {!show.skipTrophiesPage && show.classSponsorships && show.classSponsorships.length > 0 && (
         <TrophiesPage show={show} sponsorships={show.classSponsorships} />
       )}
-      <BestAwardsPage show={show} />
-
-      {/* Class pages — grouped by sex */}
-      {sections.map((section, sectionIdx) => {
-        const chunks = chunkClasses(section.classes);
-        const isLastSection = sectionIdx === sections.length - 1;
-        return chunks.map((chunkClasses, chunkIdx) => (
-          <Page
-            key={`${section.key}-chunk-${chunkIdx}`}
-            size="A5"
-            style={s.page}
-            wrap
-          >
-            {/* Sex band on first chunk of each section */}
-            {chunkIdx === 0 && (
+      <Page size="A5" style={s.page} wrap>
+        <FrontMatterContent show={show} />
+        <View style={{ marginTop: 14 }} />
+        {sections.map((section, sectionIdx) => {
+          const isLastSection = sectionIdx === sections.length - 1;
+          const chunkClasses = section.classes;
+          return (
+            <Fragment key={`section-${section.key}`}>
               <Text style={s.sexBand} minPresenceAhead={80}>
                 {section.label}
               </Text>
-            )}
-
-            {chunkClasses.map((classGroup, classIdx) => {
+              {chunkClasses.map((classGroup, classIdx) => {
               const sorted = sortEntries(classGroup.entries);
-              const sps =
-                classGroup.classNumber != null
-                  ? sponsorsByClassNumber.get(classGroup.classNumber) ?? []
-                  : [];
+              const sps = classGroup.classLabel
+                ? sponsorsByClassLabel.get(classGroup.classLabel) ?? []
+                : [];
               const sponsorLines = buildSponsorLines(sps);
 
+              // Classes with ≤8 entries stay fully atomic (wrap=false on
+              // the whole block so header + entries never split). Larger
+              // classes are allowed to wrap across pages — needed for
+              // Amanda's "flow continuously regardless of entry count"
+              // ask — but the header carries minPresenceAhead so it
+              // never orphans at the bottom of a page with no entries
+              // below it.
+              const keepAtomic = sorted.length <= 8;
+              // Keep the class header atomic with its first pair of
+              // entries — prevents the "header at page-bottom with no
+              // dogs below it" orphan Amanda flagged. The first two
+              // rows of a 2-column grid = first 4 entries. If fewer,
+              // take what we have.
+              const firstEntries = sorted.slice(0, 4);
+              const restEntries = sorted.slice(4);
               return (
                 <View
-                  key={`cls-${section.key}-${classGroup.classNumber ?? classGroup.className}-${classIdx}`}
-                  wrap={false}
+                  key={`cls-${section.key}-${classGroup.classLabel || classGroup.className}-${classIdx}`}
+                  wrap={!keepAtomic}
                 >
-                  {/* Class header strip */}
-                  <View style={s.classHeader}>
-                    <Text style={s.classHeaderText}>
-                      {classGroup.classNumber != null
-                        ? `${classGroup.classNumber}. ${classGroup.className}`
-                        : classGroup.className}
-                    </Text>
-                    <Text style={s.classHeaderCount}>
-                      {sorted.length} {sorted.length === 1 ? 'Entry' : 'Entries'}
-                    </Text>
+                  {/* Header + sponsor lines + first entries kept atomic */}
+                  <View wrap={false} minPresenceAhead={keepAtomic ? undefined : 100}>
+                    <View style={s.classHeader}>
+                      <Text style={s.classHeaderText}>
+                        {classGroup.classLabel
+                          ? `${classGroup.classLabel}. ${classGroup.className}`
+                          : classGroup.className}
+                      </Text>
+                      <Text style={s.classHeaderCount}>
+                        {sorted.length} {sorted.length === 1 ? 'Entry' : 'Entries'}
+                      </Text>
+                    </View>
+                    {sponsorLines.map((line, i) => (
+                      <Text key={i} style={s.sponsorLine}>
+                        {line}
+                      </Text>
+                    ))}
+                    {firstEntries.length > 0 ? (
+                      <View style={s.entriesGrid}>
+                        {firstEntries.map((entry, entryIdx) => (
+                          <View
+                            key={`${classGroup.classLabel || classGroup.className}-${entry.catalogueNumber ?? 'nocat'}-${entryIdx}`}
+                            style={s.entryCell}
+                          >
+                            <Text style={s.entryNumber}>{entry.catalogueNumber ?? '—'}</Text>
+                            <Text style={s.entryName}>{displayEntryName(entry)}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    ) : (
+                      <Text style={s.emptyClass}>No entries</Text>
+                    )}
                   </View>
 
-                  {/* Sponsorship lines */}
-                  {sponsorLines.map((line, i) => (
-                    <Text key={i} style={s.sponsorLine}>
-                      {line}
-                    </Text>
-                  ))}
-
-                  {/* Entry grid — catalogue number + dog name, two columns */}
-                  {sorted.length > 0 ? (
+                  {/* Remaining entries flow naturally — can split across pages */}
+                  {restEntries.length > 0 && (
                     <View style={s.entriesGrid}>
-                      {sorted.map((entry, entryIdx) => (
+                      {restEntries.map((entry, entryIdx) => (
                         <View
-                          key={`${classGroup.classNumber ?? classGroup.className}-${entry.catalogueNumber ?? 'nocat'}-${entryIdx}`}
+                          key={`rest-${classGroup.classLabel || classGroup.className}-${entry.catalogueNumber ?? 'nocat'}-${entryIdx}`}
                           style={s.entryCell}
                         >
-                          <Text style={s.entryNumber}>
-                            {entry.catalogueNumber ?? '—'}
-                          </Text>
-                          <Text style={s.entryName}>
-                            {displayEntryName(entry)}
-                          </Text>
+                          <Text style={s.entryNumber}>{entry.catalogueNumber ?? '—'}</Text>
+                          <Text style={s.entryName}>{displayEntryName(entry)}</Text>
                         </View>
                       ))}
                     </View>
-                  ) : (
-                    <Text style={s.emptyClass}>No entries</Text>
                   )}
 
                   {/* Write-in placement lines */}
@@ -564,57 +590,53 @@ export function CatalogueRingside({ show, entries }: Props) {
               );
             })}
 
-            {/* Consolidated Best Awards table — all bests (Dog, Bitch,
-                BIS, Long Coat etc.) in one table at the very end of the
-                last section, per Amanda's request. Replaces the old
-                per-section best-of-sex inline strips, which fragmented
-                the awards across multiple pages.
-                Two-column table layout: label | write-in line. */}
-            {isLastSection && chunkIdx === chunks.length - 1 && (() => {
-              const allBests = [
-                ...(bestAwards.dog ?? []),
-                ...(bestAwards.bitch ?? []),
-                ...bisAwards,
-              ];
-              if (allBests.length === 0) return null;
-              return (
-                <View
-                  wrap={false}
-                  style={{
-                    marginTop: 10,
-                    borderWidth: 1.5,
-                    borderColor: C.primary,
-                    padding: '8 12',
-                  }}
-                >
-                  <Text
+              {/* Best Awards table only after the LAST section */}
+              {isLastSection && (() => {
+                const allBests = [
+                  ...(bestAwards.dog ?? []),
+                  ...(bestAwards.bitch ?? []),
+                  ...bisAwards,
+                ];
+                if (allBests.length === 0) return null;
+                return (
+                  <View
+                    wrap={false}
                     style={{
-                      fontFamily: 'LibreBaskerville',
-                      fontSize: 12,
-                      fontWeight: 'bold',
-                      textAlign: 'center',
-                      textTransform: 'uppercase',
-                      color: C.textDark,
-                      marginBottom: 6,
-                      letterSpacing: 1.5,
+                      marginTop: 10,
+                      borderWidth: 1.5,
+                      borderColor: C.primary,
+                      padding: '8 12',
                     }}
                   >
-                    Best Awards
-                  </Text>
-                  {allBests.map((award) => (
-                    <View key={award} style={{ ...s.bestAwardRow, paddingVertical: 2.5 }}>
-                      <Text style={s.bestAwardLabel}>{award}</Text>
-                      <View style={s.bestAwardLine} />
-                    </View>
-                  ))}
-                </View>
-              );
-            })()}
+                    <Text
+                      style={{
+                        fontFamily: 'LibreBaskerville',
+                        fontSize: 12,
+                        fontWeight: 'bold',
+                        textAlign: 'center',
+                        textTransform: 'uppercase',
+                        color: C.textDark,
+                        marginBottom: 6,
+                        letterSpacing: 1.5,
+                      }}
+                    >
+                      Best Awards
+                    </Text>
+                    {allBests.map((award) => (
+                      <View key={award} style={{ ...s.bestAwardRow, paddingVertical: 2.5 }}>
+                        <Text style={s.bestAwardLabel}>{award}</Text>
+                        <View style={s.bestAwardLine} />
+                      </View>
+                    ))}
+                  </View>
+                );
+              })()}
+            </Fragment>
+          );
+        })}
+        <Text style={s.footer} render={footerRender} fixed />
+      </Page>
 
-            <Text style={s.footer} render={footerRender} fixed />
-          </Page>
-        ));
-      })}
 
       {/* Exhibitor Index — full details like the GSD Scotland PDF.
           One <Page wrap> for the whole list; react-pdf handles the
@@ -630,9 +652,16 @@ export function CatalogueRingside({ show, entries }: Props) {
           </View>
 
           {exhibitors.map((ex, exIdx) => (
+            // Every block is wrappable: without wrap, a block that
+            // doesn't fit the remaining page jumps whole and leaves
+            // trailing whitespace. react-pdf also fail-fit compresses
+            // wrap={false} blocks larger than the page. minPresenceAhead
+            // on the name prevents the header from orphaning alone at
+            // page bottom. Each dog row is wrap={false} further down so
+            // a single dog's lines never split mid-block.
             <View
               key={`${ex.name}-${exIdx}`}
-              wrap={false}
+              wrap
               style={{
                 marginBottom: 6,
                 borderBottomWidth: 0.5,
@@ -640,8 +669,7 @@ export function CatalogueRingside({ show, entries }: Props) {
                 paddingBottom: 4,
               }}
             >
-              {/* Exhibitor name + address */}
-              <Text style={s.exhibitorName}>{ex.name}</Text>
+              <Text style={s.exhibitorName} minPresenceAhead={80}>{ex.name}</Text>
               {ex.address && <Text style={s.exhibitorAddress}>{ex.address}</Text>}
 
               {/* Each dog */}
@@ -667,7 +695,7 @@ export function CatalogueRingside({ show, entries }: Props) {
                 ].filter(Boolean);
 
                 return (
-                  <View key={`${dog.catalogueNumber}-${dogIdx}`} style={s.exhibitorDogRow}>
+                  <View key={`${dog.catalogueNumber}-${dogIdx}`} wrap={false} style={s.exhibitorDogRow}>
                     {/* Catalogue number + dog/handler name */}
                     <Text style={s.exhibitorDogName}>
                       {dog.catalogueNumber ? `${dog.catalogueNumber}. ` : ''}

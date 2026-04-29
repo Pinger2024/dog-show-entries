@@ -36,6 +36,7 @@ export interface CatalogueEntry {
     name: string | undefined;
     sex: string | null | undefined;
     classNumber: number | null | undefined;
+    classLabel?: string;
     sortOrder: number | undefined;
     showClassId?: string | undefined;
   }[];
@@ -57,6 +58,7 @@ export interface ShowSponsorInfo {
 export interface ShowClassInfo {
   className: string;
   classNumber: number | null;
+  classLabel?: string;
   sortOrder: number;
   sex: string | null;
 }
@@ -65,6 +67,7 @@ export interface ShowClassInfo {
 export interface ClassSponsorshipInfo {
   className: string;
   classNumber: number | null;
+  classLabel?: string;
   trophyName: string | null;
   trophyDonor: string | null;
   sponsorName: string | null;

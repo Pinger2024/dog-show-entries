@@ -58,10 +58,17 @@ export async function makeUser(opts: Partial<typeof users.$inferInsert> = {}) {
 
 export async function makeOrg(opts: Partial<typeof organisations.$inferInsert> = {}) {
   const n = seq();
+  // Factories default the org to payment-ready — payout bank details set —
+  // so existing payment journey tests don't all need to opt in. Tests that
+  // specifically exercise the no-bank-details path should pass `null` for
+  // these fields explicitly.
   const [row] = await testDb
     .insert(organisations)
     .values({
       name: opts.name ?? `Test Club ${n}`,
+      payoutAccountName: opts.payoutAccountName ?? `Test Club ${n}`,
+      payoutSortCode: opts.payoutSortCode ?? '10-88-00',
+      payoutAccountNumber: opts.payoutAccountNumber ?? '00012345',
       ...opts,
     })
     .returning();
@@ -179,6 +186,7 @@ export async function makeEntry(opts: {
   showId: string;
   dogId: string;
   exhibitorId: string;
+  orderId?: string;
   status?: EntryStatus;
   totalFee?: number;
 }) {
@@ -188,6 +196,7 @@ export async function makeEntry(opts: {
       showId: opts.showId,
       dogId: opts.dogId,
       exhibitorId: opts.exhibitorId,
+      orderId: opts.orderId,
       status: opts.status ?? 'confirmed',
       totalFee: opts.totalFee ?? 500,
     })

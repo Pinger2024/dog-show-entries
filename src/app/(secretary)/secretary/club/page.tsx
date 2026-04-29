@@ -54,7 +54,8 @@ import {
   Users,
   Shield,
 } from 'lucide-react';
-import { PostcodeLookup } from '@/components/postcode-lookup';
+import { PayoutDetailsCard } from './_components/payout-details-card';
+import { useActiveOrganisation } from '@/lib/use-active-organisation';
 
 const POSITION_OPTIONS = [
   'President',
@@ -97,7 +98,11 @@ const emptyForm: PersonFormData = {
 };
 
 export default function MyClubPage() {
-  const { data: org, isLoading: orgLoading } = trpc.secretary.getOrganisation.useQuery();
+  const { activeOrgId } = useActiveOrganisation();
+  const { data: org, isLoading: orgLoading } = trpc.secretary.getOrganisation.useQuery(
+    { organisationId: activeOrgId ?? undefined },
+    { enabled: activeOrgId !== null }
+  );
   const utils = trpc.useUtils();
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -328,6 +333,9 @@ export default function MyClubPage() {
         </CardContent>
       </Card>
 
+      {/* Section: Payout bank details — where entry money gets sent after each show */}
+      {org?.id && <PayoutDetailsCard organisationId={org.id} />}
+
       {/* Section 2: People & Officials */}
       <Card>
         <CardHeader className="pb-3">
@@ -508,22 +516,14 @@ export default function MyClubPage() {
               </div>
             </div>
 
-            {/* Address with PostcodeLookup */}
             <div className="space-y-1.5">
               <Label htmlFor="person-address">Address</Label>
-              <PostcodeLookup
-                compact
-                onSelect={(result) =>
-                  setForm((f) => ({ ...f, address: result.fullAddress }))
-                }
-              />
               <Textarea
                 id="person-address"
                 value={form.address}
                 onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
-                placeholder="Full address"
-                rows={2}
-                className="mt-1.5"
+                placeholder="House/flat, street, town, postcode"
+                rows={3}
               />
             </div>
 

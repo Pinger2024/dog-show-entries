@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 let _s3: S3Client | null = null;
@@ -81,6 +81,29 @@ export async function uploadToR2(
     ContentType: contentType,
   });
   await client.send(command);
+}
+
+/**
+ * Generate a short-lived presigned GET URL for a private R2 object. Use for
+ * content that shouldn't sit on a public URL — e.g. judge contracts with
+ * personal details that must not be cached by a CDN.
+ */
+export async function generatePresignedGetUrl(
+  key: string,
+  opts: { expiresIn?: number; filename?: string } = {},
+): Promise<string> {
+  const client = getS3Client();
+  // Strip quotes before embedding in the Content-Disposition header — a stray
+  // quote would otherwise terminate the filename field and corrupt the header.
+  const safeFilename = opts.filename?.replace(/"/g, '');
+  const command = new GetObjectCommand({
+    Bucket: BUCKET,
+    Key: key,
+    ...(safeFilename
+      ? { ResponseContentDisposition: `attachment; filename="${safeFilename}"` }
+      : {}),
+  });
+  return getSignedUrl(client, command, { expiresIn: opts.expiresIn ?? 300 });
 }
 
 /**

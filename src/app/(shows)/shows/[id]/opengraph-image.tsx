@@ -1,10 +1,13 @@
 import { ImageResponse } from 'next/og';
 import { eq, and, isNull, sql } from 'drizzle-orm';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { db } from '@/server/db';
 import { shows, entries, showSponsors } from '@/server/db/schema';
 import { isUuid } from '@/lib/slugify';
 
 export const runtime = 'nodejs';
+export const alt = 'Preview card for a dog show listing on Remi';
 export const contentType = 'image/png';
 export const size = { width: 1200, height: 630 };
 export const revalidate = 900;
@@ -19,7 +22,10 @@ const SHOW_TYPE_LABELS: Record<string, string> = {
 };
 
 /** Simple fallback image — just the show name on a dark background */
-function fallbackImage(showName: string, fonts: { name: string; data: ArrayBuffer; weight: number }[]) {
+function fallbackImage(
+  showName: string,
+  fonts: { name: string; data: ArrayBuffer; weight: 400 | 600 | 700 }[]
+) {
   return new ImageResponse(
     (
       <div
@@ -90,23 +96,23 @@ export default async function OGImage({
 }) {
   const { id } = await params;
 
-  // Load fonts first — these are local files and should always work
+  // Load fonts first — node fs on the project root is reliable across dev and prod
+  // (the `new URL('../../../../../public/fonts/...', import.meta.url)` pattern silently
+  // fails under Next 15's prod bundler, dropping us into the "Remi Show Manager"
+  // fallback on every social share).
   let baskervilleBold: ArrayBuffer;
   let interRegular: ArrayBuffer;
   let interSemibold: ArrayBuffer;
 
   try {
-    [baskervilleBold, interRegular, interSemibold] = await Promise.all([
-      fetch(new URL('../../../../../public/fonts/libre-baskerville-bold.ttf', import.meta.url)).then(
-        (r) => r.arrayBuffer()
-      ),
-      fetch(new URL('../../../../../public/fonts/inter-regular.ttf', import.meta.url)).then(
-        (r) => r.arrayBuffer()
-      ),
-      fetch(new URL('../../../../../public/fonts/inter-semibold.ttf', import.meta.url)).then(
-        (r) => r.arrayBuffer()
-      ),
-    ]);
+    const fontsDir = join(process.cwd(), 'public', 'fonts');
+    const readFont = (name: string): ArrayBuffer => {
+      const buf = readFileSync(join(fontsDir, name));
+      return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+    };
+    baskervilleBold = readFont('libre-baskerville-bold.ttf');
+    interRegular = readFont('inter-regular.ttf');
+    interSemibold = readFont('inter-semibold.ttf');
   } catch (err) {
     console.error('OG image: font loading failed:', err);
     // Return a minimal image with default fonts
@@ -280,19 +286,24 @@ export default async function OGImage({
       badgeBg = '#2563EB'; // blue
     }
 
+    const orgKcReg = (show.organisation as { kcRegNumber?: string | null } | null | undefined)?.kcRegNumber;
+    const clubNameSize = !show.organisation ? 0 : show.organisation.name.length > 48 ? 16 : show.organisation.name.length > 36 ? 18 : 20;
+    const showNameSize = show.name.length > 40 ? 38 : show.name.length > 28 ? 46 : 54;
+
     return new ImageResponse(
       (
         <div
           style={{
             display: 'flex',
+            flexDirection: 'column',
             width: '100%',
             height: '100%',
-            backgroundColor: '#1C1917',
+            backgroundColor: '#fbf7ef',
             position: 'relative',
             overflow: 'hidden',
           }}
         >
-          {/* Banner image background */}
+          {/* Banner image background (if present) — faded into the cream */}
           {bannerData && (
             <img
               src={`data:image/jpeg;base64,${Buffer.from(bannerData).toString('base64')}`}
@@ -303,12 +314,12 @@ export default async function OGImage({
                 width: '100%',
                 height: '100%',
                 objectFit: 'cover',
-                opacity: 0.2,
+                opacity: 0.08,
               }}
             />
           )}
 
-          {/* Gradient overlay */}
+          {/* Warm amber radial highlight */}
           <div
             style={{
               display: 'flex',
@@ -317,13 +328,12 @@ export default async function OGImage({
               left: 0,
               right: 0,
               bottom: 0,
-              background: bannerData
-                ? 'linear-gradient(to top, rgba(28,25,23,1) 0%, rgba(28,25,23,0.85) 40%, rgba(28,25,23,0.7) 100%)'
-                : 'radial-gradient(ellipse at 60% 40%, rgba(180,130,80,0.08) 0%, transparent 70%)',
+              background:
+                'radial-gradient(ellipse at 50% 0%, rgba(217, 119, 6, 0.10) 0%, transparent 55%)',
             }}
           />
 
-          {/* Top gold line */}
+          {/* Top + bottom gold hairlines */}
           <div
             style={{
               display: 'flex',
@@ -331,115 +341,168 @@ export default async function OGImage({
               top: 0,
               left: 0,
               right: 0,
-              height: 3,
-              background: 'linear-gradient(90deg, #92702A, #C9A84C, #92702A)',
+              height: 2,
+              background: 'linear-gradient(90deg, transparent, #C9A84C, transparent)',
+            }}
+          />
+          <div
+            style={{
+              display: 'flex',
+              position: 'absolute',
+              bottom: 52,
+              left: 0,
+              right: 0,
+              height: 1,
+              background: 'linear-gradient(90deg, transparent, rgba(201,168,76,0.4), transparent)',
             }}
           />
 
-          {/* Main content */}
+          {/* Main content — centred heritage layout */}
           <div
             style={{
               display: 'flex',
               flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'flex-start',
               width: '100%',
-              height: '100%',
-              padding: '44px 56px',
-              justifyContent: 'center',
+              flex: 1,
+              padding: '36px 60px 24px',
+              position: 'relative',
             }}
           >
-            {/* Top row: club logo + sponsor */}
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: 24,
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                {clubLogoData ? (
-                  <img
-                    src={`data:image/png;base64,${Buffer.from(clubLogoData).toString('base64')}`}
-                    width={48}
-                    height={48}
-                    style={{ borderRadius: 6, objectFit: 'contain' }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      display: 'flex',
-                      width: 48,
-                      height: 48,
-                      borderRadius: 6,
-                      backgroundColor: '#292524',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: 'flex',
-                        width: 8,
-                        height: 8,
-                        backgroundColor: '#C9A84C',
-                        transform: 'rotate(45deg)',
-                      }}
-                    />
-                  </div>
-                )}
-                {show.organisation && (
-                  <div
-                    style={{
-                      display: 'flex',
-                      fontFamily: 'Inter',
-                      fontWeight: 400,
-                      fontSize: 16,
-                      color: '#A8A29E',
-                      letterSpacing: '0.04em',
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    {show.organisation.name}
-                  </div>
-                )}
-              </div>
-
-              {sponsorLogoData && titleSponsor && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div
-                    style={{
-                      display: 'flex',
-                      fontFamily: 'Inter',
-                      fontWeight: 400,
-                      fontSize: 11,
-                      color: '#78716C',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.06em',
-                    }}
-                  >
-                    Sponsored by
-                  </div>
-                  <img
-                    src={`data:image/png;base64,${Buffer.from(sponsorLogoData).toString('base64')}`}
-                    width={80}
-                    height={36}
-                    style={{ objectFit: 'contain' }}
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Show type badge */}
+            {/* Notice-of-show eyebrow */}
             <div
               style={{
                 display: 'flex',
                 fontFamily: 'Inter',
                 fontWeight: 600,
-                fontSize: 13,
-                color: '#C9A84C',
+                fontSize: 11,
+                color: '#92702A',
+                letterSpacing: '0.4em',
                 textTransform: 'uppercase',
-                letterSpacing: '0.1em',
-                marginBottom: 8,
+              }}
+            >
+              Notice of Show
+            </div>
+
+            {/* Club crest — the brand, front and centre */}
+            <div
+              style={{
+                display: 'flex',
+                marginTop: 18,
+                width: 120,
+                height: 120,
+                borderRadius: 60,
+                backgroundColor: '#ffffff',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '3px solid #C9A84C',
+                boxShadow: '0 4px 16px rgba(201, 168, 76, 0.25)',
+              }}
+            >
+              {clubLogoData ? (
+                <img
+                  src={`data:image/png;base64,${Buffer.from(clubLogoData).toString('base64')}`}
+                  width={96}
+                  height={96}
+                  style={{ objectFit: 'contain', borderRadius: 48 }}
+                />
+              ) : (
+                <div
+                  style={{
+                    display: 'flex',
+                    fontFamily: 'Libre Baskerville',
+                    fontWeight: 700,
+                    fontSize: 42,
+                    color: '#92702A',
+                  }}
+                >
+                  {show.organisation?.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() ?? '◆'}
+                </div>
+              )}
+            </div>
+
+            {/* Club name */}
+            {show.organisation && (
+              <div
+                style={{
+                  display: 'flex',
+                  marginTop: 16,
+                  fontFamily: 'Libre Baskerville',
+                  fontWeight: 700,
+                  fontSize: clubNameSize,
+                  color: '#292524',
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  textAlign: 'center',
+                  maxWidth: 880,
+                }}
+              >
+                {show.organisation.name}
+              </div>
+            )}
+
+            {/* RKC registration micro-badge */}
+            {orgKcReg && (
+              <div
+                style={{
+                  display: 'flex',
+                  marginTop: 6,
+                  fontFamily: 'Inter',
+                  fontWeight: 400,
+                  fontSize: 11,
+                  color: '#78716C',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                RKC Registered
+              </div>
+            )}
+
+            {/* Ornamental "presents" divider */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 14,
+                marginTop: 16,
+              }}
+            >
+              <div style={{ display: 'flex', width: 60, height: 1, backgroundColor: 'rgba(201,168,76,0.5)' }} />
+              <div style={{ display: 'flex', width: 7, height: 7, backgroundColor: '#C9A84C', transform: 'rotate(45deg)' }} />
+              <div
+                style={{
+                  display: 'flex',
+                  fontFamily: 'Libre Baskerville',
+                  fontWeight: 700,
+                  fontStyle: 'italic',
+                  fontSize: 11,
+                  color: '#92702A',
+                  letterSpacing: '0.35em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                Presents
+              </div>
+              <div style={{ display: 'flex', width: 7, height: 7, backgroundColor: '#C9A84C', transform: 'rotate(45deg)' }} />
+              <div style={{ display: 'flex', width: 60, height: 1, backgroundColor: 'rgba(201,168,76,0.5)' }} />
+            </div>
+
+            {/* Show type chip */}
+            <div
+              style={{
+                display: 'flex',
+                marginTop: 14,
+                fontFamily: 'Inter',
+                fontWeight: 600,
+                fontSize: 11,
+                color: '#92702A',
+                backgroundColor: 'rgba(201,168,76,0.14)',
+                border: '1px solid rgba(201,168,76,0.5)',
+                borderRadius: 999,
+                padding: '4px 14px',
+                letterSpacing: '0.25em',
+                textTransform: 'uppercase',
               }}
             >
               {showType}
@@ -449,94 +512,64 @@ export default async function OGImage({
             <div
               style={{
                 display: 'flex',
+                marginTop: 12,
                 fontFamily: 'Libre Baskerville',
                 fontWeight: 700,
-                fontSize: show.name.length > 40 ? 34 : show.name.length > 28 ? 40 : 46,
-                color: '#FAFAF8',
-                lineHeight: 1.15,
-                letterSpacing: '0.01em',
+                fontSize: showNameSize,
+                color: '#1C1917',
+                lineHeight: 1.05,
+                textAlign: 'center',
+                maxWidth: 1000,
               }}
             >
               {show.name}
             </div>
 
-            {/* Date + Venue */}
+            {/* Date + venue inline */}
             <div
               style={{
                 display: 'flex',
-                gap: 24,
                 marginTop: 14,
+                alignItems: 'baseline',
+                gap: 14,
                 fontFamily: 'Inter',
                 fontWeight: 400,
-                fontSize: 17,
-                color: '#A8A29E',
+                fontSize: 16,
+                color: '#57534E',
               }}
             >
               <span style={{ display: 'flex' }}>{showDate}</span>
               {show.venue && (
-                <span style={{ display: 'flex' }}>
-                  {show.venue.name}
-                </span>
+                <>
+                  <span style={{ display: 'flex', color: '#C9A84C' }}>·</span>
+                  <span style={{ display: 'flex' }}>{show.venue.name}</span>
+                </>
               )}
             </div>
 
-            {/* Ornamental divider */}
+            {/* Judges + entry count + status badge */}
             <div
               style={{
                 display: 'flex',
+                marginTop: 16,
                 alignItems: 'center',
-                gap: 12,
-                width: '100%',
-                marginTop: 22,
-                marginBottom: 22,
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  flex: 1,
-                  height: 1,
-                  backgroundColor: 'rgba(201, 168, 76, 0.25)',
-                }}
-              />
-              <div
-                style={{
-                  display: 'flex',
-                  width: 8,
-                  height: 8,
-                  backgroundColor: '#C9A84C',
-                  transform: 'rotate(45deg)',
-                }}
-              />
-              <div
-                style={{
-                  display: 'flex',
-                  flex: 1,
-                  height: 1,
-                  backgroundColor: 'rgba(201, 168, 76, 0.25)',
-                }}
-              />
-            </div>
-
-            {/* Stats row */}
-            <div
-              style={{
-                display: 'flex',
-                gap: 28,
-                alignItems: 'center',
+                gap: 16,
+                flexWrap: 'wrap',
+                justifyContent: 'center',
               }}
             >
               {judges.length > 0 && (
                 <div
                   style={{
                     display: 'flex',
-                    fontFamily: 'Inter',
-                    fontWeight: 400,
-                    fontSize: 16,
-                    color: '#78716C',
+                    fontFamily: 'Libre Baskerville',
+                    fontWeight: 700,
+                    fontStyle: 'italic',
+                    fontSize: 14,
+                    color: '#57534E',
                   }}
                 >
-                  Judge{judges.length > 1 ? 's' : ''}: {judges.slice(0, 3).join(', ')}
+                  Judged by {judges.slice(0, 3).join(' & ')}
                 </div>
               )}
               {entryCount > 0 && (
@@ -545,8 +578,8 @@ export default async function OGImage({
                     display: 'flex',
                     fontFamily: 'Inter',
                     fontWeight: 600,
-                    fontSize: 16,
-                    color: '#C9A84C',
+                    fontSize: 13,
+                    color: '#92702A',
                   }}
                 >
                   {entryCount} {entryCount === 1 ? 'entry' : 'entries'}
@@ -564,37 +597,66 @@ export default async function OGImage({
                     padding: '5px 12px',
                     borderRadius: 20,
                     textTransform: 'uppercase',
-                    letterSpacing: '0.06em',
+                    letterSpacing: '0.08em',
                   }}
                 >
                   {badgeText}
                 </div>
               )}
             </div>
-          </div>
 
-          {/* Bottom bar */}
-          <div
-            style={{
-              display: 'flex',
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              height: 52,
-              borderTop: '1px solid rgba(201, 168, 76, 0.15)',
-              padding: '0 56px',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              backgroundColor: 'rgba(28, 25, 23, 0.95)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {/* Title sponsor attribution (small, at the bottom of the content area) */}
+            {sponsorLogoData && titleSponsor && (
               <div
                 style={{
                   display: 'flex',
-                  width: 6,
-                  height: 6,
+                  position: 'absolute',
+                  right: 36,
+                  top: 36,
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    fontFamily: 'Inter',
+                    fontWeight: 400,
+                    fontSize: 10,
+                    color: '#92702A',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.1em',
+                  }}
+                >
+                  In association with
+                </div>
+                <img
+                  src={`data:image/png;base64,${Buffer.from(sponsorLogoData).toString('base64')}`}
+                  width={72}
+                  height={32}
+                  style={{ objectFit: 'contain' }}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Bottom bar — cream with Remi mark + domain */}
+          <div
+            style={{
+              display: 'flex',
+              height: 52,
+              padding: '0 56px',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              backgroundColor: '#fbf7ef',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  width: 7,
+                  height: 7,
                   backgroundColor: '#C9A84C',
                   transform: 'rotate(45deg)',
                 }}
@@ -604,12 +666,12 @@ export default async function OGImage({
                   display: 'flex',
                   fontFamily: 'Libre Baskerville',
                   fontWeight: 700,
-                  fontSize: 16,
-                  color: '#C9A84C',
-                  letterSpacing: '0.08em',
+                  fontSize: 18,
+                  color: '#15803D',
+                  letterSpacing: '0.02em',
                 }}
               >
-                REMI
+                Remi
               </div>
             </div>
             <div

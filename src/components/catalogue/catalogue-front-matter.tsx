@@ -2,7 +2,6 @@ import type { ReactNode } from 'react';
 import { Page, View, Text, Image } from '@react-pdf/renderer';
 import { styles, C } from './catalogue-styles';
 import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
-import { pickDefaultBestAwards } from './catalogue-utils';
 
 const SHOW_TYPE_LABELS: Record<string, string> = {
   championship: 'Championship Show',
@@ -60,10 +59,18 @@ function InfoCard({ title, children }: { title?: string; children: React.ReactNo
   );
 }
 
-function JurisdictionBlock() {
+export function JurisdictionBlock() {
+  // NOT wrap={false}: on shows with a long Best Awards list, forcing
+  // this block atomic orphaned the whole thing onto its own near-empty
+  // page. Letting it wrap means the band + paragraph flow below the
+  // Best Awards content and split at the natural page boundary rather
+  // than wholesale. The band uses minPresenceAhead via its own View
+  // so it doesn't end up alone at the bottom.
   return (
-    <View style={{ width: '100%', marginTop: 14 }} wrap={false}>
-      <SectionBand title="Jurisdiction and Responsibilities" />
+    <View style={{ width: '100%', marginTop: 14 }}>
+      <View minPresenceAhead={60}>
+        <SectionBand title="Jurisdiction and Responsibilities" />
+      </View>
       <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 8, lineHeight: 1.35, color: C.textMedium, paddingHorizontal: 8 }}>
         The Officers and Committee members of the society holding the licence are deemed responsible for organising and conducting the show safely and in accordance with the Rules and Regulations of the Royal Kennel Club and agree to abide by and adopt any decision of the Board or any authority to whom the Board may delegate its powers, subject to the conditions of Regulation F16. In so doing those appointed as Officers and Committee members accept that they are jointly and severally responsible for the organisation of the show and that this is a binding undertaking (vide Royal Kennel Club General Show Regulations F4 and F5).
       </Text>
@@ -155,52 +162,41 @@ function filterDuplicateRegulations(
   });
 }
 
-export function ShowInformationPage({ show }: FrontMatterProps) {
-  // Pull out everything we might render so we can decide whether the page
-  // is worth printing at all. Officers and guarantors are deliberately
-  // not surfaced here — see the comment near the render below.
+/** Heuristic: is there anything worth rendering in Show Information? */
+function showHasShowInformation(show: CatalogueShowInfo): boolean {
+  if (show.welcomeNote || show.awardsDescription) return true;
+  if (show.additionalNotes || show.futureShowDates) return true;
+  if (show.latestArrivalTime || show.catering) return true;
+  if (show.acceptsNfc || show.prizeMoney) return true;
+  if (show.judgedOnGroupSystem) return true;
+  if (filterDuplicateRegulations(show.customStatements, show).length > 0) return true;
+  return false;
+}
+
+export function ShowInformationContent({ show }: FrontMatterProps) {
   const hasWelcome = !!show.welcomeNote;
   const hasAwardsDescription = !!show.awardsDescription;
   const hasAdditionalNotes = !!show.additionalNotes;
   const hasFutureShows = !!show.futureShowDates;
-  // Regulations moved off the cover (backlog #90): every regulation EXCEPT
-  // outside attraction and the no-wet-weather notice now lives here. We
-  // also dedupe custom statements that just restate the dedicated fields,
-  // since Amanda (and most secretaries) fill in BOTH (the field for
-  // structured data, the custom statement out of habit).
+  // Regulations: every regulation EXCEPT outside attraction and the
+  // no-wet-weather notice lives here (those stay as loud cover notices).
+  // Dedupe custom statements that just restate the structured fields
+  // — secretaries often fill in both, and duplicate rendering looks bad.
   const filteredStatements = filterDuplicateRegulations(show.customStatements, show);
   const hasCustomStatements = filteredStatements.length > 0;
   const hasGroupSystem = !!show.judgedOnGroupSystem;
   const hasRegulations = hasCustomStatements || hasGroupSystem;
   const practicalInfo: { label: string; value: string }[] = [];
-  if (show.latestArrivalTime) {
-    practicalInfo.push({ label: 'Latest Arrival', value: show.latestArrivalTime });
-  }
-  if (show.catering) {
-    practicalInfo.push({ label: 'Catering', value: show.catering });
-  }
-  if (show.acceptsNfc) {
-    practicalInfo.push({ label: 'NFC Entries', value: 'Accepted' });
-  }
-  if (show.prizeMoney) {
-    practicalInfo.push({ label: 'Prize Money', value: show.prizeMoney });
-  }
+  if (show.latestArrivalTime) practicalInfo.push({ label: 'Latest Arrival', value: show.latestArrivalTime });
+  if (show.catering) practicalInfo.push({ label: 'Catering', value: show.catering });
+  if (show.acceptsNfc) practicalInfo.push({ label: 'NFC Entries', value: 'Accepted' });
+  if (show.prizeMoney) practicalInfo.push({ label: 'Prize Money', value: show.prizeMoney });
   const hasPracticalInfo = practicalInfo.length > 0;
 
-  // Don't ship a blank page if nothing is set.
-  if (
-    !hasWelcome &&
-    !hasAwardsDescription &&
-    !hasAdditionalNotes &&
-    !hasFutureShows &&
-    !hasPracticalInfo &&
-    !hasRegulations
-  ) {
-    return null;
-  }
+  if (!showHasShowInformation(show)) return null;
 
   return (
-    <Page size="A5" style={styles.frontMatterPage} wrap>
+    <>
       <SectionBand title="Show Information" />
 
       {hasWelcome && (
@@ -212,15 +208,9 @@ export function ShowInformationPage({ show }: FrontMatterProps) {
         </View>
       )}
 
-      {/* Officers and Guarantors are deliberately NOT listed by name here.
-          Amanda's note: the standard RKC "Jurisdiction and Responsibilities"
-          paragraph (rendered by JurisdictionBlock at the bottom of
-          JudgesListPage and again on the schedule) covers them collectively
-          — "The Officers and Committee members of the society holding the
-          licence are deemed responsible..." — so naming them individually
-          is redundant. The schedule settings form still collects names
-          (we use them elsewhere — e.g. organisation people sync), but the
-          catalogue render skips the named list. */}
+      {/* Officers and Guarantors are deliberately not listed by name
+          here — the RKC Jurisdiction & Responsibilities paragraph on
+          the particulars page covers them collectively. */}
 
       {hasAwardsDescription && (
         <View wrap={false} style={{ marginBottom: 6 }}>
@@ -257,10 +247,6 @@ export function ShowInformationPage({ show }: FrontMatterProps) {
         </View>
       )}
 
-      {/* Regulations — moved off the cover per backlog #90. The cover keeps
-          only the RKC-mandatory loud notices (outside attraction, no wet
-          weather). Custom statements are deduped against the dedicated
-          fields above so the same notice doesn't appear twice. */}
       {hasRegulations && (
         <View wrap={false} style={{ marginBottom: 6 }}>
           <Text style={showInfoStyles.sectionTitle}>Regulations</Text>
@@ -279,6 +265,102 @@ export function ShowInformationPage({ show }: FrontMatterProps) {
           ))}
         </View>
       )}
+    </>
+  );
+}
+
+/** Combined particulars + show information page. Kept separate from
+ *  FrontMatterPage so catalogues that just need these two sections
+ *  (without Judges / Class defs / Best awards, e.g. marked catalogue)
+ *  still have a convenient wrapper. */
+export function ShowInformationPage({ show }: FrontMatterProps) {
+  return (
+    <Page size="A5" style={styles.frontMatterPage} wrap>
+      <ShowParticularsContent show={show} />
+      {showHasShowInformation(show) && (
+        <View style={{ marginTop: 8 }}>
+          <ShowInformationContent show={show} />
+        </View>
+      )}
+      <Text
+        style={styles.footer}
+        render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}  ·  Generated by Remi`}
+        fixed
+      />
+    </Page>
+  );
+}
+
+/**
+ * Consolidated front-matter Page.
+ *
+ * Renders every front-matter section (particulars, info, judges, class
+ * definitions, best awards) inside a single <Page wrap> so they flow
+ * continuously instead of each forcing a new page. Sections are
+ * separated by a small vertical gap. This is the biggest whitespace
+ * reducer in the catalogue: a small show with short sections that
+ * previously cost 4-5 near-empty pages now packs them into 2-3 full
+ * pages.
+ *
+ * Use this instead of calling ShowInformationPage / JudgesListPage /
+ * ClassDefinitionsPage / BestAwardsPage individually.
+ */
+export function FrontMatterContent({ show }: FrontMatterProps) {
+  const hasJudges = Object.keys(show.judgesByBreedName ?? {}).length > 0
+    || (show.judgeDisplayList?.length ?? 0) > 0;
+  // Section-between gap. The sectionBand style uses marginTop: -20 to
+  // bleed into the page's top padding when it's first on a page; that
+  // negative margin also eats ~20pt when the band appears mid-flow, so
+  // the gap here has to include 20pt of compensation PLUS the visible
+  // separation we actually want (~14pt). Anything below ~30 and the
+  // Jurisdiction paragraph visually collides with the next band.
+  const SECTION_GAP = 34;
+  return (
+    <>
+      <ShowParticularsContent show={show} />
+
+      {showHasShowInformation(show) && (
+        <View style={{ marginTop: SECTION_GAP }} minPresenceAhead={100}>
+          <ShowInformationContent show={show} />
+        </View>
+      )}
+
+      {hasJudges && (
+        <View style={{ marginTop: SECTION_GAP }} minPresenceAhead={140}>
+          <JudgesListContent show={show} />
+        </View>
+      )}
+
+      {/* Class definitions stay atomic — they're short enough (typically
+          8-12 defs on one page) that fitting them on a single page is
+          always preferable to a two-page split. */}
+      {(show.classDefinitions?.length ?? 0) > 0 && (
+        <View style={{ marginTop: SECTION_GAP }} wrap={false} minPresenceAhead={240}>
+          <ClassDefinitionsContent show={show} />
+        </View>
+      )}
+
+      {hasBestAwards(show) && (
+        <View style={{ marginTop: SECTION_GAP }} minPresenceAhead={160}>
+          <BestAwardsContent show={show} />
+        </View>
+      )}
+    </>
+  );
+}
+
+/** Standalone front-matter page wrapper. Use this when the catalogue
+ *  wants front matter on its own Page; for maximum density, inline
+ *  FrontMatterContent at the top of the body <Page wrap> instead. */
+export function FrontMatterPage({ show }: FrontMatterProps) {
+  return (
+    <Page size="A5" style={styles.frontMatterPage} wrap>
+      <FrontMatterContent show={show} />
+      <Text
+        style={styles.footer}
+        render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}  ·  Generated by Remi`}
+        fixed
+      />
     </Page>
   );
 }
@@ -316,8 +398,8 @@ const bestAwardsStyles = {
     flexDirection: 'row' as const,
     borderBottomWidth: 0.5,
     borderBottomColor: C.ruleLight,
-    paddingTop: 6,
-    paddingBottom: 8,
+    paddingTop: 4,
+    paddingBottom: 5,
   },
   awardCol: { width: '38%', paddingRight: 6 } as const,
   trophyCol: { width: '24%', paddingRight: 6 } as const,
@@ -358,7 +440,7 @@ const bestAwardsStyles = {
     borderBottomColor: C.textLight,
     borderBottomStyle: 'dotted',
     width: '100%',
-    marginTop: 4,
+    marginTop: 2,
   } as const,
   winnerLabel: {
     fontFamily: 'Inter',
@@ -370,27 +452,29 @@ const bestAwardsStyles = {
   } as const,
 };
 
-export function BestAwardsPage({ show }: FrontMatterProps) {
-  const bestAwards = show.bestAwards && show.bestAwards.length > 0
-    ? show.bestAwards
-    : pickDefaultBestAwards(show);
+/**
+ * True only if the society has opted in — either by configuring the
+ * best-awards list explicitly or by adding award sponsorships. We
+ * deliberately do NOT fall back to pickDefaultBestAwards here: Amanda
+ * flagged that the section was appearing on catalogues for shows where
+ * she hadn't added any awards, spilling blank pages for defaults the
+ * club hadn't actually pledged to list.
+ */
+function hasBestAwards(show: CatalogueShowInfo): boolean {
+  const hasExplicitAwards = (show.bestAwards?.length ?? 0) > 0;
+  const hasSponsors = (show.awardSponsors?.length ?? 0) > 0;
+  return hasExplicitAwards || hasSponsors;
+}
+
+export function BestAwardsContent({ show }: FrontMatterProps) {
+  // Only render configured awards — no default-list fallback. If the
+  // secretary didn't add any, the section shouldn't exist (see
+  // hasBestAwards above for the rationale).
+  const bestAwards = show.bestAwards ?? [];
   const awardSponsors = show.awardSponsors ?? [];
+  if (bestAwards.length === 0 && awardSponsors.length === 0) return null;
 
-  // Nothing to show if both lists are empty even after defaults — only
-  // happens for shows that haven't been configured at all.
-  if (bestAwards.length === 0 && awardSponsors.length === 0) {
-    return null;
-  }
-
-  // Normalise award names once so the rest of the function can do plain
-  // string lookups instead of recomputing `.toLowerCase().trim()` on
-  // every comparison.
   const normaliseAward = (s: string) => s.toLowerCase().trim();
-
-  // Build a multimap of award name → sponsors. The same award can have
-  // multiple sponsors (e.g. Best in Show might have separate sponsors for
-  // the trophy and the rosettes), and Amanda's real shows do this — the
-  // earlier single-Map approach silently dropped duplicates.
   type Sponsor = typeof awardSponsors[number];
   const sponsorsByAward = new Map<string, Sponsor[]>();
   for (const s of awardSponsors) {
@@ -399,57 +483,68 @@ export function BestAwardsPage({ show }: FrontMatterProps) {
     list.push(s);
     sponsorsByAward.set(key, list);
   }
-
-  // Also include any sponsor whose award isn't in the bestAwards list —
-  // the society might have sponsored an extra award we don't know about.
   const bestAwardKeys = new Set(bestAwards.map(normaliseAward));
   const extraSponsorAwards = awardSponsors
     .filter((s) => !bestAwardKeys.has(normaliseAward(s.award)))
     .map((s) => s.award);
-  // Dedupe extras (multiple sponsors for the same extra award shouldn't
-  // produce duplicate rows).
   const allAwards = Array.from(new Set([...bestAwards, ...extraSponsorAwards]));
 
-  return (
-    <Page size="A5" style={styles.frontMatterPage} wrap>
-      <SectionBand title="Best Awards" />
+  // Trophy/Sponsor columns are pure clutter when no sponsor has been
+  // assigned to any award — the rows just fill with em-dashes. Amanda's
+  // feedback: only render those columns when at least one award has a
+  // sponsor configured. Empty state becomes a clean single-column
+  // "award + winner line" list.
+  const hasAnySponsor = awardSponsors.length > 0;
 
-      <Text
-        style={{
-          fontFamily: 'Times',
-          fontSize: 8,
-          fontStyle: 'italic',
-          color: C.textMedium,
-          marginBottom: 8,
-        }}
-      >
-        Awarded at the discretion of the judges. Winners may be filled in
-        ringside.
+  const introText = (
+    <Text
+      style={{
+        fontFamily: 'Times',
+        fontSize: 8,
+        fontStyle: 'italic',
+        color: C.textMedium,
+        marginBottom: 8,
+      }}
+    >
+      Awarded at the discretion of the judges. Winners may be filled in
+      ringside.
+    </Text>
+  );
+
+  const headerRow = hasAnySponsor ? (
+    <View style={bestAwardsStyles.tableHeaderRow}>
+      <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.awardCol }}>
+        Award
       </Text>
+      <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.trophyCol }}>
+        Trophy
+      </Text>
+      <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.sponsorCol }}>
+        Sponsor
+      </Text>
+    </View>
+  ) : null;
 
-      {/* Table header */}
-      <View style={bestAwardsStyles.tableHeaderRow}>
-        <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.awardCol }}>
-          Award
-        </Text>
-        <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.trophyCol }}>
-          Trophy
-        </Text>
-        <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.sponsorCol }}>
-          Sponsor
-        </Text>
-      </View>
-
-      {allAwards.map((award, i) => {
-        const sponsors = sponsorsByAward.get(normaliseAward(award)) ?? [];
-        return (
-          <View key={`${award}-${i}`} style={bestAwardsStyles.tableRow} wrap={false}>
-            <View style={bestAwardsStyles.awardCol}>
-              <Text style={bestAwardsStyles.awardName}>{award}</Text>
-              {/* Write-in space for the winner — backlog #95 */}
-              <View style={bestAwardsStyles.winnerLine} />
-              <Text style={bestAwardsStyles.winnerLabel}>Winner</Text>
-            </View>
+  const renderRow = (award: string, i: number) => {
+    const sponsors = sponsorsByAward.get(normaliseAward(award)) ?? [];
+    if (!hasAnySponsor) {
+      return (
+        <View key={`${award}-${i}`} style={bestAwardsStyles.tableRow} wrap={false}>
+          <View style={{ width: '100%' }}>
+            <Text style={bestAwardsStyles.awardName}>{award}</Text>
+            <View style={bestAwardsStyles.winnerLine} />
+            <Text style={bestAwardsStyles.winnerLabel}>Winner</Text>
+          </View>
+        </View>
+      );
+    }
+    return (
+      <View key={`${award}-${i}`} style={bestAwardsStyles.tableRow} wrap={false}>
+        <View style={bestAwardsStyles.awardCol}>
+          <Text style={bestAwardsStyles.awardName}>{award}</Text>
+          <View style={bestAwardsStyles.winnerLine} />
+          <Text style={bestAwardsStyles.winnerLabel}>Winner</Text>
+        </View>
             <View style={bestAwardsStyles.trophyCol}>
               {sponsors.length === 0 ? (
                 <Text style={{ ...bestAwardsStyles.trophyName, color: C.textLight }}>—</Text>
@@ -477,19 +572,33 @@ export function BestAwardsPage({ show }: FrontMatterProps) {
             </View>
           </View>
         );
-      })}
+  };
 
-      {/* RKC-required Jurisdiction & Responsibilities statement.
-          Lives at the bottom of Best Awards (rather than the
-          Judges page) so it doesn't push small judge bios onto
-          their own near-empty pages in the front matter. */}
-      <JurisdictionBlock />
+  return (
+    <>
+      {/* Keep banner + italic intro + header + first award row atomic so
+          the banner never sits alone at the foot of a page. Remaining
+          rows flow normally after that block. */}
+      <View wrap={false}>
+        <SectionBand title="Best Awards" />
+        {introText}
+        {headerRow}
+        {allAwards.length > 0 && renderRow(allAwards[0], 0)}
+      </View>
+      {allAwards.slice(1).map((award, i) => renderRow(award, i + 1))}
+    </>
+  );
+}
 
+/** Standalone Best Awards page — delegates to BestAwardsContent. */
+export function BestAwardsPage({ show }: FrontMatterProps) {
+  if (!hasBestAwards(show)) return null;
+  return (
+    <Page size="A5" style={styles.frontMatterPage} wrap>
+      <BestAwardsContent show={show} />
       <Text
         style={styles.footer}
-        render={({ pageNumber, totalPages }) =>
-          `Page ${pageNumber} of ${totalPages}  ·  Generated by Remi`
-        }
+        render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}  ·  Generated by Remi`}
         fixed
       />
     </Page>
@@ -585,6 +694,21 @@ export function CoverPage({ show }: FrontMatterProps) {
         {/* RKC jurisdiction */}
         <Text style={styles.coverRegulatory}>
           Held under Royal Kennel Club Rules &amp; Show Regulations F(1)
+        </Text>
+
+        {/* Product label — so exhibitors buying a printed copy on the
+            day can see at a glance what the booklet is. Deliberately
+            understated; Amanda wanted it present but not shouty. */}
+        <Text style={{
+          fontFamily: 'Inter',
+          fontSize: 7.5,
+          letterSpacing: 1.8,
+          textTransform: 'uppercase',
+          color: C.textLight,
+          textAlign: 'center',
+          marginTop: 2,
+        }}>
+          Show Catalogue
         </Text>
 
         <GoldRule />
@@ -689,86 +813,22 @@ export function CoverPage({ show }: FrontMatterProps) {
           </View>
         )}
 
-        {/* On-call vet + show manager — compact */}
-        {(show.onCallVet || show.showManager) && (
-          <View style={{ width: '100%', marginTop: 2 }}>
-            {show.onCallVet && (
-              <View style={{ marginBottom: 2 }}>
-                <Text style={styles.coverSectionLabel}>On-Call Veterinary Surgeon</Text>
-                <Text style={styles.coverSectionText}>{show.onCallVet}</Text>
-              </View>
-            )}
-            {show.showManager && (
-              <View style={{ marginBottom: 2 }}>
-                <Text style={styles.coverSectionLabel}>Show Manager</Text>
-                <Text style={styles.coverSectionText}>{show.showManager}</Text>
-              </View>
-            )}
+        {/* On-call vet and Show Manager are the last items on the cover.
+            Sponsors, docking statement and Jurisdiction & Responsibilities
+            moved to ShowParticularsPage so the cover stays consistent
+            across shows regardless of which optional fields are set. */}
+        {show.onCallVet && (
+          <View style={{ width: '100%', marginTop: 2, marginBottom: 2 }}>
+            <Text style={styles.coverSectionLabel}>On-Call Veterinary Surgeon</Text>
+            <Text style={styles.coverSectionText}>{show.onCallVet}</Text>
           </View>
         )}
 
-        {/* Show-level sponsors on cover — logos displayed prominently.
-            We deliberately EXCLUDE `tier === 'title'` here because the
-            title sponsor is already rendered inline at the top of the
-            cover (right under the show name). Including it here too was
-            causing a duplicate Royal Canin block at the bottom of page 1
-            that orphaned its "SPONSORED BY" label across the page break
-            onto page 2 — Amanda flagged the rogue label in testing. */}
-        {show.showSponsors && show.showSponsors.length > 0 && (() => {
-          const tierSponsors = show.showSponsors!.filter(sp => sp.tier === 'show');
-          const supporterSponsors = show.showSponsors!.filter(sp => sp.tier !== 'title' && sp.tier !== 'show');
-          return (
-            <View style={{ width: '100%', marginTop: 6, marginBottom: 4 }}>
-              {tierSponsors.length > 0 && (
-                <View style={{ alignItems: 'center', marginBottom: 6 }} wrap={false}>
-                  <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textLight, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 4 }}>
-                    {tierSponsors.length === 1 ? 'Sponsored by' : 'Sponsors'}
-                  </Text>
-                  {tierSponsors.map((sp, i) => (
-                    <View key={i} style={{ alignItems: 'center', marginBottom: 4 }}>
-                      {sp.logoUrl && (
-                        <Image src={sp.logoUrl} style={{ width: 100, height: 50, objectFit: 'contain', marginBottom: 3 }} />
-                      )}
-                      <Text style={{ fontFamily: 'Inter', fontSize: 9, fontWeight: 'bold', color: C.textDark }}>
-                        {sp.customTitle ? `${sp.customTitle}: ` : ''}{sp.name}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-              {supporterSponsors.length > 0 && (
-                <View style={{ ...styles.coverDetailCard, borderLeftColor: C.accent }}>
-                  <Text style={styles.coverSectionLabel}>With grateful thanks to</Text>
-                  {supporterSponsors.map((sp, i) => (
-                    <View key={i} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
-                      {sp.logoUrl && (
-                        <Image src={sp.logoUrl} style={{ width: 30, height: 15, objectFit: 'contain', marginRight: 6 }} />
-                      )}
-                      <Text style={{ fontFamily: 'Inter', fontSize: 7.5, color: C.textMedium }}>
-                        {sp.name}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-            </View>
-          );
-        })()}
-
-        {/* Docking statement — mandatory per F(1).7.c(2) */}
-        {show.dockingStatement && (
-          <Text style={{
-            fontFamily: 'Times',
-            fontSize: 7,
-            fontStyle: 'italic',
-            color: C.textMedium,
-            textAlign: 'center',
-            marginTop: 4,
-            marginBottom: 2,
-            paddingHorizontal: 8,
-          }}>
-            {show.dockingStatement}
-          </Text>
+        {show.showManager && (
+          <View style={{ width: '100%', marginTop: 2, marginBottom: 2 }}>
+            <Text style={styles.coverSectionLabel}>Show Manager</Text>
+            <Text style={styles.coverSectionText}>{show.showManager}</Text>
+          </View>
         )}
 
         <Text style={styles.coverFooterText}>
@@ -782,35 +842,124 @@ export function CoverPage({ show }: FrontMatterProps) {
   );
 }
 
-// ── Judges List Page ────────────────────────────────────────────
+// ── Show Particulars Block ──────────────────────────────────────
+//
+// Everything that used to trail the cover: show manager, supporter /
+// show-tier sponsors, docking statement, and the RKC-mandatory
+// Jurisdiction text. Rendered as a View so it can be composed inside
+// the consolidated front-matter Page together with other front-matter
+// sections, keeping the layout densely packed.
 
-/** Judges list page — breed -> judge name table with optional bios */
-export function JudgesListPage({ show }: FrontMatterProps) {
+export function ShowParticularsContent({ show }: FrontMatterProps) {
+  const sponsors = show.showSponsors ?? [];
+  const tierSponsors = sponsors.filter((sp) => sp.tier === 'show');
+  const supporterSponsors = sponsors.filter(
+    (sp) => sp.tier !== 'title' && sp.tier !== 'show',
+  );
+  const hasSponsors = tierSponsors.length > 0 || supporterSponsors.length > 0;
+
+  return (
+    <>
+      {/* Show Manager rendered on the CoverPage (after On-Call Vet)
+          per Amanda's feedback that the cover should end with the
+          show manager. Deliberately not re-rendered here. */}
+
+      {hasSponsors && (
+        <View style={{ marginBottom: 10 }}>
+          {tierSponsors.length > 0 && (
+            <View style={{ alignItems: 'center', marginBottom: 6 }} wrap={false}>
+              <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textLight, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 4 }}>
+                {tierSponsors.length === 1 ? 'Sponsored by' : 'Sponsors'}
+              </Text>
+              {tierSponsors.map((sp, i) => (
+                <View key={i} style={{ alignItems: 'center', marginBottom: 4 }}>
+                  {sp.logoUrl && (
+                    <Image src={sp.logoUrl} style={{ width: 100, height: 50, objectFit: 'contain', marginBottom: 3 }} />
+                  )}
+                  <Text style={{ fontFamily: 'Inter', fontSize: 9, fontWeight: 'bold', color: C.textDark }}>
+                    {sp.customTitle ? `${sp.customTitle}: ` : ''}{sp.name}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+          {supporterSponsors.length > 0 && (
+            <View style={{ ...styles.coverDetailCard, borderLeftColor: C.accent }}>
+              <Text style={styles.coverSectionLabel}>With grateful thanks to</Text>
+              {supporterSponsors.map((sp, i) => (
+                <View key={i} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                  {sp.logoUrl && (
+                    <Image src={sp.logoUrl} style={{ width: 30, height: 15, objectFit: 'contain', marginRight: 6 }} />
+                  )}
+                  <Text style={{ fontFamily: 'Inter', fontSize: 7.5, color: C.textMedium }}>
+                    {sp.name}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
+
+      {show.dockingStatement && (
+        <Text style={{
+          fontFamily: 'Times',
+          fontSize: 7,
+          fontStyle: 'italic',
+          color: C.textMedium,
+          textAlign: 'center',
+          marginBottom: 8,
+          paddingHorizontal: 8,
+        }}>
+          {show.dockingStatement}
+        </Text>
+      )}
+
+      <JurisdictionBlock />
+    </>
+  );
+}
+
+// Legacy standalone page wrapper — kept for callers that haven't
+// migrated to the consolidated FrontMatterPage yet.
+export function ShowParticularsPage(props: FrontMatterProps) {
+  return (
+    <Page size="A5" style={styles.frontMatterPage} wrap>
+      <ShowParticularsContent {...props} />
+
+      <Text
+        style={styles.footer}
+        render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}  ·  Generated by Remi`}
+        fixed
+      />
+    </Page>
+  );
+}
+
+// ── Judges List ─────────────────────────────────────────────────
+
+/** Judges list content block — breed → judge table or single-breed
+ *  card layout, depending on the show's judge data shape. Returned as
+ *  a fragment so it can be composed inside a larger front-matter page
+ *  or rendered standalone via JudgesListPage. */
+export function JudgesListContent({ show }: FrontMatterProps) {
   const judges = show.judgesByBreedName ?? {};
   const judgeBios = show.judgeBios ?? {};
   const ringNumbers = show.judgeRingNumbers ?? {};
   const hasRings = Object.keys(ringNumbers).length > 0;
   const sortedBreeds = Object.keys(judges).sort();
 
-  // For single-breed shows the judge assignments don't carry breed_ids,
-  // so judgesByBreedName is empty. Render from the display list instead,
-  // and include bios + photos from `judgeBios` / `judgePhotos`. Earlier
-  // versions only rendered the labels here, so single-breed catalogues
-  // were missing all the judge bios — Amanda flagged this in testing.
+  // Single-breed branch: no breed_id on the assignment, so we render
+  // from judgeDisplayList with bios + photos. Earlier versions only
+  // rendered the labels, so single-breed catalogues were missing all
+  // the judge bios.
   if (sortedBreeds.length === 0 && show.judgeDisplayList && show.judgeDisplayList.length > 0) {
-    // Group labels by judge name so the same judge with multiple roles
-    // (e.g. "Dogs — Mr X" and "Bitches — Mr X") only renders one bio
-    // block. We strip the role prefix off the label to get the judge
-    // name; if there's no " — " it's just the name.
-    //
     // FORMAT CONTRACT: judgeDisplayList strings are produced by route.ts
-    // and pdf-generation.ts as either `"<Role> — <Name>"` (with the U+2014
-    // em-dash separator) or just `"<Name>"` when the judge has no
-    // sex/JH role. The split below depends on em-dashes NOT appearing in
-    // RKC judge names, which has held in practice. If you ever change the
-    // label format on the producer side, also update this parser — or
-    // better, switch judgeDisplayList to a structured array.
-    const LABEL_SEPARATOR = ' \u2014 '; // " — " with the em-dash explicit
+    // and pdf-generation.ts as either `"<Role> — <Name>"` (U+2014 em-dash
+    // separator) or `"<Name>"`. Parser below assumes em-dashes don't
+    // appear inside RKC judge names (held in practice). If the format
+    // ever changes, switch judgeDisplayList to a structured array.
+    const LABEL_SEPARATOR = ' \u2014 ';
     const labelsByJudge = new Map<string, string[]>();
     for (const label of show.judgeDisplayList) {
       const sepIdx = label.indexOf(LABEL_SEPARATOR);
@@ -821,47 +970,58 @@ export function JudgesListPage({ show }: FrontMatterProps) {
       labelsByJudge.set(name, list);
     }
 
-    return (
-      <Page size="A5" style={styles.frontMatterPage} wrap>
-        <SectionBand title="List of Judges" />
-        {Array.from(labelsByJudge.entries()).map(([name, roles], i) => {
-          const bio = judgeBios[name];
-          const photoUrl = show.judgePhotos?.[name];
-          // Format the role label: "Dogs & Bitches" rather than two
-          // separate "Dogs", "Bitches" lines for the same judge.
-          const roleLabel = roles.includes(name)
-            ? null // role list contained the bare name (no prefix)
-            : roles.join(' & ');
-          return (
-            <View key={i} wrap={false} style={{ marginBottom: 6 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                {photoUrl && (
-                  <Image src={photoUrl} style={{ width: 44, height: 44, borderRadius: 22 }} />
-                )}
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontFamily: 'Inter', fontSize: 11, fontWeight: 'bold', color: C.textDark }}>
-                    {name}
-                  </Text>
-                  {roleLabel && (
-                    <Text style={{ fontFamily: 'Inter', fontSize: 9, fontStyle: 'italic', color: C.textMedium }}>
-                      {roleLabel}
-                    </Text>
-                  )}
-                </View>
-              </View>
-              {bio && (
-                <Text style={{ ...styles.judgeBio, marginTop: 4, marginBottom: 0 }}>
-                  {bio}
+    const judgeEntries = Array.from(labelsByJudge.entries());
+
+    // Render a single judge's row. Extracted so the first judge can be
+    // rendered inside the wrap=false banner block (keeping banner and
+    // first judge atomic, so the banner never orphans at the bottom of
+    // a page) while subsequent judges render as normal flowing cards.
+    const renderJudgeCard = (name: string, roles: string[], key: string | number) => {
+      const bio = judgeBios[name];
+      const photoUrl = show.judgePhotos?.[name];
+      const roleLabel = roles.includes(name)
+        ? null
+        : roles.join(' & ');
+      return (
+        <View key={key} wrap={false} style={{ marginBottom: 6 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {photoUrl && (
+              <Image src={photoUrl} style={{ width: 44, height: 44, borderRadius: 22 }} />
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontFamily: 'Inter', fontSize: 11, fontWeight: 'bold', color: C.textDark }}>
+                {name}
+              </Text>
+              {roleLabel && (
+                <Text style={{ fontFamily: 'Inter', fontSize: 9, fontStyle: 'italic', color: C.textMedium }}>
+                  {roleLabel}
                 </Text>
               )}
             </View>
-          );
-        })}
-        {/* Jurisdiction block moved out of this page — it was being
-            forced wrap={false} and pushing a small judge bio
-            (e.g. Miss P Ingham) onto its own near-empty page.
-            BestAwardsPage now hosts it instead. */}
-      </Page>
+          </View>
+          {bio && (
+            <Text style={{ ...styles.judgeBio, marginTop: 4, marginBottom: 0 }}>
+              {bio}
+            </Text>
+          )}
+        </View>
+      );
+    };
+
+    return (
+      <>
+        {/* Band + first judge atomic. A long bio on the first judge
+            still forces a page break, but the banner will never sit
+            alone at the bottom of a page again. */}
+        <View wrap={false}>
+          <SectionBand title="List of Judges" />
+          {judgeEntries.length > 0 &&
+            renderJudgeCard(judgeEntries[0][0], judgeEntries[0][1], 0)}
+        </View>
+        {judgeEntries.slice(1).map(([name, roles], i) =>
+          renderJudgeCard(name, roles, i + 1)
+        )}
+      </>
     );
   }
 
@@ -895,16 +1055,19 @@ export function JudgesListPage({ show }: FrontMatterProps) {
   }
 
   return (
-    <Page size="A5" style={styles.frontMatterPage} wrap>
-      <SectionBand title="List of Judges" />
-
-      {/* Table header */}
-      <View style={{ ...styles.judgesListRow, borderBottomWidth: 1.5, borderBottomColor: C.primary, marginBottom: 4 }}>
-        <Text style={{ ...styles.judgesListBreed, fontWeight: 'bold' }}>Breed</Text>
-        <Text style={{ ...styles.judgesListJudge, fontWeight: 'bold' }}>Judge</Text>
-        {hasRings && (
-          <Text style={{ fontFamily: 'Inter', fontSize: 7.5, fontWeight: 'bold', width: 30, textAlign: 'right' }}>Ring</Text>
-        )}
+    <>
+      {/* Keep banner + table header atomic so the banner never sits
+          alone at the bottom of a page with the table flowing to the
+          next. */}
+      <View wrap={false}>
+        <SectionBand title="List of Judges" />
+        <View style={{ ...styles.judgesListRow, borderBottomWidth: 1.5, borderBottomColor: C.primary, marginBottom: 4 }}>
+          <Text style={{ ...styles.judgesListBreed, fontWeight: 'bold' }}>Breed</Text>
+          <Text style={{ ...styles.judgesListJudge, fontWeight: 'bold' }}>Judge</Text>
+          {hasRings && (
+            <Text style={{ fontFamily: 'Inter', fontSize: 7.5, fontWeight: 'bold', width: 30, textAlign: 'right' }}>Ring</Text>
+          )}
+        </View>
       </View>
 
       {sortedBreeds.map((breed) => {
@@ -977,32 +1140,37 @@ export function JudgesListPage({ show }: FrontMatterProps) {
         </View>
       )}
 
-      <JurisdictionBlock />
+    </>
+  );
+}
 
+/** Standalone Judges page — delegates to JudgesListContent.
+ *  Kept so callers that haven't switched to the consolidated
+ *  front-matter page still get a correctly wrapped Page. */
+export function JudgesListPage({ show }: FrontMatterProps) {
+  const hasJudges = Object.keys(show.judgesByBreedName ?? {}).length > 0
+    || (show.judgeDisplayList?.length ?? 0) > 0;
+  if (!hasJudges) return null;
+  return (
+    <Page size="A5" style={styles.frontMatterPage} wrap>
+      <JudgesListContent show={show} />
       <Text
         style={styles.footer}
-        render={({ pageNumber, totalPages }) =>
-          `Page ${pageNumber} of ${totalPages}  ·  Generated by Remi`
-        }
+        render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}  ·  Generated by Remi`}
         fixed
       />
     </Page>
   );
 }
 
-// ── Class Definitions Page ──────────────────────────────────────
+// ── Class Definitions ──────────────────────────────────────────
 
-/** Class definitions page — name + description for each class */
-export function ClassDefinitionsPage({ show }: FrontMatterProps) {
+export function ClassDefinitionsContent({ show }: FrontMatterProps) {
   const defs = show.classDefinitions ?? [];
-
-  // Always render if we have any class definitions (RKC F(1)11 requirement)
   if (defs.length === 0) return null;
-
   return (
-    <Page size="A5" style={styles.frontMatterPage} wrap>
+    <>
       <SectionBand title="Definitions of Classes" />
-
       {defs.map((def) => (
         <View key={def.name} wrap={false}>
           <Text style={styles.classDefName}>{def.name}</Text>
@@ -1011,12 +1179,19 @@ export function ClassDefinitionsPage({ show }: FrontMatterProps) {
           )}
         </View>
       ))}
+    </>
+  );
+}
 
+/** Standalone Class Definitions page — delegates to ClassDefinitionsContent. */
+export function ClassDefinitionsPage({ show }: FrontMatterProps) {
+  if ((show.classDefinitions?.length ?? 0) === 0) return null;
+  return (
+    <Page size="A5" style={styles.frontMatterPage} wrap>
+      <ClassDefinitionsContent show={show} />
       <Text
         style={styles.footer}
-        render={({ pageNumber, totalPages }) =>
-          `Page ${pageNumber} of ${totalPages}  ·  Generated by Remi`
-        }
+        render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}  ·  Generated by Remi`}
         fixed
       />
     </Page>
@@ -1074,7 +1249,7 @@ export function ExhibitorIndexPage({ show, entries, breedName }: ExhibitorIndexP
       ex.catNos.push(entry.catalogueNumber);
     }
     for (const cls of entry.classes) {
-      const label = cls.classNumber != null ? `${cls.classNumber}` : cls.name ?? '';
+      const label = cls.classLabel ?? (cls.classNumber != null ? String(cls.classNumber) : cls.name ?? '');
       if (label && !ex.classes.includes(label)) ex.classes.push(label);
     }
   }
@@ -1106,6 +1281,7 @@ export function ExhibitorIndexPage({ show, entries, breedName }: ExhibitorIndexP
           </Text>
         </View>
       ))}
+
       <Text
         style={styles.footer}
         render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}  ·  Generated by Remi`}
@@ -1177,11 +1353,12 @@ interface TrophiesPageProps {
 export function TrophiesPage({ show, sponsorships }: TrophiesPageProps) {
   if (sponsorships.length === 0) return null;
 
-  // Sort by class number, then class name
+  // Sort: numbered classes by classNumber, JH/unnumbered by classLabel, else name.
   const sorted = [...sponsorships].sort((a, b) => {
     if (a.classNumber != null && b.classNumber != null) return a.classNumber - b.classNumber;
     if (a.classNumber != null) return -1;
     if (b.classNumber != null) return 1;
+    if (a.classLabel && b.classLabel) return a.classLabel.localeCompare(b.classLabel);
     return a.className.localeCompare(b.className);
   });
 
@@ -1203,8 +1380,9 @@ export function TrophiesPage({ show, sponsorships }: TrophiesPageProps) {
       </View>
 
       {sorted.map((sp, idx) => {
-        const classLabel = sp.classNumber != null
-          ? `${sp.classNumber}. ${sp.className}`
+        const label = sp.classLabel ?? (sp.classNumber != null ? String(sp.classNumber) : '');
+        const classHeading = label
+          ? `${label}. ${sp.className}`
           : sp.className;
 
         // Build trophy + sponsor combined text
@@ -1222,7 +1400,7 @@ export function TrophiesPage({ show, sponsorships }: TrophiesPageProps) {
 
         return (
           <View
-            key={`${sp.classNumber}-${sp.className}-${idx}`}
+            key={`${label}-${sp.className}-${idx}`}
             wrap={false}
             style={{
               flexDirection: 'row',
@@ -1232,7 +1410,7 @@ export function TrophiesPage({ show, sponsorships }: TrophiesPageProps) {
             }}
           >
             <Text style={{ fontFamily: 'Inter', fontSize: 7, fontWeight: 'bold', width: '30%', color: C.textDark }}>
-              {classLabel}
+              {classHeading}
             </Text>
             <Text style={{ fontFamily: 'Times', fontSize: 6.5, fontStyle: 'italic', width: '35%', color: C.textMedium }}>
               {trophySponsorParts.join('\n') || '—'}

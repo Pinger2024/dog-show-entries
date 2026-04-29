@@ -88,6 +88,7 @@ export const orderStatusEnum = pgEnum('order_status', [
   'paid',
   'failed',
   'cancelled',
+  'refunded',
 ]);
 
 export const entryAuditActionEnum = pgEnum('entry_audit_action', [
@@ -148,6 +149,25 @@ export const subscriptionStatusEnum = pgEnum('subscription_status', [
   'past_due',
   'cancelled',
   'none',
+]);
+
+/**
+ * Lifecycle of a club's Stripe Connect (Standard) account.
+ * - not_started: no account created yet
+ * - pending: account created but KYC / details not yet submitted by the club
+ * - restricted: Stripe requires more info before charges can resume
+ * - active: charges_enabled=true, ready to accept entry payments
+ * - rejected: Stripe has declined the account (rare; blocks all charges)
+ *
+ * The authoritative source is Stripe itself; we mirror it to gate show
+ * publishing without a round-trip to Stripe on every render.
+ */
+export const stripeAccountStatusEnum = pgEnum('stripe_account_status', [
+  'not_started',
+  'pending',
+  'restricted',
+  'active',
+  'rejected',
 ]);
 
 export const invitationStatusEnum = pgEnum('invitation_status', [

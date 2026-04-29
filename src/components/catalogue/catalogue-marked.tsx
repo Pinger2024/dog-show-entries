@@ -3,6 +3,7 @@ import { Document, Page, View, Text, StyleSheet } from '@react-pdf/renderer';
 import { styles } from './catalogue-styles';
 import {
   CoverPage,
+  ShowInformationPage,
   JudgesListPage,
   ClassDefinitionsPage,
   TrophiesPage,
@@ -177,6 +178,7 @@ const ACHIEVEMENT_LABELS: Record<string, string> = {
 interface ClassBucket {
   className: string;
   classNumber: number | null | undefined;
+  classLabel: string;
   sortOrder: number | undefined;
   sex: string | null | undefined;
   showClassId: string | undefined;
@@ -212,17 +214,19 @@ function groupEntriesKC(entries: CatalogueEntry[]) {
     // (e.g. Junior Handling) get their own section between Dogs and Bitches.
     for (const cls of entry.classes) {
       const className = cls.name ?? 'Unknown Class';
-      const classKey = `${cls.classNumber ?? ''}-${className}`;
+      const label = cls.classLabel ?? (cls.classNumber != null ? String(cls.classNumber) : '');
+      const classKey = `${label}-${className}`;
       const classSex = cls.sex === 'dog' ? 'dog' : cls.sex === 'bitch' ? 'bitch' : 'unknown';
 
       breedBucket.sexes[classSex] ??= [];
       let classBucket = breedBucket.sexes[classSex].find(
-        (cb) => `${cb.classNumber ?? ''}-${cb.className}` === classKey
+        (cb) => `${cb.classLabel}-${cb.className}` === classKey
       );
       if (!classBucket) {
         classBucket = {
           className,
           classNumber: cls.classNumber,
+          classLabel: label,
           sortOrder: cls.sortOrder,
           sex: cls.sex,
           showClassId: (cls as { showClassId?: string }).showClassId,
@@ -241,6 +245,7 @@ function groupEntriesKC(entries: CatalogueEntry[]) {
           if (a.classNumber != null && b.classNumber != null) return a.classNumber - b.classNumber;
           if (a.classNumber != null) return -1;
           if (b.classNumber != null) return 1;
+          if (a.classLabel && b.classLabel) return a.classLabel.localeCompare(b.classLabel);
           return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
         });
       }
@@ -258,8 +263,8 @@ function sortByCatNo(entries: CatalogueEntry[]) {
 
 function classHeadingLabel(bucket: ClassBucket, sex: string) {
   const parts: string[] = [];
-  if (bucket.classNumber != null) {
-    parts.push(`Class ${bucket.classNumber}.`);
+  if (bucket.classLabel) {
+    parts.push(`Class ${bucket.classLabel}.`);
   }
   parts.push(bucket.className);
   if (sex === 'dog') parts.push('Dog');
@@ -339,7 +344,7 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
           const catNo = entry.catalogueNumber;
           if (!catNo) continue;
           if (!firstSeenClass.has(catNo)) {
-            firstSeenClass.set(catNo, bucket.classNumber != null ? `class ${bucket.classNumber}` : bucket.className);
+            firstSeenClass.set(catNo, bucket.classLabel ? `class ${bucket.classLabel}` : bucket.className);
             firstAppearanceBucket.set(catNo, bucket);
           }
         }
@@ -363,6 +368,7 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
     <Document>
       {/* Cover page with MARKED CATALOGUE subtitle */}
       <CoverPage show={{ ...show, name: `${show.name}\nMARKED CATALOGUE` }} />
+      <ShowInformationPage show={show} />
       <JudgesListPage show={show} />
       <ClassDefinitionsPage show={show} />
       {!show.skipTrophiesPage && (
@@ -440,7 +446,7 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                   // Small classes stay atomic — never orphan the heading.
                   const keepTogether = bucket.entries.length <= 8;
                   return (
-                  <View key={`${bucket.classNumber}-${bucket.className}`} wrap={!keepTogether}>
+                  <View key={`${bucket.classLabel}-${bucket.className}`} wrap={!keepTogether}>
                     <Text style={styles.classHeadingInBreed} minPresenceAhead={60}>
                       {classHeadingLabel(bucket, sex)}
                     </Text>
@@ -453,7 +459,7 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                       const displayName = isJH
                         ? (entry.handler ?? entry.exhibitor ?? 'Unnamed Handler')
                         : (entry.dogName ?? 'Unnamed');
-                      const rowKey = `${bucket.classNumber ?? bucket.className}-${catNo || 'nocat'}-${entryIdx}`;
+                      const rowKey = `${bucket.classLabel || bucket.className}-${catNo || 'nocat'}-${entryIdx}`;
 
                       // Look up result for this entry in this class
                       const resultKey = catNo && bucket.showClassId

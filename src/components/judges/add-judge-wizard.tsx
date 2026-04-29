@@ -281,9 +281,12 @@ export function AddJudgeWizard({
       return;
     }
 
-    // Use the email from the form — the user may have entered/updated it on the confirm step
+    // Email is only strictly required when we'll need to email this judge
+    // their offer — i.e. at least one breed-class assignment. JH-only
+    // judges don't get an offer email, so email is optional for them.
     const email = selectedJudge.contactEmail ?? manualEmail;
-    if (!email) {
+    const hasBreedAssignment = selectedCombos.some((c) => !c.isJuniorHandling);
+    if (hasBreedAssignment && !email) {
       toast.error('Email is required — judges need it to receive their offer');
       return;
     }
@@ -292,7 +295,7 @@ export function AddJudgeWizard({
       showId,
       name: selectedJudge.name,
       kcNumber: selectedJudge.kcNumber ?? undefined,
-      contactEmail: email,
+      contactEmail: email || undefined,
       contactPhone: selectedJudge.contactPhone ?? undefined,
       kcJudgeId: selectedJudge.kcJudgeId,
       kennelClubAffix: selectedJudge.kennelClubAffix ?? undefined,
@@ -496,7 +499,9 @@ export function AddJudgeWizard({
                       />
                     </div>
                     <div>
-                      <Label className="text-xs text-muted-foreground">Email *</Label>
+                      <Label className="text-xs text-muted-foreground">
+                        Email — required for breed judges (not for Junior Handling)
+                      </Label>
                       <Input
                         type="email"
                         inputMode="email"
@@ -542,7 +547,7 @@ export function AddJudgeWizard({
                   <Button
                     size="sm"
                     onClick={selectManual}
-                    disabled={!manualName.trim() || !manualEmail.trim()}
+                    disabled={!manualName.trim()}
                     className="min-h-[2.75rem]"
                   >
                     Next — Assign Breeds
@@ -579,10 +584,13 @@ export function AddJudgeWizard({
               )}
             </div>
 
-            {/* Email if not yet provided (required) — use manualEmail as sole source of truth */}
+            {/* Email if not yet provided — required for breed judges (to send
+                the offer), optional for JH-only judges (no offer). */}
             {!selectedJudge.contactEmail && (
               <div>
-                <Label className="text-xs text-muted-foreground">Email * (required for sending offers)</Label>
+                <Label className="text-xs text-muted-foreground">
+                  Email — required for breed judges (not for Junior Handling)
+                </Label>
                 <Input
                   type="email"
                   inputMode="email"

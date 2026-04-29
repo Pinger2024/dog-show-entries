@@ -1,9 +1,10 @@
 import { Resend } from 'resend';
 import { db } from '@/server/db';
 import { and, eq, inArray } from 'drizzle-orm';
-import { orders, memberships, users, printOrders, breeds } from '@/server/db/schema';
+import { orders, memberships, users, printOrders, breeds, showClasses } from '@/server/db/schema';
 import { formatOrderRef } from '@/lib/print-products';
 import { isCatalogueItem } from '@/lib/catalogue-utils';
+import { buildClassLabelMap } from '@/lib/class-labels';
 
 export const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -89,6 +90,16 @@ export async function sendEntryConfirmationEmail(orderId: string) {
   const exhibitor = order.exhibitor;
   const entryRows = order.entries ?? [];
 
+  // Pre-compute class labels so JH classes render as JHA/JHB rather than
+  // a blank numeric prefix (RKC licences don't count JH in the numbered
+  // sequence, so classNumber is null — the label map lives outside the
+  // per-row data).
+  const allShowClasses = await db.query.showClasses.findMany({
+    where: eq(showClasses.showId, show.id),
+    with: { classDefinition: true },
+  });
+  const classLabelMap = buildClassLabelMap(allShowClasses);
+
   // Build entries summary
   const entrySections = entryRows.map((entry) => {
     const isJH = entry.entryType === 'junior_handler';
@@ -101,11 +112,11 @@ export async function sendEntryConfirmationEmail(orderId: string) {
       .map((ec) => {
         const cd = ec.showClass?.classDefinition;
         const sex = ec.showClass?.sex;
-        const classNum = ec.showClass?.classNumber;
+        const label = ec.showClass?.id ? classLabelMap.get(ec.showClass.id) : undefined;
         const className = cd?.name ?? 'Class';
         const sexLabel = sex === 'dog' ? ' Dog' : sex === 'bitch' ? ' Bitch' : '';
-        const numPrefix = classNum != null ? `${classNum}. ` : '';
-        return `<div style="padding: 2px 0; color: #444;">${numPrefix}${className}${sexLabel} — ${formatFee(ec.fee)}</div>`;
+        const prefix = label ? `${label}. ` : '';
+        return `<div style="padding: 2px 0; color: #444;">${prefix}${className}${sexLabel} — ${formatFee(ec.fee)}</div>`;
       })
       .join('');
 
@@ -735,17 +746,17 @@ export async function sendJudgeApprovalRequestEmail(params: {
 </body>
 </html>`;
 
-  try {
-    const result = await resend.emails.send({
-      from: FROM,
-      to: judge.email,
-      replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
-      subject: `Results Approval — ${show.name}`,
-      html,
-    });
-    console.log(`[email] Judge approval request sent to ${judge.email}`, result);
-    return result;
-  } catch (error) {
-    console.error(`[email] Failed to send judge approval request to ${judge.email}:`, error);
+  const result = await resend.emails.send({
+    from: FROM,
+    to: judge.email,
+    replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+    subject: `Results Approval — ${show.name}`,
+    html,
+  });
+  if (result.error) {
+    console.error(`[email] Failed to send judge approval request to ${judge.email}:`, result.error);
+    throw new Error(`Failed to send approval email to ${judge.email}: ${result.error.message ?? 'unknown error'}`);
   }
+  console.log(`[email] Judge approval request sent to ${judge.email}`, result);
+  return result;
 }

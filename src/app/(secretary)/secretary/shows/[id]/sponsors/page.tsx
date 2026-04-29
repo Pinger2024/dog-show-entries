@@ -485,104 +485,6 @@ function ShowSponsorAssignments({
               </div>
             </DialogContent>
           </Dialog>
-          <Dialog open={classDialogOpen} onOpenChange={(open) => {
-            setClassDialogOpen(open);
-            if (!open) resetClassForm();
-          }}>
-            <DialogTrigger asChild>
-              <Button size="sm" variant="outline" className="min-h-[2.75rem] w-full sm:w-auto" disabled={!orgSponsors?.length}>
-                <Trophy className="size-4" />
-                Class Sponsorship
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>Assign Class Sponsorship</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label>Sponsor *</Label>
-                  <Select value={classSponsorId} onValueChange={setClassSponsorId}>
-                    <SelectTrigger className="h-11"><SelectValue placeholder="Select sponsor" /></SelectTrigger>
-                    <SelectContent>
-                      {orgSponsors?.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Class *</Label>
-                  <Select value={selectedClassId} onValueChange={setSelectedClassId}>
-                    <SelectTrigger className="h-11"><SelectValue placeholder="Select class" /></SelectTrigger>
-                    <SelectContent>
-                      {classes?.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.classNumber ? `${c.classNumber}. ` : ''}{c.classDefinition.name}
-                          {c.sex ? ` (${c.sex === 'dog' ? 'Dog' : 'Bitch'})` : ''}
-                          {c.breed ? ` — ${c.breed.name}` : ''}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Trophy Name</Label>
-                  <Input value={trophyName} onChange={(e) => setTrophyName(e.target.value)} placeholder="The Dorado Memorial Trophy" className="h-11" />
-                </div>
-                <div>
-                  <Label>Trophy Donor</Label>
-                  <Input value={trophyDonor} onChange={(e) => setTrophyDonor(e.target.value)} placeholder="May differ from sponsor" className="h-11" />
-                </div>
-                <div>
-                  <Label>Prize Description</Label>
-                  <Input value={prizeDescription} onChange={(e) => setPrizeDescription(e.target.value)} placeholder="Best in class rosette" className="h-11" />
-                </div>
-                <Button
-                  onClick={async () => {
-                    if (!classSponsorId || !selectedClassId) return;
-                    // Find or create a show sponsor for the selected org sponsor
-                    const existing = showSponsorList?.find((ss) => ss.sponsorId === classSponsorId);
-                    if (existing) {
-                      // Already assigned to the show — use that show sponsor
-                      assignClassMutation.mutate({
-                        showSponsorId: existing.id,
-                        showClassId: selectedClassId,
-                        trophyName: trophyName.trim() || undefined,
-                        trophyDonor: trophyDonor.trim() || undefined,
-                        prizeDescription: prizeDescription.trim() || undefined,
-                      });
-                    } else {
-                      // Auto-assign the sponsor to the show as a class-tier sponsor, then create class sponsorship
-                      assignMutation.mutate(
-                        {
-                          showId,
-                          sponsorId: classSponsorId,
-                          tier: 'class' as const,
-                        },
-                        {
-                          onSuccess: (newShowSponsor) => {
-                            assignClassMutation.mutate({
-                              showSponsorId: newShowSponsor.id,
-                              showClassId: selectedClassId,
-                              trophyName: trophyName.trim() || undefined,
-                              trophyDonor: trophyDonor.trim() || undefined,
-                              prizeDescription: prizeDescription.trim() || undefined,
-                            });
-                          },
-                        }
-                      );
-                    }
-                  }}
-                  disabled={!classSponsorId || !selectedClassId || assignClassMutation.isPending || assignMutation.isPending}
-                  className="w-full min-h-[2.75rem]"
-                >
-                  {(assignClassMutation.isPending || assignMutation.isPending) && <Loader2 className="size-4 animate-spin" />}
-                  Assign Sponsorship
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
         </div>
       </div>
 
@@ -1125,18 +1027,13 @@ function NewSponsorshipRow({
       setName(s.sponsor_name);
       if (s.sponsor_affix) setAffix(s.sponsor_affix);
       setIsActive(true);
-      // Auto-save after picking a suggestion
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = setTimeout(() => {
-        createMutation.mutate({
-          showClassId,
-          sponsorName: s.sponsor_name,
-          sponsorAffix: s.sponsor_affix ?? undefined,
-          trophyName: trophy.trim() || undefined,
-        });
-      }, 800);
+      // Don't auto-save here — closure captures whatever trophy state
+      // was when the user clicked the suggestion, which is usually
+      // empty, and a second row gets created when trySave fires on
+      // blur after trophy is filled in. Blur-driven save is the
+      // single commit point.
     },
-    [showClassId, trophy, createMutation]
+    [],
   );
 
   if (!isActive) {

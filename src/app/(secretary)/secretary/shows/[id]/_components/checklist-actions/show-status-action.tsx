@@ -24,7 +24,7 @@ const STATUS_ACTIONS: Record<string, {
   entries_open: {
     targetStatus: 'entries_open',
     buttonLabel: 'Open Entries',
-    prerequisites: ['Show published', 'Classes created', 'Stripe connected'],
+    prerequisites: ['Show published', 'Classes created', 'Payout details added'],
   },
   entries_close: {
     targetStatus: 'entries_closed',
@@ -77,7 +77,7 @@ export function ShowStatusAction({ showId }: ActionPanelProps & { actionKey?: st
           if (prereq === 'Classes created') met = autoDetect?.classes_created ?? false;
           if (prereq === 'Venue confirmed') met = autoDetect?.venue_set ?? false;
           if (prereq === 'Show published') met = autoDetect?.show_published ?? false;
-          if (prereq === 'Stripe connected') met = !!show.stripeAccountId;
+          if (prereq === 'Payout details added') met = autoDetect?.payout_details_set ?? false;
           return { label: prereq, met };
         });
 

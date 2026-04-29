@@ -66,15 +66,23 @@ describe('payments.createIntent', () => {
       where: eq(payments.entryId, res.entryId),
     });
     expect(payment?.status).toBe('pending');
-    expect(payment?.amount).toBe(1200);
+    // payment.amount is the GROSS the exhibitor is charged (subtotal +
+    // £1 + 1% handling fee). 1200 + (100 + round(1200 * 0.01)) = 1312.
+    expect(payment?.amount).toBe(1312);
+    expect(res.platformFeePence).toBe(112);
+    expect(res.grossAmount).toBe(1312);
 
+    // Platform-mode PaymentIntent — Remi is merchant of record, money
+    // lands in Remi's Stripe balance, BACS'd to the club post-show.
     expect(vi.mocked(stripeService.createPaymentIntent)).toHaveBeenCalledWith(
-      1200,
+      1312,
       expect.objectContaining({
         showId: show.id,
         dogId: dog.id,
         exhibitorId: exhibitor.id,
         entryId: res.entryId,
+        platformFeePence: '112',
+        subtotalPence: '1200',
       }),
     );
   });

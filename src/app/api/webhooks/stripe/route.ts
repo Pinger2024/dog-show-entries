@@ -39,25 +39,54 @@ export async function POST(request: NextRequest) {
       const paymentIntent = event.data.object as Stripe.PaymentIntent;
       const { entryId, orderId, printOrderId } = paymentIntent.metadata;
 
-      // Print order payment
+      // Print order payment. Stripe retries on any 5xx or timeout, so we
+      // must gate both the Mixam submission AND the status write on a
+      // state transition — otherwise a retry/replay for an order that
+      // has already moved on to `submitted` / `in_production` /
+      // `dispatched` / `delivered` would regress it back to `paid`.
       if (paymentIntent.metadata.type === 'print_order' && printOrderId) {
+        const existing = await db.query.printOrders.findFirst({
+          where: eq(printOrders.id, printOrderId),
+          columns: { status: true },
+        });
+        const wasAlreadyPaid = existing?.status === 'paid' || existing?.status === 'submitted' || existing?.status === 'in_production' || existing?.status === 'dispatched' || existing?.status === 'delivered';
+
+        // stripePaymentStatus is idempotent: the second succeeded event
+        // sets the same value. Write it unconditionally so any future
+        // status-tracking bug surfaces on the first webhook delivery
+        // rather than hiding behind a stale column.
         await db
           .update(printOrders)
-          .set({
-            status: 'paid',
-            stripePaymentStatus: 'succeeded',
-          })
+          .set(
+            wasAlreadyPaid
+              ? { stripePaymentStatus: 'succeeded' }
+              : { status: 'paid', stripePaymentStatus: 'succeeded' }
+          )
           .where(eq(printOrders.id, printOrderId));
 
-        // Submit to Mixam (non-blocking)
-        submitPrintOrderToMixam(printOrderId).catch((err) =>
-          console.error('[webhook] Mixam submission failed:', err)
-        );
+        if (!wasAlreadyPaid) {
+          // Submit to Mixam (non-blocking). On retries this branch is skipped.
+          submitPrintOrderToMixam(printOrderId).catch((err) =>
+            console.error('[webhook] Mixam submission failed:', err)
+          );
+        }
         break;
       }
 
+      // Track whether the order was previously unpaid so we only send the
+      // confirmation emails on the first delivery of this event — Stripe
+      // retries aggressively and duplicate emails to exhibitors are a bad
+      // first impression.
+      let orderWasPreviouslyUnpaid = false;
+
       // Order-level payment: confirm all entries in the order
       if (orderId) {
+        const existingOrder = await db.query.orders.findFirst({
+          where: eq(orders.id, orderId),
+          columns: { status: true },
+        });
+        orderWasPreviouslyUnpaid = existingOrder?.status !== 'paid';
+
         const orderEntries = await db.query.entries.findMany({
           where: and(
             eq(entries.orderId, orderId),
@@ -99,8 +128,9 @@ export async function POST(request: NextRequest) {
         .set({ status: 'succeeded' })
         .where(eq(payments.stripePaymentId, paymentIntent.id));
 
-      // Send confirmation email (non-blocking — don't fail the webhook)
-      if (orderId) {
+      // Send confirmation email (non-blocking — don't fail the webhook).
+      // Gated on first-time transition so Stripe retries don't duplicate.
+      if (orderId && orderWasPreviouslyUnpaid) {
         sendEntryConfirmationEmail(orderId).catch((err) =>
           console.error('[webhook] Email send failed:', err)
         );

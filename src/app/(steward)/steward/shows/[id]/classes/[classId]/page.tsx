@@ -40,7 +40,12 @@ export default function StewardClassResultsPage({
   params: Promise<{ id: string; classId: string }>;
 }) {
   const { id: showId, classId } = use(params);
-  const [specialAwardOpen, setSpecialAwardOpen] = useState(false);
+  // Track WHICH entry's special-award dialog is open, not just whether ANY
+  // dialog is open. Previously a single boolean was shared across every
+  // entry row, so tapping an Award icon would open every dialog at once
+  // (only the last one in DOM order was visible). Using the entryClassId
+  // scopes open-state per row.
+  const [specialAwardEntryId, setSpecialAwardEntryId] = useState<string | null>(null);
 
   const utils = trpc.useUtils();
 
@@ -342,7 +347,12 @@ export default function StewardClassResultsPage({
                   </Select>
 
                   {/* Special award button */}
-                  <Dialog open={specialAwardOpen} onOpenChange={setSpecialAwardOpen}>
+                  <Dialog
+                    open={specialAwardEntryId === entry.entryClassId}
+                    onOpenChange={(open) =>
+                      setSpecialAwardEntryId(open ? entry.entryClassId : null)
+                    }
+                  >
                     <DialogTrigger asChild>
                       <Button
                         variant="ghost"

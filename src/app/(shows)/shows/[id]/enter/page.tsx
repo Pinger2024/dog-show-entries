@@ -35,6 +35,7 @@ import { toast } from 'sonner';
 import { isWithinAgeRange, handlerAgeYearsOnDate, formatCurrency } from '@/lib/date-utils';
 import { trpc } from '@/lib/trpc/client';
 import { formatDogName } from '@/lib/utils';
+import { readReferralSource } from '@/lib/referral-source';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -90,6 +91,10 @@ export default function EnterShowPage() {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState(0);
+  // Subtotal and handling-fee breakdown — the club gets subtotalAmount,
+  // Remi gets platformFeePence, exhibitor pays the sum (paymentAmount).
+  const [subtotalAmount, setSubtotalAmount] = useState(0);
+  const [platformFeePence, setPlatformFeePence] = useState(0);
   const [shareCopied, setShareCopied] = useState(false);
 
   // JH form state
@@ -416,6 +421,10 @@ export default function EnterShowPage() {
 
   async function handleProceedToPayment() {
     try {
+      // Read the referral channel captured on the show page (if any) so the
+      // resulting order row carries its provenance.
+      const referralSource = readReferralSource(idOrSlug) ?? undefined;
+
       const result = await checkoutMutation.mutateAsync({
         showId,
         catalogueRequested: false,
@@ -435,6 +444,7 @@ export default function EnterShowPage() {
           sundryItemId: s.sundryItemId,
           quantity: s.quantity,
         })),
+        referralSource,
       });
 
       // Free entries (£0) — skip payment, go straight to success
@@ -446,7 +456,18 @@ export default function EnterShowPage() {
 
       setClientSecret(result.clientSecret);
       setOrderId(result.orderId);
-      setPaymentAmount(result.totalAmount);
+      // Paid branch of orders.checkout always returns totalAmount +
+      // grossAmount + platformFeePence — the cast is because the full
+      // union includes a free-entry variant without those fields, already
+      // handled by the early return above.
+      const paid = result as {
+        totalAmount: number;
+        platformFeePence: number;
+        grossAmount: number;
+      };
+      setSubtotalAmount(paid.totalAmount);
+      setPlatformFeePence(paid.platformFeePence);
+      setPaymentAmount(paid.grossAmount);
       cart.setStep('payment');
     } catch {
       // Error is handled by tRPC
@@ -604,8 +625,8 @@ export default function EnterShowPage() {
           <div className="flex items-center gap-2 text-xs sm:text-sm">
             <ShoppingCart className="size-4" />
             <span>
-              {cart.entries.filter((e) => e.classIds.length > 0).length} entr
-              {cart.entries.filter((e) => e.classIds.length > 0).length !== 1 ? 'ies' : 'y'} in cart
+              {cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length} entr
+              {cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length !== 1 ? 'ies' : 'y'} in cart
             </span>
             {cart.grandTotal > 0 && (
               <Badge variant="secondary">{formatCurrency(cart.grandTotal)}</Badge>
@@ -615,7 +636,7 @@ export default function EnterShowPage() {
             variant="ghost"
             size="sm"
             onClick={() => cart.setStep('cart_review')}
-            disabled={cart.entries.filter((e) => e.classIds.length > 0).length === 0}
+            disabled={cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length === 0}
           >
             View Cart
           </Button>
@@ -1205,7 +1226,7 @@ export default function EnterShowPage() {
 
           {/* Cart entries */}
           {cart.entries
-            .filter((e) => e.classIds.length > 0)
+            .filter((e) => e.classIds.length > 0 || e.isNfc)
             .map((entry) => (
               <Card key={entry.id}>
                 <CardHeader className="pb-3">
@@ -1388,8 +1409,8 @@ export default function EnterShowPage() {
             <div className="space-y-1.5">
               <div className="flex justify-between text-sm text-muted-foreground">
                 <span>
-                  {cart.entries.filter((e) => e.classIds.length > 0).length} entr
-                  {cart.entries.filter((e) => e.classIds.length > 0).length !== 1 ? 'ies' : 'y'}
+                  {cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length} entr
+                  {cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length !== 1 ? 'ies' : 'y'}
                 </span>
                 <span>{formatCurrency(cart.entriesTotal)}</span>
               </div>
@@ -1500,7 +1521,12 @@ export default function EnterShowPage() {
                 !healthDeclared ||
                 !termsAccepted ||
                 checkoutMutation.isPending ||
-                cart.entries.filter((e) => e.classIds.length > 0).length === 0
+                // An entry is submittable if it has at least one class OR it's
+                // an NFC ("not for competition") entry — those deliberately have
+                // no classes. Mirrors the filter in handleProceedToPayment's
+                // mutation payload; previously they diverged and NFC-only carts
+                // were silently blocked here.
+                cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length === 0
               }
             >
               {checkoutMutation.isPending ? (
@@ -1531,7 +1557,27 @@ export default function EnterShowPage() {
               </CardTitle>
               <CardDescription>Secure payment powered by Stripe</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              {platformFeePence > 0 && (
+                <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Entry fees</span>
+                    <span>{formatCurrency(subtotalAmount)}</span>
+                  </div>
+                  <div className="mt-1 flex justify-between text-muted-foreground">
+                    <span>
+                      Platform fee{' '}
+                      <span className="text-xs opacity-75">(£1 + 1%)</span>
+                    </span>
+                    <span>{formatCurrency(platformFeePence)}</span>
+                  </div>
+                  <div className="mt-2 flex justify-between border-t pt-2 font-semibold text-foreground">
+                    <span>Total</span>
+                    <span>{formatCurrency(paymentAmount)}</span>
+                  </div>
+                </div>
+              )}
+
               <StripeProvider clientSecret={clientSecret}>
                 <PaymentForm
                   amount={paymentAmount}
@@ -1575,10 +1621,10 @@ export default function EnterShowPage() {
               )}
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Entries</span>
-                <span>{cart.entries.filter((e) => e.classIds.length > 0).length}</span>
+                <span>{cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length}</span>
               </div>
               {cart.entries
-                .filter((e) => e.classIds.length > 0)
+                .filter((e) => e.classIds.length > 0 || e.isNfc)
                 .map((entry) => (
                   <div key={entry.id} className="space-y-1 text-sm">
                     <div className="flex justify-between">
@@ -1621,26 +1667,78 @@ export default function EnterShowPage() {
             const shareText = `I've just entered ${dogLabel} into ${show?.name ?? 'a show'}! \u{1F415} ${showUrl}`;
             const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
 
+            const trackShare = (channel: string) => {
+              if (!show?.id) return;
+              fetch('/api/share-events', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ showId: show.id, channel }),
+                keepalive: true,
+              }).catch(() => {
+                // Fire-and-forget
+              });
+            };
+            const fbShareUrl = `${showUrl}?src=facebook`;
+
             return (
               <Card className="mx-auto w-full max-w-md border-primary/20 bg-primary/5">
-                <CardContent className="py-5 text-center space-y-3">
+                <CardContent className="space-y-3 py-5 text-center">
                   <p className="text-sm font-semibold">
-                    Let your breed group know you&apos;re coming!
+                    You&apos;re in! Let your breed group know you&apos;re coming.
                   </p>
                   <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
                     <Button
-                      className="min-h-[2.75rem] gap-2 bg-[#25D366] hover:bg-[#20BD5A] text-white"
+                      className="min-h-[2.75rem] gap-2 bg-[#25D366] text-white hover:bg-[#20BD5A]"
                       asChild
                     >
-                      <a href={whatsappUrl} target="_blank" rel="noopener noreferrer">
+                      <a
+                        href={whatsappUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => trackShare('whatsapp')}
+                      >
                         <svg className="size-4" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
                         WhatsApp
                       </a>
                     </Button>
                     <Button
                       variant="outline"
+                      className="min-h-[2.75rem] gap-2 border-[#1877F2]/30 bg-white text-[#1877F2]"
+                      onClick={async () => {
+                        trackShare('facebook');
+                        // Mobile: FB app hijacks facebook.com URLs and shows
+                        // a blank screen — copy the link instead (years-old
+                        // Meta bug, no client-side fix). Desktop: no app to
+                        // intercept so the web sharer works fine.
+                        const mobile =
+                          typeof navigator !== 'undefined' &&
+                          /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+                        if (mobile) {
+                          try {
+                            await navigator.clipboard.writeText(fbShareUrl);
+                            toast.success('Link copied — paste it into your Facebook post or group');
+                          } catch {
+                            toast.error('Could not copy the link. Long-press to copy it manually.');
+                          }
+                          return;
+                        }
+                        window.open(
+                          `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(fbShareUrl)}`,
+                          '_blank',
+                          'noopener,noreferrer'
+                        );
+                      }}
+                    >
+                      <svg className="size-4" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073" />
+                      </svg>
+                      Facebook
+                    </Button>
+                    <Button
+                      variant="outline"
                       className="min-h-[2.75rem] gap-2"
                       onClick={async () => {
+                        trackShare('copy');
                         if (typeof navigator !== 'undefined' && navigator.share) {
                           try {
                             await navigator.share({
@@ -1671,6 +1769,9 @@ export default function EnterShowPage() {
                       {shareCopied ? 'Copied!' : 'Copy Link'}
                     </Button>
                   </div>
+                  <p className="text-xs italic text-muted-foreground">
+                    A share from you is worth ten from us.
+                  </p>
                 </CardContent>
               </Card>
             );
