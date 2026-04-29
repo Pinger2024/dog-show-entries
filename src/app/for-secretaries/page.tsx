@@ -84,12 +84,12 @@ const automationCards = [
   {
     icon: BookOpen,
     title: 'Catalogue',
-    body: 'Numbered, formatted, and ready to print at any point. Four formats including judges’ books and ringside lists.',
+    body: 'Numbered, formatted, and ready to print as soon as entries are closed. Four formats — standard, by-class, online, and stewards’.',
   },
   {
     icon: Printer,
     title: 'Printing',
-    body: 'Order prize cards, ring numbers, and catalogues from the dashboard. Quotes pulled live from our print partner.',
+    body: 'Order prize cards, ring numbers, and catalogues straight from your show dashboard. We handle the printer, the proofs, and the delivery.',
   },
 ];
 
@@ -106,19 +106,24 @@ const includedItems = [
 
 const priceRows = [
   {
+    item: 'Show setup fee',
+    others: '£20 – £50',
+    remi: 'Included',
+  },
+  {
+    item: 'Online portal',
+    others: '£20+',
+    remi: 'Included',
+  },
+  {
+    item: 'Per-entry data input',
+    others: '15p – 50p per dog',
+    remi: 'Included',
+  },
+  {
     item: 'Card processing',
     others: 'Club pays 1.95% + 10p per entry',
     remi: 'Exhibitor pays — your club keeps 100%',
-  },
-  {
-    item: 'A5 prize cards',
-    others: 'from 24p each',
-    remi: '23p each',
-  },
-  {
-    item: 'Printed catalogues',
-    others: 'from £2.16 / copy',
-    remi: 'from £1.57 / copy',
   },
   {
     item: 'Online results portal',
@@ -446,15 +451,16 @@ export default function ForSecretariesPage() {
                 className="mb-4 border-gold/30 bg-gold/10 text-gold"
               >
                 <PoundSterling className="mr-1 size-3.5" />
-                One package. No surprise extras.
+                A package to suit your show
               </Badge>
               <h2 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
                 Everything’s included.
               </h2>
               <p className="mt-4 text-sm text-muted-foreground sm:text-base">
-                With Remi there’s no setup fee, no online portal fee, no
-                per-entry data charge. The platform’s included — you only pay
-                for physical print materials at trade prices.
+                No setup fees. No online portal fees. No per-entry data
+                charges. The platform comes built-in — choose the catalogue
+                and print options that fit your show, and we’ll quote you a
+                single all-in price.
               </p>
             </AnimateIn>
 
@@ -503,8 +509,7 @@ export default function ForSecretariesPage() {
               </div>
               <p className="mt-4 text-center text-xs text-muted-foreground">
                 Comparison figures sourced from established UK show systems’
-                published 2026 price lists. Remi figures from current print
-                partner quotes and our standard fee model.
+                published 2026 price lists.
               </p>
             </AnimateIn>
           </div>
