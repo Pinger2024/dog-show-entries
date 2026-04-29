@@ -1,0 +1,484 @@
+import type { Metadata } from 'next';
+import Link from 'next/link';
+import {
+  Phone,
+  FileText,
+  Moon,
+  Pencil,
+  Sparkles,
+  Calendar,
+  BookOpen,
+  Printer,
+  PoundSterling,
+  CheckCircle2,
+  ArrowRight,
+  Clock,
+  Users,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Header } from '@/components/layout/header';
+import { Footer } from '@/components/layout/footer';
+import { AnimateIn } from '@/components/animate-in';
+
+export const metadata: Metadata = {
+  title: 'Run Your Show with Remi — For Show Secretaries',
+  description:
+    'The modern alternative to Fossedata for UK dog show secretaries. Online entries, auto-generated catalogues, integrated payments — and your club keeps 100% of entry fees.',
+  openGraph: {
+    title: 'Run Your Show with Remi — For Show Secretaries',
+    description:
+      'No more typing entries. No more chasing print proofs. No more midnight catalogues. Built by a show secretary, for show secretaries.',
+    images: [
+      {
+        url: '/promo/poster.png',
+        width: 1080,
+        height: 1920,
+        alt: 'Remi — modern show management',
+      },
+    ],
+    type: 'website',
+  },
+};
+
+const DEMO_MAILTO =
+  'mailto:michael@prometheus-it.com,hundarkgsd@gmail.com' +
+  '?subject=' +
+  encodeURIComponent('Remi demo request') +
+  '&body=' +
+  encodeURIComponent(
+    [
+      'Hi Michael & Amanda,',
+      '',
+      'I’d like to see Remi in action.',
+      '',
+      'Club: ',
+      'My role: ',
+      'Our next show: ',
+      'Phone (so you can call me back): ',
+      '',
+      'Thanks,',
+    ].join('\n'),
+  );
+
+const noMore = [
+  { icon: Phone, label: 'No more phone calls to add a dog' },
+  { icon: FileText, label: 'No more chasing print proofs' },
+  { icon: Moon, label: 'No more midnight catalogues' },
+  { icon: Pencil, label: 'No more typing entries by hand' },
+];
+
+const sevenMinSteps = [
+  'Pick your show type and dates',
+  'Add classes — auto-filled from the RKC breed list',
+  'Set fees and payment options',
+  'Open entries — exhibitors can pay online instantly',
+];
+
+const automationCards = [
+  {
+    icon: Calendar,
+    title: 'Schedule',
+    body: 'Generated as you build the show. Download a finished PDF or share a live link — exhibitors always see the latest version.',
+  },
+  {
+    icon: BookOpen,
+    title: 'Catalogue',
+    body: 'Numbered, formatted, and ready to print at any point. Four formats including judges’ books and ringside lists.',
+  },
+  {
+    icon: Printer,
+    title: 'Printing',
+    body: 'Order prize cards, ring numbers, and catalogues from the dashboard. Quotes pulled live from our print partner.',
+  },
+];
+
+const priceRows = [
+  {
+    item: 'Card processing',
+    fossedata: 'Club pays 1.95% + 10p per entry',
+    remi: 'Exhibitor pays — your club keeps 100%',
+    win: true,
+  },
+  {
+    item: 'A5 prize cards',
+    fossedata: '24p each',
+    remi: '23p each',
+    win: true,
+  },
+  {
+    item: 'Printed catalogues (50 copies)',
+    fossedata: 'from £2.16 / copy',
+    remi: 'from £1.57 / copy',
+    win: true,
+  },
+  {
+    item: 'Online results portal',
+    fossedata: '£30 – £50 per show',
+    remi: 'Included',
+    win: true,
+  },
+  {
+    item: 'Add a dog after closing',
+    fossedata: 'Phone call required',
+    remi: 'Self-serve in the app',
+    win: true,
+  },
+];
+
+const clubs = ['Clyde Valley GSD Club', 'BAGSD', 'Hundark GSD'];
+
+export default function ForSecretariesPage() {
+  return (
+    <div className="flex min-h-screen flex-col">
+      <Header />
+
+      <main className="flex-1">
+        {/* Hero */}
+        <section className="relative overflow-hidden">
+          <div className="pointer-events-none absolute inset-0 -z-10">
+            <div className="absolute -top-40 right-0 h-[600px] w-[600px] rounded-full bg-primary/[0.05] blur-3xl" />
+            <div className="absolute -bottom-40 left-0 h-[500px] w-[500px] rounded-full bg-gold/[0.07] blur-3xl" />
+          </div>
+
+          <div className="mx-auto max-w-7xl px-3 py-14 sm:px-4 sm:py-20 lg:px-6 lg:py-28">
+            <div className="grid gap-10 lg:grid-cols-2 lg:items-center lg:gap-16">
+              <div>
+                <Badge
+                  variant="secondary"
+                  className="mb-5 border-gold/30 bg-gold/10 text-gold"
+                >
+                  For Show Secretaries
+                </Badge>
+                <h1 className="font-serif text-3xl font-bold leading-[1.1] tracking-tight sm:text-4xl lg:text-5xl">
+                  Run a show without{' '}
+                  <span className="text-primary">losing a Saturday.</span>
+                </h1>
+                <p className="gold-rule mt-5 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
+                  Remi is the modern alternative to Fossedata. Online entries,
+                  automatic catalogues, integrated payments — and your club
+                  keeps 100% of every entry fee.
+                </p>
+                <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                  <Button
+                    size="lg"
+                    className="h-12 px-7 text-base shadow-lg shadow-primary/15 sm:h-13"
+                    asChild
+                  >
+                    <a href={DEMO_MAILTO}>
+                      Book a 15-min demo
+                      <ArrowRight className="ml-1 size-4" />
+                    </a>
+                  </Button>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="h-12 px-7 text-base sm:h-13"
+                    asChild
+                  >
+                    <Link href="#how">See how it works</Link>
+                  </Button>
+                </div>
+                <p className="mt-4 text-sm text-muted-foreground">
+                  Or get going on your own —{' '}
+                  <Link
+                    href="/register"
+                    className="font-medium text-primary underline-offset-4 hover:underline"
+                  >
+                    create a free account
+                  </Link>
+                  .
+                </p>
+              </div>
+
+              <AnimateIn className="relative">
+                <div className="relative mx-auto w-full max-w-sm overflow-hidden rounded-3xl border bg-card shadow-2xl shadow-primary/10">
+                  <video
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    poster="/promo/poster.png"
+                    className="h-auto w-full"
+                  >
+                    <source src="/promo/remi-promo.mp4" type="video/mp4" />
+                  </video>
+                </div>
+                <div className="pointer-events-none absolute -bottom-6 left-1/2 z-10 -translate-x-1/2 rounded-full border bg-background/95 px-4 py-2 text-xs font-medium shadow-md backdrop-blur">
+                  Built mobile-first — runs on the phone in your pocket
+                </div>
+              </AnimateIn>
+            </div>
+          </div>
+        </section>
+
+        {/* No-more strip */}
+        <section className="border-y bg-card">
+          <div className="mx-auto max-w-7xl px-3 py-12 sm:px-4 sm:py-16 lg:px-6">
+            <AnimateIn className="mx-auto max-w-2xl text-center">
+              <h2 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">
+                Stop doing the things you hate.
+              </h2>
+              <p className="mt-3 text-sm text-muted-foreground sm:text-base">
+                Every secretary we’ve spoken to has the same list. So we built
+                Remi to take it off them.
+              </p>
+            </AnimateIn>
+            <div className="mx-auto mt-10 grid max-w-5xl gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+              {noMore.map((item, i) => (
+                <AnimateIn key={item.label} delay={i * 80}>
+                  <div className="flex h-full flex-col gap-3 rounded-xl border bg-background p-5">
+                    <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                      <item.icon className="size-5" strokeWidth={1.5} />
+                    </div>
+                    <p className="font-serif text-base font-bold leading-tight sm:text-lg">
+                      {item.label}
+                    </p>
+                  </div>
+                </AnimateIn>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* 7-minute show creation */}
+        <section id="how">
+          <div className="mx-auto max-w-7xl px-3 py-16 sm:px-4 sm:py-24 lg:px-6">
+            <div className="grid gap-12 lg:grid-cols-2 lg:items-center lg:gap-16">
+              <AnimateIn>
+                <Badge
+                  variant="secondary"
+                  className="mb-4 border-primary/20 bg-primary/5 text-primary"
+                >
+                  <Clock className="mr-1 size-3.5" />
+                  Seven minutes, start to finish
+                </Badge>
+                <h2 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
+                  Create your show in the time it takes to make a cup of tea.
+                </h2>
+                <p className="mt-4 text-base leading-relaxed text-muted-foreground sm:text-lg">
+                  No spreadsheets. No emails to printers. No data input fee. You
+                  fill in the basics, Remi handles the rest.
+                </p>
+                <ul className="mt-6 space-y-3">
+                  {sevenMinSteps.map((step, i) => (
+                    <li key={step} className="flex items-start gap-3">
+                      <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                        {i + 1}
+                      </span>
+                      <span className="text-base text-foreground sm:text-[1.0625rem]">
+                        {step}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </AnimateIn>
+
+              <AnimateIn delay={120}>
+                <div className="relative overflow-hidden rounded-3xl border bg-gradient-to-br from-primary/5 via-card to-gold/5 p-6 shadow-xl shadow-primary/5 sm:p-10">
+                  <div className="flex items-center gap-3">
+                    <Sparkles className="size-5 text-gold" />
+                    <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Live timer
+                    </p>
+                  </div>
+                  <p className="mt-4 font-serif text-6xl font-bold tabular-nums tracking-tight sm:text-7xl">
+                    7:00
+                  </p>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    average show set-up time
+                  </p>
+                  <div className="mt-8 space-y-3 border-t pt-6">
+                    <Row label="Schedule" value="Generated" />
+                    <Row label="Catalogue" value="Generated" />
+                    <Row label="Entries page" value="Live" />
+                    <Row label="Payments" value="Open" />
+                  </div>
+                </div>
+              </AnimateIn>
+            </div>
+          </div>
+        </section>
+
+        {/* Automation triple */}
+        <section className="border-t bg-card">
+          <div className="mx-auto max-w-7xl px-3 py-16 sm:px-4 sm:py-24 lg:px-6">
+            <AnimateIn className="mx-auto max-w-2xl text-center">
+              <h2 className="gold-rule-center font-serif text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
+                Schedule. Catalogue. Print. Automatic.
+              </h2>
+              <p className="mt-4 text-sm text-muted-foreground sm:text-base">
+                The three jobs that eat your evenings — done by Remi, the
+                second they’re needed.
+              </p>
+            </AnimateIn>
+            <div className="mx-auto mt-12 grid max-w-5xl gap-5 grid-cols-1 sm:gap-6 md:grid-cols-3">
+              {automationCards.map((card, i) => (
+                <AnimateIn key={card.title} delay={i * 100}>
+                  <div className="group h-full rounded-2xl border bg-background p-6 transition-all hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 sm:p-8">
+                    <div className="mb-5 flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                      <card.icon className="size-6" strokeWidth={1.5} />
+                    </div>
+                    <h3 className="font-serif text-lg font-bold sm:text-xl">
+                      {card.title}
+                    </h3>
+                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground sm:text-base">
+                      {card.body}
+                    </p>
+                  </div>
+                </AnimateIn>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Price comparison */}
+        <section>
+          <div className="mx-auto max-w-7xl px-3 py-16 sm:px-4 sm:py-24 lg:px-6">
+            <AnimateIn className="mx-auto max-w-2xl text-center">
+              <Badge
+                variant="secondary"
+                className="mb-4 border-gold/30 bg-gold/10 text-gold"
+              >
+                <PoundSterling className="mr-1 size-3.5" />
+                And it’s cheaper
+              </Badge>
+              <h2 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
+                You’re paying more for less.
+              </h2>
+              <p className="mt-4 text-sm text-muted-foreground sm:text-base">
+                Side-by-side with the incumbent. No fine print, no surprises.
+              </p>
+            </AnimateIn>
+
+            <div className="mx-auto mt-10 max-w-4xl">
+              <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
+                <div className="grid grid-cols-[1.4fr_1fr_1fr] gap-2 border-b bg-muted/40 px-4 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground sm:px-6 sm:text-sm">
+                  <div>Item</div>
+                  <div className="text-center">Fossedata</div>
+                  <div className="text-center font-semibold text-primary">Remi</div>
+                </div>
+                {priceRows.map((row, i) => (
+                  <div
+                    key={row.item}
+                    className={`grid grid-cols-[1.4fr_1fr_1fr] items-center gap-2 px-4 py-4 text-sm sm:px-6 sm:text-[0.9375rem] ${
+                      i < priceRows.length - 1 ? 'border-b' : ''
+                    }`}
+                  >
+                    <div className="font-medium">{row.item}</div>
+                    <div className="text-center text-muted-foreground line-through decoration-muted-foreground/40 decoration-1">
+                      {row.fossedata}
+                    </div>
+                    <div className="text-center font-semibold text-primary">
+                      {row.remi}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-4 text-center text-xs text-muted-foreground">
+                Fossedata figures from their published 2026 price list. Remi
+                figures from current Mixam quotes and our standard fee model.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* Social proof */}
+        <section className="border-t bg-card">
+          <div className="mx-auto max-w-7xl px-3 py-16 sm:px-4 sm:py-24 lg:px-6">
+            <AnimateIn className="mx-auto max-w-3xl text-center">
+              <Users className="mx-auto mb-4 size-8 text-gold" strokeWidth={1.5} />
+              <h2 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">
+                Trusted by clubs already.
+              </h2>
+              <p className="mt-4 text-base leading-relaxed text-muted-foreground sm:text-lg">
+                Remi was built by a working show secretary — Amanda at Clyde
+                Valley GSD Club — for the people who actually run shows.
+                She uses it every day. So do these clubs:
+              </p>
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+                {clubs.map((club) => (
+                  <div
+                    key={club}
+                    className="rounded-full border bg-background px-5 py-2.5 text-sm font-medium shadow-sm"
+                  >
+                    {club}
+                  </div>
+                ))}
+              </div>
+              <div className="mx-auto mt-10 max-w-2xl rounded-2xl border bg-background p-6 text-left shadow-sm sm:p-8">
+                <p className="font-serif text-base leading-relaxed text-foreground sm:text-lg">
+                  Amanda runs Clyde Valley GSD’s shows from her phone — entries,
+                  payments, catalogue, prize cards, results. She helped us
+                  design every screen, and she uses Remi for every show she
+                  runs.
+                </p>
+                <p className="mt-4 text-sm text-muted-foreground">
+                  Want to talk to her? She’s on every demo call.
+                </p>
+              </div>
+            </AnimateIn>
+          </div>
+        </section>
+
+        {/* Final CTA */}
+        <section className="border-t">
+          <div className="mx-auto max-w-7xl px-3 py-16 sm:px-4 sm:py-24 lg:px-6">
+            <AnimateIn>
+              <div className="relative overflow-hidden rounded-3xl bg-primary px-4 py-14 text-center shadow-xl shadow-primary/15 sm:px-16 sm:py-20">
+                <div className="pointer-events-none absolute inset-0">
+                  <div className="absolute -right-20 -top-20 size-72 rounded-full bg-white/10 blur-3xl" />
+                  <div className="absolute -bottom-20 -left-20 size-72 rounded-full bg-gold/15 blur-3xl" />
+                </div>
+                <div className="relative z-10">
+                  <h2 className="font-serif text-2xl font-bold tracking-tight text-primary-foreground sm:text-3xl lg:text-4xl">
+                    Run your next show with Remi.
+                  </h2>
+                  <p className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-primary-foreground/85 sm:text-lg">
+                    A 15-minute demo and we’ll set up your first show on the
+                    call. No commitment, no pressure.
+                  </p>
+                  <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
+                    <Button
+                      size="lg"
+                      variant="secondary"
+                      className="h-12 w-full px-7 text-base font-semibold sm:h-13 sm:w-auto"
+                      asChild
+                    >
+                      <a href={DEMO_MAILTO}>
+                        Book a 15-min demo
+                        <ArrowRight className="ml-1 size-4" />
+                      </a>
+                    </Button>
+                    <Button
+                      size="lg"
+                      variant="ghost"
+                      className="h-12 w-full px-7 text-base text-primary-foreground hover:bg-white/10 hover:text-primary-foreground sm:h-13 sm:w-auto"
+                      asChild
+                    >
+                      <Link href="/register">Or sign up free</Link>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </AnimateIn>
+          </div>
+        </section>
+      </main>
+
+      <Footer />
+    </div>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="inline-flex items-center gap-1.5 font-semibold">
+        <CheckCircle2 className="size-3.5 text-primary" />
+        {value}
+      </span>
+    </div>
+  );
+}
