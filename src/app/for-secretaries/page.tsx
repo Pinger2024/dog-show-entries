@@ -363,7 +363,7 @@ export default function ForSecretariesPage() {
                 </p>
                 <ul className="mt-6 space-y-3">
                   {[
-                    'Sign up and add a dog in minutes — no paperwork',
+                    'Sign up with just the dog’s name — no registration number required',
                     'Enter all their dogs in one checkout, one payment',
                     'Amend or withdraw without phoning anyone',
                     'Class eligibility is checked automatically — no maths',
