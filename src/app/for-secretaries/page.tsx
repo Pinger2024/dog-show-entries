@@ -24,7 +24,7 @@ import { AnimateIn } from '@/components/animate-in';
 export const metadata: Metadata = {
   title: 'Run Your Show with Remi — For Show Secretaries',
   description:
-    'A modern, mobile-first alternative to the established show entry systems. Online entries, auto-generated catalogues, integrated payments — and your club keeps 100% of entry fees.',
+    'A modern, mobile-first alternative to the established show entry systems. Online entries, auto-generated catalogues, integrated payments at Stripe cost — no platform markup.',
   openGraph: {
     title: 'Run Your Show with Remi — For Show Secretaries',
     description:
@@ -100,7 +100,7 @@ const includedItems = [
   'Auto-generated catalogue (4 formats)',
   'Online results portal',
   'Self-serve entry amendments',
-  'Card payments — exhibitor pays the processing',
+  'Card payments — Stripe at cost, no Remi markup',
   'Refund handling',
 ];
 
@@ -122,8 +122,8 @@ const priceRows = [
   },
   {
     item: 'Card processing',
-    others: 'Club pays 1.95% + 10p per entry',
-    remi: 'Exhibitor pays — your club keeps 100%',
+    others: '1.95% + 10p + VAT (their markup)',
+    remi: '1.5% + 20p — Stripe at cost, no Remi markup',
   },
   {
     item: 'Online results portal',
@@ -165,8 +165,8 @@ export default function ForSecretariesPage() {
                 </h1>
                 <p className="gold-rule mt-5 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
                   A modern, mobile-first show platform for UK clubs. Online
-                  entries, automatic catalogues, integrated payments — and your
-                  club keeps 100% of every entry fee.
+                  entries, automatic catalogues, and card payments at Stripe
+                  cost — no platform markup on top.
                 </p>
                 <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                   <Button
