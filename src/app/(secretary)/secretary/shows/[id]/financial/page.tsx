@@ -97,6 +97,24 @@ export default function FinancialPage() {
   const jhEntries = entries.filter((e) => !e.isNfc && e.entryType === 'junior_handler');
   const standardEntries = entries.filter((e) => !e.isNfc && e.entryType !== 'junior_handler');
 
+  // Confirmed-only counts for the headline stat cards. The headline "X
+  // entries" subtext used to lump every status together, which let a
+  // single £0 NFC or JH entry hide inside the count and made secretaries
+  // suspect the entry-fee total was wrong (e.g. "10 entries × £18 ≠ £126
+  // — what's broken?"). Showing the breakdown explicitly lets the maths
+  // be sanity-checked at a glance.
+  const confirmedStandardCount = standardEntries.filter((e) => e.status === 'confirmed').length;
+  const confirmedNfcCount = nfcEntries.filter((e) => e.status === 'confirmed').length;
+  const confirmedJhCount = jhEntries.filter((e) => e.status === 'confirmed').length;
+  const entryBreakdownParts = [
+    confirmedStandardCount > 0 ? `${confirmedStandardCount} paid` : null,
+    confirmedNfcCount > 0 ? `${confirmedNfcCount} NFC` : null,
+    confirmedJhCount > 0 ? `${confirmedJhCount} JH` : null,
+  ].filter(Boolean);
+  const entryBreakdownText = entryBreakdownParts.length > 0
+    ? entryBreakdownParts.join(' · ')
+    : `${stats?.confirmedEntries ?? 0} entries`;
+
   type ClassBreakdownItem = { name: string; entries: number; revenue: number };
   type ClassTotals = { entries: number; revenue: number };
   const sumTotals = (items: ClassBreakdownItem[]): ClassTotals =>
@@ -225,12 +243,12 @@ export default function FinancialPage() {
         <StatCard
           label="Total Income"
           value={<span className="text-green-600 dark:text-green-400">{formatCurrency(stats?.clubReceivablePence ?? 0)}</span>}
-          subtext={`${stats?.confirmedEntries ?? 0} paid entries + sundries`}
+          subtext={`${entryBreakdownText} + sundries`}
         />
         <StatCard
           label="Entry Fees"
           value={formatCurrency(stats?.paidEntryFeesPence ?? 0)}
-          subtext={`${stats?.confirmedEntries ?? 0} entries`}
+          subtext={entryBreakdownText}
         />
         <StatCard
           label="Awaiting Payment"
