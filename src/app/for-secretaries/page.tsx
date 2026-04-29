@@ -24,11 +24,11 @@ import { AnimateIn } from '@/components/animate-in';
 export const metadata: Metadata = {
   title: 'Run Your Show with Remi — For Show Secretaries',
   description:
-    'The modern alternative to Fossedata for UK dog show secretaries. Online entries, auto-generated catalogues, integrated payments — and your club keeps 100% of entry fees.',
+    'A modern, mobile-first alternative to the established show entry systems. Online entries, auto-generated catalogues, integrated payments — and your club keeps 100% of entry fees.',
   openGraph: {
     title: 'Run Your Show with Remi — For Show Secretaries',
     description:
-      'No more typing entries. No more chasing print proofs. No more midnight catalogues. Built by a show secretary, for show secretaries.',
+      'No more typing entries. No more chasing print proofs. No more midnight catalogues. Designed with working show secretaries.',
     images: [
       {
         url: '/promo/poster.png',
@@ -93,40 +93,44 @@ const automationCards = [
   },
 ];
 
+const includedItems = [
+  'Online entry system',
+  'Live entry list',
+  'Auto-generated schedule',
+  'Auto-generated catalogue (4 formats)',
+  'Online results portal',
+  'Self-serve entry amendments',
+  'Card payments — exhibitor pays the processing',
+  'Refund handling',
+];
+
 const priceRows = [
   {
     item: 'Card processing',
-    fossedata: 'Club pays 1.95% + 10p per entry',
+    others: 'Club pays 1.95% + 10p per entry',
     remi: 'Exhibitor pays — your club keeps 100%',
-    win: true,
   },
   {
     item: 'A5 prize cards',
-    fossedata: '24p each',
+    others: 'from 24p each',
     remi: '23p each',
-    win: true,
   },
   {
-    item: 'Printed catalogues (50 copies)',
-    fossedata: 'from £2.16 / copy',
+    item: 'Printed catalogues',
+    others: 'from £2.16 / copy',
     remi: 'from £1.57 / copy',
-    win: true,
   },
   {
     item: 'Online results portal',
-    fossedata: '£30 – £50 per show',
+    others: '£30 – £50 per show',
     remi: 'Included',
-    win: true,
   },
   {
     item: 'Add a dog after closing',
-    fossedata: 'Phone call required',
+    others: 'Phone call to support',
     remi: 'Self-serve in the app',
-    win: true,
   },
 ];
-
-const clubs = ['Clyde Valley GSD Club', 'BAGSD', 'Hundark GSD'];
 
 export default function ForSecretariesPage() {
   return (
@@ -155,9 +159,9 @@ export default function ForSecretariesPage() {
                   <span className="text-primary">losing a Saturday.</span>
                 </h1>
                 <p className="gold-rule mt-5 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-                  Remi is the modern alternative to Fossedata. Online entries,
-                  automatic catalogues, integrated payments — and your club
-                  keeps 100% of every entry fee.
+                  A modern, mobile-first show platform for UK clubs. Online
+                  entries, automatic catalogues, integrated payments — and your
+                  club keeps 100% of every entry fee.
                 </p>
                 <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                   <Button
@@ -193,19 +197,48 @@ export default function ForSecretariesPage() {
 
               <AnimateIn className="relative">
                 <div className="relative mx-auto w-full max-w-sm overflow-hidden rounded-3xl border bg-card shadow-2xl shadow-primary/10">
-                  <video
-                    autoPlay
-                    muted
-                    loop
-                    playsInline
-                    poster="/promo/poster.png"
-                    className="h-auto w-full"
-                  >
-                    <source src="/promo/remi-promo.mp4" type="video/mp4" />
-                  </video>
+                  <div className="flex items-center gap-3 bg-primary px-5 py-4 text-primary-foreground">
+                    <div className="size-2 animate-pulse rounded-full bg-gold" />
+                    <p className="font-serif text-sm font-bold tracking-wide">
+                      North-West Open Show
+                    </p>
+                    <span className="ml-auto rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider">
+                      Live
+                    </span>
+                  </div>
+                  <div className="space-y-5 p-6">
+                    <div>
+                      <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                        Today’s entries
+                      </p>
+                      <p className="mt-1 font-serif text-5xl font-bold tracking-tight">
+                        147
+                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        132 paid · 8 NFC · 7 JH
+                      </p>
+                    </div>
+                    <hr />
+                    <ul className="space-y-3 text-sm">
+                      {[
+                        ['Schedule', 'Generated'],
+                        ['Catalogue', 'Ready'],
+                        ['Payments', 'Open'],
+                        ['Results portal', 'Live'],
+                      ].map(([label, value]) => (
+                        <li key={label} className="flex items-center justify-between">
+                          <span className="text-muted-foreground">{label}</span>
+                          <span className="inline-flex items-center gap-1.5 font-semibold">
+                            <CheckCircle2 className="size-3.5 text-primary" />
+                            {value}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 </div>
                 <div className="pointer-events-none absolute -bottom-6 left-1/2 z-10 -translate-x-1/2 rounded-full border bg-background/95 px-4 py-2 text-xs font-medium shadow-md backdrop-blur">
-                  Built mobile-first — runs on the phone in your pocket
+                  Run your show from the phone in your pocket
                 </div>
               </AnimateIn>
             </div>
@@ -332,7 +365,79 @@ export default function ForSecretariesPage() {
           </div>
         </section>
 
-        {/* Price comparison */}
+        {/* Exhibitor benefits — happy exhibitors = more entries */}
+        <section className="border-t">
+          <div className="mx-auto max-w-7xl px-3 py-16 sm:px-4 sm:py-24 lg:px-6">
+            <div className="grid gap-12 lg:grid-cols-2 lg:items-center lg:gap-16">
+              <AnimateIn>
+                <Badge
+                  variant="secondary"
+                  className="mb-4 border-primary/20 bg-primary/5 text-primary"
+                >
+                  For your exhibitors
+                </Badge>
+                <h2 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
+                  Their entries are easier too.
+                </h2>
+                <p className="mt-4 text-base leading-relaxed text-muted-foreground sm:text-lg">
+                  Frustrated exhibitors enter fewer shows. Remi was built
+                  mobile-first for someone entering a dog from the school
+                  gate, not someone sitting at a desktop computer.
+                </p>
+                <ul className="mt-6 space-y-3">
+                  {[
+                    'Sign up and add a dog in minutes — no paperwork',
+                    'Enter all their dogs in one checkout, one payment',
+                    'Amend or withdraw without phoning anyone',
+                    'Class eligibility is checked automatically — no maths',
+                    'Confirmations, ring numbers, and passes on their phone',
+                  ].map((benefit) => (
+                    <li key={benefit} className="flex items-start gap-3">
+                      <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-primary" />
+                      <span className="text-base sm:text-[1.0625rem]">
+                        {benefit}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-6 text-sm italic text-muted-foreground">
+                  Happier exhibitors enter more shows. That’s more entries,
+                  more revenue, and fewer support calls for you.
+                </p>
+              </AnimateIn>
+
+              <AnimateIn delay={120}>
+                <div className="relative mx-auto w-full max-w-sm overflow-hidden rounded-3xl border bg-card shadow-xl shadow-primary/10">
+                  <div className="border-b bg-primary/5 px-5 py-4">
+                    <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                      Your entry
+                    </p>
+                    <p className="mt-1 font-serif text-base font-bold">
+                      Mira at Clyde Valley GSD Open Show
+                    </p>
+                  </div>
+                  <div className="space-y-4 p-5">
+                    <Row label="Sign-up" value="2 min" />
+                    <Row label="Add dog" value="1 min" />
+                    <Row label="Pick classes" value="30 sec" />
+                    <Row label="Pay" value="20 sec" />
+                    <hr />
+                    <div className="rounded-lg bg-primary/5 p-3 text-center">
+                      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Confirmed
+                      </p>
+                      <p className="mt-1 font-serif text-2xl font-bold text-primary">
+                        Under 5 minutes
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </AnimateIn>
+            </div>
+          </div>
+        </section>
+
+        {/* Pricing — what's included + side-by-side */}
         <section>
           <div className="mx-auto max-w-7xl px-3 py-16 sm:px-4 sm:py-24 lg:px-6">
             <AnimateIn className="mx-auto max-w-2xl text-center">
@@ -341,21 +446,42 @@ export default function ForSecretariesPage() {
                 className="mb-4 border-gold/30 bg-gold/10 text-gold"
               >
                 <PoundSterling className="mr-1 size-3.5" />
-                And it’s cheaper
+                One package. No surprise extras.
               </Badge>
               <h2 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
-                You’re paying more for less.
+                Everything’s included.
               </h2>
               <p className="mt-4 text-sm text-muted-foreground sm:text-base">
-                Side-by-side with the incumbent. No fine print, no surprises.
+                With Remi there’s no setup fee, no online portal fee, no
+                per-entry data charge. The platform’s included — you only pay
+                for physical print materials at trade prices.
               </p>
             </AnimateIn>
 
-            <div className="mx-auto mt-10 max-w-4xl">
+            {/* What's included */}
+            <div className="mx-auto mt-10 max-w-4xl rounded-2xl border bg-card p-6 shadow-sm sm:p-8">
+              <p className="mb-5 font-serif text-lg font-bold sm:text-xl">
+                Included with your Remi show
+              </p>
+              <ul className="grid gap-3 sm:grid-cols-2">
+                {includedItems.map((item) => (
+                  <li key={item} className="flex items-start gap-3 text-sm sm:text-[0.9375rem]">
+                    <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Side-by-side */}
+            <AnimateIn className="mx-auto mt-12 max-w-4xl">
+              <p className="mb-5 text-center font-serif text-lg font-bold sm:text-xl">
+                What other systems charge for separately
+              </p>
               <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
                 <div className="grid grid-cols-[1.4fr_1fr_1fr] gap-2 border-b bg-muted/40 px-4 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground sm:px-6 sm:text-sm">
                   <div>Item</div>
-                  <div className="text-center">Fossedata</div>
+                  <div className="text-center">Other systems</div>
                   <div className="text-center font-semibold text-primary">Remi</div>
                 </div>
                 {priceRows.map((row, i) => (
@@ -367,7 +493,7 @@ export default function ForSecretariesPage() {
                   >
                     <div className="font-medium">{row.item}</div>
                     <div className="text-center text-muted-foreground line-through decoration-muted-foreground/40 decoration-1">
-                      {row.fossedata}
+                      {row.others}
                     </div>
                     <div className="text-center font-semibold text-primary">
                       {row.remi}
@@ -376,10 +502,11 @@ export default function ForSecretariesPage() {
                 ))}
               </div>
               <p className="mt-4 text-center text-xs text-muted-foreground">
-                Fossedata figures from their published 2026 price list. Remi
-                figures from current Mixam quotes and our standard fee model.
+                Comparison figures sourced from established UK show systems’
+                published 2026 price lists. Remi figures from current print
+                partner quotes and our standard fee model.
               </p>
-            </div>
+            </AnimateIn>
           </div>
         </section>
 
@@ -389,34 +516,19 @@ export default function ForSecretariesPage() {
             <AnimateIn className="mx-auto max-w-3xl text-center">
               <Users className="mx-auto mb-4 size-8 text-gold" strokeWidth={1.5} />
               <h2 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">
-                Trusted by clubs already.
+                Designed with working secretaries.
               </h2>
               <p className="mt-4 text-base leading-relaxed text-muted-foreground sm:text-lg">
-                Remi was built by a working show secretary — Amanda at Clyde
-                Valley GSD Club — for the people who actually run shows.
-                She uses it every day. So do these clubs:
+                Every screen was shaped with show secretaries actually running
+                shows — not designers guessing what running a show is like.
+                Single-breed club secretaries have tested Remi end-to-end, and
+                the consistent feedback has been about how simple it is to use,
+                even if you’re not confident with computers.
               </p>
-              <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-                {clubs.map((club) => (
-                  <div
-                    key={club}
-                    className="rounded-full border bg-background px-5 py-2.5 text-sm font-medium shadow-sm"
-                  >
-                    {club}
-                  </div>
-                ))}
-              </div>
-              <div className="mx-auto mt-10 max-w-2xl rounded-2xl border bg-background p-6 text-left shadow-sm sm:p-8">
-                <p className="font-serif text-base leading-relaxed text-foreground sm:text-lg">
-                  Amanda runs Clyde Valley GSD’s shows from her phone — entries,
-                  payments, catalogue, prize cards, results. She helped us
-                  design every screen, and she uses Remi for every show she
-                  runs.
-                </p>
-                <p className="mt-4 text-sm text-muted-foreground">
-                  Want to talk to her? She’s on every demo call.
-                </p>
-              </div>
+              <p className="mt-4 text-base leading-relaxed text-muted-foreground sm:text-lg">
+                If you’d like to speak to a secretary already using Remi, ask
+                on your demo call — we’ll happily put you in touch.
+              </p>
             </AnimateIn>
           </div>
         </section>
