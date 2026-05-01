@@ -43,7 +43,7 @@ function makeExhibits(start: number, count: number): JudgesBookClass['exhibits']
 
 const classes: JudgesBookClass[] = [
   {
-    classNumber: 1,
+    classLabel: '1',
     className: 'Minor Puppy',
     sex: 'dog',
     breedName: 'German Shepherd Dog',
@@ -52,7 +52,7 @@ const classes: JudgesBookClass[] = [
     exhibits: makeExhibits(1, 6),
   },
   {
-    classNumber: 2,
+    classLabel: '2',
     className: 'Puppy',
     sex: 'dog',
     breedName: 'German Shepherd Dog',
@@ -61,9 +61,9 @@ const classes: JudgesBookClass[] = [
     exhibits: makeExhibits(10, 12),
   },
   {
-    // Deliberately large to force a 2-page overflow and check that the grid
-    // header repeats on the continuation page.
-    classNumber: 8,
+    // Deliberately large to force a multi-page overflow and check that
+    // headers repeat on continuation pages.
+    classLabel: '8',
     className: 'Open',
     sex: 'dog',
     breedName: 'German Shepherd Dog',

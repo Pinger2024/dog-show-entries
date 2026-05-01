@@ -1,3 +1,4 @@
+import React from 'react';
 import { Document, Page, Text, View, StyleSheet, Font } from '@react-pdf/renderer';
 import path from 'path';
 import type { JudgesBookClass, JudgesBookShowInfo } from '@/app/api/judges-book/[showId]/route';
@@ -93,17 +94,32 @@ const s = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: 3,
   },
-  // One of three identical placement columns. Carbon-triplicate: a judge
-  // fills in placements per column, the page is then physically split
-  // into strips — one for the judge's record, one for the secretary, one
-  // for the awards board.
+  // One of three identical placement columns. The judge writes the
+  // placements three times by hand (no carbon transfer), then tears the
+  // two right-hand columns off along their perforated edges — one to the
+  // secretary, one to the awards board. The leftmost column stays in
+  // the book as the judge's record.
   placementColumn: {
     flex: 1,
-    borderRightWidth: 0.5,
-    borderRightColor: '#999',
+    borderRightWidth: 1,
+    borderRightColor: '#000',
+    borderRightStyle: 'dashed',
   },
   placementColumnLast: {
     flex: 1,
+  },
+  // Small "tear here" caption above each perforated boundary, helping the
+  // judge see which strip becomes which copy.
+  copyLabel: {
+    fontSize: 7,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    color: '#666',
+    textAlign: 'center',
+    paddingVertical: 3,
+    backgroundColor: '#fafafa',
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#ccc',
   },
   columnClassHeader: {
     borderBottomWidth: 1,
@@ -211,6 +227,109 @@ const s = StyleSheet.create({
   },
 });
 
+// ── Notes page styles — one A4 sheet per class for handwritten critiques.
+// Sits before that class's awards-tear-off page. Each entry gets its own
+// generous row with ruled lines, mirroring the Fossedata judging book
+// Amanda compared against. Bench number column on the left, critique
+// writing area on the right.
+const notesStyles = StyleSheet.create({
+  classBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    backgroundColor: '#f4f4f4',
+    borderWidth: 1,
+    borderColor: '#000',
+    padding: 6,
+    marginBottom: 6,
+  },
+  classBannerLeft: {
+    flex: 1,
+  },
+  classBannerNumber: {
+    fontSize: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    color: '#666',
+  },
+  classBannerName: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+  },
+  classBannerBreed: {
+    fontSize: 9,
+    fontStyle: 'italic',
+    color: '#555',
+    marginTop: 1,
+  },
+  classBannerRight: {
+    fontSize: 9,
+    textAlign: 'right',
+    color: '#444',
+  },
+  notesTable: {
+    borderWidth: 1,
+    borderColor: '#000',
+  },
+  notesTableHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#eee',
+    borderBottomWidth: 1,
+    borderBottomColor: '#000',
+  },
+  notesTableHeaderBench: {
+    width: '14%',
+    padding: 4,
+    fontSize: 7,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    textAlign: 'center',
+    color: '#444',
+  },
+  notesTableHeaderCritique: {
+    flex: 1,
+    padding: 4,
+    fontSize: 7,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    color: '#444',
+    borderLeftWidth: 0.5,
+    borderLeftColor: '#000',
+  },
+  notesRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#000',
+    minHeight: 84,
+  },
+  notesRowBench: {
+    width: '14%',
+    padding: 6,
+    alignItems: 'center',
+  },
+  notesRowBenchNumber: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  notesRowCritique: {
+    flex: 1,
+    borderLeftWidth: 0.5,
+    borderLeftColor: '#000',
+    paddingHorizontal: 6,
+    paddingTop: 6,
+    paddingBottom: 6,
+    justifyContent: 'space-around',
+  },
+  notesRuledLine: {
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#bbb',
+    height: 1,
+  },
+});
+
 // ── Best Awards page styles — same triplicate principle as class pages ──
 const bestAwardsStyles = StyleSheet.create({
   columnHeader: {
@@ -264,12 +383,15 @@ interface ColumnHeaderProps {
 function BestAwardsColumn({
   awards,
   isLast,
+  copyLabel,
 }: {
   awards: string[];
   isLast?: boolean;
+  copyLabel: string;
 }) {
   return (
     <View style={isLast ? s.placementColumnLast : s.placementColumn}>
+      <Text style={s.copyLabel}>{copyLabel}</Text>
       <View style={bestAwardsStyles.columnHeader}>
         <Text style={bestAwardsStyles.columnHeaderLabel}>Sign-off</Text>
         <Text style={bestAwardsStyles.columnHeaderTitle}>Best Awards</Text>
@@ -304,9 +426,10 @@ function ColumnHeader({ classLabel, className, sexLabel, breedName }: ColumnHead
   );
 }
 
-function PlacementColumn(props: ColumnHeaderProps & { isLast?: boolean }) {
+function PlacementColumn(props: ColumnHeaderProps & { isLast?: boolean; copyLabel: string }) {
   return (
     <View style={props.isLast ? s.placementColumnLast : s.placementColumn}>
+      <Text style={s.copyLabel}>{props.copyLabel}</Text>
       <ColumnHeader {...props} />
 
       {PLACEMENTS.map((place) => (
@@ -368,45 +491,114 @@ export function JudgesBook({
         };
 
         return (
-          <Page key={classIdx} size="A4" style={s.page}>
-            {/* Page header — shared across the three columns */}
-            <View style={s.pageHeader}>
-              <View style={s.pageHeaderLeft}>
-                {show.organisation && (
-                  <Text style={s.clubName}>{show.organisation}</Text>
-                )}
-                <Text style={s.showName}>{show.name}</Text>
-                {cls.judgeName && (
-                  <Text style={s.judgeLine}>Judge: {cls.judgeName}</Text>
-                )}
+          <React.Fragment key={classIdx}>
+            {/* Notes sheet — handwritten critique space, one row per dog. */}
+            <Page size="A4" style={s.page}>
+              <View style={s.pageHeader} fixed>
+                <View style={s.pageHeaderLeft}>
+                  {show.organisation && (
+                    <Text style={s.clubName}>{show.organisation}</Text>
+                  )}
+                  <Text style={s.showName}>{show.name}</Text>
+                  {cls.judgeName && (
+                    <Text style={s.judgeLine}>Judge: {cls.judgeName}</Text>
+                  )}
+                </View>
+                <Text style={s.dateBlock}>{showDate}</Text>
               </View>
-              <Text style={s.dateBlock}>{showDate}</Text>
-            </View>
 
-            {/* Body: reference column + 3 identical placement columns. */}
-            <View style={s.body}>
-              <View style={s.refColumn}>
-                <Text style={s.refHeader}>Exhibit No.</Text>
-                {cls.exhibits.map((exhibit, i) => (
-                  <Text key={i} style={s.refNumber}>
-                    {exhibit.catalogueNumber ?? '—'}
+              <View style={notesStyles.classBanner} fixed>
+                <View style={notesStyles.classBannerLeft}>
+                  <Text style={notesStyles.classBannerNumber}>
+                    Class {cls.classLabel || '—'} — Notes
                   </Text>
+                  <Text style={notesStyles.classBannerName}>
+                    {cls.className}{sexLabel ? ` (${sexLabel})` : ''}
+                  </Text>
+                  {cls.breedName && (
+                    <Text style={notesStyles.classBannerBreed}>{cls.breedName}</Text>
+                  )}
+                </View>
+                <Text style={notesStyles.classBannerRight}>
+                  {cls.exhibits.length} {cls.exhibits.length === 1 ? 'entry' : 'entries'}
+                  {cls.ringNumber != null ? ` · Ring ${cls.ringNumber}` : ''}
+                </Text>
+              </View>
+
+              <View style={notesStyles.notesTable}>
+                <View style={notesStyles.notesTableHeader} fixed>
+                  <Text style={notesStyles.notesTableHeaderBench}>Bench No.</Text>
+                  <Text style={notesStyles.notesTableHeaderCritique}>
+                    Judge&apos;s Notes / Critique
+                  </Text>
+                </View>
+
+                {cls.exhibits.map((exhibit, i) => (
+                  <View key={i} style={notesStyles.notesRow} wrap={false}>
+                    <View style={notesStyles.notesRowBench}>
+                      <Text style={notesStyles.notesRowBenchNumber}>
+                        {exhibit.catalogueNumber ?? '—'}
+                      </Text>
+                    </View>
+                    <View style={notesStyles.notesRowCritique}>
+                      {Array.from({ length: 4 }, (_, j) => (
+                        <View key={j} style={notesStyles.notesRuledLine} />
+                      ))}
+                    </View>
+                  </View>
                 ))}
               </View>
 
-              <PlacementColumn {...columnProps} />
-              <PlacementColumn {...columnProps} />
-              <PlacementColumn {...columnProps} isLast />
-            </View>
+              <Text
+                style={s.footer}
+                render={({ pageNumber, totalPages }) =>
+                  `${SHOW_TYPE_LABELS[show.showType] ?? show.showType} — Class ${cls.classLabel || '—'} Notes — Page ${pageNumber} of ${totalPages} — Generated by Remi`
+                }
+                fixed
+              />
+            </Page>
 
-            <Text
-              style={s.footer}
-              render={({ pageNumber, totalPages }) =>
-                `${SHOW_TYPE_LABELS[show.showType] ?? show.showType} — Page ${pageNumber} of ${totalPages} — Generated by Remi`
-              }
-              fixed
-            />
-          </Page>
+            {/* Awards sheet — three perforated columns. Judge writes the
+                placements three times by hand; the secretary and awards
+                board copies tear off along the dashed boundaries. */}
+            <Page size="A4" style={s.page}>
+              <View style={s.pageHeader}>
+                <View style={s.pageHeaderLeft}>
+                  {show.organisation && (
+                    <Text style={s.clubName}>{show.organisation}</Text>
+                  )}
+                  <Text style={s.showName}>{show.name}</Text>
+                  {cls.judgeName && (
+                    <Text style={s.judgeLine}>Judge: {cls.judgeName}</Text>
+                  )}
+                </View>
+                <Text style={s.dateBlock}>{showDate}</Text>
+              </View>
+
+              <View style={s.body}>
+                <View style={s.refColumn}>
+                  <Text style={s.refHeader}>Exhibit No.</Text>
+                  {cls.exhibits.map((exhibit, i) => (
+                    <Text key={i} style={s.refNumber}>
+                      {exhibit.catalogueNumber ?? '—'}
+                    </Text>
+                  ))}
+                </View>
+
+                <PlacementColumn {...columnProps} copyLabel="Judge's copy — keep" />
+                <PlacementColumn {...columnProps} copyLabel="✂ Tear off — Secretary" />
+                <PlacementColumn {...columnProps} copyLabel="✂ Tear off — Awards Board" isLast />
+              </View>
+
+              <Text
+                style={s.footer}
+                render={({ pageNumber, totalPages }) =>
+                  `${SHOW_TYPE_LABELS[show.showType] ?? show.showType} — Page ${pageNumber} of ${totalPages} — Generated by Remi`
+                }
+                fixed
+              />
+            </Page>
+          </React.Fragment>
         );
       })}
 
@@ -425,9 +617,9 @@ export function JudgesBook({
           </View>
 
           <View style={s.body}>
-            <BestAwardsColumn awards={show.bestAwards} />
-            <BestAwardsColumn awards={show.bestAwards} />
-            <BestAwardsColumn awards={show.bestAwards} isLast />
+            <BestAwardsColumn awards={show.bestAwards} copyLabel="Judge's copy — keep" />
+            <BestAwardsColumn awards={show.bestAwards} copyLabel="✂ Tear off — Secretary" />
+            <BestAwardsColumn awards={show.bestAwards} copyLabel="✂ Tear off — Awards Board" isLast />
           </View>
 
           <Text
