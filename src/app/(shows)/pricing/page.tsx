@@ -103,6 +103,19 @@ export default async function PricingPage() {
               Every club is different. We&apos;ll work out the right plan with you — whether
               you run one show a year or a busy calendar of championships.
             </p>
+            <div className="mx-auto mt-8 max-w-2xl animate-fade-in-up rounded-2xl border bg-card/60 p-6 text-left text-sm leading-relaxed text-muted-foreground [animation-delay:200ms] sm:text-base">
+              <p>
+                <strong className="text-foreground">For your club:</strong>{' '}
+                a simple per-show price scaled to the level of support you need.
+                We&apos;ll agree it with you before your show goes live — no
+                surprise invoices, no hidden charges.
+              </p>
+              <p className="mt-3">
+                <strong className="text-foreground">For your exhibitors:</strong>{' '}
+                a small platform fee of £1 + 1% of their entry total, clearly shown
+                at checkout before they pay.
+              </p>
+            </div>
           </div>
         </div>
       </section>
