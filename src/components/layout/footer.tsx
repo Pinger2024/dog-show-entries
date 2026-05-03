@@ -78,6 +78,11 @@ export function Footer() {
               Card payments are processed by Stripe Payments UK, Ltd.,
               regulated by the Financial Conduct Authority.
             </p>
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              Remi is an independent platform for shows licensed by The
+              Royal Kennel Club. Remi is not operated by, affiliated with,
+              or endorsed by The Royal Kennel Club unless expressly stated.
+            </p>
           </div>
         </div>
       </div>

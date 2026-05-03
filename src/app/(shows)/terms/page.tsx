@@ -10,7 +10,7 @@ export default function TermsPage() {
         Terms of Service
       </h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        Last updated: 28 April 2026
+        Last updated: 3 May 2026
       </p>
 
       <div className="mt-8 space-y-8 text-sm leading-relaxed text-muted-foreground">
@@ -19,6 +19,11 @@ export default function TermsPage() {
           <p className="mt-2">
             Remi is an online platform for UK Royal Kennel Club (RKC) dog show
             entry management.
+          </p>
+          <p className="mt-2">
+            Remi is an independent platform for shows licensed by The Royal
+            Kennel Club. Remi is not operated by, affiliated with, or endorsed
+            by The Royal Kennel Club unless expressly stated.
           </p>
           <p className="mt-2">
             Remi is a trading name of{' '}
