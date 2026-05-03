@@ -31,6 +31,7 @@ import { trpc } from '@/lib/trpc/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { showTypeLabels } from '@/lib/show-types';
+import { buildClassificationHeading } from '@/lib/show-classification';
 import { formatCurrency } from '@/lib/date-utils';
 import { LiveEntryStats } from '@/components/show/live-entry-stats';
 import { ShowShareDropdown } from '@/components/show/show-share-dropdown';
@@ -516,6 +517,20 @@ export function ShowDetailClient() {
     if (aData.groupSortOrder !== bData.groupSortOrder) return aData.groupSortOrder - bData.groupSortOrder;
     return a.localeCompare(b);
   });
+
+  // Junior Handling appears as its own bucket alongside real breeds, but
+  // it isn't a breed — so the section header counts only buckets with at
+  // least one non-JH class, then appends "+ Junior Handling" when present.
+  const realBreedCount = breeds.filter(([, { classes: bucketClasses }]) =>
+    bucketClasses.some((sc) => sc.classDefinition?.type !== 'junior_handler')
+  ).length;
+  const hasJuniorHandling = (show.showClasses ?? []).some(
+    (sc) => sc.classDefinition?.type === 'junior_handler'
+  );
+  const classificationHeading = buildClassificationHeading(
+    realBreedCount,
+    hasJuniorHandling,
+  );
 
   /* Breed → judge/ring lookup */
   const breedJudgeMap = new Map<string, { judgeName: string; ringName?: string }>();
@@ -1294,7 +1309,7 @@ export function ShowDetailClient() {
             <div className="flex items-center gap-3">
               <div className="h-px flex-1 bg-border/50" />
               <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                {breeds.length === 1 ? 'Classification' : `${breeds.length} Breeds`}
+                {classificationHeading}
               </h2>
               <div className="h-px flex-1 bg-border/50" />
             </div>
