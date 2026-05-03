@@ -161,8 +161,8 @@ export default async function HomePage() {
               </h1>
               <p className="gold-rule-center mx-auto mt-4 sm:mt-6 max-w-2xl animate-fade-in-up text-sm sm:text-lg leading-relaxed text-muted-foreground [animation-delay:100ms] lg:text-xl">
                 Find upcoming RKC-licensed shows, enter all your dogs in one
-                place, and manage your entries from home or ringside. Trusted by
-                exhibitors and show secretaries across the country.
+                place, and manage your entries from home or ringside. Built
+                mobile-first with UK show secretaries.
               </p>
               <div className="mt-8 sm:mt-10 flex animate-fade-in-up flex-col items-center justify-center gap-3 sm:gap-4 [animation-delay:200ms] sm:flex-row">
                 <Button
