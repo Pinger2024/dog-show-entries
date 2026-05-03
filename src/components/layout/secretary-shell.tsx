@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   CalendarDays,
   PlusCircle,
-  CreditCard,
   Settings,
   LogOut,
   ChevronRight,
@@ -34,12 +33,15 @@ interface SecretaryShellProps {
   children: React.ReactNode;
 }
 
+// /secretary/billing intentionally hidden from nav while the legacy
+// subscription model is sunset. The page itself still loads for any
+// deep-linkers or existing legacy subscribers — Amanda decided 2026-05-03
+// to hide it from sight while she works out the longer-term shape.
 const sidebarNavItems = [
   { href: '/secretary', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/secretary/shows', label: 'My Shows', icon: CalendarDays },
   { href: '/secretary/club', label: 'My Club', icon: Building2 },
   { href: '/secretary/shows/new', label: 'Create Show', icon: PlusCircle },
-  { href: '/secretary/billing', label: 'Billing', icon: CreditCard },
   { href: '/secretary/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -47,7 +49,6 @@ const mobileNavItems = [
   { href: '/secretary', label: 'Home', icon: LayoutDashboard },
   { href: '/secretary/shows', label: 'Shows', icon: CalendarDays },
   { href: '/secretary/club', label: 'Club', icon: Building2 },
-  { href: '/secretary/billing', label: 'Billing', icon: CreditCard },
   { href: '/secretary/settings', label: 'Settings', icon: Settings },
 ];
 
