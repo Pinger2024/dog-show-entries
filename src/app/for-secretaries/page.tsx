@@ -14,6 +14,7 @@ import {
   ArrowRight,
   Clock,
   Users,
+  Download,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -507,6 +508,43 @@ export default function ForSecretariesPage() {
                 on your demo call — we’ll happily put you in touch.
               </p>
             </AnimateIn>
+          </div>
+        </section>
+
+        {/* Data portability — answers the "what if Remi disappears mid-season?" fear */}
+        <section className="border-t">
+          <div className="mx-auto max-w-7xl px-3 py-16 sm:px-4 sm:py-24 lg:px-6">
+            <div className="mx-auto max-w-3xl">
+              <AnimateIn className="text-center">
+                <Download className="mx-auto mb-4 size-8 text-primary" strokeWidth={1.5} />
+                <h2 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">
+                  Your show data is always yours.
+                </h2>
+                <p className="mt-4 text-base leading-relaxed text-muted-foreground sm:text-lg">
+                  Switching to a new platform shouldn&rsquo;t feel like a
+                  one-way door. From day one, your secretary dashboard has
+                  CSV downloads for everything that matters &mdash; export
+                  any time, no questions asked, no &ldquo;we&rsquo;ll get
+                  back to you about that&rdquo;.
+                </p>
+              </AnimateIn>
+              <ul className="mx-auto mt-8 space-y-3 text-base sm:text-[1.0625rem]">
+                {[
+                  'Full entry list — exhibitor, email, dog, breed, classes, fee, status',
+                  'Payment report — every transaction, refund, and reconciliation entry',
+                  'Financial report — entry fees, platform fees, payout totals for your club',
+                  'Catalogue data — class lists and judge assignments, ready for your records',
+                ].map((item) => (
+                  <li key={item} className="flex items-start gap-3">
+                    <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-primary" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mx-auto mt-8 text-center text-sm italic text-muted-foreground">
+                One click, spreadsheet on your desktop. No lock-in, no friction.
+              </p>
+            </div>
           </div>
         </section>
 
