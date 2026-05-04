@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/dialog';
 import { entryStatusConfig, downloadCsv } from '../_lib/show-utils';
 import { useShowId } from '../_lib/show-context';
+import { computeClassBreakdown } from '@/lib/class-breakdown';
 import type { RouterOutputs } from '@/server/trpc/router';
 
 type RefundableOrder = RouterOutputs['secretary']['getRefundableOrders'][number];
@@ -115,77 +116,14 @@ export default function FinancialPage() {
     ? entryBreakdownParts.join(' · ')
     : `${stats?.confirmedEntries ?? 0} entries`;
 
-  type ClassBreakdownItem = { name: string; entries: number; revenue: number };
-  type ClassTotals = { entries: number; revenue: number };
-  const sumTotals = (items: ClassBreakdownItem[]): ClassTotals =>
-    items.reduce((s, c) => ({ entries: s.entries + c.entries, revenue: s.revenue + c.revenue }), { entries: 0, revenue: 0 });
-
-  // Per-class breakdown from entry report, grouped by sex.
-  // Junior Handling classes have sex === null but should still appear in
-  // the breakdown — they get their own bucket alongside Dogs and Bitches.
-  const classBreakdown = useMemo(() => {
-    const empty = {
-      dogs: [] as ClassBreakdownItem[],
-      bitches: [] as ClassBreakdownItem[],
-      juniorHandlers: [] as ClassBreakdownItem[],
-      combined: [] as ClassBreakdownItem[],
-      dogTotals: { entries: 0, revenue: 0 },
-      bitchTotals: { entries: 0, revenue: 0 },
-      juniorHandlerTotals: { entries: 0, revenue: 0 },
-      combinedTotals: { entries: 0, revenue: 0 },
-    };
-    if (!entryReport) return empty;
-    const dogMap = new Map<string, ClassBreakdownItem>();
-    const bitchMap = new Map<string, ClassBreakdownItem>();
-    const jhMap = new Map<string, ClassBreakdownItem>();
-    const combinedMap = new Map<string, ClassBreakdownItem>();
-    for (const entry of entryReport) {
-      if (entry.status === 'cancelled' || entry.status === 'withdrawn') continue;
-      for (const ec of entry.entryClasses ?? []) {
-        const className = ec.showClass?.classDefinition?.name ?? 'Unknown';
-        const sex = ec.showClass?.sex;
-        const classType = ec.showClass?.classDefinition?.type;
-        const combined = combinedMap.get(className) ?? { name: className, entries: 0, revenue: 0 };
-        combined.entries += 1;
-        combined.revenue += ec.fee;
-        combinedMap.set(className, combined);
-        // Bucket selection: junior handler classes are never sex-keyed
-        // (sex is null), so we have to check the class type explicitly
-        // before falling back to the sex check. Without this JH entries
-        // were silently dropped from the breakdown — Amanda flagged it
-        // testing the Final Test Show.
-        const targetMap =
-          classType === 'junior_handler'
-            ? jhMap
-            : sex === 'dog'
-              ? dogMap
-              : sex === 'bitch'
-                ? bitchMap
-                : null;
-        if (targetMap) {
-          const existing = targetMap.get(className) ?? { name: className, entries: 0, revenue: 0 };
-          existing.entries += 1;
-          existing.revenue += ec.fee;
-          targetMap.set(className, existing);
-        }
-      }
-    }
-    const sortByEntries = (a: ClassBreakdownItem, b: ClassBreakdownItem) => b.entries - a.entries;
-    const dogs = Array.from(dogMap.values()).sort(sortByEntries);
-    const bitches = Array.from(bitchMap.values()).sort(sortByEntries);
-    const juniorHandlers = Array.from(jhMap.values()).sort(sortByEntries);
-    const combined = Array.from(combinedMap.values()).sort(sortByEntries);
-    return {
-      dogs,
-      bitches,
-      juniorHandlers,
-      combined,
-      dogTotals: sumTotals(dogs),
-      bitchTotals: sumTotals(bitches),
-      juniorHandlerTotals: sumTotals(juniorHandlers),
-      combinedTotals: sumTotals(combined),
-    };
-  }, [entryReport]);
+  // Per-class breakdown — buckets dogs / bitches / junior handlers /
+  // mixed (non-JH classes that accept both sexes — Veteran, Brace,
+  // Team, Stakes). The four buckets are exhaustive so subtotals always
+  // sum to the grand total. See src/lib/class-breakdown.ts.
+  const classBreakdown = useMemo(
+    () => computeClassBreakdown(entryReport),
+    [entryReport]
+  );
 
   // Per-breed breakdown with nested classes (for all-breed shows)
   const breedBreakdown = useMemo(() => {
@@ -352,6 +290,28 @@ export default function FinancialPage() {
                       <TableCell className="pl-6">Subtotal (Junior Handling)</TableCell>
                       <TableCell className="text-right">{classBreakdown.juniorHandlerTotals.entries}</TableCell>
                       <TableCell className="text-right">{formatCurrency(classBreakdown.juniorHandlerTotals.revenue)}</TableCell>
+                    </TableRow>
+                  </>
+                )}
+                {/* Mixed Classes — Veteran (when run mixed-sex), Brace, Team, Stakes etc. */}
+                {classBreakdown.mixedClasses.length > 0 && (
+                  <>
+                    <TableRow className="bg-primary/10">
+                      <TableCell colSpan={3} className="font-bold uppercase tracking-wider text-xs">
+                        Mixed Classes
+                      </TableCell>
+                    </TableRow>
+                    {classBreakdown.mixedClasses.map((c) => (
+                      <TableRow key={`mixed-${c.name}`}>
+                        <TableCell className="font-medium pl-6">{c.name}</TableCell>
+                        <TableCell className="text-right">{c.entries}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(c.revenue)}</TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow className="border-t font-semibold">
+                      <TableCell className="pl-6">Subtotal (Mixed Classes)</TableCell>
+                      <TableCell className="text-right">{classBreakdown.mixedClassesTotals.entries}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(classBreakdown.mixedClassesTotals.revenue)}</TableCell>
                     </TableRow>
                   </>
                 )}
