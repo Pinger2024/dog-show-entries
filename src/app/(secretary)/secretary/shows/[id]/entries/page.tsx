@@ -65,7 +65,12 @@ export default function EntriesPage() {
   const total = entriesData?.total ?? 0;
 
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  // Default to "active" — withdrawn/cancelled entries are noise on the
+  // primary entries view (and their visible count drifts from the layout
+  // banner's confirmed count, which secretaries flag as a discrepancy).
+  // The dropdown still has explicit Withdrawn/Cancelled/All options for
+  // when they need to drill in.
+  const [statusFilter, setStatusFilter] = useState('active');
   const [editingEntry, setEditingEntry] = useState<EntryItem | null>(null);
   const [transferringEntry, setTransferringEntry] = useState<EntryItem | null>(null);
   const [showAddEntry, setShowAddEntry] = useState(false);
@@ -80,7 +85,11 @@ export default function EntriesPage() {
         entry.dog?.breed?.name?.toLowerCase().includes(q);
 
       const matchesStatus =
-        statusFilter === 'all' || entry.status === statusFilter;
+        statusFilter === 'all'
+          ? true
+          : statusFilter === 'active'
+            ? entry.status !== 'withdrawn' && entry.status !== 'cancelled'
+            : entry.status === statusFilter;
 
       return matchesSearch && matchesStatus;
     });
@@ -136,9 +145,14 @@ export default function EntriesPage() {
         <CardHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
             <div>
-              <CardTitle className="text-base sm:text-lg">Entries ({total})</CardTitle>
+              <CardTitle className="text-base sm:text-lg">Entries ({filtered.length})</CardTitle>
               <CardDescription>
-                All entries for this show
+                {statusFilter === 'active' && 'Active entries — withdrawn and cancelled hidden by default'}
+                {statusFilter === 'all' && 'Every entry on this show, including withdrawn and cancelled'}
+                {statusFilter === 'pending' && 'Entries on orders awaiting payment'}
+                {statusFilter === 'confirmed' && 'Confirmed entries on paid orders'}
+                {statusFilter === 'withdrawn' && 'Entries the exhibitor pulled out of after paying'}
+                {statusFilter === 'cancelled' && 'Cancelled entries'}
               </CardDescription>
               {total > entries.length && (
                 <p className="text-xs text-amber-600">
@@ -181,6 +195,7 @@ export default function EntriesPage() {
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="active">Active</SelectItem>
                 <SelectItem value="all">All Statuses</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="confirmed">Confirmed</SelectItem>
