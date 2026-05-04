@@ -162,14 +162,23 @@ export default function FinancialPage() {
   }, [entryReport]);
 
   function handleExportCsv() {
-    const headers = ['Dog', 'Exhibitor', 'Status', 'Classes', 'Fee', 'Catalogue Requested'];
+    // Catalogues are bought as sundry items at the order level, not per
+    // entry — the legacy `catalogueRequested` column on entries is dead
+    // (always false). Resolve "did this exhibitor buy a catalogue?" via
+    // the catalogueOrders feed, which is the same source the on-screen
+    // "Catalogue Orders" card already uses.
+    const catalogueBuyerEmails = new Set<string>([
+      ...(catalogueOrders?.printed ?? []).map((o) => o.email.toLowerCase()),
+      ...(catalogueOrders?.online ?? []).map((o) => o.email.toLowerCase()),
+    ]);
+    const headers = ['Dog', 'Exhibitor', 'Status', 'Classes', 'Fee', 'Catalogue Ordered'];
     const rows = entries.map((e) => [
       e.dog ? formatDogName(e.dog) : 'Unknown',
       e.exhibitor?.name ?? 'Unknown',
       entryStatusConfig[e.status]?.label ?? e.status,
       (e.entryClasses ?? []).map((ec) => ec.showClass?.classDefinition?.name ?? '').join('; '),
       (e.totalFee / 100).toFixed(2),
-      e.catalogueRequested ? 'Yes' : 'No',
+      e.exhibitor?.email && catalogueBuyerEmails.has(e.exhibitor.email.toLowerCase()) ? 'Yes' : 'No',
     ]);
     downloadCsv(headers, rows, 'financial-report');
   }
