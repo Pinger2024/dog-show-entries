@@ -898,15 +898,19 @@ export function ShowDetailClient() {
               </Link>
             </Button>
           )}
+          {(show.showClasses?.length ?? 0) > 0 && (
+            <Button
+              variant="outline"
+              className="h-12 shrink-0 gap-1.5 border-2 px-3 text-sm font-semibold sm:h-10 sm:border sm:px-4 sm:font-medium"
+              asChild
+            >
+              <a href={`/api/schedule/${show.id}`} target="_blank" rel="noopener noreferrer">
+                <FileText className="size-5 sm:size-4" />
+                <span>Schedule</span>
+              </a>
+            </Button>
+          )}
           <div className="ml-auto flex items-center gap-0.5 sm:gap-1">
-            {(show.showClasses?.length ?? 0) > 0 && (
-              <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs" asChild>
-                <a href={`/api/schedule/${show.id}`} target="_blank" rel="noopener noreferrer" aria-label="Download schedule">
-                  <FileText className="size-4" />
-                  <span className="hidden sm:inline">Schedule</span>
-                </a>
-              </Button>
-            )}
             {show.status !== 'draft' && show.status !== 'cancelled' && (
               <Button
                 variant="outline"
