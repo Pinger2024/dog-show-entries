@@ -25,6 +25,7 @@ export {
   clubTypeEnum,
   serviceTierEnum,
   subscriptionStatusEnum,
+  stripeAccountStatusEnum,
   invitationStatusEnum,
   secretaryApplicationStatusEnum,
   classSexArrangementEnum,
