@@ -25,7 +25,6 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { StripeProvider } from '@/components/providers/stripe-provider';
-import { PostcodeLookup } from '@/components/postcode-lookup';
 import { PrintPaymentForm } from './_components/print-payment-form';
 import { PrintOrderList } from './_components/print-order-list';
 
@@ -56,7 +55,7 @@ function getPreviewUrl(showId: string, documentType: string, documentFormat?: st
     case 'schedule':
       return `/api/schedule/${showId}?preview${documentFormat && documentFormat !== 'standard' ? `&format=${documentFormat}` : ''}`;
     case 'prize_cards':
-      return `/api/prize-cards/${showId}?preview`;
+      return `/api/prize-cards-a3/${showId}?preview`;
     case 'ring_board':
       return `/api/ring-board/${showId}?preview`;
     case 'ring_numbers':
@@ -679,17 +678,6 @@ export default function PrintShopPage() {
                 Use {profile.name ? `${profile.name.split(' ')[0]}'s` : 'my'} address
               </Button>
             )}
-            <PostcodeLookup
-              compact
-              onSelect={(result) => {
-                setDelivery((d) => ({
-                  ...d,
-                  address1: result.address,
-                  town: result.town,
-                  postcode: result.postcode,
-                }));
-              }}
-            />
             <div className="space-y-1.5">
               <Label htmlFor="delivery-name">Recipient Name *</Label>
               <Input

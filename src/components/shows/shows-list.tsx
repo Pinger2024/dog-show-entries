@@ -9,7 +9,6 @@ import { showTypeLabels } from '@/lib/show-types';
 import {
   CalendarDays,
   MapPin,
-  Building2,
   Search,
   Loader2,
   Ticket,
@@ -869,18 +868,17 @@ function ShowCard({ show, distance }: { show: ShowListItem; distance?: number })
             )}
           </div>
 
-          {/* Title */}
-          <h3 className="line-clamp-2 text-sm font-semibold leading-snug tracking-tight text-foreground transition-colors group-hover:text-primary sm:text-[15px]">
-            {show.name}
-          </h3>
-
-          {/* Organisation */}
+          {/* Host club — primary anchor so it's unmistakable who's running the show */}
           {show.organisation && (
-            <p className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Building2 className="size-3 shrink-0" />
-              <span className="truncate">{show.organisation.name}</span>
-            </p>
+            <h3 className="line-clamp-2 text-[15px] font-bold leading-tight tracking-tight text-foreground transition-colors group-hover:text-primary sm:text-base">
+              {show.organisation.name}
+            </h3>
           )}
+
+          {/* Show name — secondary, descriptive */}
+          <p className={`line-clamp-2 text-xs font-medium leading-snug text-muted-foreground sm:text-[13px] ${show.organisation ? 'mt-1' : ''}`}>
+            {show.name}
+          </p>
 
           {/* Spacer pushes date/venue to bottom */}
           <div className="mt-auto pt-4">

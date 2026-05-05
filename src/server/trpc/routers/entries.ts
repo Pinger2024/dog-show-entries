@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, isNull, inArray, asc, desc, sql } from 'drizzle-orm';
+import { and, eq, isNull, inArray, notInArray, asc, desc, sql } from 'drizzle-orm';
 import { differenceInMonths, differenceInWeeks } from 'date-fns';
 import {
   protectedProcedure,
@@ -15,13 +15,18 @@ import {
   dogPhotos,
   shows,
   showClasses,
+  orders,
   payments,
   entryAuditLog,
   users,
   dogOwners,
   judgeAssignments,
 } from '@/server/db/schema';
-import { createPaymentIntent, getStripe } from '@/server/services/stripe';
+import {
+  createPaymentIntent,
+  calculatePlatformFee,
+  getStripe,
+} from '@/server/services/stripe';
 
 export const entriesRouter = createTRPCRouter({
   create: protectedProcedure
@@ -446,10 +451,24 @@ export const entriesRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
+      // Entries on a fully-refunded order don't belong in the entries list
+      // — the exhibitor pulled out and got their money back. Their entry
+      // rows stay in the DB for audit; the Financial tab's refund history
+      // is where they surface.
+      const refundedOrderRows = await ctx.db
+        .select({ id: orders.id })
+        .from(orders)
+        .where(and(eq(orders.showId, input.showId), eq(orders.status, 'refunded')));
+      const refundedOrderIds = refundedOrderRows.map((r) => r.id);
+
       const conditions = [
         eq(entries.showId, input.showId),
         isNull(entries.deletedAt),
       ];
+
+      if (refundedOrderIds.length > 0) {
+        conditions.push(notInArray(entries.orderId, refundedOrderIds));
+      }
 
       if (input.status) {
         conditions.push(eq(entries.status, input.status));
@@ -475,7 +494,15 @@ export const entriesRouter = createTRPCRouter({
               },
             },
           },
+          // Payments are linked at the order level (one Stripe charge per
+          // multi-entry order). entries.payments (via payments.entry_id) is
+          // currently always empty; order.payments is the live link.
           payments: true,
+          order: {
+            with: {
+              payments: true,
+            },
+          },
         },
         orderBy: [asc(entries.createdAt)],
         limit: input.limit,
@@ -653,18 +680,25 @@ export const entriesRouter = createTRPCRouter({
 
       // Handle fee difference
       if (feeDiff > 0) {
-        // Additional payment needed
-        const pi = await createPaymentIntent(feeDiff, {
+        // Additional payment needed. Platform-mode charge — money lands
+        // in Remi's balance, we include the diff in the next payout to
+        // the club.
+        const platformFeePence = calculatePlatformFee(feeDiff);
+        const grossAmount = feeDiff + platformFeePence;
+
+        const pi = await createPaymentIntent(grossAmount, {
           entryId: input.id,
           showId: entry.showId,
           exhibitorId: ctx.session.user.id,
           type: 'adjustment',
+          platformFeePence: String(platformFeePence),
+          subtotalPence: String(feeDiff),
         });
 
         await ctx.db.insert(payments).values({
           entryId: input.id,
           stripePaymentId: pi.id,
-          amount: feeDiff,
+          amount: grossAmount,
           status: 'pending',
           type: 'adjustment',
         });

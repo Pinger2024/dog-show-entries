@@ -333,8 +333,10 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
   },
   coverLogo: {
-    width: 80,
-    height: 80,
+    maxWidth: 140,
+    maxHeight: 80,
+    objectFit: 'contain',
+    alignSelf: 'center',
     marginBottom: 10,
   },
   coverShowName: {

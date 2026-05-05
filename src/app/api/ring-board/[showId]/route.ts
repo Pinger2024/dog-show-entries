@@ -8,6 +8,7 @@ import type { RingBoardShowInfo, RingBoardRing } from '@/components/ring-board/r
 import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, makePdfResponse } from '@/lib/pdf-utils';
+import { buildClassLabelMap } from '@/lib/class-labels';
 
 export async function GET(
   request: NextRequest,
@@ -69,10 +70,12 @@ export async function GET(
     }
   }
 
+  const classLabelMap = buildClassLabelMap(showClasses);
+
   // Group classes by ring number
   const ringGroups = new Map<number, Map<string, {
     breedName: string | null;
-    classes: { classNumber: number | null; className: string; sex: string | null; entryCount: number }[];
+    classes: { classLabel: string; className: string; sex: string | null; entryCount: number }[];
     totalEntries: number;
   }>>();
 
@@ -105,7 +108,7 @@ export async function GET(
     ).length;
 
     breedGroup.get(breedKey)!.classes.push({
-      classNumber: sc.classNumber,
+      classLabel: classLabelMap.get(sc.id) ?? '',
       className: sc.classDefinition?.name ?? 'Unknown',
       sex: sc.sex,
       entryCount: confirmedEntries,

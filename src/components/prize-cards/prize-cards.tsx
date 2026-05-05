@@ -22,7 +22,7 @@ export interface PrizeCardShowInfo {
 }
 
 export interface PrizeCardClass {
-  classNumber: number | null;
+  classLabel: string;
   className: string;
   sex: string | null;
   breedName: string | null;
@@ -254,8 +254,8 @@ export function PrizeCards({ show, classes, includeJudgeName, placements, cardSt
     <Document title={`Prize Cards — ${show.name}`} author="Remi Show Manager">
       {classes.map((cls, classIdx) => {
         const sexLabel = cls.sex === 'dog' ? 'Dogs' : cls.sex === 'bitch' ? 'Bitches' : null;
-        const classLabel = [
-          cls.classNumber ? `Class ${cls.classNumber}` : null,
+        const classHeading = [
+          cls.classLabel ? `Class ${cls.classLabel}` : null,
           cls.className,
         ]
           .filter(Boolean)
@@ -310,7 +310,7 @@ export function PrizeCards({ show, classes, includeJudgeName, placements, cardSt
 
                 {/* BOTTOM ZONE — class details, judge, write-in */}
                 <View style={s.bottomZone}>
-                  <Text style={s.classInfo}>{classLabel}</Text>
+                  <Text style={s.classInfo}>{classHeading}</Text>
                   {cls.breedName && (
                     <Text style={s.breedInfo}>{cls.breedName}</Text>
                   )}

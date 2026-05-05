@@ -61,7 +61,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { uploadImage } from '@/lib/upload';
-import { PostcodeLookup, formatAddress } from '@/components/postcode-lookup';
 import { formatDate } from './_lib/show-utils';
 import { useShowId } from './_lib/show-context';
 import { PhaseActionPanel } from './_components/phase-action-panel';
@@ -257,7 +256,7 @@ export default function OverviewPage() {
       )}
 
       {/* Class management */}
-      <ClassManager showId={showId} showType={show.showType} classes={show.showClasses ?? []} />
+      <ClassManager showId={showId} showType={show.showType} showScope={show.showScope} classes={show.showClasses ?? []} />
 
       {/* Add classes — prominent when empty, folded into ClassManager when classes exist */}
       {(show.showClasses?.length ?? 0) === 0 && (
@@ -772,18 +771,11 @@ function EditShowDetailsDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="edit-secretary-address">Secretary Address</Label>
-              <PostcodeLookup
-                compact
-                onSelect={(result) => {
-                  const full = [formatAddress(result), result.postcode].filter(Boolean).join(', ');
-                  setSecretaryAddress(full);
-                }}
-              />
               <Input
                 id="edit-secretary-address"
                 value={secretaryAddress}
                 onChange={(e) => setSecretaryAddress(e.target.value)}
-                placeholder="Full postal address for schedule"
+                placeholder="House/flat, street, town, postcode"
               />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">

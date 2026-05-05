@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { and, eq, desc, sql, isNull, inArray } from 'drizzle-orm';
+import { and, eq, desc, sql, inArray } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { createTRPCRouter } from '../init';
 import { secretaryProcedure } from '../procedures';
@@ -7,7 +7,6 @@ import { verifyShowAccess } from '../verify-show-access';
 import {
   printOrders,
   printOrderItems,
-  entries,
   showClasses,
   rings,
   entryClasses,
@@ -35,6 +34,7 @@ import {
 } from '@/server/services/print-price-refresh';
 import { createPaymentIntent } from '@/server/services/stripe';
 import { generateAndUploadForPrint } from '@/server/services/pdf-generation';
+import { computeShowMetrics } from '@/server/services/show-metrics';
 
 // ── Tradeprint status mapping ──
 
@@ -582,21 +582,14 @@ async function getShowStatsForPrinting(
   db: Parameters<typeof verifyShowAccess>[0],
   showId: string
 ): Promise<ShowStats> {
-  // Run independent queries in parallel; combine both entries counts into one query
-  const [entryStats, classCount, ringCount] = await Promise.all([
-    db
-      .select({
-        confirmed: sql<number>`count(*)`,
-        catalogueOrders: sql<number>`count(*) filter (where ${entries.catalogueRequested} = true)`,
-      })
-      .from(entries)
-      .where(
-        and(
-          eq(entries.showId, showId),
-          eq(entries.status, 'confirmed'),
-          isNull(entries.deletedAt)
-        )
-      ),
+  // catalogueOrders comes from the show-metrics service — catalogues
+  // are sold as sundry items now, not via the legacy
+  // entries.catalogue_requested flag (which is dead — every checkout
+  // hardcodes false). This used to count entries with that flag set,
+  // which silently always returned 0 and made the Print Shop suggest
+  // "0 catalogues" no matter how many were actually sold.
+  const [metrics, classCount, ringCount] = await Promise.all([
+    computeShowMetrics(db, showId),
     db
       .select({ count: sql<number>`count(*)` })
       .from(showClasses)
@@ -608,9 +601,9 @@ async function getShowStatsForPrinting(
   ]);
 
   return {
-    confirmedEntries: Number(entryStats[0]?.confirmed ?? 0),
+    confirmedEntries: metrics.confirmedEntryCount,
     totalClasses: Number(classCount[0]?.count ?? 0),
-    catalogueOrders: Number(entryStats[0]?.catalogueOrders ?? 0),
+    catalogueOrders: metrics.paidPrintedCatalogueCount,
     ringCount: Number(ringCount[0]?.count ?? 0),
     placementsPerClass: 4,
   };

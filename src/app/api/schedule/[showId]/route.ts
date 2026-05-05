@@ -13,6 +13,7 @@ import type {
 import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, makePdfResponse } from '@/lib/pdf-utils';
+import { buildClassLabelMap } from '@/lib/class-labels';
 
 export async function GET(
   request: NextRequest,
@@ -65,9 +66,12 @@ export async function GET(
     }),
   ]);
 
-  // Build classes data
+  // Build classes data — classLabel is what the PDF actually renders
+  // (non-JH classes show their classNumber, JH classes show JHA/JHB…).
+  const classLabelMap = buildClassLabelMap(showClasses);
   const classes: ScheduleClass[] = showClasses.map((sc) => ({
     classNumber: sc.classNumber,
+    classLabel: classLabelMap.get(sc.id) ?? '',
     className: sc.classDefinition?.name ?? 'Unknown Class',
     classDescription: sc.classDefinition?.description ?? null,
     sex: sc.sex,
@@ -130,48 +134,54 @@ export async function GET(
     }
   }
 
-  const judges: ScheduleJudge[] = Array.from(judgeMap.values())
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((agg) => {
-      const breedArr = Array.from(agg.breeds).sort();
-      // Is this judge doing junior handling?
-      // Three signals: (1) all their breeds are JH-only, (2) they have a
-      // null-sex assignment in a show with JH classes AND no sex-specific
-      // assignments, (3) single-breed show with JH classes.
-      const onlyJhBreeds =
-        breedArr.length > 0 && breedArr.every((b) => juniorBreedSet.has(b) && !breedBreedSet.has(b));
-      const nullSexInJhShow =
-        hasJuniorHandlerClasses && agg.hasNullSexAssignment && agg.sexes.size === 0;
-      const isJuniorOnly = onlyJhBreeds || nullSexInJhShow;
+  // Build each judge's row, resolving the JH-vs-breed role up front so we
+  // can use it as a sort key below.
+  const judgeRows = Array.from(judgeMap.values()).map((agg) => {
+    const breedArr = Array.from(agg.breeds).sort();
+    const onlyJhBreeds =
+      breedArr.length > 0 && breedArr.every((b) => juniorBreedSet.has(b) && !breedBreedSet.has(b));
+    const nullSexInJhShow =
+      hasJuniorHandlerClasses && agg.hasNullSexAssignment && agg.sexes.size === 0;
+    const isJuniorOnly = onlyJhBreeds || nullSexInJhShow;
 
-      // Build the role label for display
-      let role: string;
-      if (isJuniorOnly) {
-        role = 'Junior Handling';
-      } else if (agg.sexes.has('dog') && agg.sexes.has('bitch')) {
-        role = 'Dogs & Bitches';
-      } else if (agg.sexes.has('dog')) {
-        role = 'Dogs';
-      } else if (agg.sexes.has('bitch')) {
-        role = 'Bitches';
-      } else if (breedArr.length > 0) {
-        role = breedArr.join(', ');
-      } else {
-        role = show.showScope === 'single_breed' ? 'Breed Classes' : 'All Breeds';
-      }
+    let role: string;
+    if (isJuniorOnly) {
+      role = 'Junior Handling';
+    } else if (agg.sexes.has('dog') && agg.sexes.has('bitch')) {
+      role = 'Dogs & Bitches';
+    } else if (agg.sexes.has('dog')) {
+      role = 'Dogs';
+    } else if (agg.sexes.has('bitch')) {
+      role = 'Bitches';
+    } else if (breedArr.length > 0) {
+      role = breedArr.join(', ');
+    } else {
+      role = show.showScope === 'single_breed' ? 'Breed Classes' : 'All Breeds';
+    }
 
-      // displayLabel format: "Name (Affix) — Role" or "Name — Role"
-      const namePart = agg.affix ? `${agg.name} (${agg.affix})` : agg.name;
-      const displayLabel = `${namePart} — ${role}`;
-      return {
-        name: agg.name,
-        affix: agg.affix,
-        breeds: breedArr,
-        sex: agg.sexes.size === 1 ? Array.from(agg.sexes)[0] : null,
-        role,
-        displayLabel,
-      };
-    });
+    const namePart = agg.affix ? `${agg.name} (${agg.affix})` : agg.name;
+    const displayLabel = `${namePart} — ${role}`;
+    return {
+      name: agg.name,
+      affix: agg.affix,
+      breeds: breedArr,
+      sex: (agg.sexes.size === 1 ? Array.from(agg.sexes)[0] : null) as string | null,
+      role,
+      displayLabel,
+      isJuniorOnly,
+    };
+  });
+
+  // Breed judges first, JH judges after — RKC convention puts the main
+  // judging assignment ahead of the Junior Handling role on the schedule.
+  // Alphabetical within each tier for stable ordering.
+  const judges: ScheduleJudge[] = judgeRows
+    .sort((a, b) => {
+      if (a.isJuniorOnly !== b.isJuniorOnly) return a.isJuniorOnly ? 1 : -1;
+      return a.name.localeCompare(b.name);
+    })
+    // Strip the helper field — not part of the ScheduleJudge contract.
+    .map(({ isJuniorOnly: _isJuniorOnly, ...rest }) => rest);
 
   // Build sponsors data (defensive: skip sponsors with missing sponsor record)
   const sponsors: ScheduleSponsor[] = showSponsorData

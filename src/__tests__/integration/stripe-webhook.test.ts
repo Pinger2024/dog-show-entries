@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { eq, inArray } from 'drizzle-orm';
 import * as stripeService from '@/server/services/stripe';
 import * as emailService from '@/server/services/email';
-import { entries, orders, payments } from '@/server/db/schema';
+import { entries, orders, payments, printOrders } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
 import {
   makeUser,
@@ -141,6 +141,75 @@ describe('POST /api/webhooks/stripe — payment_intent.succeeded', () => {
     const res = await stripeWebhook(buildStripeWebhookRequest() as never);
 
     expect(res.status).toBe(200);
+  });
+});
+
+describe('POST /api/webhooks/stripe — print_order payment_intent.succeeded', () => {
+  async function seedPrintOrder(status: typeof printOrders.$inferInsert['status']) {
+    const [exhibitor, org, breed] = await Promise.all([
+      makeUser({ role: 'exhibitor' }),
+      makeOrg(),
+      makeBreed(),
+    ]);
+    const show = await makeShow({ organisationId: org.id, breedId: breed.id });
+    const [row] = await testDb
+      .insert(printOrders)
+      .values({
+        showId: show.id,
+        organisationId: org.id,
+        orderedByUserId: exhibitor.id,
+        status,
+        subtotalAmount: 10000,
+        totalAmount: 10000,
+        stripePaymentIntentId: 'pi_test_print',
+      })
+      .returning();
+    return row;
+  }
+
+  it('moves a draft print order to paid on first delivery', async () => {
+    const po = await seedPrintOrder('draft');
+    injectStripeEvent({
+      type: 'payment_intent.succeeded',
+      data: { object: { id: 'pi_test_print', metadata: { type: 'print_order', printOrderId: po.id } } },
+    });
+    const res = await stripeWebhook(buildStripeWebhookRequest() as never);
+    expect(res.status).toBe(200);
+    const updated = await testDb.query.printOrders.findFirst({ where: eq(printOrders.id, po.id) });
+    expect(updated?.status).toBe('paid');
+    expect(updated?.stripePaymentStatus).toBe('succeeded');
+  });
+
+  it('does NOT regress a submitted/in_production/dispatched/delivered print order back to paid on webhook replay', async () => {
+    // Stripe retries payment_intent.succeeded on 5xx / timeouts, and
+    // dashboard replays can also refire the event. Without this
+    // guard, a retry after Mixam submission would silently unwind
+    // the order status.
+    for (const terminal of ['submitted', 'in_production', 'dispatched', 'delivered'] as const) {
+      const po = await seedPrintOrder(terminal);
+      injectStripeEvent({
+        type: 'payment_intent.succeeded',
+        data: { object: { id: 'pi_test_print', metadata: { type: 'print_order', printOrderId: po.id } } },
+      });
+      const res = await stripeWebhook(buildStripeWebhookRequest() as never);
+      expect(res.status).toBe(200);
+      const updated = await testDb.query.printOrders.findFirst({ where: eq(printOrders.id, po.id) });
+      expect(updated?.status).toBe(terminal);
+      // stripePaymentStatus is idempotent and may still be written:
+      expect(updated?.stripePaymentStatus).toBe('succeeded');
+    }
+  });
+
+  it('does not regress an already-paid print order to draft/anything else', async () => {
+    const po = await seedPrintOrder('paid');
+    injectStripeEvent({
+      type: 'payment_intent.succeeded',
+      data: { object: { id: 'pi_test_print', metadata: { type: 'print_order', printOrderId: po.id } } },
+    });
+    const res = await stripeWebhook(buildStripeWebhookRequest() as never);
+    expect(res.status).toBe(200);
+    const updated = await testDb.query.printOrders.findFirst({ where: eq(printOrders.id, po.id) });
+    expect(updated?.status).toBe('paid');
   });
 });
 

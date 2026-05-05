@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/server/db';
-import { and, eq, isNull, asc, or } from 'drizzle-orm';
+import { and, eq, isNull, asc, or, inArray, sql } from 'drizzle-orm';
+import { getPaidOrderIdsForShow } from '@/server/services/show-metrics';
 import * as schema from '@/server/db/schema';
 import { formatDogName, formatDogNameForCatalogue } from '@/lib/utils';
 import { renderToBuffer } from '@react-pdf/renderer';
@@ -16,7 +17,9 @@ import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, validateRasterLogoUrl, makePdfResponse } from '@/lib/pdf-utils';
 import { padPdfToMultiple } from '@/lib/pdf-pad';
+import { ensureCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
+import { buildClassLabelMap } from '@/lib/class-labels';
 
 export async function GET(
   request: NextRequest,
@@ -44,6 +47,19 @@ export async function GET(
   const authResult = await authenticatePdfRequest(show.organisationId, { showId, format });
   if (authResult instanceof NextResponse) return authResult;
 
+  // Auto-assign catalogue numbers in class order if the show doesn't
+  // have any yet. Amanda's UX ask 2026-04-17: she shouldn't have to
+  // find a button — opening a catalogue should just give you numbered
+  // entries. No-op when numbers already exist.
+  await ensureCatalogueNumbers(db, showId);
+
+  // For the absentees format, materialise the paid-order IDs first so the
+  // entries query can filter on a plain array — embedding a Drizzle select
+  // subquery inside the relational findMany builder generates a type graph
+  // that makes Turbopack's dev-mode type resolver grind on every request.
+  const paidOrderIds =
+    format === 'absentees' ? await getPaidOrderIdsForShow(db, showId) : null;
+
   // Run independent DB queries and logo validation in parallel.
   // The marked-catalogue achievements query only runs when it's needed; for
   // every other format it short-circuits to an empty array so the Promise.all
@@ -59,6 +75,7 @@ export async function GET(
         classDefinition: true,
         classSponsorships: {
           with: { showSponsor: { with: { sponsor: true } } },
+          orderBy: [asc(schema.classSponsorships.createdAt)],
         },
       },
       orderBy: [asc(schema.showClasses.sortOrder), asc(schema.showClasses.classNumber)],
@@ -67,10 +84,17 @@ export async function GET(
       where: and(
         eq(schema.entries.showId, showId),
         format === 'absentees'
-          ? or(
-              eq(schema.entries.status, 'withdrawn'),
-              and(eq(schema.entries.status, 'confirmed'), eq(schema.entries.absent, true))
-            )
+          ? paidOrderIds && paidOrderIds.length > 0
+            ? and(
+                // Absentees only exist on paid orders. Withdrawn entries from
+                // abandoned checkouts never made the catalogue.
+                inArray(schema.entries.orderId, paidOrderIds),
+                or(
+                  eq(schema.entries.status, 'withdrawn'),
+                  and(eq(schema.entries.status, 'confirmed'), eq(schema.entries.absent, true))
+                )
+              )
+            : sql`false`
           : eq(schema.entries.status, 'confirmed'),
         isNull(schema.entries.deletedAt)
       ),
@@ -165,8 +189,10 @@ export async function GET(
     }
   }
 
+  const classLabelMap = buildClassLabelMap(showClassRows);
+
   // Collect class sponsorship data for trophies page + inline display
-  const classSponsorships: { className: string; classNumber: number | null; trophyName: string | null; trophyDonor: string | null; sponsorName: string | null; sponsorAffix: string | null; prizeDescription: string | null }[] = [];
+  const classSponsorships: { className: string; classNumber: number | null; classLabel: string; trophyName: string | null; trophyDonor: string | null; sponsorName: string | null; sponsorAffix: string | null; prizeDescription: string | null }[] = [];
   for (const sc of showClassRows) {
     for (const cs of sc.classSponsorships ?? []) {
       // Sponsor name comes from either the free-text field or the linked sponsor
@@ -175,6 +201,7 @@ export async function GET(
         classSponsorships.push({
           className: sc.classDefinition?.name ?? 'Unknown Class',
           classNumber: sc.classNumber,
+          classLabel: classLabelMap.get(sc.id) ?? '',
           trophyName: cs.trophyName,
           trophyDonor: cs.trophyDonor,
           sponsorName,
@@ -219,6 +246,7 @@ export async function GET(
       name: ec.showClass?.classDefinition?.name,
       sex: ec.showClass?.sex,
       classNumber: ec.showClass?.classNumber,
+      classLabel: ec.showClass?.id ? classLabelMap.get(ec.showClass.id) : undefined,
       sortOrder: ec.showClass?.sortOrder,
       showClassId: ec.showClassId,
     })),
@@ -241,6 +269,7 @@ export async function GET(
   const allShowClasses: ShowClassInfo[] = showClassRows.map((sc) => ({
     className: sc.classDefinition?.name ?? 'Unknown Class',
     classNumber: sc.classNumber,
+    classLabel: classLabelMap.get(sc.id) ?? '',
     sortOrder: sc.sortOrder,
     sex: sc.sex,
   }));

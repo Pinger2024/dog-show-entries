@@ -49,7 +49,7 @@ export function CatalogueHeader({
       {logoUrl && (
         <Image
           src={logoUrl}
-          style={{ width: 56, height: 56, marginBottom: 6, alignSelf: 'center' }}
+          style={{ maxWidth: 98, maxHeight: 56, objectFit: 'contain', marginBottom: 6, alignSelf: 'center' }}
         />
       )}
       {organisationName && (

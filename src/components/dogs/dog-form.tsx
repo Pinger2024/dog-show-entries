@@ -51,7 +51,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { PostcodeLookup, formatAddress } from '@/components/postcode-lookup';
 
 const ownerSchema = z.object({
   ownerName: z.string().min(1, 'Name is required'),
@@ -61,6 +60,11 @@ const ownerSchema = z.object({
   isPrimary: z.boolean(),
 });
 
+// Owners are required at create-time (RKC catalogue listing), but in edit
+// mode the form only updates top-level dog fields — the submit handler
+// strips `owners` before mutating. Baking `.min(1)` into the schema silently
+// blocked edit saves when the form loaded with no owners. We enforce the
+// create-mode requirement at submission time instead.
 const dogFormSchema = z.object({
   registeredName: z
     .string()
@@ -77,7 +81,7 @@ const dogFormSchema = z.object({
   damName: z.string().optional(),
   breederName: z.string().optional(),
   bio: z.string().optional(),
-  owners: z.array(ownerSchema).optional(),
+  owners: z.array(ownerSchema),
 });
 
 type DogFormValues = z.infer<typeof dogFormSchema>;
@@ -388,6 +392,14 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
 
   function onSubmit(data: DogFormValues) {
     if (mode === 'create') {
+      if (!data.owners || data.owners.length === 0) {
+        form.setError('owners', {
+          type: 'manual',
+          message: 'At least one owner with name and address is required',
+        });
+        toast.error('Please add at least one owner');
+        return;
+      }
       createDog.mutate(data);
     } else if (dogId) {
       const { owners: _owners, ...dogFields } = data;
@@ -448,7 +460,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                   <FormLabel>Registered Name</FormLabel>
                   <FormControl>
                     <Input
-                      placeholder="e.g. Dorabella Dancing Queen"
+                      placeholder="e.g. Thornfield Silver Dream"
                       {...field}
                     />
                   </FormControl>
@@ -908,7 +920,8 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
           <CardHeader>
             <CardTitle>Owners</CardTitle>
             <CardDescription>
-              Add up to 4 owners. At least one owner with name, address, and email is required for show entries.
+              Owner name and full postal address are required — RKC catalogues
+              must list them. Add up to 4 owners.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -964,20 +977,17 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                     )}
                   />
                 </div>
-                <PostcodeLookup
-                  compact
-                  onSelect={(result) => {
-                    form.setValue(`owners.${index}.ownerAddress`, formatAddress(result) + ', ' + result.postcode);
-                  }}
-                />
                 <FormField
                   control={form.control}
                   name={`owners.${index}.ownerAddress`}
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Address</FormLabel>
+                      <FormLabel>Full postal address</FormLabel>
                       <FormControl>
-                        <Input placeholder="Full postal address" {...field} />
+                        <Input
+                          placeholder="House, street, town, postcode"
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

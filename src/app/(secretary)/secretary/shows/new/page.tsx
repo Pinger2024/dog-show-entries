@@ -65,7 +65,6 @@ import {
 } from '@/components/ui/dialog';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
-import { PostcodeLookup, formatAddress } from '@/components/postcode-lookup';
 import {
   Form,
   FormControl,
@@ -840,9 +839,12 @@ export default function NewShowPage() {
                   />
                 </div>
 
-                {/* Entry dates */}
-                <div className="grid gap-4 sm:grid-cols-2">
+                {/* Entry dates — sm:grid-cols-3 matches the row above so
+                    Entries Open aligns with Show Date and Entries Close
+                    aligns with Show Opens At (col 2 deliberately empty). */}
+                <div className="grid gap-4 sm:grid-cols-3">
                   <DatePickerField control={form.control} name="entriesOpenDate" label="Entries Open" placeholder="Optional" />
+                  <div className="hidden sm:block" />
                   <div>
                     <DatePickerField control={form.control} name="entryCloseDate" label="Entries Close" placeholder="Optional" disableBefore={watchedEntriesOpen ? parseLocalDate(watchedEntriesOpen) : undefined} disableAfter={watchedStartDate ? parseLocalDate(watchedStartDate) : undefined} />
                     {watchedStartDate && (
@@ -1189,13 +1191,6 @@ export default function NewShowPage() {
                         </FormItem>
                       )}
                     />
-                    <PostcodeLookup
-                      compact
-                      onSelect={(result) => {
-                        form.setValue('newVenueAddress', formatAddress(result));
-                        form.setValue('newVenuePostcode', result.postcode);
-                      }}
-                    />
                     <FormField
                       control={form.control}
                       name="newVenueAddress"
@@ -1204,7 +1199,7 @@ export default function NewShowPage() {
                           <FormLabel>Address</FormLabel>
                           <FormControl>
                             <Input
-                              placeholder="Full address"
+                              placeholder="Street, town"
                               {...field}
                             />
                           </FormControl>

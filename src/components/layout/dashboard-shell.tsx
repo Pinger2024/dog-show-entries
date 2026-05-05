@@ -21,6 +21,7 @@ import {
   Activity,
   ListTodo,
   Rss,
+  Calculator,
 } from 'lucide-react';
 import { isUuid } from '@/lib/slugify';
 import { cn } from '@/lib/utils';
@@ -57,6 +58,7 @@ const adminNavItems = [
   { href: '/admin/applications', label: 'Applications', mobileLabel: 'Apps', icon: ClipboardCheck },
   { href: '/admin/invitations', label: 'Invitations', mobileLabel: 'Invites', icon: UserPlus },
   { href: '/admin/reference-data', label: 'Reference Data', mobileLabel: 'Ref Data', icon: Database },
+  { href: '/admin/calculator', label: 'Calculator', mobileLabel: 'Calc', icon: Calculator },
 ];
 
 /** Mobile bottom bar: admin uses same items as sidebar (scrollable if needed) */
@@ -65,7 +67,7 @@ const adminMobileItems = adminNavItems;
 // Paths that are "top-level" — no back button shown
 const rootPaths = new Set([
   '/dashboard', '/dogs', '/entries', '/browse', '/feed', '/settings', '/apply',
-  '/admin', '/admin/users', '/admin/applications', '/admin/invitations', '/admin/reference-data',
+  '/admin', '/admin/users', '/admin/applications', '/admin/invitations', '/admin/reference-data', '/admin/calculator',
   '/feedback', '/backlog',
 ]);
 

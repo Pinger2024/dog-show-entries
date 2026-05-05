@@ -25,6 +25,7 @@ export {
   clubTypeEnum,
   serviceTierEnum,
   subscriptionStatusEnum,
+  stripeAccountStatusEnum,
   invitationStatusEnum,
   secretaryApplicationStatusEnum,
   classSexArrangementEnum,
@@ -68,6 +69,7 @@ export { payments, paymentsRelations } from './payments';
 export { dogOwners, dogOwnersRelations } from './dog-owners';
 export { dogTitles, dogTitlesRelations } from './dog-titles';
 export { orders, ordersRelations } from './orders';
+export { payouts, payoutsRelations } from './payouts';
 export { entryAuditLog, entryAuditLogRelations } from './entry-audit-log';
 export {
   juniorHandlerDetails,
@@ -104,6 +106,7 @@ export {
   orderSundryItemsRelations,
 } from './order-sundry-items';
 export { invitations, invitationsRelations } from './invitations';
+export { shareEvents, shareEventsRelations } from './share-events';
 export {
   secretaryApplications,
   secretaryApplicationsRelations,

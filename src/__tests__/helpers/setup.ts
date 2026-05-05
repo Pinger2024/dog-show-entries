@@ -33,6 +33,42 @@ vi.mock('@/server/services/stripe', () => ({
     metadata,
     status: 'requires_payment_method',
   })),
+  createEntryPaymentIntent: vi.fn(async (params: {
+    amount: number;
+    applicationFeeAmount: number;
+    connectedAccountId: string;
+    metadata: Record<string, string>;
+  }) => ({
+    id: `pi_test_${Math.random().toString(36).slice(2, 10)}`,
+    client_secret: `pi_test_${Math.random().toString(36).slice(2, 10)}_secret_x`,
+    amount: params.amount,
+    currency: 'gbp',
+    application_fee_amount: params.applicationFeeAmount,
+    transfer_data: { destination: params.connectedAccountId },
+    on_behalf_of: params.connectedAccountId,
+    metadata: params.metadata,
+    status: 'requires_payment_method',
+  })),
+  calculatePlatformFee: vi.fn((subtotal: number) => 100 + Math.round(subtotal * 0.01)),
+  createConnectAccount: vi.fn(async (params: { organisationId: string }) => ({
+    id: `acct_test_${Math.random().toString(36).slice(2, 10)}`,
+    object: 'account',
+    metadata: { organisationId: params.organisationId },
+  })),
+  createConnectOnboardingLink: vi.fn(async () => ({
+    object: 'account_link',
+    url: 'https://connect.stripe.test/onboard',
+    expires_at: Math.floor(Date.now() / 1000) + 300,
+  })),
+  retrieveConnectAccount: vi.fn(async (accountId: string) => ({
+    id: accountId,
+    object: 'account',
+    details_submitted: true,
+    charges_enabled: true,
+    payouts_enabled: true,
+    requirements: { disabled_reason: null },
+  })),
+  deriveAccountStatus: vi.fn(() => 'active'),
   getOrCreateStripeCustomer: vi.fn(async () => 'cus_test_stub'),
   createSubscriptionCheckout: vi.fn(async () => 'https://checkout.stripe.test/session'),
   createBillingPortalSession: vi.fn(async () => 'https://billing.stripe.test/portal'),

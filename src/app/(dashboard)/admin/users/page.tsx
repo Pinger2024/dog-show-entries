@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { Eye, Search, Loader2 } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
@@ -35,7 +34,6 @@ const ROLE_STYLES: Record<string, { label: string; plural: string; variant: 'def
 };
 
 export default function AdminUsersPage() {
-  const router = useRouter();
   const { data: session } = useSession();
   const [search, setSearch] = useState('');
   const [impersonating, setImpersonating] = useState<string | null>(null);
@@ -66,8 +64,9 @@ export default function AdminUsersPage() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error ?? 'Failed to impersonate');
       }
-      router.push('/');
-      router.refresh();
+      // Full reload — the tRPC/React Query client cache would otherwise keep
+      // serving the admin's own queries to the impersonated session.
+      window.location.href = '/';
     } finally {
       setImpersonating(null);
     }

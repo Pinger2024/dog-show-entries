@@ -11,6 +11,7 @@ import { ordersRouter } from './routers/orders';
 import { devRouter } from './routers/dev';
 import { feedbackRouter } from './routers/feedback';
 import { subscriptionRouter } from './routers/subscription';
+import { stripeConnectRouter } from './routers/stripe-connect';
 import { stewardRouter } from './routers/steward';
 import { onboardingRouter } from './routers/onboarding';
 import { invitationsRouter } from './routers/invitations';
@@ -37,6 +38,7 @@ export const appRouter = createTRPCRouter({
   dev: devRouter,
   feedback: feedbackRouter,
   subscription: subscriptionRouter,
+  stripeConnect: stripeConnectRouter,
   steward: stewardRouter,
   onboarding: onboardingRouter,
   invitations: invitationsRouter,

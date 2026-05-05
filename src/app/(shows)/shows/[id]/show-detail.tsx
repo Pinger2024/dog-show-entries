@@ -31,6 +31,7 @@ import { trpc } from '@/lib/trpc/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { showTypeLabels } from '@/lib/show-types';
+import { buildClassificationHeading } from '@/lib/show-classification';
 import { formatCurrency } from '@/lib/date-utils';
 import { LiveEntryStats } from '@/components/show/live-entry-stats';
 import { ShowShareDropdown } from '@/components/show/show-share-dropdown';
@@ -355,9 +356,8 @@ export function ShowDetailClient() {
   const params = useParams();
   const idOrSlug = params.id as string;
 
-  const [showStickyBar, setShowStickyBar] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
-
+  const [showWidget, setShowWidget] = useState(false);
 
   const { data: show, isLoading } = trpc.shows.getById.useQuery({
     id: idOrSlug,
@@ -389,11 +389,12 @@ export function ShowDetailClient() {
   );
   const scrolledToHash = useRef(false);
 
-  // Show sticky CTA bar after scrolling past the hero
+  // Slide up entry widget after user scrolls past the hero area
   useEffect(() => {
+    const threshold = window.innerHeight * 0.7;
     function handleScroll() {
-      const next = window.scrollY > 300;
-      setShowStickyBar((prev) => (prev === next ? prev : next));
+      const next = window.scrollY > threshold;
+      setShowWidget((prev) => (prev === next ? prev : next));
     }
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
@@ -517,6 +518,20 @@ export function ShowDetailClient() {
     return a.localeCompare(b);
   });
 
+  // Junior Handling appears as its own bucket alongside real breeds, but
+  // it isn't a breed — so the section header counts only buckets with at
+  // least one non-JH class, then appends "+ Junior Handling" when present.
+  const realBreedCount = breeds.filter(([, { classes: bucketClasses }]) =>
+    bucketClasses.some((sc) => sc.classDefinition?.type !== 'junior_handler')
+  ).length;
+  const hasJuniorHandling = (show.showClasses ?? []).some(
+    (sc) => sc.classDefinition?.type === 'junior_handler'
+  );
+  const classificationHeading = buildClassificationHeading(
+    realBreedCount,
+    hasJuniorHandling,
+  );
+
   /* Breed → judge/ring lookup */
   const breedJudgeMap = new Map<string, { judgeName: string; ringName?: string }>();
   let allBreedsJudge: { judgeName: string; ringName?: string } | null = null;
@@ -551,84 +566,167 @@ export function ShowDetailClient() {
     }
   }
 
-  /* Unique judges */
-  const uniqueJudges = [...new Set((show.judgeAssignments ?? []).map((ja) => ja.judge?.name).filter(Boolean))];
+  /* Judges with roles — same aggregation logic as the schedule PDF route */
+  const judgesWithRoles = (() => {
+    const assignments = show.judgeAssignments ?? [];
+    const classes = show.showClasses ?? [];
+    const hasJHClasses = classes.some((sc) => sc.classDefinition?.type === 'junior_handler');
+    const juniorBreedSet = new Set<string>();
+    const breedBreedSet = new Set<string>();
+    for (const sc of classes) {
+      const b = sc.breed?.name;
+      if (!b) continue;
+      if (sc.classDefinition?.type === 'junior_handler') juniorBreedSet.add(b);
+      else breedBreedSet.add(b);
+    }
+    type Agg = { name: string; affix: string | null; breeds: Set<string>; sexes: Set<string>; hasNullSex: boolean };
+    const judgeMap = new Map<string, Agg>();
+    for (const ja of assignments) {
+      if (!ja.judge?.id || !ja.judge?.name) continue;
+      if (!judgeMap.has(ja.judge.id)) {
+        judgeMap.set(ja.judge.id, { name: ja.judge.name, affix: (ja.judge as { kennelClubAffix?: string | null }).kennelClubAffix ?? null, breeds: new Set(), sexes: new Set(), hasNullSex: false });
+      }
+      const agg = judgeMap.get(ja.judge.id)!;
+      if (ja.breed?.name) agg.breeds.add(ja.breed.name);
+      if (ja.sex) agg.sexes.add(ja.sex);
+      else agg.hasNullSex = true;
+    }
+    return Array.from(judgeMap.values()).map((agg) => {
+      const breedArr = Array.from(agg.breeds).sort();
+      const onlyJhBreeds = breedArr.length > 0 && breedArr.every((b) => juniorBreedSet.has(b) && !breedBreedSet.has(b));
+      const isJH = onlyJhBreeds || (hasJHClasses && agg.hasNullSex && agg.sexes.size === 0);
+      let role: string;
+      if (isJH) role = 'Junior Handling';
+      else if (agg.sexes.has('dog') && agg.sexes.has('bitch')) role = 'Dogs & Bitches';
+      else if (agg.sexes.has('dog')) role = 'Dogs';
+      else if (agg.sexes.has('bitch')) role = 'Bitches';
+      else if (breedArr.length > 0) role = breedArr.join(', ');
+      else role = (show as { showScope?: string }).showScope === 'single_breed' ? 'Breed Classes' : 'All Breeds';
+      return { name: agg.name, affix: agg.affix, role, isJH };
+    }).sort((a, b) => (a.isJH !== b.isJH ? (a.isJH ? 1 : -1) : a.name.localeCompare(b.name)));
+  })();
+
+  const hasBanner = !!show.bannerImageUrl;
+
+  const t = hasBanner
+    ? {
+        heroBg:       'bg-stone-900',
+        backLink:     'text-stone-400 hover:text-stone-200',
+        orgName:      'text-stone-200',
+        orgInitials:  'bg-white/15 text-white/80 ring-1 ring-white/20',
+        heading:      'text-white',
+        showType:     'border-gold/30 bg-gold/10 text-gold',
+        mutedChip:    'bg-stone-700 text-stone-300',
+        closedBadge:  'border-stone-600 text-stone-300',
+        meta:         'text-stone-400',
+        metaIcon:     'text-stone-500',
+        judgeLabel:   'text-stone-400',
+        judgeName:    'text-stone-200',
+        statsCard:    'border-stone-700/50 bg-stone-800/50',
+        statsDog:     'text-gold/60',
+        statsNum:     'text-white',
+        statsMuted:   'text-stone-400',
+        statsDivider: 'bg-stone-700',
+        sponsorName:  'text-stone-200',
+        sponsorLogo:  'brightness-0 invert',
+        outlineBtn:   'border-stone-600 bg-transparent text-stone-300 shadow-none hover:bg-stone-700/50 hover:text-white',
+        description:  'text-stone-300',
+      }
+    : {
+        heroBg:       'bg-gradient-to-br from-amber-100 via-amber-50 to-stone-50',
+        backLink:     'text-stone-500 hover:text-stone-700',
+        orgName:      'text-stone-700',
+        orgInitials:  'bg-amber-200/80 text-amber-800 ring-1 ring-amber-300/60',
+        heading:      'text-stone-900',
+        showType:     'border-amber-300 bg-amber-100 text-amber-800',
+        mutedChip:    'bg-stone-200 text-stone-700',
+        closedBadge:  'border-stone-300 text-stone-500',
+        meta:         'text-stone-600',
+        metaIcon:     'text-stone-400',
+        judgeLabel:   'text-stone-600',
+        judgeName:    'text-stone-800',
+        statsCard:    'border-stone-200 bg-white/70 backdrop-blur-sm',
+        statsDog:     'text-amber-500',
+        statsNum:     'text-stone-900',
+        statsMuted:   'text-stone-500',
+        statsDivider: 'bg-stone-200',
+        sponsorName:  'text-stone-700',
+        sponsorLogo:  '',
+        outlineBtn:   'border-stone-300 bg-white/60 text-stone-600 shadow-none hover:bg-stone-100 hover:text-stone-800',
+        description:  'text-stone-700',
+      };
 
   return (
     <div className="min-h-screen">
       {/* ─── Hero header ──────────────────────── */}
-      <div className="relative overflow-hidden bg-stone-900">
-        {/* Banner image background (if uploaded) */}
-        {show.bannerImageUrl && (
-          <img
-            src={show.bannerImageUrl}
-            alt=""
-            className="absolute inset-0 size-full object-cover opacity-30"
-          />
+      <div className={`relative overflow-hidden ${t.heroBg}`}>
+        {/* Banner image — full bleed when uploaded, dark overlay for readability */}
+        {hasBanner && (
+          <>
+            <img
+              src={show.bannerImageUrl!}
+              alt=""
+              fetchPriority="high"
+              className="absolute inset-0 size-full object-cover opacity-30"
+            />
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-stone-900 via-stone-900/80 to-stone-900/60" />
+          </>
         )}
-        {/* Gradient layers for depth + warmth */}
-        <div className="pointer-events-none absolute inset-0">
-          {show.bannerImageUrl ? (
-            /* Stronger overlay when banner exists for text readability */
-            <div className="absolute inset-0 bg-gradient-to-t from-stone-900 via-stone-900/80 to-stone-900/60" />
-          ) : (
-            <>
-              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_60%_30%,rgba(180,130,60,0.08),transparent_70%)]" />
-              <div className="absolute -right-32 -top-32 h-96 w-96 rounded-full bg-gold/[0.06] blur-3xl" />
-              <div className="absolute -left-20 bottom-0 h-64 w-64 rounded-full bg-primary/[0.03] blur-3xl" />
-            </>
-          )}
-        </div>
         {/* Top gold accent line */}
-        <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
+        <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-gold/60 to-transparent" />
         {/* Bottom gold accent line */}
-        <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-gold/20 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-amber-300/40 to-transparent" />
 
-        <div className="relative mx-auto max-w-4xl px-3 pb-8 pt-6 sm:px-4 sm:pb-14 sm:pt-10 lg:px-6">
+        <div className="relative mx-auto max-w-4xl px-3 pb-10 pt-6 sm:px-4 sm:pb-16 sm:pt-10 lg:px-6">
           <Link
             href="/shows"
-            className="inline-flex items-center gap-1 py-2 text-sm text-stone-400 transition-colors hover:text-stone-200"
+            className={`inline-flex items-center gap-1 py-2 text-sm transition-colors ${t.backLink}`}
           >
             <ChevronLeft className="size-4" />
             All shows
           </Link>
 
-          <div className="mt-4 flex flex-wrap items-start justify-between gap-4 sm:mt-6">
-            <div className="min-w-0 flex-1">
-              {/* Org name + logo */}
+          <div className="mt-5 sm:mt-7">
+              {/* Club identity — logo prominent, name below */}
               {show.organisation && (
-                <div className="flex items-center gap-2.5">
-                  {(show.organisation as Record<string, unknown>).logoUrl && (
+                <div className="mb-5">
+                  {(show.organisation as Record<string, unknown>).logoUrl ? (
                     <img
                       src={(show.organisation as Record<string, unknown>).logoUrl as string}
-                      alt=""
-                      className="size-7 rounded object-contain sm:size-8"
+                      alt={show.organisation.name}
+                      className="h-16 w-auto max-w-[280px] object-contain drop-shadow-sm sm:h-20"
                     />
+                  ) : (
+                    <div className={`flex size-16 items-center justify-center rounded-2xl sm:size-20 ${t.orgInitials}`}>
+                      <span className="font-serif text-2xl font-bold">
+                        {show.organisation.name.charAt(0)}
+                      </span>
+                    </div>
                   )}
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold/80">
+                  <p className={`mt-2 text-sm font-semibold leading-snug sm:text-base ${t.orgName}`}>
                     {show.organisation.name}
                   </p>
                 </div>
               )}
 
               {/* Show name — billboard sized */}
-              <h1 className="mt-3 font-serif text-3xl font-bold tracking-tight text-white sm:text-4xl lg:text-5xl">
+              <h1 className={`font-serif text-3xl font-bold tracking-tight sm:text-4xl lg:text-5xl ${t.heading}`}>
                 {show.name}
               </h1>
 
-              {/* Gold rule — wider, gradient */}
-              <div className="mt-4 h-[2px] w-20 bg-gradient-to-r from-gold to-gold/20" />
+              {/* Gold rule */}
+              <div className="mt-4 h-[2px] w-24 bg-gradient-to-r from-gold to-gold/20 sm:w-32" />
 
               {/* Badges */}
               <div className="mt-5 flex flex-wrap items-center gap-2">
                 <Badge
                   variant="outline"
-                  className="border-gold/30 bg-gold/10 text-[11px] font-semibold uppercase tracking-wide text-gold"
+                  className={`text-[11px] font-semibold uppercase tracking-wide ${t.showType}`}
                 >
                   {showTypeLabels[show.showType] ?? show.showType}
                 </Badge>
                 {isCompleted && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-stone-700 px-2.5 py-0.5 text-[11px] font-semibold text-stone-300">
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${t.mutedChip}`}>
                     <Trophy className="size-3" />
                     Show Complete — Results Available
                   </span>
@@ -647,7 +745,7 @@ export function ShowDetailClient() {
                       if (daysLeft <= 0) return null;
                       const isUrgent = daysLeft <= 3;
                       return (
-                        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${isUrgent ? 'bg-red-600 text-white' : 'bg-stone-700 text-stone-300'}`}>
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${isUrgent ? 'bg-red-600 text-white' : t.mutedChip}`}>
                           <Clock className="size-3" />
                           {daysLeft === 1 ? 'Closes tomorrow!' : `${daysLeft} days left`}
                         </span>
@@ -656,7 +754,7 @@ export function ShowDetailClient() {
                   </>
                 )}
                 {!isOpen && (
-                  <Badge variant="outline" className="border-stone-600 text-[11px] capitalize text-stone-300">
+                  <Badge variant="outline" className={`text-[11px] capitalize ${t.closedBadge}`}>
                     {(show.status === 'entries_open' && closeDatePast
                       ? 'Entries Closed'
                       : show.status
@@ -666,73 +764,63 @@ export function ShowDetailClient() {
               </div>
 
               {/* Date, time, venue */}
-              <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-stone-400">
+              <div className={`mt-5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm ${t.meta}`}>
                 <span className="flex items-center gap-1.5">
-                  <CalendarDays className="size-4 text-stone-500" />
+                  <CalendarDays className={`size-4 ${t.metaIcon}`} />
                   {format(parseISO(show.startDate), 'EEEE d MMMM yyyy')}
                   {show.startDate !== show.endDate &&
                     ` – ${format(parseISO(show.endDate), 'EEEE d MMMM yyyy')}`}
                 </span>
                 {showAny.startTime && (
                   <span className="flex items-center gap-1.5">
-                    <Clock className="size-4 text-stone-500" />
+                    <Clock className={`size-4 ${t.metaIcon}`} />
                     {showAny.startTime}
                   </span>
                 )}
               </div>
               {venue && (
-                <div className="mt-1.5 flex items-center gap-1.5 text-sm text-stone-400">
-                  <MapPin className="size-4 text-stone-500" />
+                <div className={`mt-1.5 flex items-center gap-1.5 text-sm ${t.meta}`}>
+                  <MapPin className={`size-4 ${t.metaIcon}`} />
                   {venue.name}
                   {venue.postcode && `, ${venue.postcode}`}
                 </div>
               )}
 
               {/* Judge names — judges sell entries */}
-              {uniqueJudges.length > 0 && (
-                <div className="mt-3 text-sm">
-                  <div className="flex items-center gap-1.5">
-                    <User className="size-4 shrink-0 text-stone-500" />
-                    <span className="text-stone-400">
-                      {uniqueJudges.length === 1 ? 'Judge:' : 'Judges:'}
-                    </span>
-                    {uniqueJudges.length <= 2 && (
-                      <span className="font-serif font-medium text-stone-200">{uniqueJudges.join(', ')}</span>
-                    )}
-                  </div>
-                  {uniqueJudges.length > 2 && (
-                    <div className="mt-1 flex flex-wrap items-center gap-x-1 gap-y-0.5 pl-[1.375rem]">
-                      {uniqueJudges.map((name, i) => (
-                        <span key={name} className="font-serif font-medium text-stone-200">
-                          {name}{i < uniqueJudges.length - 1 && (
-                            <span className="ml-1 text-stone-600">&middot;</span>
-                          )}
-                        </span>
-                      ))}
+              {judgesWithRoles.length > 0 && (
+                <div className="mt-3 flex flex-col gap-1 text-sm">
+                  {judgesWithRoles.map(({ name, affix, role }) => (
+                    <div key={name} className="flex items-center gap-1.5">
+                      <User className={`size-4 shrink-0 ${t.metaIcon}`} />
+                      <span className={`font-serif font-medium ${t.judgeName}`}>
+                        {affix ? `${name} (${affix})` : name}
+                      </span>
+                      <span className={t.metaIcon}>—</span>
+                      <span className={t.judgeLabel}>{role}</span>
                     </div>
-                  )}
+                  ))}
                 </div>
               )}
 
               {/* Hero stats strip — social proof */}
               {publicStats && publicStats.totalDogs > 0 && (
-                <div className="mt-6 inline-flex items-center gap-4 rounded-lg border border-stone-700/50 bg-stone-800/50 px-4 py-2.5 sm:gap-6 sm:px-5 sm:py-3">
+                <div className={`mt-6 inline-flex items-center gap-4 rounded-lg border px-4 py-2.5 sm:gap-6 sm:px-5 sm:py-3 ${t.statsCard}`}>
                   <div className="flex items-center gap-2">
-                    <Dog className="size-4 text-gold/60" />
-                    <span className="font-serif text-xl font-bold text-white sm:text-2xl">{publicStats.totalDogs}</span>
-                    <span className="text-xs text-stone-400">{publicStats.totalDogs === 1 ? 'dog' : 'dogs'}</span>
+                    <Dog className={`size-4 ${t.statsDog}`} />
+                    <span className={`font-serif text-xl font-bold sm:text-2xl ${t.statsNum}`}>{publicStats.totalDogs}</span>
+                    <span className={`text-xs ${t.statsMuted}`}>{publicStats.totalDogs === 1 ? 'dog' : 'dogs'}</span>
                   </div>
-                  <div className="h-5 w-px bg-stone-700" />
+                  <div className={`h-5 w-px ${t.statsDivider}`} />
                   <div className="flex items-center gap-2">
-                    <span className="font-serif text-xl font-bold text-white sm:text-2xl">{publicStats.totalExhibitors}</span>
-                    <span className="text-xs text-stone-400">{publicStats.totalExhibitors === 1 ? 'exhibitor' : 'exhibitors'}</span>
+                    <span className={`font-serif text-xl font-bold sm:text-2xl ${t.statsNum}`}>{publicStats.totalExhibitors}</span>
+                    <span className={`text-xs ${t.statsMuted}`}>{publicStats.totalExhibitors === 1 ? 'exhibitor' : 'exhibitors'}</span>
                   </div>
                   {breeds.length > 1 && (
                     <>
-                      <div className="h-5 w-px bg-stone-700" />
+                      <div className={`h-5 w-px ${t.statsDivider}`} />
                       <div className="flex items-center gap-2">
-                        <span className="font-serif text-xl font-bold text-white sm:text-2xl">{breeds.length}</span>
-                        <span className="text-xs text-stone-400">{breeds.length === 1 ? 'breed' : 'breeds'}</span>
+                        <span className={`font-serif text-xl font-bold sm:text-2xl ${t.statsNum}`}>{breeds.length}</span>
+                        <span className={`text-xs ${t.statsMuted}`}>{breeds.length === 1 ? 'breed' : 'breeds'}</span>
                       </div>
                     </>
                   )}
@@ -750,90 +838,22 @@ export function ShowDetailClient() {
                       src={titleSponsors[0].sponsor.logoUrl}
                       alt={titleSponsors[0].sponsor.name}
                       href={titleSponsors[0].sponsor.website}
-                      className="h-7 brightness-0 invert"
+                      className={`h-7 ${t.sponsorLogo}`}
                       fallbackName={titleSponsors[0].sponsor.name}
                     />
                   ) : (
-                    <span className="font-serif text-sm font-medium text-stone-200">
+                    <span className={`font-serif text-sm font-medium ${t.sponsorName}`}>
                       {titleSponsors[0].sponsor.name}
                     </span>
                   )}
                 </div>
               )}
-            </div>
-
-            {/* CTA buttons */}
-            <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto">
-              {isOpen && (
-                <Button size="lg" className="h-12 w-full bg-primary text-base shadow-lg shadow-primary/25 sm:w-auto" asChild>
-                  <Link href={`/shows/${showSlug}/enter`}>
-                    <Ticket className="size-5" />
-                    Enter This Show
-                  </Link>
-                </Button>
-              )}
-              {isCompleted && (
-                <Button size="lg" className="h-12 w-full text-base sm:w-auto" asChild>
-                  <Link href={`/shows/${showSlug}/results`}>
-                    <Trophy className="size-5" />
-                    View Results &amp; Critiques
-                  </Link>
-                </Button>
-              )}
-              <div className="flex gap-2 [&>*]:flex-1 sm:[&>*]:flex-initial">
-                {hasResults && !isCompleted && (
-                  <Button
-                    variant={isOpen ? 'outline' : 'default'}
-                    className={isOpen ? 'border-stone-600 bg-transparent text-stone-300 shadow-none hover:bg-stone-700/50 hover:text-white' : ''}
-                    asChild
-                  >
-                    <Link href={`/shows/${showSlug}/results`}>
-                      <Trophy className="size-4" />
-                      {show.status === 'in_progress' ? 'Live Results' : 'Results'}
-                    </Link>
-                  </Button>
-                )}
-                {(show.showClasses?.length ?? 0) > 0 && (
-                  <Button
-                    variant="outline"
-                    className="border-stone-600 bg-transparent text-stone-300 shadow-none hover:bg-stone-700/50 hover:text-white"
-                    asChild
-                  >
-                    <a href={`/api/schedule/${show.id}`} target="_blank" rel="noopener noreferrer">
-                      <FileText className="size-4" />
-                      Schedule
-                    </a>
-                  </Button>
-                )}
-                {show.status !== 'draft' && show.status !== 'cancelled' && (
-                  <Button
-                    variant="outline"
-                    className="h-9 border-stone-600 bg-transparent text-stone-300 shadow-none hover:bg-stone-700/50 hover:text-white"
-                    onClick={() => {
-                      window.location.href = `/api/shows/${show.id}/calendar`;
-                    }}
-                  >
-                    <CalendarPlus className="size-4" />
-                    <span className="hidden sm:inline">Calendar</span>
-                  </Button>
-                )}
-                <ShowShareDropdown
-                  showName={show.name}
-                  showType={showTypeLabels[show.showType] ?? show.showType}
-                  showDate={format(parseISO(show.startDate), 'd MMMM yyyy')}
-                  organisationName={show.organisation?.name ?? ''}
-                  venueName={show.venue?.name}
-                  shareUrl={typeof window !== 'undefined' ? `${window.location.origin}/shows/${showSlug}` : ''}
-                  className="h-9 border-stone-600 bg-transparent text-stone-300 shadow-none hover:bg-stone-700/50 hover:text-white"
-                />
-              </div>
-            </div>
           </div>
 
           {/* Description — editorial treatment */}
           {show.description && (
             <div className="mt-6 border-l-2 border-gold/30 pl-4 sm:pl-5">
-              <p className={`max-w-2xl leading-relaxed text-stone-300 ${!descExpanded ? 'line-clamp-3 sm:line-clamp-none' : ''}`}>
+              <p className={`max-w-2xl leading-relaxed ${t.description} ${!descExpanded ? 'line-clamp-3 sm:line-clamp-none' : ''}`}>
                 {show.description}
               </p>
               {show.description.length > 120 && (
@@ -846,6 +866,72 @@ export function ShowDetailClient() {
               )}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* ─── Action bar — sticky below site header ── */}
+      <div className="sticky top-[4.5rem] z-40 border-b bg-background/95 shadow-sm backdrop-blur-md">
+        <div className="mx-auto flex max-w-4xl items-center gap-2 px-3 py-2.5 sm:px-4 lg:px-6">
+          {isOpen && (
+            <Button className="h-12 flex-1 px-5 text-base font-semibold shadow-lg shadow-primary/30 sm:h-11 sm:flex-initial sm:shrink-0 sm:px-5 sm:shadow-md sm:shadow-primary/25" asChild>
+              <Link href={`/shows/${showSlug}/enter`}>
+                <Ticket className="size-5 sm:size-4" />
+                Enter This Show
+              </Link>
+            </Button>
+          )}
+          {isCompleted && (
+            <Button className="h-12 flex-1 px-5 text-base font-semibold shadow-lg sm:h-10 sm:flex-initial sm:shrink-0 sm:px-4 sm:text-sm sm:font-medium sm:shadow-sm" asChild>
+              <Link href={`/shows/${showSlug}/results`}>
+                <Trophy className="size-5 sm:size-4" />
+                <span className="hidden sm:inline">Results &amp; Critiques</span>
+                <span className="sm:hidden">Results</span>
+              </Link>
+            </Button>
+          )}
+          {hasResults && !isCompleted && (
+            <Button variant={isOpen ? 'outline' : 'default'} className="h-12 flex-1 px-5 text-base font-semibold sm:h-10 sm:flex-initial sm:shrink-0 sm:px-4 sm:text-sm sm:font-medium" asChild>
+              <Link href={`/shows/${showSlug}/results`}>
+                <Trophy className="size-4" />
+                <span className="hidden sm:inline">{show.status === 'in_progress' ? 'Live Results' : 'Results'}</span>
+                <span className="sm:hidden">Results</span>
+              </Link>
+            </Button>
+          )}
+          {(show.showClasses?.length ?? 0) > 0 && (
+            <Button
+              variant="outline"
+              className="h-12 shrink-0 gap-1.5 border-2 px-3 text-sm font-semibold sm:h-10 sm:border sm:px-4 sm:font-medium"
+              asChild
+            >
+              <a href={`/api/schedule/${show.id}`} target="_blank" rel="noopener noreferrer">
+                <FileText className="size-5 sm:size-4" />
+                <span>Schedule</span>
+              </a>
+            </Button>
+          )}
+          <div className="ml-auto flex items-center gap-0.5 sm:gap-1">
+            {show.status !== 'draft' && show.status !== 'cancelled' && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 gap-1.5 text-xs"
+                aria-label="Add to calendar"
+                onClick={() => { window.location.href = `/api/shows/${show.id}/calendar`; }}
+              >
+                <CalendarPlus className="size-4" />
+                <span className="hidden sm:inline">Add to Calendar</span>
+              </Button>
+            )}
+            <ShowShareDropdown
+              showName={show.name}
+              showType={showTypeLabels[show.showType] ?? show.showType}
+              showDate={format(parseISO(show.startDate), 'd MMMM yyyy')}
+              organisationName={show.organisation?.name ?? ''}
+              venueName={show.venue?.name}
+              shareUrl={typeof window !== 'undefined' ? `${window.location.origin}/shows/${showSlug}` : ''}
+            />
+          </div>
         </div>
       </div>
 
@@ -1159,7 +1245,7 @@ export function ShowDetailClient() {
                           {ts.specialPrizes}
                         </p>
                       )}
-                      {(ts as Record<string, unknown>).adImageUrl && (
+                      {!!(ts as Record<string, unknown>).adImageUrl && (
                         <div className="mt-4 flex justify-center">
                           <img
                             src={(ts as Record<string, unknown>).adImageUrl as string}
@@ -1227,7 +1313,7 @@ export function ShowDetailClient() {
             <div className="flex items-center gap-3">
               <div className="h-px flex-1 bg-border/50" />
               <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                {breeds.length === 1 ? 'Classification' : `${breeds.length} Breeds`}
+                {classificationHeading}
               </h2>
               <div className="h-px flex-1 bg-border/50" />
             </div>
@@ -1304,32 +1390,47 @@ export function ShowDetailClient() {
           </div>
         )}
 
-        {/* Bottom spacer for sticky bar */}
-        {isOpen && <div className="h-20 sm:hidden" />}
+        {/* Bottom spacer so last content isn't hidden behind the entry widget */}
+        {isOpen && <div className="h-24 sm:hidden" />}
       </div>
 
-      {/* ─── Sticky mobile CTA bar ──────────────── */}
-      {isOpen && showStickyBar && (
+      {/* ─── Entry widget — slides up from bottom on mobile after scroll ── */}
+      {isOpen && (
         <div
-          className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 p-3 pr-16 backdrop-blur-lg sm:hidden"
+          className={`fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 backdrop-blur-lg transition-all duration-300 ease-out sm:hidden ${
+            showWidget ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'
+          }`}
           style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
         >
-          <Button size="lg" className="h-12 w-full text-base shadow-lg" asChild>
-            <Link href={`/shows/${showSlug}/enter`}>
-              <Ticket className="size-5" />
-              Enter This Show
+          <div className="flex items-center gap-3 px-4 pt-3">
+            <div className="min-w-0 flex-1">
+              {show.firstEntryFee != null && show.firstEntryFee > 0 ? (
+                <>
+                  <p className="font-serif text-xl font-bold text-primary">{formatCurrency(show.firstEntryFee)}</p>
+                  <p className="text-xs text-muted-foreground">entry fee</p>
+                </>
+              ) : (
+                <p className="text-sm font-semibold">Enter This Show</p>
+              )}
               {show.entryCloseDate && (() => {
                 const daysLeft = Math.ceil((new Date(show.entryCloseDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-                if (daysLeft > 0 && daysLeft <= 7) {
-                  return <span className="ml-1 text-xs opacity-80">· {daysLeft === 1 ? 'Closes tomorrow!' : `${daysLeft} days left`}</span>;
-                }
-                if (publicStats && publicStats.totalExhibitors > 5) {
-                  return <span className="ml-1 text-xs opacity-70">· {publicStats.totalExhibitors} entered</span>;
+                if (daysLeft > 0 && daysLeft <= 14) {
+                  return (
+                    <p className={`text-xs font-medium ${daysLeft <= 3 ? 'text-red-600' : 'text-amber-600'}`}>
+                      {daysLeft === 1 ? 'Closes tomorrow!' : `Closes in ${daysLeft} days`}
+                    </p>
+                  );
                 }
                 return null;
               })()}
-            </Link>
-          </Button>
+            </div>
+            <Button className="h-12 shrink-0 px-6 text-base font-semibold shadow-lg shadow-primary/30" asChild>
+              <Link href={`/shows/${showSlug}/enter`}>
+                <Ticket className="size-5" />
+                Enter Now
+              </Link>
+            </Button>
+          </div>
         </div>
       )}
     </div>

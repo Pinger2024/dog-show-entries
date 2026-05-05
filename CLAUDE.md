@@ -38,7 +38,9 @@ Amanda sends feedback, bug reports, and feature requests by replying to Remi ema
 | `FEEDBACK_EMAIL` | Reply-To address (`feedback@inbound.remishowmanager.co.uk`) |
 | `EMAIL_FROM` | Sending address (`Remi <noreply@remishowmanager.co.uk>`) |
 | `FEEDBACK_NOTIFY_EMAIL` | Who gets notified of new feedback (`michael@prometheus-it.com`) |
-| `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret |
+| `STRIPE_WEBHOOK_SECRET` | Stripe platform webhook signing secret (payment events) |
+| `STRIPE_CONNECT_WEBHOOK_SECRET` | Stripe Connect webhook signing secret (`account.updated` etc.) |
+| `NEXT_PUBLIC_APP_URL` | Absolute base URL used for Stripe redirect return/refresh links |
 
 ## Tech Stack & Patterns
 
@@ -89,6 +91,27 @@ src/
     ui/              — shadcn components
 ```
 
+## Payments Architecture
+
+**Remi is merchant of record for entry payments.** Exhibitors pay Remi's Stripe account; Remi BACSes the net to each host club after entries close. No Stripe Connect, no club-side KYC.
+
+**Entry payments** (exhibitor → Remi → club)
+- Platform-mode `createPaymentIntent` in `src/server/services/stripe.ts`. Money lands in Remi's Stripe balance.
+- Exhibitor charged `totalAmount + platformFee` (£1 + 1% via `calculatePlatformFee`). `platform_fee_pence` column on `orders` records the split for reconciliation.
+- Club provides sort code + account number on `/secretary/club` (saved to `organisations.payout_{account_name,sort_code,account_number}`).
+- **Gate:** `shows.update` refuses `entries_open` unless all three payout fields are set. Checklist key `payout_details_set`.
+- After entries close, admin records the BACS payout via `/admin/payouts` → inserts a `payouts` row.
+- Chargeback liability is Remi's — T&Cs need to say so.
+
+**Stripe Billing** (club → Remi SaaS subscription, separate)
+- Unchanged. `organisations.stripeCustomerId` / `stripeSubscriptionId`, plain Checkout session.
+- Lives at `/secretary/billing`.
+
+**Print orders** (Remi → Mixam, separate)
+- Platform-mode `createPaymentIntent`, landing in Remi's balance — Remi is the buyer from Mixam.
+
+**Stripe Connect code still exists** (`src/server/trpc/routers/stripe-connect.ts`, `/api/stripe/connect/*`, `/api/webhooks/stripe/connect`, `stripe_*` columns on organisations) but is dormant — kept for future use if Remi ever needs a true marketplace model. See `project_stripe_connect_migration.md` memory for the shipped-and-retired saga (2026-04-20).
+
 ## User Roles
 
 - **exhibitor** — Default. Can enter shows, manage dogs.
@@ -115,6 +138,55 @@ The lettiva.com domain is no longer used — migrated to remishowmanager.co.uk o
 ## Database Migrations
 
 Use `npx drizzle-kit push` to sync schema changes to the database. No migration files — push mode.
+
+## Testing
+
+**411 integration tests across 39 files**, covering every user journey in `TESTING_MAP.md`.
+
+### Running tests
+
+```bash
+npm test              # full suite (pretest auto-pushes schema to remi_test DB)
+npx vitest run --run src/__tests__/integration/  # skip pretest hook (faster)
+npm run test:watch    # watch mode
+```
+
+### Test infrastructure
+
+- **Framework:** Vitest 3.2.4 with Postgres-backed integration tests
+- **Local DB:** Homebrew `postgresql@16` with `remi_test` database (not Docker)
+- **CI:** GitHub Actions with a Postgres service container (`.github/workflows/test.yml`)
+- **Config:** `vitest.config.ts` loads `.env.test` for test env vars; `singleFork: true` keeps all tests in one process
+
+### Test helpers (`src/__tests__/helpers/`)
+
+| File | Purpose |
+|------|---------|
+| `setup.ts` | Global mocks for Stripe, Resend, results-notifications, email senders, NextAuth. Runs `cleanDb()` before each test. |
+| `db.ts` | `testDb` (Drizzle instance against `remi_test`), `cleanDb()` (TRUNCATE CASCADE, refuses non-localhost URLs) |
+| `context.ts` | `createTestCaller(user)` — builds a tRPC caller with an injected session, bypasses NextAuth entirely |
+| `factories.ts` | `makeUser`, `makeOrg`, `makeShow`, `makeDog`, `makeEntry`, `makeResult`, `makeJudge`, `makeStewardAssignment`, `makeOrder`, `makePayment`, `makePlan`, `makeSponsor`, `makeFeedback`, `makeBacklogItem`, etc. + convenience builders like `makeSecretaryWithOrg()`, `makeSecretaryWithOrgAndBreed()` |
+| `stripe-event.ts` | `injectStripeEvent(event)`, `buildStripeWebhookRequest()` — for Stripe webhook route testing |
+| `resend-mocks.ts` | Shared `resendMocks.send` capture for email payload assertions |
+
+### Writing a new test
+
+```typescript
+const { user, org } = await makeSecretaryWithOrg();
+const show = await makeShow({ organisationId: org.id, status: 'in_progress' });
+const caller = createTestCaller(user);
+await caller.secretary.someMutation({ showId: show.id });
+expect(...).toBe(...);
+```
+
+### Testing rules
+
+- **Every bug Amanda reports becomes a test first, fix second.** The suite grows where it matters.
+- **New features include a journey test.** One test that strings multiple procedures together.
+- **Mock external services, not the DB.** Tests use real Postgres and real Drizzle queries. Stripe, Resend, S3/R2 are mocked at the service boundary.
+- **Don't mock the database.** Use transactions or `cleanDb()` between tests.
+- **Assert payload shapes, not email HTML.** For email tests, check `to`, `subject`, and key body content — not exact HTML.
+- **`TESTING_MAP.md` is the canonical coverage checklist.** Tick rows as tests land. Add new rows as features ship.
 
 ## Feature Development Workflow
 

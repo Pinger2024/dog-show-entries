@@ -21,7 +21,10 @@ import {
   users,
   achievements,
 } from '@/server/db/schema';
-import { createPaymentIntent } from '@/server/services/stripe';
+import {
+  createPaymentIntent,
+  calculatePlatformFee,
+} from '@/server/services/stripe';
 
 const cartEntrySchema = z.object({
   entryType: z.enum(['standard', 'junior_handler']).default('standard'),
@@ -47,10 +50,19 @@ export const ordersRouter = createTRPCRouter({
           sundryItemId: z.string().uuid(),
           quantity: z.number().int().min(1),
         })).default([]),
+        /** Channel the exhibitor arrived from (from the show page's ?src= param). */
+        referralSource: z
+          .string()
+          .regex(/^[a-z0-9_-]+$/i, 'invalid source')
+          .max(32)
+          .optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // Validate show is accepting entries
+      // Validate show is accepting entries. Remi is merchant of record —
+      // exhibitor entry fees land in Remi's Stripe balance and are paid
+      // out to the club by BACS after the show. No need to fetch the
+      // host org's payment config here.
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
       });
@@ -446,6 +458,12 @@ export const ordersRouter = createTRPCRouter({
 
       totalAmount += sundryTotal;
 
+      // Platform handling fee (£1 + 1% of subtotal) — the exhibitor pays
+      // totalAmount + platformFee at Stripe. Fee is 0 for £0 orders so
+      // free entries bypass Stripe entirely.
+      const platformFeePence =
+        totalAmount === 0 ? 0 : calculatePlatformFee(totalAmount);
+
       // Create order
       const [order] = await ctx.db
         .insert(orders)
@@ -454,6 +472,8 @@ export const ordersRouter = createTRPCRouter({
           exhibitorId: ctx.session.user.id,
           status: 'pending_payment',
           totalAmount,
+          platformFeePence,
+          referralSource: input.referralSource?.toLowerCase() ?? null,
         })
         .returning();
 
@@ -499,24 +519,36 @@ export const ordersRouter = createTRPCRouter({
           dogId: entryInput.dogId ?? null,
         });
 
-        // Create entry classes with tiered fees
-        await ctx.db.insert(entryClasses).values(
-          entryInput.classIds.map((cid, idx) => {
-            let classFee: number;
-            if (entryInput.isNfc && show.nfcEntryFee != null) {
-              classFee = show.nfcEntryFee;
-            } else if (show.firstEntryFee != null) {
-              classFee = idx === 0 ? show.firstEntryFee : (show.subsequentEntryFee ?? show.firstEntryFee);
-            } else {
-              classFee = classMap.get(cid)!.entryFee;
-            }
-            return {
-              entryId: entry!.id,
-              showClassId: cid,
-              fee: classFee,
-            };
-          })
-        );
+        // Create entry classes with per-class fees. The sum of these must
+        // match entries.total_fee above — the JH and NFC branches have to
+        // stay aligned between the two loops or the financial "Entries by
+        // Class" breakdown disagrees with the order-level revenue.
+        // NFC entries can legitimately have zero classes — skip the insert
+        // in that case (Drizzle's .values([]) throws "values() must be
+        // called with at least one value").
+        if (entryInput.classIds.length > 0) {
+          await ctx.db.insert(entryClasses).values(
+            entryInput.classIds.map((cid, idx) => {
+              let classFee: number;
+              if (entryInput.entryType === 'junior_handler' && show.juniorHandlerFee != null) {
+                // JH fee is a flat per-entry charge — attribute to the first
+                // class, zero for the rest. Typically only one class anyway.
+                classFee = idx === 0 ? show.juniorHandlerFee : 0;
+              } else if (entryInput.isNfc && show.nfcEntryFee != null) {
+                classFee = show.nfcEntryFee;
+              } else if (show.firstEntryFee != null) {
+                classFee = idx === 0 ? show.firstEntryFee : (show.subsequentEntryFee ?? show.firstEntryFee);
+              } else {
+                classFee = classMap.get(cid)!.entryFee;
+              }
+              return {
+                entryId: entry!.id,
+                showClassId: cid,
+                fee: classFee,
+              };
+            })
+          );
+        }
 
         // Create junior handler details if applicable
         if (
@@ -579,12 +611,20 @@ export const ordersRouter = createTRPCRouter({
         };
       }
 
-      // Create Stripe PaymentIntent
-      const paymentIntent = await createPaymentIntent(totalAmount, {
+      // Gross = what the exhibitor is charged (subtotal + £1+1% handling
+      // fee). Money lands in Remi's platform Stripe account; the
+      // subtotal is forwarded to the club by BACS after entries close.
+      // The platformFeePence column on orders + the metadata below keep
+      // the two components separable for reconciliation and payouts.
+      const grossAmount = totalAmount + platformFeePence;
+
+      const paymentIntent = await createPaymentIntent(grossAmount, {
         orderId: order!.id,
         showId: input.showId,
         exhibitorId: ctx.session.user.id,
         entryCount: String(input.entries.length),
+        platformFeePence: String(platformFeePence),
+        subtotalPence: String(totalAmount),
       });
 
       // Update order with Stripe PI ID
@@ -593,11 +633,13 @@ export const ordersRouter = createTRPCRouter({
         .set({ stripePaymentIntentId: paymentIntent.id })
         .where(eq(orders.id, order!.id));
 
-      // Create payment record
+      // Create payment record. amount here reflects what the exhibitor
+      // is being charged (gross) so the sum reconciles with Stripe's
+      // own balance transactions.
       await ctx.db.insert(payments).values({
         orderId: order!.id,
         stripePaymentId: paymentIntent.id,
-        amount: totalAmount,
+        amount: grossAmount,
         status: 'pending',
         type: 'initial',
       });
@@ -606,6 +648,8 @@ export const ordersRouter = createTRPCRouter({
         clientSecret: paymentIntent.client_secret!,
         orderId: order!.id,
         totalAmount,
+        platformFeePence,
+        grossAmount,
         entryCount: createdEntries.length,
         freeEntry: false,
       };

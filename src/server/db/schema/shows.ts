@@ -55,6 +55,12 @@ export interface ScheduleData {
   // Customisable best award names (e.g. Best in Show, Best Dog, Best Bitch, etc.)
   bestAwards?: string[];
 
+  // Best Veteran in Show — RKC requires explicit eligibility criteria when offered
+  /** Whether a Best Veteran in Show competition is being held at this show */
+  hasBestVeteranInShow?: boolean;
+  /** Eligibility criteria text — RKC mandates this be in the schedule if BVIS is held */
+  bestVeteranInShowEligibility?: string;
+
   // Custom statements (e.g. "OUTSIDE ATTRACTION - KC RULE F(1) 16h WILL BE STRICTLY ENFORCED")
   customStatements?: string[];
 

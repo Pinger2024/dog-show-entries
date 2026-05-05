@@ -25,8 +25,22 @@ export const orders = pgTable(
       .notNull()
       .references(() => users.id),
     status: orderStatusEnum('status').notNull().default('draft'),
+    // Amount the CLUB receives — entry + sundry subtotal, in pence. The
+    // exhibitor is charged totalAmount + platformFeePence at Stripe; the
+    // fee is routed to Remi via application_fee_amount and the rest goes
+    // to the club's connected Standard account.
     totalAmount: integer('total_amount').notNull().default(0),
+    // Remi's handling fee for this order: £1 flat + 1% of totalAmount.
+    // Persisted for receipts + reconciliation — NOT derived on the fly
+    // because the formula could change and historical orders need their
+    // original fee preserved.
+    platformFeePence: integer('platform_fee_pence').notNull().default(0),
     stripePaymentIntentId: text('stripe_payment_intent_id'),
+    // Attribution: which channel drove this entry? Populated from the ?src=
+    // query param on the share URL (whatsapp/facebook/instagram/…). Null when
+    // the exhibitor came in directly. Kept free-form on purpose so new share
+    // channels don't need a schema change.
+    referralSource: text('referral_source'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -39,6 +53,7 @@ export const orders = pgTable(
     index('orders_show_id_idx').on(table.showId),
     index('orders_exhibitor_id_idx').on(table.exhibitorId),
     index('orders_status_idx').on(table.status),
+    index('orders_referral_source_idx').on(table.referralSource),
   ]
 );
 

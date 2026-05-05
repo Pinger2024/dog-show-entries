@@ -22,6 +22,7 @@ import {
   classDefinitions,
   orders,
   orderSundryItems,
+  shareEvents,
 } from '@/server/db/schema';
 import { verifyShowAccess } from '../verify-show-access';
 import { isUuid, generateShowSlug } from '@/lib/slugify';
@@ -741,6 +742,37 @@ export const showsRouter = createTRPCRouter({
 
       await verifyShowAccess(ctx.db, ctx.session.user.id, id, { callerIsAdmin: ctx.callerIsAdmin });
 
+      // Gate: can't open entries unless the host club has saved their
+      // payout bank details. Remi is merchant of record, so clubs don't
+      // need a Stripe account — but we do need their sort code + account
+      // number so we can BACS them the entry fees after the show.
+      if (input.status === 'entries_open') {
+        const row = await ctx.db.query.shows.findFirst({
+          where: eq(shows.id, id),
+          columns: { organisationId: true },
+          with: {
+            organisation: {
+              columns: {
+                payoutSortCode: true,
+                payoutAccountNumber: true,
+                payoutAccountName: true,
+              },
+            },
+          },
+        });
+        if (
+          !row?.organisation?.payoutSortCode ||
+          !row.organisation.payoutAccountNumber ||
+          !row.organisation.payoutAccountName
+        ) {
+          throw new TRPCError({
+            code: 'PRECONDITION_FAILED',
+            message:
+              "Add your club's bank details before opening entries — we need them to send the entry fees on to you after the show. Visit the Club page to add them.",
+          });
+        }
+      }
+
       // Validate that close dates are before the show start date
       const effectiveStartDate = rest.startDate;
       if (effectiveStartDate) {
@@ -781,6 +813,18 @@ export const showsRouter = createTRPCRouter({
         .set(updateData)
         .where(eq(shows.id, id))
         .returning();
+
+      // Amanda's spec 2026-04-17: catalogue numbers should lock in at
+      // the moment entries close. Fire ensureCatalogueNumbers on any
+      // transition into entries_closed (or further along the lifecycle
+      // — in_progress / completed — for shows that skip that status).
+      if (
+        input.status &&
+        ['entries_closed', 'in_progress', 'completed'].includes(input.status)
+      ) {
+        const { ensureCatalogueNumbers } = await import('@/server/services/catalogue-numbering');
+        await ensureCatalogueNumbers(ctx.db, id);
+      }
 
       return updated!;
     }),
@@ -837,6 +881,28 @@ export const showsRouter = createTRPCRouter({
         startDate: show.startDate,
         status: show.status,
       };
+    }),
+
+  /**
+   * How many times this show has been shared in the last 7 days. Feeds the
+   * "Shared N times this week" social-proof chip on the show page.
+   * Returns 0 when there's nothing to brag about yet — the client chooses
+   * whether to show it.
+   */
+  getShareCount: publicProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const rows = await ctx.db
+        .select({ n: sql<number>`count(*)` })
+        .from(shareEvents)
+        .where(
+          and(
+            eq(shareEvents.showId, input.showId),
+            gte(shareEvents.createdAt, sevenDaysAgo)
+          )
+        );
+      return { weekly: Number(rows[0]?.n ?? 0) };
     }),
 
   getShowSponsors: publicProcedure

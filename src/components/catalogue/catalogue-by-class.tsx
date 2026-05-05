@@ -3,7 +3,7 @@ import { styles } from './catalogue-styles';
 import { CatalogueHeader } from './catalogue-header';
 import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
 import { formatDobKC, formatPedigreeKC, formatOwnerKC, uppercaseName, buildSponsorLines } from './catalogue-utils';
-import { CoverPage, ShowInformationPage, JudgesListPage, ClassDefinitionsPage, TrophiesPage, BestAwardsPage, ExhibitorIndexPage } from './catalogue-front-matter';
+import { CoverPage, FrontMatterPage, TrophiesPage, ExhibitorIndexPage } from './catalogue-front-matter';
 
 interface Props {
   show: CatalogueShowInfo;
@@ -11,13 +11,15 @@ interface Props {
 }
 
 // Group entries by class, preserving sort metadata.
-// Uses classNumber as the unique key (not class name) so that
-// dog and bitch classes with the same definition name stay separate.
+// Uses classLabel (then classNumber) as the unique key so that dog and
+// bitch classes with the same definition name stay separate, and so that
+// JH classes (which all share classNumber=null) don't collapse together.
 function groupByClass(entries: CatalogueEntry[]) {
   const classes: Record<string, {
     className: string;
     sex: string | null | undefined;
     classNumber: number | null | undefined;
+    classLabel: string;
     sortOrder: number | undefined;
     entries: CatalogueEntry[];
   }> = {};
@@ -25,13 +27,15 @@ function groupByClass(entries: CatalogueEntry[]) {
   for (const entry of entries) {
     for (const cls of entry.classes) {
       const className = cls.name ?? 'Unknown Class';
-      const classKey = cls.classNumber != null
-        ? String(cls.classNumber)
-        : `${className}-${cls.sex ?? 'any'}`;
+      const label = cls.classLabel ?? (cls.classNumber != null ? String(cls.classNumber) : '');
+      const classKey = label
+        ? `lbl:${label}`
+        : `name:${className}-${cls.sex ?? 'any'}`;
       classes[classKey] ??= {
         className,
         sex: cls.sex,
         classNumber: cls.classNumber,
+        classLabel: label,
         sortOrder: cls.sortOrder,
         entries: [],
       };
@@ -43,15 +47,17 @@ function groupByClass(entries: CatalogueEntry[]) {
 }
 
 export function CatalogueByClass({ show, entries }: Props) {
-  // Build a lookup: classNumber -> sponsorship info (array, since one class
+  // Build a lookup: classLabel -> sponsorship info (array, since one class
   // can have multiple sponsors — e.g. one for the trophy and another for
-  // the rosettes).
-  const sponsorsByClassNumber = new Map<number, ClassSponsorshipInfo[]>();
+  // the rosettes). Keyed on label rather than classNumber so that JH class
+  // sponsorships (classNumber=null, classLabel='JHA') still resolve.
+  const sponsorsByClassLabel = new Map<string, ClassSponsorshipInfo[]>();
   for (const sp of show.classSponsorships ?? []) {
-    if (sp.classNumber != null) {
-      const existing = sponsorsByClassNumber.get(sp.classNumber) ?? [];
+    const label = sp.classLabel ?? (sp.classNumber != null ? String(sp.classNumber) : '');
+    if (label) {
+      const existing = sponsorsByClassLabel.get(label) ?? [];
       existing.push(sp);
-      sponsorsByClassNumber.set(sp.classNumber, existing);
+      sponsorsByClassLabel.set(label, existing);
     }
   }
 
@@ -61,14 +67,16 @@ export function CatalogueByClass({ show, entries }: Props) {
   if (show.allShowClasses) {
     const existingKeys = new Set(Object.keys(grouped));
     for (const sc of show.allShowClasses) {
-      const classKey = sc.classNumber != null
-        ? String(sc.classNumber)
-        : `${sc.className}-${sc.sex ?? 'any'}`;
+      const label = sc.classLabel ?? (sc.classNumber != null ? String(sc.classNumber) : '');
+      const classKey = label
+        ? `lbl:${label}`
+        : `name:${sc.className}-${sc.sex ?? 'any'}`;
       if (!existingKeys.has(classKey)) {
         grouped[classKey] = {
           className: sc.className,
           sex: sc.sex,
           classNumber: sc.classNumber,
+          classLabel: label,
           sortOrder: sc.sortOrder,
           entries: [],
         };
@@ -76,30 +84,35 @@ export function CatalogueByClass({ show, entries }: Props) {
     }
   }
 
-  // Sort by classNumber if assigned, otherwise by sortOrder, then alphabetically
+  // Sort: numbered classes first (by classNumber), then unnumbered (JH etc)
+  // by classLabel, then sortOrder, then alphabetically for stability.
   const classKeys = Object.keys(grouped).sort((a, b) => {
     const aNum = grouped[a].classNumber;
     const bNum = grouped[b].classNumber;
     if (aNum != null && bNum != null) return aNum - bNum;
     if (aNum != null) return -1;
     if (bNum != null) return 1;
+    const aLbl = grouped[a].classLabel;
+    const bLbl = grouped[b].classLabel;
+    if (aLbl && bLbl) return aLbl.localeCompare(bLbl);
     const aSort = grouped[a].sortOrder ?? 0;
     const bSort = grouped[b].sortOrder ?? 0;
     if (aSort !== bSort) return aSort - bSort;
     return a.localeCompare(b);
   });
 
-  // Chunk classes into page-sized groups. The threshold matters in
-  // two directions:
-  //   - Too low (~30) creates artificial page breaks that leave large
-  //     trailing whitespace on chunk boundaries.
-  //   - Too high (200+) triggers a pdfkit coordinate-overflow crash
-  //     ("unsupported number: -9.979e+21") on shows with many entries
-  //     in a single <Page wrap>. Confirmed in production 2026-04-15.
-  // 60 is a happy medium — large enough that small/medium shows fit
-  // in one chunk, low enough that pdfkit's coordinate math stays in
-  // safe range.
-  const PAGE_ENTRY_THRESHOLD = 60;
+  // pdfkit underflows coordinates inside clipBorderTop once a wrapped
+  // <Page> accumulates too many layout nodes (error:
+  // "unsupported number -9.979e+21"). The node count depends on
+  // class + entry + sponsor rows, not just entry count. Empirically:
+  //   - 82 entries / 20 classes / no sponsors → safe
+  //   - 90 entries / ~24 classes / ~15 sponsors → crash
+  //   - 117 entries / ~30 classes / sponsors → crash
+  //   - 187 entries split across chunks (each ~93) → safe (fewer
+  //     classes-per-chunk keeps node count down)
+  // 80 is conservative enough to survive sponsorship-heavy shows
+  // without turning every chunk into one tiny Page.
+  const PAGE_ENTRY_THRESHOLD = 80;
   const classChunks: string[][] = [];
   let currentChunk: string[] = [];
   let currentCount = 0;
@@ -124,18 +137,15 @@ export function CatalogueByClass({ show, entries }: Props) {
           #93) since exhibitors look up their own catalogue numbers more
           often than they read alphabetical reference indexes. */}
       <CoverPage show={show} />
-      <ShowInformationPage show={show} />
-      <JudgesListPage show={show} />
-      <ClassDefinitionsPage show={show} />
+      <FrontMatterPage show={show} />
       {!show.skipTrophiesPage && (
         <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />
       )}
-      <BestAwardsPage show={show} />
 
       {classChunks.map((chunkKeys, chunkIdx) => (
       <Page key={`chunk-${chunkIdx}`} size="A5" style={styles.page} wrap>
       {chunkKeys.map((classKey, idx) => {
-        const { className, sex, classNumber, entries: classEntries } = grouped[classKey];
+        const { className, sex, classLabel, entries: classEntries } = grouped[classKey];
         const sorted = [...classEntries].sort(
           (a, b) => (a.catalogueNumber ?? '').localeCompare(b.catalogueNumber ?? '', undefined, { numeric: true })
         );
@@ -223,15 +233,15 @@ export function CatalogueByClass({ show, entries }: Props) {
               <View
                 style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', ...styles.groupHeading }}
               >
-                <Text>{classNumber ? `Class ${classNumber}: ${className}` : className}</Text>
+                <Text>{classLabel ? `Class ${classLabel}: ${className}` : className}</Text>
                 {sex && (
                   <Text style={{ fontSize: 9, fontStyle: 'italic', color: '#fff' }}>
                     ({sex === 'dog' ? 'Dogs' : sex === 'bitch' ? 'Bitches' : 'Open'})
                   </Text>
                 )}
               </View>
-              {classNumber != null && sponsorsByClassNumber.has(classNumber) &&
-                buildSponsorLines(sponsorsByClassNumber.get(classNumber)!).map((line, i) => (
+              {classLabel && sponsorsByClassLabel.has(classLabel) &&
+                buildSponsorLines(sponsorsByClassLabel.get(classLabel)!).map((line, i) => (
                   <Text key={i} style={styles.sponsorLine}>{line}</Text>
                 ))}
 
