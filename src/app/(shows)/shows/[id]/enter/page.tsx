@@ -1434,29 +1434,30 @@ export default function EnterShowPage() {
           <div className="space-y-3">
             <h3 className="text-sm font-semibold">RKC Declaration</h3>
             <div className="max-h-40 overflow-y-auto rounded-md border bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">
-              I/We agree to submit to and be bound by Kennel Club Limited Rules
-              &amp; Regulations in their present form or as they may be amended
-              from time to time in relation to all canine matters with which the
-              Kennel Club is concerned and that this entry is made upon the basis
-              that all current single or joint registered owners of this dog(s)
-              have authorised/consented to this entry. I/We also undertake to
-              abide by the Regulations of this Show and not to bring to the Show
-              any dog which has contracted or been knowingly exposed to any
-              infectious or contagious disease during the 21 days prior to the
-              Show, or which is suffering from a visible condition which adversely
-              affects its health or welfare or to bring any dog which has been
-              prepared for exhibition contrary to Kennel Club Regulations for the
-              Preparation of Dogs for Exhibition F (Annex B). I/We agree without
-              reservation that any Veterinary Surgeon operating on any of my/our
-              dogs in such a way that the operation alters the natural
-              conformation of the dog or part thereof may report such operations
-              to the Kennel Club. I/We declare that where any alteration has been
-              made to the natural conformation of the dog(s) the relevant
-              permission to show has been granted by the Kennel Club. I/We
-              further declare that I believe to the best of my knowledge that the
-              dogs are not liable to disqualification under Kennel Club Show
-              Regulations. I/We also confirm that I/we understand the eligibility
-              of the classes entered.
+              I/We agree to submit to and be bound by Royal Kennel Club Limited
+              Rules &amp; Regulations in their present form or as they may be
+              amended from time to time in relation to all canine matters with
+              which the Royal Kennel Club is concerned and that this entry is
+              made upon the basis that all current single or joint registered
+              owners of this dog(s) have authorised/consented to this entry.
+              I/We also undertake to abide by the Regulations of this Show and
+              not to bring to the Show any dog which has contracted or been
+              knowingly exposed to any infectious or contagious disease during
+              the 21 days prior to the Show, or which is suffering from a
+              visible condition which adversely affects its health or welfare or
+              to bring any dog which has been prepared for exhibition contrary
+              to Royal Kennel Club Regulations for the Preparation of Dogs for
+              Exhibition F (Annex B). I/We agree without reservation that any
+              Veterinary Surgeon operating on any of my/our dogs in such a way
+              that the operation alters the natural conformation of the dog or
+              part thereof may report such operations to the Royal Kennel Club.
+              I/We declare that where any alteration has been made to the
+              natural conformation of the dog(s) the relevant permission to show
+              has been granted by the Royal Kennel Club. I/We further declare
+              that I believe to the best of my knowledge that the dogs are not
+              liable to disqualification under Royal Kennel Club Show
+              Regulations. I/We also confirm that I/we understand the
+              eligibility of the classes entered.
             </div>
             <label className="flex cursor-pointer items-start gap-3">
               <Checkbox

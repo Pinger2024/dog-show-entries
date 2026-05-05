@@ -145,6 +145,8 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
   const [additionalNotes, setAdditionalNotes] = useState('');
   const [welcomeNote, setWelcomeNote] = useState('');
   const [outsideAttraction, setOutsideAttraction] = useState(false);
+  const [hasBestVeteranInShow, setHasBestVeteranInShow] = useState(false);
+  const [bestVeteranInShowEligibility, setBestVeteranInShowEligibility] = useState('');
   const [customStatements, setCustomStatements] = useState<string[]>([]);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [appliedDefaults, setAppliedDefaults] = useState(false);
@@ -199,6 +201,8 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     setAdditionalNotes(sd?.additionalNotes ?? '');
     setWelcomeNote(sd?.welcomeNote ?? '');
     setOutsideAttraction(sd?.outsideAttraction ?? false);
+    setHasBestVeteranInShow(sd?.hasBestVeteranInShow ?? false);
+    setBestVeteranInShowEligibility(sd?.bestVeteranInShowEligibility ?? '');
     setCustomStatements(sd?.customStatements ?? []);
 
     if (!effectiveExisting && previousData) {
@@ -279,6 +283,10 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       additionalNotes: additionalNotes || undefined,
       welcomeNote: welcomeNote || undefined,
       outsideAttraction: outsideAttraction || undefined,
+      hasBestVeteranInShow: hasBestVeteranInShow || undefined,
+      bestVeteranInShowEligibility: hasBestVeteranInShow && bestVeteranInShowEligibility.trim()
+        ? bestVeteranInShowEligibility.trim()
+        : undefined,
       customStatements: customStatements.filter((s) => s.trim()).length > 0
         ? customStatements.filter((s) => s.trim())
         : undefined,
@@ -335,7 +343,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     acceptsNfc, judgedOnGroupSystem, latestArrivalTime, showOpenTime, judgingStartTime,
     onCallVet, what3words, showManager, officers, awardsDescription, prizeMoney,
     directions, catering, futureShowDates, additionalNotes, welcomeNote,
-    outsideAttraction, customStatements,
+    outsideAttraction, hasBestVeteranInShow, bestVeteranInShowEligibility, customStatements,
   ]);
 
   // Flush the latest snapshot via navigator.sendBeacon when the form
@@ -419,6 +427,10 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       additionalNotes: additionalNotes || undefined,
       welcomeNote: welcomeNote || undefined,
       outsideAttraction: outsideAttraction || undefined,
+      hasBestVeteranInShow: hasBestVeteranInShow || undefined,
+      bestVeteranInShowEligibility: hasBestVeteranInShow && bestVeteranInShowEligibility.trim()
+        ? bestVeteranInShowEligibility.trim()
+        : undefined,
       customStatements: customStatements.filter((s) => s.trim()).length > 0
         ? customStatements.filter((s) => s.trim())
         : undefined,
@@ -437,6 +449,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     showOpenTime, judgingStartTime, onCallVet, what3words, showManager,
     officers, awardsDescription, prizeMoney, directions, catering,
     futureShowDates, additionalNotes, welcomeNote, outsideAttraction,
+    hasBestVeteranInShow, bestVeteranInShowEligibility,
     customStatements, showId,
   ]);
 
@@ -651,6 +664,8 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
                     <AwardsSection
                       awardsDescription={awardsDescription} setAwardsDescription={setAwardsDescription}
                       prizeMoney={prizeMoney} setPrizeMoney={setPrizeMoney}
+                      hasBestVeteranInShow={hasBestVeteranInShow} setHasBestVeteranInShow={setHasBestVeteranInShow}
+                      bestVeteranInShowEligibility={bestVeteranInShowEligibility} setBestVeteranInShowEligibility={setBestVeteranInShowEligibility}
                       showId={showId}
                     />
                   )}
@@ -1048,10 +1063,15 @@ function PeopleSection({
 // ── Awards Section ───────────────────────────────────
 
 function AwardsSection({
-  awardsDescription, setAwardsDescription, prizeMoney, setPrizeMoney, showId,
+  awardsDescription, setAwardsDescription, prizeMoney, setPrizeMoney,
+  hasBestVeteranInShow, setHasBestVeteranInShow,
+  bestVeteranInShowEligibility, setBestVeteranInShowEligibility,
+  showId,
 }: {
   awardsDescription: string; setAwardsDescription: (v: string) => void;
   prizeMoney: string; setPrizeMoney: (v: string) => void;
+  hasBestVeteranInShow: boolean; setHasBestVeteranInShow: (v: boolean) => void;
+  bestVeteranInShowEligibility: string; setBestVeteranInShowEligibility: (v: string) => void;
   showId: string;
 }) {
   const { data: sponsors } = trpc.secretary.listShowSponsors.useQuery({ showId });
@@ -1067,6 +1087,29 @@ function AwardsSection({
         <Label htmlFor="prizeMoney" className="text-xs">Prize Money</Label>
         <p className="text-xs text-muted-foreground">Leave blank if no prize money is offered</p>
         <Input id="prizeMoney" value={prizeMoney} onChange={(e) => setPrizeMoney(e.target.value)} placeholder="e.g. No prize money offered" className="min-h-[2.75rem]" />
+      </div>
+
+      {/* Best Veteran in Show — RKC requires explicit eligibility criteria when offered */}
+      <div className="space-y-2 rounded-lg border p-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <Label className="text-xs">Best Veteran in Show</Label>
+            <p className="text-xs text-muted-foreground">RKC requires the eligibility criteria to be printed in the schedule</p>
+          </div>
+          <Switch checked={hasBestVeteranInShow} onCheckedChange={setHasBestVeteranInShow} />
+        </div>
+        {hasBestVeteranInShow && (
+          <div className="space-y-1.5 pt-1">
+            <Label htmlFor="bvisEligibility" className="text-xs">Eligibility criteria</Label>
+            <Textarea
+              id="bvisEligibility"
+              value={bestVeteranInShowEligibility}
+              onChange={(e) => setBestVeteranInShowEligibility(e.target.value)}
+              placeholder="Leave blank to use the standard wording (Best Veteran of Sex from each breed). Override only if your club has different rules."
+              rows={3}
+            />
+          </div>
+        )}
       </div>
 
       {/* Sponsors link */}

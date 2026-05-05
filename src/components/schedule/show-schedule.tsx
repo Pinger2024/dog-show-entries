@@ -3,6 +3,7 @@ import path from 'path';
 import type { ScheduleData } from '@/server/db/schema/shows';
 import { formatCurrency } from '@/lib/date-utils';
 import { getDockingStatement as getDockingStatementShared } from '@/lib/rkc-compliance';
+import { lookupRkcDefinition, RKC_NFC_DEFINITION } from '@/lib/rkc-class-definitions';
 import React from 'react';
 
 // ── Font Registration ──────────────────────────────────────────────────────────
@@ -1507,51 +1508,40 @@ export function ShowSchedule({
           <Text style={{ fontWeight: 'bold' }}>d)</Text> If an exhibit arrives late and misses a class, even if it is the only class in which the dog is entered, the dog may not be transferred to any other class.
         </Text>
 
-        {/* Class definitions */}
-        <View style={s.defBlock} wrap={false}>
-          <Text style={s.defName}>MINOR PUPPY:</Text>
-          <Text style={s.defDescription}>For dogs of 6 and not exceeding 9 calendar months of age on the first day of the show.</Text>
-        </View>
-        <View style={s.defBlock} wrap={false}>
-          <Text style={s.defName}>PUPPY:</Text>
-          <Text style={s.defDescription}>For dogs of 6 and not exceeding 12 calendar months of age on the first day of the show.</Text>
-        </View>
-        <View style={s.defBlock} wrap={false}>
-          <Text style={s.defName}>JUNIOR:</Text>
-          <Text style={s.defDescription}>For dogs of 6 and not exceeding 18 calendar months of age on the first day of the show.</Text>
-        </View>
-        <View style={s.defBlock} wrap={false}>
-          <Text style={s.defName}>NOVICE:</Text>
-          <Text style={s.defDescription}>For dogs which have not won a Challenge Certificate/CACIB/CAC/Green Star or three or more First Prizes at Open and Championship Shows (Minor Puppy, Special Minor Puppy, Puppy and Special Puppy classes excepted, whether restricted or not).</Text>
-        </View>
-        <View style={s.defBlock} wrap={false}>
-          <Text style={s.defName}>YEARLING:</Text>
-          <Text style={s.defDescription}>For dogs of twelve and not exceeding twenty four calendar months of age on the first day of the Show.</Text>
-        </View>
-        <View style={s.defBlock} wrap={false}>
-          <Text style={s.defName}>GRADUATE:</Text>
-          <Text style={s.defDescription}>For dogs which have not won a Challenge Certificate/CACIB/CAC/Green Star or four or more First Prizes at Championship Shows in Graduate, Post Graduate, Minor Limit, Mid Limit, Limit and Open Classes, whether restricted or not, where Challenge Certificates were offered for the breed.</Text>
-        </View>
-        <View style={s.defBlock} wrap={false}>
-          <Text style={s.defName}>POST GRADUATE:</Text>
-          <Text style={s.defDescription}>For dogs which have not won a Challenge Certificate/CACIB/CAC/Green Star or five or more First Prizes at Championship Shows in Post Graduate, Minor Limit, Mid Limit, Limit and Open Classes, whether restricted or not, where Challenge Certificates were offered for the breed.</Text>
-        </View>
-        <View style={s.defBlock} wrap={false}>
-          <Text style={s.defName}>LIMIT:</Text>
-          <Text style={s.defDescription}>For dogs which have not become Show Champions under Royal Kennel Club Regulations or under the rules of any governing body recognised by the Royal Kennel Club or won 3 or more CC/CACIB/CAC/Green Stars or won 7 or more First prizes in all at Championship Shows in Limit and Open classes, confined to the breed, whether restricted or not at shows where Challenge Certificates were offered for the breed.</Text>
-        </View>
-        <View style={s.defBlock} wrap={false}>
-          <Text style={s.defName}>OPEN:</Text>
-          <Text style={s.defDescription}>For all dogs of the breeds for which the class is provided and eligible for entry at the Show.</Text>
-        </View>
-        <View style={s.defBlock} wrap={false}>
-          <Text style={s.defName}>VETERAN:</Text>
-          <Text style={s.defDescription}>For dogs of not less than 7 years of age on the first day of the Show.</Text>
-        </View>
-        <View style={s.defBlock} wrap={false}>
-          <Text style={s.defName}>NOT FOR COMPETITION:</Text>
-          <Text style={s.defDescription}>Dogs may be entered for Not for Competition, such entries must be recorded on the entry form enclosed for the purpose.</Text>
-        </View>
+        {/* Class definitions — driven by classes actually scheduled.
+            RKC F(1) requires every scheduled class to be defined. Lookup
+            falls back to the DB description for non-RKC (Special) classes. */}
+        {(() => {
+          type Def = { label: string; sortOrder: number; text: string };
+          const seen = new Map<string, Def>();
+          for (const cls of deduplicatedClasses) {
+            const rkc = lookupRkcDefinition(cls.className);
+            if (rkc) {
+              if (!seen.has(rkc.label)) seen.set(rkc.label, rkc);
+              continue;
+            }
+            // Non-RKC class (e.g. "Special Long Coat Open") — use DB description
+            // if present, otherwise label-only.
+            const label = cls.className.toUpperCase();
+            if (!seen.has(label)) {
+              seen.set(label, {
+                label,
+                sortOrder: 500,
+                text: cls.classDescription ?? '',
+              });
+            }
+          }
+          if (sd?.acceptsNfc !== false) {
+            seen.set(RKC_NFC_DEFINITION.label, RKC_NFC_DEFINITION);
+          }
+          const defs = Array.from(seen.values()).sort((a, b) => a.sortOrder - b.sortOrder);
+          return defs.map((d, i) => (
+            <View key={i} style={s.defBlock} wrap={false}>
+              <Text style={s.defName}>{d.label}:</Text>
+              {d.text && <Text style={s.defDescription}>{d.text}</Text>}
+            </View>
+          ));
+        })()}
 
 
           <Text style={s.footer} render={footerRender} fixed />
@@ -1562,6 +1552,12 @@ export function ShowSchedule({
           ════════════════════════════════════════════════════════════════════ */}
       <Page size="A5" style={s.page}>
         <SectionBand title="Rules and Regulations" />
+
+        <View style={{ marginBottom: 10, paddingHorizontal: 2 }} wrap={false}>
+          <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 8, lineHeight: 1.4, color: C.textMedium }}>
+            All Judges at this show agree to abide by the following statement: &ldquo;In assessing dogs, judges must penalise any features or exaggerations which they consider would be detrimental to the soundness, health and well being of the dog.&rdquo;
+          </Text>
+        </View>
 
         {show.showOpenTime && (
           <Rule num="1">The show will open at {formatTime(show.showOpenTime)}.</Rule>
@@ -1574,7 +1570,7 @@ export function ShowSchedule({
         {show.startTime && (
           <Rule num="3">Judging will commence {formatTime(show.startTime)}.</Rule>
         )}
-        <Rule num="4">Exhibits may be removed from the Show after their judging has been completed. The Show will close half an hour after all judging has been completed.</Rule>
+        <Rule num="4">Exhibits may be removed from the Show after their judging has been completed. The Show will close half an hour after all judging has been completed. Exhibits may not be removed any earlier unless by written order of the veterinary surgeon, veterinary practitioner or of the Show Management and then only in very exceptional and unforeseen circumstances which must be reported to the Royal Kennel Club.</Rule>
         {(show.firstEntryFee != null || show.subsequentEntryFee != null || show.nfcEntryFee != null) && (
           <Rule num="5">
             ENTRY FEES: {show.firstEntryFee != null ? `${formatCurrency(show.firstEntryFee)} first entry` : ''}
@@ -1586,13 +1582,22 @@ export function ShowSchedule({
         )}
         <Rule num="6">ONLINE ENTRY can be found at remishowmanager.co.uk/shows/{show.slug}</Rule>
         <Rule num="7">The Committee reserves to itself the right to refuse any entries.</Rule>
-        <Rule num="8">No dog under 6 calendar months of age on the first day of the Show is eligible for exhibition.</Rule>
+        <Rule num="8">Puppies under four calendar months of age on the first day of the Show are not eligible for exhibition.</Rule>
         <Rule num="9">The mating of bitches within the precincts of the Show is forbidden.</Rule>
         <Text style={s.ruleText}>
           <Text style={s.ruleNumber}>10.</Text> <Text style={s.ruleTextBold}>Best Puppy in Show:</Text> Where a Best Puppy in Show competition is scheduled the Best Puppy in Show is a puppy which has competed and is unbeaten by any other puppy exhibited at the show. A puppy is a dog of six and not exceeding twelve calendar months of age on the first day of the show.
         </Text>
         <Rule num="11">A Baby Puppy is a dog of four and less than six calendar months of age on the first day of the show. Baby Puppy classes may be scheduled at any breed Club show, Best Baby Puppy in Breed may be declared at each breed from the dogs entered in the Baby Puppy class. There must be no progression to further competitions.</Rule>
         <Rule num="12">In Best in Show the exhibits may be selected from the exhibits declared Best of Sex. If a Reserve Best in Show is to be selected, the eligible dogs are those declared Best of Sex, Opposite Best of Sex of the exhibit declared Best in Show.</Rule>
+        {sd?.hasBestVeteranInShow && (
+          <Text style={s.ruleText}>
+            <Text style={s.ruleNumber}>12a.</Text>{' '}
+            <Text style={s.ruleTextBold}>Best Veteran in Show:</Text>{' '}
+            {sd.bestVeteranInShowEligibility?.trim()
+              ? sd.bestVeteranInShowEligibility
+              : 'A Best Veteran in Show competition will be held. Eligible dogs are those declared Best Veteran in their breed (or Best Veteran of Sex where applicable). The selection of Best in Show may follow the selection of Best Veteran in Show. Where the Best in Show is a veteran it may, at the discretion of the judge, be awarded Best Veteran in Show.'}
+          </Text>
+        )}
         <Rule num="13">Exhibits will not be admitted to Group or Best in Show competition after a period of ten minutes has elapsed since the announcement that exhibits are required for judging, unless they have been unavoidably delayed by previous judging not being completed on time, and then only with the special permission of the Show Management.</Rule>
         <Rule num="14">Exhibitors must not pick up dogs by their tails and leads. When lifting dogs not handle in a rough manner.</Rule>
         <Rule num="15">All exhibitors must be familiar with Royal Kennel Club Regulation F (Annex B) Regulations for the Preparation of Dogs for Exhibition.</Rule>
@@ -1692,6 +1697,49 @@ export function ShowSchedule({
       </Page>}
 
       {/* ════════════════════════════════════════════════════════════════════════
+          ADVISED NOTICES (RKC Annex A) — Electrical Equipment + Security
+          ════════════════════════════════════════════════════════════════════ */}
+      <Page size="A5" style={s.page}>
+        <SectionBand title="Notices to Exhibitors" />
+
+        <View style={{ marginBottom: 14 }} wrap={false}>
+          <Text style={{ fontFamily: 'Inter', fontSize: 9, fontWeight: 'bold', color: C.primary, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            Use of Electrical Equipment at Shows
+          </Text>
+          <Text style={{ ...s.infoText, marginBottom: 3 }}>
+            The Royal Kennel Club is becoming increasingly concerned at the amount of electrical equipment being used by exhibitors at shows, including hair dryers, hair straighteners and other grooming devices.
+          </Text>
+          <Text style={{ ...s.infoText, marginBottom: 3 }}>
+            Electrical equipment should not be brought to shows unless absolutely necessary. In rare instances where it might be required, it should be PAT tested and permission sought from the secretary of the show before it is used.
+          </Text>
+          <Text style={s.infoText}>
+            The Royal Kennel Club has also been informed of recent instances of exhibitors commandeering certain areas of a venue in order to have access to power points so as to use electrical grooming equipment. This is totally unacceptable and particularly unfair on the breeds whose allocated areas have been cramped because of this selfish behaviour.
+          </Text>
+        </View>
+
+        <View wrap={false}>
+          <Text style={{ fontFamily: 'Inter', fontSize: 9, fontWeight: 'bold', color: C.primary, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            Security at Shows
+          </Text>
+          <Text style={{ ...s.infoText, marginBottom: 3 }}>
+            In light of recent events the Royal Kennel Club would like to issue a reminder to all Societies of the importance of security at dog shows.
+          </Text>
+          <Text style={{ ...s.infoText, marginBottom: 3 }}>
+            The Royal Kennel Club understands that due to the nature of dog shows and the quantity of paraphernalia exhibitors bring it would be extremely difficult for show organisers to take on the issue of security alone, therefore we would reiterate the advice being given by the Police and security services, that everyone in the UK should remain vigilant and this applies to those organising and taking part in dog shows.
+          </Text>
+          <Text style={{ ...s.infoText, marginBottom: 3 }}>
+            The importance of exhibitors feeling that they and their dogs are safe when attending a show cannot be underestimated. We would therefore remind you of the importance of the need for show organisers and exhibitors to remain mindful of potential dangers and that all visitors generally need to be vigilant and alert.
+          </Text>
+          <Text style={s.infoText}>
+            Furthermore the society should provide robust notification informing exhibitors of where to report to should they see anything suspicious or of concern, and of the evacuation procedures in place.
+          </Text>
+        </View>
+
+
+          <Text style={s.footer} render={footerRender} fixed />
+      </Page>
+
+      {/* ════════════════════════════════════════════════════════════════════════
           ADDITIONAL INFORMATION (optional)
           ════════════════════════════════════════════════════════════════════ */}
       {(sd?.directions || sd?.catering || sd?.futureShowDates || sd?.additionalNotes) && (
@@ -1751,6 +1799,9 @@ export function ShowSchedule({
             <Text style={s.formLabel}>Owner(s) Name</Text>
             <View style={s.formLine} />
           </View>
+          <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 6.5, color: C.textLight, marginTop: -2, marginBottom: 4 }}>
+            In the case of joint registered ownership the name of every owner must be given here.
+          </Text>
           <View style={s.formField}>
             <Text style={s.formLabel}>Address</Text>
             <View style={s.formLine} />
@@ -1832,27 +1883,46 @@ export function ShowSchedule({
             <View style={{ ...s.formLine, maxWidth: 60 }} />
           </View>
 
-          {/* Declaration */}
+          {/* Privacy / address-publication objection — RKC F(1).11.b */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, marginBottom: 6 }}>
+            <View style={{ width: 10, height: 10, borderWidth: 1, borderColor: C.textDark, marginRight: 6 }} />
+            <Text style={{ fontFamily: 'Times', fontSize: 6.5, color: C.textMedium, flex: 1 }}>
+              Tick to object to publication of your address in the catalogue. Your dog&apos;s registered name and pedigree details will still appear.
+            </Text>
+          </View>
+
+          {/* Docking statement repeat above declaration — RKC Annex A */}
+          <View style={{ borderWidth: 0.5, borderColor: C.ruleLight, padding: 4, marginBottom: 6 }}>
+            <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 6.5, color: C.textDark, textAlign: 'center' }}>
+              {dockingStatement}
+            </Text>
+          </View>
+
+          {/* Hot Days notice — RKC requires on entry form */}
+          <View style={{ marginBottom: 6 }}>
+            <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', color: C.textDark, marginBottom: 1 }}>
+              Your dog is vulnerable and AT RISK in hot weather
+            </Text>
+            <Text style={{ fontFamily: 'Times', fontSize: 6.5, lineHeight: 1.4, color: C.textMedium }}>
+              Your dog is at risk if left in a vehicle in high temperatures and even on days considered slightly warm. If your dog is found to be at risk forcible entry to your vehicle may be necessary without liability for any damage caused.
+            </Text>
+          </View>
+
+          {/* RKC Declaration — full specimen wording, matches online checkout */}
           <View style={s.formDeclaration}>
+            <Text style={{ fontFamily: 'Inter', fontSize: 7, fontWeight: 'bold', marginBottom: 3, color: C.textDark, textAlign: 'center' }}>
+              DECLARATION
+            </Text>
             <Text style={{ fontFamily: 'Times', fontSize: 6.5, lineHeight: 1.5, color: C.textMedium }}>
-              I/We agree to submit to and be bound by Royal Kennel Club Rules and Show Regulations F(1)
-              in their present form or as they may be amended from time to time. I/We also agree to
-              submit to the regulations of this show and not to bring to the show any dog which has
-              contracted or been knowingly exposed to any infectious or contagious disease during the
-              21 days prior to the show. I/We further agree that if I/we default in any payment to the
-              show society concerned, whether in connection with entry fees or otherwise, my/our dog(s)
-              may be excluded from any or all societies affiliated to the Royal Kennel Club, and I/we
-              shall not be entitled to register, transfer, or exhibit any dogs until the debt(s) is/are
-              settled. I/We further declare that I/we believe to the best of my/our knowledge that the
-              dog(s) entered is/are not a danger to the public.
+              I/We agree to submit to and be bound by Royal Kennel Club Limited Rules &amp; Regulations in their present form or as they may be amended from time to time in relation to all canine matters with which the Royal Kennel Club is concerned and that this entry is made upon the basis that all current single or joint registered owners of this dog(s) have authorised/consented to this entry. I/We also undertake to abide by the Regulations of this Show and not to bring to the Show any dog which has contracted or been knowingly exposed to any infectious or contagious disease during the 21 days prior to the Show, or which is suffering from a visible condition which adversely affects its health or welfare or to bring any dog which has been prepared for exhibition contrary to Royal Kennel Club Regulations for the Preparation of Dogs for Exhibition F (Annex B). I/We agree without reservation that any Veterinary Surgeon operating on any of my/our dogs in such a way that the operation alters the natural conformation of the dog or part thereof may report such operations to the Royal Kennel Club. I/We declare that where any alteration has been made to the natural conformation of the dog(s) the relevant permission to show has been granted by the Royal Kennel Club. I/We further declare that I believe to the best of my knowledge that the dogs are not liable to disqualification under Royal Kennel Club Show Regulations. I/We also confirm that I/we understand the eligibility of the classes entered.
             </Text>
           </View>
 
           {/* Signature */}
-          <View style={{ flexDirection: 'row', marginTop: 10, justifyContent: 'space-between' }}>
+          <View style={{ flexDirection: 'row', marginTop: 6, justifyContent: 'space-between' }}>
             <View style={{ width: '55%' }}>
               <Text style={{ fontFamily: 'Inter', fontSize: 7, fontWeight: 'bold', marginBottom: 2, color: C.textDark }}>
-                Signature of Owner
+                Signature of Owner(s)
               </Text>
               <View style={{ borderBottomWidth: 1, borderBottomColor: C.textDark, height: 18 }} />
             </View>
@@ -1862,7 +1932,15 @@ export function ShowSchedule({
             </View>
           </View>
 
-  
+          {/* Mandatory NOTE blocks — RKC entry form requires these */}
+          <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 6.5, color: C.textMedium, marginTop: 6 }}>
+            NOTE: Dogs entered in breach of Royal Kennel Club Show Regulations are liable to disqualification whether or not the owner was aware of the breach.
+          </Text>
+          <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 6.5, color: C.textMedium, marginTop: 2 }}>
+            NOTE: Children under the age of 11 are the responsibility of, and must be accompanied at all times, by a Parent or Guardian.
+          </Text>
+
+
           <Text style={s.footer} render={footerRender} fixed />
         </Page>
       )}

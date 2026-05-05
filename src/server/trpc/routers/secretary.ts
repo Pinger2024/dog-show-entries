@@ -5270,6 +5270,8 @@ export const secretaryRouter = createTRPCRouter({
           additionalNotes: z.string().optional(),
           welcomeNote: z.string().optional(),
           outsideAttraction: z.boolean().optional(),
+          hasBestVeteranInShow: z.boolean().optional(),
+          bestVeteranInShowEligibility: z.string().optional(),
         }),
       })
     )
