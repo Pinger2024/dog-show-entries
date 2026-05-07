@@ -26,14 +26,16 @@ vi.mock('@react-pdf/renderer', () => ({
   },
 }));
 
-import { ShowSchedule, type ScheduleShowInfo, type ScheduleClass, type ScheduleJudge } from '@/components/schedule/show-schedule';
+import { ShowSchedule } from '@/components/schedule/show-schedule';
+import { ShowScheduleMultibreed } from '@/components/schedule/show-schedule-multibreed';
+import type { ScheduleShowInfo, ScheduleClass, ScheduleJudge } from '@/components/schedule/shared/types';
 
 function baseShow(overrides: Partial<ScheduleShowInfo> = {}): ScheduleShowInfo {
   return {
     slug: 'test-show',
     name: 'Test Champ Show',
     showType: 'championship',
-    showScope: 'all_breed',
+    showScope: 'single_breed',
     date: '2026-06-01',
     endDate: '2026-06-01',
     startTime: '9:30',
@@ -82,8 +84,19 @@ const baseJudges: ScheduleJudge[] = [
   { name: 'Mr J Judge', breeds: ['Test Breed'], displayLabel: 'Mr J Judge — Test Breed' },
 ];
 
-function render(show: ScheduleShowInfo = baseShow()): string {
-  const tree = ShowSchedule({ show, classes: baseClasses, judges: baseJudges });
+function render(
+  show: ScheduleShowInfo = baseShow(),
+  classes: ScheduleClass[] = baseClasses,
+): string {
+  const tree = ShowSchedule({ show, classes, judges: baseJudges });
+  return renderToStaticMarkup(tree as React.ReactElement);
+}
+
+/** Multi-breed renderer used by the multi-breed describe blocks below.
+ *  Single-breed regression tests continue to use `render()` against the
+ *  slimmed-down ShowSchedule. */
+function renderMultibreed(show: ScheduleShowInfo, classes: ScheduleClass[]): string {
+  const tree = ShowScheduleMultibreed({ show, classes, judges: baseJudges });
   return renderToStaticMarkup(tree as React.ReactElement);
 }
 
@@ -416,5 +429,225 @@ describe('RKC schedule compliance — wet weather statement', () => {
       ShowSchedule({ show, classes: baseClasses, judges: baseJudges }) as React.ReactElement,
     );
     expect(html).toMatch(/NO WET WEATHER ACCOMMODATION IS PROVIDED/);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────────
+// Multi-breed RKC compliance (general/group championship + open shows
+// judged or not judged on the group system). Source: 2026-05-06 extraction
+// from RKC specimen schedules. Single-breed shows must not regress — the
+// 41 tests above continue to pass against the same component.
+// ───────────────────────────────────────────────────────────────────────────────
+
+const multiBreedClasses: ScheduleClass[] = [
+  // Hound group breeds
+  { classNumber: 1, classLabel: '1', className: 'Puppy', classDescription: null, sex: 'dog', breedName: 'Beagle', classType: 'age', breedGroupName: 'Hound', breedGroupSortOrder: 2 },
+  { classNumber: 2, classLabel: '2', className: 'Open', classDescription: null, sex: 'dog', breedName: 'Beagle', classType: 'age', breedGroupName: 'Hound', breedGroupSortOrder: 2 },
+  // Gundog group
+  { classNumber: 3, classLabel: '3', className: 'Puppy', classDescription: null, sex: 'dog', breedName: 'Cocker Spaniel', classType: 'age', breedGroupName: 'Gundog', breedGroupSortOrder: 1 },
+  // Pastoral group
+  { classNumber: 4, classLabel: '4', className: 'Open', classDescription: null, sex: 'dog', breedName: 'German Shepherd Dog', classType: 'age', breedGroupName: 'Pastoral', breedGroupSortOrder: 3 },
+  // AVNSC and AVIBR — no breed group on the row
+  { classNumber: 5, classLabel: '5', className: 'AVNSC', classDescription: null, sex: null, breedName: null, classType: 'age' },
+  { classNumber: 6, classLabel: '6', className: 'AVIBR', classDescription: null, sex: null, breedName: null, classType: 'age' },
+];
+
+describe('RKC schedule compliance — multi-breed open show (NOT judged on group system)', () => {
+  const show = baseShow({
+    showType: 'open',
+    showScope: 'general',
+    scheduleData: {
+      ...(baseShow().scheduleData as object),
+      judgedOnGroupSystem: false,
+    } as ScheduleShowInfo['scheduleData'],
+  });
+  const html = renderMultibreed(show, multiBreedClasses);
+
+  it('Rule 8 uses the SIX-month puppy threshold (no Baby Puppy permitted)', () => {
+    expect(html).toMatch(/Puppies under six calendar months/i);
+    expect(html).not.toMatch(/Puppies under four calendar months/i);
+  });
+
+  it('Rule 12 uses the multi-breed BIS chain (BOB + AVNSC + AVIBR), not Best of Sex', () => {
+    expect(html).toMatch(/Best in Show and subsequent placings must be selected from those dogs declared Best of Breed, Best Any Variety Not Separately Classified and Best Any Variety Imported Breed Register/i);
+    expect(html).not.toMatch(/may be selected from the exhibits declared Best of Sex/i);
+  });
+
+  it('Rule 10 (Best Puppy in Show) uses the multi-breed eligibility chain', () => {
+    expect(html).toMatch(/Best Puppy in Breed, Best Any Variety Not Separately Classified Puppy or Best Any Variety Imported Breed Register Puppy/i);
+  });
+
+  it('does NOT include the Crufts qualification banner (only on group-system open shows)', () => {
+    expect(html).not.toMatch(/CRUFTS QUALIFICATION/);
+    expect(html).not.toMatch(/will qualify for Crufts the following year/i);
+  });
+
+  it('does NOT include Best of Group / Best Puppy in Group rules', () => {
+    expect(html).not.toMatch(/Best Puppy in Group must be selected/i);
+    expect(html).not.toMatch(/Best in Show must be selected from the Best of Group winners/i);
+  });
+
+  it('renders RKC Group classification headings on the all-breed class table', () => {
+    expect(html).toMatch(/HOUND GROUP/);
+    expect(html).toMatch(/GUNDOG GROUP/);
+    expect(html).toMatch(/PASTORAL GROUP/);
+  });
+
+  it('renders ungrouped classes (AVNSC, AVIBR) under a Variety & Other Classes heading', () => {
+    expect(html).toMatch(/VARIETY &amp; OTHER CLASSES|VARIETY & OTHER CLASSES/);
+  });
+
+  it('renders class definitions for AVNSC, AVIBR when those classes are scheduled', () => {
+    expect(html).toMatch(/ANY VARIETY NOT SEPARATELY CLASSIFIED/);
+    expect(html).toMatch(/For breeds of dog for which no separate breed classes are scheduled/i);
+    expect(html).toMatch(/ANY VARIETY IMPORTED BREED REGISTER/);
+    expect(html).toMatch(/For breeds confined to the Imported Breeds Register/i);
+  });
+
+  it('does NOT render Rule 11 (Baby Puppy definition) when no Baby Puppy class is scheduled', () => {
+    expect(html).not.toMatch(/A Baby Puppy is a dog of four and less than six calendar months/i);
+  });
+});
+
+describe('RKC schedule compliance — multi-breed open show (JUDGED on group system)', () => {
+  const show = baseShow({
+    showType: 'open',
+    showScope: 'general',
+    scheduleData: {
+      ...(baseShow().scheduleData as object),
+      judgedOnGroupSystem: true,
+    } as ScheduleShowInfo['scheduleData'],
+  });
+  const html = renderMultibreed(show, multiBreedClasses);
+
+  it('shows the Crufts qualification banner prominently', () => {
+    expect(html).toMatch(/CRUFTS QUALIFICATION/);
+    expect(html).toMatch(/Dogs placed 1.*4 in each group.*will qualify for Crufts the following year/i);
+  });
+
+  it('shows the "Judged on the Group System" badge on the cover', () => {
+    expect(html).toMatch(/Judged on the Group System/i);
+  });
+
+  it('Rule 12 uses the group-system BIS chain (BOG winners feed into BIS)', () => {
+    expect(html).toMatch(/Best of Group and subsequent placings must be selected from the Best of Breed winners in each group/i);
+    expect(html).toMatch(/Best in Show must be selected from the Best of Group winners/i);
+    expect(html).toMatch(/Reserve Best in Show must be selected from the remaining Group winners/i);
+  });
+
+  it('Rule 10 includes the Best Puppy in Group → Best Puppy in Show chain', () => {
+    expect(html).toMatch(/Best Puppy in Group must be selected from the Best Puppy in Breed winners/i);
+    expect(html).toMatch(/Best Puppy in Show must be selected from the Best Puppy in Group winners/i);
+  });
+});
+
+describe('RKC schedule compliance — multi-breed general championship show', () => {
+  const show = baseShow({
+    showType: 'championship',
+    showScope: 'general',
+    scheduleData: {
+      ...(baseShow().scheduleData as object),
+      judgedOnGroupSystem: true,
+    } as ScheduleShowInfo['scheduleData'],
+  });
+  const html = renderMultibreed(show, multiBreedClasses);
+
+  it('does NOT show the Crufts qualification banner (only open shows show it)', () => {
+    // Championship shows already qualify dogs via CCs — Crufts qualification
+    // banner is exclusive to group-system OPEN shows per RKC specimens.
+    expect(html).not.toMatch(/CRUFTS QUALIFICATION/);
+  });
+
+  it('uses the group-system BIS chain', () => {
+    expect(html).toMatch(/Best in Show must be selected from the Best of Group winners/i);
+  });
+
+  it('uses the SIX-month puppy threshold', () => {
+    expect(html).toMatch(/Puppies under six calendar months/i);
+  });
+});
+
+describe('RKC schedule compliance — single-breed show (regression: must NOT pick up multi-breed wording)', () => {
+  const html = render(); // baseShow() defaults to single_breed
+
+  it('Rule 12 retains the single-breed Best of Sex wording', () => {
+    expect(html).toMatch(/may be selected from the exhibits declared Best of Sex/i);
+    expect(html).not.toMatch(/Best Any Variety Not Separately Classified/);
+  });
+
+  it('does NOT render group classification headings on the (single-breed) class table', () => {
+    expect(html).not.toMatch(/HOUND GROUP/);
+    expect(html).not.toMatch(/VARIETY & OTHER CLASSES/);
+  });
+
+  it('does NOT show the Crufts qualification banner', () => {
+    expect(html).not.toMatch(/CRUFTS QUALIFICATION/);
+  });
+
+  it('keeps the four-month puppy threshold', () => {
+    expect(html).toMatch(/under four calendar months/i);
+  });
+});
+
+describe('RKC schedule compliance — Premier Open show (group system)', () => {
+  // Premier Open is by RKC definition a group-system open show
+  // (specimen: "Premier Open show status … will only apply to shows held on
+  // the group system"). It must render the Crufts qualification banner just
+  // like a regular group-system open show.
+  const show = baseShow({
+    showType: 'premier_open',
+    showScope: 'general',
+    scheduleData: {
+      ...(baseShow().scheduleData as object),
+      judgedOnGroupSystem: true,
+    } as ScheduleShowInfo['scheduleData'],
+  });
+  const html = renderMultibreed(show, multiBreedClasses);
+
+  it('shows the Crufts qualification banner (premier_open is a group-system open show)', () => {
+    expect(html).toMatch(/CRUFTS QUALIFICATION/);
+    expect(html).toMatch(/will qualify for Crufts the following year/i);
+  });
+});
+
+describe('RKC schedule compliance — single-breed Rule 11 regression guard', () => {
+  // Rule 11 (Baby Puppy definition) was unconditional pre-Phase-A and must
+  // remain so for single-breed shows even if no Baby Puppy class is
+  // scheduled — Amanda's GSD shows currently render with Rule 11 present
+  // and removing it would be a silent cosmetic regression.
+  const html = render(); // baseShow() defaults to single_breed, no Baby Puppy
+
+  it('keeps Rule 11 (Baby Puppy definition) on single-breed shows even without a Baby Puppy class', () => {
+    expect(html).toMatch(/A Baby Puppy is a dog of four and less than six calendar months/i);
+  });
+});
+
+describe('RKC schedule compliance — multi-breed open show with Baby Puppy class scheduled', () => {
+  // Edge case: a multi-breed show that schedules a Baby Puppy class — even
+  // though the RKC specimen says "no Baby Puppy at multi-breed open shows",
+  // if a secretary explicitly schedules one, Rule 8 must drop to four months
+  // and Rule 11 (Baby Puppy definition) must appear, otherwise the schedule
+  // contradicts itself. (Phase B will add a UI gate to prevent this; Phase A
+  // just renders consistent rules for whatever is scheduled.)
+  const classesWithBabyPuppy: ScheduleClass[] = [
+    ...multiBreedClasses,
+    { classNumber: 7, classLabel: '7', className: 'Baby Puppy', classDescription: null, sex: 'dog', breedName: 'Beagle', classType: 'age', breedGroupName: 'Hound', breedGroupSortOrder: 2 },
+  ];
+  const show = baseShow({
+    showType: 'open',
+    showScope: 'general',
+    scheduleData: {
+      ...(baseShow().scheduleData as object),
+      judgedOnGroupSystem: false,
+    } as ScheduleShowInfo['scheduleData'],
+  });
+  const html = renderMultibreed(show, classesWithBabyPuppy);
+
+  it('drops Rule 8 to four months when a Baby Puppy class is scheduled', () => {
+    expect(html).toMatch(/Puppies under four calendar months/i);
+  });
+
+  it('renders Rule 11 (Baby Puppy definition) when the class is present', () => {
+    expect(html).toMatch(/A Baby Puppy is a dog of four and less than six calendar months/i);
   });
 });

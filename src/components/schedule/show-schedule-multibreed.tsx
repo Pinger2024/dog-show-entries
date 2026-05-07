@@ -21,21 +21,21 @@ import {
 } from './shared/styles';
 import { SectionBand, InfoCard, GoldRule, Rule } from './shared/elements';
 
-// Re-export so existing consumers (route.ts, pdf-generation.ts, tests,
-// preview scripts) continue importing from this module path.
-export type { ScheduleShowInfo, ScheduleClass, ScheduleJudge, ScheduleSponsor };
-
-
 // ── Main Component ─────────────────────────────────────────────────────────────
+//
+// Multi-breed schedule renderer — covers general championship, group
+// championship, multi-breed open (group system), and multi-breed open (not
+// group system) shows. Sibling component to ShowSchedule (single-breed).
+// Both share types, palette, styles, and helper elements via ./shared/.
+//
+// The dispatcher in route.ts / pdf-generation.ts picks this component when
+// show.showScope is 'general' or 'group'.
 
-export type ScheduleFormat = 'standard';
-
-export function ShowSchedule({
+export function ShowScheduleMultibreed({
   show,
   classes,
   judges,
   sponsors = [],
-  format = 'standard',
 }: {
   show: ScheduleShowInfo;
   classes: ScheduleClass[];
@@ -70,16 +70,18 @@ export function ShowSchedule({
 
   const classCount = deduplicatedClasses.length;
 
-  // Single-breed component is only invoked for showScope 'single_breed' (the
-  // dispatcher in route.ts / pdf-generation.ts routes 'general' / 'group' to
-  // ShowScheduleMultibreed). Class splitting matches RKC ordering for
-  // single-breed shows: Mixed non-JH (Veteran, etc.) above Dog/Bitch, JH-only
-  // Mixed below as the "Junior Handling" section.
-  const dogClasses = deduplicatedClasses.filter((c) => c.sex === 'dog');
-  const bitchClasses = deduplicatedClasses.filter((c) => c.sex === 'bitch');
-  const mixedClasses = deduplicatedClasses.filter((c) => c.sex !== 'dog' && c.sex !== 'bitch');
-  const mixedTopClasses = mixedClasses.filter((c) => c.classType !== 'junior_handler');
-  const mixedBottomClasses = mixedClasses.filter((c) => c.classType === 'junior_handler');
+  // Split classes by sex for single breed two-column layout. Mixed classes
+  // split further: non-JH (Veteran, etc.) render ABOVE Dog/Bitch because
+  // RKC ordering requires them judged before the per-sex challenges.
+  // JH-only Mixed renders BELOW as the "Junior Handling" section.
+  const isGroupSystem = sd?.judgedOnGroupSystem === true;
+  // Baby Puppy is not permitted at multi-breed open shows per RKC F(1) — but
+  // if a club nonetheless schedules one, Rule 8 must drop to four months and
+  // Rule 11 must appear, otherwise the schedule contradicts itself. Phase B
+  // will gate this at the class-creation UI.
+  const hasBabyPuppyClass = deduplicatedClasses.some(
+    (c) => c.className.trim().toLowerCase() === 'baby puppy',
+  );
 
   const footerRender = ({ pageNumber, totalPages }: { pageNumber: number; totalPages: number }) =>
     `${show.name}  ·  Schedule  ·  Page ${pageNumber} of ${totalPages}`;
@@ -654,81 +656,109 @@ export function ShowSchedule({
           SCHEDULE OF CLASSES
           ════════════════════════════════════════════════════════════════════ */}
       <Page size="A5" style={s.page}>
-        <SectionBand title="Classification" />
+        <SectionBand title="Schedule of Classes" />
 
-        {/* Judge name(s) above the table — singular for single-breed shows. */}
-        {judges.length > 0 && (
-          <View style={{ marginBottom: 10 }}>
-            {judges.map((judge, i) => (
-              <Text key={i} style={{ fontFamily: 'Inter', fontSize: 9, fontWeight: 'bold', textAlign: 'center', color: C.textDark, marginBottom: 2 }}>
-                {judge.displayLabel ?? judge.name}
-              </Text>
-            ))}
+        {/* "Alphabetical order within group — not in ring order" disclaimer.
+            Per the 2026-05-07 benchmark of seven Higham Press champ schedules,
+            this disclaimer is best practice (Birmingham 2025 prints it
+            verbatim above the classification block) and pre-empts exhibitor
+            confusion when the schedule is published before ring allocation. */}
+        <Text style={{ fontFamily: 'Times', fontSize: 7.5, fontStyle: 'italic', color: C.textMedium, textAlign: 'center', marginBottom: 8 }}>
+          Classification is in alphabetical order within each Group — not in ring order.
+        </Text>
+
+        {/* All-breed table: No / Class / Sex / Breed, grouped by RKC group
+            (HOUND GROUP, GUNDOG GROUP, etc.) per the RKC specimen layout.
+            AVNSC / AVIBR / Variety classes that don't carry a breed-group
+            association currently fall into "Variety & Other Classes" at the
+            end. Phase B will let secretaries assign a Group to those classes
+            so they render at the bottom of their group's breed list, matching
+            Higham's house style. */}
+        <View style={s.classTableHeader}>
+          <View style={s.colNo}>
+            <Text style={s.classTableHeaderText}>No.</Text>
           </View>
-        )}
-
-        {/* Single breed: Dogs | Bitches two-column layout. Mixed non-JH
-            classes (Veteran, etc.) render at the top so class 1 is visible
-            first. JH Mixed classes render at the bottom as a separate
-            "Junior Handling" section. */}
-        {mixedTopClasses.length > 0 && (
-          <View style={{ marginBottom: 8 }}>
-            <View style={s.twoColMixedHeader}>
-              <Text style={s.twoColHeaderText}>Mixed</Text>
-            </View>
-            {mixedTopClasses.map((cls, i) => (
-              <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
-                <Text style={s.twoColNum}>{cls.classLabel}</Text>
-                <Text style={s.twoColName}>{cls.className}</Text>
-              </View>
-            ))}
+          <View style={s.colClass}>
+            <Text style={s.classTableHeaderText}>Class</Text>
           </View>
-        )}
-
-        <View style={s.twoColContainer}>
-          {/* Dogs column */}
-          <View style={[s.twoColHalf, { paddingRight: 4 }]}>
-            <View style={s.twoColHeader}>
-              <Text style={s.twoColHeaderText}>Dog</Text>
-            </View>
-            {dogClasses.map((cls, i) => (
-              <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
-                <Text style={s.twoColNum}>{cls.classLabel}</Text>
-                <Text style={s.twoColName}>{cls.className}</Text>
-              </View>
-            ))}
+          <View style={s.colSex}>
+            <Text style={s.classTableHeaderText}>Sex</Text>
           </View>
-
-          {/* Bitches column */}
-          <View style={[s.twoColHalf, { paddingLeft: 4 }]}>
-            <View style={s.twoColHeader}>
-              <Text style={s.twoColHeaderText}>Bitch</Text>
-            </View>
-            {bitchClasses.map((cls, i) => (
-              <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
-                <Text style={s.twoColNum}>{cls.classLabel}</Text>
-                <Text style={s.twoColName}>{cls.className}</Text>
-              </View>
-            ))}
+          <View style={s.colBreed}>
+            <Text style={s.classTableHeaderText}>Breed</Text>
           </View>
         </View>
 
-        {mixedBottomClasses.length > 0 && (
-          <View style={{ marginTop: 8 }}>
-            <View style={s.twoColMixedHeader}>
-              <Text style={s.twoColHeaderText}>Junior Handling</Text>
-            </View>
-            {mixedBottomClasses.map((cls, i) => (
-              <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
-                <Text style={s.twoColNum}>{cls.classLabel}</Text>
-                <Text style={s.twoColName}>{cls.className}</Text>
+        {(() => {
+          type GroupBucket = { name: string; sortOrder: number; classes: ScheduleClass[] };
+          const buckets = new Map<string, GroupBucket>();
+          const ungrouped: ScheduleClass[] = [];
+          for (const cls of deduplicatedClasses) {
+            if (cls.breedGroupName) {
+              const key = cls.breedGroupName;
+              if (!buckets.has(key)) {
+                buckets.set(key, {
+                  name: key,
+                  sortOrder: cls.breedGroupSortOrder ?? 999,
+                  classes: [],
+                });
+              }
+              buckets.get(key)!.classes.push(cls);
+            } else {
+              ungrouped.push(cls);
+            }
+          }
+          const orderedGroups = Array.from(buckets.values()).sort(
+            (a, b) => a.sortOrder - b.sortOrder,
+          );
+          const sections = orderedGroups.map((g) => ({
+            heading: `${g.name.toUpperCase()} GROUP`,
+            classes: g.classes,
+          }));
+          if (ungrouped.length > 0) {
+            sections.push({
+              heading: 'VARIETY & OTHER CLASSES',
+              classes: ungrouped,
+            });
+          }
+
+          const renderRow = (cls: ScheduleClass, i: number) => {
+            const sexLabel = cls.sex === 'dog' ? 'Dogs' : cls.sex === 'bitch' ? 'Bitches' : 'Mixed';
+            return (
+              <View key={`${cls.classLabel}-${i}`} style={[s.classRow, i % 2 !== 0 && s.classRowAlt]} wrap={false}>
+                <View style={s.colNo}>
+                  <Text style={s.cellBold}>{cls.classLabel}</Text>
+                </View>
+                <View style={s.colClass}>
+                  <Text style={s.cellBold}>{cls.className}</Text>
+                </View>
+                <View style={s.colSex}>
+                  <Text style={s.cellMuted}>{sexLabel}</Text>
+                </View>
+                <View style={s.colBreed}>
+                  <Text style={s.cell}>{cls.breedName ?? ''}</Text>
+                </View>
               </View>
-            ))}
-          </View>
-        )}
+            );
+          };
 
+          // Single-group multi-breed shows (e.g. a tiny group champ within
+          // one RKC group) skip the heading band to avoid visual noise.
+          if (sections.length === 1 && ungrouped.length === 0) {
+            return sections[0].classes.map(renderRow);
+          }
 
-          <Text style={s.footer} render={footerRender} fixed />
+          return sections.map((section, si) => (
+            <View key={`section-${si}`}>
+              <View style={s.twoColMixedHeader} wrap={false}>
+                <Text style={s.twoColHeaderText}>{section.heading}</Text>
+              </View>
+              {section.classes.map((cls, i) => renderRow(cls, i))}
+            </View>
+          ));
+        })()}
+
+        <Text style={s.footer} render={footerRender} fixed />
       </Page>
 
       {/* ════════════════════════════════════════════════════════════════════════
@@ -824,6 +854,20 @@ export function ShowSchedule({
           </Text>
         </View>
 
+        {/* Crufts qualification — open shows judged on the group system only.
+            Per the RKC specimen, this is a notable exhibitor-facing benefit
+            so we render it as a highlighted callout above the rules. */}
+        {isGroupSystem && (show.showType === 'open' || show.showType === 'premier_open') && (
+          <View style={{ marginBottom: 10, paddingHorizontal: 8, paddingVertical: 6, backgroundColor: C.cardBg, borderRadius: 4, borderLeftWidth: 3, borderLeftColor: C.primary }} wrap={false}>
+            <Text style={{ fontFamily: 'Inter', fontSize: 7, fontWeight: 'bold', color: C.primary, letterSpacing: 0.5, marginBottom: 2 }}>
+              CRUFTS QUALIFICATION
+            </Text>
+            <Text style={{ fontFamily: 'Times', fontSize: 7.5, lineHeight: 1.5, color: C.textDark }}>
+              Dogs placed 1&ndash;4 in each group, and 1&ndash;4 in each puppy group, will qualify for Crufts the following year, as a result of which more dogs will gain opportunities to qualify for Crufts.
+            </Text>
+          </View>
+        )}
+
         {show.showOpenTime && (
           <Rule num="1">The show will open at {formatTime(show.showOpenTime)}.</Rule>
         )}
@@ -847,17 +891,45 @@ export function ShowSchedule({
         )}
         <Rule num="6">ONLINE ENTRY can be found at remishowmanager.co.uk/shows/{show.slug}</Rule>
         <Rule num="7">The Committee reserves to itself the right to refuse any entries.</Rule>
-        <Rule num="8">Puppies under four calendar months of age on the first day of the Show are not eligible for exhibition.</Rule>
+        {/* Rule 8: multi-breed open shows use a six-month puppy threshold per
+            the RKC specimens (no Baby Puppy class permitted at multi-breed
+            open shows). If a club nonetheless schedules a Baby Puppy class
+            we drop to four months so the schedule doesn't contradict itself.
+            Phase B will gate this at the class-creation UI. */}
+        <Rule num="8">Puppies under {hasBabyPuppyClass ? 'four' : 'six'} calendar months of age on the first day of the Show are not eligible for exhibition.</Rule>
         <Rule num="9">The mating of bitches within the precincts of the Show is forbidden.</Rule>
-        <Text style={s.ruleText}>
-          <Text style={s.ruleNumber}>10.</Text> <Text style={s.ruleTextBold}>Best Puppy in Show:</Text> Where a Best Puppy in Show competition is scheduled the Best Puppy in Show is a puppy which has competed and is unbeaten by any other puppy exhibited at the show. A puppy is a dog of six and not exceeding twelve calendar months of age on the first day of the show.
-        </Text>
-        <Rule num="11">A Baby Puppy is a dog of four and less than six calendar months of age on the first day of the show. Baby Puppy classes may be scheduled at any breed Club show, Best Baby Puppy in Breed may be declared at each breed from the dogs entered in the Baby Puppy class. There must be no progression to further competitions.</Rule>
-        <Rule num="12">In Best in Show the exhibits may be selected from the exhibits declared Best of Sex. If a Reserve Best in Show is to be selected, the eligible dogs are those declared Best of Sex, Opposite Best of Sex of the exhibit declared Best in Show.</Rule>
-        {/* Multi-breed BIS chains (Best of Group → Best in Show), the Crufts
-            qualification banner, and the AVNSC/AVIBR variants of Rule 10 all
-            live in ShowScheduleMultibreed — the sibling component dispatched
-            for showScope 'general' / 'group'. */}
+        {/* Rule 10: multi-breed Best Puppy in Show chain. Group-system shows
+            include the Best Puppy in Group → Best Puppy in Show progression. */}
+        {isGroupSystem ? (
+          <Text style={s.ruleText}>
+            <Text style={s.ruleNumber}>10.</Text> <Text style={s.ruleTextBold}>Best Puppy in Show:</Text> Where a Best Puppy in Show competition is scheduled the Best Puppy in Show is a puppy which has competed and has been declared Best Puppy in Breed, Best Any Variety Not Separately Classified Puppy or Best Any Variety Imported Breed Register Puppy. A puppy is a dog of six and not exceeding twelve calendar months of age on the first day of the Show. Best Puppy in Group must be selected from the Best Puppy in Breed winners and the Best Puppy from the Any Variety Imported Breed Register classes in each group. Best Puppy in Show must be selected from the Best Puppy in Group winners.
+          </Text>
+        ) : (
+          <Text style={s.ruleText}>
+            <Text style={s.ruleNumber}>10.</Text> <Text style={s.ruleTextBold}>Best Puppy in Show:</Text> Where a Best Puppy in Show competition is scheduled the Best Puppy in Show is a puppy which has competed and has been declared Best Puppy in Breed, Best Any Variety Not Separately Classified Puppy or Best Any Variety Imported Breed Register Puppy. A puppy is a dog of six and not exceeding twelve calendar months of age on the first day of the Show.
+          </Text>
+        )}
+        {/* Rule 11 (Baby Puppy) only renders when a Baby Puppy class is
+            scheduled — otherwise it's dead text contradicting Rule 8. */}
+        {hasBabyPuppyClass && (
+          <Rule num="11">A Baby Puppy is a dog of four and less than six calendar months of age on the first day of the show. Baby Puppy classes may be scheduled at any breed Club show, Best Baby Puppy in Breed may be declared at each breed from the dogs entered in the Baby Puppy class. There must be no progression to further competitions.</Rule>
+        )}
+        {/* Rule 12: multi-breed BIS chain. Group-system shows go through
+            BOG (Best of Group) winners; non-group-system shows pick BIS
+            directly from BOB + AVNSC + AVIBR. */}
+        {isGroupSystem ? (
+          <Text style={s.ruleText}>
+            <Text style={s.ruleNumber}>12.</Text>{' '}
+            <Text style={s.ruleTextBold}>Best of Group, Best in Show:</Text>{' '}
+            Where a breed is separately classified a Best of Breed may be declared but only from those dogs which have received a first prize in a breed class at the show. Where separate classes are provided for each sex of a breed a Best of each Sex must be declared. Best of Group and subsequent placings must be selected from the Best of Breed winners in each group, the dog declared Best Any Variety Not Separately Classified in each group, and the Best dog from Any Variety Imported Breed Register classes in each group. Best in Show must be selected from the Best of Group winners. Reserve Best in Show must be selected from the remaining Group winners following the selection of Best in Show.
+          </Text>
+        ) : (
+          <Text style={s.ruleText}>
+            <Text style={s.ruleNumber}>12.</Text>{' '}
+            <Text style={s.ruleTextBold}>Best in Show:</Text>{' '}
+            Where a breed is separately classified a Best of Breed may be declared but only from those dogs which have received a first prize in a breed class at the show. Where separate classes are provided for each sex of a breed a Best of each Sex must be declared. Best in Show and subsequent placings must be selected from those dogs declared Best of Breed, Best Any Variety Not Separately Classified and Best Any Variety Imported Breed Register.
+          </Text>
+        )}
         {sd?.hasBestVeteranInShow && (
           <Text style={s.ruleText}>
             <Text style={s.ruleNumber}>12a.</Text>{' '}

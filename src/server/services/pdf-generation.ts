@@ -19,8 +19,8 @@ import { CatalogueByBreed } from '@/components/catalogue/catalogue-by-breed';
 import type { CatalogueEntry, CatalogueShowInfo } from '@/components/catalogue/catalogue-types';
 import { PrizeCards } from '@/components/prize-cards/prize-cards';
 import type { PrizeCardShowInfo, PrizeCardClass } from '@/components/prize-cards/prize-cards';
-import { ShowSchedule } from '@/components/schedule/show-schedule';
-import type { ScheduleShowInfo, ScheduleClass, ScheduleJudge, ScheduleSponsor } from '@/components/schedule/show-schedule';
+import { pickScheduleComponent } from '@/components/schedule';
+import type { ScheduleShowInfo, ScheduleClass, ScheduleJudge, ScheduleSponsor } from '@/components/schedule';
 import { RingBoard } from '@/components/ring-board/ring-board';
 import type { RingBoardShowInfo, RingBoardRing } from '@/components/ring-board/ring-board';
 import { RingNumbers as RingNumbersComponent } from '@/components/ring-numbers/ring-numbers';
@@ -363,7 +363,7 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
       where: eq(schema.showClasses.showId, showId),
       with: {
         classDefinition: true,
-        breed: true,
+        breed: { with: { group: true } },
         classSponsorships: true,
       },
       orderBy: [asc(schema.showClasses.sortOrder), asc(schema.showClasses.classNumber)],
@@ -427,6 +427,8 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     sex: sc.sex,
     breedName: sc.breed?.name ?? null,
     classType: sc.classDefinition?.type ?? null,
+    breedGroupName: sc.breed?.group?.name ?? null,
+    breedGroupSortOrder: sc.breed?.group?.sortOrder ?? null,
   }));
 
   // Build class sponsorships grouped by show sponsor (loaded via showClasses relation)
@@ -499,7 +501,8 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     } : null,
   };
 
-  const pdfDocument = React.createElement(ShowSchedule, {
+  const ScheduleComponent = pickScheduleComponent(showInfo.showScope);
+  const pdfDocument = React.createElement(ScheduleComponent, {
     show: showInfo,
     classes,
     judges,

@@ -166,6 +166,51 @@ export const RKC_CLASS_DEFINITIONS: Record<string, RkcClassDefinition> = {
     sortOrder: 300,
     text: 'For dogs that have achieved their GCDS Bronze Award Certificate or above.',
   },
+  // ── Multi-breed-only classes (general/group championship + group-system or
+  // non-group-system open shows). Verbatim from the four RKC multi-breed
+  // specimen schedules (Feb 2026 edition). Single-breed shows never schedule
+  // these; the lookup is class-name-keyed so no branching is needed — they
+  // only appear in the definitions list when actually scheduled.
+  'avnsc': {
+    label: 'ANY VARIETY NOT SEPARATELY CLASSIFIED',
+    sortOrder: 310,
+    text: 'For breeds of dog for which no separate breed classes are scheduled. These classes are not open to breeds which are listed on the Imported Breed Register.',
+  },
+  'any variety not separately classified': {
+    label: 'ANY VARIETY NOT SEPARATELY CLASSIFIED',
+    sortOrder: 310,
+    text: 'For breeds of dog for which no separate breed classes are scheduled. These classes are not open to breeds which are listed on the Imported Breed Register.',
+  },
+  'avibr': {
+    label: 'ANY VARIETY IMPORTED BREED REGISTER',
+    sortOrder: 320,
+    text: 'For breeds confined to the Imported Breeds Register and only when an Interim Breed Standard has been published by The Royal Kennel Club. Such breeds may be exhibited in this class with the Best Imported Register / Best Imported Register Puppy being eligible for Best in Group / Best Puppy in Group or Best in Show / Best Puppy in Show as relevant. Such breeds may be entered into Imported Breed Register classes and/or Any Variety or Stakes classes, with the exception of AVNSC classes, for which they are not eligible.',
+  },
+  'any variety imported breed register': {
+    label: 'ANY VARIETY IMPORTED BREED REGISTER',
+    sortOrder: 320,
+    text: 'For breeds confined to the Imported Breeds Register and only when an Interim Breed Standard has been published by The Royal Kennel Club. Such breeds may be exhibited in this class with the Best Imported Register / Best Imported Register Puppy being eligible for Best in Group / Best Puppy in Group or Best in Show / Best Puppy in Show as relevant. Such breeds may be entered into Imported Breed Register classes and/or Any Variety or Stakes classes, with the exception of AVNSC classes, for which they are not eligible.',
+  },
+  'imported breed register': {
+    label: 'ANY VARIETY IMPORTED BREED REGISTER',
+    sortOrder: 320,
+    text: 'For breeds confined to the Imported Breeds Register and only when an Interim Breed Standard has been published by The Royal Kennel Club. Such breeds may be exhibited in this class with the Best Imported Register / Best Imported Register Puppy being eligible for Best in Group / Best Puppy in Group or Best in Show / Best Puppy in Show as relevant. Such breeds may be entered into Imported Breed Register classes and/or Any Variety or Stakes classes, with the exception of AVNSC classes, for which they are not eligible.',
+  },
+  'rare breeds': {
+    label: 'RARE BREEDS',
+    sortOrder: 330,
+    text: 'Confined to those breeds not granted Challenge Certificates in the current year, with the exception of those breeds whose registration is confined to the Imported Breed Register.',
+  },
+  'variety class': {
+    label: 'VARIETY CLASS',
+    sortOrder: 340,
+    text: 'For the purposes of Royal Kennel Club Regulations, the term "Variety Class" also applies to "Stakes Classes". A Variety Class is one in which more than one breed or variety of a breed with a breed standard can compete. There must be no stipulation that exhibits must be entered for Variety Classes as well as Breed Classes and no minimum number of classes in which a dog must be entered may be fixed.',
+  },
+  'variety': {
+    label: 'VARIETY CLASS',
+    sortOrder: 340,
+    text: 'For the purposes of Royal Kennel Club Regulations, the term "Variety Class" also applies to "Stakes Classes". A Variety Class is one in which more than one breed or variety of a breed with a breed standard can compete. There must be no stipulation that exhibits must be entered for Variety Classes as well as Breed Classes and no minimum number of classes in which a dog must be entered may be fixed.',
+  },
 };
 
 /** Generic NFC entry — included separately as it isn't a competitive class. */

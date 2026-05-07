@@ -3,13 +3,13 @@ import { db } from '@/server/db';
 import { eq, asc } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
 import { renderToBuffer } from '@react-pdf/renderer';
-import { ShowSchedule } from '@/components/schedule/show-schedule';
+import { pickScheduleComponent } from '@/components/schedule';
 import type {
   ScheduleShowInfo,
   ScheduleClass,
   ScheduleJudge,
   ScheduleSponsor,
-} from '@/components/schedule/show-schedule';
+} from '@/components/schedule';
 import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, makePdfResponse } from '@/lib/pdf-utils';
@@ -46,7 +46,7 @@ export async function GET(
       where: eq(schema.showClasses.showId, showId),
       with: {
         classDefinition: true,
-        breed: true,
+        breed: { with: { group: true } },
       },
       orderBy: [asc(schema.showClasses.sortOrder), asc(schema.showClasses.classNumber)],
     }),
@@ -77,6 +77,8 @@ export async function GET(
     sex: sc.sex,
     breedName: sc.breed?.name ?? null,
     classType: sc.classDefinition?.type ?? null,
+    breedGroupName: sc.breed?.group?.name ?? null,
+    breedGroupSortOrder: sc.breed?.group?.sortOrder ?? null,
   }));
 
   // Build judges data (deduplicated by judge id). For each judge we track
@@ -253,7 +255,8 @@ export async function GET(
   }
 
   try {
-    const pdfDocument = React.createElement(ShowSchedule, {
+    const ScheduleComponent = pickScheduleComponent(showInfo.showScope);
+    const pdfDocument = React.createElement(ScheduleComponent, {
       show: showInfo,
       classes,
       judges,

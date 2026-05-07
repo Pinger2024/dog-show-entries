@@ -1,0 +1,97 @@
+import type { ScheduleData } from '@/server/db/schema/shows';
+
+/**
+ * Types shared by both the single-breed and multi-breed schedule renderers.
+ * Live in `shared/` so neither top-level component owns them.
+ */
+
+export interface ScheduleShowInfo {
+  slug: string;
+  name: string;
+  showType: string;
+  showScope: string;
+  date: string;
+  endDate: string;
+  startTime: string | null;
+  entriesOpenDate: string | null;
+  entryCloseDate: string | null;
+  postalCloseDate: string | null;
+  kcLicenceNo: string | null;
+  secretaryEmail: string | null;
+  secretaryName: string | null;
+  secretaryAddress: string | null;
+  secretaryPhone: string | null;
+  showOpenTime: string | null;
+  onCallVet: string | null;
+  description: string | null;
+  firstEntryFee: number | null;
+  subsequentEntryFee: number | null;
+  nfcEntryFee: number | null;
+  juniorHandlerFee: number | null;
+  acceptsPostalEntries: boolean;
+  scheduleData: ScheduleData | null;
+  organisation: {
+    name: string;
+    contactEmail: string | null;
+    contactPhone: string | null;
+    website: string | null;
+    logoUrl: string | null;
+  } | null;
+  venue: {
+    name: string;
+    address: string | null;
+    postcode: string | null;
+  } | null;
+}
+
+export interface ScheduleClass {
+  classNumber: number | null;
+  /** Display label — "1" for numbered classes, "JHA"/"JHB" for Junior
+   *  Handler classes which sit outside the RKC-licensed class count. */
+  classLabel: string;
+  className: string;
+  classDescription: string | null;
+  sex: string | null;
+  breedName: string | null;
+  classType?: string | null;
+  /** RKC group of the class's breed. Populated for multi-breed shows so the
+   *  schedule can render Group classification headings (HOUND GROUP, etc.).
+   *  Null for breed-less classes (AVNSC, Variety, JH) and for single-breed
+   *  shows where the heading is unnecessary. */
+  breedGroupName?: string | null;
+  /** Sort order for the breed's group (used to render groups in the RKC's
+   *  conventional order regardless of breed name alphabetisation). */
+  breedGroupSortOrder?: number | null;
+}
+
+export interface ScheduleJudge {
+  name: string;
+  affix?: string | null;
+  breeds: string[];
+  sex?: string | null; // 'dog' | 'bitch' | null (both)
+  /** Role label, e.g. "Dogs & Bitches" or "Junior Handling" */
+  role?: string;
+  /** Pre-formatted label for display, e.g. "Mr A Winfrow (Sadira) — Dogs & Bitches" */
+  displayLabel?: string;
+}
+
+export interface ScheduleSponsor {
+  name: string;
+  tier: string;
+  customTitle: string | null;
+  logoUrl: string | null;
+  website: string | null;
+  specialPrizes: string | null;
+  classSponsorships: Array<{
+    className: string;
+    trophyName: string | null;
+    trophyDonor: string | null;
+    prizeDescription: string | null;
+  }>;
+}
+
+/** Multi-breed shows have RKC group-level "best in group" awards plus
+ *  variants for puppy/veteran. Single-breed shows only declare best in
+ *  show / best of breed. The `variant` prop on shared subcomponents
+ *  branches on this. */
+export type ScheduleVariant = 'single-breed' | 'multi-breed';
