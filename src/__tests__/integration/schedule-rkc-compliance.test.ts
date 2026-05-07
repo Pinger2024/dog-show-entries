@@ -28,7 +28,7 @@ vi.mock('@react-pdf/renderer', () => ({
 
 import { ShowSchedule } from '@/components/schedule/show-schedule';
 import { ShowScheduleMultibreed } from '@/components/schedule/show-schedule-multibreed';
-import type { ScheduleShowInfo, ScheduleClass, ScheduleJudge } from '@/components/schedule/shared/types';
+import type { ScheduleShowInfo, ScheduleClass, ScheduleJudge, SchedulePanelJudge } from '@/components/schedule/shared/types';
 
 function baseShow(overrides: Partial<ScheduleShowInfo> = {}): ScheduleShowInfo {
   return {
@@ -95,8 +95,12 @@ function render(
 /** Multi-breed renderer used by the multi-breed describe blocks below.
  *  Single-breed regression tests continue to use `render()` against the
  *  slimmed-down ShowSchedule. */
-function renderMultibreed(show: ScheduleShowInfo, classes: ScheduleClass[]): string {
-  const tree = ShowScheduleMultibreed({ show, classes, judges: baseJudges });
+function renderMultibreed(
+  show: ScheduleShowInfo,
+  classes: ScheduleClass[],
+  panelJudges: SchedulePanelJudge[] = [],
+): string {
+  const tree = ShowScheduleMultibreed({ show, classes, judges: baseJudges, panelJudges });
   return renderToStaticMarkup(tree as React.ReactElement);
 }
 
@@ -651,3 +655,117 @@ describe('RKC schedule compliance — multi-breed open show with Baby Puppy clas
     expect(html).toMatch(/A Baby Puppy is a dog of four and less than six calendar months/i);
   });
 });
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+// Phase A.2 — BIS & Group Judges panel + per-group judge banner. The data
+// model came from Amanda 2026-05-07: stock RKC roles + user-defined
+// custom roles, mirrored on the class_definitions stock+custom pattern.
+// ───────────────────────────────────────────────────────────────────────────────
+
+const samplePanelJudges: SchedulePanelJudge[] = [
+  // Show-level
+  { displayLabel: "Mr A Best (Sadira)", roleName: "Best in Show Judge", roleShortLabel: "BIS", roleSortOrder: 100, isGroupLevel: false, groupName: null, groupSortOrder: null },
+  { displayLabel: "Mrs B Puppy", roleName: "Best Puppy in Show Judge", roleShortLabel: "BPIS", roleSortOrder: 110, isGroupLevel: false, groupName: null, groupSortOrder: null },
+  // Hound group panel
+  { displayLabel: "Mr H Hound", roleName: "Group Judge", roleShortLabel: "Group", roleSortOrder: 10, isGroupLevel: true, groupName: "Hound", groupSortOrder: 2 },
+  { displayLabel: "Ms P Pup", roleName: "Puppy Group Judge", roleShortLabel: "Puppy Group", roleSortOrder: 20, isGroupLevel: true, groupName: "Hound", groupSortOrder: 2 },
+  { displayLabel: "Mr V Vet", roleName: "Veteran Group Judge", roleShortLabel: "Veteran Group", roleSortOrder: 30, isGroupLevel: true, groupName: "Hound", groupSortOrder: 2 },
+  // Gundog group panel
+  { displayLabel: "Mrs G Gundog", roleName: "Group Judge", roleShortLabel: "Group", roleSortOrder: 10, isGroupLevel: true, groupName: "Gundog", groupSortOrder: 1 },
+  { displayLabel: "Ms P Pup", roleName: "Puppy Group Judge", roleShortLabel: "Puppy Group", roleSortOrder: 20, isGroupLevel: true, groupName: "Gundog", groupSortOrder: 1 },
+];
+
+describe("RKC schedule compliance — BIS & Group Judges panel page (Phase A.2)", () => {
+  const show = baseShow({
+    showType: "championship",
+    showScope: "general",
+    scheduleData: {
+      ...(baseShow().scheduleData as object),
+      judgedOnGroupSystem: true,
+    } as ScheduleShowInfo["scheduleData"],
+  });
+  const html = renderMultibreed(show, multiBreedClasses, samplePanelJudges);
+
+  it("renders the panel page section heading", () => {
+    expect(html).toMatch(/Best in Show.*Group Judges/i);
+  });
+
+  it("includes the show-level Best in Show judge", () => {
+    expect(html).toMatch(/Best in Show Judge/);
+    expect(html).toMatch(/Mr A Best \(Sadira\)/);
+  });
+
+  it("includes the show-level Best Puppy in Show judge", () => {
+    expect(html).toMatch(/Best Puppy in Show Judge/);
+    expect(html).toMatch(/Mrs B Puppy/);
+  });
+
+  it("includes the per-group rows on the panel table", () => {
+    expect(html).toMatch(/HOUND/);
+    expect(html).toMatch(/GUNDOG/);
+    expect(html).toMatch(/Mr H Hound/);
+    expect(html).toMatch(/Mrs G Gundog/);
+  });
+
+  it("includes the dynamic role columns based on the data", () => {
+    // Group Judge column is universal across both groups
+    expect(html).toMatch(/Group/);
+    // Puppy Group column appears (used by both groups)
+    expect(html).toMatch(/Puppy Group/);
+    // Veteran Group column appears (only Hound has one — column still renders)
+    expect(html).toMatch(/Veteran Group/);
+  });
+});
+
+describe("RKC schedule compliance — per-group judge banner above the class table (Phase A.2)", () => {
+  const show = baseShow({
+    showType: "championship",
+    showScope: "general",
+    scheduleData: {
+      ...(baseShow().scheduleData as object),
+      judgedOnGroupSystem: true,
+    } as ScheduleShowInfo["scheduleData"],
+  });
+  const html = renderMultibreed(show, multiBreedClasses, samplePanelJudges);
+
+  it("renders group judges underneath each group banner", () => {
+    // The HOUND GROUP heading should be followed by Mr H Hound (Group Judge)
+    expect(html).toMatch(/HOUND GROUP/);
+    expect(html).toMatch(/Mr H Hound/);
+    expect(html).toMatch(/Mrs G Gundog/);
+  });
+
+  it("uses the role short label as the per-judge prefix", () => {
+    // "Group:" for the main group judge (short label)
+    expect(html).toMatch(/Group:/);
+    // "Puppy Group:" for the sub-judge
+    expect(html).toMatch(/Puppy Group:/);
+  });
+
+  it("does NOT render show-level judges (BIS, BPIS) under any group banner — they only appear on the panel page", () => {
+    // The string "BIS:" with colon should NOT appear as a banner-row prefix.
+    // (It appears on the panel page header but not as a per-group banner row.)
+    expect(html).not.toMatch(/HOUND GROUP[\s\S]*BIS:/);
+  });
+});
+
+describe("RKC schedule compliance — panel page omitted when no panel judges (Phase A.2)", () => {
+  // When a multi-breed show has no group/show-level assignments yet (e.g.
+  // freshly created), the panel page should not render — better than an
+  // empty page. The per-group banner also stays empty.
+  const show = baseShow({
+    showType: "championship",
+    showScope: "general",
+    scheduleData: {
+      ...(baseShow().scheduleData as object),
+      judgedOnGroupSystem: true,
+    } as ScheduleShowInfo["scheduleData"],
+  });
+  const html = renderMultibreed(show, multiBreedClasses, []);
+
+  it("does NOT render the panel page section heading", () => {
+    expect(html).not.toMatch(/Best in Show.*Group Judges/i);
+  });
+});
+

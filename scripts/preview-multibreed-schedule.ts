@@ -19,6 +19,7 @@ import type {
   ScheduleShowInfo,
   ScheduleClass,
   ScheduleJudge,
+  SchedulePanelJudge,
 } from '../src/components/schedule/shared/types';
 
 function baseShow(overrides: Partial<ScheduleShowInfo> = {}): ScheduleShowInfo {
@@ -92,8 +93,30 @@ const classes: ScheduleClass[] = [
   { classNumber: 13, classLabel: '13', className: 'Variety Class', classDescription: null, sex: null, breedName: null, classType: 'age' },
 ];
 
+// Sample panel judges across three groups (Hound, Gundog, Pastoral) plus
+// show-level BIS / BPIS / BVIS — gives the preview page enough variety to
+// show the dynamic-column layout that adapts to whatever sub-judge roles
+// the data carries.
+const panelJudges: SchedulePanelJudge[] = [
+  // Show-level
+  { displayLabel: 'Mrs Eleanor Best (Sandcastle)', roleName: 'Best in Show Judge', roleShortLabel: 'BIS', roleSortOrder: 100, isGroupLevel: false, groupName: null, groupSortOrder: null },
+  { displayLabel: 'Mr Jonathan Pup (Westwood)', roleName: 'Best Puppy in Show Judge', roleShortLabel: 'BPIS', roleSortOrder: 110, isGroupLevel: false, groupName: null, groupSortOrder: null },
+  { displayLabel: 'Mrs Margaret Vet (Brackenbridge)', roleName: 'Best Veteran in Show Judge', roleShortLabel: 'BVIS', roleSortOrder: 120, isGroupLevel: false, groupName: null, groupSortOrder: null },
+  // Gundog (sortOrder 1)
+  { displayLabel: 'Mr Adam Gundog (Sadira)', roleName: 'Group Judge', roleShortLabel: 'Group', roleSortOrder: 10, isGroupLevel: true, groupName: 'Gundog', groupSortOrder: 1 },
+  { displayLabel: 'Ms Helen PupGundog', roleName: 'Puppy Group Judge', roleShortLabel: 'Puppy Group', roleSortOrder: 20, isGroupLevel: true, groupName: 'Gundog', groupSortOrder: 1 },
+  { displayLabel: 'Mr Tim Veteran', roleName: 'Veteran Group Judge', roleShortLabel: 'Veteran Group', roleSortOrder: 30, isGroupLevel: true, groupName: 'Gundog', groupSortOrder: 1 },
+  // Hound (sortOrder 2)
+  { displayLabel: 'Mrs Diane Hound (Camargue)', roleName: 'Group Judge', roleShortLabel: 'Group', roleSortOrder: 10, isGroupLevel: true, groupName: 'Hound', groupSortOrder: 2 },
+  { displayLabel: 'Mr Francesco Cohetti (Italy)', roleName: 'Puppy Group Judge', roleShortLabel: 'Puppy Group', roleSortOrder: 20, isGroupLevel: true, groupName: 'Hound', groupSortOrder: 2 },
+  { displayLabel: 'Mr Tim Veteran', roleName: 'Veteran Group Judge', roleShortLabel: 'Veteran Group', roleSortOrder: 30, isGroupLevel: true, groupName: 'Hound', groupSortOrder: 2 },
+  // Pastoral (sortOrder 3)
+  { displayLabel: 'Mr Edward Paterson (Camargue)', roleName: 'Group Judge', roleShortLabel: 'Group', roleSortOrder: 10, isGroupLevel: true, groupName: 'Pastoral', groupSortOrder: 3 },
+  { displayLabel: 'Mr Francesco Cohetti (Italy)', roleName: 'Puppy Group Judge', roleShortLabel: 'Puppy Group', roleSortOrder: 20, isGroupLevel: true, groupName: 'Pastoral', groupSortOrder: 3 },
+];
+
 async function render(label: string, show: ScheduleShowInfo, outPath: string) {
-  const tree = React.createElement(ShowScheduleMultibreed, { show, classes, judges });
+  const tree = React.createElement(ShowScheduleMultibreed, { show, classes, judges, panelJudges });
   // Cast — react-pdf typings vs FunctionComponentElement is a known mismatch
   // (already noted as pre-existing in tsc output).
   const buf = await renderToBuffer(tree as Parameters<typeof renderToBuffer>[0]);

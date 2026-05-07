@@ -9,6 +9,7 @@ import type {
   ScheduleClass,
   ScheduleJudge,
   ScheduleSponsor,
+  SchedulePanelJudge,
 } from '@/components/schedule';
 import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
@@ -52,7 +53,7 @@ export async function GET(
     }),
     db.query.judgeAssignments.findMany({
       where: eq(schema.judgeAssignments.showId, showId),
-      with: { judge: true, breed: true },
+      with: { judge: true, breed: true, breedGroup: true, judgeRole: true },
     }),
     db.query.showSponsors.findMany({
       where: eq(schema.showSponsors.showId, showId),
@@ -117,6 +118,10 @@ export async function GET(
   const judgeMap = new Map<string, JudgeAggregate>();
   for (const ja of judgeAssignments) {
     if (!ja.judge?.id || !ja.judge?.name) continue;
+    // Multi-breed group/show-level assignments (Group Judge, BIS, etc.) are
+    // surfaced via panelJudges below — skip them here so they don't pollute
+    // the per-breed roll-up that drives the cover page judge list.
+    if (ja.judgeRoleId) continue;
     const key = ja.judge.id;
     if (!judgeMap.has(key)) {
       judgeMap.set(key, {
@@ -135,6 +140,25 @@ export async function GET(
       agg.hasNullSexAssignment = true;
     }
   }
+
+  // Multi-breed panel judges (group-level + show-level). Single-breed shows
+  // never populate this — judge_roles is a multi-breed-only taxonomy.
+  const panelJudges: SchedulePanelJudge[] = judgeAssignments
+    .filter((ja) => ja.judgeRoleId && ja.judge?.name && ja.judgeRole)
+    .map((ja) => {
+      const namePart = ja.judge!.kennelClubAffix
+        ? `${ja.judge!.name} (${ja.judge!.kennelClubAffix})`
+        : ja.judge!.name;
+      return {
+        displayLabel: namePart,
+        roleName: ja.judgeRole!.name,
+        roleShortLabel: ja.judgeRole!.shortLabel ?? null,
+        roleSortOrder: ja.judgeRole!.sortOrder,
+        isGroupLevel: ja.judgeRole!.isGroupLevel,
+        groupName: ja.breedGroup?.name ?? null,
+        groupSortOrder: ja.breedGroup?.sortOrder ?? null,
+      };
+    });
 
   // Build each judge's row, resolving the JH-vs-breed role up front so we
   // can use it as a sort key below.
@@ -261,6 +285,7 @@ export async function GET(
       classes,
       judges,
       sponsors,
+      panelJudges,
     });
     const buffer = await renderToBuffer(pdfDocument);
     const filename = `${sanitizeFilename(show.name)}-Schedule.pdf`;

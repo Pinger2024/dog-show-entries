@@ -61,6 +61,7 @@ export {
   judgeAssignments,
   judgeAssignmentsRelations,
 } from './judge-assignments';
+export { judgeRoles } from './judge-roles';
 export { achievements, achievementsRelations } from './achievements';
 export { memberships, membershipsRelations } from './memberships';
 export { payments, paymentsRelations } from './payments';

@@ -19,6 +19,7 @@ export type {
   ScheduleClass,
   ScheduleJudge,
   ScheduleSponsor,
+  SchedulePanelJudge,
 } from './shared/types';
 
 /**

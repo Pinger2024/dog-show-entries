@@ -41,6 +41,10 @@ export function ShowSchedule({
   classes: ScheduleClass[];
   judges: ScheduleJudge[];
   sponsors?: ScheduleSponsor[];
+  /** Accepted but unused — single-breed shows don't render group/show-level
+   *  panel judges. The dispatcher passes this prop to both renderers so the
+   *  call signatures stay symmetrical; multi-breed component consumes it. */
+  panelJudges?: unknown;
 }) {
   const showTypeLabel = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
   const showDate = show.endDate && show.endDate !== show.date

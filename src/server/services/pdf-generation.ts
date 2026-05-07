@@ -20,7 +20,7 @@ import type { CatalogueEntry, CatalogueShowInfo } from '@/components/catalogue/c
 import { PrizeCards } from '@/components/prize-cards/prize-cards';
 import type { PrizeCardShowInfo, PrizeCardClass } from '@/components/prize-cards/prize-cards';
 import { pickScheduleComponent } from '@/components/schedule';
-import type { ScheduleShowInfo, ScheduleClass, ScheduleJudge, ScheduleSponsor } from '@/components/schedule';
+import type { ScheduleShowInfo, ScheduleClass, ScheduleJudge, ScheduleSponsor, SchedulePanelJudge } from '@/components/schedule';
 import { RingBoard } from '@/components/ring-board/ring-board';
 import type { RingBoardShowInfo, RingBoardRing } from '@/components/ring-board/ring-board';
 import { RingNumbers as RingNumbersComponent } from '@/components/ring-numbers/ring-numbers';
@@ -370,7 +370,7 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     }),
     db.query.judgeAssignments.findMany({
       where: eq(schema.judgeAssignments.showId, showId),
-      with: { judge: true, breed: true },
+      with: { judge: true, breed: true, breedGroup: true, judgeRole: true },
     }),
     db.query.showSponsors.findMany({
       where: eq(schema.showSponsors.showId, showId),
@@ -379,11 +379,13 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
   ]);
 
   // Build judges with sex-annotated display labels
-  // Group by (name + sex) to preserve sex-split assignments
+  // Group by (name + sex) to preserve sex-split assignments. Skip group/show-
+  // level (panel) assignments — those are surfaced via panelJudges below.
   const judgeKey = (name: string, sex: string | null) => `${name}::${sex ?? 'all'}`;
   const judgeEntries = new Map<string, { name: string; sex: string | null; breeds: string[]; isJH: boolean }>();
   for (const ja of judgeAssignments) {
     if (!ja.judge?.name) continue;
+    if (ja.judgeRoleId) continue;
     const key = judgeKey(ja.judge.name, ja.sex);
     const existing = judgeEntries.get(key);
     // Detect Junior Handling: no breed, sex=null, and class names contain "handling"
@@ -399,6 +401,24 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
       });
     }
   }
+
+  // Multi-breed panel judges (group-level + show-level). Empty for single-breed.
+  const panelJudges: SchedulePanelJudge[] = judgeAssignments
+    .filter((ja) => ja.judgeRoleId && ja.judge?.name && ja.judgeRole)
+    .map((ja) => {
+      const namePart = ja.judge!.kennelClubAffix
+        ? `${ja.judge!.name} (${ja.judge!.kennelClubAffix})`
+        : ja.judge!.name;
+      return {
+        displayLabel: namePart,
+        roleName: ja.judgeRole!.name,
+        roleShortLabel: ja.judgeRole!.shortLabel ?? null,
+        roleSortOrder: ja.judgeRole!.sortOrder,
+        isGroupLevel: ja.judgeRole!.isGroupLevel,
+        groupName: ja.breedGroup?.name ?? null,
+        groupSortOrder: ja.breedGroup?.sortOrder ?? null,
+      };
+    });
 
   // Build display labels: "Dogs — Mr A Winfrow" or "Junior Handling — Mandy McAteer"
   function sexPrefix(sex: string | null, isJH: boolean): string | null {
@@ -507,6 +527,7 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     classes,
     judges,
     sponsors,
+    panelJudges,
   });
   return Buffer.from(await renderToBuffer(pdfDocument));
 }

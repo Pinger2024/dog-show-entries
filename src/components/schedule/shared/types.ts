@@ -95,3 +95,29 @@ export interface ScheduleSponsor {
  *  show / best of breed. The `variant` prop on shared subcomponents
  *  branches on this. */
 export type ScheduleVariant = 'single-breed' | 'multi-breed';
+
+/**
+ * Multi-breed group/show-level judge assignment. Renders on the
+ * "BIS & Group Judges" panel page near the front of the schedule and
+ * (for group-level entries) on the per-group banner above each group's
+ * classification block.
+ *
+ * Single-breed shows don't use this — their judges live in the existing
+ * `judges: ScheduleJudge[]` prop.
+ */
+export interface SchedulePanelJudge {
+  /** Judge's display name, including any affix in parentheses. */
+  displayLabel: string;
+  /** Role name as stored in judge_roles (e.g. "Group Judge"). */
+  roleName: string;
+  /** Short label for compact rendering ("Puppy Group", "BIS"). */
+  roleShortLabel: string | null;
+  /** Sort order for rendering — both within the panel table and the per-group banner. */
+  roleSortOrder: number;
+  /** True for per-group roles, false for show-level (BIS, BPIS, BVIS). */
+  isGroupLevel: boolean;
+  /** Group name (e.g. "Hound") for group-level entries. Null for show-level. */
+  groupName: string | null;
+  /** Sort order for the group (drives row ordering on the panel table). */
+  groupSortOrder: number | null;
+}

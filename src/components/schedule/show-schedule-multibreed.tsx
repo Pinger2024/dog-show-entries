@@ -7,6 +7,7 @@ import type {
   ScheduleClass,
   ScheduleJudge,
   ScheduleSponsor,
+  SchedulePanelJudge,
 } from './shared/types';
 import {
   C,
@@ -36,11 +37,17 @@ export function ShowScheduleMultibreed({
   classes,
   judges,
   sponsors = [],
+  panelJudges = [],
 }: {
   show: ScheduleShowInfo;
   classes: ScheduleClass[];
   judges: ScheduleJudge[];
   sponsors?: ScheduleSponsor[];
+  /** Group-level + show-level judge assignments (Group Judge, Puppy Group,
+   *  BIS, etc.). Drives the BIS & Group Judges panel page and the per-group
+   *  judge banner above each group's classification block. Empty array when
+   *  the show hasn't yet had panel-level judges assigned. */
+  panelJudges?: SchedulePanelJudge[];
 }) {
   const showTypeLabel = SHOW_TYPE_LABELS[show.showType] ?? show.showType;
   const showDate = show.endDate && show.endDate !== show.date
@@ -653,6 +660,103 @@ export function ShowScheduleMultibreed({
       )}
 
       {/* ════════════════════════════════════════════════════════════════════════
+          BIS & GROUP JUDGES PANEL — only renders when panelJudges has data.
+          Lays out show-level (BIS / BPIS / BVIS) above a per-group table of
+          group + sub-group judges, mirroring Higham Press house style for
+          general championship schedules.
+          ════════════════════════════════════════════════════════════════════ */}
+      {panelJudges.length > 0 && (() => {
+        const groupLevel = panelJudges.filter((p) => p.isGroupLevel);
+        const showLevel = panelJudges
+          .filter((p) => !p.isGroupLevel)
+          .sort((a, b) => a.roleSortOrder - b.roleSortOrder);
+
+        // Distinct roles + groups, both ordered. Cell lookup keyed by (group, role).
+        const roleMeta = new Map<string, { sortOrder: number; shortLabel: string }>();
+        for (const e of groupLevel) {
+          if (!roleMeta.has(e.roleName)) {
+            roleMeta.set(e.roleName, {
+              sortOrder: e.roleSortOrder,
+              shortLabel: e.roleShortLabel ?? e.roleName,
+            });
+          }
+        }
+        const orderedRoles = [...roleMeta.entries()].sort(
+          (a, b) => a[1].sortOrder - b[1].sortOrder,
+        );
+
+        const groupMeta = new Map<string, number>();
+        for (const e of groupLevel) {
+          if (e.groupName && !groupMeta.has(e.groupName)) {
+            groupMeta.set(e.groupName, e.groupSortOrder ?? 999);
+          }
+        }
+        const orderedGroups = [...groupMeta.entries()].sort((a, b) => a[1] - b[1]);
+
+        const cell = new Map<string, string>();
+        for (const e of groupLevel) {
+          if (!e.groupName) continue;
+          cell.set(`${e.groupName}::${e.roleName}`, e.displayLabel);
+        }
+
+        return (
+          <Page size="A5" style={s.page}>
+            <SectionBand title="Best in Show & Group Judges" />
+
+            {showLevel.length > 0 && (
+              <View style={{ marginBottom: 12 }}>
+                {showLevel.map((e, i) => (
+                  <View key={i} style={s.judgeRow}>
+                    <Text style={s.judgeName}>{e.roleName}</Text>
+                    <Text style={s.judgeBreeds}>{e.displayLabel}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {orderedGroups.length > 0 && (
+              <View>
+                <View style={{ flexDirection: 'row', backgroundColor: C.primary, paddingVertical: 5, paddingHorizontal: 6, borderTopLeftRadius: 4, borderTopRightRadius: 4 }}>
+                  <Text style={{ width: '22%', fontFamily: 'Inter', fontSize: 7, fontWeight: 'bold', color: C.textOnPrimary, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                    Group
+                  </Text>
+                  {orderedRoles.map(([roleName, meta]) => (
+                    <Text key={roleName} style={{ flex: 1, fontFamily: 'Inter', fontSize: 7, fontWeight: 'bold', color: C.textOnPrimary, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                      {meta.shortLabel}
+                    </Text>
+                  ))}
+                </View>
+                {orderedGroups.map(([groupName], gi) => (
+                  <View
+                    key={groupName}
+                    style={[
+                      { flexDirection: 'row', paddingVertical: 4, paddingHorizontal: 6, borderBottomWidth: 0.5, borderBottomColor: C.cardBorder },
+                      gi % 2 !== 0 && { backgroundColor: C.tableRowAlt },
+                    ]}
+                    wrap={false}
+                  >
+                    <Text style={{ width: '22%', fontFamily: 'Inter', fontSize: 7.5, fontWeight: 'bold', color: C.textDark }}>
+                      {groupName.toUpperCase()}
+                    </Text>
+                    {orderedRoles.map(([roleName]) => (
+                      <Text
+                        key={roleName}
+                        style={{ flex: 1, fontFamily: 'Inter', fontSize: 7.5, color: C.textDark, paddingRight: 4 }}
+                      >
+                        {cell.get(`${groupName}::${roleName}`) ?? ''}
+                      </Text>
+                    ))}
+                  </View>
+                ))}
+              </View>
+            )}
+
+            <Text style={s.footer} render={footerRender} fixed />
+          </Page>
+        );
+      })()}
+
+      {/* ════════════════════════════════════════════════════════════════════════
           SCHEDULE OF CLASSES
           ════════════════════════════════════════════════════════════════════ */}
       <Page size="A5" style={s.page}>
@@ -711,14 +815,34 @@ export function ShowScheduleMultibreed({
           const orderedGroups = Array.from(buckets.values()).sort(
             (a, b) => a.sortOrder - b.sortOrder,
           );
-          const sections = orderedGroups.map((g) => ({
+
+          // Per-group judge banner: pull all group-level panel judges keyed
+          // by group name, so each section heading can list the group's
+          // judges underneath the band — Higham Press house style.
+          const groupJudgesByGroup = new Map<string, SchedulePanelJudge[]>();
+          for (const pj of panelJudges) {
+            if (!pj.isGroupLevel || !pj.groupName) continue;
+            const existing = groupJudgesByGroup.get(pj.groupName) ?? [];
+            existing.push(pj);
+            groupJudgesByGroup.set(pj.groupName, existing);
+          }
+
+          const sections: Array<{
+            heading: string;
+            classes: ScheduleClass[];
+            judges: SchedulePanelJudge[] | null;
+          }> = orderedGroups.map((g) => ({
             heading: `${g.name.toUpperCase()} GROUP`,
             classes: g.classes,
+            judges: (groupJudgesByGroup.get(g.name) ?? []).sort(
+              (a, b) => a.roleSortOrder - b.roleSortOrder,
+            ),
           }));
           if (ungrouped.length > 0) {
             sections.push({
               heading: 'VARIETY & OTHER CLASSES',
               classes: ungrouped,
+              judges: null,
             });
           }
 
@@ -753,6 +877,30 @@ export function ShowScheduleMultibreed({
               <View style={s.twoColMixedHeader} wrap={false}>
                 <Text style={s.twoColHeaderText}>{section.heading}</Text>
               </View>
+              {section.judges && section.judges.length > 0 && (
+                <View
+                  style={{
+                    paddingVertical: 4,
+                    paddingHorizontal: 8,
+                    backgroundColor: C.cardBg,
+                    borderBottomWidth: 0.5,
+                    borderBottomColor: C.cardBorder,
+                  }}
+                  wrap={false}
+                >
+                  {section.judges.map((j, ji) => (
+                    <Text
+                      key={ji}
+                      style={{ fontFamily: 'Inter', fontSize: 7.5, color: C.textDark, marginVertical: 0.5 }}
+                    >
+                      <Text style={{ fontWeight: 'bold', color: C.primary }}>
+                        {j.roleShortLabel ?? j.roleName}:
+                      </Text>{' '}
+                      {j.displayLabel}
+                    </Text>
+                  ))}
+                </View>
+              )}
               {section.classes.map((cls, i) => renderRow(cls, i))}
             </View>
           ));
