@@ -67,6 +67,7 @@ export const classTypeEnum = pgEnum('class_type', [
   'achievement',
   'special',
   'junior_handler',
+  'sv_age',
 ]);
 
 // ── New enums for Amanda's requirements ──────────────────
@@ -268,4 +269,71 @@ export const printServiceLevelEnum = pgEnum('print_service_level', [
   'saver',
   'standard',
   'express',
+]);
+
+// ── WUSV / SV regional show enums ──────────────────────────
+
+export const showRulesetEnum = pgEnum('show_ruleset', ['rkc', 'wusv']);
+
+export const coatTypeEnum = pgEnum('coat_type', ['stock', 'long_stock']);
+
+export const registrationBodyEnum = pgEnum('registration_body', [
+  'kc',
+  'sv',
+  'ikc',
+  'other',
+]);
+
+export const hipGradeEnum = pgEnum('hip_grade', [
+  'not_required',
+  'normal',
+  'fast_normal',
+  'noch_zugelassen',
+  'other',
+]);
+
+export const elbowGradeEnum = pgEnum('elbow_grade', [
+  'not_required',
+  'normal',
+  'fast_normal',
+  'noch_zugelassen',
+  'other',
+]);
+
+export const haemophiliaClearEnum = pgEnum('haemophilia_clear', [
+  'not_required',
+  'yes',
+  'no',
+  'not_tested',
+]);
+
+export const dmTestEnum = pgEnum('dm_test', [
+  'not_required',
+  'clear',
+  'carrier',
+  'affected',
+  'not_tested',
+]);
+
+export const koerungEnum = pgEnum('koerung', [
+  'none',
+  'current_year',
+  'lebenzeit',
+]);
+
+export const wusvClubEnum = pgEnum('wusv_club', [
+  'gsdl',
+  'gsdl_brg',
+  'bagsd',
+  'sv',
+  'other',
+]);
+
+export const svGradeEnum = pgEnum('sv_grade', [
+  'v',
+  'sg',
+  'g',
+  'a',
+  'u',
+  'disqualified',
 ]);

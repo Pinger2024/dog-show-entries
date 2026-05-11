@@ -10,7 +10,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
-import { showTypeEnum, showScopeEnum, showStatusEnum, classSexArrangementEnum } from './enums';
+import { showTypeEnum, showScopeEnum, showStatusEnum, classSexArrangementEnum, showRulesetEnum } from './enums';
 
 // ── Schedule data stored as JSONB on each show ──
 export interface ScheduleData {
@@ -105,6 +105,7 @@ export const shows = pgTable(
     slug: text('slug').unique(),
     showType: showTypeEnum('show_type').notNull(),
     showScope: showScopeEnum('show_scope').notNull(),
+    showRuleset: showRulesetEnum('show_ruleset').notNull().default('rkc'),
     organisationId: uuid('organisation_id')
       .notNull()
       .references(() => organisations.id),

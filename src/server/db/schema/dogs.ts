@@ -8,7 +8,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
-import { sexEnum } from './enums';
+import { sexEnum, coatTypeEnum, registrationBodyEnum } from './enums';
 import { breeds } from './breeds';
 import { users } from './users';
 import { entries } from './entries';
@@ -16,6 +16,7 @@ import { achievements } from './achievements';
 import { dogOwners } from './dog-owners';
 import { dogTitles } from './dog-titles';
 import { dogPhotos } from './dog-photos';
+import { dogSvProfile } from './dog-sv-profile';
 
 export const dogs = pgTable(
   'dogs',
@@ -23,13 +24,21 @@ export const dogs = pgTable(
     id: uuid('id').defaultRandom().primaryKey(),
     registeredName: text('registered_name').notNull(),
     kcRegNumber: text('kc_reg_number').unique(),
+    registrationBody: registrationBodyEnum('registration_body'),
+    registrationBodyOther: text('registration_body_other'),
     breedId: uuid('breed_id')
       .notNull()
       .references(() => breeds.id),
     sex: sexEnum('sex').notNull(),
     dateOfBirth: date('date_of_birth', { mode: 'string' }).notNull(),
+    coatType: coatTypeEnum('coat_type'),
+    microchipNumber: text('microchip_number'),
     sireName: text('sire_name'),
+    sireRegistrationBody: registrationBodyEnum('sire_registration_body'),
+    sireRegistrationNumber: text('sire_registration_number'),
     damName: text('dam_name'),
+    damRegistrationBody: registrationBodyEnum('dam_registration_body'),
+    damRegistrationNumber: text('dam_registration_number'),
     breederName: text('breeder_name'),
     colour: text('colour'),
     registrationStatus: text('registration_status'), // null=registered, 'naf', 'taf', 'cnaf'
@@ -68,4 +77,8 @@ export const dogsRelations = relations(dogs, ({ one, many }) => ({
   owners: many(dogOwners),
   titles: many(dogTitles),
   photos: many(dogPhotos),
+  svProfile: one(dogSvProfile, {
+    fields: [dogs.id],
+    references: [dogSvProfile.dogId],
+  }),
 }));
