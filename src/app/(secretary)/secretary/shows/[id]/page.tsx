@@ -65,7 +65,7 @@ import { formatDate } from './_lib/show-utils';
 import { useShowId } from './_lib/show-context';
 import { PhaseActionPanel } from './_components/phase-action-panel';
 import { SetupWizard } from './_components/setup-wizard';
-import { ClassManager, BulkClassCreator, AddIndividualClass } from './_components/class-manager';
+import { ClassManager, BulkClassCreator, AddIndividualClass, VarietyClassQuickAdd } from './_components/class-manager';
 import { SundryItemManager } from './_components/sundry-item-manager';
 
 export default function OverviewPage() {
@@ -264,6 +264,11 @@ export default function OverviewPage() {
           <BulkClassCreator showId={showId} />
           <AddIndividualClass showId={showId} />
         </>
+      )}
+
+      {/* Variety class quick-add for multi-breed shows */}
+      {show.showScope === 'general' && (
+        <VarietyClassQuickAdd showId={showId} />
       )}
 
       {/* Sundry items management */}

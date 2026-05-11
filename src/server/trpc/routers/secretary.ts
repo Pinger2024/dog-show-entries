@@ -37,6 +37,8 @@ import {
   classSponsorships,
   organisationPeople,
   achievements,
+  judgeRoles,
+  breedGroups,
 } from '@/server/db/schema';
 import {
   DEFAULT_CHECKLIST_ITEMS,
@@ -2157,8 +2159,45 @@ export const secretaryRouter = createTRPCRouter({
           judge: true,
           breed: true,
           ring: true,
+          breedGroup: true,
+          judgeRole: true,
         },
       });
+    }),
+
+  getJudgeRoles: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      return ctx.db.query.judgeRoles.findMany({
+        orderBy: (jr, { asc }) => [asc(jr.sortOrder), asc(jr.name)],
+      });
+    }),
+
+  assignGroupJudge: secretaryProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        judgeId: z.string().uuid(),
+        breedGroupId: z.string().uuid().nullable().optional(),
+        judgeRoleId: z.string().uuid().nullable().optional(),
+      }).refine((d) => d.breedGroupId || d.judgeRoleId, {
+        message: 'At least one of breedGroupId or judgeRoleId must be provided',
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      const [assignment] = await ctx.db
+        .insert(judgeAssignments)
+        .values({
+          showId: input.showId,
+          judgeId: input.judgeId,
+          breedGroupId: input.breedGroupId ?? null,
+          judgeRoleId: input.judgeRoleId ?? null,
+        })
+        .returning();
+      return assignment!;
     }),
 
   assignJudge: secretaryProcedure

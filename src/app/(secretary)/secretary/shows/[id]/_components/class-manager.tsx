@@ -175,11 +175,16 @@ export function ClassManager({ showId, showType, showScope, classes }: ClassMana
 
     if (multiBreed) {
       const breedMap = new Map<string, { groupSort: number; groupName: string; classes: typeof effectiveClasses }>();
+      const varietyClasses: typeof effectiveClasses = [];
       for (const sc of effectiveClasses) {
-        const breedName = sc.breed?.name ?? 'Other';
+        if (!sc.breed) {
+          varietyClasses.push(sc);
+          continue;
+        }
+        const breedName = sc.breed.name;
         const entry = breedMap.get(breedName) ?? {
-          groupSort: sc.breed?.group?.sortOrder ?? 999,
-          groupName: sc.breed?.group?.name ?? 'Other',
+          groupSort: sc.breed.group?.sortOrder ?? 999,
+          groupName: sc.breed.group?.name ?? 'Other',
           classes: [],
         };
         entry.classes.push(sc);
@@ -206,6 +211,12 @@ export function ClassManager({ showId, showType, showScope, classes }: ClassMana
           return a.sortOrder - b.sortOrder;
         });
         groups.push({ key: `breed-${breedName}`, label: breedName, classes: sorted });
+      }
+
+      // Variety & special classes (no breed) at the end, in their own section
+      if (varietyClasses.length > 0) {
+        const sorted = [...varietyClasses].sort((a, b) => a.sortOrder - b.sortOrder);
+        groups.push({ key: 'variety', label: 'Variety & Special Classes', classes: sorted });
       }
     } else {
       // Group by sex only (no sub-grouping by type) so classes display
@@ -1213,6 +1224,114 @@ export function AddIndividualClass({ showId }: { showId: string }) {
           <Plus className="size-4" />
           Add Class
         </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Variety Class Quick-Add (multi-breed shows only) ──────────
+
+const VARIETY_CLASS_NAMES = [
+  'Any Variety Not Separately Classified',
+  'Any Variety Imported Breed Register',
+  'Variety Class',
+  'Rare Breeds',
+] as const;
+
+const VARIETY_CLASS_DESCRIPTIONS: Record<string, string> = {
+  'Any Variety Not Separately Classified': 'For breeds not separately classified at this show.',
+  'Any Variety Imported Breed Register': 'For breeds on the Imported Breed Register with an interim breed standard.',
+  'Variety Class': 'Mixed-breed variety class or Stakes class.',
+  'Rare Breeds': 'For breeds designated as Rare Breeds by the RKC.',
+};
+
+export function VarietyClassQuickAdd({ showId }: { showId: string }) {
+  const [feeInputs, setFeeInputs] = useState<Record<string, string>>({});
+  const { data: classDefs } = trpc.secretary.listClassDefinitions.useQuery();
+  const utils = trpc.useUtils();
+
+  const addClassMutation = trpc.secretary.addShowClass.useMutation({
+    onSuccess: (_, vars) => {
+      toast.success('Variety class added');
+      setFeeInputs((prev) => {
+        const next = { ...prev };
+        delete next[vars.classDefinitionId];
+        return next;
+      });
+      utils.shows.getById.invalidate({ id: showId });
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to add class'),
+  });
+
+  const varietyDefs = (classDefs ?? []).filter((cd) =>
+    (VARIETY_CLASS_NAMES as readonly string[]).includes(cd.name)
+  );
+
+  if (varietyDefs.length === 0) return null;
+
+  function handleAdd(defId: string) {
+    const raw = feeInputs[defId] ?? '5.00';
+    const pounds = parseFloat(raw);
+    if (isNaN(pounds) || pounds < 0) {
+      toast.error('Enter a valid fee in pounds');
+      return;
+    }
+    addClassMutation.mutate({
+      showId,
+      classDefinitionId: defId,
+      entryFee: poundsToPence(pounds),
+    });
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Variety Classes</CardTitle>
+        <CardDescription>
+          Add AVNSC, AVIBR, Variety or Rare Breeds classes — these apply across all breeds with no
+          single-breed restriction.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {varietyDefs.map((def) => (
+          <div key={def.id} className="flex items-center gap-3 rounded-lg border p-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium leading-tight">{def.name}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {VARIETY_CLASS_DESCRIPTIONS[def.name] ?? ''}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <div className="w-20">
+                <Input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  placeholder="5.00"
+                  value={feeInputs[def.id] ?? ''}
+                  onChange={(e) =>
+                    setFeeInputs((prev) => ({ ...prev, [def.id]: e.target.value }))
+                  }
+                  className="h-9 text-sm"
+                  aria-label={`Fee for ${def.name}`}
+                />
+              </div>
+              <Button
+                size="sm"
+                className="min-h-[2.25rem] shrink-0"
+                onClick={() => handleAdd(def.id)}
+                disabled={addClassMutation.isPending}
+              >
+                {addClassMutation.isPending ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Plus className="size-3.5" />
+                )}
+                Add
+              </Button>
+            </div>
+          </div>
+        ))}
       </CardContent>
     </Card>
   );
