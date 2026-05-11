@@ -26,6 +26,12 @@ import type { ClassSponsorshipInfo } from './catalogue-types';
 interface Props {
   show: CatalogueShowInfo;
   entries: CatalogueEntry[];
+  /**
+   * Compact mode — tightens front-matter section spacing and condenses
+   * the back-of-book exhibitor list. No effect on class hero banners,
+   * cover, sponsor banners, judges-with-bios, or class definitions.
+   */
+  compact?: boolean;
 }
 
 // ── Styles ─────────────────────────────────────────────────────
@@ -376,7 +382,7 @@ function chunkClasses(classes: ClassGroup[]): ClassGroup[][] {
 
 // ── Main Component ─────────────────────────────────────────────
 
-export function CatalogueRingside({ show, entries }: Props) {
+export function CatalogueRingside({ show, entries, compact }: Props) {
   const allClasses = groupByClass(entries, show);
   const isChampionship = show.showType === 'championship';
 
@@ -475,7 +481,7 @@ export function CatalogueRingside({ show, entries }: Props) {
         <TrophiesPage show={show} sponsorships={show.classSponsorships} />
       )}
       <Page size="A5" style={s.page} wrap>
-        <FrontMatterContent show={show} />
+        <FrontMatterContent show={show} compact={compact} />
         <View style={{ marginTop: 14 }} />
         {sections.map((section, sectionIdx) => {
           const isLastSection = sectionIdx === sections.length - 1;
@@ -663,14 +669,27 @@ export function CatalogueRingside({ show, entries }: Props) {
               key={`${ex.name}-${exIdx}`}
               wrap
               style={{
-                marginBottom: 6,
+                marginBottom: compact ? 3 : 6,
                 borderBottomWidth: 0.5,
                 borderBottomColor: C.ruleLight,
-                paddingBottom: 4,
+                paddingBottom: compact ? 2 : 4,
               }}
             >
-              <Text style={s.exhibitorName} minPresenceAhead={80}>{ex.name}</Text>
-              {ex.address && <Text style={s.exhibitorAddress}>{ex.address}</Text>}
+              {compact ? (
+                // Single-line exhibitor heading — name + address joined
+                // by an em-dash so each exhibitor block opens with one
+                // line instead of two. Address still suppressed when the
+                // exhibitor opted out of publication via the per-entry
+                // withhold flag.
+                <Text style={s.exhibitorName} minPresenceAhead={60}>
+                  {ex.name}{ex.address ? ` — ${ex.address}` : ''}
+                </Text>
+              ) : (
+                <>
+                  <Text style={s.exhibitorName} minPresenceAhead={80}>{ex.name}</Text>
+                  {ex.address && <Text style={s.exhibitorAddress}>{ex.address}</Text>}
+                </>
+              )}
 
               {/* Each dog */}
               {ex.dogs.map((dog, dogIdx) => {
@@ -694,6 +713,26 @@ export function CatalogueRingside({ show, entries }: Props) {
                   pedigree,
                 ].filter(Boolean);
 
+                if (compact) {
+                  // One line per dog — cat#, name, then detail + classes
+                  // collapsed into a single trailing string. A dog with
+                  // 3 classes used to take 3 lines (name, detail, classes);
+                  // now it takes 1.
+                  const trailing = [
+                    !isJH && detailParts.length > 0 ? detailParts.join('  ·  ') : null,
+                    dog.classes ? `Class${dog.classes.includes(',') ? 'es' : ''}: ${dog.classes}` : null,
+                  ].filter(Boolean).join('  ·  ');
+                  return (
+                    <View key={`${dog.catalogueNumber}-${dogIdx}`} wrap={false} style={{ marginBottom: 0.8 }}>
+                      <Text style={s.exhibitorDogName}>
+                        {dog.catalogueNumber ? `${dog.catalogueNumber}. ` : ''}
+                        {dog.dogName}
+                        {isJH ? ' (Junior Handler)' : ''}
+                        {trailing ? ` — ${trailing}` : ''}
+                      </Text>
+                    </View>
+                  );
+                }
                 return (
                   <View key={`${dog.catalogueNumber}-${dogIdx}`} wrap={false} style={s.exhibitorDogRow}>
                     {/* Catalogue number + dog/handler name */}

@@ -8,6 +8,15 @@ import { CoverPage, FrontMatterPage, TrophiesPage, ExhibitorIndexPage } from './
 interface Props {
   show: CatalogueShowInfo;
   entries: CatalogueEntry[];
+  /**
+   * Compact mode: tightens front-matter spacing, drops the standalone
+   * "List of Judges" page (judges already named on the cover and inside
+   * Show Particulars), and renders the back-of-book exhibitor index as
+   * a single-line cross-reference rather than a 3-column table. Saves
+   * ~3-5 pages per catalogue depending on entry count. Defaults to
+   * false so existing callers see no change in behaviour.
+   */
+  compact?: boolean;
 }
 
 // Group entries by class, preserving sort metadata.
@@ -46,7 +55,7 @@ function groupByClass(entries: CatalogueEntry[]) {
   return classes;
 }
 
-export function CatalogueByClass({ show, entries }: Props) {
+export function CatalogueByClass({ show, entries, compact }: Props) {
   // Build a lookup: classLabel -> sponsorship info (array, since one class
   // can have multiple sponsors — e.g. one for the trophy and another for
   // the rosettes). Keyed on label rather than classNumber so that JH class
@@ -137,8 +146,8 @@ export function CatalogueByClass({ show, entries }: Props) {
           #93) since exhibitors look up their own catalogue numbers more
           often than they read alphabetical reference indexes. */}
       <CoverPage show={show} />
-      <FrontMatterPage show={show} />
-      {!show.skipTrophiesPage && (
+      <FrontMatterPage show={show} compact={compact} />
+      {!show.skipTrophiesPage && !compact && (
         <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />
       )}
 
@@ -268,7 +277,7 @@ export function CatalogueByClass({ show, entries }: Props) {
       ))}
 
       {/* Back matter: exhibitor index — moved to the end per backlog #93 */}
-      <ExhibitorIndexPage show={show} entries={entries} />
+      <ExhibitorIndexPage show={show} entries={entries} compact={compact} />
     </Document>
   );
 }
