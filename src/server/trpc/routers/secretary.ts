@@ -6256,15 +6256,11 @@ export const secretaryRouter = createTRPCRouter({
     .input(
       z.object({
         showId: z.string().uuid(),
-        // Each entry describes one age class × sex × coat-type combination
-        classes: z.array(
-          z.object({
-            classDefinitionId: z.string().uuid(),
-            sex: z.enum(['dog', 'bitch']),
-            svCoatType: z.enum(['stock', 'long_stock']),
-            entryFee: z.number().int().min(0).default(0),
-          })
-        ),
+        entryFee: z.number().int().min(0),
+        membersEntryFeePence: z.number().int().min(0).nullable(),
+        selectedAgeDefIds: z.array(z.string().uuid()),
+        includeJh6_11: z.boolean(),
+        includeJh12_16: z.boolean(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -6279,40 +6275,120 @@ export const secretaryRouter = createTRPCRouter({
         },
       });
 
-      const wusvClasses = existing.filter((sc) => sc.classDefinition?.type === 'sv_age');
-      const wusvIds = wusvClasses.map((sc) => sc.id);
+      const managed = existing.filter(
+        (sc) => sc.classDefinition?.type === 'sv_age' || sc.classDefinition?.type === 'junior_handler'
+      );
+      const managedIds = managed.map((sc) => sc.id);
 
-      // Guard: refuse to re-run setup if any WUSV class already has entries
-      const entriedWusvClasses = wusvClasses.filter((sc) => sc.entryClasses.length > 0);
-      if (entriedWusvClasses.length > 0) {
+      // Guard: refuse if any managed class already has entries
+      const entriedClasses = managed.filter((sc) => sc.entryClasses.length > 0);
+      if (entriedClasses.length > 0) {
         throw new TRPCError({
           code: 'PRECONDITION_FAILED',
-          message: `Cannot modify SV classes — ${entriedWusvClasses.length} class(es) already have entries. Cancel or refund entries first.`,
+          message: `Cannot modify SV classes — ${entriedClasses.length} class(es) already have entries. Cancel or refund entries first.`,
         });
       }
 
-      if (wusvIds.length > 0) {
-        await ctx.db.delete(showClasses).where(inArray(showClasses.id, wusvIds));
+      // Update membersEntryFeePence on the show
+      await ctx.db
+        .update(shows)
+        .set({ membersEntryFeePence: input.membersEntryFeePence })
+        .where(eq(shows.id, input.showId));
+
+      if (managedIds.length > 0) {
+        await ctx.db.delete(showClasses).where(inArray(showClasses.id, managedIds));
       }
 
-      if (input.classes.length === 0) return { created: 0 };
+      const hasClasses = input.selectedAgeDefIds.length > 0 || input.includeJh6_11 || input.includeJh12_16;
+      if (!hasClasses) return { created: 0 };
 
-      // Compute the highest classNumber among non-WUSV classes so new rows don't collide
-      const nonWusvClasses = existing.filter((sc) => !wusvIds.includes(sc.id));
-      const maxClassNumber = nonWusvClasses.reduce(
-        (max, sc) => Math.max(max, sc.classNumber ?? 0),
-        0
-      );
+      // Load sv_age defs in sort order, filtered to selected
+      const [ageDefs, jhDefs] = await Promise.all([
+        input.selectedAgeDefIds.length > 0
+          ? ctx.db.query.classDefinitions.findMany({
+              where: and(
+                eq(classDefinitions.type, 'sv_age'),
+                inArray(classDefinitions.id, input.selectedAgeDefIds)
+              ),
+              orderBy: [asc(classDefinitions.sortOrder)],
+            })
+          : Promise.resolve([]),
+        (input.includeJh6_11 || input.includeJh12_16)
+          ? ctx.db.query.classDefinitions.findMany({
+              where: eq(classDefinitions.type, 'junior_handler'),
+              orderBy: [asc(classDefinitions.sortOrder)],
+            })
+          : Promise.resolve([]),
+      ]);
 
-      const values = input.classes.map((cls, i) => ({
-        showId: input.showId,
-        classDefinitionId: cls.classDefinitionId,
-        sex: cls.sex,
-        svCoatType: cls.svCoatType,
-        entryFee: cls.entryFee,
-        sortOrder: nonWusvClasses.length + i,
-        classNumber: maxClassNumber + i + 1,
-      }));
+      const nonManaged = existing.filter((sc) => !managedIds.includes(sc.id));
+      const baseClassNumber = nonManaged.reduce((max, sc) => Math.max(max, sc.classNumber ?? 0), 0);
+
+      type CoatSex = { sex: 'bitch' | 'dog'; coat: 'stock' | 'long_stock' };
+      const COMBOS: CoatSex[] = [
+        { sex: 'bitch', coat: 'stock' },
+        { sex: 'bitch', coat: 'long_stock' },
+        { sex: 'dog', coat: 'stock' },
+        { sex: 'dog', coat: 'long_stock' },
+      ];
+
+      const values: {
+        showId: string;
+        classDefinitionId: string;
+        sex: 'dog' | 'bitch' | null;
+        svCoatType: 'stock' | 'long_stock' | null;
+        entryFee: number;
+        sortOrder: number;
+        classNumber: number;
+      }[] = [];
+
+      let idx = 0;
+      for (const def of ageDefs) {
+        for (const { sex, coat } of COMBOS) {
+          values.push({
+            showId: input.showId,
+            classDefinitionId: def.id,
+            sex,
+            svCoatType: coat,
+            entryFee: input.entryFee,
+            sortOrder: nonManaged.length + idx,
+            classNumber: baseClassNumber + idx + 1,
+          });
+          idx++;
+        }
+      }
+
+      if (input.includeJh6_11) {
+        const def = jhDefs.find((d) => d.name === 'Junior Handler (6-11)');
+        if (def) {
+          values.push({
+            showId: input.showId,
+            classDefinitionId: def.id,
+            sex: null,
+            svCoatType: null,
+            entryFee: 0,
+            sortOrder: nonManaged.length + idx,
+            classNumber: baseClassNumber + idx + 1,
+          });
+          idx++;
+        }
+      }
+
+      if (input.includeJh12_16) {
+        const def = jhDefs.find((d) => d.name === 'Junior Handler (12-16)');
+        if (def) {
+          values.push({
+            showId: input.showId,
+            classDefinitionId: def.id,
+            sex: null,
+            svCoatType: null,
+            entryFee: 0,
+            sortOrder: nonManaged.length + idx,
+            classNumber: baseClassNumber + idx + 1,
+          });
+          idx++;
+        }
+      }
 
       await ctx.db.insert(showClasses).values(values);
       return { created: values.length };

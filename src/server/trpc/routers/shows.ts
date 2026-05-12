@@ -490,6 +490,7 @@ export const showsRouter = createTRPCRouter({
         subsequentEntryFee: z.number().int().min(0).optional(),
         nfcEntryFee: z.number().int().min(0).optional(),
         juniorHandlerFee: z.number().int().min(0).optional(),
+        membersEntryFeePence: z.number().int().min(0).nullable().optional(),
         // All-breed show class data: breed selections + class template applied per breed
         allBreedClassData: z.object({
           breedIds: z.array(z.string().uuid()),
@@ -533,7 +534,7 @@ export const showsRouter = createTRPCRouter({
         });
       }
 
-      const { classDefinitionIds, entryFee, firstEntryFee, subsequentEntryFee, nfcEntryFee, juniorHandlerFee, allBreedClassData, ...showData } = input;
+      const { classDefinitionIds, entryFee, firstEntryFee, subsequentEntryFee, nfcEntryFee, juniorHandlerFee, membersEntryFeePence, allBreedClassData, ...showData } = input;
 
       // Generate a unique slug
       const baseSlug = generateShowSlug(showData.name, showData.startDate);
@@ -562,6 +563,7 @@ export const showsRouter = createTRPCRouter({
           subsequentEntryFee: subsequentEntryFee ?? null,
           nfcEntryFee: nfcEntryFee ?? null,
           juniorHandlerFee: juniorHandlerFee ?? null,
+          membersEntryFeePence: membersEntryFeePence ?? null,
         })
         .returning();
 
@@ -736,6 +738,7 @@ export const showsRouter = createTRPCRouter({
         subsequentEntryFee: z.number().int().min(0).nullable().optional(),
         nfcEntryFee: z.number().int().min(0).nullable().optional(),
         juniorHandlerFee: z.number().int().min(0).nullable().optional(),
+        membersEntryFeePence: z.number().int().min(0).nullable().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {

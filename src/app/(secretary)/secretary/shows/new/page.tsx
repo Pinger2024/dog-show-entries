@@ -143,6 +143,7 @@ const createShowSchema = z.object({
   subsequentEntryFee: z.coerce.number().min(0).default(0),
   nfcEntryFee: z.coerce.number().min(0).default(0),
   juniorHandlerFee: z.coerce.number().min(0).default(0),
+  membersEntryFeePence: z.coerce.number().min(0).optional(),
 
   // Step 4 - Classes
   selectedClassIds: z.array(z.string().uuid()).default([]),
@@ -291,6 +292,14 @@ export default function NewShowPage() {
     }
   }, [currentOrgId, organisations, form]);
 
+  // Lock show ruleset to the org's ruleset (WUSV orgs only ever run WUSV shows)
+  useEffect(() => {
+    if (!currentOrgId) return;
+    const org = organisations.find((o) => o.id === currentOrgId);
+    if (!org?.showRuleset) return;
+    form.setValue('showRuleset', org.showRuleset as 'rkc' | 'wusv', { shouldDirty: false });
+  }, [currentOrgId, organisations, form]);
+
   // Fetch venues for this org
   const { data: venues } = trpc.secretary.listVenues.useQuery(
     { organisationId: currentOrgId },
@@ -415,6 +424,9 @@ export default function NewShowPage() {
         juniorHandlerFee: values.juniorHandlerFee != null && values.juniorHandlerFee !== ''
           ? poundsToPence(Number(values.juniorHandlerFee))
           : undefined,
+        membersEntryFeePence: values.membersEntryFeePence != null && values.membersEntryFeePence !== ('' as unknown as number)
+          ? poundsToPence(Number(values.membersEntryFeePence))
+          : undefined,
         // All-breed: pass breed + class data
         allBreedClassData: (values.showScope === 'general' && allBreedData.selectedBreedIds.length > 0 && allBreedData.classDefinitionIds.length > 0)
           ? {
@@ -444,6 +456,7 @@ export default function NewShowPage() {
   const watchedName = form.watch('name');
   const watchedShowType = form.watch('showType');
   const watchedShowScope = form.watch('showScope');
+  const watchedShowRuleset = form.watch('showRuleset');
   const watchedStartDate = form.watch('startDate');
   const watchedEndDate = form.watch('endDate');
   const watchedAcceptsPostal = form.watch('acceptsPostalEntries');
@@ -742,32 +755,44 @@ export default function NewShowPage() {
                 <FormField
                   control={form.control}
                   name="showRuleset"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Show Rules</FormLabel>
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        {[
-                          { value: 'rkc', label: 'Royal Kennel Club (RKC)', desc: 'Standard UK dog show — placement ribbons, CCs, RCCs.' },
-                          { value: 'wusv', label: 'WUSV / SV Regional', desc: 'German Shepherd breed show under SV rules — graded V/SG/G, class split by coat type.' },
-                        ].map((opt) => (
-                          <button
-                            key={opt.value}
-                            type="button"
-                            onClick={() => field.onChange(opt.value)}
-                            className={`flex flex-col gap-1 rounded-lg border p-4 text-left transition-colors ${
-                              field.value === opt.value
-                                ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                                : 'hover:bg-accent'
-                            }`}
-                          >
-                            <span className="text-sm font-semibold">{opt.label}</span>
-                            <span className="text-xs text-muted-foreground">{opt.desc}</span>
-                          </button>
-                        ))}
-                      </div>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+                  render={({ field }) => {
+                    const orgRuleset = organisations.find((o) => o.id === currentOrgId)?.showRuleset;
+                    const locked = !!orgRuleset;
+                    return (
+                      <FormItem>
+                        <FormLabel>Show Rules</FormLabel>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          {[
+                            { value: 'rkc', label: 'Royal Kennel Club (RKC)', desc: 'Standard UK dog show — placement ribbons, CCs, RCCs.' },
+                            { value: 'wusv', label: 'WUSV / SV Regional', desc: 'German Shepherd breed show under SV rules — graded V/SG/G, class split by coat type.' },
+                          ].map((opt) => (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              disabled={locked && opt.value !== field.value}
+                              onClick={() => !locked && field.onChange(opt.value)}
+                              className={`flex flex-col gap-1 rounded-lg border p-4 text-left transition-colors ${
+                                field.value === opt.value
+                                  ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                                  : locked
+                                    ? 'opacity-40 cursor-not-allowed'
+                                    : 'hover:bg-accent'
+                              }`}
+                            >
+                              <span className="text-sm font-semibold">{opt.label}</span>
+                              <span className="text-xs text-muted-foreground">{opt.desc}</span>
+                            </button>
+                          ))}
+                        </div>
+                        {locked && (
+                          <p className="text-xs text-muted-foreground">
+                            Your club is registered as a {orgRuleset === 'wusv' ? 'WUSV/SV' : 'RKC'} club — shows are automatically set to match.
+                          </p>
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
                 />
 
                 {/* Breed selector for single-breed shows */}
@@ -1309,7 +1334,9 @@ export default function NewShowPage() {
                     name="firstEntryFee"
                     render={({ field }) => (
                       <FormItem className="rounded-lg border bg-muted/20 p-4">
-                        <FormLabel className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">First Entry</FormLabel>
+                        <FormLabel className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                          {watchedShowRuleset === 'wusv' ? 'Entry Fee (per class)' : 'First Entry'}
+                        </FormLabel>
                         <FormControl>
                           <div className="relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">£</span>
@@ -1325,89 +1352,124 @@ export default function NewShowPage() {
                             />
                           </div>
                         </FormControl>
-                        <p className="text-xs text-muted-foreground">The fee for the first dog entered</p>
+                        <p className="text-xs text-muted-foreground">
+                          {watchedShowRuleset === 'wusv' ? 'Applies to all SV age classes' : 'The fee for the first dog entered'}
+                        </p>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                  <FormField
-                    control={form.control}
-                    name="subsequentEntryFee"
-                    render={({ field }) => (
-                      <FormItem className="rounded-lg border bg-muted/20 p-4">
-                        <FormLabel className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Subsequent</FormLabel>
-                        <FormControl>
-                          <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">£</span>
-                            <Input
-                              type="number"
-                              min={0}
-                              step={0.01}
-                              placeholder="0.00"
-                              className="pl-7 text-lg font-semibold h-12"
-                              {...field}
-                              value={field.value === 0 || field.value ? field.value : ''}
-                              onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
-                            />
-                          </div>
-                        </FormControl>
-                        <p className="text-xs text-muted-foreground">Each additional entry after the first</p>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="nfcEntryFee"
-                    render={({ field }) => (
-                      <FormItem className="rounded-lg border bg-muted/20 p-4">
-                        <FormLabel className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Not for Competition</FormLabel>
-                        <FormControl>
-                          <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">£</span>
-                            <Input
-                              type="number"
-                              min={0}
-                              step={0.01}
-                              placeholder="0.00"
-                              className="pl-7 text-lg font-semibold h-12"
-                              {...field}
-                              value={field.value === 0 || field.value ? field.value : ''}
-                              onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
-                            />
-                          </div>
-                        </FormControl>
-                        <p className="text-xs text-muted-foreground">NFC entries (exhibition only)</p>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="juniorHandlerFee"
-                    render={({ field }) => (
-                      <FormItem className="rounded-lg border bg-muted/20 p-4">
-                        <FormLabel className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Junior Handling</FormLabel>
-                        <FormControl>
-                          <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">£</span>
-                            <Input
-                              type="number"
-                              min={0}
-                              step={0.01}
-                              placeholder="0.00"
-                              className="pl-7 text-lg font-semibold h-12"
-                              {...field}
-                              value={field.value === 0 || field.value ? field.value : ''}
-                              onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
-                            />
-                          </div>
-                        </FormControl>
-                        <p className="text-xs text-muted-foreground">Fee for junior handling classes</p>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  {watchedShowRuleset !== 'wusv' && (
+                    <FormField
+                      control={form.control}
+                      name="subsequentEntryFee"
+                      render={({ field }) => (
+                        <FormItem className="rounded-lg border bg-muted/20 p-4">
+                          <FormLabel className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Subsequent</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">£</span>
+                              <Input
+                                type="number"
+                                min={0}
+                                step={0.01}
+                                placeholder="0.00"
+                                className="pl-7 text-lg font-semibold h-12"
+                                {...field}
+                                value={field.value === 0 || field.value ? field.value : ''}
+                                onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
+                              />
+                            </div>
+                          </FormControl>
+                          <p className="text-xs text-muted-foreground">Each additional entry after the first</p>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                  {watchedShowRuleset !== 'wusv' && (
+                    <FormField
+                      control={form.control}
+                      name="nfcEntryFee"
+                      render={({ field }) => (
+                        <FormItem className="rounded-lg border bg-muted/20 p-4">
+                          <FormLabel className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Not for Competition</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">£</span>
+                              <Input
+                                type="number"
+                                min={0}
+                                step={0.01}
+                                placeholder="0.00"
+                                className="pl-7 text-lg font-semibold h-12"
+                                {...field}
+                                value={field.value === 0 || field.value ? field.value : ''}
+                                onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
+                              />
+                            </div>
+                          </FormControl>
+                          <p className="text-xs text-muted-foreground">NFC entries (exhibition only)</p>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                  {watchedShowRuleset === 'wusv' ? (
+                    <FormField
+                      control={form.control}
+                      name="membersEntryFeePence"
+                      render={({ field }) => (
+                        <FormItem className="rounded-lg border bg-muted/20 p-4">
+                          <FormLabel className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Members Fee</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">£</span>
+                              <Input
+                                type="number"
+                                min={0}
+                                step={0.01}
+                                placeholder="Optional"
+                                className="pl-7 text-lg font-semibold h-12"
+                                {...field}
+                                value={field.value === 0 || field.value ? field.value : ''}
+                                onChange={(e) => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+                              />
+                            </div>
+                          </FormControl>
+                          <p className="text-xs text-muted-foreground">Discounted fee for SV/BRG/League members</p>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  ) : (
+                    <FormField
+                      control={form.control}
+                      name="juniorHandlerFee"
+                      render={({ field }) => (
+                        <FormItem className="rounded-lg border bg-muted/20 p-4">
+                          <FormLabel className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Junior Handling</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">£</span>
+                              <Input
+                                type="number"
+                                min={0}
+                                step={0.01}
+                                placeholder="0.00"
+                                className="pl-7 text-lg font-semibold h-12"
+                                {...field}
+                                value={field.value === 0 || field.value ? field.value : ''}
+                                onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
+                              />
+                            </div>
+                          </FormControl>
+                          <p className="text-xs text-muted-foreground">Fee for junior handling classes</p>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
                 </div>
               </CardContent>
             </Card>

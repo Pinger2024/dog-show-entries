@@ -29,6 +29,7 @@ export const secretaryApplicationsRouter = createTRPCRouter({
       z.object({
         organisationName: z.string().min(1, 'Organisation name is required'),
         clubType: z.enum(clubTypeEnum.enumValues),
+        showRuleset: z.enum(['rkc', 'wusv']).default('rkc'),
         breedOrGroup: z.string().optional(),
         breedId: z.string().uuid().optional(),
         kcRegNumber: z.string().optional(),
@@ -67,6 +68,7 @@ export const secretaryApplicationsRouter = createTRPCRouter({
         .values({
           name: input.organisationName,
           type: input.clubType,
+          showRuleset: input.showRuleset,
           breedId: input.clubType === 'single_breed' ? input.breedId ?? null : null,
           kcRegNumber: input.kcRegNumber ?? null,
           contactEmail: input.contactEmail,

@@ -1,6 +1,6 @@
 import { pgTable, text, timestamp, uuid, boolean } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
-import { subscriptionStatusEnum, stripeAccountStatusEnum } from './enums';
+import { subscriptionStatusEnum, stripeAccountStatusEnum, showRulesetEnum } from './enums';
 import { shows } from './shows';
 import { memberships } from './memberships';
 import { plans } from './plans';
@@ -54,6 +54,7 @@ export const organisations = pgTable('organisations', {
   subscriptionCurrentPeriodEnd: timestamp('subscription_current_period_end', {
     withTimezone: true,
   }),
+  showRuleset: showRulesetEnum('show_ruleset').notNull().default('rkc'),
   logoUrl: text('logo_url'),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
