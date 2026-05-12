@@ -6289,20 +6289,9 @@ export const secretaryRouter = createTRPCRouter({
         });
       }
 
-      // Update membersEntryFeePence on the show
-      await ctx.db
-        .update(shows)
-        .set({ membersEntryFeePence: input.membersEntryFeePence })
-        .where(eq(shows.id, input.showId));
-
-      if (managedIds.length > 0) {
-        await ctx.db.delete(showClasses).where(inArray(showClasses.id, managedIds));
-      }
-
       const hasClasses = input.selectedAgeDefIds.length > 0 || input.includeJh6_11 || input.includeJh12_16;
-      if (!hasClasses) return { created: 0 };
 
-      // Load sv_age defs in sort order, filtered to selected
+      // Load defs before opening transaction (reads don't need to be atomic with the writes)
       const [ageDefs, jhDefs] = await Promise.all([
         input.selectedAgeDefIds.length > 0
           ? ctx.db.query.classDefinitions.findMany({
@@ -6320,6 +6309,13 @@ export const secretaryRouter = createTRPCRouter({
             })
           : Promise.resolve([]),
       ]);
+
+      if (input.includeJh6_11 && !jhDefs.find((d) => d.name === 'Junior Handler (6-11)')) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Junior Handler (6-11) class definition not found' });
+      }
+      if (input.includeJh12_16 && !jhDefs.find((d) => d.name === 'Junior Handler (12-16)')) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Junior Handler (12-16) class definition not found' });
+      }
 
       const nonManaged = existing.filter((sc) => !managedIds.includes(sc.id));
       const baseClassNumber = nonManaged.reduce((max, sc) => Math.max(max, sc.classNumber ?? 0), 0);
@@ -6359,38 +6355,48 @@ export const secretaryRouter = createTRPCRouter({
       }
 
       if (input.includeJh6_11) {
-        const def = jhDefs.find((d) => d.name === 'Junior Handler (6-11)');
-        if (def) {
-          values.push({
-            showId: input.showId,
-            classDefinitionId: def.id,
-            sex: null,
-            svCoatType: null,
-            entryFee: 0,
-            sortOrder: nonManaged.length + idx,
-            classNumber: baseClassNumber + idx + 1,
-          });
-          idx++;
-        }
+        const def = jhDefs.find((d) => d.name === 'Junior Handler (6-11)')!;
+        values.push({
+          showId: input.showId,
+          classDefinitionId: def.id,
+          sex: null,
+          svCoatType: null,
+          entryFee: 0,
+          sortOrder: nonManaged.length + idx,
+          classNumber: baseClassNumber + idx + 1,
+        });
+        idx++;
       }
 
       if (input.includeJh12_16) {
-        const def = jhDefs.find((d) => d.name === 'Junior Handler (12-16)');
-        if (def) {
-          values.push({
-            showId: input.showId,
-            classDefinitionId: def.id,
-            sex: null,
-            svCoatType: null,
-            entryFee: 0,
-            sortOrder: nonManaged.length + idx,
-            classNumber: baseClassNumber + idx + 1,
-          });
-          idx++;
-        }
+        const def = jhDefs.find((d) => d.name === 'Junior Handler (12-16)')!;
+        values.push({
+          showId: input.showId,
+          classDefinitionId: def.id,
+          sex: null,
+          svCoatType: null,
+          entryFee: 0,
+          sortOrder: nonManaged.length + idx,
+          classNumber: baseClassNumber + idx + 1,
+        });
+        idx++;
       }
 
-      await ctx.db.insert(showClasses).values(values);
+      await ctx.db.transaction(async (tx) => {
+        await tx
+          .update(shows)
+          .set({ membersEntryFeePence: input.membersEntryFeePence })
+          .where(eq(shows.id, input.showId));
+
+        if (managedIds.length > 0) {
+          await tx.delete(showClasses).where(inArray(showClasses.id, managedIds));
+        }
+
+        if (hasClasses && values.length > 0) {
+          await tx.insert(showClasses).values(values);
+        }
+      });
+
       return { created: values.length };
     }),
 

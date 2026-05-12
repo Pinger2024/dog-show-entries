@@ -5,6 +5,7 @@ import { Loader2, Save, Shield } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { useShowId } from '../_lib/show-context';
+import { poundsToPence, penceToPoundsString } from '@/lib/date-utils';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -16,12 +17,6 @@ import {
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 
-interface AgeClassDef {
-  id: string;
-  name: string;
-  sortOrder: number | null;
-}
-
 const AGE_CLASS_DISPLAY: Record<string, string> = {
   'Baby Puppy': 'Baby Puppy',
   'SV Minor Puppy': 'Minor Puppy',
@@ -31,14 +26,6 @@ const AGE_CLASS_DISPLAY: Record<string, string> = {
   'Adult': 'Adult',
   'Working': 'Working',
 };
-
-function poundsToPence(pounds: number): number {
-  return Math.round(pounds * 100);
-}
-
-function penceToPounds(pence: number): string {
-  return (pence / 100).toFixed(2);
-}
 
 export default function WusvClassesPage() {
   const showId = useShowId();
@@ -71,10 +58,10 @@ export default function WusvClassesPage() {
     // Entry fee — take from first sv_age showClass, or firstEntryFee on show
     const svClass = show.showClasses.find((sc) => sc.classDefinition?.type === 'sv_age');
     const fee = svClass?.entryFee ?? show.firstEntryFee ?? 0;
-    setEntryFeeStr(penceToPounds(fee));
+    setEntryFeeStr(penceToPoundsString(fee));
 
     const membersFee = show.membersEntryFeePence;
-    setMembersFeeStr(membersFee != null ? penceToPounds(membersFee) : '');
+    setMembersFeeStr(membersFee != null ? penceToPoundsString(membersFee) : '');
 
     // Which age class defs are currently active
     const activeAgeIds = new Set(
