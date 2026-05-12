@@ -72,6 +72,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { DogSvHealthCard } from '@/components/dogs/dog-sv-health-card';
 
 function formatAge(dateOfBirth: string): string {
   const dob = parseISO(dateOfBirth);
@@ -1339,6 +1340,9 @@ export default function DogDetailPage({
 
       {/* RKC Title Progress */}
       <TitleProgressCard dogId={id} />
+
+      {/* SV Health & Working Titles */}
+      <DogSvHealthCard dogId={id} isOwner={true} />
 
       {/* Achievements (with self-report) */}
       <AchievementsCard dogId={id} achievements={dog.achievements ?? []} />
