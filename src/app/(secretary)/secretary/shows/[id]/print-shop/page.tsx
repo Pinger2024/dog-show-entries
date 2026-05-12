@@ -38,7 +38,6 @@ export default function PrintShopPage() {
   });
   const [orderId, setOrderId] = useState<string | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
-  const [paymentAmount, setPaymentAmount] = useState(0);
   const [showNewOrder, setShowNewOrder] = useState(false);
 
   const { data: profile } = trpc.users.getProfile.useQuery(undefined, {
@@ -47,7 +46,7 @@ export default function PrintShopPage() {
 
   const { data: packageData, isLoading: packagesLoading } = trpc.printOrders.getPackageOptions.useQuery(
     { showId },
-    { staleTime: 60_000 }
+    { staleTime: 60_000, enabled: step === 'packages' || showNewOrder }
   );
 
   const { data: orders } = trpc.printOrders.listByShow.useQuery(
@@ -95,12 +94,6 @@ export default function PrintShopPage() {
       setOrderId(newOrderId);
 
       const { clientSecret: cs } = await initiatePayment.mutateAsync({ orderId: newOrderId });
-
-      const option = packageData.tier.options.find((o) => o.catalogueQty === selectedQty);
-      if (option) {
-        setPaymentAmount(option.pricePence + calculatePrintOrderFee(option.pricePence));
-      }
-
       setClientSecret(cs);
       setStep('payment');
     } catch (err) {
@@ -114,7 +107,6 @@ export default function PrintShopPage() {
     }
     setOrderId(null);
     setClientSecret(null);
-    setPaymentAmount(0);
     setStep('delivery');
   }, [orderId, cancelOrder]);
 
@@ -129,7 +121,6 @@ export default function PrintShopPage() {
     setSelectedQty(null);
     setOrderId(null);
     setClientSecret(null);
-    setPaymentAmount(0);
   }, []);
 
   const hasOrders = orders && orders.length > 0;
@@ -408,7 +399,10 @@ export default function PrintShopPage() {
           <CardContent className="p-4">
             <StripeProvider clientSecret={clientSecret}>
               <PrintPaymentForm
-                amount={paymentAmount}
+                amount={(() => {
+                  const opt = packageData?.tier?.options.find((o) => o.catalogueQty === selectedQty);
+                  return opt ? opt.pricePence + calculatePrintOrderFee(opt.pricePence) : 0;
+                })()}
                 onSuccess={handlePaymentSuccess}
                 onBack={handleBackFromPayment}
               />

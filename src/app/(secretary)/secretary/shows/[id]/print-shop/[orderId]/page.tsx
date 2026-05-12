@@ -231,15 +231,11 @@ export default function PrintOrderDetailPage({
             <div key={item.id} className="flex items-center justify-between text-sm">
               <div className="min-w-0 flex-1">
                 <p className="font-medium">{item.documentLabel}</p>
-                {item.lineTotal > 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    {item.quantity} copies × {formatCurrency(item.unitSellingPrice)}
-                  </p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    {item.quantity > 1 ? `${item.quantity} copies · ` : ''}Included in package
-                  </p>
-                )}
+                <p className="text-xs text-muted-foreground">
+                  {item.lineTotal > 0
+                    ? `${item.quantity} copies × ${formatCurrency(item.unitSellingPrice)}`
+                    : `${item.quantity > 1 ? `${item.quantity} copies · ` : ''}Included in package`}
+                </p>
                 {item.pdfPublicUrl && (
                   <a
                     href={item.pdfPublicUrl}

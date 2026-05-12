@@ -70,12 +70,10 @@ export async function POST(request: NextRequest) {
               console.error('[webhook] Mixam submission failed:', err)
             );
           } else {
-            sendPrintOrderAdminNotificationEmail(printOrderId).catch((err) =>
-              console.error('[webhook] Admin notification failed:', err)
-            );
-            sendPrintOrderConfirmationEmail(printOrderId).catch((err) =>
-              console.error('[webhook] Print order confirmation email failed:', err)
-            );
+            Promise.all([
+              sendPrintOrderAdminNotificationEmail(printOrderId),
+              sendPrintOrderConfirmationEmail(printOrderId),
+            ]).catch((err) => console.error('[webhook] Print order email failed:', err));
           }
         }
         break;

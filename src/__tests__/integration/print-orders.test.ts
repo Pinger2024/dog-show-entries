@@ -8,7 +8,7 @@ import {
   makeShow,
   makeOrg,
 } from '../helpers/factories';
-import { PRINT_PACKAGE_TIERS } from '@/lib/print-products';
+import { PRINT_PACKAGE_TIERS, calculatePrintOrderFee } from '@/lib/print-products';
 
 async function makePackageOrderSetup() {
   const { user, org } = await makeSecretaryWithOrg();
@@ -58,7 +58,7 @@ describe('printOrders.createPackageOrder', () => {
     expect(order?.deliveryName).toBe('Show Secretary');
 
     const tier1option50 = PRINT_PACKAGE_TIERS[0].options.find((o) => o.catalogueQty === 50)!;
-    const fee = Math.ceil(tier1option50.pricePence * 0.015);
+    const fee = calculatePrintOrderFee(tier1option50.pricePence);
     expect(order?.subtotalAmount).toBe(tier1option50.pricePence);
     expect(order?.totalAmount).toBe(tier1option50.pricePence + fee);
 
