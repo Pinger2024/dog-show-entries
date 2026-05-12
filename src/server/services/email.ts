@@ -612,7 +612,9 @@ export async function sendPrintOrderAdminNotificationEmail(printOrderId: string)
       <div style="padding: 20px 24px; border-bottom: 1px solid #e5e5e5;">
         <h3 style="margin: 0 0 4px; font-size: 18px; color: #1a1a1a;">${show.name}</h3>
         <p style="margin: 0; font-size: 14px; color: #666;">
-          A print order has been paid. Please submit the PDFs below to Mixam manually.
+          ${order.paymentMethod === 'deducted_from_payout'
+            ? 'A print order has been paid by deduction from entry income. Please submit the PDFs below to Mixam manually.'
+            : 'A print order has been paid by card. Please submit the PDFs below to Mixam manually.'}
         </p>
       </div>
 
@@ -658,7 +660,7 @@ export async function sendPrintOrderAdminNotificationEmail(printOrderId: string)
     const result = await resend.emails.send({
       from: FROM,
       to: adminEmail,
-      subject: `Print Order Action Required — ${show.name} (${orderRef})`,
+      subject: `Print Order Action Required — ${show.name} (${orderRef})${order.paymentMethod === 'deducted_from_payout' ? ' [Deducted from payout]' : ''}`,
       html,
     });
     console.log(`[email] Admin print notification sent for ${orderRef}`, result);

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { and, eq, desc, sql, inArray } from 'drizzle-orm';
+import { and, eq, desc, sql, inArray, notInArray } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { createTRPCRouter } from '../init';
 import { secretaryProcedure } from '../procedures';
@@ -20,7 +20,7 @@ import {
   type ShowStats,
 } from '@/lib/print-products';
 import { getOrderStatus } from '@/server/services/mixam';
-import { sendPrintOrderDispatchEmail } from '@/server/services/email';
+import { sendPrintOrderDispatchEmail, sendPrintOrderAdminNotificationEmail, sendPrintOrderConfirmationEmail } from '@/server/services/email';
 import { createPaymentIntent } from '@/server/services/stripe';
 import { generateAndUploadForPrint } from '@/server/services/pdf-generation';
 import { computeShowMetrics } from '@/server/services/show-metrics';
@@ -307,6 +307,105 @@ export const printOrdersRouter = createTRPCRouter({
         .update(printOrders)
         .set({ status: 'cancelled' })
         .where(eq(printOrders.id, order.id));
+
+      return { success: true };
+    }),
+
+  /** Return the balance available for payout-deduction payment */
+  getDeductionBalance: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      const metrics = await computeShowMetrics(ctx.db, input.showId);
+      const [row] = await ctx.db
+        .select({ total: sql<string>`coalesce(sum(total_amount), '0')` })
+        .from(printOrders)
+        .where(and(
+          eq(printOrders.showId, input.showId),
+          eq(printOrders.paymentMethod, 'deducted_from_payout'),
+          notInArray(printOrders.status, ['cancelled', 'failed']),
+        ));
+      const alreadyDeductedPence = Number(row?.total ?? 0);
+      return {
+        clubReceivablePence: metrics.clubReceivablePence,
+        alreadyDeductedPence,
+        availablePence: metrics.clubReceivablePence - alreadyDeductedPence,
+      };
+    }),
+
+  /** Pay a draft order by deducting from the show's entry income payout */
+  completeByDeduction: secretaryProcedure
+    .input(z.object({ orderId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const order = await ctx.db.query.printOrders.findFirst({
+        where: eq(printOrders.id, input.orderId),
+        with: { items: true },
+      });
+      if (!order) throw new TRPCError({ code: 'NOT_FOUND', message: 'Order not found' });
+      await verifyShowAccess(ctx.db, ctx.session.user.id, order.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      if (order.status !== 'draft') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Order is not in draft status' });
+      }
+
+      // Generate PDFs and upload to R2
+      const pdfResults = await Promise.all(
+        order.items.map(async (item) => {
+          try {
+            const { storageKey, publicUrl } = await generateAndUploadForPrint(
+              order.showId,
+              item.documentType,
+              item.documentFormat ?? undefined
+            );
+            return { itemId: item.id, storageKey, publicUrl };
+          } catch (err) {
+            console.error(`[deduction] PDF generation failed for ${item.documentType}:`, err);
+            throw new TRPCError({
+              code: 'INTERNAL_SERVER_ERROR',
+              message: `Failed to generate ${item.documentLabel} PDF`,
+            });
+          }
+        })
+      );
+
+      await Promise.all(
+        pdfResults.map((r) =>
+          ctx.db
+            .update(printOrderItems)
+            .set({ pdfStorageKey: r.storageKey, pdfPublicUrl: r.publicUrl, pdfGeneratedAt: new Date() })
+            .where(eq(printOrderItems.id, r.itemId))
+        )
+      );
+
+      // Check available balance
+      const metrics = await computeShowMetrics(ctx.db, order.showId);
+      const [row] = await ctx.db
+        .select({ total: sql<string>`coalesce(sum(total_amount), '0')` })
+        .from(printOrders)
+        .where(and(
+          eq(printOrders.showId, order.showId),
+          eq(printOrders.paymentMethod, 'deducted_from_payout'),
+          notInArray(printOrders.status, ['cancelled', 'failed']),
+        ));
+      const alreadyDeducted = Number(row?.total ?? 0);
+      const available = metrics.clubReceivablePence - alreadyDeducted;
+
+      if (available < order.totalAmount) {
+        const fmt = (p: number) => `£${(p / 100).toFixed(2)}`;
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Insufficient balance. ${fmt(available)} available, ${fmt(order.totalAmount)} needed.`,
+        });
+      }
+
+      await ctx.db
+        .update(printOrders)
+        .set({ status: 'paid', paymentMethod: 'deducted_from_payout' })
+        .where(eq(printOrders.id, order.id));
+
+      Promise.all([
+        sendPrintOrderAdminNotificationEmail(order.id),
+        sendPrintOrderConfirmationEmail(order.id),
+      ]).catch((err) => console.error('[deduction] Email failed:', err));
 
       return { success: true };
     }),

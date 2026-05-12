@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import {
   Loader2, Printer, Check, CreditCard,
-  ChevronLeft, RefreshCw, MessageCircle, MapPin,
+  ChevronLeft, RefreshCw, MessageCircle, MapPin, Landmark,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PENDING_STATUSES, calculatePrintOrderFee } from '@/lib/print-products';
@@ -18,7 +18,7 @@ import { StripeProvider } from '@/components/providers/stripe-provider';
 import { PrintPaymentForm } from './_components/print-payment-form';
 import { PrintOrderList } from './_components/print-order-list';
 
-type Step = 'packages' | 'delivery' | 'payment' | 'confirmation';
+type Step = 'packages' | 'delivery' | 'payment-method' | 'payment' | 'confirmation';
 
 const BUNDLE_CONTENTS = [
   'Show catalogue — printed & delivered',
@@ -36,6 +36,7 @@ export default function PrintShopPage() {
   const [delivery, setDelivery] = useState({
     name: '', address1: '', address2: '', town: '', postcode: '', phone: '',
   });
+  const [paymentMethodChoice, setPaymentMethodChoice] = useState<'card' | 'deduction' | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [showNewOrder, setShowNewOrder] = useState(false);
@@ -54,8 +55,14 @@ export default function PrintShopPage() {
     { staleTime: 30_000 }
   );
 
+  const { data: deductionBalance, isLoading: deductionBalanceLoading } = trpc.printOrders.getDeductionBalance.useQuery(
+    { showId },
+    { staleTime: 30_000, enabled: step === 'payment-method' }
+  );
+
   const createPackageOrder = trpc.printOrders.createPackageOrder.useMutation();
   const initiatePayment = trpc.printOrders.initiatePayment.useMutation();
+  const completeByDeduction = trpc.printOrders.completeByDeduction.useMutation();
   const cancelOrder = trpc.printOrders.cancelOrder.useMutation();
   const refreshAllOrders = trpc.printOrders.refreshAllPendingOrders.useMutation();
   const utils = trpc.useUtils();
@@ -71,35 +78,40 @@ export default function PrintShopPage() {
     }));
   }, [profile]);
 
-  const handleProceedToPayment = useCallback(async () => {
-    if (!selectedQty || !packageData?.tier) return;
+  const buildOrderInput = useCallback(() => ({
+    showId,
+    catalogueQty: selectedQty!,
+    deliveryName: delivery.name,
+    deliveryAddress1: delivery.address1,
+    deliveryAddress2: delivery.address2 || undefined,
+    deliveryTown: delivery.town,
+    deliveryPostcode: delivery.postcode,
+    deliveryPhone: delivery.phone || undefined,
+  }), [showId, selectedQty, delivery]);
 
-    if (!delivery.name || !delivery.address1 || !delivery.town || !delivery.postcode) {
-      toast.error('Please fill in all required delivery fields');
-      return;
-    }
-
+  const handleCardPayment = useCallback(async () => {
     try {
-      const { orderId: newOrderId } = await createPackageOrder.mutateAsync({
-        showId,
-        catalogueQty: selectedQty,
-        deliveryName: delivery.name,
-        deliveryAddress1: delivery.address1,
-        deliveryAddress2: delivery.address2 || undefined,
-        deliveryTown: delivery.town,
-        deliveryPostcode: delivery.postcode,
-        deliveryPhone: delivery.phone || undefined,
-      });
-
+      const { orderId: newOrderId } = await createPackageOrder.mutateAsync(buildOrderInput());
       setOrderId(newOrderId);
-
       const { clientSecret: cs } = await initiatePayment.mutateAsync({ orderId: newOrderId });
       setClientSecret(cs);
       setStep('payment');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to create order');
     }
-  }, [selectedQty, packageData, delivery, createPackageOrder, initiatePayment, showId]);
+  }, [buildOrderInput, createPackageOrder, initiatePayment]);
+
+  const handleDeductionPayment = useCallback(async () => {
+    try {
+      const { orderId: newOrderId } = await createPackageOrder.mutateAsync(buildOrderInput());
+      setOrderId(newOrderId);
+      await completeByDeduction.mutateAsync({ orderId: newOrderId });
+      utils.printOrders.listByShow.invalidate({ showId });
+      setStep('confirmation');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to place order');
+    }
+  }, [buildOrderInput, createPackageOrder, completeByDeduction, utils, showId]);
 
   const handleBackFromPayment = useCallback(async () => {
     if (orderId) {
@@ -107,7 +119,7 @@ export default function PrintShopPage() {
     }
     setOrderId(null);
     setClientSecret(null);
-    setStep('delivery');
+    setStep('payment-method');
   }, [orderId, cancelOrder]);
 
   const handlePaymentSuccess = useCallback(() => {
@@ -119,6 +131,7 @@ export default function PrintShopPage() {
     setStep('packages');
     setShowNewOrder(false);
     setSelectedQty(null);
+    setPaymentMethodChoice(null);
     setOrderId(null);
     setClientSecret(null);
   }, []);
@@ -360,29 +373,133 @@ export default function PrintShopPage() {
         </Card>
 
         <Button
-          onClick={handleProceedToPayment}
+          onClick={() => {
+            if (!delivery.name || !delivery.address1 || !delivery.town || !delivery.postcode) {
+              toast.error('Please fill in all required delivery fields');
+              return;
+            }
+            setStep('payment-method');
+          }}
           className="w-full"
           size="lg"
-          disabled={createPackageOrder.isPending || initiatePayment.isPending}
         >
-          {createPackageOrder.isPending || initiatePayment.isPending ? (
-            <>
-              <Loader2 className="size-4 animate-spin" />
-              Preparing your order...
-            </>
-          ) : (
-            <>
-              <CreditCard className="size-4" />
-              Continue to Payment
-            </>
-          )}
+          <CreditCard className="size-4" />
+          Continue to Payment
         </Button>
       </div>
     );
   }
 
   // ══════════════════════════════════════════════════════
-  // STEP 3: PAYMENT
+  // STEP 3: PAYMENT METHOD SELECTION
+  // ══════════════════════════════════════════════════════
+  if (step === 'payment-method') {
+    const orderTotal = (() => {
+      const opt = packageData?.tier?.options.find((o) => o.catalogueQty === selectedQty);
+      return opt ? opt.pricePence + calculatePrintOrderFee(opt.pricePence) : 0;
+    })();
+    const canDeduct = (deductionBalance?.availablePence ?? 0) >= orderTotal;
+    const isPending = createPackageOrder.isPending || initiatePayment.isPending || completeByDeduction.isPending;
+
+    return (
+      <div className="space-y-4">
+        <div>
+          <Button variant="ghost" size="sm" onClick={() => setStep('delivery')} className="-ml-2">
+            <ChevronLeft className="size-4" />
+            Back
+          </Button>
+          <h2 className="mt-2 font-serif text-lg font-semibold">How would you like to pay?</h2>
+        </div>
+
+        <div className="space-y-3">
+          {/* Card */}
+          <button
+            onClick={() => setPaymentMethodChoice('card')}
+            className={`w-full rounded-lg border p-4 text-left transition-all ${
+              paymentMethodChoice === 'card'
+                ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
+                : 'hover:bg-muted/50'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <CreditCard className="mt-0.5 size-5 shrink-0 text-primary" />
+              <div>
+                <p className="font-medium">Pay by card</p>
+                <p className="text-sm text-muted-foreground">
+                  Pay {formatCurrency(orderTotal)} now — card charged immediately
+                </p>
+              </div>
+            </div>
+          </button>
+
+          {/* Deduction */}
+          {deductionBalanceLoading ? (
+            <div className="flex items-center gap-3 rounded-lg border p-4 text-muted-foreground">
+              <Loader2 className="size-5 animate-spin shrink-0" />
+              <p className="text-sm">Checking available balance…</p>
+            </div>
+          ) : (
+            <button
+              onClick={() => canDeduct && setPaymentMethodChoice('deduction')}
+              disabled={!canDeduct}
+              className={`w-full rounded-lg border p-4 text-left transition-all ${
+                paymentMethodChoice === 'deduction'
+                  ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
+                  : canDeduct
+                    ? 'hover:bg-muted/50'
+                    : 'cursor-not-allowed opacity-50'
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <Landmark className="mt-0.5 size-5 shrink-0 text-primary" />
+                <div>
+                  <p className="font-medium">Deduct from entry income</p>
+                  {deductionBalance ? (
+                    canDeduct ? (
+                      <p className="text-sm text-muted-foreground">
+                        {formatCurrency(deductionBalance.availablePence)} available — taken off your payout when we transfer entry money
+                      </p>
+                    ) : (
+                      <>
+                        <p className="text-sm text-muted-foreground">
+                          {formatCurrency(deductionBalance.availablePence)} collected so far
+                        </p>
+                        <p className="mt-0.5 text-xs text-destructive">
+                          Not enough for this order — {formatCurrency(orderTotal)} needed
+                        </p>
+                      </>
+                    )
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Taken off your payout when we transfer entry money</p>
+                  )}
+                </div>
+              </div>
+            </button>
+          )}
+        </div>
+
+        {paymentMethodChoice && (
+          <Button
+            className="w-full"
+            size="lg"
+            onClick={paymentMethodChoice === 'card' ? handleCardPayment : handleDeductionPayment}
+            disabled={isPending}
+          >
+            {isPending ? (
+              <><Loader2 className="size-4 animate-spin" />Preparing your order…</>
+            ) : paymentMethodChoice === 'card' ? (
+              <><CreditCard className="size-4" />Continue to Card Payment</>
+            ) : (
+              <><Check className="size-4" />Confirm — Deduct {formatCurrency(orderTotal)}</>
+            )}
+          </Button>
+        )}
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════
+  // STEP 4: CARD PAYMENT (STRIPE)
   // ══════════════════════════════════════════════════════
   if (step === 'payment' && clientSecret) {
     return (
@@ -412,7 +529,7 @@ export default function PrintShopPage() {
   }
 
   // ══════════════════════════════════════════════════════
-  // STEP 4: CONFIRMATION
+  // STEP 5: CONFIRMATION
   // ══════════════════════════════════════════════════════
   if (step === 'confirmation') {
     return (
@@ -431,6 +548,9 @@ export default function PrintShopPage() {
               <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">What happens next</p>
               {[
                 { icon: '📄', text: 'PDFs generated from your show data' },
+                ...(paymentMethodChoice === 'deduction'
+                  ? [{ icon: '🏦', text: 'Cost deducted from your entry income payout' }]
+                  : []),
                 { icon: '✉️', text: "We'll review and send to the printer" },
                 { icon: '📦', text: 'Printed, packed and dispatched' },
                 { icon: '🚚', text: 'Delivered to your address' },
