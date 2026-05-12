@@ -3,7 +3,6 @@ import { Document, Page, Text, View, StyleSheet, Font } from '@react-pdf/rendere
 import path from 'path';
 import type { JudgesBookClass, JudgesBookShowInfo } from '@/app/api/judges-book/[showId]/route';
 
-// Register Times New Roman
 const fontsDir = path.join(process.cwd(), 'public', 'fonts');
 Font.register({
   family: 'Times',
@@ -32,7 +31,6 @@ const s = StyleSheet.create({
     fontSize: 10,
     padding: '28 28 36 28',
   },
-  // ── Page header (club/show/judge/date) ──
   pageHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -64,41 +62,116 @@ const s = StyleSheet.create({
     fontSize: 10,
     textAlign: 'right',
   },
-  // ── Body layout — reference column + 3 triplicate columns ──
+  // ── Combined body: notes on left, 3 placement columns on right ──
   body: {
     flexDirection: 'row',
     flex: 1,
     borderWidth: 1,
     borderColor: '#000',
   },
-  // Left reference column showing every ring number entered in this class.
-  // Narrow so the placement columns get most of the width.
-  refColumn: {
-    width: '12%',
+  // Left notes section (~38% of page width)
+  notesSection: {
+    width: '38%',
     borderRightWidth: 1.5,
     borderRightColor: '#000',
-    padding: 4,
   },
-  refHeader: {
+  notesHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    padding: 6,
+    backgroundColor: '#f4f4f4',
+    borderBottomWidth: 1,
+    borderBottomColor: '#000',
+  },
+  notesHeaderLeft: {
+    flex: 1,
+  },
+  notesClassNumber: {
     fontSize: 7,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    color: '#666',
+  },
+  notesClassName: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+  },
+  notesClassBreed: {
+    fontSize: 8,
+    fontStyle: 'italic',
+    color: '#555',
+    marginTop: 1,
+  },
+  notesEntryCount: {
+    fontSize: 8,
+    textAlign: 'right',
+    color: '#444',
+  },
+  notesColHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#eee',
+    borderBottomWidth: 1,
+    borderBottomColor: '#000',
+  },
+  notesColHeaderBench: {
+    width: 32,
+    padding: 3,
+    fontSize: 6,
     fontWeight: 'bold',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     textAlign: 'center',
-    color: '#555',
-    marginBottom: 4,
+    color: '#444',
+    borderRightWidth: 0.5,
+    borderRightColor: '#ccc',
   },
-  refNumber: {
-    fontSize: 16,
+  notesColHeaderCritique: {
+    flex: 1,
+    padding: 3,
+    fontSize: 6,
     fontWeight: 'bold',
-    textAlign: 'center',
-    paddingVertical: 3,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    color: '#444',
   },
-  // One of three identical placement columns. The judge writes the
-  // placements three times by hand (no carbon transfer), then tears the
-  // two right-hand columns off along their perforated edges — one to the
-  // secretary, one to the awards board. The leftmost column stays in
-  // the book as the judge's record.
+  notesRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#bbb',
+    minHeight: 56,
+  },
+  notesBenchCell: {
+    width: 32,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: 6,
+    borderRightWidth: 0.5,
+    borderRightColor: '#ccc',
+  },
+  notesBenchNumber: {
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  notesCritiqueCell: {
+    flex: 1,
+    paddingHorizontal: 5,
+    paddingTop: 8,
+    paddingBottom: 5,
+    justifyContent: 'space-around',
+  },
+  notesCritiqueLine: {
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#bbb',
+    height: 1,
+  },
+  // Right placements section (flex: 1 = remaining ~62%, split into 3)
+  placementsSection: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  // Each of the three tearoff columns
   placementColumn: {
     flex: 1,
     borderRightWidth: 1,
@@ -108,8 +181,6 @@ const s = StyleSheet.create({
   placementColumnLast: {
     flex: 1,
   },
-  // Small "tear here" caption above each perforated boundary, helping the
-  // judge see which strip becomes which copy.
   copyLabel: {
     fontSize: 7,
     textTransform: 'uppercase',
@@ -124,47 +195,44 @@ const s = StyleSheet.create({
   columnClassHeader: {
     borderBottomWidth: 1,
     borderBottomColor: '#000',
-    padding: 6,
+    padding: 5,
     backgroundColor: '#f4f4f4',
   },
   columnClassNumber: {
-    fontSize: 9,
+    fontSize: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
     color: '#666',
   },
   columnClassName: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: 'bold',
     textTransform: 'uppercase',
   },
   columnClassBreed: {
-    fontSize: 9,
+    fontSize: 8,
     fontStyle: 'italic',
     color: '#555',
     marginTop: 1,
   },
-  // Placement rows — pre-printed "1st", "2nd", etc. with a wide blank
-  // space next to them for the judge to write the winning ring number.
   placementRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     borderBottomWidth: 0.5,
     borderBottomColor: '#ccc',
-    minHeight: 34,
-    paddingHorizontal: 6,
+    minHeight: 30,
+    paddingHorizontal: 5,
     paddingBottom: 3,
   },
   placementLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: 'bold',
-    width: 30,
+    width: 26,
   },
-  // Slightly wider for "Withheld" which is longer than the placement abbrevs.
   placementLabelNarrow: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: 'bold',
-    width: 52,
+    width: 46,
   },
   placementWriteLine: {
     flex: 1,
@@ -174,18 +242,14 @@ const s = StyleSheet.create({
     marginBottom: 4,
     height: 1,
   },
-  // Absent row — calibrated on Amanda's 2026-04-19 Open Bitch: 26 entries,
-  // 18 absent. Six stacked write-lines give the judge room for ~18-24
-  // ring numbers (3-4 per line), which covers all but the most freakish
-  // absentee counts. The row dominates the lower half of the column.
   absentRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     borderBottomWidth: 0.5,
     borderBottomColor: '#ccc',
-    minHeight: 180,
-    paddingHorizontal: 6,
-    paddingTop: 6,
+    minHeight: 100,
+    paddingHorizontal: 5,
+    paddingTop: 5,
     paddingBottom: 3,
   },
   absentWriteArea: {
@@ -195,15 +259,14 @@ const s = StyleSheet.create({
   absentWriteLine: {
     borderBottomWidth: 1,
     borderBottomColor: '#888',
-    marginTop: 22,
+    marginTop: 20,
   },
-  // Signature block at the bottom of each column.
   signatureBlock: {
-    padding: 6,
-    paddingTop: 14,
+    padding: 5,
+    paddingTop: 12,
   },
   signatureLabel: {
-    fontSize: 8,
+    fontSize: 7,
     fontWeight: 'bold',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -213,9 +276,8 @@ const s = StyleSheet.create({
   signatureLine: {
     borderBottomWidth: 1,
     borderBottomColor: '#000',
-    height: 18,
+    height: 16,
   },
-  // ── Footer ──
   footer: {
     position: 'absolute',
     bottom: 14,
@@ -227,110 +289,7 @@ const s = StyleSheet.create({
   },
 });
 
-// ── Notes page styles — one A4 sheet per class for handwritten critiques.
-// Sits before that class's awards-tear-off page. Each entry gets its own
-// generous row with ruled lines, mirroring the Fossedata judging book
-// Amanda compared against. Bench number column on the left, critique
-// writing area on the right.
-const notesStyles = StyleSheet.create({
-  classBanner: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    backgroundColor: '#f4f4f4',
-    borderWidth: 1,
-    borderColor: '#000',
-    padding: 6,
-    marginBottom: 6,
-  },
-  classBannerLeft: {
-    flex: 1,
-  },
-  classBannerNumber: {
-    fontSize: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    color: '#666',
-  },
-  classBannerName: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-  },
-  classBannerBreed: {
-    fontSize: 9,
-    fontStyle: 'italic',
-    color: '#555',
-    marginTop: 1,
-  },
-  classBannerRight: {
-    fontSize: 9,
-    textAlign: 'right',
-    color: '#444',
-  },
-  notesTable: {
-    borderWidth: 1,
-    borderColor: '#000',
-  },
-  notesTableHeader: {
-    flexDirection: 'row',
-    backgroundColor: '#eee',
-    borderBottomWidth: 1,
-    borderBottomColor: '#000',
-  },
-  notesTableHeaderBench: {
-    width: '14%',
-    padding: 4,
-    fontSize: 7,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    textAlign: 'center',
-    color: '#444',
-  },
-  notesTableHeaderCritique: {
-    flex: 1,
-    padding: 4,
-    fontSize: 7,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    color: '#444',
-    borderLeftWidth: 0.5,
-    borderLeftColor: '#000',
-  },
-  notesRow: {
-    flexDirection: 'row',
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#000',
-    minHeight: 84,
-  },
-  notesRowBench: {
-    width: '14%',
-    padding: 6,
-    alignItems: 'center',
-  },
-  notesRowBenchNumber: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  notesRowCritique: {
-    flex: 1,
-    borderLeftWidth: 0.5,
-    borderLeftColor: '#000',
-    paddingHorizontal: 6,
-    paddingTop: 6,
-    paddingBottom: 6,
-    justifyContent: 'space-around',
-  },
-  notesRuledLine: {
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#bbb',
-    height: 1,
-  },
-});
-
-// ── Best Awards page styles — same triplicate principle as class pages ──
+// ── Best Awards page styles ──
 const bestAwardsStyles = StyleSheet.create({
   columnHeader: {
     padding: 6,
@@ -415,9 +374,7 @@ function BestAwardsColumn({
 function ColumnHeader({ classLabel, className, sexLabel, breedName }: ColumnHeaderProps) {
   return (
     <View style={s.columnClassHeader}>
-      <Text style={s.columnClassNumber}>
-        Class {classLabel || '—'}
-      </Text>
+      <Text style={s.columnClassNumber}>Class {classLabel || '—'}</Text>
       <Text style={s.columnClassName}>
         {className}{sexLabel ? ` (${sexLabel})` : ''}
       </Text>
@@ -439,8 +396,6 @@ function PlacementColumn(props: ColumnHeaderProps & { isLast?: boolean; copyLabe
         </View>
       ))}
 
-      {/* Withheld — for marking any placement the judge deemed unworthy
-          (e.g. "3rd" or "RCC"). Separate from Abs (exhibitor absent). */}
       <View style={s.placementRow}>
         <Text style={s.placementLabelNarrow}>Withheld</Text>
         <View style={s.placementWriteLine} />
@@ -449,7 +404,7 @@ function PlacementColumn(props: ColumnHeaderProps & { isLast?: boolean; copyLabe
       <View style={s.absentRow}>
         <Text style={s.placementLabel}>Abs</Text>
         <View style={s.absentWriteArea}>
-          {Array.from({ length: 6 }, (_, i) => (
+          {Array.from({ length: 4 }, (_, i) => (
             <View key={i} style={s.absentWriteLine} />
           ))}
         </View>
@@ -491,119 +446,84 @@ export function JudgesBook({
         };
 
         return (
-          <React.Fragment key={classIdx}>
-            {/* Notes sheet — handwritten critique space, one row per dog. */}
-            <Page size="A4" style={s.page}>
-              <View style={s.pageHeader} fixed>
-                <View style={s.pageHeaderLeft}>
-                  {show.organisation && (
-                    <Text style={s.clubName}>{show.organisation}</Text>
-                  )}
-                  <Text style={s.showName}>{show.name}</Text>
-                  {cls.judgeName && (
-                    <Text style={s.judgeLine}>Judge: {cls.judgeName}</Text>
-                  )}
-                </View>
-                <Text style={s.dateBlock}>{showDate}</Text>
+          // One page per class: notes on the left, 3 tearoff placement columns on the right.
+          <Page key={classIdx} size="A4" style={s.page}>
+            <View style={s.pageHeader} fixed>
+              <View style={s.pageHeaderLeft}>
+                {show.organisation && (
+                  <Text style={s.clubName}>{show.organisation}</Text>
+                )}
+                <Text style={s.showName}>{show.name}</Text>
+                {cls.judgeName && (
+                  <Text style={s.judgeLine}>Judge: {cls.judgeName}</Text>
+                )}
               </View>
+              <Text style={s.dateBlock}>{showDate}</Text>
+            </View>
 
-              <View style={notesStyles.classBanner} fixed>
-                <View style={notesStyles.classBannerLeft}>
-                  <Text style={notesStyles.classBannerNumber}>
-                    Class {cls.classLabel || '—'} — Notes
+            <View style={s.body}>
+              {/* Left: bench numbers + critique writing area */}
+              <View style={s.notesSection}>
+                <View style={s.notesHeader} fixed>
+                  <View style={s.notesHeaderLeft}>
+                    <Text style={s.notesClassNumber}>
+                      Class {cls.classLabel || '—'}
+                    </Text>
+                    <Text style={s.notesClassName}>
+                      {cls.className}{sexLabel ? ` (${sexLabel})` : ''}
+                    </Text>
+                    {cls.breedName && (
+                      <Text style={s.notesClassBreed}>{cls.breedName}</Text>
+                    )}
+                  </View>
+                  <Text style={s.notesEntryCount}>
+                    {cls.exhibits.length}{' '}
+                    {cls.exhibits.length === 1 ? 'entry' : 'entries'}
+                    {cls.ringNumber != null ? ` · Ring ${cls.ringNumber}` : ''}
                   </Text>
-                  <Text style={notesStyles.classBannerName}>
-                    {cls.className}{sexLabel ? ` (${sexLabel})` : ''}
-                  </Text>
-                  {cls.breedName && (
-                    <Text style={notesStyles.classBannerBreed}>{cls.breedName}</Text>
-                  )}
                 </View>
-                <Text style={notesStyles.classBannerRight}>
-                  {cls.exhibits.length} {cls.exhibits.length === 1 ? 'entry' : 'entries'}
-                  {cls.ringNumber != null ? ` · Ring ${cls.ringNumber}` : ''}
-                </Text>
-              </View>
 
-              <View style={notesStyles.notesTable}>
-                <View style={notesStyles.notesTableHeader} fixed>
-                  <Text style={notesStyles.notesTableHeaderBench}>Bench No.</Text>
-                  <Text style={notesStyles.notesTableHeaderCritique}>
-                    Judge&apos;s Notes / Critique
-                  </Text>
+                <View style={s.notesColHeader} fixed>
+                  <Text style={s.notesColHeaderBench}>No.</Text>
+                  <Text style={s.notesColHeaderCritique}>Judge&apos;s Notes / Critique</Text>
                 </View>
 
                 {cls.exhibits.map((exhibit, i) => (
-                  <View key={i} style={notesStyles.notesRow} wrap={false}>
-                    <View style={notesStyles.notesRowBench}>
-                      <Text style={notesStyles.notesRowBenchNumber}>
+                  <View key={i} style={s.notesRow} wrap={false}>
+                    <View style={s.notesBenchCell}>
+                      <Text style={s.notesBenchNumber}>
                         {exhibit.catalogueNumber ?? '—'}
                       </Text>
                     </View>
-                    <View style={notesStyles.notesRowCritique}>
-                      {Array.from({ length: 4 }, (_, j) => (
-                        <View key={j} style={notesStyles.notesRuledLine} />
+                    <View style={s.notesCritiqueCell}>
+                      {Array.from({ length: 3 }, (_, j) => (
+                        <View key={j} style={s.notesCritiqueLine} />
                       ))}
                     </View>
                   </View>
                 ))}
               </View>
 
-              <Text
-                style={s.footer}
-                render={({ pageNumber, totalPages }) =>
-                  `${SHOW_TYPE_LABELS[show.showType] ?? show.showType} — Class ${cls.classLabel || '—'} Notes — Page ${pageNumber} of ${totalPages} — Generated by Remi`
-                }
-                fixed
-              />
-            </Page>
-
-            {/* Awards sheet — three perforated columns. Judge writes the
-                placements three times by hand; the secretary and awards
-                board copies tear off along the dashed boundaries. */}
-            <Page size="A4" style={s.page}>
-              <View style={s.pageHeader}>
-                <View style={s.pageHeaderLeft}>
-                  {show.organisation && (
-                    <Text style={s.clubName}>{show.organisation}</Text>
-                  )}
-                  <Text style={s.showName}>{show.name}</Text>
-                  {cls.judgeName && (
-                    <Text style={s.judgeLine}>Judge: {cls.judgeName}</Text>
-                  )}
-                </View>
-                <Text style={s.dateBlock}>{showDate}</Text>
-              </View>
-
-              <View style={s.body}>
-                <View style={s.refColumn}>
-                  <Text style={s.refHeader}>Exhibit No.</Text>
-                  {cls.exhibits.map((exhibit, i) => (
-                    <Text key={i} style={s.refNumber}>
-                      {exhibit.catalogueNumber ?? '—'}
-                    </Text>
-                  ))}
-                </View>
-
+              {/* Right: three tearoff placement columns */}
+              <View style={s.placementsSection}>
                 <PlacementColumn {...columnProps} copyLabel="Judge's copy — keep" />
                 <PlacementColumn {...columnProps} copyLabel="✂ Tear off — Secretary" />
                 <PlacementColumn {...columnProps} copyLabel="✂ Tear off — Awards Board" isLast />
               </View>
+            </View>
 
-              <Text
-                style={s.footer}
-                render={({ pageNumber, totalPages }) =>
-                  `${SHOW_TYPE_LABELS[show.showType] ?? show.showType} — Page ${pageNumber} of ${totalPages} — Generated by Remi`
-                }
-                fixed
-              />
-            </Page>
-          </React.Fragment>
+            <Text
+              style={s.footer}
+              render={({ pageNumber, totalPages }) =>
+                `${SHOW_TYPE_LABELS[show.showType] ?? show.showType} — Class ${cls.classLabel || '—'} — Page ${pageNumber} of ${totalPages} — Generated by Remi`
+              }
+              fixed
+            />
+          </Page>
         );
       })}
 
-      {/* Final page — Best Awards sign-off. Triplicate columns match the
-          class pages so the secretary can tear the same way. */}
+      {/* Final page — Best Awards sign-off. Triplicate columns, no notes needed. */}
       {show.bestAwards.length > 0 && (
         <Page size="A4" style={s.page}>
           <View style={s.pageHeader}>
