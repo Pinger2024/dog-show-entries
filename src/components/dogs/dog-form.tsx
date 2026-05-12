@@ -82,6 +82,15 @@ const dogFormSchema = z.object({
   breederName: z.string().optional(),
   bio: z.string().optional(),
   owners: z.array(ownerSchema),
+  // SV / WUSV fields
+  registrationBody: z.enum(['kc', 'sv', 'ikc', 'other']).optional(),
+  registrationBodyOther: z.string().optional(),
+  coatType: z.enum(['stock', 'long_stock']).optional(),
+  microchipNumber: z.string().optional(),
+  sireRegistrationBody: z.enum(['kc', 'sv', 'ikc', 'other']).optional(),
+  sireRegistrationNumber: z.string().optional(),
+  damRegistrationBody: z.enum(['kc', 'sv', 'ikc', 'other']).optional(),
+  damRegistrationNumber: z.string().optional(),
 });
 
 type DogFormValues = z.infer<typeof dogFormSchema>;
@@ -883,6 +892,160 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                 </FormItem>
               )}
             />
+          </CardContent>
+        </Card>
+
+        {/* SV / WUSV Details */}
+        <Card>
+          <CardHeader>
+            <CardTitle>SV / WUSV Details</CardTitle>
+            <CardDescription>
+              For German Shepherd Dogs entered in WUSV/SV regional shows. Leave blank if not applicable.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 sm:space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="registrationBody"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Registration Body <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
+                    <Select onValueChange={(v) => field.onChange(v === 'none' ? undefined : v)} value={field.value ?? 'none'}>
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select body" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">— Not specified —</SelectItem>
+                        <SelectItem value="kc">Royal Kennel Club (RKC)</SelectItem>
+                        <SelectItem value="sv">SV (Germany)</SelectItem>
+                        <SelectItem value="ikc">IKC (Ireland)</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="coatType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Coat Type <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
+                    <Select onValueChange={(v) => field.onChange(v === 'none' ? undefined : v)} value={field.value ?? 'none'}>
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select coat type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">— Not specified —</SelectItem>
+                        <SelectItem value="stock">Stock Coat</SelectItem>
+                        <SelectItem value="long_stock">Long Stock Coat</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <FormField
+              control={form.control}
+              name="microchipNumber"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Microchip Number <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
+                  <FormControl>
+                    <Input placeholder="15-digit microchip number" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="sireRegistrationBody"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Sire Registration Body <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                    <Select onValueChange={(v) => field.onChange(v === 'none' ? undefined : v)} value={field.value ?? 'none'}>
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select body" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">— Not specified —</SelectItem>
+                        <SelectItem value="kc">RKC</SelectItem>
+                        <SelectItem value="sv">SV</SelectItem>
+                        <SelectItem value="ikc">IKC</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="sireRegistrationNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Sire Registration Number <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. SZ 2355001" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="damRegistrationBody"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Dam Registration Body <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                    <Select onValueChange={(v) => field.onChange(v === 'none' ? undefined : v)} value={field.value ?? 'none'}>
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select body" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">— Not specified —</SelectItem>
+                        <SelectItem value="kc">RKC</SelectItem>
+                        <SelectItem value="sv">SV</SelectItem>
+                        <SelectItem value="ikc">IKC</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="damRegistrationNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Dam Registration Number <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. SZ 2344555" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
           </CardContent>
         </Card>
 

@@ -15,6 +15,7 @@ import {
   PoundSterling,
   Printer,
   Settings,
+  Shield,
   Ticket,
   Trophy,
   Users,
@@ -37,7 +38,7 @@ type Section = {
   hasBadge?: boolean;
 };
 
-const sections: Section[] = [
+const BASE_SECTIONS: Section[] = [
   { path: '', label: 'Secretary Tools', icon: LayoutDashboard, exact: true },
   { path: '/checklist', label: 'Show Checklist', icon: ListChecks, hasBadge: true },
   { path: '/schedule', label: 'Schedule', icon: CalendarDays },
@@ -53,21 +54,7 @@ const sections: Section[] = [
   { path: '/print-shop', label: 'Print Shop', icon: Printer },
 ];
 
-// Grouped for the mobile sheet
-const sectionGroups = [
-  {
-    label: 'Manage',
-    items: ['', '/checklist', '/schedule', '/entries', '/results'],
-  },
-  {
-    label: 'Finance & Print',
-    items: ['/financial', '/catalogue', '/catalogue-settings', '/reports', '/print-shop'],
-  },
-  {
-    label: 'Setup',
-    items: ['/people', '/sponsors', '/documents'],
-  },
-];
+const WUSV_SECTION: Section = { path: '/wusv-classes', label: 'SV Classes', icon: Shield };
 
 const sectionMap = new Map(sections.map((s) => [s.path, s]));
 
@@ -78,10 +65,29 @@ function isActive(section: Section, pathname: string, basePath: string): boolean
   return pathname.startsWith(`${basePath}${section.path}`);
 }
 
-export function ShowSectionNav({ showId }: { showId: string }) {
+export function ShowSectionNav({ showId, isWusv = false }: { showId: string; isWusv?: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
   const basePath = `/secretary/shows/${showId}`;
+
+  const sections: Section[] = isWusv
+    ? [...BASE_SECTIONS, WUSV_SECTION]
+    : BASE_SECTIONS;
+
+  const sectionGroups = [
+    {
+      label: 'Manage',
+      items: ['', '/checklist', '/schedule', '/entries', '/results', ...(isWusv ? ['/wusv-classes'] : [])],
+    },
+    {
+      label: 'Finance & Print',
+      items: ['/financial', '/catalogue', '/catalogue-settings', '/reports', '/print-shop'],
+    },
+    {
+      label: 'Setup',
+      items: ['/people', '/sponsors', '/documents'],
+    },
+  ];
   const [open, setOpen] = useState(false);
 
   // Check for pending actions (accepted judges needing confirmation)

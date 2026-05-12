@@ -108,6 +108,7 @@ export default function StewardClassResultsPage({
 
   const { showClass, entries, judgeName } = data;
   const isLocked = lockStatus?.locked ?? false;
+  const isWusv = showClass.showRuleset === 'wusv';
 
   // Check if judge bred any dogs in this class
   const judgeBreederWarnings = judgeName
@@ -345,6 +346,35 @@ export default function StewardClassResultsPage({
                       <SelectItem value="unplaced">Unplaced</SelectItem>
                     </SelectContent>
                   </Select>
+
+                  {/* SV Grade selector — WUSV shows only */}
+                  {isWusv && (
+                    <Select
+                      value={entry.result?.svGrade ?? 'none'}
+                      onValueChange={(v) => {
+                        recordResult.mutate({
+                          entryClassId: entry.entryClassId,
+                          placement: entry.result?.placement ?? null,
+                          placementStatus: entry.result?.placementStatus ?? null,
+                          specialAward: entry.result?.specialAward ?? null,
+                          svGrade: v === 'none' ? null : (v as 'v' | 'sg' | 'g' | 'a' | 'u' | 'disqualified'),
+                        });
+                      }}
+                    >
+                      <SelectTrigger className="h-11 w-28 shrink-0">
+                        <SelectValue placeholder="Grade" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">— Grade —</SelectItem>
+                        <SelectItem value="v">V — Excellent</SelectItem>
+                        <SelectItem value="sg">SG — Very Good</SelectItem>
+                        <SelectItem value="g">G — Good</SelectItem>
+                        <SelectItem value="a">A — Adequate</SelectItem>
+                        <SelectItem value="u">U — Insufficient</SelectItem>
+                        <SelectItem value="disqualified">Disqualified</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
 
                   {/* Special award button */}
                   <Dialog

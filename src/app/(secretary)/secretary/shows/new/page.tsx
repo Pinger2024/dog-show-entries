@@ -113,6 +113,7 @@ const createShowSchema = z.object({
     'championship',
   ], { required_error: 'Please select a show type' }),
   showScope: z.enum(['single_breed', 'general'], { required_error: 'Please select a show scope' }),
+  showRuleset: z.enum(['rkc', 'wusv']).default('rkc'),
   breedId: z.string().uuid().optional(),
   classSexArrangement: z.enum(['separate_sex', 'combined_sex']).optional(),
   secretaryUserId: z.string().uuid().optional(),
@@ -215,6 +216,7 @@ export default function NewShowPage() {
       name: '',
       showType: '' as never,
       showScope: '' as never,
+      showRuleset: 'rkc',
       classSexArrangement: undefined,
       secretaryUserId: undefined,
       secretaryEmail: '',
@@ -371,6 +373,7 @@ export default function NewShowPage() {
         name: values.name,
         showType: values.showType,
         showScope: values.showScope,
+        showRuleset: values.showRuleset ?? 'rkc',
         breedId: values.breedId || undefined,
         classSexArrangement: values.classSexArrangement || undefined,
         secretaryUserId: values.secretaryUserId || undefined,
@@ -734,6 +737,38 @@ export default function NewShowPage() {
                     )}
                   />
                 </div>
+
+                {/* Show Ruleset — RKC or WUSV/SV */}
+                <FormField
+                  control={form.control}
+                  name="showRuleset"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Show Rules</FormLabel>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        {[
+                          { value: 'rkc', label: 'Royal Kennel Club (RKC)', desc: 'Standard UK dog show — placement ribbons, CCs, RCCs.' },
+                          { value: 'wusv', label: 'WUSV / SV Regional', desc: 'German Shepherd breed show under SV rules — graded V/SG/G, class split by coat type.' },
+                        ].map((opt) => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => field.onChange(opt.value)}
+                            className={`flex flex-col gap-1 rounded-lg border p-4 text-left transition-colors ${
+                              field.value === opt.value
+                                ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                                : 'hover:bg-accent'
+                            }`}
+                          >
+                            <span className="text-sm font-semibold">{opt.label}</span>
+                            <span className="text-xs text-muted-foreground">{opt.desc}</span>
+                          </button>
+                        ))}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
                 {/* Breed selector for single-breed shows */}
                 {watchedShowScope === 'single_breed' && (

@@ -70,6 +70,14 @@ export default function EditDogPage({
             sireName: dog.sireName ?? '',
             damName: dog.damName ?? '',
             breederName: dog.breederName ?? '',
+            registrationBody: dog.registrationBody ?? undefined,
+            registrationBodyOther: dog.registrationBodyOther ?? '',
+            coatType: dog.coatType ?? undefined,
+            microchipNumber: dog.microchipNumber ?? '',
+            sireRegistrationBody: dog.sireRegistrationBody ?? undefined,
+            sireRegistrationNumber: dog.sireRegistrationNumber ?? '',
+            damRegistrationBody: dog.damRegistrationBody ?? undefined,
+            damRegistrationNumber: dog.damRegistrationNumber ?? '',
           }}
         />
       </div>
