@@ -8,71 +8,99 @@ import {
   makeShow,
   makeOrg,
 } from '../helpers/factories';
+import { PRINT_PACKAGE_TIERS } from '@/lib/print-products';
 
-const draftOrderInput = (showId: string) => ({
+async function makePackageOrderSetup() {
+  const { user, org } = await makeSecretaryWithOrg();
+  const show = await makeShow({ organisationId: org.id });
+  const caller = createTestCaller(user);
+  return { user, org, show, caller };
+}
+
+const packageOrderInput = (showId: string) => ({
   showId,
-  items: [{
-    documentType: 'catalogue',
-    documentLabel: 'Show Catalogue',
-    quantity: 50,
-    unitTradeCost: 200,
-    unitSellingPrice: 280,
-    lineTotal: 50 * 280,
-    tradeprintProductId: 'mixam-cat-001',
-    printSpecs: { paperType: 'silk', size: 'a5' },
-  }],
-  serviceLevel: 'standard' as const,
+  catalogueQty: 50,
   deliveryName: 'Show Secretary',
   deliveryAddress1: '1 Show Lane',
   deliveryTown: 'Showtown',
   deliveryPostcode: 'SH1 1AA',
 });
 
-describe('printOrders.createDraftOrder', () => {
-  it('creates a draft order with linked items and computed markup', async () => {
-    const { user, org } = await makeSecretaryWithOrg();
-    const show = await makeShow({ organisationId: org.id });
-    const caller = createTestCaller(user);
+describe('printOrders.getPackageOptions', () => {
+  it('returns tier1 for a show with no entries (0 ≤ 100)', async () => {
+    const { show, caller } = await makePackageOrderSetup();
+    const result = await caller.printOrders.getPackageOptions({ showId: show.id });
+    expect(result.tooLarge).toBe(false);
+    expect(result.tier?.id).toBe('tier1');
+    expect(result.tier?.options).toHaveLength(PRINT_PACKAGE_TIERS[0].options.length);
+  });
 
-    const { orderId } = await caller.printOrders.createDraftOrder(draftOrderInput(show.id));
+  it('rejects on a foreign show', async () => {
+    const { user } = await makeSecretaryWithOrg();
+    const otherOrg = await makeOrg();
+    const otherShow = await makeShow({ organisationId: otherOrg.id });
+    await expect(
+      createTestCaller(user).printOrders.getPackageOptions({ showId: otherShow.id }),
+    ).rejects.toThrow(/access/i);
+  });
+});
+
+describe('printOrders.createPackageOrder', () => {
+  it('creates a draft order with catalogue and prize_cards items', async () => {
+    const { show, caller } = await makePackageOrderSetup();
+    const { orderId } = await caller.printOrders.createPackageOrder(packageOrderInput(show.id));
     expect(orderId).toBeTruthy();
 
     const order = await testDb.query.printOrders.findFirst({
       where: eq(printOrders.id, orderId),
     });
     expect(order?.status).toBe('draft');
-    expect(order?.subtotalAmount).toBe(50 * 280);
-    expect(order?.totalAmount).toBe(50 * 280);
     expect(order?.deliveryName).toBe('Show Secretary');
+
+    const tier1option50 = PRINT_PACKAGE_TIERS[0].options.find((o) => o.catalogueQty === 50)!;
+    const fee = Math.ceil(tier1option50.pricePence * 0.015);
+    expect(order?.subtotalAmount).toBe(tier1option50.pricePence);
+    expect(order?.totalAmount).toBe(tier1option50.pricePence + fee);
 
     const items = await testDb.query.printOrderItems.findMany({
       where: eq(printOrderItems.printOrderId, orderId),
     });
-    expect(items).toHaveLength(1);
-    expect(items[0]?.tradeprintProductId).toBe('mixam-cat-001');
-    expect(items[0]?.printSpecs).toEqual({ paperType: 'silk', size: 'a5' });
+    expect(items).toHaveLength(2);
+
+    const catalogue = items.find((i) => i.documentType === 'catalogue');
+    expect(catalogue?.quantity).toBe(50);
+    expect(catalogue?.lineTotal).toBe(tier1option50.pricePence);
+
+    const prizeCards = items.find((i) => i.documentType === 'prize_cards');
+    expect(prizeCards?.lineTotal).toBe(0);
+    expect(prizeCards?.unitSellingPrice).toBe(0);
   });
 
-  it('rejects createDraftOrder on a foreign show', async () => {
+  it('rejects an invalid catalogueQty not in the tier options', async () => {
+    const { show, caller } = await makePackageOrderSetup();
+    await expect(
+      caller.printOrders.createPackageOrder({ ...packageOrderInput(show.id), catalogueQty: 99 }),
+    ).rejects.toThrow(/not a valid option/);
+  });
+
+  it('rejects createPackageOrder on a foreign show', async () => {
     const { user } = await makeSecretaryWithOrg();
     const otherOrg = await makeOrg();
     const otherShow = await makeShow({ organisationId: otherOrg.id });
     await expect(
-      createTestCaller(user).printOrders.createDraftOrder(draftOrderInput(otherShow.id)),
+      createTestCaller(user).printOrders.createPackageOrder(packageOrderInput(otherShow.id)),
     ).rejects.toThrow(/access/i);
   });
 });
 
 describe('printOrders.getById / listByShow', () => {
   it('getById returns the order with embedded items and orderedBy + show', async () => {
-    const { user, org } = await makeSecretaryWithOrg();
-    const show = await makeShow({ organisationId: org.id });
-    const caller = createTestCaller(user);
-    const { orderId } = await caller.printOrders.createDraftOrder(draftOrderInput(show.id));
+    const { show, caller, user } = await makePackageOrderSetup();
+    const { orderId } = await caller.printOrders.createPackageOrder(packageOrderInput(show.id));
 
     const order = await caller.printOrders.getById({ orderId });
     expect(order.id).toBe(orderId);
-    expect(order.items).toHaveLength(1);
+    expect(order.items).toHaveLength(2);
     expect(order.orderedBy?.id).toBe(user.id);
   });
 
@@ -86,11 +114,9 @@ describe('printOrders.getById / listByShow', () => {
   });
 
   it('listByShow returns orders for the show, newest first', async () => {
-    const { user, org } = await makeSecretaryWithOrg();
-    const show = await makeShow({ organisationId: org.id });
-    const caller = createTestCaller(user);
-    await caller.printOrders.createDraftOrder(draftOrderInput(show.id));
-    await caller.printOrders.createDraftOrder(draftOrderInput(show.id));
+    const { show, caller } = await makePackageOrderSetup();
+    await caller.printOrders.createPackageOrder(packageOrderInput(show.id));
+    await caller.printOrders.createPackageOrder(packageOrderInput(show.id));
     const list = await caller.printOrders.listByShow({ showId: show.id });
     expect(list).toHaveLength(2);
   });
@@ -98,10 +124,8 @@ describe('printOrders.getById / listByShow', () => {
 
 describe('printOrders.cancelOrder', () => {
   it('cancels a draft order', async () => {
-    const { user, org } = await makeSecretaryWithOrg();
-    const show = await makeShow({ organisationId: org.id });
-    const caller = createTestCaller(user);
-    const { orderId } = await caller.printOrders.createDraftOrder(draftOrderInput(show.id));
+    const { show, caller } = await makePackageOrderSetup();
+    const { orderId } = await caller.printOrders.createPackageOrder(packageOrderInput(show.id));
 
     const res = await caller.printOrders.cancelOrder({ orderId });
     expect(res.success).toBe(true);
@@ -112,10 +136,8 @@ describe('printOrders.cancelOrder', () => {
   });
 
   it('rejects cancellation of an already-paid order', async () => {
-    const { user, org } = await makeSecretaryWithOrg();
-    const show = await makeShow({ organisationId: org.id });
-    const caller = createTestCaller(user);
-    const { orderId } = await caller.printOrders.createDraftOrder(draftOrderInput(show.id));
+    const { show, caller } = await makePackageOrderSetup();
+    const { orderId } = await caller.printOrders.createPackageOrder(packageOrderInput(show.id));
     await testDb.update(printOrders).set({ status: 'paid' })
       .where(eq(printOrders.id, orderId));
 

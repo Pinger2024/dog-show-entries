@@ -3,7 +3,7 @@ import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { getStripe } from '@/server/services/stripe';
 import { db } from '@/server/db';
 import { entries, orders, payments, organisations, plans, users, printOrders, printOrderItems } from '@/server/db/schema';
-import { sendEntryConfirmationEmail, sendSecretaryNotificationEmail, sendPrintOrderConfirmationEmail } from '@/server/services/email';
+import { sendEntryConfirmationEmail, sendSecretaryNotificationEmail, sendPrintOrderConfirmationEmail, sendPrintOrderAdminNotificationEmail } from '@/server/services/email';
 import { formatOrderRef } from '@/lib/print-products';
 import type Stripe from 'stripe';
 
@@ -65,10 +65,18 @@ export async function POST(request: NextRequest) {
           .where(eq(printOrders.id, printOrderId));
 
         if (!wasAlreadyPaid) {
-          // Submit to Mixam (non-blocking). On retries this branch is skipped.
-          submitPrintOrderToMixam(printOrderId).catch((err) =>
-            console.error('[webhook] Mixam submission failed:', err)
-          );
+          if (process.env.PRINT_AUTO_SUBMIT === 'true') {
+            submitPrintOrderToMixam(printOrderId).catch((err) =>
+              console.error('[webhook] Mixam submission failed:', err)
+            );
+          } else {
+            sendPrintOrderAdminNotificationEmail(printOrderId).catch((err) =>
+              console.error('[webhook] Admin notification failed:', err)
+            );
+            sendPrintOrderConfirmationEmail(printOrderId).catch((err) =>
+              console.error('[webhook] Print order confirmation email failed:', err)
+            );
+          }
         }
         break;
       }

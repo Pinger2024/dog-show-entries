@@ -231,9 +231,15 @@ export default function PrintOrderDetailPage({
             <div key={item.id} className="flex items-center justify-between text-sm">
               <div className="min-w-0 flex-1">
                 <p className="font-medium">{item.documentLabel}</p>
-                <p className="text-xs text-muted-foreground">
-                  {item.quantity} copies × {formatCurrency(item.unitSellingPrice)}
-                </p>
+                {item.lineTotal > 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    {item.quantity} copies × {formatCurrency(item.unitSellingPrice)}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {item.quantity > 1 ? `${item.quantity} copies · ` : ''}Included in package
+                  </p>
+                )}
                 {item.pdfPublicUrl && (
                   <a
                     href={item.pdfPublicUrl}
@@ -246,7 +252,9 @@ export default function PrintOrderDetailPage({
                   </a>
                 )}
               </div>
-              <p className="font-medium">{formatCurrency(item.lineTotal)}</p>
+              <p className="font-medium">
+                {item.lineTotal > 0 ? formatCurrency(item.lineTotal) : 'Included'}
+              </p>
             </div>
           ))}
           <div className="border-t pt-3 flex items-center justify-between">
