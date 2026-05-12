@@ -56,8 +56,6 @@ const BASE_SECTIONS: Section[] = [
 
 const WUSV_SECTION: Section = { path: '/wusv-classes', label: 'SV Classes', icon: Shield };
 
-const sectionMap = new Map(sections.map((s) => [s.path, s]));
-
 function isActive(section: Section, pathname: string, basePath: string): boolean {
   if (section.exact) {
     return pathname === basePath || pathname === `${basePath}/`;
@@ -73,6 +71,8 @@ export function ShowSectionNav({ showId, isWusv = false }: { showId: string; isW
   const sections: Section[] = isWusv
     ? [...BASE_SECTIONS, WUSV_SECTION]
     : BASE_SECTIONS;
+
+  const sectionMap = new Map(sections.map((s) => [s.path, s]));
 
   const sectionGroups = [
     {
