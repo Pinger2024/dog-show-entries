@@ -2,7 +2,7 @@ import { Resend } from 'resend';
 import { db } from '@/server/db';
 import { and, eq, inArray } from 'drizzle-orm';
 import { orders, memberships, users, printOrders, breeds, showClasses } from '@/server/db/schema';
-import { formatOrderRef } from '@/lib/print-products';
+import { formatOrderRef, PRINT_PAYMENT_METHODS } from '@/lib/print-products';
 import { isCatalogueItem } from '@/lib/catalogue-utils';
 import { buildClassLabelMap } from '@/lib/class-labels';
 
@@ -496,7 +496,7 @@ export async function sendPrintOrderConfirmationEmail(printOrderId: string) {
       <div style="padding: 20px 24px; border-bottom: 1px solid #e5e5e5;">
         <h3 style="margin: 0 0 4px; font-size: 18px; color: #1a1a1a;">${show.name}</h3>
         <p style="margin: 0; font-size: 14px; color: #666;">
-          Your print order has been submitted to the printer and is being processed.
+          Your print order has been received. We&apos;re preparing your documents and will be in touch shortly.
         </p>
       </div>
 
@@ -555,6 +555,118 @@ export async function sendPrintOrderConfirmationEmail(printOrderId: string) {
     return result;
   } catch (error) {
     console.error(`[email] Failed to send print order confirmation for ${orderRef}:`, error);
+  }
+}
+
+/**
+ * Notify Michael that a print order needs manual Mixam submission.
+ * Sent instead of auto-submitting when PRINT_AUTO_SUBMIT is not set.
+ */
+export async function sendPrintOrderAdminNotificationEmail(printOrderId: string) {
+  const order = await db.query.printOrders.findFirst({
+    where: eq(printOrders.id, printOrderId),
+    with: {
+      items: true,
+      orderedBy: true,
+      show: { with: { organisation: true } },
+    },
+  });
+
+  if (!order) {
+    console.error(`[email] Cannot send admin print notification: order ${printOrderId} not found`);
+    return;
+  }
+
+  const orderRef = formatOrderRef(order.id);
+  const show = order.show;
+  const deliveryAddr = formatDeliveryAddress(order);
+  const adminEmail = process.env.FEEDBACK_NOTIFY_EMAIL ?? 'michael@prometheus-it.com';
+
+  const itemRows = order.items.map((item) => `
+    <tr>
+      <td style="padding: 8px 16px; border-bottom: 1px solid #e5e5e5; font-size: 14px;">${item.documentLabel}</td>
+      <td style="padding: 8px 16px; border-bottom: 1px solid #e5e5e5; font-size: 14px; text-align: center;">${item.quantity}</td>
+      <td style="padding: 8px 16px; border-bottom: 1px solid #e5e5e5; font-size: 14px; text-align: right;">${formatFee(item.lineTotal)}</td>
+      <td style="padding: 8px 16px; border-bottom: 1px solid #e5e5e5; font-size: 13px;">
+        ${item.pdfPublicUrl ? `<a href="${item.pdfPublicUrl}" style="color: #2D5F3F;">Download PDF</a>` : 'PDF pending'}
+      </td>
+    </tr>`).join('');
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; background-color: #f5f3ef; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
+    <div style="text-align: center; padding: 24px 0;">
+      <h1 style="margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 28px; color: #2D5F3F; letter-spacing: -0.5px;">Remi</h1>
+    </div>
+    <div style="background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: #92400e; padding: 24px 24px 20px; text-align: center;">
+        <h2 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 700;">Print Order — Action Required</h2>
+        <p style="margin: 8px 0 0; color: #fde68a; font-size: 14px;">
+          Order ${orderRef} &middot; ${formatFee(order.totalAmount)}
+        </p>
+      </div>
+
+      <div style="padding: 20px 24px; border-bottom: 1px solid #e5e5e5;">
+        <h3 style="margin: 0 0 4px; font-size: 18px; color: #1a1a1a;">${show.name}</h3>
+        <p style="margin: 0; font-size: 14px; color: #666;">
+          ${order.paymentMethod === PRINT_PAYMENT_METHODS.DEDUCTED_FROM_PAYOUT
+            ? 'A print order has been paid by deduction from entry income. Please submit the PDFs below to Mixam manually.'
+            : 'A print order has been paid by card. Please submit the PDFs below to Mixam manually.'}
+        </p>
+      </div>
+
+      <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr>
+            <th style="padding: 8px 16px; text-align: left; font-size: 11px; text-transform: uppercase; color: #888; border-bottom: 2px solid #e5e5e5;">Item</th>
+            <th style="padding: 8px 16px; text-align: center; font-size: 11px; text-transform: uppercase; color: #888; border-bottom: 2px solid #e5e5e5;">Qty</th>
+            <th style="padding: 8px 16px; text-align: right; font-size: 11px; text-transform: uppercase; color: #888; border-bottom: 2px solid #e5e5e5;">Price</th>
+            <th style="padding: 8px 16px; text-align: left; font-size: 11px; text-transform: uppercase; color: #888; border-bottom: 2px solid #e5e5e5;">PDF</th>
+          </tr>
+        </thead>
+        <tbody>${itemRows}</tbody>
+      </table>
+
+      <div style="padding: 16px 24px; background: #f9f8f6;">
+        <table style="width: 100%;">
+          <tr>
+            <td style="font-weight: 700; font-size: 16px; color: #1a1a1a;">Total paid</td>
+            <td style="text-align: right; font-weight: 700; font-size: 16px; color: #2D5F3F;">${formatFee(order.totalAmount)}</td>
+          </tr>
+        </table>
+      </div>
+
+      <div style="padding: 16px 24px; border-top: 1px solid #e5e5e5;">
+        <p style="margin: 0 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #888;">Deliver to</p>
+        <p style="margin: 0; font-size: 14px; color: #444;">
+          ${order.deliveryName ? `<strong>${order.deliveryName}</strong><br>` : ''}
+          ${deliveryAddr}
+          ${order.deliveryPhone ? `<br>${order.deliveryPhone}` : ''}
+        </p>
+      </div>
+
+      <div style="padding: 20px 24px; text-align: center; border-top: 1px solid #e5e5e5;">
+        ${btn(`${APP_URL}/secretary/shows/${show.slug ?? show.id}/print-shop/${order.id}`, 'View Order')}
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  try {
+    const result = await resend.emails.send({
+      from: FROM,
+      to: adminEmail,
+      subject: `Print Order Action Required — ${show.name} (${orderRef})${order.paymentMethod === PRINT_PAYMENT_METHODS.DEDUCTED_FROM_PAYOUT ? ' [Deducted from payout]' : ''}`,
+      html,
+    });
+    console.log(`[email] Admin print notification sent for ${orderRef}`, result);
+    return result;
+  } catch (error) {
+    console.error(`[email] Failed to send admin print notification for ${orderRef}:`, error);
   }
 }
 

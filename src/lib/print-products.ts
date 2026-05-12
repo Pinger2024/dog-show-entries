@@ -322,6 +322,61 @@ export function calculateUnitSellingPrice(totalTradeCostExVatPence: number, quan
   return Math.ceil(unitSellingPrice);
 }
 
+// ── Package pricing ──
+
+export interface PrintPackageOption {
+  catalogueQty: number;
+  pricePence: number;
+}
+
+export interface PrintPackageTier {
+  id: 'tier1' | 'tier2';
+  maxEntries: number;
+  maxCataloguePages: number;
+  options: PrintPackageOption[];
+}
+
+export const PRINT_PACKAGE_TIERS: [PrintPackageTier, PrintPackageTier] = [
+  {
+    id: 'tier1',
+    maxEntries: 100,
+    maxCataloguePages: 36,
+    options: [
+      { catalogueQty: 30, pricePence: 12000 },
+      { catalogueQty: 40, pricePence: 14000 },
+      { catalogueQty: 50, pricePence: 16000 },
+      { catalogueQty: 60, pricePence: 18000 },
+      { catalogueQty: 75, pricePence: 19500 },
+      { catalogueQty: 100, pricePence: 21500 },
+    ],
+  },
+  {
+    id: 'tier2',
+    maxEntries: 200,
+    maxCataloguePages: 44,
+    options: [
+      { catalogueQty: 30, pricePence: 13000 },
+      { catalogueQty: 40, pricePence: 15000 },
+      { catalogueQty: 50, pricePence: 18000 },
+      { catalogueQty: 60, pricePence: 19000 },
+      { catalogueQty: 75, pricePence: 20500 },
+      { catalogueQty: 100, pricePence: 23000 },
+    ],
+  },
+];
+
+/** Returns the package tier for a given confirmed entry count, or null if too large. */
+export function getPackageTier(confirmedEntries: number): PrintPackageTier | null {
+  if (confirmedEntries > 200) return null;
+  if (confirmedEntries > 100) return PRINT_PACKAGE_TIERS[1];
+  return PRINT_PACKAGE_TIERS[0];
+}
+
+/** Remi service fee for print orders: 1.5%, rounded up. */
+export function calculatePrintOrderFee(subtotalPence: number): number {
+  return Math.ceil(subtotalPence * 0.015);
+}
+
 // ── Order helpers ──
 
 /** Statuses where an order can be cancelled */
@@ -329,6 +384,12 @@ export const CANCELLABLE_STATUSES = ['draft', 'awaiting_payment'] as const;
 
 /** Statuses where an order is in-flight and can be polled for updates */
 export const PENDING_STATUSES = ['submitted', 'in_production'] as const;
+
+export const PRINT_PAYMENT_METHODS = {
+  CARD: 'card',
+  DEDUCTED_FROM_PAYOUT: 'deducted_from_payout',
+} as const;
+export type PrintPaymentMethod = typeof PRINT_PAYMENT_METHODS[keyof typeof PRINT_PAYMENT_METHODS];
 
 /** Format a print order ID for display */
 export function formatOrderRef(id: string): string {

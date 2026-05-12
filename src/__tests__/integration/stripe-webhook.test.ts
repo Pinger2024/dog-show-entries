@@ -211,6 +211,34 @@ describe('POST /api/webhooks/stripe — print_order payment_intent.succeeded', (
     const updated = await testDb.query.printOrders.findFirst({ where: eq(printOrders.id, po.id) });
     expect(updated?.status).toBe('paid');
   });
+
+  it('sends admin notification + secretary confirmation but does NOT auto-submit to Mixam when PRINT_AUTO_SUBMIT is unset', async () => {
+    // Ensure PRINT_AUTO_SUBMIT is not set (default — manual fulfilment mode)
+    delete process.env.PRINT_AUTO_SUBMIT;
+
+    const po = await seedPrintOrder('draft');
+    injectStripeEvent({
+      type: 'payment_intent.succeeded',
+      data: { object: { id: 'pi_test_print', metadata: { type: 'print_order', printOrderId: po.id } } },
+    });
+
+    vi.mocked(emailService.sendPrintOrderAdminNotificationEmail).mockClear();
+    vi.mocked(emailService.sendPrintOrderConfirmationEmail).mockClear();
+
+    const res = await stripeWebhook(buildStripeWebhookRequest() as never);
+    expect(res.status).toBe(200);
+
+    const updated = await testDb.query.printOrders.findFirst({ where: eq(printOrders.id, po.id) });
+    // Order must be paid, NOT submitted (Mixam not called)
+    expect(updated?.status).toBe('paid');
+    expect(updated?.tradeprintOrderRef).toBeNull();
+
+    // Both email functions must have been called once
+    expect(emailService.sendPrintOrderAdminNotificationEmail).toHaveBeenCalledOnce();
+    expect(emailService.sendPrintOrderAdminNotificationEmail).toHaveBeenCalledWith(po.id);
+    expect(emailService.sendPrintOrderConfirmationEmail).toHaveBeenCalledOnce();
+    expect(emailService.sendPrintOrderConfirmationEmail).toHaveBeenCalledWith(po.id);
+  });
 });
 
 describe('POST /api/webhooks/stripe — payment_intent.payment_failed', () => {
