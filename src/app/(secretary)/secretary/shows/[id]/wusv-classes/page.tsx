@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Loader2, Plus, Save, Shield, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
@@ -59,14 +59,13 @@ export default function WusvClassesPage() {
   });
 
   const [pendingClasses, setPendingClasses] = useState<PendingClass[]>([]);
-  const [initialised, setInitialised] = useState(false);
 
-  // Seed pending from existing WUSV show classes once loaded
   const show = existingClasses;
   const isWusv = show?.showRuleset === 'wusv';
 
-  if (!initialised && show && classDefs && !defsLoading && !classesLoading) {
-    setInitialised(true);
+  // Seed pending classes from existing WUSV show classes once both queries resolve
+  useEffect(() => {
+    if (!show || !classDefs) return;
     const existing = show.showClasses
       .filter((sc) => sc.classDefinition?.type === 'sv_age' && sc.svCoatType)
       .map((sc) => ({
@@ -78,7 +77,8 @@ export default function WusvClassesPage() {
     if (existing.length > 0) {
       setPendingClasses(existing);
     }
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [show?.id, classDefs]);
 
   if (defsLoading || classesLoading) {
     return (

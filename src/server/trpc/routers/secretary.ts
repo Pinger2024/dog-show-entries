@@ -6270,30 +6270,48 @@ export const secretaryRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
 
-      // Remove existing WUSV show classes for this show so we can re-seed cleanly
+      // Load existing show classes with their entry counts
       const existing = await ctx.db.query.showClasses.findMany({
         where: eq(showClasses.showId, input.showId),
-        with: { classDefinition: { columns: { type: true } } },
+        with: {
+          classDefinition: { columns: { type: true } },
+          entryClasses: { columns: { id: true } },
+        },
       });
-      const wusvIds = existing
-        .filter((sc) => sc.classDefinition?.type === 'sv_age')
-        .map((sc) => sc.id);
+
+      const wusvClasses = existing.filter((sc) => sc.classDefinition?.type === 'sv_age');
+      const wusvIds = wusvClasses.map((sc) => sc.id);
+
+      // Guard: refuse to re-run setup if any WUSV class already has entries
+      const entriedWusvClasses = wusvClasses.filter((sc) => sc.entryClasses.length > 0);
+      if (entriedWusvClasses.length > 0) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: `Cannot modify SV classes — ${entriedWusvClasses.length} class(es) already have entries. Cancel or refund entries first.`,
+        });
+      }
+
       if (wusvIds.length > 0) {
         await ctx.db.delete(showClasses).where(inArray(showClasses.id, wusvIds));
       }
 
       if (input.classes.length === 0) return { created: 0 };
 
-      // Build values with sequential class numbers (after existing non-WUSV classes)
-      const nonWusvCount = existing.length - wusvIds.length;
+      // Compute the highest classNumber among non-WUSV classes so new rows don't collide
+      const nonWusvClasses = existing.filter((sc) => !wusvIds.includes(sc.id));
+      const maxClassNumber = nonWusvClasses.reduce(
+        (max, sc) => Math.max(max, sc.classNumber ?? 0),
+        0
+      );
+
       const values = input.classes.map((cls, i) => ({
         showId: input.showId,
         classDefinitionId: cls.classDefinitionId,
         sex: cls.sex,
         svCoatType: cls.svCoatType,
         entryFee: cls.entryFee,
-        sortOrder: nonWusvCount + i,
-        classNumber: nonWusvCount + i + 1,
+        sortOrder: nonWusvClasses.length + i,
+        classNumber: maxClassNumber + i + 1,
       }));
 
       await ctx.db.insert(showClasses).values(values);
