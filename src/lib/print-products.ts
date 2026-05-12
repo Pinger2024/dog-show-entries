@@ -385,6 +385,12 @@ export const CANCELLABLE_STATUSES = ['draft', 'awaiting_payment'] as const;
 /** Statuses where an order is in-flight and can be polled for updates */
 export const PENDING_STATUSES = ['submitted', 'in_production'] as const;
 
+export const PRINT_PAYMENT_METHODS = {
+  CARD: 'card',
+  DEDUCTED_FROM_PAYOUT: 'deducted_from_payout',
+} as const;
+export type PrintPaymentMethod = typeof PRINT_PAYMENT_METHODS[keyof typeof PRINT_PAYMENT_METHODS];
+
 /** Format a print order ID for display */
 export function formatOrderRef(id: string): string {
   return id.slice(0, 8).toUpperCase();

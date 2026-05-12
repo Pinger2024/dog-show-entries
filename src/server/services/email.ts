@@ -2,7 +2,7 @@ import { Resend } from 'resend';
 import { db } from '@/server/db';
 import { and, eq, inArray } from 'drizzle-orm';
 import { orders, memberships, users, printOrders, breeds, showClasses } from '@/server/db/schema';
-import { formatOrderRef } from '@/lib/print-products';
+import { formatOrderRef, PRINT_PAYMENT_METHODS } from '@/lib/print-products';
 import { isCatalogueItem } from '@/lib/catalogue-utils';
 import { buildClassLabelMap } from '@/lib/class-labels';
 
@@ -612,7 +612,7 @@ export async function sendPrintOrderAdminNotificationEmail(printOrderId: string)
       <div style="padding: 20px 24px; border-bottom: 1px solid #e5e5e5;">
         <h3 style="margin: 0 0 4px; font-size: 18px; color: #1a1a1a;">${show.name}</h3>
         <p style="margin: 0; font-size: 14px; color: #666;">
-          ${order.paymentMethod === 'deducted_from_payout'
+          ${order.paymentMethod === PRINT_PAYMENT_METHODS.DEDUCTED_FROM_PAYOUT
             ? 'A print order has been paid by deduction from entry income. Please submit the PDFs below to Mixam manually.'
             : 'A print order has been paid by card. Please submit the PDFs below to Mixam manually.'}
         </p>
@@ -660,7 +660,7 @@ export async function sendPrintOrderAdminNotificationEmail(printOrderId: string)
     const result = await resend.emails.send({
       from: FROM,
       to: adminEmail,
-      subject: `Print Order Action Required — ${show.name} (${orderRef})${order.paymentMethod === 'deducted_from_payout' ? ' [Deducted from payout]' : ''}`,
+      subject: `Print Order Action Required — ${show.name} (${orderRef})${order.paymentMethod === PRINT_PAYMENT_METHODS.DEDUCTED_FROM_PAYOUT ? ' [Deducted from payout]' : ''}`,
       html,
     });
     console.log(`[email] Admin print notification sent for ${orderRef}`, result);

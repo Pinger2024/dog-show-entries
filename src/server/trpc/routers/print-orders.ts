@@ -15,10 +15,12 @@ import {
   getPackageTier,
   calculatePrintOrderFee,
   PRINT_PACKAGE_TIERS,
+  PRINT_PAYMENT_METHODS,
   CANCELLABLE_STATUSES,
   PENDING_STATUSES,
   type ShowStats,
 } from '@/lib/print-products';
+import { formatCurrency } from '@/lib/date-utils';
 import { getOrderStatus } from '@/server/services/mixam';
 import { sendPrintOrderDispatchEmail, sendPrintOrderAdminNotificationEmail, sendPrintOrderConfirmationEmail } from '@/server/services/email';
 import { createPaymentIntent } from '@/server/services/stripe';
@@ -316,21 +318,7 @@ export const printOrdersRouter = createTRPCRouter({
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
-      const metrics = await computeShowMetrics(ctx.db, input.showId);
-      const [row] = await ctx.db
-        .select({ total: sql<string>`coalesce(sum(total_amount), '0')` })
-        .from(printOrders)
-        .where(and(
-          eq(printOrders.showId, input.showId),
-          eq(printOrders.paymentMethod, 'deducted_from_payout'),
-          notInArray(printOrders.status, ['cancelled', 'failed']),
-        ));
-      const alreadyDeductedPence = Number(row?.total ?? 0);
-      return {
-        clubReceivablePence: metrics.clubReceivablePence,
-        alreadyDeductedPence,
-        availablePence: metrics.clubReceivablePence - alreadyDeductedPence,
-      };
+      return computeDeductionBalance(ctx.db, input.showId);
     }),
 
   /** Pay a draft order by deducting from the show's entry income payout */
@@ -345,6 +333,15 @@ export const printOrdersRouter = createTRPCRouter({
       await verifyShowAccess(ctx.db, ctx.session.user.id, order.showId, { callerIsAdmin: ctx.callerIsAdmin });
       if (order.status !== 'draft') {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Order is not in draft status' });
+      }
+
+      // Check balance before generating PDFs to avoid wasted R2 writes
+      const { availablePence } = await computeDeductionBalance(ctx.db, order.showId);
+      if (availablePence < order.totalAmount) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Insufficient balance. ${formatCurrency(availablePence)} available, ${formatCurrency(order.totalAmount)} needed.`,
+        });
       }
 
       // Generate PDFs and upload to R2
@@ -376,30 +373,9 @@ export const printOrdersRouter = createTRPCRouter({
         )
       );
 
-      // Check available balance
-      const metrics = await computeShowMetrics(ctx.db, order.showId);
-      const [row] = await ctx.db
-        .select({ total: sql<string>`coalesce(sum(total_amount), '0')` })
-        .from(printOrders)
-        .where(and(
-          eq(printOrders.showId, order.showId),
-          eq(printOrders.paymentMethod, 'deducted_from_payout'),
-          notInArray(printOrders.status, ['cancelled', 'failed']),
-        ));
-      const alreadyDeducted = Number(row?.total ?? 0);
-      const available = metrics.clubReceivablePence - alreadyDeducted;
-
-      if (available < order.totalAmount) {
-        const fmt = (p: number) => `£${(p / 100).toFixed(2)}`;
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: `Insufficient balance. ${fmt(available)} available, ${fmt(order.totalAmount)} needed.`,
-        });
-      }
-
       await ctx.db
         .update(printOrders)
-        .set({ status: 'paid', paymentMethod: 'deducted_from_payout' })
+        .set({ status: 'paid', paymentMethod: PRINT_PAYMENT_METHODS.DEDUCTED_FROM_PAYOUT })
         .where(eq(printOrders.id, order.id));
 
       Promise.all([
@@ -512,5 +488,28 @@ async function getShowStatsForPrinting(
     catalogueOrders: metrics.paidPrintedCatalogueCount,
     ringCount: Number(ringCount[0]?.count ?? 0),
     placementsPerClass: 4,
+  };
+}
+
+async function computeDeductionBalance(
+  db: Parameters<typeof verifyShowAccess>[0],
+  showId: string
+) {
+  const [metrics, [row]] = await Promise.all([
+    computeShowMetrics(db, showId),
+    db
+      .select({ total: sql<string>`coalesce(sum(total_amount), '0')` })
+      .from(printOrders)
+      .where(and(
+        eq(printOrders.showId, showId),
+        eq(printOrders.paymentMethod, PRINT_PAYMENT_METHODS.DEDUCTED_FROM_PAYOUT),
+        notInArray(printOrders.status, ['cancelled', 'failed']),
+      )),
+  ]);
+  const alreadyDeductedPence = Number(row?.total ?? 0);
+  return {
+    clubReceivablePence: metrics.clubReceivablePence,
+    alreadyDeductedPence,
+    availablePence: metrics.clubReceivablePence - alreadyDeductedPence,
   };
 }

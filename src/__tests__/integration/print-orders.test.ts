@@ -8,7 +8,7 @@ import {
   makeShow,
   makeOrg,
 } from '../helpers/factories';
-import { PRINT_PACKAGE_TIERS, calculatePrintOrderFee } from '@/lib/print-products';
+import { PRINT_PACKAGE_TIERS, calculatePrintOrderFee, PRINT_PAYMENT_METHODS } from '@/lib/print-products';
 
 vi.mock('@/server/services/pdf-generation', () => ({
   generateAndUploadForPrint: vi.fn(async () => ({
@@ -176,7 +176,7 @@ describe('printOrders.getDeductionBalance', () => {
 
     // Manually insert a paid+deducted print order to simulate a prior deduction
     await testDb.update(printOrders)
-      .set({ status: 'paid', paymentMethod: 'deducted_from_payout' })
+      .set({ status: 'paid', paymentMethod: PRINT_PAYMENT_METHODS.DEDUCTED_FROM_PAYOUT })
       .where(eq(
         printOrders.id,
         (await caller.printOrders.createPackageOrder(packageOrderInput(show.id))).orderId
@@ -194,11 +194,7 @@ describe('printOrders.completeByDeduction', () => {
     const { show, caller } = await makePackageOrderSetup();
     const { orderId } = await caller.printOrders.createPackageOrder(packageOrderInput(show.id));
 
-    // Simulate sufficient club receivable by patching metrics via a pre-paid print order
-    // approach: directly set enough balance via DB manipulation of show metrics would be
-    // complex, so we override the check by making available >= order total manually.
-    // Instead, set the order totalAmount to 0 so the check always passes.
-    const order = await testDb.query.printOrders.findFirst({ where: eq(printOrders.id, orderId) });
+    // Force totalAmount to 0 so availablePence (0 for empty show) >= totalAmount
     await testDb.update(printOrders).set({ totalAmount: 0 }).where(eq(printOrders.id, orderId));
 
     const result = await caller.printOrders.completeByDeduction({ orderId });
@@ -209,11 +205,10 @@ describe('printOrders.completeByDeduction', () => {
       with: { items: true },
     });
     expect(refreshed?.status).toBe('paid');
-    expect(refreshed?.paymentMethod).toBe('deducted_from_payout');
+    expect(refreshed?.paymentMethod).toBe(PRINT_PAYMENT_METHODS.DEDUCTED_FROM_PAYOUT);
     // PDF URLs should be set on items
     expect(refreshed?.items.every((i) => i.pdfPublicUrl !== null)).toBe(true);
 
-    void order; // used to ensure findFirst ran
   });
 
   it('rejects when balance is insufficient', async () => {
