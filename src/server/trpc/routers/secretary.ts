@@ -39,6 +39,7 @@ import {
   achievements,
   judgeRoles,
   breedGroups,
+  catalogueAdverts,
 } from '@/server/db/schema';
 import {
   DEFAULT_CHECKLIST_ITEMS,
@@ -6240,5 +6241,126 @@ export const secretaryRouter = createTRPCRouter({
         );
 
       return { removed: true };
+    }),
+
+  // ── WUSV / SV class management ───────────────────────────
+
+  listWusvClassDefs: publicProcedure.query(async ({ ctx }) => {
+    return ctx.db.query.classDefinitions.findMany({
+      where: eq(classDefinitions.type, 'sv_age'),
+      orderBy: [asc(classDefinitions.sortOrder)],
+    });
+  }),
+
+  setupWusvClasses: secretaryProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        // Each entry describes one age class × sex × coat-type combination
+        classes: z.array(
+          z.object({
+            classDefinitionId: z.string().uuid(),
+            sex: z.enum(['dog', 'bitch']),
+            svCoatType: z.enum(['stock', 'long_stock']),
+            entryFee: z.number().int().min(0).default(0),
+          })
+        ),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      // Remove existing WUSV show classes for this show so we can re-seed cleanly
+      const existing = await ctx.db.query.showClasses.findMany({
+        where: eq(showClasses.showId, input.showId),
+        with: { classDefinition: { columns: { type: true } } },
+      });
+      const wusvIds = existing
+        .filter((sc) => sc.classDefinition?.type === 'sv_age')
+        .map((sc) => sc.id);
+      if (wusvIds.length > 0) {
+        await ctx.db.delete(showClasses).where(inArray(showClasses.id, wusvIds));
+      }
+
+      if (input.classes.length === 0) return { created: 0 };
+
+      // Build values with sequential class numbers (after existing non-WUSV classes)
+      const nonWusvCount = existing.length - wusvIds.length;
+      const values = input.classes.map((cls, i) => ({
+        showId: input.showId,
+        classDefinitionId: cls.classDefinitionId,
+        sex: cls.sex,
+        svCoatType: cls.svCoatType,
+        entryFee: cls.entryFee,
+        sortOrder: nonWusvCount + i,
+        classNumber: nonWusvCount + i + 1,
+      }));
+
+      await ctx.db.insert(showClasses).values(values);
+      return { created: values.length };
+    }),
+
+  // ── Catalogue adverts ────────────────────────────────────
+
+  getCatalogueAdverts: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      return ctx.db.query.catalogueAdverts.findMany({
+        where: eq(catalogueAdverts.showId, input.showId),
+        orderBy: [asc(catalogueAdverts.sortOrder)],
+      });
+    }),
+
+  upsertCatalogueAdvert: secretaryProcedure
+    .input(
+      z.object({
+        id: z.string().uuid().optional(),
+        showId: z.string().uuid(),
+        advertiserName: z.string().min(1).max(255),
+        adType: z.enum(['full_page', 'half_page', 'quarter_page']).default('full_page'),
+        imageStorageKey: z.string().nullable().optional(),
+        imageUrl: z.string().nullable().optional(),
+        textContent: z.string().nullable().optional(),
+        sortOrder: z.number().int().min(0).default(0),
+        isPaid: z.boolean().default(false),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      const { id, ...data } = input;
+      if (id) {
+        const existing = await ctx.db.query.catalogueAdverts.findFirst({
+          where: and(eq(catalogueAdverts.id, id), eq(catalogueAdverts.showId, input.showId)),
+          columns: { id: true },
+        });
+        if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Advert not found' });
+
+        const [updated] = await ctx.db
+          .update(catalogueAdverts)
+          .set({ ...data, updatedAt: new Date() })
+          .where(eq(catalogueAdverts.id, id))
+          .returning();
+        return updated!;
+      }
+
+      const [created] = await ctx.db
+        .insert(catalogueAdverts)
+        .values(data)
+        .returning();
+      return created!;
+    }),
+
+  deleteCatalogueAdvert: secretaryProcedure
+    .input(z.object({ id: z.string().uuid(), showId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await ctx.db
+        .delete(catalogueAdverts)
+        .where(
+          and(eq(catalogueAdverts.id, input.id), eq(catalogueAdverts.showId, input.showId))
+        );
+      return { deleted: true };
     }),
 });

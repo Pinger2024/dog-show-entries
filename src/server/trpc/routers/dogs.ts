@@ -3,7 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { and, eq, inArray, isNull, or, asc, desc, sql } from 'drizzle-orm';
 import { protectedProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
-import { dogs, dogOwners, dogTitles, dogPhotos, users, entries, entryClasses, showClasses, shows, results, classDefinitions, achievements, judgeAssignments, judges } from '@/server/db/schema';
+import { dogs, dogOwners, dogTitles, dogPhotos, users, entries, entryClasses, showClasses, shows, results, classDefinitions, achievements, judgeAssignments, judges, dogSvProfile } from '@/server/db/schema';
 import { deleteFromR2 } from '@/server/services/storage';
 import { scrapeKcDog, searchKcDogs, fetchKcDogProfile } from '@/server/services/firecrawl';
 import { isCcType, isRccType } from '@/lib/placements';
@@ -388,6 +388,15 @@ export const dogsRouter = createTRPCRouter({
         breederName: z.string().nullable().optional(),
         colour: z.string().nullable().optional(),
         bio: z.string().nullable().optional(),
+        // SV / WUSV fields
+        registrationBody: z.enum(['kc', 'sv', 'ikc', 'other']).nullable().optional(),
+        registrationBodyOther: z.string().nullable().optional(),
+        coatType: z.enum(['stock', 'long_stock']).nullable().optional(),
+        microchipNumber: z.string().nullable().optional(),
+        sireRegistrationBody: z.enum(['kc', 'sv', 'ikc', 'other']).nullable().optional(),
+        sireRegistrationNumber: z.string().nullable().optional(),
+        damRegistrationBody: z.enum(['kc', 'sv', 'ikc', 'other']).nullable().optional(),
+        damRegistrationNumber: z.string().nullable().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -1408,5 +1417,60 @@ export const dogsRouter = createTRPCRouter({
             ? 'This dog has 5+ RCCs under different judges and is ineligible for Limited shows (2026 rule)'
             : null,
       };
+    }),
+
+  // ── SV / WUSV profile ────────────────────────────────────
+
+  getSvProfile: protectedProcedure
+    .input(z.object({ dogId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const dog = await ctx.db.query.dogs.findFirst({
+        where: and(eq(dogs.id, input.dogId), isNull(dogs.deletedAt)),
+        columns: { ownerId: true },
+      });
+      if (!dog) throw new TRPCError({ code: 'NOT_FOUND', message: 'Dog not found' });
+      if (dog.ownerId !== ctx.session.user.id)
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
+
+      const profile = await ctx.db.query.dogSvProfile.findFirst({
+        where: eq(dogSvProfile.dogId, input.dogId),
+      });
+      return profile ?? null;
+    }),
+
+  upsertSvProfile: protectedProcedure
+    .input(
+      z.object({
+        dogId: z.string().uuid(),
+        breedSurveyClass: z.string().nullable().optional(),
+        hipGrade: z.enum(['not_required', 'normal', 'fast_normal', 'noch_zugelassen', 'other']).nullable().optional(),
+        hipScore: z.string().nullable().optional(),
+        elbowGrade: z.enum(['not_required', 'normal', 'fast_normal', 'noch_zugelassen', 'other']).nullable().optional(),
+        elbowScore: z.string().nullable().optional(),
+        haemophiliaClear: z.enum(['not_required', 'yes', 'no', 'not_tested']).nullable().optional(),
+        dmTest: z.enum(['not_required', 'clear', 'carrier', 'affected', 'not_tested']).nullable().optional(),
+        koerung: z.enum(['none', 'current_year', 'lebenzeit']).nullable().optional(),
+        workingTitle: z.string().nullable().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const dog = await ctx.db.query.dogs.findFirst({
+        where: and(eq(dogs.id, input.dogId), isNull(dogs.deletedAt)),
+        columns: { ownerId: true },
+      });
+      if (!dog) throw new TRPCError({ code: 'NOT_FOUND', message: 'Dog not found' });
+      if (dog.ownerId !== ctx.session.user.id)
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
+
+      const { dogId, ...profileData } = input;
+      const [profile] = await ctx.db
+        .insert(dogSvProfile)
+        .values({ dogId, ...profileData })
+        .onConflictDoUpdate({
+          target: dogSvProfile.dogId,
+          set: { ...profileData, updatedAt: new Date() },
+        })
+        .returning();
+      return profile!;
     }),
 });

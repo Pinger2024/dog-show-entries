@@ -483,6 +483,7 @@ export const showsRouter = createTRPCRouter({
         onCallVet: z.string().optional(),
         acceptsPostalEntries: z.boolean().optional(),
         classSexArrangement: z.enum(['separate_sex', 'combined_sex']).optional(),
+        showRuleset: z.enum(['rkc', 'wusv']).optional().default('rkc'),
         classDefinitionIds: z.array(z.string().uuid()).optional(),
         entryFee: z.number().int().min(0).optional(),
         firstEntryFee: z.number().int().min(0).optional(),

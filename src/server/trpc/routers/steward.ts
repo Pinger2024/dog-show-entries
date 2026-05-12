@@ -301,6 +301,7 @@ export const stewardRouter = createTRPCRouter({
         critiqueText: z.string().nullable().optional(),
         winnerPhotoUrl: z.string().nullable().optional(),
         winnerPhotoStorageKey: z.string().nullable().optional(),
+        svGrade: z.enum(['v', 'sg', 'g', 'a', 'u', 'disqualified']).nullable().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -357,6 +358,7 @@ export const stewardRouter = createTRPCRouter({
           critiqueText: input.critiqueText ?? null,
           winnerPhotoUrl: input.winnerPhotoUrl ?? null,
           winnerPhotoStorageKey: input.winnerPhotoStorageKey ?? null,
+          svGrade: input.svGrade ?? null,
           recordedBy: ctx.session.user.id,
           recordedAt: new Date(),
         })
@@ -369,6 +371,7 @@ export const stewardRouter = createTRPCRouter({
             critiqueText: input.critiqueText ?? null,
             winnerPhotoUrl: input.winnerPhotoUrl ?? null,
             winnerPhotoStorageKey: input.winnerPhotoStorageKey ?? null,
+            svGrade: input.svGrade ?? null,
             recordedBy: ctx.session.user.id,
             recordedAt: new Date(),
           },

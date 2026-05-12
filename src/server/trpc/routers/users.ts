@@ -11,6 +11,7 @@ import {
   shows,
   sessions,
   accounts,
+  userSvProfile,
 } from '@/server/db/schema';
 import { hash, compare } from 'bcryptjs';
 
@@ -274,4 +275,33 @@ export const usersRouter = createTRPCRouter({
       recentEntries,
     };
   }),
+
+  // ── SV / WUSV membership profile ─────────────────────────
+
+  getSvProfile: protectedProcedure.query(async ({ ctx }) => {
+    const profile = await ctx.db.query.userSvProfile.findFirst({
+      where: eq(userSvProfile.userId, ctx.session.user.id),
+    });
+    return profile ?? null;
+  }),
+
+  upsertSvProfile: protectedProcedure
+    .input(
+      z.object({
+        wusvClub: z.enum(['gsdl', 'gsdl_brg', 'bagsd', 'sv', 'other']).nullable().optional(),
+        wusvMembershipNumber: z.string().nullable().optional(),
+        wusvClubOther: z.string().nullable().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const [profile] = await ctx.db
+        .insert(userSvProfile)
+        .values({ userId: ctx.session.user.id, ...input })
+        .onConflictDoUpdate({
+          target: userSvProfile.userId,
+          set: { ...input, updatedAt: new Date() },
+        })
+        .returning();
+      return profile!;
+    }),
 });
