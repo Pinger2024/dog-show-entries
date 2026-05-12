@@ -22,10 +22,10 @@ type Step = 'packages' | 'delivery' | 'payment' | 'confirmation';
 
 const BUNDLE_CONTENTS = [
   'Show catalogue — printed & delivered',
-  'Prize cards — A3 silk, ready to guillotine',
-  'Ring boards — download & print',
-  'Ring numbers — download & print',
-  "Judges books — download",
+  'Prize cards — A5, printed & delivered',
+  'Ring boards — printed & delivered',
+  'Ring numbers — printed & delivered',
+  'Judges books — printed & delivered',
 ];
 
 export default function PrintShopPage() {
@@ -238,8 +238,6 @@ export default function PrintShopPage() {
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {tier.options.map((option) => {
                   const isSelected = selectedQty === option.catalogueQty;
-                  const fee = calculatePrintOrderFee(option.pricePence);
-                  const total = option.pricePence + fee;
                   return (
                     <button
                       key={option.catalogueQty}
@@ -253,10 +251,10 @@ export default function PrintShopPage() {
                       <p className="text-lg font-bold">{option.catalogueQty}</p>
                       <p className="text-xs text-muted-foreground">catalogues</p>
                       <p className={`mt-2 text-sm font-semibold ${isSelected ? 'text-primary' : ''}`}>
-                        {formatCurrency(total)}
+                        {formatCurrency(option.pricePence)}
                       </p>
                       <p className="text-[11px] text-muted-foreground">
-                        inc. {formatCurrency(fee)} service fee
+                        + merchant processing fee
                       </p>
                     </button>
                   );
