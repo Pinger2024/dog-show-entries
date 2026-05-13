@@ -412,14 +412,21 @@ export default function LiveResultsPage({
                           {cls.results.map((result) => (
                             <div key={result.entryClassId}>
                               <div className="flex flex-wrap items-center gap-1.5 sm:gap-3 text-sm">
-                                {result.placement && (
+                                {result.placement ? (
                                   <Badge
                                     variant="outline"
                                     className={`w-auto sm:w-16 justify-center text-xs font-semibold whitespace-nowrap ${placementColors[result.placement] ?? ''}`}
                                   >
                                     {getPlacementLabel(result.placement)}
                                   </Badge>
-                                )}
+                                ) : result.placementStatus === 'withheld' ? (
+                                  <Badge
+                                    variant="outline"
+                                    className="w-auto sm:w-16 justify-center text-xs font-semibold whitespace-nowrap text-muted-foreground"
+                                  >
+                                    W/H
+                                  </Badge>
+                                ) : null}
                                 <span className="font-mono text-xs text-muted-foreground">
                                   {result.catalogueNumber ?? '—'}
                                 </span>
