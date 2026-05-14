@@ -68,6 +68,7 @@ const SECTION_HELP: Record<SectionId, SectionHelpContent> = {
       'Pick the time judging starts.',
       'Add the on-call vet contact (a vet who has agreed to be available during the show).',
     ],
+    benefit: 'Set the times here and they flow straight through to the schedule, the catalogue, the entry confirmation emails, and the show page exhibitors see online. Change one time and it updates everywhere in seconds. No more correcting half a dozen documents because the hall booking shifted by an hour.',
     tip: 'These times go on the printed schedule, so exhibitors know when to turn up and when judging begins.',
   },
   people: {
@@ -77,6 +78,7 @@ const SECTION_HELP: Record<SectionId, SectionHelpContent> = {
       'Add the club officers, picking from your club roster or typing them in.',
       'Tick the box next to any officers who are guarantors. Champ shows need at least three; other shows need at least one.',
     ],
+    benefit: 'Your club roster is remembered between shows. When you run the next one, the officers are already there waiting to be ticked. We also count the guarantors and warn you if you are below the RKC minimum, so the show licence does not come back rejected.',
     tip: 'If you have run shows before, the roster pre-fills the people you have used previously. You can add new ones any time.',
   },
   awards: {
@@ -86,6 +88,7 @@ const SECTION_HELP: Record<SectionId, SectionHelpContent> = {
       'Add prize money if you offer it.',
       'If you are running a Best Veteran in Show competition, tick the box and write the eligibility wording (the RKC needs this in the schedule).',
     ],
+    benefit: 'Type the awards once and they appear on the schedule, the catalogue, and any prize cards we print for you. Sponsors and trophies you set up elsewhere also flow through automatically, so there is no risk of one document saying something different from another.',
     tip: 'You do not need to list every sponsor or trophy here. There is a separate Sponsors section for that.',
   },
   venue: {
@@ -95,6 +98,7 @@ const SECTION_HELP: Record<SectionId, SectionHelpContent> = {
       'Note any catering on site (a cafe, food trucks, etc).',
       'List any other shows your club has coming up. Exhibitors love knowing what is next.',
     ],
+    benefit: 'Add the venue details once and exhibitors get them in three places: on the schedule, on the show page, and in their booking confirmation. No more answering the same "where exactly is the hall?" question by email a dozen times in the week before the show.',
     tip: 'What3words is a free service that gives any spot a three-word address. It is great for venues without a street address. Just type the three words separated by dots.',
   },
   regulations: {
@@ -106,6 +110,7 @@ const SECTION_HELP: Record<SectionId, SectionHelpContent> = {
       'Tick if dogs will be benched. If yes, add the time they can be removed.',
       'Tick if you accept NFC (Not For Competition) entries.',
     ],
+    benefit: 'The RKC wording is long, fiddly, and changes from time to time. We keep the latest version and add the right paragraphs to your schedule based on a few tick boxes. If the RKC updates the wording, your next schedule picks it up automatically. No more cross-referencing PDFs from the RKC website.',
     tip: 'When you are not sure, the RKC website has guidance on each of these. The wording on the schedule is generated for you so you do not have to write it.',
   },
 };
@@ -632,6 +637,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
             'When you are happy, click Preview PDF at the top to see how it will look.',
             'Share the PDF link on social media or send it by email so exhibitors can read it.',
           ],
+          benefit: 'No more sending Word files to the printer and waiting days for a proof. No more marking up paper copies in red pen. No more posting schedules out at your own cost. You type the details once and a polished PDF is ready to download or share in seconds. Spot a typo a week later? Fix it and the PDF updates the moment you save.',
           tip: 'The mandatory RKC statements (declarations, rules, regulations) are added automatically. You only need to fill in the parts specific to your show.',
         }}
       />
@@ -862,7 +868,7 @@ function SectionSummary({
       return parts.length > 0 ? (
         <p className="text-xs text-muted-foreground truncate">{parts.join(' · ')}</p>
       ) : (
-        <p className="text-xs text-muted-foreground">Optional — directions, catering, etc.</p>
+        <p className="text-xs text-muted-foreground">Optional. Directions, catering, etc.</p>
       );
     }
     case 'regulations': {
@@ -1203,7 +1209,7 @@ function AwardsSection({
           <p className="text-sm font-medium">Show Sponsors</p>
           <p className="text-xs text-muted-foreground">
             {sponsorCount > 0
-              ? `${sponsorCount} sponsor${sponsorCount !== 1 ? 's' : ''} — these will appear in your schedule`
+              ? `${sponsorCount} sponsor${sponsorCount !== 1 ? 's' : ''}. These will appear in your schedule`
               : 'Add sponsors so they appear in your schedule'}
           </p>
         </div>

@@ -152,6 +152,7 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
                   'Each step has its own Help button (the small question mark next to each section) if you get stuck.',
                   'Nothing goes live until you press the green Open Entries button at the end.',
                 ],
+                benefit: 'Running a show used to mean a folder full of paper forms, a spreadsheet of entries, several trips to the printer, late nights with the calculator, and a cardboard box of cash on the day. With us, all of that is one online form, one button to open entries, and one click to print whatever you need. Your evenings are yours again.',
                 tip: 'You can leave this page and come back later. Your progress is saved automatically.',
               }}
             />
@@ -378,6 +379,7 @@ function StepClasses({ showId, show }: { showId: string; show: Show }) {
             'Add or remove classes if your show is different from the usual.',
             'For Champ shows, the Royal Kennel Club has rules about which classes must be offered. We try to flag anything missing.',
           ],
+          benefit: 'No more typing your class list into a Word document and re-typing it next year. We remember your set up, flag any RKC rules that you might miss, and the same classes flow straight through to the schedule, the catalogue, and the judges book without you lifting a finger.',
           tip: 'You can change classes at any time before entries open. Once a dog has entered a class, that class is locked in so its entry stays valid.',
         }}
       />
@@ -422,6 +424,7 @@ function StepJudge({ showId }: { showId: string }) {
               'When you save, we send the judge an email with the invitation. They click Accept or Decline.',
               'You can see who has accepted at the top of this section. Chase any that have not replied a week or two before the show.',
             ],
+            benefit: 'No more posting invitation letters, sending follow-up texts, or wondering whether a judge has confirmed. We send the invitation the moment you save, the judge clicks one button to accept, and you see the green tick instantly. Their name flows straight into the schedule and catalogue.',
             tip: 'If a judge cannot do the show in the end, you can swap them out at any time and we will send a new invitation to the replacement.',
           }}
         />
@@ -519,6 +522,7 @@ function SecretaryDetails({
                 'A postal address is helpful if any entries come in by post.',
                 'These details are saved against your account so future shows can pre-fill them.',
               ],
+              benefit: 'Type these once and they pre-fill every show you ever run with us. They also flow through to the schedule, the catalogue, the entry confirmation emails to exhibitors, and any letters we need to send on your behalf. No copy and paste, no remembering to update three documents when your phone number changes.',
               tip: 'If your club has a shared show email like secretary@yourclub.co.uk, use that instead of your personal one. It is easier to hand over if someone else takes over the role.',
             }}
           />
@@ -694,6 +698,7 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
               'NFC: Not For Competition. For people who want to bring their dog along but not compete. Some shows charge less, some leave it the same.',
               'Junior Handler: for the young handler classes. Usually free or just a small amount.',
             ],
+            benefit: 'We work out the right total for every order automatically, including first-class and extra-class fees, and we collect the money for you at the same time the exhibitor enters. No more cash on the day, no more chasing late payments, no more sums on a notepad.',
             tip: 'You can leave any of these blank if you do not offer that type of entry. Just set what applies to your show.',
           }}
         />
@@ -798,6 +803,7 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
               'If you accept postal entries, set the postal close date too. It can be the same as the online date, or different.',
               'Both dates must be before the show day. We will warn you if they are not.',
             ],
+            benefit: 'We close entries automatically at the exact date and time you set. No more checking the inbox at midnight, no more deciding whether a late entry that arrived in the post a day late should be accepted. The deadline is fair, firm, and out of your hands.',
             tip: 'You can extend a close date later if you need more entries. Just come back and change it.',
           }}
         />
@@ -898,6 +904,7 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
               'Tick whether it is a yes/no item (like a printed catalogue) or whether people can buy more than one (like raffle tickets).',
               'You can edit or remove items any time before the order is paid.',
             ],
+            benefit: 'No more bags of cash for catalogue sales on the day, no more counting raffle ticket stubs, no more chasing club memberships through the post. Exhibitors tick what they want, pay online, and you arrive on the day with a clean list of who has bought what.',
             tip: 'This is a great place to add a donation to a charity close to your club. Exhibitors are often happy to add £5 to their order if it goes to a good cause.',
           }}
         />
@@ -928,6 +935,7 @@ function StepSchedule({
               'Click Preview PDF at the top to see how it looks before you share it.',
               'When you are happy, share the link or the PDF with exhibitors.',
             ],
+            benefit: 'Schedules used to mean a Word document, an emailed quote from the printer, a marked up PDF proof going back and forth, postage costs, and a week or two of wait. With us, you fill in the form once and the schedule appears as a polished PDF in seconds. Every time you change something, the PDF updates. No printer, no postage, no proofs, no waiting. Share the link on social media and exhibitors read it on their phone.',
             tip: 'You do not have to finish this in one go. The form saves as you type, so you can come back any time and pick up where you left off.',
           }}
         />
@@ -979,6 +987,7 @@ function StepOpenEntries({ showId }: { showId: string }) {
             'Click the green Open Entries button at the bottom.',
             'You will see a confirmation and the show will appear publicly.',
           ],
+          benefit: 'The moment you click open, exhibitors can find the show in our directory and on every search engine. They enter on their phone in two minutes, pay there and then, and you get an email confirming each entry. No envelopes, no cheques to bank, no spreadsheet to maintain. Watch your entries grow in real time on the dashboard.',
           tip: 'You can edit most things about the show after entries open, but be careful changing fees or classes once people have started entering. Tell exhibitors first if you do.',
         }}
       />

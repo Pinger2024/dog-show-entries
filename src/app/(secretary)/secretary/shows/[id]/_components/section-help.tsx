@@ -26,6 +26,10 @@ export interface SectionHelpContent {
   what: string;
   /** Step-by-step list of what the user needs to do. */
   todo: string[];
+  /** Optional "why this is better than the old way" copy. Concrete benefits
+   *  vs marking up printer proofs / chasing emails / cash on the day, etc.
+   *  Surfaces the platform's value where it matters. */
+  benefit?: string;
   /** Optional small tip or reassurance. */
   tip?: string;
 }
@@ -110,6 +114,16 @@ function HelpPanel({
             ))}
           </ol>
         </>
+      )}
+      {content.benefit && (
+        <div className="mt-3 rounded-md border border-amber-300/40 bg-amber-50 px-3 py-2 dark:border-amber-700/40 dark:bg-amber-950/30">
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-900 dark:text-amber-300">
+            Why this saves you time
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-amber-900/90 dark:text-amber-200/90">
+            {content.benefit}
+          </p>
+        </div>
       )}
       {content.tip && (
         <p className="mt-3 rounded-md bg-primary/10 px-2 py-1.5 text-xs italic text-primary">
