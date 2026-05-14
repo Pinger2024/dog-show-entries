@@ -201,6 +201,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
   const [showOpenTime, setShowOpenTime] = useState('');
   const [judgingStartTime, setJudgingStartTime] = useState('');
   const [onCallVet, setOnCallVet] = useState('');
+  const [firstAiders, setFirstAiders] = useState<string[]>([]);
   const [what3words, setWhat3words] = useState('');
   const [showManager, setShowManager] = useState('');
   const [officers, setOfficers] = useState<OfficerWithGuarantor[]>([]);
@@ -260,6 +261,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       }))
     );
 
+    setFirstAiders(sd?.firstAiders ?? []);
     setAwardsDescription(sd?.awardsDescription ?? '');
     setPrizeMoney(sd?.prizeMoney ?? '');
     setDirections(sd?.directions ?? '');
@@ -341,6 +343,9 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       guarantors: officers
         .filter((o) => o.name && o.isGuarantor)
         .map((o) => ({ name: o.name, address: o.address || undefined })),
+      firstAiders: firstAiders.filter((n) => n.trim()).length > 0
+        ? firstAiders.filter((n) => n.trim()).map((n) => n.trim())
+        : undefined,
       awardsDescription: awardsDescription || undefined,
       prizeMoney: prizeMoney || undefined,
       what3words: what3words || undefined,
@@ -408,7 +413,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
   }, [
     hasLoaded, country, publicAdmission, wetWeather, isBenched, benchingRemovalTime,
     acceptsNfc, judgedOnGroupSystem, latestArrivalTime, showOpenTime, judgingStartTime,
-    onCallVet, what3words, showManager, officers, awardsDescription, prizeMoney,
+    onCallVet, what3words, showManager, officers, firstAiders, awardsDescription, prizeMoney,
     directions, catering, futureShowDates, additionalNotes, welcomeNote,
     outsideAttraction, hasBestVeteranInShow, bestVeteranInShowEligibility, customStatements,
   ]);
@@ -485,6 +490,9 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       guarantors: officers
         .filter((o) => o.name && o.isGuarantor)
         .map((o) => ({ name: o.name, address: o.address || undefined })),
+      firstAiders: firstAiders.filter((n) => n.trim()).length > 0
+        ? firstAiders.filter((n) => n.trim()).map((n) => n.trim())
+        : undefined,
       awardsDescription: awardsDescription || undefined,
       prizeMoney: prizeMoney || undefined,
       what3words: what3words || undefined,
@@ -514,7 +522,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     effectiveExisting, country, publicAdmission, wetWeather, isBenched,
     benchingRemovalTime, acceptsNfc, judgedOnGroupSystem, latestArrivalTime,
     showOpenTime, judgingStartTime, onCallVet, what3words, showManager,
-    officers, awardsDescription, prizeMoney, directions, catering,
+    officers, firstAiders, awardsDescription, prizeMoney, directions, catering,
     futureShowDates, additionalNotes, welcomeNote, outsideAttraction,
     hasBestVeteranInShow, bestVeteranInShowEligibility,
     customStatements, showId,
@@ -727,6 +735,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
                       latestArrivalTime={latestArrivalTime} setLatestArrivalTime={setLatestArrivalTime}
                       judgingStartTime={judgingStartTime} setJudgingStartTime={setJudgingStartTime}
                       onCallVet={onCallVet} setOnCallVet={setOnCallVet}
+                      firstAiders={firstAiders} setFirstAiders={setFirstAiders}
                     />
                   )}
                   {section.id === 'people' && (
@@ -890,11 +899,13 @@ function ShowDaySection({
   latestArrivalTime, setLatestArrivalTime,
   judgingStartTime, setJudgingStartTime,
   onCallVet, setOnCallVet,
+  firstAiders, setFirstAiders,
 }: {
   showOpenTime: string; setShowOpenTime: (v: string) => void;
   latestArrivalTime: string; setLatestArrivalTime: (v: string) => void;
   judgingStartTime: string; setJudgingStartTime: (v: string) => void;
   onCallVet: string; setOnCallVet: (v: string) => void;
+  firstAiders: string[]; setFirstAiders: (v: string[]) => void;
 }) {
   return (
     <div className="space-y-4">
@@ -936,6 +947,64 @@ function ShowDaySection({
       <div className="space-y-1.5">
         <Label htmlFor="onCallVet" className="text-xs">Veterinary surgeon on call</Label>
         <Input id="onCallVet" value={onCallVet} onChange={(e) => setOnCallVet(e.target.value)} placeholder="e.g. Westport Vets, Unit 42, Mill Road, Linlithgow EH49 7SF" className="min-h-[2.75rem]" />
+      </div>
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <Label className="text-xs">First Aider on the day</Label>
+          {firstAiders.length < 3 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setFirstAiders([...firstAiders, ''])}
+            >
+              <Plus className="size-3" />
+              Add another
+            </Button>
+          )}
+        </div>
+        {firstAiders.length === 0 ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="min-h-[2.75rem] w-full"
+            onClick={() => setFirstAiders([''])}
+          >
+            <Plus className="size-3.5" />
+            Add a first aider
+          </Button>
+        ) : (
+          <div className="space-y-2">
+            {firstAiders.map((name, idx) => (
+              <div key={idx} className="flex gap-2">
+                <Input
+                  value={name}
+                  onChange={(e) => {
+                    const next = [...firstAiders];
+                    next[idx] = e.target.value;
+                    setFirstAiders(next);
+                  }}
+                  placeholder="Name"
+                  className="min-h-[2.75rem] flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-11 text-destructive hover:text-destructive"
+                  onClick={() => setFirstAiders(firstAiders.filter((_, i) => i !== idx))}
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">
+          Required on the schedule and catalogue. Add a second name if a multi-breed show has more than one cover.
+        </p>
       </div>
     </div>
   );

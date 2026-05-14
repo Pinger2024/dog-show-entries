@@ -858,6 +858,15 @@ export function CoverPage({ show }: FrontMatterProps) {
           </View>
         )}
 
+        {show.firstAiders && show.firstAiders.length > 0 && (
+          <View style={{ width: '100%', marginTop: 2, marginBottom: 2 }}>
+            <Text style={styles.coverSectionLabel}>
+              {show.firstAiders.length === 1 ? 'First Aider' : 'First Aiders'}
+            </Text>
+            <Text style={styles.coverSectionText}>{show.firstAiders.join(', ')}</Text>
+          </View>
+        )}
+
         {show.showManager && (
           <View style={{ width: '100%', marginTop: 2, marginBottom: 2 }}>
             <Text style={styles.coverSectionLabel}>Show Manager</Text>

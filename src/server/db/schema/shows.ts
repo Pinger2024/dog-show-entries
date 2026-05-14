@@ -36,6 +36,10 @@ export interface ScheduleData {
   showManager?: string;
   guarantors?: { name: string; address?: string }[];
   officers?: { name: string; position: string }[];
+  /** First aider name(s) — required to be on the schedule and catalogue
+   *  per Amanda's RKC compliance ask 2026-05-14. One per single-breed
+   *  show, sometimes 2+ on multi-breed shows. */
+  firstAiders?: string[];
 
   // Awards & prizes
   awardsDescription?: string;

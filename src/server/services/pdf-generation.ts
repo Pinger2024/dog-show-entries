@@ -269,6 +269,7 @@ export async function generateCataloguePdf(
     welcomeNote: scheduleData?.welcomeNote,
     outsideAttraction: scheduleData?.outsideAttraction === true ? true : undefined,
     showManager: scheduleData?.showManager,
+    firstAiders: scheduleData?.firstAiders,
     officers: scheduleData?.officers,
     guarantors: scheduleData?.guarantors,
     awardSponsors: scheduleData?.awardSponsors,

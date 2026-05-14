@@ -247,6 +247,16 @@ export function ShowScheduleMultibreed({
             </View>
           )}
 
+          {/* First Aider(s) — RKC compliance, Amanda 2026-05-14 */}
+          {sd?.firstAiders && sd.firstAiders.length > 0 && (
+            <View style={{ width: '100%', marginBottom: 4 }}>
+              <Text style={s.coverSectionLabel}>
+                {sd.firstAiders.length === 1 ? 'First Aider' : 'First Aiders'}
+              </Text>
+              <Text style={s.coverSectionText}>{sd.firstAiders.join(', ')}</Text>
+            </View>
+          )}
+
           {/* Show Manager */}
           {sd?.showManager && (
             <View style={{ width: '100%', marginBottom: 4 }}>
