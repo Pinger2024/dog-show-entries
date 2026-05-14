@@ -49,6 +49,7 @@ interface BreedSexCombo {
   notApproved?: boolean;
   alreadyAssigned?: string; // judge name if already assigned
   isJuniorHandling?: boolean;
+  isSpecialAwardsClasses?: boolean;
 }
 
 interface AddJudgeWizardProps {
@@ -146,9 +147,13 @@ export function AddJudgeWizard({
   // ── Derive show breed+sex combos for the assign step ──
   const showBreedSexCombos = useMemo(() => {
     if (!showData?.showClasses) return [];
-    const combos = new Map<string, { breedId: string | null; breedName: string | null; sex: string | null; isJuniorHandling: boolean }>();
+    const combos = new Map<string, { breedId: string | null; breedName: string | null; sex: string | null; isJuniorHandling: boolean; isSpecialAwardsClasses: boolean }>();
+    let hasSpecialAwardsClasses = false;
     for (const sc of showData.showClasses) {
       const isJH = sc.classDefinition?.type === 'junior_handler';
+      if (sc.classDefinition?.name?.startsWith('Special Award Class')) {
+        hasSpecialAwardsClasses = true;
+      }
       // Junior Handling gets its own combo, separate from breed classes
       const prefix = isJH ? 'jh' : 'breed';
       const key = `${prefix}:${sc.breed?.id ?? 'all'}:${sc.sex ?? 'both'}`;
@@ -158,10 +163,25 @@ export function AddJudgeWizard({
           breedName: isJH ? 'Junior Handling' : (sc.breed?.name ?? null),
           sex: sc.sex,
           isJuniorHandling: isJH,
+          isSpecialAwardsClasses: false,
         });
       }
     }
-    return Array.from(combos.values());
+    const arr = Array.from(combos.values());
+    // Virtual combo for the lunchtime Special Awards Classes judge — only
+    // surfaced when the show has at least one Special Award Class set up.
+    // Amanda's spec (2026-05-14): one judge covers all three SAC classes,
+    // separate from the breed judge.
+    if (hasSpecialAwardsClasses) {
+      arr.push({
+        breedId: null,
+        breedName: 'Special Awards Classes',
+        sex: null,
+        isJuniorHandling: false,
+        isSpecialAwardsClasses: true,
+      });
+    }
+    return arr;
   }, [showData]);
 
   // ── Reset ──
@@ -187,6 +207,10 @@ export function AddJudgeWizard({
     // Build a set of already-assigned breed+sex combos from existing assignments
     const assignedMap = new Map<string, string>(); // key -> judge name
     for (const a of existingAssignments ?? []) {
+      if ((a as { isSpecialAwardsClassesJudge?: boolean }).isSpecialAwardsClassesJudge) {
+        assignedMap.set('sac', a.judge.name);
+        continue;
+      }
       // An assignment with sex=null covers both sexes
       if (a.sex === null) {
         assignedMap.set(`${a.breedId ?? 'all'}:both`, a.judge.name);
@@ -199,7 +223,9 @@ export function AddJudgeWizard({
 
     // Build breed combos, marking already-assigned ones
     const combos: BreedSexCombo[] = showBreedSexCombos.map((c) => {
-      const key = `${c.breedId ?? 'all'}:${c.sex ?? 'both'}`;
+      const key = c.isSpecialAwardsClasses
+        ? 'sac'
+        : `${c.breedId ?? 'all'}:${c.sex ?? 'both'}`;
       const assignedTo = assignedMap.get(key);
 
       // If triggered from coverage dashboard with a specific breed/sex, pre-select that
@@ -215,6 +241,7 @@ export function AddJudgeWizard({
         selected: isPrefilled,
         alreadyAssigned: assignedTo,
         isJuniorHandling: c.isJuniorHandling,
+        isSpecialAwardsClasses: c.isSpecialAwardsClasses,
       };
     });
 
@@ -302,6 +329,7 @@ export function AddJudgeWizard({
       assignments: selectedCombos.map((c) => ({
         breedId: c.breedId,
         sex: c.sex as 'dog' | 'bitch' | null,
+        isSpecialAwardsClassesJudge: c.isSpecialAwardsClasses ?? false,
       })),
     });
   }

@@ -120,8 +120,19 @@ export async function GET(
     hasNullSexAssignment: boolean; // any assignment with sex=null
   };
   const judgeMap = new Map<string, JudgeAggregate>();
+  // Separate bucket for the lunchtime Special Awards Classes judge — gets
+  // its own row on the schedule labelled "special awards classes" instead
+  // of the breed name. Amanda's spec 2026-05-14.
+  const specialAwardsJudges: Array<{ name: string; affix: string | null }> = [];
   for (const ja of judgeAssignments) {
     if (!ja.judge?.id || !ja.judge?.name) continue;
+    if (ja.isSpecialAwardsClassesJudge) {
+      specialAwardsJudges.push({
+        name: ja.judge.name,
+        affix: ja.judge.kennelClubAffix ?? null,
+      });
+      continue;
+    }
     // Multi-breed group/show-level assignments (Group Judge, BIS, etc.) are
     // surfaced via panelJudges below — skip them here so they don't pollute
     // the per-breed roll-up that drives the cover page judge list.
@@ -212,6 +223,19 @@ export async function GET(
     })
     // Strip the helper field — not part of the ScheduleJudge contract.
     .map(({ isJuniorOnly: _isJuniorOnly, ...rest }) => rest);
+
+  // Append Special Awards Classes judges with their own role label.
+  for (const sac of specialAwardsJudges) {
+    const namePart = sac.affix ? `${sac.name} (${sac.affix})` : sac.name;
+    judges.push({
+      name: sac.name,
+      affix: sac.affix,
+      breeds: [],
+      sex: null,
+      role: 'Special Awards Classes',
+      displayLabel: `${namePart} — Special Awards Classes`,
+    });
+  }
 
   // Build sponsors data (defensive: skip sponsors with missing sponsor record)
   const sponsors: ScheduleSponsor[] = showSponsorData

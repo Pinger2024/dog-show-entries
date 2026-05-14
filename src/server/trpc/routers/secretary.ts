@@ -2363,6 +2363,9 @@ export const secretaryRouter = createTRPCRouter({
       assignments: z.array(z.object({
         breedId: z.string().uuid().nullable(),
         sex: z.enum(['dog', 'bitch']).nullable(),
+        /** True for the lunchtime Special Awards Classes judge — breedId/sex ignored
+         *  on the schedule and they render as "Special Awards Classes" instead. */
+        isSpecialAwardsClassesJudge: z.boolean().optional(),
       })).min(1),
       ringId: z.string().uuid().nullable().optional(),
     }))
@@ -2417,6 +2420,7 @@ export const secretaryRouter = createTRPCRouter({
         breedId: a.breedId,
         ringId: input.ringId ?? null,
         sex: a.sex,
+        isSpecialAwardsClassesJudge: a.isSpecialAwardsClassesJudge ?? false,
       }));
 
       const rows = await ctx.db.insert(judgeAssignments)

@@ -117,6 +117,12 @@ export async function generateCataloguePdf(
   const seenJudgeKeys = new Set<string>();
   for (const ja of judgeAssignmentRows) {
     if (!ja.judge?.name) continue;
+    if (ja.isSpecialAwardsClassesJudge) {
+      // Lunchtime SAC judges get their own labelled line per Amanda's
+      // spec 2026-05-14: "Judge: A Smith - special awards classes".
+      judgeDisplayList.push(`${ja.judge.name} — Special Awards Classes`);
+      continue;
+    }
     const key = `${ja.judge.name}::${ja.sex ?? 'all'}`;
     if (seenJudgeKeys.has(key)) continue;
     seenJudgeKeys.add(key);
@@ -387,8 +393,13 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
   // level (panel) assignments — those are surfaced via panelJudges below.
   const judgeKey = (name: string, sex: string | null) => `${name}::${sex ?? 'all'}`;
   const judgeEntries = new Map<string, { name: string; sex: string | null; breeds: string[]; isJH: boolean }>();
+  const specialAwardsJudges: Array<{ name: string }> = [];
   for (const ja of judgeAssignments) {
     if (!ja.judge?.name) continue;
+    if (ja.isSpecialAwardsClassesJudge) {
+      specialAwardsJudges.push({ name: ja.judge.name });
+      continue;
+    }
     if (ja.judgeRoleId) continue;
     const key = judgeKey(ja.judge.name, ja.sex);
     const existing = judgeEntries.get(key);
@@ -441,6 +452,16 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
       displayLabel: prefix ? `${prefix} — ${j.name}` : j.name,
     };
   });
+
+  // Append Special Awards Classes judges with the explicit role label.
+  for (const sac of specialAwardsJudges) {
+    judges.push({
+      name: sac.name,
+      breeds: [],
+      sex: null,
+      displayLabel: `${sac.name} — Special Awards Classes`,
+    });
+  }
 
   const classLabelMap = buildClassLabelMap(showClasses);
   const classes: ScheduleClass[] = showClasses.map((sc) => ({
