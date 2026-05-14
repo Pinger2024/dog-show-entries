@@ -51,6 +51,7 @@ const COMMON_SUNDRY_PRESETS = [
   { name: 'Club Membership — Sole', description: 'Annual single membership', maxPerOrder: 1 },
   { name: 'Club Membership — Joint', description: 'Annual joint membership', maxPerOrder: 1 },
   { name: 'Club Membership — Family', description: 'Annual family membership', maxPerOrder: 1 },
+  { name: 'Club Membership — Junior', description: 'Annual membership for under-16s', maxPerOrder: 1 },
 ];
 
 function PresetPicker({
