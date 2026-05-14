@@ -13,6 +13,7 @@ import {
   buildSponsorLines,
   pickDefaultBestAwards,
   splitBestAwardsBySex,
+  ownerHeading,
 } from './catalogue-utils';
 import type { ClassGroup } from './catalogue-utils';
 import {
@@ -283,6 +284,8 @@ interface ExhibitorDogInfo {
 interface ExhibitorInfo {
   name: string;
   address: string | null;
+  /** Lower-case surname of the first owner, used purely for sorting. */
+  sortKey: string;
   dogs: ExhibitorDogInfo[];
 }
 
@@ -290,12 +293,13 @@ function buildExhibitorIndex(entries: CatalogueEntry[]): ExhibitorInfo[] {
   const byExhibitor = new Map<string, ExhibitorInfo>();
 
   for (const entry of entries) {
-    const name = entry.exhibitor ?? entry.owners[0]?.name ?? 'Unknown';
-    const key = name.toUpperCase();
+    const { heading, sortKey } = ownerHeading(entry.owners, entry.exhibitor);
+    const key = heading;
     if (!byExhibitor.has(key)) {
       byExhibitor.set(key, {
-        name: name.toUpperCase(),
+        name: heading,
         address: entry.owners[0]?.address ?? null,
+        sortKey,
         dogs: [],
       });
     }
@@ -341,7 +345,13 @@ function buildExhibitorIndex(entries: CatalogueEntry[]): ExhibitorInfo[] {
   }
 
   return Array.from(byExhibitor.values())
-    .sort((a, b) => a.name.localeCompare(b.name))
+    .sort((a, b) => {
+      const surnameCmp = a.sortKey.localeCompare(b.sortKey);
+      if (surnameCmp !== 0) return surnameCmp;
+      // Same surname falls back to the full heading (so "Smith, John"
+      // comes before "Smith, Mary" within the S section).
+      return a.name.localeCompare(b.name);
+    })
     .map((ex) => ({
       ...ex,
       dogs: ex.dogs.sort((a, b) =>

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Page, View, Text, Image } from '@react-pdf/renderer';
 import { styles, C } from './catalogue-styles';
 import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
+import { ownerHeading } from './catalogue-utils';
 
 const SHOW_TYPE_LABELS: Record<string, string> = {
   championship: 'Championship Show',
@@ -1264,14 +1265,15 @@ interface ExhibitorIndexPageProps {
  * per F(1).11.b.(6)/(8) are excluded from the index entirely.
  */
 export function ExhibitorIndexPage({ show, entries, breedName, compact }: ExhibitorIndexPageProps & { compact?: boolean }) {
-  const byExhibitor = new Map<string, { name: string; address?: string; catNos: string[]; classes: string[] }>();
+  const byExhibitor = new Map<string, { name: string; sortKey: string; address?: string; catNos: string[]; classes: string[] }>();
   for (const entry of entries) {
     if (entry.withholdFromPublication) continue;
-    const name = entry.exhibitor ?? entry.owners[0]?.name ?? 'Unknown';
-    const key = name.toUpperCase();
+    const { heading, sortKey } = ownerHeading(entry.owners, entry.exhibitor);
+    const key = heading;
     if (!byExhibitor.has(key)) {
       byExhibitor.set(key, {
-        name: name.toUpperCase(),
+        name: heading,
+        sortKey,
         address: entry.owners[0]?.address ?? undefined,
         catNos: [],
         classes: [],
@@ -1287,7 +1289,10 @@ export function ExhibitorIndexPage({ show, entries, breedName, compact }: Exhibi
     }
   }
 
-  const sorted = Array.from(byExhibitor.values()).sort((a, b) => a.name.localeCompare(b.name));
+  const sorted = Array.from(byExhibitor.values()).sort((a, b) => {
+    const surnameCmp = a.sortKey.localeCompare(b.sortKey);
+    return surnameCmp !== 0 ? surnameCmp : a.name.localeCompare(b.name);
+  });
   if (sorted.length === 0) return null;
 
   const title = breedName ? `Exhibitor Index — ${breedName}` : 'Exhibitor Index';
