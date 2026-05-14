@@ -297,10 +297,30 @@ export function ShowSchedule({
             )}
             {show.subsequentEntryFee != null && (
               <View style={s.infoRow}>
-                <Text style={s.infoLabel}>Subsequent entry (same owner)</Text>
+                <Text style={s.infoLabel}>Subsequent entry (same dog)</Text>
                 <Text style={s.infoValue}>{formatCurrency(show.subsequentEntryFee)}</Text>
               </View>
             )}
+            {show.discountGroups.map((g) => (
+              <View key={g.label} style={s.infoRow}>
+                <Text style={s.infoLabel}>{g.label} (first entry)</Text>
+                <Text style={s.infoValue}>{formatCurrency(g.firstEntryFeePence)}</Text>
+              </View>
+            ))}
+            {show.multiDogThreshold != null && show.multiDogPackagePence != null && (
+              <View style={s.infoRow}>
+                <Text style={s.infoLabel}>{show.multiDogThreshold}+ dog package</Text>
+                <Text style={s.infoValue}>{formatCurrency(show.multiDogPackagePence)}</Text>
+              </View>
+            )}
+            {show.discountGroups
+              .filter((g) => g.multiDogPackagePence != null)
+              .map((g) => (
+                <View key={`${g.label}-pkg`} style={s.infoRow}>
+                  <Text style={s.infoLabel}>{show.multiDogThreshold ?? '3'}+ dog package ({g.label})</Text>
+                  <Text style={s.infoValue}>{formatCurrency(g.multiDogPackagePence!)}</Text>
+                </View>
+              ))}
             {show.nfcEntryFee != null && (
               <View style={s.infoRow}>
                 <Text style={s.infoLabel}>Not for Competition</Text>
@@ -844,6 +864,14 @@ export function ShowSchedule({
           <Rule num="5">
             ENTRY FEES: {show.firstEntryFee != null ? `${formatCurrency(show.firstEntryFee)} first entry` : ''}
             {show.subsequentEntryFee != null ? `, subsequent entries same dog ${formatCurrency(show.subsequentEntryFee)}` : ''}
+            {show.discountGroups.map((g) => `. ${g.label} first entry ${formatCurrency(g.firstEntryFeePence)}`).join('')}
+            {show.multiDogThreshold != null && show.multiDogPackagePence != null
+              ? `. ${show.multiDogThreshold}+ dog package ${formatCurrency(show.multiDogPackagePence)}`
+              : ''}
+            {show.discountGroups
+              .filter((g) => g.multiDogPackagePence != null)
+              .map((g) => ` (${g.label}: ${formatCurrency(g.multiDogPackagePence!)})`)
+              .join('')}
             {show.nfcEntryFee != null ? `. NFC ${formatCurrency(show.nfcEntryFee)}` : ''}
             {show.juniorHandlerFee != null ? `. Junior Handler ${formatCurrency(show.juniorHandlerFee)}` : ''}.
             {' '}A handling fee of £1.00 plus 1% of the order subtotal is added at checkout to cover online processing; this is shown to exhibitors before they pay.

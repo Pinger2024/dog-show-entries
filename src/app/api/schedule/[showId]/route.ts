@@ -41,8 +41,8 @@ export async function GET(
     if (authResult instanceof NextResponse) return authResult;
   }
 
-  // Fetch show classes, judge assignments, and sponsors concurrently
-  const [showClasses, judgeAssignments, showSponsorData] = await Promise.all([
+  // Fetch show classes, judge assignments, sponsors, and discount groups concurrently
+  const [showClasses, judgeAssignments, showSponsorData, discountGroups] = await Promise.all([
     db.query.showClasses.findMany({
       where: eq(schema.showClasses.showId, showId),
       with: {
@@ -64,6 +64,10 @@ export async function GET(
         },
       },
       orderBy: [asc(schema.showSponsors.displayOrder)],
+    }),
+    db.query.showDiscountGroups.findMany({
+      where: eq(schema.showDiscountGroups.showId, showId),
+      orderBy: [asc(schema.showDiscountGroups.displayOrder)],
     }),
   ]);
 
@@ -250,6 +254,13 @@ export async function GET(
     subsequentEntryFee: show.subsequentEntryFee ?? null,
     nfcEntryFee: show.nfcEntryFee ?? null,
     juniorHandlerFee: show.juniorHandlerFee ?? null,
+    multiDogThreshold: show.multiDogThreshold ?? null,
+    multiDogPackagePence: show.multiDogPackagePence ?? null,
+    discountGroups: discountGroups.map((g) => ({
+      label: g.label,
+      firstEntryFeePence: g.firstEntryFeePence,
+      multiDogPackagePence: g.multiDogPackagePence,
+    })),
     acceptsPostalEntries: show.acceptsPostalEntries ?? false,
     scheduleData: show.scheduleData ?? null,
     organisation: show.organisation

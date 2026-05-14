@@ -28,6 +28,15 @@ export interface ScheduleShowInfo {
   subsequentEntryFee: number | null;
   nfcEntryFee: number | null;
   juniorHandlerFee: number | null;
+  multiDogThreshold: number | null;
+  multiDogPackagePence: number | null;
+  /** Per-show named discount tiers (Members, Pensioners, etc.). Each row
+   *  carries its first-class fee and optional multi-dog package price. */
+  discountGroups: Array<{
+    label: string;
+    firstEntryFeePence: number;
+    multiDogPackagePence: number | null;
+  }>;
   acceptsPostalEntries: boolean;
   scheduleData: ScheduleData | null;
   organisation: {

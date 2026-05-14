@@ -358,7 +358,7 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
 
   if (!show) throw new Error(`Show ${showId} not found`);
 
-  const [showClasses, judgeAssignments, showSponsors] = await Promise.all([
+  const [showClasses, judgeAssignments, showSponsors, discountGroups] = await Promise.all([
     db.query.showClasses.findMany({
       where: eq(schema.showClasses.showId, showId),
       with: {
@@ -375,6 +375,10 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     db.query.showSponsors.findMany({
       where: eq(schema.showSponsors.showId, showId),
       with: { sponsor: true },
+    }),
+    db.query.showDiscountGroups.findMany({
+      where: eq(schema.showDiscountGroups.showId, showId),
+      orderBy: [asc(schema.showDiscountGroups.displayOrder)],
     }),
   ]);
 
@@ -505,6 +509,13 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     subsequentEntryFee: show.subsequentEntryFee,
     nfcEntryFee: show.nfcEntryFee,
     juniorHandlerFee: show.juniorHandlerFee ?? null,
+    multiDogThreshold: show.multiDogThreshold ?? null,
+    multiDogPackagePence: show.multiDogPackagePence ?? null,
+    discountGroups: discountGroups.map((g) => ({
+      label: g.label,
+      firstEntryFeePence: g.firstEntryFeePence,
+      multiDogPackagePence: g.multiDogPackagePence,
+    })),
     acceptsPostalEntries: show.acceptsPostalEntries ?? false,
     scheduleData: show.scheduleData as ScheduleShowInfo['scheduleData'],
     organisation: show.organisation ? {
