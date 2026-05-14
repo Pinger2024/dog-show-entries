@@ -57,6 +57,58 @@ import {
 import type { ScheduleData } from '@/server/db/schema/shows';
 import { RKC_STATEMENTS, RKC_STATEMENT_CATEGORIES } from '@/lib/rkc-statements';
 import { SHOW_TIMES } from '@/lib/show-times';
+import { InlineHelp, type SectionHelpContent } from './section-help';
+
+const SECTION_HELP: Record<SectionId, SectionHelpContent> = {
+  showday: {
+    what: 'The timings for the day of the show. When the doors open, the deadline by which everyone must have arrived, when judging starts, and the vet on call if needed.',
+    todo: [
+      'Pick the time the show opens. This is when exhibitors can start arriving and finding their ring.',
+      'Set the latest arrival time. After this, latecomers may not be allowed in to compete (RKC rules).',
+      'Pick the time judging starts.',
+      'Add the on-call vet contact (a vet who has agreed to be available during the show).',
+    ],
+    tip: 'These times go on the printed schedule, so exhibitors know when to turn up and when judging begins.',
+  },
+  people: {
+    what: 'The people running the show. The officers (Chairman, Secretary, Treasurer, etc.) and the guarantors who underwrite the show financially. The RKC requires at least one guarantor on the schedule.',
+    todo: [
+      'Add the show manager (the person in overall charge on the day).',
+      'Add the club officers, picking from your club roster or typing them in.',
+      'Tick the box next to any officers who are guarantors. Champ shows need at least three; other shows need at least one.',
+    ],
+    tip: 'If you have run shows before, the roster pre-fills the people you have used previously. You can add new ones any time.',
+  },
+  awards: {
+    what: 'A description of the prizes and awards on offer at your show. This is the friendly summary that appears in the schedule, so exhibitors know what they could win.',
+    todo: [
+      'Write a short summary of what is on offer. For example, "Rosettes 1st to VHC. Trophies for Best of Breed, Best Puppy and Best Veteran."',
+      'Add prize money if you offer it.',
+      'If you are running a Best Veteran in Show competition, tick the box and write the eligibility wording (the RKC needs this in the schedule).',
+    ],
+    tip: 'You do not need to list every sponsor or trophy here. There is a separate Sponsors section for that.',
+  },
+  venue: {
+    what: 'How exhibitors find the venue and what they will find when they arrive. Directions, catering, what3words, future show dates, anything else worth knowing.',
+    todo: [
+      'Add directions or a postcode that helps people find the venue.',
+      'Note any catering on site (a cafe, food trucks, etc).',
+      'List any other shows your club has coming up. Exhibitors love knowing what is next.',
+    ],
+    tip: 'What3words is a free service that gives any spot a three-word address. It is great for venues without a street address. Just type the three words separated by dots.',
+  },
+  regulations: {
+    what: 'The official rules that apply to your show. Most of these are RKC rules that have to be on the schedule by law. Tick the ones that apply.',
+    todo: [
+      'Pick the country the show is in. This sets the right RKC docking statement.',
+      'Tick whether the public can come in (free admission, paid, or no public).',
+      'Tick if there is wet weather cover (indoor space if it rains).',
+      'Tick if dogs will be benched. If yes, add the time they can be removed.',
+      'Tick if you accept NFC (Not For Competition) entries.',
+    ],
+    tip: 'When you are not sure, the RKC website has guidance on each of these. The wording on the schedule is generated for you so you do not have to write it.',
+  },
+};
 
 interface OfficerWithGuarantor {
   name: string;
@@ -570,6 +622,20 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
         </div>
       </div>
 
+      <InlineHelp
+        label="What is the schedule?"
+        content={{
+          what: 'The schedule is the official document you send to exhibitors before the show. It tells them the date, venue, classes, judges, fees, and the rules of the show. We create the PDF for you from the information you enter on this page.',
+          todo: [
+            'Click any section below to open it and fill in the details.',
+            'Each section saves on its own as you type, so you can come back at any time.',
+            'When you are happy, click Preview PDF at the top to see how it will look.',
+            'Share the PDF link on social media or send it by email so exhibitors can read it.',
+          ],
+          tip: 'The mandatory RKC statements (declarations, rules, regulations) are added automatically. You only need to fill in the parts specific to your show.',
+        }}
+      />
+
       {/* Smart defaults notice */}
       {appliedDefaults && (
         <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50/50 px-3 py-2.5 text-sm dark:border-blue-800 dark:bg-blue-950/20">
@@ -646,6 +712,9 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
               {/* Section content — only when editing */}
               {isEditing && (
                 <div className="border-t px-4 pb-4 pt-4">
+                  <div className="mb-3">
+                    <InlineHelp content={SECTION_HELP[section.id]} />
+                  </div>
                   {section.id === 'showday' && (
                     <ShowDaySection
                       showOpenTime={showOpenTime} setShowOpenTime={setShowOpenTime}
