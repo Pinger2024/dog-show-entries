@@ -45,6 +45,7 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
     description: 'Full RKC championship class schedule with all standard classes, split by sex.',
     showTypes: ['championship'],
     classNames: [
+      'Baby Puppy',
       'Minor Puppy',
       'Puppy',
       'Junior',
@@ -66,6 +67,7 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
     description: 'Standard open show class schedule with popular classes.',
     showTypes: ['open', 'premier_open'],
     classNames: [
+      'Baby Puppy',
       'Minor Puppy',
       'Puppy',
       'Junior',
@@ -84,6 +86,7 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
     description: 'Basic limited show schedule with core classes.',
     showTypes: ['limited', 'primary'],
     classNames: [
+      'Baby Puppy',
       'Puppy',
       'Junior',
       'Novice',
@@ -100,6 +103,7 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
     showTypes: ['championship'],
     gsdOnly: true,
     classNames: [
+      'Baby Puppy',
       'Minor Puppy',
       'Puppy',
       'Junior',
@@ -128,6 +132,7 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
     showTypes: ['open', 'premier_open'],
     gsdOnly: true,
     classNames: [
+      'Baby Puppy',
       'Minor Puppy',
       'Puppy',
       'Junior',
@@ -152,6 +157,7 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
     description: 'Companion show schedule for fun and social events.',
     showTypes: ['companion'],
     classNames: [
+      'Baby Puppy',
       'Puppy',
       'Open',
       'Veteran',

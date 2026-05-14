@@ -39,7 +39,9 @@ import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -1123,11 +1125,39 @@ export function AddIndividualClass({ showId }: { showId: string }) {
                   <SelectValue placeholder="Select a class..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {classDefs?.map((cd) => (
-                    <SelectItem key={cd.id} value={cd.id}>
-                      {cd.name}
-                    </SelectItem>
-                  ))}
+                  {(() => {
+                    // Group classes by sensible buckets so they are easier
+                    // to find — Amanda flagged Special Award Classes weren't
+                    // visibly distinct from the long list (2026-05-14).
+                    const list = classDefs ?? [];
+                    const buckets: Array<{ label: string; defs: typeof list }> = [];
+                    const age = list.filter((cd) => cd.type === 'age');
+                    const achievement = list.filter((cd) => cd.type === 'achievement');
+                    const specialAward = list.filter(
+                      (cd) => cd.type === 'special' && cd.name.startsWith('Special Award Class'),
+                    );
+                    const otherSpecial = list.filter(
+                      (cd) => cd.type === 'special' && !cd.name.startsWith('Special Award Class'),
+                    );
+                    const handler = list.filter(
+                      (cd) => cd.type === 'junior_handler' || cd.type === 'sv_age',
+                    );
+                    if (age.length) buckets.push({ label: 'Age classes', defs: age });
+                    if (achievement.length) buckets.push({ label: 'Achievement classes', defs: achievement });
+                    if (specialAward.length) buckets.push({ label: 'Special Award classes', defs: specialAward });
+                    if (otherSpecial.length) buckets.push({ label: 'Other special classes', defs: otherSpecial });
+                    if (handler.length) buckets.push({ label: 'Junior Handler / SV', defs: handler });
+                    return buckets.map((b) => (
+                      <SelectGroup key={b.label}>
+                        <SelectLabel>{b.label}</SelectLabel>
+                        {b.defs.map((cd) => (
+                          <SelectItem key={cd.id} value={cd.id}>
+                            {cd.name}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    ));
+                  })()}
                 </SelectContent>
               </Select>
               <Button
