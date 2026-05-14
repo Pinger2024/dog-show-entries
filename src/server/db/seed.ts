@@ -93,6 +93,7 @@ async function seed() {
     .values([
       // Global sortOrder — determines class order within each sex group
       // SLC variants interleave with their standard counterparts; Veteran is always last breed class
+      { name: 'Baby Puppy', type: 'age' as const, sortOrder: 5, minAgeMonths: 4, maxAgeMonths: 6, description: 'For dogs of 4 and not exceeding 6 calendar months of age on the first day of the show.' },
       { name: 'Minor Puppy', type: 'age' as const, sortOrder: 10, minAgeMonths: 6, maxAgeMonths: 9, description: 'For dogs of 6 and not exceeding 9 calendar months of age on the first day of the show.' },
       { name: 'Puppy', type: 'age' as const, sortOrder: 20, minAgeMonths: 6, maxAgeMonths: 12, description: 'For dogs of 6 and not exceeding 12 calendar months of age on the first day of the show.' },
       { name: 'Junior', type: 'age' as const, sortOrder: 30, minAgeMonths: 6, maxAgeMonths: 18, description: 'For dogs of 6 and not exceeding 18 calendar months of age on the first day of the show.' },
