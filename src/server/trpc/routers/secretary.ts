@@ -40,6 +40,7 @@ import {
   judgeRoles,
   breedGroups,
   catalogueAdverts,
+  showDiscountGroups,
 } from '@/server/db/schema';
 import {
   DEFAULT_CHECKLIST_ITEMS,
@@ -6257,7 +6258,6 @@ export const secretaryRouter = createTRPCRouter({
       z.object({
         showId: z.string().uuid(),
         entryFee: z.number().int().min(0),
-        membersEntryFeePence: z.number().int().min(0).nullable(),
         selectedAgeDefIds: z.array(z.string().uuid()),
         includeJh6_11: z.boolean(),
         includeJh12_16: z.boolean(),
@@ -6383,11 +6383,6 @@ export const secretaryRouter = createTRPCRouter({
       }
 
       await ctx.db.transaction(async (tx) => {
-        await tx
-          .update(shows)
-          .set({ membersEntryFeePence: input.membersEntryFeePence })
-          .where(eq(shows.id, input.showId));
-
         if (managedIds.length > 0) {
           await tx.delete(showClasses).where(inArray(showClasses.id, managedIds));
         }
@@ -6461,6 +6456,88 @@ export const secretaryRouter = createTRPCRouter({
         .where(
           and(eq(catalogueAdverts.id, input.id), eq(catalogueAdverts.showId, input.showId))
         );
+      return { deleted: true };
+    }),
+
+  // ── Discount groups ──────────────────────────────────────
+  // Named per-show discount tiers (Members, Pensioners, etc.) — the
+  // exhibitor declares one at checkout and pays the group's reduced
+  // first-class fee. If a group also sets multiDogPackagePence, that
+  // package replaces the show-wide one when the group is claimed.
+
+  listDiscountGroups: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      return ctx.db.query.showDiscountGroups.findMany({
+        where: eq(showDiscountGroups.showId, input.showId),
+        orderBy: [asc(showDiscountGroups.displayOrder)],
+      });
+    }),
+
+  createDiscountGroup: secretaryProcedure
+    .input(z.object({
+      showId: z.string().uuid(),
+      label: z.string().min(1).max(100),
+      firstEntryFeePence: z.number().int().min(0),
+      multiDogPackagePence: z.number().int().min(0).nullable().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      const [maxOrder] = await ctx.db
+        .select({ max: sql<number>`COALESCE(MAX(display_order), -1)` })
+        .from(showDiscountGroups)
+        .where(eq(showDiscountGroups.showId, input.showId));
+      const [created] = await ctx.db
+        .insert(showDiscountGroups)
+        .values({
+          showId: input.showId,
+          label: input.label,
+          firstEntryFeePence: input.firstEntryFeePence,
+          multiDogPackagePence: input.multiDogPackagePence ?? null,
+          displayOrder: (maxOrder?.max ?? -1) + 1,
+        })
+        .returning();
+      return created!;
+    }),
+
+  updateDiscountGroup: secretaryProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      label: z.string().min(1).max(100).optional(),
+      firstEntryFeePence: z.number().int().min(0).optional(),
+      multiDogPackagePence: z.number().int().min(0).nullable().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.showDiscountGroups.findFirst({
+        where: eq(showDiscountGroups.id, input.id),
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Discount group not found' });
+      await verifyShowAccess(ctx.db, ctx.session.user.id, existing.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      const updates: Record<string, unknown> = {};
+      if (input.label !== undefined) updates.label = input.label;
+      if (input.firstEntryFeePence !== undefined) updates.firstEntryFeePence = input.firstEntryFeePence;
+      if (input.multiDogPackagePence !== undefined) updates.multiDogPackagePence = input.multiDogPackagePence;
+      if (Object.keys(updates).length === 0) return existing;
+
+      const [updated] = await ctx.db
+        .update(showDiscountGroups)
+        .set(updates)
+        .where(eq(showDiscountGroups.id, input.id))
+        .returning();
+      return updated!;
+    }),
+
+  deleteDiscountGroup: secretaryProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.showDiscountGroups.findFirst({
+        where: eq(showDiscountGroups.id, input.id),
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Discount group not found' });
+      await verifyShowAccess(ctx.db, ctx.session.user.id, existing.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      await ctx.db.delete(showDiscountGroups).where(eq(showDiscountGroups.id, input.id));
       return { deleted: true };
     }),
 });

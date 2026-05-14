@@ -143,7 +143,6 @@ const createShowSchema = z.object({
   subsequentEntryFee: z.coerce.number().min(0).default(0),
   nfcEntryFee: z.coerce.number().min(0).default(0),
   juniorHandlerFee: z.coerce.number().min(0).default(0),
-  membersEntryFeePence: z.coerce.number().min(0).optional(),
 
   // Step 4 - Classes
   selectedClassIds: z.array(z.string().uuid()).default([]),
@@ -423,9 +422,6 @@ export default function NewShowPage() {
           : undefined,
         juniorHandlerFee: values.juniorHandlerFee != null && values.juniorHandlerFee !== ''
           ? poundsToPence(Number(values.juniorHandlerFee))
-          : undefined,
-        membersEntryFeePence: values.membersEntryFeePence != null && values.membersEntryFeePence !== ('' as unknown as number)
-          ? poundsToPence(Number(values.membersEntryFeePence))
           : undefined,
         // All-breed: pass breed + class data
         allBreedClassData: (values.showScope === 'general' && allBreedData.selectedBreedIds.length > 0 && allBreedData.classDefinitionIds.length > 0)
@@ -1415,35 +1411,7 @@ export default function NewShowPage() {
                       )}
                     />
                   )}
-                  {watchedShowRuleset === 'wusv' ? (
-                    <FormField
-                      control={form.control}
-                      name="membersEntryFeePence"
-                      render={({ field }) => (
-                        <FormItem className="rounded-lg border bg-muted/20 p-4">
-                          <FormLabel className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Members Fee</FormLabel>
-                          <FormControl>
-                            <div className="relative">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">£</span>
-                              <Input
-                                type="number"
-                                min={0}
-                                step={0.01}
-                                placeholder="Optional"
-                                className="pl-7 text-lg font-semibold h-12"
-                                {...field}
-                                value={field.value === 0 || field.value ? field.value : ''}
-                                onChange={(e) => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
-                              />
-                            </div>
-                          </FormControl>
-                          <p className="text-xs text-muted-foreground">Discounted fee for SV/BRG/League members</p>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  ) : (
-                    <FormField
+                  <FormField
                       control={form.control}
                       name="juniorHandlerFee"
                       render={({ field }) => (
@@ -1469,7 +1437,6 @@ export default function NewShowPage() {
                         </FormItem>
                       )}
                     />
-                  )}
                 </div>
               </CardContent>
             </Card>

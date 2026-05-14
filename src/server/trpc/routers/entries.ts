@@ -21,7 +21,13 @@ import {
   users,
   dogOwners,
   judgeAssignments,
+  showDiscountGroups,
 } from '@/server/db/schema';
+import {
+  computeOrderFees,
+  type DogEntryInput,
+  type FeeContext,
+} from '@/lib/fee-calc';
 import {
   createPaymentIntent,
   calculatePlatformFee,
@@ -238,6 +244,20 @@ export const entriesRouter = createTRPCRouter({
           code: 'BAD_REQUEST',
           message: 'One or more classes are invalid for this show',
         });
+      }
+
+      // WUSV coat type validation: if the class specifies a coat type, the dog must match
+      if (show.showRuleset === 'wusv' && dog.coatType) {
+        for (const sc of selectedClasses) {
+          if (sc.svCoatType && sc.svCoatType !== dog.coatType) {
+            const expected = sc.svCoatType === 'stock' ? 'Stock Coat' : 'Long Stock Coat';
+            const actual = dog.coatType === 'stock' ? 'Stock Coat' : 'Long Stock Coat';
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `This class is for ${expected} dogs but your dog is registered as ${actual}. Please select the correct class.`,
+            });
+          }
+        }
       }
 
       // Calculate total fee for the new classes
@@ -627,16 +647,86 @@ export const entriesRouter = createTRPCRouter({
       }
 
       const oldFee = entry.totalFee;
-      // Use show-level tiered pricing if available, otherwise sum per-class fees
+
+      // Recompute fees via the order-level service so the multi-dog package
+      // (if applied to this order) stays consistent. We load every entry in
+      // the same order, swap in the new class count for the target entry,
+      // and ask the service for the fresh breakdown.
+      const orderId = entry.orderId;
       let newFee: number;
-      if (entry.show.firstEntryFee != null) {
-        const subsequentRate = entry.show.subsequentEntryFee ?? entry.show.firstEntryFee;
-        newFee = newClasses.length > 0
-          ? entry.show.firstEntryFee + subsequentRate * (newClasses.length - 1)
-          : 0;
+      let perClassFees: number[];
+
+      if (orderId && entry.show.firstEntryFee != null) {
+        const [orderRow, siblingEntries] = await Promise.all([
+          ctx.db.query.orders.findFirst({
+            where: eq(orders.id, orderId),
+            columns: { discountGroupId: true },
+          }),
+          ctx.db.query.entries.findMany({
+            where: and(eq(entries.orderId, orderId), isNull(entries.deletedAt)),
+            with: { entryClasses: { columns: { id: true } } },
+          }),
+        ]);
+
+        let discountGroup: FeeContext['discountGroup'] = null;
+        if (orderRow?.discountGroupId) {
+          const dg = await ctx.db.query.showDiscountGroups.findFirst({
+            where: eq(showDiscountGroups.id, orderRow.discountGroupId),
+          });
+          if (dg) {
+            discountGroup = {
+              firstEntryFeePence: dg.firstEntryFeePence,
+              multiDogPackagePence: dg.multiDogPackagePence,
+            };
+          }
+        }
+
+        const feeCtx: FeeContext = {
+          firstEntryFeePence: entry.show.firstEntryFee,
+          subsequentEntryFeePence: entry.show.subsequentEntryFee,
+          nfcEntryFeePence: entry.show.nfcEntryFee,
+          juniorHandlerFeePence: entry.show.juniorHandlerFee,
+          multiDogThreshold: entry.show.multiDogThreshold,
+          multiDogPackagePence: entry.show.multiDogPackagePence,
+          discountGroup,
+        };
+
+        // Preserve sibling entries' class counts; substitute the new
+        // class count for the entry being edited.
+        const dogEntries: DogEntryInput[] = siblingEntries.map((e) => ({
+          key: e.id,
+          kind: e.entryType === 'junior_handler'
+            ? 'junior_handler'
+            : e.isNfc
+              ? 'nfc'
+              : 'standard',
+          classCount: e.id === input.id ? newClasses.length : e.entryClasses.length,
+        }));
+
+        const result = computeOrderFees(dogEntries, feeCtx);
+        const myBreak = result.perEntry.find((b) => b.key === input.id)!;
+        newFee = myBreak.fee;
+        perClassFees = myBreak.perClassFees;
+
+        // Update sibling entries whose share of the multi-dog package
+        // may have shifted (rounding remainder lives on the last paying
+        // entry, so adding/removing a class on one entry can re-slot it).
+        for (const sib of siblingEntries) {
+          if (sib.id === input.id) continue;
+          const sibBreak = result.perEntry.find((b) => b.key === sib.id);
+          if (sibBreak && sibBreak.fee !== sib.totalFee) {
+            await ctx.db
+              .update(entries)
+              .set({ totalFee: sibBreak.fee })
+              .where(eq(entries.id, sib.id));
+          }
+        }
       } else {
+        // Legacy fallback: per-class fees from the showClasses table.
         newFee = newClasses.reduce((sum, sc) => sum + sc.entryFee, 0);
+        perClassFees = newClasses.map((sc) => sc.entryFee);
       }
+
       const feeDiff = newFee - oldFee;
 
       const oldClassIds = entry.entryClasses.map((ec) => ec.showClassId);
@@ -647,10 +737,10 @@ export const entriesRouter = createTRPCRouter({
         .where(eq(entryClasses.entryId, input.id));
 
       await ctx.db.insert(entryClasses).values(
-        newClasses.map((sc) => ({
+        newClasses.map((sc, idx) => ({
           entryId: input.id,
           showClassId: sc.id,
-          fee: sc.entryFee,
+          fee: perClassFees[idx] ?? sc.entryFee,
         }))
       );
 

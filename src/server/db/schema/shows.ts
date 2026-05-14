@@ -96,6 +96,7 @@ import { stewardAssignments } from './steward-assignments';
 import { showChecklistItems } from './show-checklist';
 import { sundryItems } from './sundry-items';
 import { showSponsors } from './sponsors';
+import { showDiscountGroups } from './show-discount-groups';
 
 export const shows = pgTable(
   'shows',
@@ -138,7 +139,10 @@ export const shows = pgTable(
     subsequentEntryFee: integer('subsequent_entry_fee'),
     nfcEntryFee: integer('nfc_entry_fee'),
     juniorHandlerFee: integer('junior_handler_fee'),
-    membersEntryFeePence: integer('members_entry_fee_pence'),
+    // Multi-dog package — when threshold paying dogs entered in one order,
+    // the per-dog first-class fees are replaced by this flat package price.
+    multiDogThreshold: integer('multi_dog_threshold'),
+    multiDogPackagePence: integer('multi_dog_package_pence'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -184,4 +188,5 @@ export const showsRelations = relations(shows, ({ one, many }) => ({
   checklistItems: many(showChecklistItems),
   sundryItems: many(sundryItems),
   showSponsors: many(showSponsors),
+  discountGroups: many(showDiscountGroups),
 }));

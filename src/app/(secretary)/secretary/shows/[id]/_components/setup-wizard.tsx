@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import type { RouterOutputs } from '@/server/trpc/router';
 import { ClassManager, BulkClassCreator } from './class-manager';
+import { DiscountsSection } from './discounts-section';
 import { JudgesSection } from './judge-section';
 import { ScheduleSettingsForm } from './schedule-settings-form';
 import { SundryItemManager } from './sundry-item-manager';
@@ -538,6 +539,10 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
   const [juniorHandlerFee, setJuniorHandlerFee] = useState(
     show.juniorHandlerFee != null ? penceToPoundsString(show.juniorHandlerFee) : '',
   );
+  const [multiDog, setMultiDog] = useState({
+    threshold: show.multiDogThreshold != null ? String(show.multiDogThreshold) : '',
+    packagePence: show.multiDogPackagePence != null ? penceToPoundsString(show.multiDogPackagePence) : '',
+  });
   const [entryCloseDate, setEntryCloseDate] = useState(
     show.entryCloseDate
       ? new Date(show.entryCloseDate).toISOString().slice(0, 16)
@@ -589,6 +594,8 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
         : null,
       nfcEntryFee: nfcEntryFee ? poundsToPence(Number(nfcEntryFee)) : null,
       juniorHandlerFee: juniorHandlerFee ? poundsToPence(Number(juniorHandlerFee)) : null,
+      multiDogThreshold: multiDog.threshold ? Number(multiDog.threshold) : null,
+      multiDogPackagePence: multiDog.packagePence ? poundsToPence(Number(multiDog.packagePence)) : null,
       entryCloseDate: entryCloseDate
         ? new Date(entryCloseDate).toISOString()
         : null,
@@ -690,6 +697,12 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
             </div>
           </div>
         </div>
+
+        <DiscountsSection
+          showId={showId}
+          multiDog={multiDog}
+          onMultiDogChange={setMultiDog}
+        />
       </div>
 
       {/* Close Dates */}

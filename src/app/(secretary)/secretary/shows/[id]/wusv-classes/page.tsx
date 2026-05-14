@@ -43,7 +43,6 @@ export default function WusvClassesPage() {
   });
 
   const [entryFeeStr, setEntryFeeStr] = useState('');
-  const [membersFeeStr, setMembersFeeStr] = useState('');
   const [selectedAgeIds, setSelectedAgeIds] = useState<Set<string>>(new Set());
   const [includeJh6_11, setIncludeJh6_11] = useState(true);
   const [includeJh12_16, setIncludeJh12_16] = useState(true);
@@ -59,9 +58,6 @@ export default function WusvClassesPage() {
     const svClass = show.showClasses.find((sc) => sc.classDefinition?.type === 'sv_age');
     const fee = svClass?.entryFee ?? show.firstEntryFee ?? 0;
     setEntryFeeStr(penceToPoundsString(fee));
-
-    const membersFee = show.membersEntryFeePence;
-    setMembersFeeStr(membersFee != null ? penceToPoundsString(membersFee) : '');
 
     // Which age class defs are currently active
     const activeAgeIds = new Set(
@@ -125,7 +121,6 @@ export default function WusvClassesPage() {
     setupMutation.mutate({
       showId,
       entryFee: poundsToPence(parseFloat(entryFeeStr) || 0),
-      membersEntryFeePence: membersFeeStr ? poundsToPence(parseFloat(membersFeeStr)) : null,
       selectedAgeDefIds: [...selectedAgeIds],
       includeJh6_11,
       includeJh12_16,
@@ -164,27 +159,10 @@ export default function WusvClassesPage() {
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Members Fee <span className="font-normal text-muted-foreground">(optional)</span>
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">£</span>
-                <Input
-                  type="number"
-                  min={0}
-                  step={0.01}
-                  placeholder="Leave blank to disable"
-                  className="pl-7 text-lg font-semibold h-12"
-                  value={membersFeeStr}
-                  onChange={(e) => setMembersFeeStr(e.target.value)}
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Exhibitors entering their SV, BRG, or League membership number will pay this fee instead.
-              </p>
-            </div>
           </div>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Member discount rates are now configured under <strong>Discounts</strong> on the show overview — you can offer different rates to SV, BRG, or League members from one place.
+          </p>
         </CardContent>
       </Card>
 
