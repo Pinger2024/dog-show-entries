@@ -1104,6 +1104,145 @@ export const secretaryRouter = createTRPCRouter({
       });
     }),
 
+  /**
+   * Higham-style Extras Summary report. Groups every paid add-on
+   * purchase (sundry items: catalogues, memberships, donations etc;
+   * class sponsorships; show sponsors) by item type and lists each
+   * buyer's contact details under that section. Per Amanda's spec
+   * 2026-05-14.
+   */
+  getExtrasSummary: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      // Sundry line items on paid orders only. Refunded orders are
+      // excluded because the buyer no longer holds the item.
+      const sundryRows = await ctx.db
+        .select({
+          itemName: sundryItems.name,
+          quantity: orderSundryItems.quantity,
+          unitPrice: orderSundryItems.unitPrice,
+          buyerName: users.name,
+          buyerEmail: users.email,
+          buyerPhone: users.phone,
+        })
+        .from(orderSundryItems)
+        .innerJoin(orders, eq(orderSundryItems.orderId, orders.id))
+        .innerJoin(sundryItems, eq(orderSundryItems.sundryItemId, sundryItems.id))
+        .innerJoin(users, eq(orders.exhibitorId, users.id))
+        .where(and(eq(orders.showId, input.showId), eq(orders.status, 'paid')));
+
+      // Class sponsorships — secretary-entered, not a purchase. Still
+      // useful in the extras summary so the secretary has one list of
+      // every external contributor to the show.
+      const classSponsorRows = await ctx.db
+        .select({
+          className: classDefinitions.name,
+          sponsorName: classSponsorships.sponsorName,
+          sponsorAffix: classSponsorships.sponsorAffix,
+          trophyName: classSponsorships.trophyName,
+          trophyDonor: classSponsorships.trophyDonor,
+          prizeMoney: classSponsorships.prizeMoney,
+          prizeDescription: classSponsorships.prizeDescription,
+        })
+        .from(classSponsorships)
+        .innerJoin(showClasses, eq(classSponsorships.showClassId, showClasses.id))
+        .innerJoin(classDefinitions, eq(showClasses.classDefinitionId, classDefinitions.id))
+        .where(eq(showClasses.showId, input.showId));
+
+      // Show-level sponsors. Stored on showSponsors with optional ad/
+      // tier info. We list each one as a sponsor entry.
+      const showSponsorRows = await ctx.db
+        .select({
+          tier: showSponsors.tier,
+          customTitle: showSponsors.customTitle,
+          specialPrizes: showSponsors.specialPrizes,
+          prizeMoney: showSponsors.prizeMoney,
+          sponsorName: sponsors.name,
+          sponsorEmail: sponsors.contactEmail,
+          sponsorPhone: sponsors.contactPhone,
+        })
+        .from(showSponsors)
+        .innerJoin(sponsors, eq(showSponsors.sponsorId, sponsors.id))
+        .where(eq(showSponsors.showId, input.showId));
+
+      type SundryBuyer = {
+        name: string | null;
+        email: string | null;
+        phone: string | null;
+        quantity: number;
+        unitPrice: number;
+      };
+      type SponsorRow = {
+        sponsorName: string;
+        email?: string | null;
+        phone?: string | null;
+        detail: string;
+        amountPence?: number;
+      };
+
+      // Group sundry rows by item name
+      const sundryGroups = new Map<string, SundryBuyer[]>();
+      for (const r of sundryRows) {
+        const arr = sundryGroups.get(r.itemName) ?? [];
+        arr.push({
+          name: r.buyerName,
+          email: r.buyerEmail,
+          phone: r.buyerPhone,
+          quantity: r.quantity,
+          unitPrice: r.unitPrice,
+        });
+        sundryGroups.set(r.itemName, arr);
+      }
+
+      const sections = [
+        ...Array.from(sundryGroups.entries())
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([label, buyers]) => ({
+            kind: 'sundry' as const,
+            label,
+            buyers: buyers.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '')),
+            totalQuantity: buyers.reduce((s, b) => s + b.quantity, 0),
+            totalPence: buyers.reduce((s, b) => s + b.quantity * b.unitPrice, 0),
+          })),
+      ];
+
+      const classSponsorEntries: SponsorRow[] = classSponsorRows
+        .filter((r) => r.sponsorName || r.trophyName || r.prizeMoney || r.prizeDescription)
+        .map((r) => {
+          const parts: string[] = [];
+          if (r.trophyName) parts.push(r.trophyName);
+          if (r.prizeMoney) parts.push(`£${(r.prizeMoney / 100).toFixed(2)}`);
+          if (r.prizeDescription) parts.push(r.prizeDescription);
+          return {
+            sponsorName: [r.sponsorName, r.sponsorAffix].filter(Boolean).join(' ') || (r.trophyDonor ?? 'Class sponsor'),
+            detail: `${r.className}${parts.length ? ' — ' + parts.join(', ') : ''}`,
+            amountPence: r.prizeMoney ?? undefined,
+          };
+        });
+
+      const showSponsorEntries: SponsorRow[] = showSponsorRows.map((r) => {
+        const parts: string[] = [];
+        if (r.customTitle) parts.push(r.customTitle);
+        if (r.specialPrizes) parts.push(r.specialPrizes);
+        if (r.prizeMoney) parts.push(`£${(r.prizeMoney / 100).toFixed(2)}`);
+        return {
+          sponsorName: r.sponsorName,
+          email: r.sponsorEmail,
+          phone: r.sponsorPhone,
+          detail: [r.tier, ...parts].filter(Boolean).join(' — '),
+          amountPence: r.prizeMoney ?? undefined,
+        };
+      });
+
+      return {
+        sundrySections: sections,
+        classSponsors: classSponsorEntries,
+        showSponsors: showSponsorEntries,
+      };
+    }),
+
   // ── Class transfer ─────────────────────────────────────────
 
   transferClass: secretaryProcedure

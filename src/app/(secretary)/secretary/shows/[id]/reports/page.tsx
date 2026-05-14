@@ -80,7 +80,7 @@ export default function ReportsPage() {
 
   return (
     <Tabs defaultValue="entries" className="space-y-4">
-      <TabsList className="grid w-full grid-cols-5">
+      <TabsList className="grid w-full grid-cols-6">
         <TabsTrigger value="entries" className="gap-1.5 text-xs sm:text-sm">
           <FileText className="size-3.5 hidden sm:block" />
           Entries
@@ -100,6 +100,11 @@ export default function ReportsPage() {
           <span className="sm:hidden">Cat.</span>
           <span className="hidden sm:inline">Catalogues</span>
         </TabsTrigger>
+        <TabsTrigger value="extras" className="gap-1.5 text-xs sm:text-sm">
+          <ClipboardList className="size-3.5 hidden sm:block" />
+          <span className="sm:hidden">Extras</span>
+          <span className="hidden sm:inline">Extras Summary</span>
+        </TabsTrigger>
         <TabsTrigger value="audit" className="gap-1.5 text-xs sm:text-sm">
           <History className="size-3.5 hidden sm:block" />
           <span className="sm:hidden">Audit</span>
@@ -118,6 +123,9 @@ export default function ReportsPage() {
       </TabsContent>
       <TabsContent value="catalogue">
         <CatalogueOrdersContent showId={showId} />
+      </TabsContent>
+      <TabsContent value="extras">
+        <ExtrasSummaryContent showId={showId} />
       </TabsContent>
       <TabsContent value="audit">
         <AuditLogViewer showId={showId} />
@@ -1056,6 +1064,188 @@ function AbsenteeReportContent({ showId }: { showId: string }) {
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function ExtrasSummaryContent({ showId }: { showId: string }) {
+  const { data, isLoading } = trpc.secretary.getExtrasSummary.useQuery({ showId });
+
+  function exportCsv() {
+    if (!data) return;
+    const headers = ['Section', 'Name', 'Email', 'Phone', 'Detail / Quantity', 'Total'];
+    const rows: string[][] = [];
+    for (const section of data.sundrySections) {
+      for (const buyer of section.buyers) {
+        rows.push([
+          section.label,
+          buyer.name ?? '',
+          buyer.email ?? '',
+          buyer.phone ?? '',
+          `Qty ${buyer.quantity}`,
+          formatCurrency(buyer.quantity * buyer.unitPrice),
+        ]);
+      }
+    }
+    for (const sp of data.classSponsors) {
+      rows.push(['Class Sponsor', sp.sponsorName, '', '', sp.detail, sp.amountPence ? formatCurrency(sp.amountPence) : '']);
+    }
+    for (const sp of data.showSponsors) {
+      rows.push(['Show Sponsor', sp.sponsorName, sp.email ?? '', sp.phone ?? '', sp.detail, sp.amountPence ? formatCurrency(sp.amountPence) : '']);
+    }
+    downloadCsv(headers, rows, `extras-summary-${showId}`);
+  }
+
+  if (isLoading) return <LoadingCard />;
+  if (!data) return null;
+
+  const totalExtras = data.sundrySections.reduce((sum, s) => sum + s.totalPence, 0);
+  const totalBuyers = data.sundrySections.reduce((sum, s) => sum + s.buyers.length, 0);
+  const isEmpty =
+    data.sundrySections.length === 0 &&
+    data.classSponsors.length === 0 &&
+    data.showSponsors.length === 0;
+
+  return (
+    <div className="space-y-4">
+      {/* Top totals */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <Card>
+          <CardContent className="pt-4 pb-3">
+            <p className="text-xs font-medium text-muted-foreground">Add-on revenue</p>
+            <p className="text-2xl font-bold">{formatCurrency(totalExtras)}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3">
+            <p className="text-xs font-medium text-muted-foreground">Buyers</p>
+            <p className="text-2xl font-bold">{totalBuyers}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3">
+            <p className="text-xs font-medium text-muted-foreground">Sponsors</p>
+            <p className="text-2xl font-bold">
+              {data.classSponsors.length + data.showSponsors.length}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" onClick={exportCsv} disabled={isEmpty}>
+          <Download className="size-3.5" />
+          Download CSV
+        </Button>
+      </div>
+
+      {isEmpty && (
+        <Card>
+          <CardContent className="pt-6 pb-6 text-center text-sm text-muted-foreground">
+            No add-ons, sponsors or extras have been recorded for this show yet.
+          </CardContent>
+        </Card>
+      )}
+
+      {/* One card per sundry item type */}
+      {data.sundrySections.map((section) => (
+        <Card key={section.label}>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">{section.label}</CardTitle>
+              <Badge variant="secondary">
+                {section.totalQuantity} × {formatCurrency(section.totalPence / Math.max(section.totalQuantity, 1))} = {formatCurrency(section.totalPence)}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead className="hidden sm:table-cell">Email</TableHead>
+                  <TableHead className="hidden sm:table-cell">Phone</TableHead>
+                  <TableHead className="text-right">Qty</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {section.buyers.map((buyer, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="font-medium">{buyer.name ?? '—'}</TableCell>
+                    <TableCell className="hidden sm:table-cell text-muted-foreground">{buyer.email ?? '—'}</TableCell>
+                    <TableCell className="hidden sm:table-cell text-muted-foreground">{buyer.phone ?? '—'}</TableCell>
+                    <TableCell className="text-right">{buyer.quantity}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(buyer.quantity * buyer.unitPrice)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ))}
+
+      {/* Class sponsors */}
+      {data.classSponsors.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Class Sponsors</CardTitle>
+            <CardDescription>Sponsorships you have recorded against individual classes.</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Sponsor</TableHead>
+                  <TableHead>Class / Trophy</TableHead>
+                  <TableHead className="text-right">Prize</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.classSponsors.map((sp, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="font-medium">{sp.sponsorName}</TableCell>
+                    <TableCell className="text-muted-foreground">{sp.detail}</TableCell>
+                    <TableCell className="text-right">{sp.amountPence ? formatCurrency(sp.amountPence) : '—'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Show sponsors */}
+      {data.showSponsors.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Show Sponsors</CardTitle>
+            <CardDescription>Sponsors who back the show as a whole.</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Sponsor</TableHead>
+                  <TableHead className="hidden sm:table-cell">Email</TableHead>
+                  <TableHead className="hidden sm:table-cell">Phone</TableHead>
+                  <TableHead>Detail</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.showSponsors.map((sp, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="font-medium">{sp.sponsorName}</TableCell>
+                    <TableCell className="hidden sm:table-cell text-muted-foreground">{sp.email ?? '—'}</TableCell>
+                    <TableCell className="hidden sm:table-cell text-muted-foreground">{sp.phone ?? '—'}</TableCell>
+                    <TableCell className="text-muted-foreground">{sp.detail}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
