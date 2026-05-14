@@ -101,8 +101,18 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     trpc.secretary.getScheduleData.useQuery({ showId }, { retry: 2 });
   const { data: showData } = trpc.shows.getById.useQuery({ id: showId });
 
-  // Derive existing schedule data from showData as fallback if getScheduleData fails
-  const effectiveExisting = existing ?? (existingError ? (showData?.scheduleData as typeof existing ?? null) : undefined);
+  // Derive existing schedule data from showData as fallback if getScheduleData fails.
+  // We must NOT use `existing ?? fallback` here — when the server legitimately returns
+  // `null` (brand-new show, no scheduleData yet), `null ?? undefined` collapses to
+  // `undefined`, the load effect treats it as "still loading", `hasLoaded` never flips
+  // true, and autosave is silently disabled forever. Use an explicit undefined check
+  // so null (a valid resolved value) flows through unchanged.
+  const effectiveExisting =
+    existing !== undefined
+      ? existing
+      : existingError
+        ? ((showData?.scheduleData as typeof existing) ?? null)
+        : undefined;
 
   const { data: previousData } = trpc.secretary.getPreviousScheduleData.useQuery(
     { showId },
