@@ -5371,7 +5371,17 @@ export const secretaryRouter = createTRPCRouter({
         .set(showUpdates)
         .where(eq(shows.id, input.showId));
 
-      // Sync new officers into organisation_people so they're available for future shows
+      // Sync new officers into organisation_people so they're available for future shows.
+      //
+      // Important: the form auto-saves on every keystroke, so a partially
+      // typed name like "Phili" would otherwise be inserted as its own
+      // roster row each tick. Only sync an officer when BOTH the name and
+      // the position are filled in — position is a single-click dropdown,
+      // so its presence is the strongest signal that the user has
+      // committed to this officer rather than still typing.
+      //
+      // Also require a space in the name (i.e. first + surname) as a
+      // second guard against incidental single-letter or partial entries.
       const scheduleOfficers = input.scheduleData.officers;
       if (scheduleOfficers && scheduleOfficers.length > 0 && currentShow) {
         {
@@ -5392,7 +5402,14 @@ export const secretaryRouter = createTRPCRouter({
           );
 
           const newPeople = scheduleOfficers
-            .filter((o) => o.name.trim() && !existingNames.has(o.name.toLowerCase().trim()))
+            .filter((o) => {
+              const name = o.name.trim();
+              const position = (o.position ?? '').trim();
+              if (!name || !position) return false;
+              if (!name.includes(' ')) return false;
+              if (existingNames.has(name.toLowerCase())) return false;
+              return true;
+            })
             .map((o) => ({
               organisationId: currentShow.organisationId,
               name: o.name.trim(),
