@@ -80,6 +80,78 @@ function buildJudgeBreedText(
   return [...new Set(parts)].join(', ') || 'All breeds';
 }
 
+/** Build the two-line breed + classification labels for judge offer
+ *  emails, per Amanda's 2026-05-15 spec. Splits the legacy combined
+ *  "Breeds" line into:
+ *    - Breed: the actual dog breed(s) on the show
+ *    - Classification: what they're judging (breed classes, Special
+ *      Awards Classes, Junior Handling)
+ */
+function buildJudgeBreedAndClassification(
+  assignments: {
+    breed?: { name: string } | null;
+    sex: string | null;
+    isSpecialAwardsClassesJudge?: boolean | null;
+  }[],
+  showBreedNames: string[],
+  showName?: string,
+): { breedLine: string; classificationLine: string } {
+  const fallbackBreed = showBreedNames.length > 0
+    ? showBreedNames.join(', ')
+    : (showName ?? 'All breeds');
+
+  // Collect breeds and classifications separately
+  const breeds = new Set<string>();
+  const classifications = new Set<string>();
+  const breedSexes = new Map<string, Set<'dog' | 'bitch' | 'both'>>();
+  let hasJh = false;
+  let hasSac = false;
+
+  for (const a of assignments) {
+    const isSac = a.isSpecialAwardsClassesJudge === true;
+    if (isSac) {
+      hasSac = true;
+      // SAC inherits the show's breed for the breed line
+      for (const b of showBreedNames) breeds.add(b);
+      continue;
+    }
+    if (a.breed?.name) {
+      breeds.add(a.breed.name);
+      const set = breedSexes.get(a.breed.name) ?? new Set();
+      set.add(a.sex === 'dog' ? 'dog' : a.sex === 'bitch' ? 'bitch' : 'both');
+      breedSexes.set(a.breed.name, set);
+    } else if (a.sex === null) {
+      hasJh = true;
+    }
+  }
+
+  // Build per-breed classification with sex grouping
+  for (const breed of breeds) {
+    const sexes = breedSexes.get(breed);
+    if (sexes) {
+      const hasDog = sexes.has('dog');
+      const hasBitch = sexes.has('bitch');
+      const hasBoth = sexes.has('both');
+      const sexLabel = hasBoth || (hasDog && hasBitch)
+        ? 'Dogs & Bitches'
+        : hasDog ? 'Dogs' : hasBitch ? 'Bitches' : '';
+      classifications.add(sexLabel ? `${breed} ${sexLabel} classes` : `${breed} classes`);
+    }
+  }
+  if (hasSac) {
+    const showBreed = showBreedNames[0];
+    classifications.add(showBreed ? `${showBreed} Special Award Classes` : 'Special Award Classes');
+  }
+  if (hasJh) {
+    classifications.add('Junior Handling');
+  }
+
+  return {
+    breedLine: breeds.size > 0 ? [...breeds].join(', ') : fallbackBreed,
+    classificationLine: classifications.size > 0 ? [...classifications].join(' / ') : 'TBC',
+  };
+}
+
 /**
  * Derive a sundry row's status from the entries in the same order
  * rather than the order's payment status. The order might be
@@ -3920,11 +3992,15 @@ export const secretaryRouter = createTRPCRouter({
         with: { breed: true, ring: true },
       });
 
-      // Derive breed text: show.breed (single-breed), class breeds, or show name
+      // Derive breed + classification labels per Amanda's 2026-05-15 spec.
       const showBreedNames = show.breed
         ? [show.breed.name]
         : [...new Set(show.showClasses.filter((sc) => sc.breed).map((sc) => sc.breed!.name))];
-      const breedsText = buildJudgeBreedText(assignments, showBreedNames, show.name);
+      const { breedLine, classificationLine } = buildJudgeBreedAndClassification(
+        assignments,
+        showBreedNames,
+        show.name,
+      );
 
       // Token expires in 30 days
       const tokenExpiresAt = new Date();
@@ -4020,8 +4096,12 @@ export const secretaryRouter = createTRPCRouter({
             <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${venue}</td>
           </tr>
           <tr>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Breeds</td>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${breedsText}</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Breed</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${breedLine}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Classification</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${classificationLine}</td>
           </tr>
           ${show.showType ? `<tr>
             <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Show Type</td>
@@ -4146,7 +4226,11 @@ export const secretaryRouter = createTRPCRouter({
       const showBreedNames = contract.show.breed
         ? [contract.show.breed.name]
         : [...new Set(contract.show.showClasses.filter((sc) => sc.breed).map((sc) => sc.breed!.name))];
-      const breedsText = buildJudgeBreedText(assignments, showBreedNames, contract.show.name);
+      const { breedLine, classificationLine } = buildJudgeBreedAndClassification(
+        assignments,
+        showBreedNames,
+        contract.show.name,
+      );
 
       const baseUrl = getBaseUrl();
       const acceptUrl = `${baseUrl}/api/judge-contract/${contract.offerToken}`;
@@ -4190,7 +4274,8 @@ export const secretaryRouter = createTRPCRouter({
           <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444; width: 120px;">Show</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${show.name}</td></tr>
           <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Date</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${showDate}</td></tr>
           <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Venue</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${venue}</td></tr>
-          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Breeds</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${breedsText}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Breed</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${breedLine}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Classification</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${classificationLine}</td></tr>
         </table>
         <div style="text-align: center; margin: 28px 0;">
           <a href="${acceptUrl}?action=accept" style="display: inline-block; background: #2D5F3F; color: #ffffff; padding: 14px 32px; border-radius: 8px; font-size: 16px; font-weight: 600; text-decoration: none; margin-bottom: 12px;">Accept Appointment</a>

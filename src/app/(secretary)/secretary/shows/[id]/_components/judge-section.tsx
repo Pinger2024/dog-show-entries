@@ -340,7 +340,7 @@ export function JudgesSection({ showId }: { showId: string }) {
 
   // Deduplicate judges from assignments (a judge may have multiple breed/ring assignments)
   const uniqueJudges = useMemo(() => {
-    const seen = new Map<string, {
+    type JudgeRow = {
       judgeId: string;
       name: string;
       kcNumber: string | null;
@@ -348,29 +348,43 @@ export function JudgesSection({ showId }: { showId: string }) {
       contactPhone: string | null;
       kennelClubAffix: string | null;
       breeds: string[];
+      // Sexes covered per breed — used to derive the classification label
+      // (Dogs / Bitches / Dogs & Bitches) per Amanda's spec 2026-05-15.
+      breedSexes: Map<string, Set<'dog' | 'bitch' | 'both'>>;
       rings: string[];
       assignmentIds: string[];
-      // True when every one of this judge's assignments has breed=null AND
-      // sex=null — the shape JH-only assignments take in the DB.
-      // Used so the offer preview says "Junior Handling" rather than
-      // falling back to the show's default breed.
-      isJuniorHandlingOnly: boolean;
-    }>();
+      hasSpecialAwards: boolean;
+      hasJuniorHandling: boolean;
+      hasBreedAssignment: boolean;
+    };
+    const seen = new Map<string, JudgeRow>();
     for (const a of assignments ?? []) {
       // Group-level assignments (with a judgeRoleId) are shown in GroupJudgesPanel, not here
       if (a.judgeRole) continue;
+      const isSac = (a as { isSpecialAwardsClassesJudge?: boolean }).isSpecialAwardsClassesJudge === true;
+      const isJhShape = !isSac && a.breed === null && a.sex === null;
       const existing = seen.get(a.judgeId);
-      const isJhShape = a.breed === null && a.sex === null;
       if (existing) {
         if (a.breed && !existing.breeds.includes(a.breed.name)) {
           existing.breeds.push(a.breed.name);
+        }
+        if (a.breed && !isSac) {
+          const set = existing.breedSexes.get(a.breed.name) ?? new Set();
+          set.add(a.sex === 'dog' ? 'dog' : a.sex === 'bitch' ? 'bitch' : 'both');
+          existing.breedSexes.set(a.breed.name, set);
         }
         if (a.ring && !existing.rings.includes(`Ring ${a.ring.number}`)) {
           existing.rings.push(`Ring ${a.ring.number}`);
         }
         existing.assignmentIds.push(a.id);
-        if (!isJhShape) existing.isJuniorHandlingOnly = false;
+        if (isSac) existing.hasSpecialAwards = true;
+        if (isJhShape) existing.hasJuniorHandling = true;
+        if (a.breed && !isSac) existing.hasBreedAssignment = true;
       } else {
+        const breedSexes = new Map<string, Set<'dog' | 'bitch' | 'both'>>();
+        if (a.breed && !isSac) {
+          breedSexes.set(a.breed.name, new Set([a.sex === 'dog' ? 'dog' : a.sex === 'bitch' ? 'bitch' : 'both']));
+        }
         seen.set(a.judgeId, {
           judgeId: a.judgeId,
           name: a.judge.name,
@@ -378,15 +392,59 @@ export function JudgesSection({ showId }: { showId: string }) {
           contactEmail: a.judge.contactEmail,
           contactPhone: a.judge.contactPhone,
           kennelClubAffix: a.judge.kennelClubAffix,
-          breeds: a.breed ? [a.breed.name] : [],
+          breeds: a.breed && !isSac ? [a.breed.name] : [],
+          breedSexes,
           rings: a.ring ? [`Ring ${a.ring.number}`] : [],
           assignmentIds: [a.id],
-          isJuniorHandlingOnly: isJhShape,
+          hasSpecialAwards: isSac,
+          hasJuniorHandling: isJhShape,
+          hasBreedAssignment: !!a.breed && !isSac,
         });
       }
     }
     return Array.from(seen.values());
   }, [assignments]);
+
+  // Build the breed + classification labels Amanda wants shown on the
+  // assignments card and inside the offer email preview (2026-05-15).
+  // breed line = the actual breed(s); classification = what kind of
+  // judging (breed classes / Special Awards / Junior Handling).
+  function deriveJudgeLabels(j: typeof uniqueJudges[number]): {
+    breedLine: string;
+    classificationLines: string[];
+  } {
+    const showBreed = showData?.breed?.name ?? null;
+    const breedsForDisplay = j.breeds.length > 0
+      ? j.breeds
+      : (showBreed ? [showBreed] : []);
+    const breedLine = breedsForDisplay.length > 0
+      ? breedsForDisplay.join(', ')
+      : (showData?.name ?? 'All breeds');
+
+    const classifications: string[] = [];
+    if (j.hasBreedAssignment) {
+      for (const breed of j.breeds) {
+        const sexes = j.breedSexes.get(breed);
+        let sexLabel = '';
+        if (sexes) {
+          const hasDog = sexes.has('dog');
+          const hasBitch = sexes.has('bitch');
+          const hasBoth = sexes.has('both');
+          if (hasBoth || (hasDog && hasBitch)) sexLabel = 'Dogs & Bitches';
+          else if (hasDog) sexLabel = 'Dogs';
+          else if (hasBitch) sexLabel = 'Bitches';
+        }
+        classifications.push(sexLabel ? `${breed} ${sexLabel} classes` : `${breed} classes`);
+      }
+    }
+    if (j.hasSpecialAwards) {
+      classifications.push(showBreed ? `${showBreed} Special Award Classes` : 'Special Award Classes');
+    }
+    if (j.hasJuniorHandling) {
+      classifications.push('Junior Handling');
+    }
+    return { breedLine, classificationLines: classifications };
+  }
 
   function openOfferDialog(judgeId: string, email: string) {
     setOfferJudgeId(judgeId);
@@ -468,17 +526,29 @@ export function JudgesSection({ showId }: { showId: string }) {
                             <Badge variant="outline" className="text-muted-foreground">No Contract</Badge>
                           )}
                         </div>
-                        <div className="mt-1 flex flex-wrap gap-1.5">
-                          {j.breeds.length > 0 ? (
-                            j.breeds.map((b) => (
-                              <Badge key={b} variant="outline" className="text-xs">{b}</Badge>
-                            ))
-                          ) : (
-                            <span className="text-xs text-muted-foreground">All breeds</span>
-                          )}
-                          {j.rings.map((r) => (
-                            <Badge key={r} variant="outline" className="text-xs">{r}</Badge>
-                          ))}
+                        <div className="mt-1 space-y-1">
+                          {(() => {
+                            const { breedLine, classificationLines } = deriveJudgeLabels(j);
+                            return (
+                              <>
+                                <p className="text-xs text-muted-foreground">
+                                  <span className="font-medium text-foreground">Breed:</span> {breedLine}
+                                </p>
+                                {classificationLines.length > 0 && (
+                                  <p className="text-xs text-muted-foreground">
+                                    <span className="font-medium text-foreground">Classification:</span> {classificationLines.join('; ')}
+                                  </p>
+                                )}
+                                {j.rings.length > 0 && (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {j.rings.map((r) => (
+                                      <Badge key={r} variant="outline" className="text-xs">{r}</Badge>
+                                    ))}
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
                         </div>
                         {j.contactEmail && (
                           <p className="mt-1 text-xs text-muted-foreground flex items-center gap-1">
@@ -707,20 +777,11 @@ export function JudgesSection({ showId }: { showId: string }) {
           {/* Email preview */}
           {(() => {
             const judge = uniqueJudges.find((j) => j.judgeId === offerJudgeId);
-            // Derive breed names: judge's assigned breeds → show breed → class breeds → show name
-            const showBreedName = showData?.breed?.name;
-            const classBreedNames = [...new Set(
-              (showData?.showClasses ?? []).filter((sc) => sc.breed).map((sc) => sc.breed!.name)
-            )];
-            const fallbackBreed = showBreedName ?? (classBreedNames.length > 0 ? classBreedNames.join(', ') : (showData?.name ?? 'All breeds'));
-            // JH-only judges aren't judging a breed — the offer should
-            // say "Junior Handling" so the letter reads correctly and
-            // the judge knows what they've been asked to do.
-            const breedsText = judge?.isJuniorHandlingOnly
-              ? 'Junior Handling'
-              : judge?.breeds.length
-                ? judge.breeds.join(', ')
-                : fallbackBreed;
+            const labels = judge ? deriveJudgeLabels(judge) : { breedLine: '—', classificationLines: [] };
+            const breedLine = labels.breedLine;
+            const classificationText = labels.classificationLines.length > 0
+              ? labels.classificationLines.join(' / ')
+              : '—';
             const showDate = showData?.startDate
               ? new Date(showData.startDate).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
               : 'TBC';
@@ -745,8 +806,10 @@ export function JudgesSection({ showId }: { showId: string }) {
                   <span>{showDate}</span>
                   <span className="font-medium">Venue</span>
                   <span>{venue}</span>
-                  <span className="font-medium">Breeds</span>
-                  <span>{breedsText}</span>
+                  <span className="font-medium">Breed</span>
+                  <span>{breedLine}</span>
+                  <span className="font-medium">Classification</span>
+                  <span>{classificationText}</span>
                   {showData?.showType && (
                     <>
                       <span className="font-medium">Type</span>
