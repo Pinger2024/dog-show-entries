@@ -2768,6 +2768,7 @@ export const secretaryRouter = createTRPCRouter({
           label: req.label,
           sex: req.sex,
           classCount: req.classCount,
+          isSpecialAwards: req.isSpecialAwards,
           covered: judges.length > 0,
           judges,
           // Keep flat fields for backwards compat

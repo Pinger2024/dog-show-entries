@@ -123,6 +123,7 @@ export function JudgesSection({ showId }: { showId: string }) {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardPrefillBreedId, setWizardPrefillBreedId] = useState<string | null | undefined>(undefined);
   const [wizardPrefillSex, setWizardPrefillSex] = useState<string | null | undefined>(undefined);
+  const [wizardPrefillSpecialAwards, setWizardPrefillSpecialAwards] = useState(false);
   const utils = trpc.useUtils();
 
   const { data: assignments, isLoading } =
@@ -462,9 +463,10 @@ export function JudgesSection({ showId }: { showId: string }) {
       {/* Coverage Dashboard */}
       <JudgeCoverageDashboard
         showId={showId}
-        onAddJudge={(breedId, sex) => {
+        onAddJudge={(breedId, sex, isSpecialAwards) => {
           setWizardPrefillBreedId(breedId);
           setWizardPrefillSex(sex);
+          setWizardPrefillSpecialAwards(isSpecialAwards);
           setWizardOpen(true);
         }}
       />
@@ -476,6 +478,7 @@ export function JudgesSection({ showId }: { showId: string }) {
         onOpenChange={setWizardOpen}
         prefillBreedId={wizardPrefillBreedId}
         prefillSex={wizardPrefillSex}
+        prefillSpecialAwards={wizardPrefillSpecialAwards}
       />
 
       {/* Group & show-level judges — multi-breed shows only */}

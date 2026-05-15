@@ -59,6 +59,11 @@ interface AddJudgeWizardProps {
   /** Pre-select a specific breed+sex when triggered from the coverage dashboard */
   prefillBreedId?: string | null;
   prefillSex?: string | null;
+  /** True when the coverage cell that triggered this wizard was a Special
+   *  Awards Classes cell. Routes the prefill to the SAC combo only and
+   *  prevents the regular breed combo (which also matches breedId=GSD)
+   *  from being auto-ticked. Fixes Amanda's bug 2026-05-15. */
+  prefillSpecialAwards?: boolean;
 }
 
 import { sexLabel } from './utils';
@@ -79,6 +84,7 @@ export function AddJudgeWizard({
   onOpenChange,
   prefillBreedId,
   prefillSex,
+  prefillSpecialAwards = false,
 }: AddJudgeWizardProps) {
   // ── Step state ──
   const [step, setStep] = useState<Step>('find');
@@ -228,18 +234,23 @@ export function AddJudgeWizard({
         : `${c.breedId ?? 'all'}:${c.sex ?? 'both'}`;
       const assignedTo = assignedMap.get(key);
 
-      // If triggered from coverage dashboard with a specific breed/sex, pre-select that.
-      // SAC and Junior Handling combos both have breedId=null AND sex=null, so a
-      // breedId-null prefill would otherwise pre-select both. Skip the auto-prefill
-      // for those special combos — the user picks them explicitly from the wizard
-      // step. Fixes Amanda's 2026-05-15 bug where assigning a SAC judge also
-      // auto-ticked Junior Handling.
-      const isSpecialCombo = c.isJuniorHandling || c.isSpecialAwardsClasses;
-      const isPrefilled = !assignedTo
-        && !isSpecialCombo
-        && prefillBreedId !== undefined
-        && c.breedId === prefillBreedId
-        && (prefillSex === undefined || c.sex === prefillSex);
+      // Prefill rules — Amanda's 2026-05-15 bugs forced a tightening here:
+      //  • If the user clicked Add on the SAC coverage cell, ONLY the SAC
+      //    combo should pre-tick. Regular breed combos must stay clear
+      //    even when they share the same breedId.
+      //  • Otherwise (regular breed cell), the regular breed combo
+      //    pre-ticks but neither SAC nor JH does — those need an
+      //    explicit click because their breedId/sex shape overlaps with
+      //    breed-null prefills.
+      let isPrefilled = false;
+      if (prefillSpecialAwards) {
+        isPrefilled = !assignedTo && c.isSpecialAwardsClasses === true;
+      } else if (!c.isJuniorHandling && !c.isSpecialAwardsClasses) {
+        isPrefilled = !assignedTo
+          && prefillBreedId !== undefined
+          && c.breedId === prefillBreedId
+          && (prefillSex === undefined || c.sex === prefillSex);
+      }
 
       return {
         breedId: c.breedId,
