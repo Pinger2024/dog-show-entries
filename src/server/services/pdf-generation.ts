@@ -117,6 +117,12 @@ export async function generateCataloguePdf(
   const seenJudgeKeys = new Set<string>();
   for (const ja of judgeAssignmentRows) {
     if (!ja.judge?.name) continue;
+    if (ja.isSpecialAwardsClassesJudge) {
+      // Lunchtime SAC judges get their own labelled line per Amanda's
+      // spec 2026-05-14: "Judge: A Smith - special awards classes".
+      judgeDisplayList.push(`${ja.judge.name} — Special Awards Classes`);
+      continue;
+    }
     const key = `${ja.judge.name}::${ja.sex ?? 'all'}`;
     if (seenJudgeKeys.has(key)) continue;
     seenJudgeKeys.add(key);
@@ -263,6 +269,7 @@ export async function generateCataloguePdf(
     welcomeNote: scheduleData?.welcomeNote,
     outsideAttraction: scheduleData?.outsideAttraction === true ? true : undefined,
     showManager: scheduleData?.showManager,
+    firstAiders: scheduleData?.firstAiders,
     officers: scheduleData?.officers,
     guarantors: scheduleData?.guarantors,
     awardSponsors: scheduleData?.awardSponsors,
@@ -358,7 +365,7 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
 
   if (!show) throw new Error(`Show ${showId} not found`);
 
-  const [showClasses, judgeAssignments, showSponsors] = await Promise.all([
+  const [showClasses, judgeAssignments, showSponsors, discountGroups] = await Promise.all([
     db.query.showClasses.findMany({
       where: eq(schema.showClasses.showId, showId),
       with: {
@@ -376,6 +383,10 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
       where: eq(schema.showSponsors.showId, showId),
       with: { sponsor: true },
     }),
+    db.query.showDiscountGroups.findMany({
+      where: eq(schema.showDiscountGroups.showId, showId),
+      orderBy: [asc(schema.showDiscountGroups.displayOrder)],
+    }),
   ]);
 
   // Build judges with sex-annotated display labels
@@ -383,8 +394,13 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
   // level (panel) assignments — those are surfaced via panelJudges below.
   const judgeKey = (name: string, sex: string | null) => `${name}::${sex ?? 'all'}`;
   const judgeEntries = new Map<string, { name: string; sex: string | null; breeds: string[]; isJH: boolean }>();
+  const specialAwardsJudges: Array<{ name: string }> = [];
   for (const ja of judgeAssignments) {
     if (!ja.judge?.name) continue;
+    if (ja.isSpecialAwardsClassesJudge) {
+      specialAwardsJudges.push({ name: ja.judge.name });
+      continue;
+    }
     if (ja.judgeRoleId) continue;
     const key = judgeKey(ja.judge.name, ja.sex);
     const existing = judgeEntries.get(key);
@@ -437,6 +453,16 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
       displayLabel: prefix ? `${prefix} — ${j.name}` : j.name,
     };
   });
+
+  // Append Special Awards Classes judges with the explicit role label.
+  for (const sac of specialAwardsJudges) {
+    judges.push({
+      name: sac.name,
+      breeds: [],
+      sex: null,
+      displayLabel: `${sac.name} — Special Awards Classes`,
+    });
+  }
 
   const classLabelMap = buildClassLabelMap(showClasses);
   const classes: ScheduleClass[] = showClasses.map((sc) => ({
@@ -505,6 +531,13 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     subsequentEntryFee: show.subsequentEntryFee,
     nfcEntryFee: show.nfcEntryFee,
     juniorHandlerFee: show.juniorHandlerFee ?? null,
+    multiDogThreshold: show.multiDogThreshold ?? null,
+    multiDogPackagePence: show.multiDogPackagePence ?? null,
+    discountGroups: discountGroups.map((g) => ({
+      label: g.label,
+      firstEntryFeePence: g.firstEntryFeePence,
+      multiDogPackagePence: g.multiDogPackagePence,
+    })),
     acceptsPostalEntries: show.acceptsPostalEntries ?? false,
     scheduleData: show.scheduleData as ScheduleShowInfo['scheduleData'],
     organisation: show.organisation ? {

@@ -37,6 +37,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import type { RouterOutputs } from '@/server/trpc/router';
 import { ClassManager, BulkClassCreator } from './class-manager';
+import { DiscountsSection } from './discounts-section';
+import { SectionHeading, InlineHelp } from './section-help';
 import { JudgesSection } from './judge-section';
 import { ScheduleSettingsForm } from './schedule-settings-form';
 import { SundryItemManager } from './sundry-item-manager';
@@ -140,6 +142,21 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
           <p className="mt-0.5 text-xs text-muted-foreground">
             Complete these {STEPS.length} steps to open entries. You can do them in any order.
           </p>
+          <div className="mt-2">
+            <InlineHelp
+              label="New to this? Read the quick guide"
+              content={{
+                what: 'These steps cover everything we need before exhibitors can enter your show. Each one saves on its own and you can come back to any step at any time. When all five are done, you can open entries to the public.',
+                todo: [
+                  'Work through the steps in order if you like, or click any step to jump to it.',
+                  'Each step has its own Help button (the small question mark next to each section) if you get stuck.',
+                  'Nothing goes live until you press the green Open Entries button at the end.',
+                ],
+                benefit: 'Running a show used to mean a folder full of paper forms, a spreadsheet of entries, several trips to the printer, late nights with the calculator, and a cardboard box of cash on the day. With us, all of that is one online form, one button to open entries, and one click to print whatever you need. Your evenings are yours again.',
+                tip: 'You can leave this page and come back later. Your progress is saved automatically.',
+              }}
+            />
+          </div>
         </div>
       )}
 
@@ -351,24 +368,70 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
 function StepClasses({ showId, show }: { showId: string; show: Show }) {
   const hasClasses = (show.showClasses?.length ?? 0) > 0;
 
+  const help = (
+    <div className="mb-3">
+      <InlineHelp
+        label="What are classes?"
+        content={{
+          what: 'A class is a group of dogs competing against each other, like Puppy, Junior, or Open. Most shows offer several classes so dogs compete with others of a similar age or experience. Each class needs to be set up before exhibitors can enter their dogs.',
+          todo: [
+            'Pick the classes you want to offer (you can use a standard set as a starting point).',
+            'Add or remove classes if your show is different from the usual.',
+            'For Champ shows, the Royal Kennel Club has rules about which classes must be offered. We try to flag anything missing.',
+          ],
+          benefit: 'No more typing your class list into a Word document and re-typing it next year. We remember your set up, flag any RKC rules that you might miss, and the same classes flow straight through to the schedule, the catalogue, and the judges book without you lifting a finger.',
+          tip: 'You can change classes at any time before entries open. Once a dog has entered a class, that class is locked in so its entry stays valid.',
+        }}
+      />
+    </div>
+  );
+
   if (!hasClasses) {
-    return <BulkClassCreator showId={showId} />;
+    return (
+      <>
+        {help}
+        <BulkClassCreator showId={showId} />
+      </>
+    );
   }
 
   return (
-    <ClassManager
-      showId={showId}
-      showType={show.showType}
-      showScope={show.showScope}
-      classes={show.showClasses ?? []}
-    />
+    <>
+      {help}
+      <ClassManager
+        showId={showId}
+        showType={show.showType}
+        showScope={show.showScope}
+        classes={show.showClasses ?? []}
+      />
+    </>
   );
 }
 
 // ── Step 2: Judge ─────────────────────────────────────────
 
 function StepJudge({ showId }: { showId: string }) {
-  return <JudgesSection showId={showId} />;
+  return (
+    <>
+      <div className="mb-3">
+        <InlineHelp
+          label="How do judges work?"
+          content={{
+            what: 'Every breed at your show needs a judge. We keep a directory of judges with their Royal Kennel Club details, and we email each one to ask if they accept the invitation. They confirm online and that locks them in.',
+            todo: [
+              'Search for the judge by name. If they are in our directory we will fill in their RKC number for you.',
+              'Choose which breeds and sex each judge is doing (for multi-breed shows).',
+              'When you save, we send the judge an email with the invitation. They click Accept or Decline.',
+              'You can see who has accepted at the top of this section. Chase any that have not replied a week or two before the show.',
+            ],
+            benefit: 'No more posting invitation letters, sending follow-up texts, or wondering whether a judge has confirmed. We send the invitation the moment you save, the judge clicks one button to accept, and you see the green tick instantly. Their name flows straight into the schedule and catalogue.',
+            tip: 'If a judge cannot do the show in the end, you can swap them out at any time and we will send a new invitation to the replacement.',
+          }}
+        />
+      </div>
+      <JudgesSection showId={showId} />
+    </>
+  );
 }
 
 // ── Secretary Details (read-only with edit toggle) ────────
@@ -450,7 +513,19 @@ function SecretaryDetails({
     return (
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h4 className="text-sm font-semibold">Secretary Details</h4>
+          <SectionHeading
+            title="Secretary Details"
+            help={{
+              what: 'Your contact details as the show secretary. These appear in the printed schedule and on the show page so exhibitors know who to ask if they have a question.',
+              todo: [
+                'Add your name, email and phone number.',
+                'A postal address is helpful if any entries come in by post.',
+                'These details are saved against your account so future shows can pre-fill them.',
+              ],
+              benefit: 'Type these once and they pre-fill every show you ever run with us. They also flow through to the schedule, the catalogue, the entry confirmation emails to exhibitors, and any letters we need to send on your behalf. No copy and paste, no remembering to update three documents when your phone number changes.',
+              tip: 'If your club has a shared show email like secretary@yourclub.co.uk, use that instead of your personal one. It is easier to hand over if someone else takes over the role.',
+            }}
+          />
           {hasDetails && (
             <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => setEditing(false)}>
               Cancel
@@ -538,6 +613,10 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
   const [juniorHandlerFee, setJuniorHandlerFee] = useState(
     show.juniorHandlerFee != null ? penceToPoundsString(show.juniorHandlerFee) : '',
   );
+  const [multiDog, setMultiDog] = useState({
+    threshold: show.multiDogThreshold != null ? String(show.multiDogThreshold) : '',
+    packagePence: show.multiDogPackagePence != null ? penceToPoundsString(show.multiDogPackagePence) : '',
+  });
   const [entryCloseDate, setEntryCloseDate] = useState(
     show.entryCloseDate
       ? new Date(show.entryCloseDate).toISOString().slice(0, 16)
@@ -589,6 +668,8 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
         : null,
       nfcEntryFee: nfcEntryFee ? poundsToPence(Number(nfcEntryFee)) : null,
       juniorHandlerFee: juniorHandlerFee ? poundsToPence(Number(juniorHandlerFee)) : null,
+      multiDogThreshold: multiDog.threshold ? Number(multiDog.threshold) : null,
+      multiDogPackagePence: multiDog.packagePence ? poundsToPence(Number(multiDog.packagePence)) : null,
       entryCloseDate: entryCloseDate
         ? new Date(entryCloseDate).toISOString()
         : null,
@@ -607,7 +688,20 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
     <div className="space-y-6">
       {/* Entry Fees */}
       <div className="space-y-3">
-        <h4 className="text-sm font-semibold">Entry Fees</h4>
+        <SectionHeading
+          title="Entry Fees"
+          help={{
+            what: 'The prices people pay to enter their dog. There are usually two main rates: one for the first class a dog enters, and a cheaper one for any extra classes the same dog enters.',
+            todo: [
+              'First entry fee: what people pay for one dog in one class.',
+              'Subsequent entry fee: what they pay if the same dog enters another class at the same show.',
+              'NFC: Not For Competition. For people who want to bring their dog along but not compete. Some shows charge less, some leave it the same.',
+              'Junior Handler: for the young handler classes. Usually free or just a small amount.',
+            ],
+            benefit: 'We work out the right total for every order automatically, including first-class and extra-class fees, and we collect the money for you at the same time the exhibitor enters. No more cash on the day, no more chasing late payments, no more sums on a notepad.',
+            tip: 'You can leave any of these blank if you do not offer that type of entry. Just set what applies to your show.',
+          }}
+        />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="wiz-first-fee" className="text-xs">
@@ -690,11 +784,29 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
             </div>
           </div>
         </div>
+
+        <DiscountsSection
+          showId={showId}
+          multiDog={multiDog}
+          onMultiDogChange={setMultiDog}
+        />
       </div>
 
       {/* Close Dates */}
       <div className="space-y-3">
-        <h4 className="text-sm font-semibold">Close Dates</h4>
+        <SectionHeading
+          title="Close Dates"
+          help={{
+            what: 'The deadlines for entries. After the online close date, exhibitors cannot enter through Remi any more. The postal close date is for people who post their entry form to you by hand, if you accept those.',
+            todo: [
+              'Pick the date and time online entries should close. This is usually a couple of weeks before the show.',
+              'If you accept postal entries, set the postal close date too. It can be the same as the online date, or different.',
+              'Both dates must be before the show day. We will warn you if they are not.',
+            ],
+            benefit: 'We close entries automatically at the exact date and time you set. No more checking the inbox at midnight, no more deciding whether a late entry that arrived in the post a day late should be accepted. The deadline is fair, firm, and out of your hands.',
+            tip: 'You can extend a close date later if you need more entries. Just come back and change it.',
+          }}
+        />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="wiz-close-date" className="text-xs">
@@ -742,9 +854,18 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
 
       {/* RKC Licence */}
       <div className="space-y-1.5">
-        <Label htmlFor="wiz-licence" className="text-xs">
-          RKC Licence Number
-        </Label>
+        <SectionHeading
+          title="RKC Licence Number"
+          help={{
+            what: 'The Royal Kennel Club gives each licensed show a unique number. It must be printed on the schedule and catalogue. The RKC sends it to you when they approve your show licence.',
+            todo: [
+              'Find the licence number on the approval email or letter the RKC sent you.',
+              'Type it in here. We will put it on the schedule and catalogue automatically.',
+            ],
+            tip: 'If you have not had the licence number back yet, you can come back and add it later. It does not stop you opening entries.',
+          }}
+          level="h5"
+        />
         <Input
           id="wiz-licence"
           placeholder="Licence number"
@@ -772,10 +893,21 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
 
       {/* Sundry Items */}
       <div className="space-y-3">
-        <h4 className="text-sm font-semibold">Sundry Items</h4>
-        <p className="text-xs text-muted-foreground">
-          Configure add-on items exhibitors can purchase at checkout, such as catalogues, memberships, and donations.
-        </p>
+        <SectionHeading
+          title="Sundry Items"
+          subtitle="Optional extras exhibitors can add to their order at checkout."
+          help={{
+            what: 'Anything you would like to sell alongside the entry fees, like printed catalogues, club memberships, raffle tickets, or a donation to a charity. Exhibitors see these as add-ons when they check out.',
+            todo: [
+              'Click Add to create a new item.',
+              'Give it a clear name and a price.',
+              'Tick whether it is a yes/no item (like a printed catalogue) or whether people can buy more than one (like raffle tickets).',
+              'You can edit or remove items any time before the order is paid.',
+            ],
+            benefit: 'No more bags of cash for catalogue sales on the day, no more counting raffle ticket stubs, no more chasing club memberships through the post. Exhibitors tick what they want, pay online, and you arrive on the day with a clean list of who has bought what.',
+            tip: 'This is a great place to add a donation to a charity close to your club. Exhibitors are often happy to add £5 to their order if it goes to a good cause.',
+          }}
+        />
         <SundryItemManager showId={showId} />
       </div>
     </div>
@@ -791,7 +923,26 @@ function StepSchedule({
   showId: string;
   onSaved: () => void;
 }) {
-  return <ScheduleSettingsForm showId={showId} onSaved={onSaved} />;
+  return (
+    <>
+      <div className="mb-3">
+        <InlineHelp
+          label="What is the schedule for?"
+          content={{
+            what: 'The schedule is the printed (or shared digitally) document that tells exhibitors everything about your show. It includes the date, the venue, the classes, the judges, the fees, and all the rules. The Royal Kennel Club requires certain statements to be on it, and we add those for you automatically.',
+            todo: [
+              'Fill in each section by clicking it open and typing the details.',
+              'Click Preview PDF at the top to see how it looks before you share it.',
+              'When you are happy, share the link or the PDF with exhibitors.',
+            ],
+            benefit: 'Schedules used to mean a Word document, an emailed quote from the printer, a marked up PDF proof going back and forth, postage costs, and a week or two of wait. With us, you fill in the form once and the schedule appears as a polished PDF in seconds. Every time you change something, the PDF updates. No printer, no postage, no proofs, no waiting. Share the link on social media and exhibitors read it on their phone.',
+            tip: 'You do not have to finish this in one go. The form saves as you type, so you can come back any time and pick up where you left off.',
+          }}
+        />
+      </div>
+      <ScheduleSettingsForm showId={showId} onSaved={onSaved} />
+    </>
+  );
 }
 
 // ── Step 5: Open Entries ──────────────────────────────────
@@ -827,6 +978,19 @@ function StepOpenEntries({ showId }: { showId: string }) {
 
   return (
     <div className="space-y-4">
+      <InlineHelp
+        label="What happens when I open entries?"
+        content={{
+          what: 'Opening entries makes your show live. From that moment, exhibitors can find it on Remi and enter their dogs. Their money is taken at the time of entry, and we hold it until after the show, when it is paid out to your club.',
+          todo: [
+            'Make sure every item on the checklist below has a green tick.',
+            'Click the green Open Entries button at the bottom.',
+            'You will see a confirmation and the show will appear publicly.',
+          ],
+          benefit: 'The moment you click open, exhibitors can find the show in our directory and on every search engine. They enter on their phone in two minutes, pay there and then, and you get an email confirming each entry. No envelopes, no cheques to bank, no spreadsheet to maintain. Watch your entries grow in real time on the dashboard.',
+          tip: 'You can edit most things about the show after entries open, but be careful changing fees or classes once people have started entering. Tell exhibitors first if you do.',
+        }}
+      />
       <p className="text-sm text-muted-foreground">
         Review the checklist below. All required items must be completed before
         you can open entries.

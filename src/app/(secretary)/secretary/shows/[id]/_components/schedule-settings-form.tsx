@@ -57,6 +57,63 @@ import {
 import type { ScheduleData } from '@/server/db/schema/shows';
 import { RKC_STATEMENTS, RKC_STATEMENT_CATEGORIES } from '@/lib/rkc-statements';
 import { SHOW_TIMES } from '@/lib/show-times';
+import { InlineHelp, type SectionHelpContent } from './section-help';
+
+const SECTION_HELP: Record<SectionId, SectionHelpContent> = {
+  showday: {
+    what: 'The timings for the day of the show. When the doors open, the deadline by which everyone must have arrived, when judging starts, and the vet on call if needed.',
+    todo: [
+      'Pick the time the show opens. This is when exhibitors can start arriving and finding their ring.',
+      'Set the latest arrival time. After this, latecomers may not be allowed in to compete (RKC rules).',
+      'Pick the time judging starts.',
+      'Add the on-call vet contact (a vet who has agreed to be available during the show).',
+    ],
+    benefit: 'Set the times here and they flow straight through to the schedule, the catalogue, the entry confirmation emails, and the show page exhibitors see online. Change one time and it updates everywhere in seconds. No more correcting half a dozen documents because the hall booking shifted by an hour.',
+    tip: 'These times go on the printed schedule, so exhibitors know when to turn up and when judging begins.',
+  },
+  people: {
+    what: 'The people running the show. The officers (Chairman, Secretary, Treasurer, etc.) and the guarantors who underwrite the show financially. The RKC requires at least one guarantor on the schedule.',
+    todo: [
+      'Add the show manager (the person in overall charge on the day).',
+      'Add the club officers, picking from your club roster or typing them in.',
+      'Tick the box next to any officers who are guarantors. Champ shows need at least three; other shows need at least one.',
+    ],
+    benefit: 'Your club roster is remembered between shows. When you run the next one, the officers are already there waiting to be ticked. We also count the guarantors and warn you if you are below the RKC minimum, so the show licence does not come back rejected.',
+    tip: 'If you have run shows before, the roster pre-fills the people you have used previously. You can add new ones any time.',
+  },
+  awards: {
+    what: 'A description of the prizes and awards on offer at your show. This is the friendly summary that appears in the schedule, so exhibitors know what they could win.',
+    todo: [
+      'Write a short summary of what is on offer. For example, "Rosettes 1st to VHC. Trophies for Best of Breed, Best Puppy and Best Veteran."',
+      'Add prize money if you offer it.',
+      'If you are running a Best Veteran in Show competition, tick the box and write the eligibility wording (the RKC needs this in the schedule).',
+    ],
+    benefit: 'Type the awards once and they appear on the schedule, the catalogue, and any prize cards we print for you. Sponsors and trophies you set up elsewhere also flow through automatically, so there is no risk of one document saying something different from another.',
+    tip: 'You do not need to list every sponsor or trophy here. There is a separate Sponsors section for that.',
+  },
+  venue: {
+    what: 'How exhibitors find the venue and what they will find when they arrive. Directions, catering, what3words, future show dates, anything else worth knowing.',
+    todo: [
+      'Add directions or a postcode that helps people find the venue.',
+      'Note any catering on site (a cafe, food trucks, etc).',
+      'List any other shows your club has coming up. Exhibitors love knowing what is next.',
+    ],
+    benefit: 'Add the venue details once and exhibitors get them in three places: on the schedule, on the show page, and in their booking confirmation. No more answering the same "where exactly is the hall?" question by email a dozen times in the week before the show.',
+    tip: 'What3words is a free service that gives any spot a three-word address. It is great for venues without a street address. Just type the three words separated by dots.',
+  },
+  regulations: {
+    what: 'The official rules that apply to your show. Most of these are RKC rules that have to be on the schedule by law. Tick the ones that apply.',
+    todo: [
+      'Pick the country the show is in. This sets the right RKC docking statement.',
+      'Tick whether the public can come in (free admission, paid, or no public).',
+      'Tick if there is wet weather cover (indoor space if it rains).',
+      'Tick if dogs will be benched. If yes, add the time they can be removed.',
+      'Tick if you accept NFC (Not For Competition) entries.',
+    ],
+    benefit: 'The RKC wording is long, fiddly, and changes from time to time. We keep the latest version and add the right paragraphs to your schedule based on a few tick boxes. If the RKC updates the wording, your next schedule picks it up automatically. No more cross-referencing PDFs from the RKC website.',
+    tip: 'When you are not sure, the RKC website has guidance on each of these. The wording on the schedule is generated for you so you do not have to write it.',
+  },
+};
 
 interface OfficerWithGuarantor {
   name: string;
@@ -144,6 +201,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
   const [showOpenTime, setShowOpenTime] = useState('');
   const [judgingStartTime, setJudgingStartTime] = useState('');
   const [onCallVet, setOnCallVet] = useState('');
+  const [firstAiders, setFirstAiders] = useState<string[]>([]);
   const [what3words, setWhat3words] = useState('');
   const [showManager, setShowManager] = useState('');
   const [officers, setOfficers] = useState<OfficerWithGuarantor[]>([]);
@@ -203,6 +261,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       }))
     );
 
+    setFirstAiders(sd?.firstAiders ?? []);
     setAwardsDescription(sd?.awardsDescription ?? '');
     setPrizeMoney(sd?.prizeMoney ?? '');
     setDirections(sd?.directions ?? '');
@@ -284,6 +343,9 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       guarantors: officers
         .filter((o) => o.name && o.isGuarantor)
         .map((o) => ({ name: o.name, address: o.address || undefined })),
+      firstAiders: firstAiders.filter((n) => n.trim()).length > 0
+        ? firstAiders.filter((n) => n.trim()).map((n) => n.trim())
+        : undefined,
       awardsDescription: awardsDescription || undefined,
       prizeMoney: prizeMoney || undefined,
       what3words: what3words || undefined,
@@ -351,7 +413,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
   }, [
     hasLoaded, country, publicAdmission, wetWeather, isBenched, benchingRemovalTime,
     acceptsNfc, judgedOnGroupSystem, latestArrivalTime, showOpenTime, judgingStartTime,
-    onCallVet, what3words, showManager, officers, awardsDescription, prizeMoney,
+    onCallVet, what3words, showManager, officers, firstAiders, awardsDescription, prizeMoney,
     directions, catering, futureShowDates, additionalNotes, welcomeNote,
     outsideAttraction, hasBestVeteranInShow, bestVeteranInShowEligibility, customStatements,
   ]);
@@ -428,6 +490,9 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       guarantors: officers
         .filter((o) => o.name && o.isGuarantor)
         .map((o) => ({ name: o.name, address: o.address || undefined })),
+      firstAiders: firstAiders.filter((n) => n.trim()).length > 0
+        ? firstAiders.filter((n) => n.trim()).map((n) => n.trim())
+        : undefined,
       awardsDescription: awardsDescription || undefined,
       prizeMoney: prizeMoney || undefined,
       what3words: what3words || undefined,
@@ -457,7 +522,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     effectiveExisting, country, publicAdmission, wetWeather, isBenched,
     benchingRemovalTime, acceptsNfc, judgedOnGroupSystem, latestArrivalTime,
     showOpenTime, judgingStartTime, onCallVet, what3words, showManager,
-    officers, awardsDescription, prizeMoney, directions, catering,
+    officers, firstAiders, awardsDescription, prizeMoney, directions, catering,
     futureShowDates, additionalNotes, welcomeNote, outsideAttraction,
     hasBestVeteranInShow, bestVeteranInShowEligibility,
     customStatements, showId,
@@ -570,6 +635,21 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
         </div>
       </div>
 
+      <InlineHelp
+        label="What is the schedule?"
+        content={{
+          what: 'The schedule is the official document you send to exhibitors before the show. It tells them the date, venue, classes, judges, fees, and the rules of the show. We create the PDF for you from the information you enter on this page.',
+          todo: [
+            'Click any section below to open it and fill in the details.',
+            'Each section saves on its own as you type, so you can come back at any time.',
+            'When you are happy, click Preview PDF at the top to see how it will look.',
+            'Share the PDF link on social media or send it by email so exhibitors can read it.',
+          ],
+          benefit: 'No more sending Word files to the printer and waiting days for a proof. No more marking up paper copies in red pen. No more posting schedules out at your own cost. You type the details once and a polished PDF is ready to download or share in seconds. Spot a typo a week later? Fix it and the PDF updates the moment you save.',
+          tip: 'The mandatory RKC statements (declarations, rules, regulations) are added automatically. You only need to fill in the parts specific to your show.',
+        }}
+      />
+
       {/* Smart defaults notice */}
       {appliedDefaults && (
         <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50/50 px-3 py-2.5 text-sm dark:border-blue-800 dark:bg-blue-950/20">
@@ -646,12 +726,16 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
               {/* Section content — only when editing */}
               {isEditing && (
                 <div className="border-t px-4 pb-4 pt-4">
+                  <div className="mb-3">
+                    <InlineHelp content={SECTION_HELP[section.id]} />
+                  </div>
                   {section.id === 'showday' && (
                     <ShowDaySection
                       showOpenTime={showOpenTime} setShowOpenTime={setShowOpenTime}
                       latestArrivalTime={latestArrivalTime} setLatestArrivalTime={setLatestArrivalTime}
                       judgingStartTime={judgingStartTime} setJudgingStartTime={setJudgingStartTime}
                       onCallVet={onCallVet} setOnCallVet={setOnCallVet}
+                      firstAiders={firstAiders} setFirstAiders={setFirstAiders}
                     />
                   )}
                   {section.id === 'people' && (
@@ -793,7 +877,7 @@ function SectionSummary({
       return parts.length > 0 ? (
         <p className="text-xs text-muted-foreground truncate">{parts.join(' · ')}</p>
       ) : (
-        <p className="text-xs text-muted-foreground">Optional — directions, catering, etc.</p>
+        <p className="text-xs text-muted-foreground">Optional. Directions, catering, etc.</p>
       );
     }
     case 'regulations': {
@@ -815,11 +899,13 @@ function ShowDaySection({
   latestArrivalTime, setLatestArrivalTime,
   judgingStartTime, setJudgingStartTime,
   onCallVet, setOnCallVet,
+  firstAiders, setFirstAiders,
 }: {
   showOpenTime: string; setShowOpenTime: (v: string) => void;
   latestArrivalTime: string; setLatestArrivalTime: (v: string) => void;
   judgingStartTime: string; setJudgingStartTime: (v: string) => void;
   onCallVet: string; setOnCallVet: (v: string) => void;
+  firstAiders: string[]; setFirstAiders: (v: string[]) => void;
 }) {
   return (
     <div className="space-y-4">
@@ -861,6 +947,64 @@ function ShowDaySection({
       <div className="space-y-1.5">
         <Label htmlFor="onCallVet" className="text-xs">Veterinary surgeon on call</Label>
         <Input id="onCallVet" value={onCallVet} onChange={(e) => setOnCallVet(e.target.value)} placeholder="e.g. Westport Vets, Unit 42, Mill Road, Linlithgow EH49 7SF" className="min-h-[2.75rem]" />
+      </div>
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <Label className="text-xs">First Aider on the day</Label>
+          {firstAiders.length < 3 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setFirstAiders([...firstAiders, ''])}
+            >
+              <Plus className="size-3" />
+              Add another
+            </Button>
+          )}
+        </div>
+        {firstAiders.length === 0 ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="min-h-[2.75rem] w-full"
+            onClick={() => setFirstAiders([''])}
+          >
+            <Plus className="size-3.5" />
+            Add a first aider
+          </Button>
+        ) : (
+          <div className="space-y-2">
+            {firstAiders.map((name, idx) => (
+              <div key={idx} className="flex gap-2">
+                <Input
+                  value={name}
+                  onChange={(e) => {
+                    const next = [...firstAiders];
+                    next[idx] = e.target.value;
+                    setFirstAiders(next);
+                  }}
+                  placeholder="Name"
+                  className="min-h-[2.75rem] flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-11 text-destructive hover:text-destructive"
+                  onClick={() => setFirstAiders(firstAiders.filter((_, i) => i !== idx))}
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">
+          Required on the schedule and catalogue. Add a second name if a multi-breed show has more than one cover.
+        </p>
       </div>
     </div>
   );
@@ -1134,7 +1278,7 @@ function AwardsSection({
           <p className="text-sm font-medium">Show Sponsors</p>
           <p className="text-xs text-muted-foreground">
             {sponsorCount > 0
-              ? `${sponsorCount} sponsor${sponsorCount !== 1 ? 's' : ''} — these will appear in your schedule`
+              ? `${sponsorCount} sponsor${sponsorCount !== 1 ? 's' : ''}. These will appear in your schedule`
               : 'Add sponsors so they appear in your schedule'}
           </p>
         </div>

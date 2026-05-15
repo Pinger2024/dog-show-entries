@@ -13,6 +13,7 @@ import { users } from './users';
 import { entries } from './entries';
 import { payments } from './payments';
 import { orderSundryItems } from './order-sundry-items';
+import { showDiscountGroups } from './show-discount-groups';
 
 export const orders = pgTable(
   'orders',
@@ -25,6 +26,15 @@ export const orders = pgTable(
       .notNull()
       .references(() => users.id),
     status: orderStatusEnum('status').notNull().default('draft'),
+    // Discount group the exhibitor declared at checkout (e.g. "Members").
+    // Null when the exhibitor is paying the standard rate. The order's
+    // totalAmount is already locked at checkout — this just records the
+    // declaration for the secretary's entry list and for any later refund
+    // recalculation.
+    discountGroupId: uuid('discount_group_id').references(
+      () => showDiscountGroups.id,
+      { onDelete: 'set null' },
+    ),
     // Amount the CLUB receives — entry + sundry subtotal, in pence. The
     // exhibitor is charged totalAmount + platformFeePence at Stripe; the
     // fee is routed to Remi via application_fee_amount and the rest goes
@@ -65,6 +75,10 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
   exhibitor: one(users, {
     fields: [orders.exhibitorId],
     references: [users.id],
+  }),
+  discountGroup: one(showDiscountGroups, {
+    fields: [orders.discountGroupId],
+    references: [showDiscountGroups.id],
   }),
   entries: many(entries, { relationName: 'orderEntries' }),
   payments: many(payments),

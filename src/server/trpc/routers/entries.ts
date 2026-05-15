@@ -21,7 +21,13 @@ import {
   users,
   dogOwners,
   judgeAssignments,
+  showDiscountGroups,
 } from '@/server/db/schema';
+import {
+  computeOrderFees,
+  type DogEntryInput,
+  type FeeContext,
+} from '@/lib/fee-calc';
 import {
   createPaymentIntent,
   calculatePlatformFee,
@@ -238,6 +244,20 @@ export const entriesRouter = createTRPCRouter({
           code: 'BAD_REQUEST',
           message: 'One or more classes are invalid for this show',
         });
+      }
+
+      // WUSV coat type validation: if the class specifies a coat type, the dog must match
+      if (show.showRuleset === 'wusv' && dog.coatType) {
+        for (const sc of selectedClasses) {
+          if (sc.svCoatType && sc.svCoatType !== dog.coatType) {
+            const expected = sc.svCoatType === 'stock' ? 'Stock Coat' : 'Long Stock Coat';
+            const actual = dog.coatType === 'stock' ? 'Stock Coat' : 'Long Stock Coat';
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `This class is for ${expected} dogs but your dog is registered as ${actual}. Please select the correct class.`,
+            });
+          }
+        }
       }
 
       // Calculate total fee for the new classes
@@ -627,16 +647,105 @@ export const entriesRouter = createTRPCRouter({
       }
 
       const oldFee = entry.totalFee;
-      // Use show-level tiered pricing if available, otherwise sum per-class fees
+
+      // Recompute fees via the shared service. When this entry is part of
+      // an order we also load the order's discount-group + sibling entries
+      // so the multi-dog package re-slots correctly. Without an order we
+      // still use the service — it cleanly handles the simple single-entry
+      // ladder case.
+      const orderId = entry.orderId;
       let newFee: number;
+      let perClassFees: number[];
+
       if (entry.show.firstEntryFee != null) {
-        const subsequentRate = entry.show.subsequentEntryFee ?? entry.show.firstEntryFee;
-        newFee = newClasses.length > 0
-          ? entry.show.firstEntryFee + subsequentRate * (newClasses.length - 1)
-          : 0;
+        const entryKind = entry.entryType === 'junior_handler'
+          ? 'junior_handler'
+          : entry.isNfc
+            ? 'nfc'
+            : 'standard';
+
+        let discountGroup: FeeContext['discountGroup'] = null;
+        let siblingEntries: { id: string; entryType: string; isNfc: boolean; entryClasses: { id: string }[]; totalFee: number }[] = [
+          {
+            id: input.id,
+            entryType: entry.entryType,
+            isNfc: entry.isNfc,
+            entryClasses: newClasses.map((_, i) => ({ id: `c${i}` })),
+            totalFee: entry.totalFee,
+          },
+        ];
+
+        if (orderId) {
+          const [orderRow, dbSiblings] = await Promise.all([
+            ctx.db.query.orders.findFirst({
+              where: eq(orders.id, orderId),
+              columns: { discountGroupId: true },
+            }),
+            ctx.db.query.entries.findMany({
+              where: and(eq(entries.orderId, orderId), isNull(entries.deletedAt)),
+              with: { entryClasses: { columns: { id: true } } },
+            }),
+          ]);
+          siblingEntries = dbSiblings;
+
+          if (orderRow?.discountGroupId) {
+            const dg = await ctx.db.query.showDiscountGroups.findFirst({
+              where: eq(showDiscountGroups.id, orderRow.discountGroupId),
+            });
+            if (dg) {
+              discountGroup = {
+                firstEntryFeePence: dg.firstEntryFeePence,
+                multiDogPackagePence: dg.multiDogPackagePence,
+              };
+            }
+          }
+        }
+
+        const feeCtx: FeeContext = {
+          firstEntryFeePence: entry.show.firstEntryFee,
+          subsequentEntryFeePence: entry.show.subsequentEntryFee,
+          nfcEntryFeePence: entry.show.nfcEntryFee,
+          juniorHandlerFeePence: entry.show.juniorHandlerFee,
+          multiDogThreshold: entry.show.multiDogThreshold,
+          multiDogPackagePence: entry.show.multiDogPackagePence,
+          discountGroup,
+        };
+
+        const dogEntries: DogEntryInput[] = siblingEntries.map((e) => ({
+          key: e.id,
+          kind: (e.id === input.id ? entryKind : e.entryType === 'junior_handler'
+            ? 'junior_handler'
+            : e.isNfc
+              ? 'nfc'
+              : 'standard'),
+          classCount: e.id === input.id ? newClasses.length : e.entryClasses.length,
+        }));
+
+        const result = computeOrderFees(dogEntries, feeCtx);
+        const myBreak = result.perEntry.find((b) => b.key === input.id)!;
+        newFee = myBreak.fee;
+        perClassFees = myBreak.perClassFees;
+
+        // Re-slot sibling fees only when an order exists — the multi-dog
+        // package may have shifted across rounding.
+        if (orderId) {
+          for (const sib of siblingEntries) {
+            if (sib.id === input.id) continue;
+            const sibBreak = result.perEntry.find((b) => b.key === sib.id);
+            if (sibBreak && sibBreak.fee !== sib.totalFee) {
+              await ctx.db
+                .update(entries)
+                .set({ totalFee: sibBreak.fee })
+                .where(eq(entries.id, sib.id));
+            }
+          }
+        }
       } else {
+        // Legacy per-class fallback for shows that never set show-level fees.
         newFee = newClasses.reduce((sum, sc) => sum + sc.entryFee, 0);
+        perClassFees = newClasses.map((sc) => sc.entryFee);
       }
+
       const feeDiff = newFee - oldFee;
 
       const oldClassIds = entry.entryClasses.map((ec) => ec.showClassId);
@@ -647,10 +756,10 @@ export const entriesRouter = createTRPCRouter({
         .where(eq(entryClasses.entryId, input.id));
 
       await ctx.db.insert(entryClasses).values(
-        newClasses.map((sc) => ({
+        newClasses.map((sc, idx) => ({
           entryId: input.id,
           showClassId: sc.id,
-          fee: sc.entryFee,
+          fee: perClassFees[idx] ?? sc.entryFee,
         }))
       );
 

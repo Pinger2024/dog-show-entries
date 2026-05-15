@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Loader2, Plus, Save, Shield, Trash2 } from 'lucide-react';
+import { Loader2, Save, Shield } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { useShowId } from '../_lib/show-context';
+import { poundsToPence, penceToPoundsString } from '@/lib/date-utils';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -13,34 +14,17 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 
-type SvCoatType = 'stock' | 'long_stock';
-type Sex = 'dog' | 'bitch';
-
-interface PendingClass {
-  classDefinitionId: string;
-  sex: Sex;
-  svCoatType: SvCoatType;
-  entryFee: number;
-}
-
-const COAT_LABELS: Record<SvCoatType, string> = {
-  stock: 'Stock Coat',
-  long_stock: 'Long Stock Coat',
-};
-
-const SEX_LABELS: Record<Sex, string> = {
-  dog: 'Dog',
-  bitch: 'Bitch',
+const AGE_CLASS_DISPLAY: Record<string, string> = {
+  'Baby Puppy': 'Baby Puppy',
+  'SV Minor Puppy': 'Minor Puppy',
+  'SV Puppy': 'Puppy',
+  'SV Junior': 'Junior',
+  'SV Yearling': 'Yearling',
+  'Adult': 'Adult',
+  'Working': 'Working',
 };
 
 export default function WusvClassesPage() {
@@ -48,39 +32,61 @@ export default function WusvClassesPage() {
   const utils = trpc.useUtils();
 
   const { data: classDefs, isLoading: defsLoading } = trpc.secretary.listWusvClassDefs.useQuery();
-  const { data: existingClasses, isLoading: classesLoading } = trpc.shows.getById.useQuery({ id: showId });
+  const { data: show, isLoading: showLoading } = trpc.shows.getById.useQuery({ id: showId });
 
   const setupMutation = trpc.secretary.setupWusvClasses.useMutation({
     onSuccess: (result) => {
       utils.shows.getById.invalidate({ id: showId });
-      toast.success(`${result.created} SV classes saved`);
+      toast.success(`${result.created} classes saved`);
     },
     onError: (err) => toast.error('Failed to save classes', { description: err.message }),
   });
 
-  const [pendingClasses, setPendingClasses] = useState<PendingClass[]>([]);
+  const [entryFeeStr, setEntryFeeStr] = useState('');
+  const [selectedAgeIds, setSelectedAgeIds] = useState<Set<string>>(new Set());
+  const [includeJh6_11, setIncludeJh6_11] = useState(true);
+  const [includeJh12_16, setIncludeJh12_16] = useState(true);
+  const [initialised, setInitialised] = useState(false);
 
-  const show = existingClasses;
   const isWusv = show?.showRuleset === 'wusv';
 
-  // Seed pending classes from existing WUSV show classes once both queries resolve
+  // Initialise state from existing show data once both queries resolve
   useEffect(() => {
-    if (!show || !classDefs) return;
-    const existing = show.showClasses
-      .filter((sc) => sc.classDefinition?.type === 'sv_age' && sc.svCoatType)
-      .map((sc) => ({
-        classDefinitionId: sc.classDefinitionId,
-        sex: (sc.sex ?? 'dog') as Sex,
-        svCoatType: sc.svCoatType as SvCoatType,
-        entryFee: sc.entryFee,
-      }));
-    if (existing.length > 0) {
-      setPendingClasses(existing);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [show?.id, classDefs]);
+    if (!show || !classDefs || initialised) return;
 
-  if (defsLoading || classesLoading) {
+    // Entry fee — take from first sv_age showClass, or firstEntryFee on show
+    const svClass = show.showClasses.find((sc) => sc.classDefinition?.type === 'sv_age');
+    const fee = svClass?.entryFee ?? show.firstEntryFee ?? 0;
+    setEntryFeeStr(penceToPoundsString(fee));
+
+    // Which age class defs are currently active
+    const activeAgeIds = new Set(
+      show.showClasses
+        .filter((sc) => sc.classDefinition?.type === 'sv_age')
+        .map((sc) => sc.classDefinitionId)
+    );
+
+    if (activeAgeIds.size > 0) {
+      setSelectedAgeIds(activeAgeIds);
+    } else {
+      // Default: all age defs selected
+      setSelectedAgeIds(new Set(classDefs.map((d) => d.id)));
+    }
+
+    // JH state
+    const jhNames = show.showClasses
+      .filter((sc) => sc.classDefinition?.type === 'junior_handler')
+      .map((sc) => sc.classDefinition?.name ?? '');
+    if (activeAgeIds.size > 0 || jhNames.length > 0) {
+      setIncludeJh6_11(jhNames.some((n) => n.includes('6-11')));
+      setIncludeJh12_16(jhNames.some((n) => n.includes('12-16')));
+    }
+
+    setInitialised(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [show?.id, classDefs, initialised]);
+
+  if (defsLoading || showLoading) {
     return (
       <div className="flex items-center justify-center py-24">
         <Loader2 className="size-8 animate-spin text-muted-foreground" />
@@ -102,160 +108,162 @@ export default function WusvClassesPage() {
     );
   }
 
-  function addRow() {
-    if (!classDefs || classDefs.length === 0) return;
-    setPendingClasses((prev) => [
-      ...prev,
-      {
-        classDefinitionId: classDefs[0]!.id,
-        sex: 'dog',
-        svCoatType: 'stock',
-        entryFee: 0,
-      },
-    ]);
-  }
-
-  function removeRow(index: number) {
-    setPendingClasses((prev) => prev.filter((_, i) => i !== index));
-  }
-
-  function updateRow(index: number, patch: Partial<PendingClass>) {
-    setPendingClasses((prev) =>
-      prev.map((row, i) => (i === index ? { ...row, ...patch } : row))
-    );
+  function toggleAgeId(id: string) {
+    setSelectedAgeIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   function handleSave() {
-    setupMutation.mutate({ showId, classes: pendingClasses });
+    setupMutation.mutate({
+      showId,
+      entryFee: poundsToPence(parseFloat(entryFeeStr) || 0),
+      selectedAgeDefIds: [...selectedAgeIds],
+      includeJh6_11,
+      includeJh12_16,
+    });
   }
 
-  const classByDef = new Map(classDefs?.map((cd) => [cd.id, cd]) ?? []);
+  const totalClasses = selectedAgeIds.size * 4 + (includeJh6_11 ? 1 : 0) + (includeJh12_16 ? 1 : 0);
 
   return (
     <div className="space-y-4">
+      {/* Entry Fees */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Shield className="size-5 text-primary" />
-            SV Age Classes
+            Entry Fees
           </CardTitle>
           <CardDescription>
-            Add a row for each age class × sex × coat type combination. Classes run Dog Stock → Dog Long Stock → Bitch Stock → Bitch Long Stock within each age group.
+            All SV age classes share the same entry fee. Junior Handling is free.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          {pendingClasses.length === 0 && (
-            <p className="text-sm text-muted-foreground py-4 text-center">
-              No classes added yet. Click &ldquo;Add Row&rdquo; to start.
-            </p>
-          )}
-
-          {pendingClasses.map((row, i) => {
-            return (
-              <div
-                key={i}
-                className="grid grid-cols-1 gap-2 rounded-lg border p-3 sm:grid-cols-[1fr_auto_auto_auto_auto]"
-              >
-                {/* Age class */}
-                <Select
-                  value={row.classDefinitionId}
-                  onValueChange={(v) => updateRow(i, { classDefinitionId: v })}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {classDefs?.map((cd) => (
-                      <SelectItem key={cd.id} value={cd.id}>
-                        {cd.name.replace(/^SV /, '')}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {/* Sex */}
-                <Select
-                  value={row.sex}
-                  onValueChange={(v) => updateRow(i, { sex: v as Sex })}
-                >
-                  <SelectTrigger className="w-full sm:w-28">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="dog">Dog</SelectItem>
-                    <SelectItem value="bitch">Bitch</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                {/* Coat type */}
-                <Select
-                  value={row.svCoatType}
-                  onValueChange={(v) => updateRow(i, { svCoatType: v as SvCoatType })}
-                >
-                  <SelectTrigger className="w-full sm:w-36">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="stock">Stock Coat</SelectItem>
-                    <SelectItem value="long_stock">Long Stock Coat</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                {/* Entry fee */}
-                <div className="flex items-center gap-1">
-                  <span className="text-sm text-muted-foreground">£</span>
-                  <Input
-                    type="number"
-                    min={0}
-                    step={0.5}
-                    className="w-20"
-                    value={row.entryFee / 100}
-                    onChange={(e) =>
-                      updateRow(i, { entryFee: Math.round(Number(e.target.value) * 100) })
-                    }
-                  />
-                </div>
-
-                {/* Remove */}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="shrink-0 text-destructive hover:text-destructive"
-                  onClick={() => removeRow(i)}
-                >
-                  <Trash2 className="size-4" />
-                </Button>
+        <CardContent>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Entry Fee (per class)</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">£</span>
+                <Input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  placeholder="0.00"
+                  className="pl-7 text-lg font-semibold h-12"
+                  value={entryFeeStr}
+                  onChange={(e) => setEntryFeeStr(e.target.value)}
+                />
               </div>
-            );
-          })}
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Member discount rates are now configured under <strong>Discounts</strong> on the show overview — you can offer different rates to SV, BRG, or League members from one place.
+          </p>
+        </CardContent>
+      </Card>
 
-          <div className="flex gap-2 pt-1">
-            <Button type="button" variant="outline" size="sm" onClick={addRow}>
-              <Plus className="size-4" />
-              Add Row
-            </Button>
+      {/* SV Age Classes */}
+      <Card>
+        <CardHeader>
+          <CardTitle>SV Age Classes</CardTitle>
+          <CardDescription>
+            Each selected class creates four entries: Bitch Stock → Bitch Long Stock → Dog Stock → Dog Long Stock.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {(classDefs ?? []).map((def) => {
+              const label = AGE_CLASS_DISPLAY[def.name] ?? def.name.replace(/^SV /, '');
+              const checked = selectedAgeIds.has(def.id);
+              return (
+                <label
+                  key={def.id}
+                  className={`flex cursor-pointer items-center gap-3 rounded-lg border p-4 transition-colors ${
+                    checked
+                      ? 'border-primary bg-primary/5'
+                      : 'hover:bg-muted/50'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    className="size-5 accent-primary"
+                    checked={checked}
+                    onChange={() => toggleAgeId(def.id)}
+                  />
+                  <span className="text-sm font-medium">{label}</span>
+                </label>
+              );
+            })}
           </div>
         </CardContent>
       </Card>
 
-      {/* Summary preview */}
-      {pendingClasses.length > 0 && (
+      {/* Junior Handling */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Junior Handling</CardTitle>
+          <CardDescription>
+            WUSV shows include Junior Handling classes. Both age groups are included by default.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {[
+              { label: 'Junior Handler (6–11)', value: includeJh6_11, set: setIncludeJh6_11 },
+              { label: 'Junior Handler (12–16)', value: includeJh12_16, set: setIncludeJh12_16 },
+            ].map(({ label, value, set }) => (
+              <label
+                key={label}
+                className={`flex cursor-pointer items-center gap-3 rounded-lg border p-4 transition-colors ${
+                  value ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  className="size-5 accent-primary"
+                  checked={value}
+                  onChange={(e) => set(e.target.checked)}
+                />
+                <span className="text-sm font-medium">{label}</span>
+              </label>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Preview */}
+      {totalClasses > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Preview</CardTitle>
-            <CardDescription>{pendingClasses.length} classes will be created</CardDescription>
+            <CardDescription>{totalClasses} classes will be created</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
-              {pendingClasses.map((row, i) => {
-                const def = classByDef.get(row.classDefinitionId);
-                return (
-                  <Badge key={i} variant="secondary" className="text-xs">
-                    {def?.name.replace(/^SV /, '') ?? '?'} · {SEX_LABELS[row.sex]} · {COAT_LABELS[row.svCoatType]}
+              {(classDefs ?? [])
+                .filter((d) => selectedAgeIds.has(d.id))
+                .flatMap((def) => {
+                  const label = AGE_CLASS_DISPLAY[def.name] ?? def.name.replace(/^SV /, '');
+                  return [
+                    `${label} · Bitch Stock`,
+                    `${label} · Bitch Long Stock`,
+                    `${label} · Dog Stock`,
+                    `${label} · Dog Long Stock`,
+                  ];
+                })
+                .concat([
+                  ...(includeJh6_11 ? ['JH 6–11'] : []),
+                  ...(includeJh12_16 ? ['JH 12–16'] : []),
+                ])
+                .map((label) => (
+                  <Badge key={label} variant="secondary" className="text-xs">
+                    {label}
                   </Badge>
-                );
-              })}
+                ))}
             </div>
           </CardContent>
         </Card>
@@ -265,7 +273,7 @@ export default function WusvClassesPage() {
         <Button
           size="lg"
           className="w-full sm:w-auto"
-          disabled={setupMutation.isPending}
+          disabled={setupMutation.isPending || totalClasses === 0}
           onClick={handleSave}
         >
           {setupMutation.isPending ? (

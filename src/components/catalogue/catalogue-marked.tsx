@@ -102,10 +102,14 @@ const markedStyles = StyleSheet.create({
     color: '#6b7280',
     marginLeft: 4,
   },
+  // Principal Winners (anything "best", "challenge certificate", or
+  // "reserve") render in red on the RKC submission catalogue per
+  // Amanda's spec 2026-05-14. Red matches the placement number colour
+  // used elsewhere on this catalogue so the eye can scan winners fast.
   specialAwardBadge: {
     fontSize: 6.5,
     fontWeight: 'bold',
-    color: '#92400e',
+    color: '#b91c1c',
     paddingLeft: 22,
     marginBottom: 0.5,
   },
@@ -130,14 +134,18 @@ const markedStyles = StyleSheet.create({
     fontSize: 7.5,
     fontWeight: 'bold',
     width: '40%',
+    // Award name in red — Amanda's spec 2026-05-14 (Principal Winners).
+    color: '#b91c1c',
   },
   achievementDog: {
     fontSize: 7.5,
+    fontWeight: 'bold',
     width: '35%',
+    color: '#b91c1c',
   },
   achievementBreed: {
     fontSize: 7.5,
-    color: '#444',
+    color: '#b91c1c',
     width: '25%',
   },
   watermark: {

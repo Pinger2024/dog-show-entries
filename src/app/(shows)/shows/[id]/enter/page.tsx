@@ -36,6 +36,7 @@ import { isWithinAgeRange, handlerAgeYearsOnDate, formatCurrency } from '@/lib/d
 import { trpc } from '@/lib/trpc/client';
 import { formatDogName } from '@/lib/utils';
 import { readReferralSource } from '@/lib/referral-source';
+import { computeOrderFees, type DogEntryInput, type FeeContext } from '@/lib/fee-calc';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -76,6 +77,7 @@ const EMPTY_GROUPED_CLASSES = {
   achievement: [] as never[],
   special: [] as never[],
   junior_handler: [] as never[],
+  sv_age: [] as never[],
 };
 
 export default function EnterShowPage() {
@@ -96,6 +98,11 @@ export default function EnterShowPage() {
   const [subtotalAmount, setSubtotalAmount] = useState(0);
   const [platformFeePence, setPlatformFeePence] = useState(0);
   const [shareCopied, setShareCopied] = useState(false);
+  // Discount group declaration (e.g. "I am a Member") at checkout.
+  // Stored as the group id or null. Sent to the server with the order
+  // so the fee-calc service can apply the group's first-class rate
+  // and (if set) member-specific multi-dog package price.
+  const [discountGroupId, setDiscountGroupId] = useState<string | null>(null);
 
   // JH form state
   const [jhName, setJhName] = useState('');
@@ -208,6 +215,50 @@ export default function EnterShowPage() {
     { enabled: !!showId && (cart.step === 'select_classes' || cart.step === 'cart_review') }
   );
 
+  // Show's discount groups (Members, Pensioners, etc.) — exhibitor declares
+  // one at checkout. Empty list = feature disabled for this show.
+  const { data: discountGroups } = trpc.shows.getDiscountGroups.useQuery(
+    { showId },
+    { enabled: !!showId && cart.step === 'cart_review' }
+  );
+
+  // Live fee preview — mirrors server-side computation so the exhibitor sees
+  // the right total before paying. The server recomputes authoritatively at
+  // checkout, so this is purely informational; mismatch would be caught there.
+  const feePreview = useMemo(() => {
+    if (!show || show.firstEntryFee == null) return null;
+    const selectedGroup = discountGroups?.find((g) => g.id === discountGroupId) ?? null;
+    const feeCtx: FeeContext = {
+      firstEntryFeePence: show.firstEntryFee,
+      subsequentEntryFeePence: show.subsequentEntryFee,
+      nfcEntryFeePence: show.nfcEntryFee,
+      juniorHandlerFeePence: show.juniorHandlerFee,
+      multiDogThreshold: show.multiDogThreshold ?? null,
+      multiDogPackagePence: show.multiDogPackagePence ?? null,
+      discountGroup: selectedGroup
+        ? {
+            firstEntryFeePence: selectedGroup.firstEntryFeePence,
+            multiDogPackagePence: selectedGroup.multiDogPackagePence,
+          }
+        : null,
+    };
+    const dogEntries: DogEntryInput[] = cart.entries
+      .filter((e) => e.classIds.length > 0 || e.isNfc)
+      .map((e, i) => ({
+        key: String(i),
+        kind:
+          e.entryType === 'junior_handler'
+            ? 'junior_handler'
+            : e.isNfc
+              ? 'nfc'
+              : 'standard',
+        classCount: e.classIds.length,
+      }));
+    if (dogEntries.length === 0) return null;
+    return computeOrderFees(dogEntries, feeCtx);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [show, discountGroups, discountGroupId, cart.entries]);
+
   // Sync cart sundry item prices/names with server data (handles secretary price changes)
   useEffect(() => {
     if (!sundryItemsData) return;
@@ -275,9 +326,15 @@ export default function EnterShowPage() {
       ? showClasses.filter((sc) => !sc.sex || sc.sex === selectedDogSex)
       : showClasses;
 
+    // WUSV shows: filter by dog's coat type when set (stock vs long_stock)
+    const selectedDogCoatType = selectedDog?.coatType as 'stock' | 'long_stock' | null | undefined;
+    const coatFiltered = selectedDogCoatType
+      ? sexFiltered.filter((sc) => !(sc as { svCoatType?: string | null }).svCoatType || (sc as { svCoatType?: string | null }).svCoatType === selectedDogCoatType)
+      : sexFiltered;
+
     // RKC rule: AVNSC classes are hidden when the show has breed-specific classes
     // for this breed. Check if any classes have the dog's breedId set.
-    const hasBreedClasses = sexFiltered.some((sc) => sc.breedId != null);
+    const hasBreedClasses = coatFiltered.some((sc) => sc.breedId != null);
     const isAvnsc = (name: string) =>
       /avnsc|not separately classified/i.test(name);
 
@@ -285,8 +342,8 @@ export default function EnterShowPage() {
     const isGsd = isGsdBreed(selectedDog?.breed?.name ?? '');
 
     const eligible = (hasBreedClasses
-      ? sexFiltered.filter((sc) => sc.breedId != null || !isAvnsc(sc.classDefinition.name))
-      : sexFiltered
+      ? coatFiltered.filter((sc) => sc.breedId != null || !isAvnsc(sc.classDefinition.name))
+      : coatFiltered
     ).filter((sc) => !isGsdOnlyClass(sc.classDefinition.name) || isGsd);
 
     const byCanonicalOrder = (a: (typeof eligible)[0], b: (typeof eligible)[0]) =>
@@ -297,8 +354,9 @@ export default function EnterShowPage() {
       achievement: eligible.filter((sc) => sc.classDefinition.type === 'achievement').sort(byCanonicalOrder),
       special: eligible.filter((sc) => sc.classDefinition.type === 'special').sort(byCanonicalOrder),
       junior_handler: eligible.filter((sc) => sc.classDefinition.type === 'junior_handler').sort(byCanonicalOrder),
+      sv_age: eligible.filter((sc) => sc.classDefinition.type === 'sv_age').sort(byCanonicalOrder),
     };
-  }, [showClasses, selectedDogSex, selectedDog?.breed?.name]);
+  }, [showClasses, selectedDogSex, selectedDog?.breed?.name, selectedDog?.coatType]);
 
   // Filter classes by entry type (and by handler age for JH entries)
   const availableClasses = useMemo(() => {
@@ -315,6 +373,7 @@ export default function EnterShowPage() {
     }
     return [
       ...groupedClasses.age,
+      ...groupedClasses.sv_age,
       ...groupedClasses.achievement,
       ...groupedClasses.special,
     ];
@@ -338,6 +397,26 @@ export default function EnterShowPage() {
       setSelectedClassIds([availableClasses[0].id]);
     }
   }, [cart.step, cart.activeEntry?.entryType, cart.editingExisting, availableClasses, selectedClassIds.length]);
+
+  // Auto-select the single eligible SV age class for WUSV shows
+  const wusvAutoSelectedRef = useRef(false);
+  useEffect(() => {
+    if (cart.step !== 'select_classes') {
+      wusvAutoSelectedRef.current = false;
+      return;
+    }
+    if (
+      show?.showRuleset === 'wusv' &&
+      cart.activeEntry?.entryType === 'standard' &&
+      !cart.editingExisting &&
+      groupedClasses.sv_age.length === 1 &&
+      selectedClassIds.length === 0 &&
+      !wusvAutoSelectedRef.current
+    ) {
+      wusvAutoSelectedRef.current = true;
+      setSelectedClassIds([(groupedClasses.sv_age[0] as { id: string }).id]);
+    }
+  }, [cart.step, cart.activeEntry?.entryType, cart.editingExisting, groupedClasses.sv_age, selectedClassIds.length, show?.showRuleset]);
 
   // Calculate total for current selection using show-level fee tiers
   const isJuniorHandler = cart.activeEntry?.entryType === 'junior_handler';
@@ -445,6 +524,7 @@ export default function EnterShowPage() {
           quantity: s.quantity,
         })),
         referralSource,
+        discountGroupId: discountGroupId ?? undefined,
       });
 
       // Free entries (£0) — skip payment, go straight to success
@@ -1050,6 +1130,27 @@ export default function EnterShowPage() {
                       </p>
                     </div>
                   )}
+                  {groupedClasses.sv_age.length > 0 && (
+                    <>
+                      {groupedClasses.sv_age.length === 1 && selectedClassIds.length === 1 && (
+                        <div className="flex gap-3 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-950">
+                          <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-green-600" />
+                          <p className="text-sm text-green-800 dark:text-green-200">
+                            Based on your dog&apos;s age and coat type, they are eligible for{' '}
+                            <span className="font-medium">{(groupedClasses.sv_age[0] as { classDefinition: { name: string } }).classDefinition.name}</span>.
+                            This has been automatically selected.
+                          </p>
+                        </div>
+                      )}
+                      <ClassGroup
+                        title="SV Age Classes"
+                        classes={groupedClasses.sv_age}
+                        selectedIds={selectedClassIds}
+                        onToggle={toggleClass}
+                        getAgeEligibility={getAgeEligibility}
+                      />
+                    </>
+                  )}
                   {groupedClasses.age.length > 0 && (
                     <ClassGroup
                       title="Age Classes"
@@ -1404,6 +1505,59 @@ export default function EnterShowPage() {
             </div>
           )}
 
+          {/* Discount group declaration — only when the show offers groups */}
+          {discountGroups && discountGroups.length > 0 && (
+            <div className="rounded-lg border bg-card p-4">
+              <div className="space-y-1">
+                <p className="text-sm font-semibold">Are you eligible for a discount?</p>
+                <p className="text-xs text-muted-foreground">
+                  Tick the option that applies to you. By checking it you confirm you qualify.
+                </p>
+              </div>
+              <div className="mt-3 space-y-2">
+                {discountGroups.map((g) => (
+                  <label key={g.id} className="flex cursor-pointer items-start gap-3 rounded-md border p-3 hover:bg-muted/30">
+                    <input
+                      type="radio"
+                      name="discount-group"
+                      checked={discountGroupId === g.id}
+                      onChange={() => setDiscountGroupId(g.id)}
+                      className="mt-0.5 size-4 cursor-pointer"
+                    />
+                    <span className="text-sm">
+                      <span className="font-medium">I am a {g.label}</span>
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        {formatCurrency(g.firstEntryFeePence)}/first class
+                      </span>
+                    </span>
+                  </label>
+                ))}
+                <label className="flex cursor-pointer items-start gap-3 rounded-md border p-3 hover:bg-muted/30">
+                  <input
+                    type="radio"
+                    name="discount-group"
+                    checked={discountGroupId === null}
+                    onChange={() => setDiscountGroupId(null)}
+                    className="mt-0.5 size-4 cursor-pointer"
+                  />
+                  <span className="text-sm font-medium">None of the above (standard rate)</span>
+                </label>
+              </div>
+            </div>
+          )}
+
+          {/* Multi-dog savings banner */}
+          {feePreview?.multiDogApplied && feePreview.multiDogSavings > 0 && (
+            <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900">
+              <p className="font-medium">
+                Multi-dog discount applied — saving {formatCurrency(feePreview.multiDogSavings)}
+              </p>
+              <p className="mt-0.5 text-xs text-green-800/80">
+                You&apos;ve entered {feePreview.payingDogCount} dogs in paying classes.
+              </p>
+            </div>
+          )}
+
           {/* Grand total with breakdown */}
           <div className="rounded-lg border bg-muted/50 p-3 sm:p-4">
             <div className="space-y-1.5">
@@ -1412,7 +1566,7 @@ export default function EnterShowPage() {
                   {cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length} entr
                   {cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length !== 1 ? 'ies' : 'y'}
                 </span>
-                <span>{formatCurrency(cart.entriesTotal)}</span>
+                <span>{formatCurrency(feePreview?.total ?? cart.entriesTotal)}</span>
               </div>
               {cart.sundryTotal > 0 && (
                 <div className="flex justify-between text-sm text-muted-foreground">
@@ -1422,7 +1576,7 @@ export default function EnterShowPage() {
               )}
               <div className="flex justify-between border-t pt-1.5 text-sm font-bold sm:text-base">
                 <span>Grand Total</span>
-                <span>{formatCurrency(cart.grandTotal)}</span>
+                <span>{formatCurrency((feePreview?.total ?? cart.entriesTotal) + cart.sundryTotal)}</span>
               </div>
             </div>
           </div>
@@ -1537,9 +1691,11 @@ export default function EnterShowPage() {
                 </>
               ) : (
                 <>
-                  {cart.grandTotal === 0
-                    ? 'Confirm Entry — Free'
-                    : <>Proceed to Payment &middot; {formatCurrency(cart.grandTotal)}</>}
+                  {(() => {
+                    const previewGrand = (feePreview?.total ?? cart.entriesTotal) + cart.sundryTotal;
+                    if (previewGrand === 0) return 'Confirm Entry — Free';
+                    return <>Proceed to Payment &middot; {formatCurrency(previewGrand)}</>;
+                  })()}
                 </>
               )}
             </Button>
@@ -1879,7 +2035,7 @@ function ClassGroup({
   // Filter out age-ineligible classes if eligibility info is available
   const visibleClasses = getAgeEligibility
     ? classes.filter((sc) => {
-        if (sc.classDefinition.type !== 'age') return true;
+        if (sc.classDefinition.type !== 'age' && sc.classDefinition.type !== 'sv_age') return true;
         const elig = getAgeEligibility(
           sc.classDefinition.minAgeMonths,
           sc.classDefinition.maxAgeMonths

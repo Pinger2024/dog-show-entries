@@ -263,6 +263,19 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
 
             {sorted.slice(1).map((entry, sliceIdx) => renderEntry(entry, sliceIdx + 1))}
 
+            {/* Placements write-in row — traditional 1st/2nd/3rd/Res/VHC
+                line for the judge to fill in on the day. Only renders for
+                classes that actually have entries. Amanda's spec 2026-05-14. */}
+            {sorted.length > 0 && (
+              <View style={styles.placementsRow} wrap={false}>
+                <Text style={styles.placementsCell}>1st .....</Text>
+                <Text style={styles.placementsCell}>2nd .....</Text>
+                <Text style={styles.placementsCell}>3rd .....</Text>
+                <Text style={styles.placementsCell}>Res .....</Text>
+                <Text style={styles.placementsCell}>VHC .....</Text>
+              </View>
+            )}
+
           </View>
         );
       })}

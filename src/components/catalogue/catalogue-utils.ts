@@ -49,6 +49,40 @@ export function formatPedigreeKC(
  * replaced with "address withheld". Amanda 2026-04-17: F(1).11.b.(6)/(8)
  * suppresses personal contact details, not exhibitor identity.
  */
+// "Amanda McAteer" → "McAteer, Amanda". Single-word names left untouched.
+// Used by the back-of-catalogue exhibitor index per Amanda's spec
+// (2026-05-14) so the index reads like a phone book sorted by surname.
+export function toPhoneBookName(fullName: string): string {
+  const trimmed = fullName.trim();
+  if (!trimmed) return trimmed;
+  const parts = trimmed.split(/\s+/);
+  if (parts.length < 2) return trimmed;
+  const surname = parts[parts.length - 1]!;
+  const first = parts.slice(0, -1).join(' ');
+  return `${surname}, ${first}`;
+}
+
+export function surnameOf(fullName: string): string {
+  const parts = fullName.trim().split(/\s+/);
+  return (parts[parts.length - 1] ?? '').toLowerCase();
+}
+
+// Heading + sort key for the exhibitor index. Owners array is the
+// source of truth when populated (gives joint owners structured per
+// person); falls back to the single exhibitor string otherwise.
+// Joint owners join with " & ", each flipped to phone-book format.
+export function ownerHeading(
+  owners: { name: string; address: string | null }[],
+  exhibitor: string | null | undefined,
+): { heading: string; sortKey: string } {
+  if (owners.length > 0) {
+    const formatted = owners.map((o) => toPhoneBookName(o.name).toUpperCase());
+    return { heading: formatted.join(' & '), sortKey: surnameOf(owners[0]!.name) };
+  }
+  const fallback = exhibitor ?? 'Unknown';
+  return { heading: toPhoneBookName(fallback).toUpperCase(), sortKey: surnameOf(fallback) };
+}
+
 export function formatOwnerKC(
   owners: { name: string; address: string | null; userId: string | null }[],
   exhibitorId?: string | undefined,

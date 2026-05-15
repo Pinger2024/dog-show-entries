@@ -149,3 +149,4 @@ export { printPriceCache } from './print-price-cache';
 export { dogSvProfile, dogSvProfileRelations } from './dog-sv-profile';
 export { userSvProfile, userSvProfileRelations } from './user-sv-profile';
 export { catalogueAdverts, catalogueAdvertsRelations } from './catalogue-adverts';
+export { showDiscountGroups, showDiscountGroupsRelations } from './show-discount-groups';

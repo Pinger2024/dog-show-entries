@@ -1,4 +1,4 @@
-import { index, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
+import { boolean, index, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { shows } from './shows';
 import { judges } from './judges';
@@ -29,6 +29,13 @@ export const judgeAssignments = pgTable(
     judgeRoleId: uuid('judge_role_id').references(() => judgeRoles.id),
     ringId: uuid('ring_id').references(() => rings.id),
     sex: text('sex'), // null = both, 'dog' = dogs only, 'bitch' = bitches only
+    /** Marks this assignment as the "Special Awards Classes" judge — the
+     *  up-and-coming judge given the lunchtime SAC classes. When true,
+     *  breedId/sex are ignored on the schedule, and the line renders as
+     *  "Judge: <name> - special awards classes" per Amanda's spec (2026-05-14).
+     *  This judge covers any showClasses whose class definition name starts
+     *  with "Special Award Class". */
+    isSpecialAwardsClassesJudge: boolean('is_special_awards_classes_judge').notNull().default(false),
     // Results approval fields
     approvalToken: uuid('approval_token'),
     approvalStatus: text('approval_status'), // null | 'pending' | 'approved' | 'declined'

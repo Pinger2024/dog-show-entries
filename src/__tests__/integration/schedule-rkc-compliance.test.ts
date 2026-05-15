@@ -54,6 +54,9 @@ function baseShow(overrides: Partial<ScheduleShowInfo> = {}): ScheduleShowInfo {
     subsequentEntryFee: 2000,
     nfcEntryFee: 500,
     juniorHandlerFee: 0,
+    multiDogThreshold: null,
+    multiDogPackagePence: null,
+    discountGroups: [],
     acceptsPostalEntries: true,
     scheduleData: {
       country: 'england',

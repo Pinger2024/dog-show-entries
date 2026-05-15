@@ -122,6 +122,9 @@ export interface CatalogueShowInfo {
   outsideAttraction?: boolean;
   /** Show manager name */
   showManager?: string;
+  /** First aider name(s). One on a single-breed show, possibly 2+ on a
+   *  multi-breed show. RKC compliance per Amanda 2026-05-14. */
+  firstAiders?: string[];
   /** Docking statement per F(1).7.c(2) — varies by country and public admission */
   dockingStatement?: string;
 

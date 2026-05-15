@@ -36,6 +36,10 @@ export interface ScheduleData {
   showManager?: string;
   guarantors?: { name: string; address?: string }[];
   officers?: { name: string; position: string }[];
+  /** First aider name(s) — required to be on the schedule and catalogue
+   *  per Amanda's RKC compliance ask 2026-05-14. One per single-breed
+   *  show, sometimes 2+ on multi-breed shows. */
+  firstAiders?: string[];
 
   // Awards & prizes
   awardsDescription?: string;
@@ -96,6 +100,7 @@ import { stewardAssignments } from './steward-assignments';
 import { showChecklistItems } from './show-checklist';
 import { sundryItems } from './sundry-items';
 import { showSponsors } from './sponsors';
+import { showDiscountGroups } from './show-discount-groups';
 
 export const shows = pgTable(
   'shows',
@@ -138,6 +143,10 @@ export const shows = pgTable(
     subsequentEntryFee: integer('subsequent_entry_fee'),
     nfcEntryFee: integer('nfc_entry_fee'),
     juniorHandlerFee: integer('junior_handler_fee'),
+    // Multi-dog package — when threshold paying dogs entered in one order,
+    // the per-dog first-class fees are replaced by this flat package price.
+    multiDogThreshold: integer('multi_dog_threshold'),
+    multiDogPackagePence: integer('multi_dog_package_pence'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -183,4 +192,5 @@ export const showsRelations = relations(shows, ({ one, many }) => ({
   checklistItems: many(showChecklistItems),
   sundryItems: many(sundryItems),
   showSponsors: many(showSponsors),
+  discountGroups: many(showDiscountGroups),
 }));

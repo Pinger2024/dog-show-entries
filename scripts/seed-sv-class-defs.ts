@@ -5,13 +5,13 @@ import { classDefinitions } from '../src/server/db/schema';
 import { eq } from 'drizzle-orm';
 
 const SV_CLASSES = [
-  { name: 'Baby Puppy', minAgeMonths: 2, maxAgeMonths: 4, sortOrder: 500 },
-  { name: 'Minor Puppy', minAgeMonths: 4, maxAgeMonths: 6, sortOrder: 510 },
-  { name: 'Puppy', minAgeMonths: 6, maxAgeMonths: 9, sortOrder: 520 },
-  { name: 'Junior', minAgeMonths: 9, maxAgeMonths: 18, sortOrder: 530 },
-  { name: 'Yearling', minAgeMonths: 18, maxAgeMonths: 24, sortOrder: 540 },
-  { name: 'Adult', minAgeMonths: 24, maxAgeMonths: null, sortOrder: 550 },
-  { name: 'Working', minAgeMonths: 24, maxAgeMonths: null, sortOrder: 560 },
+  { name: 'Baby Puppy',     minAgeMonths: 2,  maxAgeMonths: 4,    sortOrder: 500 },
+  { name: 'SV Minor Puppy', minAgeMonths: 4,  maxAgeMonths: 6,    sortOrder: 511 },
+  { name: 'SV Puppy',       minAgeMonths: 6,  maxAgeMonths: 9,    sortOrder: 521 },
+  { name: 'SV Junior',      minAgeMonths: 9,  maxAgeMonths: 18,   sortOrder: 531 },
+  { name: 'SV Yearling',    minAgeMonths: 18, maxAgeMonths: 24,   sortOrder: 541 },
+  { name: 'Adult',          minAgeMonths: 24, maxAgeMonths: null, sortOrder: 550 },
+  { name: 'Working',        minAgeMonths: 24, maxAgeMonths: null, sortOrder: 560 },
 ] as const;
 
 (async () => {

@@ -190,10 +190,10 @@ export const stewardRouter = createTRPCRouter({
         showClass.showId
       );
 
-      // Fetch show scope for placement rules
+      // Fetch show scope and ruleset for placement rules
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, showClass.showId),
-        columns: { showScope: true },
+        columns: { showScope: true, showRuleset: true },
       });
 
       // Fetch judge for this class's breed to check breeder conflicts
@@ -238,6 +238,7 @@ export const stewardRouter = createTRPCRouter({
           breed: showClass.breed,
           sex: showClass.sex,
           showScope: show?.showScope ?? 'general',
+          showRuleset: show?.showRuleset ?? 'rkc',
         },
         judgeName,
         entries: confirmed
@@ -280,6 +281,7 @@ export const stewardRouter = createTRPCRouter({
                     placementStatus: ec.result.placementStatus,
                     specialAward: ec.result.specialAward,
                     critiqueText: ec.result.critiqueText,
+                    svGrade: ec.result.svGrade,
                   }
                 : null,
             };

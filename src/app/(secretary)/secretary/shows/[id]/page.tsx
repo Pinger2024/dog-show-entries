@@ -67,6 +67,7 @@ import { PhaseActionPanel } from './_components/phase-action-panel';
 import { SetupWizard } from './_components/setup-wizard';
 import { ClassManager, BulkClassCreator, AddIndividualClass, VarietyClassQuickAdd } from './_components/class-manager';
 import { SundryItemManager } from './_components/sundry-item-manager';
+import { DiscountsSection } from './_components/discounts-section';
 
 export default function OverviewPage() {
   const showId = useShowId();
@@ -451,6 +452,8 @@ function EditShowDetailsDialog({
     subsequentEntryFee: number | null;
     nfcEntryFee: number | null;
     juniorHandlerFee: number | null;
+    multiDogThreshold: number | null;
+    multiDogPackagePence: number | null;
   };
   showId: string;
 }) {
@@ -487,6 +490,10 @@ function EditShowDetailsDialog({
   const [subsequentEntryFee, setSubsequentEntryFee] = useState(show.subsequentEntryFee != null ? (show.subsequentEntryFee / 100).toFixed(2) : '');
   const [nfcEntryFee, setNfcEntryFee] = useState(show.nfcEntryFee != null ? (show.nfcEntryFee / 100).toFixed(2) : '');
   const [juniorHandlerFee, setJuniorHandlerFee] = useState(show.juniorHandlerFee != null ? (show.juniorHandlerFee / 100).toFixed(2) : '');
+  const [multiDog, setMultiDog] = useState({
+    threshold: show.multiDogThreshold != null ? String(show.multiDogThreshold) : '',
+    packagePence: show.multiDogPackagePence != null ? (show.multiDogPackagePence / 100).toFixed(2) : '',
+  });
   const [startTime, setStartTime] = useState(show.startTime ?? '');
 
   const handleBannerUpload = useCallback(async (file: File) => {
@@ -549,6 +556,8 @@ function EditShowDetailsDialog({
       subsequentEntryFee: subsequentEntryFee ? poundsToPence(Number(subsequentEntryFee)) : null,
       nfcEntryFee: nfcEntryFee ? poundsToPence(Number(nfcEntryFee)) : null,
       juniorHandlerFee: juniorHandlerFee ? poundsToPence(Number(juniorHandlerFee)) : null,
+      multiDogThreshold: multiDog.threshold ? Number(multiDog.threshold) : null,
+      multiDogPackagePence: multiDog.packagePence ? poundsToPence(Number(multiDog.packagePence)) : null,
       startTime: startTime || null,
     });
   }
@@ -972,6 +981,12 @@ function EditShowDetailsDialog({
                 </div>
               </div>
             </div>
+
+            <DiscountsSection
+              showId={showId}
+              multiDog={multiDog}
+              onMultiDogChange={setMultiDog}
+            />
 
             <div className="space-y-1.5">
               <Label htmlFor="edit-kc">RKC Licence Number</Label>
