@@ -1161,7 +1161,6 @@ export const secretaryRouter = createTRPCRouter({
           prizeMoney: showSponsors.prizeMoney,
           sponsorName: sponsors.name,
           sponsorEmail: sponsors.contactEmail,
-          sponsorPhone: sponsors.contactPhone,
         })
         .from(showSponsors)
         .innerJoin(sponsors, eq(showSponsors.sponsorId, sponsors.id))
@@ -1230,7 +1229,7 @@ export const secretaryRouter = createTRPCRouter({
         return {
           sponsorName: r.sponsorName,
           email: r.sponsorEmail,
-          phone: r.sponsorPhone,
+          phone: null,
           detail: [r.tier, ...parts].filter(Boolean).join(' — '),
           amountPence: r.prizeMoney ?? undefined,
         };
@@ -2602,42 +2601,63 @@ export const secretaryRouter = createTRPCRouter({
       ]);
       const assignments = assignmentRows;
 
-      // Build unique breed+sex requirements from classes
-      // Group classes by breedId+sex to get the unique combos that need judges
+      // Build unique requirements from classes. Split by:
+      //   1. breedId + sex (the original axes)
+      //   2. AND whether the class is a Special Award Class — those need
+      //      a separate "Special Awards Classes" judge per Amanda's spec
+      //      2026-05-14, and must never be lumped with the breed's
+      //      regular null-sex classes (e.g. Veteran).
       const requirementsMap = new Map<string, {
         breedId: string | null;
         breedName: string | null;
-        label: string; // Display label — breed name or class definition name (e.g. "Junior Handling")
+        label: string;
         sex: string | null;
         classCount: number;
+        isSpecialAwards: boolean;
       }>();
 
+      const isSpecialAwardClass = (sc: typeof classes[number]) =>
+        sc.classDefinition?.name?.startsWith('Special Award Class') ?? false;
+
       for (const sc of classes) {
-        const key = `${sc.breedId ?? 'all'}:${sc.sex ?? 'both'}`;
+        const sac = isSpecialAwardClass(sc);
+        const key = sac
+          ? `sac:${sc.breedId ?? 'all'}`
+          : `${sc.breedId ?? 'all'}:${sc.sex ?? 'both'}`;
         const existing = requirementsMap.get(key);
         if (existing) {
           existing.classCount++;
         } else {
           // For breed-less classes: use breed name, class name (JH), or scope-aware fallback
-          const isJuniorHandling = sc.classDefinition?.name?.toLowerCase().includes('handling');
-          const label = sc.breed?.name
-            ?? (isJuniorHandling ? 'Junior Handling'
-              : show?.showScope === 'single_breed' ? 'Breed Classes' : 'All Breeds');
+          const isJuniorHandling = sc.classDefinition?.type === 'junior_handler';
+          const label = sac
+            ? (sc.breed?.name ? `${sc.breed.name} — Special Awards Classes` : 'Special Awards Classes')
+            : (sc.breed?.name
+                ?? (isJuniorHandling ? 'Junior Handling'
+                  : show?.showScope === 'single_breed' ? 'Breed Classes' : 'All Breeds'));
           requirementsMap.set(key, {
             breedId: sc.breedId,
             breedName: sc.breed?.name ?? null,
             label,
-            sex: sc.sex,
+            sex: sac ? null : sc.sex,
             classCount: 1,
+            isSpecialAwards: sac,
           });
         }
       }
 
       // Check which requirements are covered by assignments
       const coverage = Array.from(requirementsMap.values()).map((req) => {
+        // SAC assignments and "regular breed-judge" assignments live in
+        // different lanes — keep them apart so a SAC assignment doesn't
+        // appear to cover Junior Handling and vice versa.
+        const lanedAssignments = req.isSpecialAwards
+          ? assignments.filter((a) => a.isSpecialAwardsClassesJudge)
+          : assignments.filter((a) => !a.isSpecialAwardsClassesJudge);
+
         // Find ALL matching assignments. breed=null or sex=null on an
         // assignment is treated as a catch-all — "any breed" / "any sex".
-        const matching = assignments.filter((a) => {
+        const matching = lanedAssignments.filter((a) => {
           const breedMatch = req.breedId
             ? a.breedId === req.breedId || a.breedId === null
             : a.breedId === null;

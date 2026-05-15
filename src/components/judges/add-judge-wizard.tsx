@@ -228,8 +228,15 @@ export function AddJudgeWizard({
         : `${c.breedId ?? 'all'}:${c.sex ?? 'both'}`;
       const assignedTo = assignedMap.get(key);
 
-      // If triggered from coverage dashboard with a specific breed/sex, pre-select that
+      // If triggered from coverage dashboard with a specific breed/sex, pre-select that.
+      // SAC and Junior Handling combos both have breedId=null AND sex=null, so a
+      // breedId-null prefill would otherwise pre-select both. Skip the auto-prefill
+      // for those special combos — the user picks them explicitly from the wizard
+      // step. Fixes Amanda's 2026-05-15 bug where assigning a SAC judge also
+      // auto-ticked Junior Handling.
+      const isSpecialCombo = c.isJuniorHandling || c.isSpecialAwardsClasses;
       const isPrefilled = !assignedTo
+        && !isSpecialCombo
         && prefillBreedId !== undefined
         && c.breedId === prefillBreedId
         && (prefillSex === undefined || c.sex === prefillSex);
