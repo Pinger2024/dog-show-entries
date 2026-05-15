@@ -14,6 +14,7 @@ import {
   GripVertical,
   Hash,
   Loader2,
+  Pencil,
   Plus,
   Trash2,
   TriangleAlert,
@@ -618,9 +619,11 @@ export function ClassManager({ showId, showType, showScope, classes }: ClassMana
                                             <button
                                               type="button"
                                               onClick={() => startEditFee(sc.id, sc.entryFee)}
-                                              className="rounded px-2 py-1 text-sm font-semibold transition-colors hover:bg-muted"
+                                              title="Click to edit this class's entry fee"
+                                              className="inline-flex items-center gap-1 rounded border border-dashed border-muted-foreground/30 px-2 py-1 text-sm font-semibold transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
                                             >
                                               {formatCurrency(sc.entryFee)}
+                                              <Pencil className="size-3 text-muted-foreground" />
                                             </button>
                                             <Button
                                               size="icon"
