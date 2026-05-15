@@ -1058,6 +1058,8 @@ export function AddIndividualClass({ showId }: { showId: string }) {
 
   const { data: classDefs } = trpc.secretary.listClassDefinitions.useQuery();
   const { data: breeds } = trpc.breeds.list.useQuery();
+  const { data: showInfo } = trpc.shows.getById.useQuery({ id: showId });
+  const isWusvShow = showInfo?.showRuleset === 'wusv';
   const utils = trpc.useUtils();
 
   const createDefMutation = trpc.secretary.createClassDefinition.useMutation();
@@ -1132,7 +1134,14 @@ export function AddIndividualClass({ showId }: { showId: string }) {
                     // Group classes by sensible buckets so they are easier
                     // to find — Amanda flagged Special Award Classes weren't
                     // visibly distinct from the long list (2026-05-14).
-                    const list = classDefs ?? [];
+                    //
+                    // Filter out WUSV/SV-only class types unless this is
+                    // a WUSV-ruleset show; Amanda flagged them showing up
+                    // on RKC shows on 2026-05-15.
+                    const fullList = classDefs ?? [];
+                    const list = isWusvShow
+                      ? fullList
+                      : fullList.filter((cd) => cd.type !== 'sv_age');
                     const buckets: Array<{ label: string; defs: typeof list }> = [];
                     const age = list.filter((cd) => cd.type === 'age');
                     const achievement = list.filter((cd) => cd.type === 'achievement');
@@ -1142,14 +1151,14 @@ export function AddIndividualClass({ showId }: { showId: string }) {
                     const otherSpecial = list.filter(
                       (cd) => cd.type === 'special' && !cd.name.startsWith('Special Award Class'),
                     );
-                    const handler = list.filter(
-                      (cd) => cd.type === 'junior_handler' || cd.type === 'sv_age',
-                    );
+                    const handler = list.filter((cd) => cd.type === 'junior_handler');
+                    const svAge = list.filter((cd) => cd.type === 'sv_age');
                     if (age.length) buckets.push({ label: 'Age classes', defs: age });
                     if (achievement.length) buckets.push({ label: 'Achievement classes', defs: achievement });
                     if (specialAward.length) buckets.push({ label: 'Special Award classes', defs: specialAward });
                     if (otherSpecial.length) buckets.push({ label: 'Other special classes', defs: otherSpecial });
-                    if (handler.length) buckets.push({ label: 'Junior Handler / SV', defs: handler });
+                    if (handler.length) buckets.push({ label: 'Junior Handler', defs: handler });
+                    if (svAge.length) buckets.push({ label: 'WUSV / SV classes', defs: svAge });
                     return buckets.map((b) => (
                       <SelectGroup key={b.label}>
                         <SelectLabel>{b.label}</SelectLabel>
