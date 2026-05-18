@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, isNull, isNotNull, asc } from 'drizzle-orm';
+import { and, eq, isNull, isNotNull, asc, sql } from 'drizzle-orm';
 import { stewardProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import type { Database } from '@/server/db';
@@ -145,9 +145,11 @@ export const stewardRouter = createTRPCRouter({
         const confirmedEntries = sc.entryClasses.filter(
           (ec) => ec.entry.status === 'confirmed' && !ec.entry.deletedAt
         );
-        const resultsCount = confirmedEntries.filter(
-          (ec) => ec.result !== null
-        ).length;
+        const resultsRows = confirmedEntries
+          .map((ec) => ec.result)
+          .filter((r): r is NonNullable<typeof r> => r !== null);
+        const resultsCount = resultsRows.length;
+        const publishedResults = resultsRows.filter((r) => r.publishedAt !== null);
         const absentCount = confirmedEntries.filter(
           (ec) => ec.entry.absent
         ).length;
@@ -163,6 +165,11 @@ export const stewardRouter = createTRPCRouter({
           absentCount,
           resultsCount,
           hasResults: resultsCount > 0,
+          // Publish status: published when every current result is live,
+          // partially published when some are live, and "dirty" when new
+          // results have been added since the steward last published.
+          isPublished: resultsCount > 0 && publishedResults.length === resultsCount,
+          hasUnpublishedChanges: publishedResults.length > 0 && publishedResults.length < resultsCount,
         };
       });
     }),
@@ -230,6 +237,12 @@ export const stewardRouter = createTRPCRouter({
         (ec) => ec.entry.status === 'confirmed' && !ec.entry.deletedAt
       );
 
+      // Publish status — derived from per-result publishedAt timestamps.
+      const allResults = confirmed.map((ec) => ec.result).filter((r): r is NonNullable<typeof r> => r != null);
+      const publishedResults = allResults.filter((r) => r.publishedAt !== null);
+      const isPublished = allResults.length > 0 && publishedResults.length === allResults.length;
+      const hasUnpublishedChanges = publishedResults.length > 0 && publishedResults.length < allResults.length;
+
       return {
         showClass: {
           id: showClass.id,
@@ -239,6 +252,8 @@ export const stewardRouter = createTRPCRouter({
           sex: showClass.sex,
           showScope: show?.showScope ?? 'general',
           showRuleset: show?.showRuleset ?? 'rkc',
+          isPublished,
+          hasUnpublishedChanges,
         },
         judgeName,
         entries: confirmed
@@ -382,6 +397,71 @@ export const stewardRouter = createTRPCRouter({
         .returning();
 
       return result!;
+    }),
+
+  // ── Publish / unpublish a single class's results (steward-side) ──
+  publishClassResults: stewardProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        showClassId: z.string().uuid(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyStewardAssignment(ctx.db, ctx.session.user.id, input.showId);
+
+      const now = new Date();
+      try {
+        await ctx.db.execute(sql`
+          UPDATE results r
+          SET published_at = ${now.toISOString()}::timestamptz
+          FROM entry_classes ec
+          JOIN entries e ON ec.entry_id = e.id
+          WHERE r.entry_class_id = ec.id
+            AND e.show_id = ${input.showId}
+            AND ec.show_class_id = ${input.showClassId}
+            AND r.published_at IS NULL
+        `);
+      } catch (error) {
+        console.error('[steward.publishClassResults] SQL error:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to publish class results. Please try again.',
+        });
+      }
+
+      return { published: true, classId: input.showClassId };
+    }),
+
+  unpublishClassResults: stewardProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        showClassId: z.string().uuid(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyStewardAssignment(ctx.db, ctx.session.user.id, input.showId);
+
+      try {
+        await ctx.db.execute(sql`
+          UPDATE results r
+          SET published_at = NULL
+          FROM entry_classes ec
+          JOIN entries e ON ec.entry_id = e.id
+          WHERE r.entry_class_id = ec.id
+            AND e.show_id = ${input.showId}
+            AND ec.show_class_id = ${input.showClassId}
+        `);
+      } catch (error) {
+        console.error('[steward.unpublishClassResults] SQL error:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to unpublish results. Please try again.',
+        });
+      }
+
+      return { unpublished: true, classId: input.showClassId };
     }),
 
   // ── Update winner photo only (no data loss) ──────────────

@@ -733,6 +733,28 @@ export function ShowPreviewClient() {
         </div>
       </header>
 
+      {/* ─── LIVE RESULTS banner — only while the show is in progress ── */}
+      {show.status === 'in_progress' && (
+        <Link
+          href={`/shows/${slug}/results`}
+          className="block bg-gradient-to-r from-red-600 via-red-500 to-red-600 text-white shadow-md transition-opacity hover:opacity-95"
+        >
+          <div className="mx-auto flex max-w-6xl items-center justify-center gap-3 px-3 py-3 sm:gap-4 sm:py-3.5">
+            <span className="relative flex size-3 shrink-0">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
+              <span className="relative inline-flex size-3 rounded-full bg-white" />
+            </span>
+            <span className="text-sm font-bold uppercase tracking-[0.2em] sm:text-base sm:tracking-[0.25em]">
+              Live Results
+            </span>
+            <span className="hidden text-xs font-medium opacity-90 sm:inline">
+              See who's winning right now →
+            </span>
+            <span className="text-xs font-semibold sm:hidden">View →</span>
+          </div>
+        </Link>
+      )}
+
       {/* ──────────────────────────── Sticky action bar ──────────────────── */}
       <div className="sticky top-[calc(4.5rem+2.5rem)] z-40 border-b bg-white/95 shadow-sm backdrop-blur-md sm:top-[calc(4.5rem+2.75rem)]">
         <div className="mx-auto flex max-w-6xl items-center gap-2 px-3 py-2.5 sm:px-4 lg:px-6">
@@ -743,9 +765,19 @@ export function ShowPreviewClient() {
                 Enter This Show
               </Link>
             </Button>
+          ) : show.status === 'in_progress' || show.status === 'completed' ? (
+            <Button
+              className="h-12 flex-1 px-5 text-base font-semibold shadow-lg shadow-red-600/30 sm:h-11 sm:flex-initial sm:shrink-0 sm:px-5 bg-red-600 hover:bg-red-700 text-white"
+              asChild
+            >
+              <Link href={`/shows/${slug}/results`}>
+                <Trophy className="size-5 sm:size-4" />
+                {show.status === 'in_progress' ? 'View Live Results' : 'View Results'}
+              </Link>
+            </Button>
           ) : (
             <div className="flex-1 text-sm font-medium text-stone-600 sm:flex-initial">{
-              show.status === 'completed' ? 'Show complete' : show.status === 'cancelled' ? 'Cancelled' : 'Entries closed'
+              show.status === 'cancelled' ? 'Cancelled' : 'Entries closed'
             }</div>
           )}
 

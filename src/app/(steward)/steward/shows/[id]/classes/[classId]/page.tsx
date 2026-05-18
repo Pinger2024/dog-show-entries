@@ -8,6 +8,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Globe,
   Loader2,
   Lock,
   Award,
@@ -131,6 +132,26 @@ export default function StewardClassResultsPage({
     },
   });
 
+  const publishClass = trpc.steward.publishClassResults.useMutation({
+    onSuccess: () => {
+      utils.steward.getClassEntries.invalidate({ showClassId: classId });
+      utils.steward.getShowClasses.invalidate({ showId });
+      toast.success('Class results are now live for the public');
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const unpublishClass = trpc.steward.unpublishClassResults.useMutation({
+    onSuccess: () => {
+      utils.steward.getClassEntries.invalidate({ showClassId: classId });
+      utils.steward.getShowClasses.invalidate({ showId });
+      toast.success('Class results hidden from the public');
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
+
   if (isLoading) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
@@ -241,6 +262,17 @@ export default function StewardClassResultsPage({
           {showClass.sex && (
             <Badge variant="outline" className="ml-2 capitalize text-xs align-middle">
               {showClass.sex}
+            </Badge>
+          )}
+          {showClass.isPublished && (
+            <Badge className="ml-2 bg-green-600 text-white text-xs align-middle">
+              <Globe className="mr-1 size-3" />
+              Live to public
+            </Badge>
+          )}
+          {showClass.hasUnpublishedChanges && (
+            <Badge variant="outline" className="ml-2 border-amber-300 bg-amber-50 text-amber-700 text-xs align-middle">
+              Unpublished edits
             </Badge>
           )}
         </h1>
@@ -468,6 +500,125 @@ export default function StewardClassResultsPage({
               )}
             </div>
           )}
+
+          {/* Publish to public — appears once at least one placement is recorded */}
+          {placedCount > 0 && !isLocked && (
+            <div
+              className={cn(
+                'mt-5 rounded-xl border p-4',
+                showClass.isPublished
+                  ? 'border-green-300 bg-green-50/60'
+                  : 'border-slate-200 bg-slate-50'
+              )}
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <div
+                    className={cn(
+                      'flex size-9 shrink-0 items-center justify-center rounded-full',
+                      showClass.isPublished ? 'bg-green-600 text-white' : 'bg-slate-300 text-slate-700'
+                    )}
+                  >
+                    <Globe className="size-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold">
+                      {showClass.isPublished
+                        ? 'Live to public'
+                        : 'Not yet visible to the public'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {showClass.isPublished
+                        ? showClass.hasUnpublishedChanges
+                          ? 'You have new edits since you published. Publish again to push them live.'
+                          : 'Anyone viewing the show results page can see these placements.'
+                        : 'Once published, results show up on the public results page.'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {showClass.isPublished ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-10"
+                        onClick={() => unpublishClass.mutate({ showId, showClassId: classId })}
+                        disabled={unpublishClass.isPending || publishClass.isPending}
+                      >
+                        Unpublish
+                      </Button>
+                      {showClass.hasUnpublishedChanges && (
+                        <Button
+                          size="sm"
+                          className="h-10 bg-green-700 hover:bg-green-800"
+                          onClick={() => setPublishDialogOpen(true)}
+                          disabled={publishClass.isPending || unpublishClass.isPending}
+                        >
+                          <Globe className="size-4" />
+                          Publish updates
+                        </Button>
+                      )}
+                    </>
+                  ) : (
+                    <Button
+                      size="sm"
+                      className="h-10 bg-green-700 hover:bg-green-800"
+                      onClick={() => setPublishDialogOpen(true)}
+                      disabled={publishClass.isPending}
+                    >
+                      <Globe className="size-4" />
+                      Publish to public
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Publish confirmation — Amanda's "flash up a reminder" requirement */}
+          <Dialog open={publishDialogOpen} onOpenChange={setPublishDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Publish {showClass.classDefinition.name} results?</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3 text-sm">
+                <div className="flex gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900">
+                  <AlertTriangle className="size-5 shrink-0 text-amber-600" />
+                  <p>
+                    <strong>Double-check your placements first.</strong> Once published,
+                    everyone on the public results page can see them — including
+                    exhibitors, judges, and the world at large. You can still
+                    unpublish afterwards if you spot a mistake.
+                  </p>
+                </div>
+                <p className="text-muted-foreground">
+                  You're about to publish <strong>{placedCount}</strong> placement
+                  {placedCount === 1 ? '' : 's'} for this class.
+                </p>
+              </div>
+              <div className="flex gap-2 sm:justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => setPublishDialogOpen(false)}
+                  className="h-11"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="h-11 bg-green-700 hover:bg-green-800"
+                  onClick={() => {
+                    publishClass.mutate({ showId, showClassId: classId });
+                    setPublishDialogOpen(false);
+                  }}
+                  disabled={publishClass.isPending}
+                >
+                  <Globe className="size-4" />
+                  Yes, publish now
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
 
           {/* Special-award dialog (one shared, scoped by selected entry id) */}
           {specialAwardEntryId && (() => {
