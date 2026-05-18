@@ -75,6 +75,19 @@ export default function EntriesPage() {
   const [transferringEntry, setTransferringEntry] = useState<EntryItem | null>(null);
   const [showAddEntry, setShowAddEntry] = useState(false);
 
+  const formatClassWithSex = (ec: {
+    showClass?: {
+      sex?: string | null;
+      classDefinition?: { name?: string | null } | null;
+    } | null;
+  }): string => {
+    const name = ec.showClass?.classDefinition?.name ?? '?';
+    const sex = ec.showClass?.sex;
+    if (sex === 'dog') return `${name} Dog`;
+    if (sex === 'bitch') return `${name} Bitch`;
+    return name;
+  };
+
   const filtered = useMemo(() => {
     return entries.filter((entry) => {
       const q = search.toLowerCase();
@@ -114,8 +127,8 @@ export default function EntriesPage() {
       e.dog?.registeredName ?? '',
       e.dog?.breed?.name ?? '',
       e.entryClasses
-        .map((ec) => ec.showClass?.classDefinition?.name ?? '')
-        .filter(Boolean)
+        .map((ec) => formatClassWithSex(ec))
+        .filter((s) => s && s !== '?')
         .join('; '),
       (e.totalFee / 100).toFixed(2),
       e.status,
@@ -277,7 +290,7 @@ export default function EntriesPage() {
                               variant="secondary"
                               className="text-xs"
                             >
-                              {ec.showClass?.classDefinition?.name ?? '?'}
+                              {formatClassWithSex(ec)}
                             </Badge>
                           ))}
                         </div>
@@ -340,7 +353,7 @@ export default function EntriesPage() {
                                 variant="secondary"
                                 className="text-xs"
                               >
-                                {ec.showClass?.classDefinition?.name ?? '?'}
+                                {formatClassWithSex(ec)}
                               </Badge>
                             ))}
                           </div>
