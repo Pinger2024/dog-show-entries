@@ -523,8 +523,13 @@ export function ShowPreviewClient() {
 
   const org = show.organisation;
   const venue = show.venue;
-  const isOpen = show.status === 'entries_open';
   const entryCloseDate = showAny.entryCloseDate ? new Date(showAny.entryCloseDate) : null;
+  const closeDatePast = entryCloseDate ? entryCloseDate.getTime() < Date.now() : false;
+  // "Open" requires status=entries_open AND the close date not yet passed.
+  // Show DB status can lag for a few minutes after the cron flips it, so
+  // gating on the close date catches the window where the page would
+  // otherwise still offer entry past the deadline.
+  const isOpen = show.status === 'entries_open' && !closeDatePast;
   const daysToClose = entryCloseDate ? differenceInDays(entryCloseDate, new Date()) : null;
   const showDate = format(parseISO(show.startDate), 'EEEE d MMMM yyyy');
   const dayName = format(parseISO(show.startDate), 'EEEE');
