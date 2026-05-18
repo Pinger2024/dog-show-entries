@@ -5,6 +5,7 @@ import Link from 'next/link';
 import {
   AlertTriangle,
   ArrowLeft,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Loader2,
@@ -13,7 +14,6 @@ import {
   X,
   UserX,
   Plus,
-  MoreVertical,
   CircleSlash,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -297,6 +297,17 @@ export default function StewardClassResultsPage({
         </p>
       ) : (
         <div className={cn('mt-5', isLocked && 'pointer-events-none opacity-60')}>
+          {/* How to use — quick reference */}
+          <div className="mb-4 rounded-lg border border-green-200 bg-green-50/60 p-3 text-xs text-green-900">
+            <p className="font-semibold">How to use this page</p>
+            <ul className="mt-1 space-y-0.5 text-green-800">
+              <li>· <strong>Tap any dog</strong> in the list to place it in the next open slot</li>
+              <li>· <strong>Tap ×</strong> next to a placed dog to undo</li>
+              <li>· <strong>Tap "Status ▾"</strong> on a dog to mark Absent / Withheld / Unplaced</li>
+              <li>· <strong>Tap the trophy</strong> to give a Special Award (Best of Breed, etc)</li>
+            </ul>
+          </div>
+
           {/* Placement ladder */}
           <div className="overflow-hidden rounded-xl border bg-card">
             <div className="bg-green-800 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-white">
@@ -607,7 +618,7 @@ function DogCard({
           </Badge>
         )}
       </div>
-      <div className="flex items-center gap-1">
+      <div className="flex flex-col items-end gap-1 shrink-0">
         {isWusv && (
           <Select
             value={entry.result?.svGrade ?? 'none'}
@@ -616,7 +627,7 @@ function DogCard({
             }
           >
             <SelectTrigger
-              className="h-9 w-[78px] shrink-0 text-xs"
+              className="h-9 w-[88px] text-xs"
               onClick={(e) => e.stopPropagation()}
             >
               <SelectValue placeholder="Grade" />
@@ -631,29 +642,35 @@ function DogCard({
             </SelectContent>
           </Select>
         )}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-9 shrink-0 text-amber-500"
-          onClick={(e) => {
-            e.stopPropagation();
-            onOpenSpecialAward();
-          }}
-          title="Special award"
-        >
-          <Award className={cn('size-4', !entry.result?.specialAward && 'text-muted-foreground/40')} />
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenSpecialAward();
+            }}
+            className={cn(
+              'inline-flex h-9 items-center gap-1 rounded-full border px-2.5 text-xs font-semibold transition-colors',
+              entry.result?.specialAward
+                ? 'border-amber-300 bg-amber-100 text-amber-800'
+                : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
+            )}
+            title="Give a Special Award (Best of Breed, etc)"
+          >
+            <Award className="size-3.5" />
+            Award
+          </button>
         <Popover>
           <PopoverTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-9 shrink-0 text-muted-foreground"
+            <button
+              type="button"
               onClick={(e) => e.stopPropagation()}
-              title="More"
+              className="inline-flex h-9 items-center gap-1 rounded-full border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100"
+              title="Mark as absent / withheld / unplaced"
             >
-              <MoreVertical className="size-4" />
-            </Button>
+              Status
+              <ChevronDown className="size-3.5" />
+            </button>
           </PopoverTrigger>
           <PopoverContent className="w-52 p-1.5" align="end" onClick={(e) => e.stopPropagation()}>
             <button
@@ -682,6 +699,7 @@ function DogCard({
             </button>
           </PopoverContent>
         </Popover>
+        </div>
       </div>
     </div>
   );
