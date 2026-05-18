@@ -12,10 +12,13 @@ import {
   Award,
   X,
   UserX,
+  Plus,
+  MoreVertical,
+  CircleSlash,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
-import { SPECIAL_AWARDS, getPlacementsForScope } from '@/lib/placements';
+import { SPECIAL_AWARDS } from '@/lib/placements';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -33,6 +36,44 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+
+// Ordinal label for a placement integer. 1-5 use the named labels
+// (Reserve / VHC), 6+ use "6th", "7th" etc.
+function placementLabel(n: number): string {
+  if (n === 1) return '1st';
+  if (n === 2) return '2nd';
+  if (n === 3) return '3rd';
+  if (n === 4) return 'Res';
+  if (n === 5) return 'VHC';
+  return `${n}th`;
+}
+
+// Per-slot accent colour. 1-5 follow the prize-card ribbon palette;
+// 6+ use a neutral slate.
+function placementColour(n: number): { bg: string; ring: string } {
+  switch (n) {
+    case 1: return { bg: 'bg-red-600', ring: 'ring-red-600' };
+    case 2: return { bg: 'bg-blue-700', ring: 'ring-blue-700' };
+    case 3: return { bg: 'bg-yellow-500', ring: 'ring-yellow-500' };
+    case 4: return { bg: 'bg-green-700', ring: 'ring-green-700' };
+    case 5: return { bg: 'bg-purple-700', ring: 'ring-purple-700' };
+    default: return { bg: 'bg-slate-600', ring: 'ring-slate-600' };
+  }
+}
+
+const SV_GRADES = [
+  { value: 'v', label: 'V — Excellent' },
+  { value: 'sg', label: 'SG — Very Good' },
+  { value: 'g', label: 'G — Good' },
+  { value: 'a', label: 'A — Adequate' },
+  { value: 'u', label: 'U — Insufficient' },
+  { value: 'disqualified', label: 'Disqualified' },
+] as const;
 
 export default function StewardClassResultsPage({
   params,
@@ -40,12 +81,10 @@ export default function StewardClassResultsPage({
   params: Promise<{ id: string; classId: string }>;
 }) {
   const { id: showId, classId } = use(params);
-  // Track WHICH entry's special-award dialog is open, not just whether ANY
-  // dialog is open. Previously a single boolean was shared across every
-  // entry row, so tapping an Award icon would open every dialog at once
-  // (only the last one in DOM order was visible). Using the entryClassId
-  // scopes open-state per row.
   const [specialAwardEntryId, setSpecialAwardEntryId] = useState<string | null>(null);
+  // How many extra placement slots above the default 5 the steward has
+  // explicitly added with the "+ Add Nth" button. Resets per-class.
+  const [extraSlots, setExtraSlots] = useState(0);
 
   const utils = trpc.useUtils();
 
@@ -110,7 +149,6 @@ export default function StewardClassResultsPage({
   const isLocked = lockStatus?.locked ?? false;
   const isWusv = showClass.showRuleset === 'wusv';
 
-  // Check if judge bred any dogs in this class
   const judgeBreederWarnings = judgeName
     ? entries.filter(
         (e) =>
@@ -120,74 +158,75 @@ export default function StewardClassResultsPage({
       )
     : [];
 
-  // Scope-aware placements: all-breed = 1st–HC, breed = 1st–Commended
-  const availablePlacements = getPlacementsForScope(showClass.showScope);
+  // Build the placement → dog map for the ladder.
+  const placedByValue = new Map<number, (typeof entries)[number]>();
+  for (const e of entries) {
+    if (e.result?.placement != null) placedByValue.set(e.result.placement, e);
+  }
+  const highestPlaced = placedByValue.size > 0
+    ? Math.max(...Array.from(placedByValue.keys()))
+    : 0;
+  const baseSlotCount = Math.max(5, highestPlaced);
+  const totalSlots = baseSlotCount + extraSlots;
+  const slots = Array.from({ length: totalSlots }, (_, i) => i + 1);
+  const nextOpenSlot = slots.find((n) => !placedByValue.has(n)) ?? null;
 
-  // Set of placement integers already taken by other entries in this class.
-  // Each placement should only ever be assigned to one dog, so the steward
-  // shouldn't be able to pick the same placement twice — once an entry has
-  // 1st, "1st" disappears from every other entry's dropdown. Amanda flagged
-  // this in testing.
-  const usedPlacements = new Set(
-    entries
-      .map((e) => e.result?.placement)
-      .filter((p): p is number => p != null)
+  // Categorise unplaced entries for the bottom sections.
+  const remaining = entries.filter(
+    (e) => !e.absent && e.result?.placement == null && !e.result?.placementStatus
+  );
+  const absent = entries.filter((e) => e.absent);
+  const withheld = entries.filter(
+    (e) => !e.absent && e.result?.placementStatus === 'withheld'
+  );
+  const explicitlyUnplaced = entries.filter(
+    (e) => !e.absent && e.result?.placementStatus === 'unplaced'
   );
 
-  // "Dogs forward" = present (not absent) — standard RKC terminology
   const dogsForward = entries.filter((e) => !e.absent).length;
+  const placedCount = placedByValue.size;
+  const progressPct = dogsForward > 0 ? Math.round((placedCount / dogsForward) * 100) : 0;
 
-  // Find prev/next class
-  const sortedClasses = allClasses?.sort(
-    (a, b) => a.sortOrder - b.sortOrder
-  );
-  const currentIndex =
-    sortedClasses?.findIndex((c) => c.id === classId) ?? -1;
-  const prevClass =
-    currentIndex > 0 ? sortedClasses?.[currentIndex - 1] : undefined;
+  const sortedClasses = allClasses?.sort((a, b) => a.sortOrder - b.sortOrder);
+  const currentIndex = sortedClasses?.findIndex((c) => c.id === classId) ?? -1;
+  const prevClass = currentIndex > 0 ? sortedClasses?.[currentIndex - 1] : undefined;
   const nextClass =
     sortedClasses && currentIndex < sortedClasses.length - 1
       ? sortedClasses[currentIndex + 1]
       : undefined;
 
-  function handlePlacementChange(
-    entryClassId: string,
-    value: string,
-    currentSpecialAward: string | null
-  ) {
-    if (value === 'none') {
-      removeResult.mutate({ entryClassId });
-    } else if (value === 'withheld' || value === 'unplaced') {
-      // Non-numeric statuses go in the new placementStatus column,
-      // and we explicitly null out the numeric placement.
-      recordResult.mutate({
-        entryClassId,
-        placement: null,
-        placementStatus: value,
-        specialAward: currentSpecialAward,
-      });
-    } else {
-      recordResult.mutate({
-        entryClassId,
-        placement: parseInt(value),
-        placementStatus: null,
-        specialAward: currentSpecialAward,
-      });
+  function placeNext(entryClassId: string, specialAward: string | null) {
+    if (nextOpenSlot == null) {
+      toast.error('No empty placement slot — clear one first or add another');
+      return;
     }
-  }
-
-  function handleSpecialAward(entryClassId: string, award: string | null, currentPlacement: number | null) {
     recordResult.mutate({
       entryClassId,
-      placement: currentPlacement,
-      specialAward: award,
+      placement: nextOpenSlot,
+      placementStatus: null,
+      specialAward,
     });
-    setSpecialAwardOpen(false);
+  }
+
+  function clearPlacement(entryClassId: string) {
+    removeResult.mutate({ entryClassId });
+  }
+
+  function setStatus(
+    entryClassId: string,
+    status: 'withheld' | 'unplaced',
+    currentSpecialAward: string | null
+  ) {
+    recordResult.mutate({
+      entryClassId,
+      placement: null,
+      placementStatus: status,
+      specialAward: currentSpecialAward,
+    });
   }
 
   return (
     <div>
-      {/* Header */}
       <Link
         href={`/steward/shows/${showId}`}
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -199,27 +238,41 @@ export default function StewardClassResultsPage({
       <div className="mt-3">
         <h1 className="font-serif text-xl font-bold">
           {showClass.classDefinition.name}
-        </h1>
-        <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-          {showClass.breed && <span>{showClass.breed.name}</span>}
           {showClass.sex && (
-            <Badge variant="outline" className="capitalize text-xs">
+            <Badge variant="outline" className="ml-2 capitalize text-xs align-middle">
               {showClass.sex}
             </Badge>
           )}
+        </h1>
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          {showClass.breed && <span>{showClass.breed.name}</span>}
           <span>{entries.length} {entries.length === 1 ? 'entry' : 'entries'}</span>
-          <span className="font-medium text-foreground">
-            · {dogsForward} forward
-          </span>
+          <span className="font-medium text-foreground">· {dogsForward} forward</span>
           {entries.length - dogsForward > 0 && (
-            <span className="text-amber-600">
-              ({entries.length - dogsForward} absent)
-            </span>
+            <span className="text-amber-600">({entries.length - dogsForward} absent)</span>
           )}
         </div>
+
+        {/* Progress bar */}
+        {dogsForward > 0 && (
+          <>
+            <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-green-700 to-green-500 transition-all"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">{placedCount} placed</span>
+              {' · '}
+              {remaining.length} remaining
+              {' · '}
+              <span>{progressPct}%</span>
+            </p>
+          </>
+        )}
       </div>
 
-      {/* Locked banner */}
       {isLocked && (
         <div className="mt-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
           <Lock className="size-4 shrink-0" />
@@ -227,7 +280,6 @@ export default function StewardClassResultsPage({
         </div>
       )}
 
-      {/* Judge breeder conflict warnings */}
       {judgeBreederWarnings.length > 0 && (
         <div className="mt-4 space-y-1.5 rounded-lg border border-amber-200 bg-amber-50 p-3">
           {judgeBreederWarnings.map((entry) => (
@@ -239,215 +291,231 @@ export default function StewardClassResultsPage({
         </div>
       )}
 
-      {/* Entries list */}
-      <div className={`mt-6 space-y-2 ${isLocked ? 'pointer-events-none opacity-60' : ''}`}>
-        {entries.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            No confirmed entries in this class.
-          </p>
-        ) : (
-          entries.map((entry) => (
-            <div
-              key={entry.entryClassId}
-              className={`rounded-lg border ${entry.absent ? 'opacity-50' : ''}`}
-            >
-              <div className="flex flex-col gap-2 p-3">
-                {/* Top row: catalogue number + dog info + absent toggle */}
-                <div className="flex items-center gap-2 sm:gap-3">
-                  {/* Catalogue number — large for ringside visibility */}
-                  <div className={`flex size-12 shrink-0 items-center justify-center rounded-lg text-lg font-bold ${entry.absent ? 'bg-amber-100 text-amber-600' : 'bg-muted'}`}>
-                    {entry.absent ? 'Abs' : (entry.catalogueNumber ?? '—')}
-                  </div>
-
-                  {/* Dog info */}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <p className={`truncate text-sm font-medium ${entry.absent ? 'line-through' : ''}`}>
-                        {entry.dogName}
-                      </p>
-                      {entry.absent && (
-                        <Badge variant="outline" className="text-xs text-amber-600 border-amber-300 shrink-0">
-                          Absent
-                        </Badge>
+      {entries.length === 0 ? (
+        <p className="mt-8 py-8 text-center text-sm text-muted-foreground">
+          No confirmed entries in this class.
+        </p>
+      ) : (
+        <div className={cn('mt-5', isLocked && 'pointer-events-none opacity-60')}>
+          {/* Placement ladder */}
+          <div className="overflow-hidden rounded-xl border bg-card">
+            <div className="bg-green-800 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-white">
+              Placements
+            </div>
+            <div className="divide-y">
+              {slots.map((n) => {
+                const placed = placedByValue.get(n);
+                const isActive = nextOpenSlot === n;
+                const colour = placementColour(n);
+                return (
+                  <div
+                    key={n}
+                    className={cn(
+                      'flex min-h-[58px] items-center gap-3 px-3 py-2',
+                      isActive && 'border-l-4 border-amber-400 bg-amber-50/60 pl-2'
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        'flex size-10 shrink-0 items-center justify-center rounded-lg text-sm font-bold text-white',
+                        colour.bg
+                      )}
+                    >
+                      {placementLabel(n)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      {placed ? (
+                        <>
+                          <p className="text-xs font-semibold text-muted-foreground">
+                            #{placed.catalogueNumber ?? '—'}
+                          </p>
+                          <p className="truncate text-sm font-semibold">
+                            {placed.dogName}
+                          </p>
+                          {placed.result?.specialAward && (
+                            <Badge variant="secondary" className="mt-1 text-xs bg-amber-50 text-amber-700">
+                              <Award className="mr-0.5 size-3" />
+                              {placed.result.specialAward}
+                            </Badge>
+                          )}
+                        </>
+                      ) : isActive ? (
+                        <p className="text-sm italic text-muted-foreground">
+                          Tap a dog below to place {placementLabel(n)} →
+                        </p>
+                      ) : (
+                        <p className="text-sm italic text-muted-foreground">—</p>
                       )}
                     </div>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {entry.exhibitorName}
-                      {!entry.absent && entry.catalogueNumber && ` · #${entry.catalogueNumber}`}
-                    </p>
-                    {entry.result?.specialAward && (
-                      <Badge variant="secondary" className="mt-1 text-xs bg-amber-50 text-amber-700">
-                        <Award className="mr-0.5 size-3" />
-                        {entry.result.specialAward}
-                      </Badge>
-                    )}
-                  </div>
-
-                  {/* Absent toggle */}
-                  <Button
-                    variant={entry.absent ? 'default' : 'ghost'}
-                    size="icon"
-                    className={`size-11 shrink-0 ${entry.absent ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'text-muted-foreground/40'}`}
-                    title={entry.absent ? 'Mark as present' : 'Mark as absent'}
-                    onClick={() =>
-                      markAbsent.mutate({
-                        entryId: entry.entryId,
-                        absent: !entry.absent,
-                      })
-                    }
-                  >
-                    <UserX className="size-4" />
-                  </Button>
-                </div>
-
-                {/* Bottom row: placement select + award button — indented past catalogue number */}
-                <div className={`flex items-center gap-2 pl-14 ${entry.absent ? 'pointer-events-none opacity-30' : ''}`}>
-                  <Select
-                    value={
-                      entry.result?.placement
-                        ? String(entry.result.placement)
-                        : entry.result?.placementStatus
-                          ? entry.result.placementStatus
-                          : 'none'
-                    }
-                    onValueChange={(v) =>
-                      handlePlacementChange(
-                        entry.entryClassId,
-                        v,
-                        entry.result?.specialAward ?? null
-                      )
-                    }
-                  >
-                    <SelectTrigger className="h-11 flex-1">
-                      <SelectValue placeholder="—" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">—</SelectItem>
-                      {availablePlacements.map((p) => {
-                        // Hide placements that another entry has already
-                        // claimed, but keep this entry's own selection
-                        // visible so the steward can see/clear it.
-                        const isOwnSelection = entry.result?.placement === p.value;
-                        if (usedPlacements.has(p.value) && !isOwnSelection) {
-                          return null;
-                        }
-                        return (
-                          <SelectItem key={p.value} value={String(p.value)}>
-                            {p.label}
-                          </SelectItem>
-                        );
-                      })}
-                      {/* Non-numeric placement statuses — Amanda's
-                          additions in steward testing. Withheld is when
-                          the judge withholds a placement; Unplaced is an
-                          explicit "judged but not in the prizes". Both
-                          are mutually exclusive with a numeric placement. */}
-                      <SelectItem value="withheld">Withheld</SelectItem>
-                      <SelectItem value="unplaced">Unplaced</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  {/* SV Grade selector — WUSV shows only */}
-                  {isWusv && (
-                    <Select
-                      value={entry.result?.svGrade ?? 'none'}
-                      onValueChange={(v) => {
-                        recordResult.mutate({
-                          entryClassId: entry.entryClassId,
-                          placement: entry.result?.placement ?? null,
-                          placementStatus: entry.result?.placementStatus ?? null,
-                          specialAward: entry.result?.specialAward ?? null,
-                          svGrade: v === 'none' ? null : (v as 'v' | 'sg' | 'g' | 'a' | 'u' | 'disqualified'),
-                        });
-                      }}
-                    >
-                      <SelectTrigger className="h-11 w-28 shrink-0">
-                        <SelectValue placeholder="Grade" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">— Grade —</SelectItem>
-                        <SelectItem value="v">V — Excellent</SelectItem>
-                        <SelectItem value="sg">SG — Very Good</SelectItem>
-                        <SelectItem value="g">G — Good</SelectItem>
-                        <SelectItem value="a">A — Adequate</SelectItem>
-                        <SelectItem value="u">U — Insufficient</SelectItem>
-                        <SelectItem value="disqualified">Disqualified</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  )}
-
-                  {/* Special award button */}
-                  <Dialog
-                    open={specialAwardEntryId === entry.entryClassId}
-                    onOpenChange={(open) =>
-                      setSpecialAwardEntryId(open ? entry.entryClassId : null)
-                    }
-                  >
-                    <DialogTrigger asChild>
+                    {placed && (
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="size-11 shrink-0"
-                        title="Special Award"
+                        className="size-9 shrink-0 text-muted-foreground"
+                        onClick={() => clearPlacement(placed.entryClassId)}
+                        title="Clear this placement"
                       >
-                        <Award className={`size-4 ${entry.result?.specialAward ? 'text-amber-500' : 'text-muted-foreground/40'}`} />
+                        <X className="size-4" />
                       </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>
-                          Special Award — {entry.dogName}
-                        </DialogTitle>
-                      </DialogHeader>
-                      <div className="grid gap-2">
-                        {SPECIAL_AWARDS.map((award) => (
-                          <Button
-                            key={award}
-                            variant={
-                              entry.result?.specialAward === award
-                                ? 'default'
-                                : 'outline'
-                            }
-                            className="justify-start h-11"
-                            onClick={() =>
-                              handleSpecialAward(
-                                entry.entryClassId,
-                                entry.result?.specialAward === award
-                                  ? null
-                                  : award,
-                                entry.result?.placement ?? null
-                              )
-                            }
-                          >
-                            {award}
-                          </Button>
-                        ))}
-                        {entry.result?.specialAward && (
-                          <Button
-                            variant="ghost"
-                            className="text-destructive h-11"
-                            onClick={() =>
-                              handleSpecialAward(
-                                entry.entryClassId,
-                                null,
-                                entry.result?.placement ?? null
-                              )
-                            }
-                          >
-                            <X className="mr-1 size-4" />
-                            Remove Award
-                          </Button>
-                        )}
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              </div>
-
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          ))
-        )}
-      </div>
+            <div className="flex gap-2 border-t bg-muted/40 px-3 py-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-10 flex-1"
+                onClick={() => setExtraSlots((n) => n + 1)}
+              >
+                <Plus className="mr-1 size-4" />
+                Add {placementLabel(totalSlots + 1)}
+              </Button>
+              {extraSlots > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-10"
+                  onClick={() => setExtraSlots((n) => Math.max(0, n - 1))}
+                  disabled={placedByValue.has(totalSlots)}
+                  title="Remove last empty slot"
+                >
+                  Remove last
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Not-yet-placed list */}
+          {remaining.length > 0 && (
+            <>
+              <div className="mt-5 flex items-center justify-between">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  Not yet placed ({remaining.length})
+                </p>
+                {nextOpenSlot != null && (
+                  <p className="text-xs text-muted-foreground">
+                    Tap to place {placementLabel(nextOpenSlot)}
+                  </p>
+                )}
+              </div>
+              <div className="mt-2 space-y-2">
+                {remaining.map((entry) => (
+                  <DogCard
+                    key={entry.entryClassId}
+                    entry={entry}
+                    canPlace={nextOpenSlot != null}
+                    onPlace={() => placeNext(entry.entryClassId, entry.result?.specialAward ?? null)}
+                    onMarkAbsent={() => markAbsent.mutate({ entryId: entry.entryId, absent: true })}
+                    onWithhold={() => setStatus(entry.entryClassId, 'withheld', entry.result?.specialAward ?? null)}
+                    onUnplaced={() => setStatus(entry.entryClassId, 'unplaced', entry.result?.specialAward ?? null)}
+                    onOpenSpecialAward={() => setSpecialAwardEntryId(entry.entryClassId)}
+                    isWusv={isWusv}
+                    onChangeGrade={(grade) => {
+                      recordResult.mutate({
+                        entryClassId: entry.entryClassId,
+                        placement: entry.result?.placement ?? null,
+                        placementStatus: (entry.result?.placementStatus as "withheld" | "unplaced" | null | undefined) ?? null,
+                        specialAward: entry.result?.specialAward ?? null,
+                        svGrade: grade,
+                      });
+                    }}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Withheld / Unplaced / Absent categories */}
+          {(withheld.length > 0 || explicitlyUnplaced.length > 0 || absent.length > 0) && (
+            <div className="mt-5 space-y-3">
+              {withheld.length > 0 && (
+                <CategoryCard
+                  title="Withheld"
+                  tone="amber"
+                  entries={withheld}
+                  onClear={(id) => removeResult.mutate({ entryClassId: id })}
+                />
+              )}
+              {explicitlyUnplaced.length > 0 && (
+                <CategoryCard
+                  title="Unplaced"
+                  tone="slate"
+                  entries={explicitlyUnplaced}
+                  onClear={(id) => removeResult.mutate({ entryClassId: id })}
+                />
+              )}
+              {absent.length > 0 && (
+                <CategoryCard
+                  title="Absent"
+                  tone="muted"
+                  entries={absent}
+                  onClear={(id, entryId) => markAbsent.mutate({ entryId: entryId!, absent: false })}
+                  clearLabel="Mark present"
+                />
+              )}
+            </div>
+          )}
+
+          {/* Special-award dialog (one shared, scoped by selected entry id) */}
+          {specialAwardEntryId && (() => {
+            const entry = entries.find((e) => e.entryClassId === specialAwardEntryId);
+            if (!entry) return null;
+            return (
+              <Dialog
+                open={true}
+                onOpenChange={(open) => setSpecialAwardEntryId(open ? specialAwardEntryId : null)}
+              >
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Special Award — {entry.dogName}</DialogTitle>
+                  </DialogHeader>
+                  <div className="grid gap-2">
+                    {SPECIAL_AWARDS.map((award) => (
+                      <Button
+                        key={award}
+                        variant={entry.result?.specialAward === award ? 'default' : 'outline'}
+                        className="justify-start h-11"
+                        onClick={() => {
+                          recordResult.mutate({
+                            entryClassId: entry.entryClassId,
+                            placement: entry.result?.placement ?? null,
+                            placementStatus: (entry.result?.placementStatus as "withheld" | "unplaced" | null | undefined) ?? null,
+                            specialAward:
+                              entry.result?.specialAward === award ? null : award,
+                          });
+                          setSpecialAwardEntryId(null);
+                        }}
+                      >
+                        {award}
+                      </Button>
+                    ))}
+                    {entry.result?.specialAward && (
+                      <Button
+                        variant="ghost"
+                        className="text-destructive h-11"
+                        onClick={() => {
+                          recordResult.mutate({
+                            entryClassId: entry.entryClassId,
+                            placement: entry.result?.placement ?? null,
+                            placementStatus: (entry.result?.placementStatus as "withheld" | "unplaced" | null | undefined) ?? null,
+                            specialAward: null,
+                          });
+                          setSpecialAwardEntryId(null);
+                        }}
+                      >
+                        <X className="mr-1 size-4" />
+                        Remove Award
+                      </Button>
+                    )}
+                  </div>
+                </DialogContent>
+              </Dialog>
+            );
+          })()}
+        </div>
+      )}
 
       {/* Previous / Next class navigation */}
       <div className="mt-8 flex items-center justify-between gap-2 sm:gap-4">
@@ -471,6 +539,217 @@ export default function StewardClassResultsPage({
         ) : (
           <div />
         )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+
+interface DogCardEntry {
+  entryClassId: string;
+  entryId: string;
+  catalogueNumber: string | null;
+  dogName: string;
+  exhibitorName: string | null;
+  absent: boolean;
+  result: {
+    specialAward: string | null;
+    svGrade?: 'v' | 'sg' | 'g' | 'a' | 'u' | 'disqualified' | null;
+  } | null;
+}
+
+function DogCard({
+  entry,
+  canPlace,
+  onPlace,
+  onMarkAbsent,
+  onWithhold,
+  onUnplaced,
+  onOpenSpecialAward,
+  isWusv,
+  onChangeGrade,
+}: {
+  entry: DogCardEntry;
+  canPlace: boolean;
+  onPlace: () => void;
+  onMarkAbsent: () => void;
+  onWithhold: () => void;
+  onUnplaced: () => void;
+  onOpenSpecialAward: () => void;
+  isWusv: boolean;
+  onChangeGrade: (grade: 'v' | 'sg' | 'g' | 'a' | 'u' | 'disqualified' | null) => void;
+}) {
+  return (
+    <div
+      className={cn(
+        'group flex items-center gap-3 rounded-xl border bg-card p-2.5 transition-all',
+        canPlace && 'cursor-pointer hover:border-green-700 hover:shadow-sm active:scale-[0.99]'
+      )}
+      onClick={(e) => {
+        if (!canPlace) return;
+        // Don't fire when tapping the dog row's action buttons
+        const tag = (e.target as HTMLElement).closest('button,[role="menuitem"],[role="dialog"]');
+        if (tag) return;
+        onPlace();
+      }}
+    >
+      <div className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-green-800 text-base font-bold text-white">
+        {entry.catalogueNumber ?? '—'}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold">{entry.dogName}</p>
+        <p className="truncate text-xs text-muted-foreground">{entry.exhibitorName}</p>
+        {entry.result?.specialAward && (
+          <Badge variant="secondary" className="mt-1 text-xs bg-amber-50 text-amber-700">
+            <Award className="mr-0.5 size-3" />
+            {entry.result.specialAward}
+          </Badge>
+        )}
+      </div>
+      <div className="flex items-center gap-1">
+        {isWusv && (
+          <Select
+            value={entry.result?.svGrade ?? 'none'}
+            onValueChange={(v) =>
+              onChangeGrade(v === 'none' ? null : (v as 'v' | 'sg' | 'g' | 'a' | 'u' | 'disqualified'))
+            }
+          >
+            <SelectTrigger
+              className="h-9 w-[78px] shrink-0 text-xs"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <SelectValue placeholder="Grade" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">— Grade —</SelectItem>
+              {SV_GRADES.map((g) => (
+                <SelectItem key={g.value} value={g.value}>
+                  {g.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-9 shrink-0 text-amber-500"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenSpecialAward();
+          }}
+          title="Special award"
+        >
+          <Award className={cn('size-4', !entry.result?.specialAward && 'text-muted-foreground/40')} />
+        </Button>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-9 shrink-0 text-muted-foreground"
+              onClick={(e) => e.stopPropagation()}
+              title="More"
+            >
+              <MoreVertical className="size-4" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-52 p-1.5" align="end" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-muted"
+              onClick={onMarkAbsent}
+            >
+              <UserX className="size-4 text-amber-600" />
+              Mark as absent
+            </button>
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-muted"
+              onClick={onWithhold}
+            >
+              <CircleSlash className="size-4 text-amber-600" />
+              Mark as withheld
+            </button>
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-muted"
+              onClick={onUnplaced}
+            >
+              <CircleSlash className="size-4 text-muted-foreground" />
+              Mark as unplaced
+            </button>
+          </PopoverContent>
+        </Popover>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+
+function CategoryCard({
+  title,
+  tone,
+  entries,
+  onClear,
+  clearLabel = 'Clear',
+}: {
+  title: string;
+  tone: 'amber' | 'slate' | 'muted';
+  entries: {
+    entryClassId: string;
+    entryId: string;
+    catalogueNumber: string | null;
+    dogName: string;
+    exhibitorName: string | null;
+  }[];
+  onClear: (entryClassId: string, entryId?: string) => void;
+  clearLabel?: string;
+}) {
+  const toneClasses =
+    tone === 'amber'
+      ? 'border-amber-200 bg-amber-50/70'
+      : tone === 'slate'
+        ? 'border-slate-200 bg-slate-50/70'
+        : 'border-muted-foreground/10 bg-muted/30';
+  const titleClasses =
+    tone === 'amber'
+      ? 'text-amber-700'
+      : tone === 'slate'
+        ? 'text-slate-600'
+        : 'text-muted-foreground';
+  return (
+    <div className={cn('overflow-hidden rounded-xl border', toneClasses)}>
+      <div
+        className={cn(
+          'px-4 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em]',
+          titleClasses
+        )}
+      >
+        {title} ({entries.length})
+      </div>
+      <div className="divide-y divide-white/40">
+        {entries.map((e) => (
+          <div key={e.entryClassId} className="flex items-center gap-3 px-3 py-2">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-white text-xs font-bold text-muted-foreground">
+              {e.catalogueNumber ?? '—'}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">{e.dogName}</p>
+              <p className="truncate text-xs text-muted-foreground">{e.exhibitorName}</p>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => onClear(e.entryClassId, e.entryId)}
+            >
+              {clearLabel}
+            </Button>
+          </div>
+        ))}
       </div>
     </div>
   );

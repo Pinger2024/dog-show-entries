@@ -295,9 +295,10 @@ export const stewardRouter = createTRPCRouter({
       z.object({
         entryClassId: z.string().uuid(),
         // `placement` and `placementStatus` are mutually exclusive — an
-        // entry is either numerically placed (1-7) OR has a non-numeric
-        // status ('withheld' / 'unplaced'), never both.
-        placement: z.number().int().min(1).max(7).nullable(),
+        // entry is either numerically placed OR has a non-numeric
+        // status ('withheld' / 'unplaced'), never both. Max 50 to allow
+        // GSD-style "place every dog in the class" judging.
+        placement: z.number().int().min(1).max(50).nullable(),
         placementStatus: z.enum(['withheld', 'unplaced']).nullable().optional(),
         specialAward: z.string().nullable().optional(),
         critiqueText: z.string().nullable().optional(),
