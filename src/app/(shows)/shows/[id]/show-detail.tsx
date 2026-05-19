@@ -869,6 +869,30 @@ export function ShowDetailClient() {
         </div>
       </div>
 
+      {/* ─── LIVE RESULTS banner — only while the show is in progress ── */}
+      {show.status === 'in_progress' && (
+        <Link
+          href={`/shows/${showSlug}/results`}
+          className="block bg-gradient-to-r from-red-600 via-red-500 to-red-600 text-white shadow-md transition-opacity hover:opacity-95"
+        >
+          <div className="mx-auto flex max-w-4xl items-center justify-center gap-3 px-3 py-3 sm:gap-4 sm:py-3.5">
+            <span className="relative flex size-3 shrink-0">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
+              <span className="relative inline-flex size-3 rounded-full bg-white" />
+            </span>
+            <span className="text-sm font-bold uppercase tracking-[0.2em] sm:text-base sm:tracking-[0.25em]">
+              Live Results
+            </span>
+            <span className="hidden text-xs font-medium opacity-90 sm:inline">
+              See who's winning right now →
+            </span>
+            <span className="text-xs font-semibold underline-offset-2 sm:hidden">
+              View →
+            </span>
+          </div>
+        </Link>
+      )}
+
       {/* ─── Action bar — sticky below site header ── */}
       <div className="sticky top-[4.5rem] z-40 border-b bg-background/95 shadow-sm backdrop-blur-md">
         <div className="mx-auto flex max-w-4xl items-center gap-2 px-3 py-2.5 sm:px-4 lg:px-6">

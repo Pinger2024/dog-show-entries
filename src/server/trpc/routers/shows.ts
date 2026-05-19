@@ -15,6 +15,8 @@ import {
   sundryItems,
   memberships,
   entries,
+  entryClasses,
+  results,
   showSponsors,
   dogs,
   breeds,
@@ -279,7 +281,23 @@ export const showsRouter = createTRPCRouter({
         });
       }
 
-      return show;
+      // Surface whether this show has any published results — drives the
+      // public-facing "LIVE RESULTS" banner. One small COUNT, much cheaper
+      // than fetching all live results just to test for non-empty.
+      const publishedCount = await ctx.db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(results)
+        .innerJoin(entryClasses, eq(entryClasses.id, results.entryClassId))
+        .innerJoin(entries, eq(entries.id, entryClasses.entryId))
+        .where(
+          and(
+            eq(entries.showId, show.id),
+            isNotNull(results.publishedAt),
+          ),
+        );
+      const hasPublishedResults = (publishedCount[0]?.n ?? 0) > 0;
+
+      return { ...show, hasPublishedResults };
     }),
 
   getClasses: publicProcedure

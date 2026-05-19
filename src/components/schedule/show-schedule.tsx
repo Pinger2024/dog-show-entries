@@ -343,6 +343,36 @@ export function ShowSchedule({
                 <Text style={s.infoValue}>{formatCurrency(show.juniorHandlerFee)}</Text>
               </View>
             )}
+            {/* Per-class fee overrides — any class whose entryFee differs
+                from the show's default first-entry fee. Groups identical
+                overrides (e.g. all Special Award Classes priced at £3) so
+                the panel doesn't fill with one row per class. */}
+            {(() => {
+              const overrides = new Map<number, typeof classes>();
+              for (const c of classes) {
+                if (
+                  c.entryFee != null &&
+                  show.firstEntryFee != null &&
+                  c.entryFee !== show.firstEntryFee
+                ) {
+                  const bucket = overrides.get(c.entryFee) ?? [];
+                  bucket.push(c);
+                  overrides.set(c.entryFee, bucket);
+                }
+              }
+              if (overrides.size === 0) return null;
+              return Array.from(overrides.entries()).map(([fee, cls]) => {
+                const label = cls
+                  .map((c) => `#${c.classLabel}`)
+                  .join(', ');
+                return (
+                  <View key={fee} style={s.infoRow}>
+                    <Text style={s.infoLabel}>{`Classes ${label}`}</Text>
+                    <Text style={s.infoValue}>{formatCurrency(fee)}</Text>
+                  </View>
+                );
+              });
+            })()}
           </InfoCard>
         )}
 

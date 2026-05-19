@@ -139,7 +139,7 @@ export default function StewardShowPage({
                     <div className="size-5 shrink-0 rounded-full border-2 border-muted-foreground/20" />
                   )}
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 sm:gap-2">
+                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                       {sc.classNumber != null && (
                         <span className="text-xs font-bold text-muted-foreground">
                           #{sc.classNumber}
@@ -154,6 +154,16 @@ export default function StewardShowPage({
                           className="text-xs capitalize"
                         >
                           {sc.sex}
+                        </Badge>
+                      )}
+                      {sc.isPublished && (
+                        <Badge className="bg-green-600 text-white text-[10px] uppercase tracking-wider">
+                          Live
+                        </Badge>
+                      )}
+                      {sc.hasUnpublishedChanges && (
+                        <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700 text-[10px]">
+                          Updates pending
                         </Badge>
                       )}
                     </div>

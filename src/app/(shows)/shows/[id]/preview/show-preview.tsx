@@ -507,6 +507,7 @@ export function ShowPreviewClient() {
     entryCloseDate?: string | null;
     acceptsPostalEntries?: boolean;
     kcLicenceNo?: string | null;
+    hasPublishedResults?: boolean;
     scheduleData?: {
       prizeMoney?: string;
       awardsDescription?: string;
@@ -523,8 +524,13 @@ export function ShowPreviewClient() {
 
   const org = show.organisation;
   const venue = show.venue;
-  const isOpen = show.status === 'entries_open';
   const entryCloseDate = showAny.entryCloseDate ? new Date(showAny.entryCloseDate) : null;
+  const closeDatePast = entryCloseDate ? entryCloseDate.getTime() < Date.now() : false;
+  // "Open" requires status=entries_open AND the close date not yet passed.
+  // Show DB status can lag for a few minutes after the cron flips it, so
+  // gating on the close date catches the window where the page would
+  // otherwise still offer entry past the deadline.
+  const isOpen = show.status === 'entries_open' && !closeDatePast;
   const daysToClose = entryCloseDate ? differenceInDays(entryCloseDate, new Date()) : null;
   const showDate = format(parseISO(show.startDate), 'EEEE d MMMM yyyy');
   const dayName = format(parseISO(show.startDate), 'EEEE');
@@ -714,7 +720,7 @@ export function ShowPreviewClient() {
             <div className="mt-10 sm:mt-12">
               <div className="mx-auto grid max-w-xl grid-cols-2 divide-amber-500/20 text-center sm:divide-x">
                 <EditorialStat label="Classes" value={totalClasses} highlight />
-                <EditorialStat label="Breeds" value={breedGroups.length} />
+                <EditorialStat label="Breeds" value={breedGroups.filter((g) => !g.isJH).length} />
               </div>
             </div>
           )}
@@ -733,6 +739,41 @@ export function ShowPreviewClient() {
         </div>
       </header>
 
+      {/* ─── LIVE RESULTS banner — appears as soon as ANY class has been
+           published, regardless of whether the show is formally
+           "in_progress". Drops to a calmer "Results available" tone
+           once the show is completed so the pulsing dot doesn't carry
+           on weeks later. ── */}
+      {(showAny.hasPublishedResults || show.status === 'in_progress') && (
+        <Link
+          href={`/shows/${slug}/results`}
+          className={cn(
+            'block text-white shadow-md transition-opacity hover:opacity-95',
+            show.status === 'completed'
+              ? 'bg-gradient-to-r from-stone-700 via-stone-600 to-stone-700'
+              : 'bg-gradient-to-r from-red-600 via-red-500 to-red-600'
+          )}
+        >
+          <div className="mx-auto flex max-w-6xl items-center justify-center gap-3 px-3 py-3 sm:gap-4 sm:py-3.5">
+            {show.status !== 'completed' && (
+              <span className="relative flex size-3 shrink-0">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
+                <span className="relative inline-flex size-3 rounded-full bg-white" />
+              </span>
+            )}
+            <span className="text-sm font-bold uppercase tracking-[0.2em] sm:text-base sm:tracking-[0.25em]">
+              {show.status === 'completed' ? 'Results Available' : 'Live Results'}
+            </span>
+            <span className="hidden text-xs font-medium opacity-90 sm:inline">
+              {show.status === 'completed'
+                ? 'See who took the top prizes →'
+                : "See who's winning right now →"}
+            </span>
+            <span className="text-xs font-semibold sm:hidden">View →</span>
+          </div>
+        </Link>
+      )}
+
       {/* ──────────────────────────── Sticky action bar ──────────────────── */}
       <div className="sticky top-[calc(4.5rem+2.5rem)] z-40 border-b bg-white/95 shadow-sm backdrop-blur-md sm:top-[calc(4.5rem+2.75rem)]">
         <div className="mx-auto flex max-w-6xl items-center gap-2 px-3 py-2.5 sm:px-4 lg:px-6">
@@ -743,9 +784,24 @@ export function ShowPreviewClient() {
                 Enter This Show
               </Link>
             </Button>
+          ) : show.status === 'in_progress' || show.status === 'completed' || showAny.hasPublishedResults ? (
+            <Button
+              className={cn(
+                'h-12 flex-1 px-5 text-base font-semibold shadow-lg sm:h-11 sm:flex-initial sm:shrink-0 sm:px-5 text-white',
+                show.status === 'completed'
+                  ? 'bg-stone-700 hover:bg-stone-800 shadow-stone-700/30'
+                  : 'bg-red-600 hover:bg-red-700 shadow-red-600/30'
+              )}
+              asChild
+            >
+              <Link href={`/shows/${slug}/results`}>
+                <Trophy className="size-5 sm:size-4" />
+                {show.status === 'completed' ? 'View Results' : 'View Live Results'}
+              </Link>
+            </Button>
           ) : (
             <div className="flex-1 text-sm font-medium text-stone-600 sm:flex-initial">{
-              show.status === 'completed' ? 'Show complete' : show.status === 'cancelled' ? 'Cancelled' : 'Entries closed'
+              show.status === 'cancelled' ? 'Cancelled' : 'Entries closed'
             }</div>
           )}
 
@@ -948,7 +1004,11 @@ export function ShowPreviewClient() {
       {breedGroups.length > 0 && (
         <section className="border-y bg-stone-50/60">
           <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
-            <SectionHeading eyebrow="The card" title={breedGroups.length === 1 ? 'Classes on Offer' : `${breedGroups.length} Breeds`} />
+            <SectionHeading eyebrow="The card" title={(() => {
+              const breedCount = breedGroups.filter((g) => !g.isJH).length;
+              if (breedCount <= 1) return 'Classes on Offer';
+              return `${breedCount} Breeds`;
+            })()} />
             <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {breedGroups.map(({ breed, classes, judgeName }) => (
                 <div
