@@ -63,6 +63,11 @@ export interface ScheduleClass {
   sex: string | null;
   breedName: string | null;
   classType?: string | null;
+  /** Per-class entry fee in pence. When this differs from the show's
+   *  show.firstEntryFee the schedule should surface it as a "Special
+   *  class fees" override line — e.g. SAC or Junior classes priced at
+   *  £3 on an otherwise £20 show. Null = use the show-level fee. */
+  entryFee?: number | null;
   /** RKC group of the class's breed. Populated for multi-breed shows so the
    *  schedule can render Group classification headings (HOUND GROUP, etc.).
    *  Null for breed-less classes (AVNSC, Variety, JH) and for single-breed

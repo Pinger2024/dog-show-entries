@@ -84,6 +84,7 @@ export async function GET(
     classType: sc.classDefinition?.type ?? null,
     breedGroupName: sc.breed?.group?.name ?? null,
     breedGroupSortOrder: sc.breed?.group?.sortOrder ?? null,
+    entryFee: sc.entryFee ?? null,
   }));
 
   // Build judges data (deduplicated by judge id). For each judge we track

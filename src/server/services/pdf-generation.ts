@@ -475,6 +475,7 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     classType: sc.classDefinition?.type ?? null,
     breedGroupName: sc.breed?.group?.name ?? null,
     breedGroupSortOrder: sc.breed?.group?.sortOrder ?? null,
+    entryFee: sc.entryFee ?? null,
   }));
 
   // Build class sponsorships grouped by show sponsor (loaded via showClasses relation)
