@@ -6552,11 +6552,13 @@ export const secretaryRouter = createTRPCRouter({
       const baseClassNumber = nonManaged.reduce((max, sc) => Math.max(max, sc.classNumber ?? 0), 0);
 
       type CoatSex = { sex: 'bitch' | 'dog'; coat: 'stock' | 'long_stock' };
+      // Bitch Long Stock → Bitch Stock → Dog Long Stock → Dog Stock per
+      // Amanda's SV convention 2026-05-19.
       const COMBOS: CoatSex[] = [
-        { sex: 'bitch', coat: 'stock' },
         { sex: 'bitch', coat: 'long_stock' },
-        { sex: 'dog', coat: 'stock' },
+        { sex: 'bitch', coat: 'stock' },
         { sex: 'dog', coat: 'long_stock' },
+        { sex: 'dog', coat: 'stock' },
       ];
 
       const values: {

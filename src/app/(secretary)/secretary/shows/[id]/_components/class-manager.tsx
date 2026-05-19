@@ -609,6 +609,13 @@ export function ClassManager({ showId, showType, showScope, classes }: ClassMana
                                               ) : (
                                                 <span className="text-xs text-muted-foreground">Any sex</span>
                                               )}
+                                              {(sc as { svCoatType?: 'stock' | 'long_stock' | null }).svCoatType && (
+                                                <Badge variant="outline" className="text-xs">
+                                                  {(sc as { svCoatType?: 'stock' | 'long_stock' | null }).svCoatType === 'long_stock'
+                                                    ? 'Long Stock'
+                                                    : 'Stock'}
+                                                </Badge>
+                                              )}
                                               {!isMultiBreed && sc.breed && (
                                                 <span className="truncate text-xs text-muted-foreground">{sc.breed.name}</span>
                                               )}

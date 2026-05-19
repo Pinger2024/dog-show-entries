@@ -711,11 +711,13 @@ export const showsRouter = createTRPCRouter({
           orderBy: [asc(classDefinitions.sortOrder)],
         });
         const fee = firstEntryFee ?? entryFee ?? 0;
+        // Amanda's SV convention 2026-05-19: bitch classes first (Long Stock,
+        // then Stock), then dog classes (Long Stock, then Stock).
         const COMBOS: Array<{ sex: 'bitch' | 'dog'; coat: 'stock' | 'long_stock' }> = [
-          { sex: 'bitch', coat: 'stock' },
           { sex: 'bitch', coat: 'long_stock' },
-          { sex: 'dog', coat: 'stock' },
+          { sex: 'bitch', coat: 'stock' },
           { sex: 'dog', coat: 'long_stock' },
+          { sex: 'dog', coat: 'stock' },
         ];
         const svValues: Array<{
           showId: string;

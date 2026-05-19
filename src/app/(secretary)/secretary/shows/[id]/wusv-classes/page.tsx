@@ -249,10 +249,10 @@ export default function WusvClassesPage() {
                 .flatMap((def) => {
                   const label = AGE_CLASS_DISPLAY[def.name] ?? def.name.replace(/^SV /, '');
                   return [
-                    `${label} · Bitch Stock`,
                     `${label} · Bitch Long Stock`,
-                    `${label} · Dog Stock`,
+                    `${label} · Bitch Stock`,
                     `${label} · Dog Long Stock`,
+                    `${label} · Dog Stock`,
                   ];
                 })
                 .concat([
