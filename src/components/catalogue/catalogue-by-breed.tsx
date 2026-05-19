@@ -1,5 +1,5 @@
 import { Fragment } from 'react';
-import { Document, Page, View, Text } from '@react-pdf/renderer';
+import { Document, Page, View, Text, Image } from '@react-pdf/renderer';
 import { styles } from './catalogue-styles';
 import {
   CoverPage,
@@ -234,6 +234,7 @@ export function CatalogueByBreed({ show, entries }: Props) {
       {/* Front matter — cover is its own Page; the rest flows in a
           single consolidated FrontMatterPage. */}
       <CoverPage show={show} />
+      <AdvertPages adverts={show.adverts} position="inside_front" />
       <FrontMatterPage show={show} />
       {!show.skipTrophiesPage && (
         <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />
@@ -414,6 +415,30 @@ export function CatalogueByBreed({ show, entries }: Props) {
           </Page>
         </Fragment>
       ))}
+      <AdvertPages adverts={show.adverts} position="inside_back" />
+      <AdvertPages adverts={show.adverts} position="last_page" />
     </Document>
+  );
+}
+
+function AdvertPages({
+  adverts,
+  position,
+}: {
+  adverts: CatalogueShowInfo['adverts'];
+  position: 'inside_front' | 'inside_back' | 'last_page';
+}) {
+  const matching = (adverts ?? [])
+    .filter((a) => a.position === position && a.imageUrl)
+    .toSorted((a, b) => a.sortOrder - b.sortOrder);
+  if (matching.length === 0) return null;
+  return (
+    <>
+      {matching.map((ad) => (
+        <Page key={`ad-${position}-${ad.id}`} size="A5" style={{ padding: 0, margin: 0 }}>
+          <Image src={ad.imageUrl!} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+        </Page>
+      ))}
+    </>
   );
 }

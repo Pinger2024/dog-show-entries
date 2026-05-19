@@ -64,7 +64,7 @@ export async function GET(
   // The marked-catalogue achievements query only runs when it's needed; for
   // every other format it short-circuits to an empty array so the Promise.all
   // still resolves cleanly.
-  const [judgeAssignmentRows, showClassRows, entries, safeLogoUrl, showSponsorRows, achievementRows] = await Promise.all([
+  const [judgeAssignmentRows, showClassRows, entries, safeLogoUrl, showSponsorRows, achievementRows, catalogueAdvertRows] = await Promise.all([
     db.query.judgeAssignments.findMany({
       where: eq(schema.judgeAssignments.showId, showId),
       with: { judge: true, breed: true, ring: true },
@@ -130,6 +130,13 @@ export async function GET(
           with: { dog: { with: { breed: true } } },
         })
       : Promise.resolve([] as never[]),
+    db.query.catalogueAdverts.findMany({
+      where: and(
+        eq(schema.catalogueAdverts.showId, showId),
+        eq(schema.catalogueAdverts.document, 'catalogue'),
+      ),
+      orderBy: [asc(schema.catalogueAdverts.sortOrder)],
+    }),
   ]);
 
   const judgesByBreedName: Record<string, string> = {};
@@ -329,6 +336,13 @@ export async function GET(
     prizeMoney: scheduleData?.prizeMoney,
     country: scheduleData?.country,
     publicAdmission: scheduleData?.publicAdmission,
+    adverts: catalogueAdvertRows.map((ad) => ({
+      id: ad.id,
+      advertiserName: ad.advertiserName,
+      position: ad.position,
+      imageUrl: ad.imageUrl,
+      sortOrder: ad.sortOrder,
+    })),
   };
 
   // Check if JSON format was explicitly requested (for data export)

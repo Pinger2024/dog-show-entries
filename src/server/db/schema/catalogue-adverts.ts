@@ -8,7 +8,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
-import { adSizeEnum } from './enums';
+import { adSizeEnum, advertDocumentEnum, advertPositionEnum } from './enums';
 import { shows } from './shows';
 
 export const catalogueAdverts = pgTable(
@@ -20,6 +20,10 @@ export const catalogueAdverts = pgTable(
       .references(() => shows.id, { onDelete: 'cascade' }),
     advertiserName: text('advertiser_name').notNull(),
     adType: adSizeEnum('ad_type').notNull().default('full_page'),
+    /** Which document the advert slots into. */
+    document: advertDocumentEnum('document').notNull().default('catalogue'),
+    /** Where in the document the advert renders. */
+    position: advertPositionEnum('position').notNull().default('last_page'),
     imageStorageKey: text('image_storage_key'),
     imageUrl: text('image_url'),
     textContent: text('text_content'),

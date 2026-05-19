@@ -251,6 +251,19 @@ export const adSizeEnum = pgEnum('ad_size', [
   'quarter_page',
 ]);
 
+/** Which document the advert renders in. */
+export const advertDocumentEnum = pgEnum('advert_document', [
+  'schedule',
+  'catalogue',
+]);
+
+/** Where in the document the advert slots in. */
+export const advertPositionEnum = pgEnum('advert_position', [
+  'inside_front',
+  'inside_back',
+  'last_page',
+]);
+
 // ── Print Shop enums ──────────────────────────────────
 
 export const printOrderStatusEnum = pgEnum('print_order_status', [

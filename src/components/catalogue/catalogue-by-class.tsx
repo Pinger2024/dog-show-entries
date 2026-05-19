@@ -1,4 +1,4 @@
-import { Document, Page, View, Text } from '@react-pdf/renderer';
+import { Document, Page, View, Text, Image } from '@react-pdf/renderer';
 import { styles } from './catalogue-styles';
 import { CatalogueHeader } from './catalogue-header';
 import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
@@ -146,6 +146,7 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
           #93) since exhibitors look up their own catalogue numbers more
           often than they read alphabetical reference indexes. */}
       <CoverPage show={show} />
+      <AdvertPages adverts={show.adverts} position="inside_front" />
       <FrontMatterPage show={show} compact={compact} />
       {!show.skipTrophiesPage && !compact && (
         <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />
@@ -291,6 +292,30 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
 
       {/* Back matter: exhibitor index — moved to the end per backlog #93 */}
       <ExhibitorIndexPage show={show} entries={entries} compact={compact} />
+      <AdvertPages adverts={show.adverts} position="inside_back" />
+      <AdvertPages adverts={show.adverts} position="last_page" />
     </Document>
+  );
+}
+
+function AdvertPages({
+  adverts,
+  position,
+}: {
+  adverts: CatalogueShowInfo['adverts'];
+  position: 'inside_front' | 'inside_back' | 'last_page';
+}) {
+  const matching = (adverts ?? [])
+    .filter((a) => a.position === position && a.imageUrl)
+    .toSorted((a, b) => a.sortOrder - b.sortOrder);
+  if (matching.length === 0) return null;
+  return (
+    <>
+      {matching.map((ad) => (
+        <Page key={`ad-${position}-${ad.id}`} size="A5" style={{ padding: 0, margin: 0 }}>
+          <Image src={ad.imageUrl!} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+        </Page>
+      ))}
+    </>
   );
 }

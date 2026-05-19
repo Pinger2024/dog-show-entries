@@ -10,6 +10,7 @@ import {
   FileText,
   FolderOpen,
   Handshake,
+  Image as ImageIcon,
   LayoutDashboard,
   ListChecks,
   PoundSterling,
@@ -50,6 +51,7 @@ const BASE_SECTIONS: Section[] = [
   { path: '/reports', label: 'Reports', icon: FileText },
   { path: '/people', label: 'People', icon: Users },
   { path: '/sponsors', label: 'Sponsors', icon: Handshake },
+  { path: '/adverts', label: 'Adverts', icon: ImageIcon },
   { path: '/documents', label: 'Documents', icon: FolderOpen },
   { path: '/print-shop', label: 'Print Shop', icon: Printer },
 ];
@@ -85,7 +87,7 @@ export function ShowSectionNav({ showId, isWusv = false }: { showId: string; isW
     },
     {
       label: 'Setup',
-      items: ['/people', '/sponsors', '/documents'],
+      items: ['/people', '/sponsors', '/adverts', '/documents'],
     },
   ];
   const [open, setOpen] = useState(false);

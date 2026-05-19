@@ -166,4 +166,13 @@ export interface CatalogueShowInfo {
   country?: 'england' | 'wales' | 'scotland' | 'northern_ireland';
   /** Whether the show is open to the public (vs. exhibitors only) */
   publicAdmission?: boolean;
+  /** Full-page A5 adverts to slot into the catalogue at the chosen positions.
+   *  Secretaries upload these via /secretary/shows/[id]/adverts. */
+  adverts?: Array<{
+    id: string;
+    advertiserName: string;
+    position: 'inside_front' | 'inside_back' | 'last_page';
+    imageUrl: string | null;
+    sortOrder: number;
+  }>;
 }

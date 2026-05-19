@@ -48,7 +48,7 @@ export async function generateCataloguePdf(
   // previously this service dropped bios/photos/ring numbers/class
   // sponsorships/show sponsors, so any catalogue generated via
   // generateAndUploadForPrint was missing them.
-  const [judgeAssignmentRows, showClassRows, entries, showSponsorRows] = await Promise.all([
+  const [judgeAssignmentRows, showClassRows, entries, showSponsorRows, catalogueAdvertRows] = await Promise.all([
     db.query.judgeAssignments.findMany({
       where: eq(schema.judgeAssignments.showId, showId),
       with: { judge: true, breed: true, ring: true },
@@ -91,6 +91,13 @@ export async function generateCataloguePdf(
       where: eq(schema.showSponsors.showId, showId),
       with: { sponsor: true },
       orderBy: [asc(schema.showSponsors.displayOrder)],
+    }),
+    db.query.catalogueAdverts.findMany({
+      where: and(
+        eq(schema.catalogueAdverts.showId, showId),
+        eq(schema.catalogueAdverts.document, 'catalogue'),
+      ),
+      orderBy: [asc(schema.catalogueAdverts.sortOrder)],
     }),
   ]);
 
@@ -283,6 +290,13 @@ export async function generateCataloguePdf(
     prizeMoney: scheduleData?.prizeMoney,
     country: scheduleData?.country,
     publicAdmission: scheduleData?.publicAdmission,
+    adverts: catalogueAdvertRows.map((ad) => ({
+      id: ad.id,
+      advertiserName: ad.advertiserName,
+      position: ad.position,
+      imageUrl: ad.imageUrl,
+      sortOrder: ad.sortOrder,
+    })),
   };
 
   const isAllBreed = show.showScope !== 'single_breed';
@@ -365,7 +379,7 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
 
   if (!show) throw new Error(`Show ${showId} not found`);
 
-  const [showClasses, judgeAssignments, showSponsors, discountGroups] = await Promise.all([
+  const [showClasses, judgeAssignments, showSponsors, discountGroups, advertRows] = await Promise.all([
     db.query.showClasses.findMany({
       where: eq(schema.showClasses.showId, showId),
       with: {
@@ -387,7 +401,20 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
       where: eq(schema.showDiscountGroups.showId, showId),
       orderBy: [asc(schema.showDiscountGroups.displayOrder)],
     }),
+    db.query.catalogueAdverts.findMany({
+      where: eq(schema.catalogueAdverts.showId, showId),
+      orderBy: [asc(schema.catalogueAdverts.sortOrder)],
+    }),
   ]);
+
+  const adverts = advertRows.map((ad) => ({
+    id: ad.id,
+    advertiserName: ad.advertiserName,
+    document: ad.document,
+    position: ad.position,
+    imageUrl: ad.imageUrl,
+    sortOrder: ad.sortOrder,
+  }));
 
   // Build judges with sex-annotated display labels
   // Group by (name + sex) to preserve sex-split assignments. Skip group/show-
@@ -561,6 +588,7 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     classes,
     judges,
     sponsors,
+    adverts,
     panelJudges,
   });
   return Buffer.from(await renderToBuffer(pdfDocument));

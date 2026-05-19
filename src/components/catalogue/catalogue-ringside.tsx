@@ -1,5 +1,5 @@
 import { Fragment } from 'react';
-import { Document, Page, View, Text, StyleSheet } from '@react-pdf/renderer';
+import { Document, Page, View, Text, Image, StyleSheet } from '@react-pdf/renderer';
 import './catalogue-styles'; // side-effect: registers Inter + LibreBaskerville fonts
 import { C } from './catalogue-styles';
 import type { CatalogueEntry, CatalogueShowInfo } from './catalogue-types';
@@ -390,6 +390,31 @@ function chunkClasses(classes: ClassGroup[]): ClassGroup[][] {
   return chunks;
 }
 
+// ── Advert pages ───────────────────────────────────────────────
+// Full-bleed A5 sponsored adverts (Amanda 2026-05-19). One ad = one A5 page.
+
+function AdvertPages({
+  adverts,
+  position,
+}: {
+  adverts: CatalogueShowInfo['adverts'];
+  position: 'inside_front' | 'inside_back' | 'last_page';
+}) {
+  const matching = (adverts ?? [])
+    .filter((a) => a.position === position && a.imageUrl)
+    .toSorted((a, b) => a.sortOrder - b.sortOrder);
+  if (matching.length === 0) return null;
+  return (
+    <>
+      {matching.map((ad) => (
+        <Page key={`ad-${position}-${ad.id}`} size="A5" style={{ padding: 0, margin: 0 }}>
+          <Image src={ad.imageUrl!} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+        </Page>
+      ))}
+    </>
+  );
+}
+
 // ── Main Component ─────────────────────────────────────────────
 
 export function CatalogueRingside({ show, entries, compact }: Props) {
@@ -487,6 +512,7 @@ export function CatalogueRingside({ show, entries, compact }: Props) {
           diagnostic or fall back to per-section pages if it becomes
           a problem. */}
       <CoverPage show={show} />
+      <AdvertPages adverts={show.adverts} position="inside_front" />
       {!show.skipTrophiesPage && show.classSponsorships && show.classSponsorships.length > 0 && (
         <TrophiesPage show={show} sponsorships={show.classSponsorships} />
       )}
@@ -772,6 +798,8 @@ export function CatalogueRingside({ show, entries, compact }: Props) {
           <Text style={s.footer} render={footerRender} fixed />
         </Page>
       )}
+      <AdvertPages adverts={show.adverts} position="inside_back" />
+      <AdvertPages adverts={show.adverts} position="last_page" />
     </Document>
   );
 }

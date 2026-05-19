@@ -11,6 +11,7 @@ import type {
   ScheduleSponsor,
   SchedulePanelJudge,
 } from '@/components/schedule';
+import type { ScheduleAdvert } from '@/components/schedule/shared/types';
 import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, makePdfResponse } from '@/lib/pdf-utils';
@@ -41,8 +42,9 @@ export async function GET(
     if (authResult instanceof NextResponse) return authResult;
   }
 
-  // Fetch show classes, judge assignments, sponsors, and discount groups concurrently
-  const [showClasses, judgeAssignments, showSponsorData, discountGroups] = await Promise.all([
+  // Fetch show classes, judge assignments, sponsors, discount groups,
+  // and catalogue adverts concurrently
+  const [showClasses, judgeAssignments, showSponsorData, discountGroups, advertRows] = await Promise.all([
     db.query.showClasses.findMany({
       where: eq(schema.showClasses.showId, showId),
       with: {
@@ -69,7 +71,20 @@ export async function GET(
       where: eq(schema.showDiscountGroups.showId, showId),
       orderBy: [asc(schema.showDiscountGroups.displayOrder)],
     }),
+    db.query.catalogueAdverts.findMany({
+      where: eq(schema.catalogueAdverts.showId, showId),
+      orderBy: [asc(schema.catalogueAdverts.sortOrder)],
+    }),
   ]);
+
+  const adverts: ScheduleAdvert[] = advertRows.map((ad) => ({
+    id: ad.id,
+    advertiserName: ad.advertiserName,
+    document: ad.document,
+    position: ad.position,
+    imageUrl: ad.imageUrl,
+    sortOrder: ad.sortOrder,
+  }));
 
   // Build classes data — classLabel is what the PDF actually renders
   // (non-JH classes show their classNumber, JH classes show JHA/JHB…).
@@ -321,6 +336,7 @@ export async function GET(
       classes,
       judges,
       sponsors,
+      adverts,
       panelJudges,
     });
     const buffer = await renderToBuffer(pdfDocument);

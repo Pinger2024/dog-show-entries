@@ -89,6 +89,17 @@ export interface ScheduleJudge {
   displayLabel?: string;
 }
 
+/** Full-page A5 advert that slots into the schedule or catalogue PDF.
+ *  Secretaries upload these via the Adverts page. */
+export interface ScheduleAdvert {
+  id: string;
+  advertiserName: string;
+  document: 'schedule' | 'catalogue';
+  position: 'inside_front' | 'inside_back' | 'last_page';
+  imageUrl: string | null;
+  sortOrder: number;
+}
+
 export interface ScheduleSponsor {
   name: string;
   tier: string;

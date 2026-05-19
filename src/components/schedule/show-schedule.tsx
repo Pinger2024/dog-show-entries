@@ -22,6 +22,8 @@ import {
 import { SectionBand, InfoCard, GoldRule, Rule } from './shared/elements';
 import { sortOfficers } from './shared/officers';
 import { buildEntryFeeGroups } from './shared/entry-fee-groups';
+import { AdvertPage, selectAdverts } from './shared/advert-page';
+import type { ScheduleAdvert } from './shared/types';
 
 // Re-export so existing consumers (route.ts, pdf-generation.ts, tests,
 // preview scripts) continue importing from this module path.
@@ -37,12 +39,14 @@ export function ShowSchedule({
   classes,
   judges,
   sponsors = [],
+  adverts = [],
   format = 'standard',
 }: {
   show: ScheduleShowInfo;
   classes: ScheduleClass[];
   judges: ScheduleJudge[];
   sponsors?: ScheduleSponsor[];
+  adverts?: ScheduleAdvert[];
   /** Accepted but unused — single-breed shows don't render group/show-level
    *  panel judges. The dispatcher passes this prop to both renderers so the
    *  call signatures stay symmetrical; multi-breed component consumes it. */
@@ -305,6 +309,11 @@ export function ShowSchedule({
         {/* Green bottom band */}
         <View style={s.coverBottomBand} />
       </Page>
+
+      {/* Inside-front-cover adverts — render right after the cover page. */}
+      {selectAdverts(adverts, 'schedule', 'inside_front').map((ad) => (
+        <AdvertPage key={`ad-if-${ad.id}`} advert={ad} />
+      ))}
 
       {/* ════════════════════════════════════════════════════════════════════════
           ENTRY INFORMATION
@@ -1316,6 +1325,16 @@ export function ShowSchedule({
           <Text style={s.footer} render={footerRender} fixed />
         </Page>
       )}
+
+      {/* Inside-back-cover adverts — sit just before any last-page adverts. */}
+      {selectAdverts(adverts, 'schedule', 'inside_back').map((ad) => (
+        <AdvertPage key={`ad-ib-${ad.id}`} advert={ad} />
+      ))}
+
+      {/* Last-page adverts — the very final pages of the PDF. */}
+      {selectAdverts(adverts, 'schedule', 'last_page').map((ad) => (
+        <AdvertPage key={`ad-lp-${ad.id}`} advert={ad} />
+      ))}
     </Document>
   );
 }

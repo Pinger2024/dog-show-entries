@@ -23,6 +23,8 @@ import {
 import { SectionBand, InfoCard, GoldRule, Rule } from './shared/elements';
 import { sortOfficers } from './shared/officers';
 import { buildEntryFeeGroups } from './shared/entry-fee-groups';
+import { AdvertPage, selectAdverts } from './shared/advert-page';
+import type { ScheduleAdvert } from './shared/types';
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 //
@@ -39,12 +41,14 @@ export function ShowScheduleMultibreed({
   classes,
   judges,
   sponsors = [],
+  adverts = [],
   panelJudges = [],
 }: {
   show: ScheduleShowInfo;
   classes: ScheduleClass[];
   judges: ScheduleJudge[];
   sponsors?: ScheduleSponsor[];
+  adverts?: ScheduleAdvert[];
   /** Group-level + show-level judge assignments (Group Judge, Puppy Group,
    *  BIS, etc.). Drives the BIS & Group Judges panel page and the per-group
    *  judge banner above each group's classification block. Empty array when
@@ -296,6 +300,11 @@ export function ShowScheduleMultibreed({
         {/* Green bottom band */}
         <View style={s.coverBottomBand} />
       </Page>
+
+      {/* Inside-front-cover adverts — render right after the cover page. */}
+      {selectAdverts(adverts, 'schedule', 'inside_front').map((ad) => (
+        <AdvertPage key={`ad-if-${ad.id}`} advert={ad} />
+      ))}
 
       {/* ════════════════════════════════════════════════════════════════════════
           ENTRY INFORMATION
@@ -1545,6 +1554,16 @@ export function ShowScheduleMultibreed({
           <Text style={s.footer} render={footerRender} fixed />
         </Page>
       )}
+
+      {/* Inside-back-cover adverts — just before any last-page adverts. */}
+      {selectAdverts(adverts, 'schedule', 'inside_back').map((ad) => (
+        <AdvertPage key={`ad-ib-${ad.id}`} advert={ad} />
+      ))}
+
+      {/* Last-page adverts — final pages of the PDF. */}
+      {selectAdverts(adverts, 'schedule', 'last_page').map((ad) => (
+        <AdvertPage key={`ad-lp-${ad.id}`} advert={ad} />
+      ))}
     </Document>
   );
 }
