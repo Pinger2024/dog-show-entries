@@ -21,7 +21,8 @@ export function AdvertPage({ advert }: { advert: ScheduleAdvert }) {
   );
 }
 
-/** Filter adverts for a document + position, ordered by sortOrder. */
+/** Filter adverts for a document + position, ordered by sortOrder.
+ *  Adverts tagged `both` appear in either schedule or catalogue render. */
 export function selectAdverts(
   adverts: readonly ScheduleAdvert[] | undefined,
   document: 'schedule' | 'catalogue',
@@ -29,6 +30,11 @@ export function selectAdverts(
 ): ScheduleAdvert[] {
   if (!adverts) return [];
   return adverts
-    .filter((a) => a.document === document && a.position === position && a.imageUrl)
+    .filter(
+      (a) =>
+        (a.document === document || a.document === 'both') &&
+        a.position === position &&
+        a.imageUrl,
+    )
     .toSorted((a, b) => a.sortOrder - b.sortOrder);
 }

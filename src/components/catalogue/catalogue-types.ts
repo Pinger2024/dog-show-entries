@@ -167,7 +167,9 @@ export interface CatalogueShowInfo {
   /** Whether the show is open to the public (vs. exhibitors only) */
   publicAdmission?: boolean;
   /** Full-page A5 adverts to slot into the catalogue at the chosen positions.
-   *  Secretaries upload these via /secretary/shows/[id]/adverts. */
+   *  Secretaries upload these via /secretary/shows/[id]/adverts. The server
+   *  passes only catalogue-bound adverts here — both `'catalogue'` and
+   *  `'both'` document values match. */
   adverts?: Array<{
     id: string;
     advertiserName: string;

@@ -6622,7 +6622,7 @@ export const secretaryRouter = createTRPCRouter({
         showId: z.string().uuid(),
         advertiserName: z.string().min(1).max(255),
         adType: z.enum(['full_page', 'half_page', 'quarter_page']).default('full_page'),
-        document: z.enum(['schedule', 'catalogue']).default('catalogue'),
+        document: z.enum(['schedule', 'catalogue', 'both']).default('catalogue'),
         position: z.enum(['inside_front', 'inside_back', 'last_page']).default('last_page'),
         imageStorageKey: z.string().nullable().optional(),
         imageUrl: z.string().nullable().optional(),

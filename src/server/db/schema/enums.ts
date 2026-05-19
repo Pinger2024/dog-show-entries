@@ -255,6 +255,7 @@ export const adSizeEnum = pgEnum('ad_size', [
 export const advertDocumentEnum = pgEnum('advert_document', [
   'schedule',
   'catalogue',
+  'both',
 ]);
 
 /** Where in the document the advert slots in. */

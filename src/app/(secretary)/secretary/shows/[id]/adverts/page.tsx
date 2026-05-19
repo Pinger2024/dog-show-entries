@@ -35,12 +35,13 @@ import {
 import { EmptyState } from '@/components/ui/empty-state';
 import { useShowId } from '../_lib/show-context';
 
-type AdvertDocument = 'schedule' | 'catalogue';
+type AdvertDocument = 'schedule' | 'catalogue' | 'both';
 type AdvertPosition = 'inside_front' | 'inside_back' | 'last_page';
 
 const DOCUMENT_LABEL: Record<AdvertDocument, string> = {
   schedule: 'Schedule',
   catalogue: 'Catalogue',
+  both: 'Schedule & Catalogue',
 };
 
 const POSITION_LABEL: Record<AdvertPosition, string> = {
@@ -454,6 +455,7 @@ function AdvertDialog({
                 <SelectContent>
                   <SelectItem value="catalogue">Catalogue</SelectItem>
                   <SelectItem value="schedule">Schedule</SelectItem>
+                  <SelectItem value="both">Both — Schedule &amp; Catalogue</SelectItem>
                 </SelectContent>
               </Select>
             </div>

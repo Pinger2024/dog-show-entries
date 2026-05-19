@@ -9,7 +9,7 @@ import path from 'node:path';
 import sharp from 'sharp';
 import { format, parseISO } from 'date-fns';
 import { db } from '@/server/db';
-import { and, eq, isNull, asc, sql } from 'drizzle-orm';
+import { and, eq, isNull, asc, sql, inArray } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
 import { formatDogName, formatDogNameForCatalogue } from '@/lib/utils';
 import { renderToBuffer, Document, Page, Text, StyleSheet } from '@react-pdf/renderer';
@@ -95,7 +95,7 @@ export async function generateCataloguePdf(
     db.query.catalogueAdverts.findMany({
       where: and(
         eq(schema.catalogueAdverts.showId, showId),
-        eq(schema.catalogueAdverts.document, 'catalogue'),
+        inArray(schema.catalogueAdverts.document, ['catalogue', 'both']),
       ),
       orderBy: [asc(schema.catalogueAdverts.sortOrder)],
     }),

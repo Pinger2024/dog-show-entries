@@ -94,7 +94,7 @@ export interface ScheduleJudge {
 export interface ScheduleAdvert {
   id: string;
   advertiserName: string;
-  document: 'schedule' | 'catalogue';
+  document: 'schedule' | 'catalogue' | 'both';
   position: 'inside_front' | 'inside_back' | 'last_page';
   imageUrl: string | null;
   sortOrder: number;

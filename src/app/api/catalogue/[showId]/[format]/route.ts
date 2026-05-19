@@ -133,7 +133,7 @@ export async function GET(
     db.query.catalogueAdverts.findMany({
       where: and(
         eq(schema.catalogueAdverts.showId, showId),
-        eq(schema.catalogueAdverts.document, 'catalogue'),
+        inArray(schema.catalogueAdverts.document, ['catalogue', 'both']),
       ),
       orderBy: [asc(schema.catalogueAdverts.sortOrder)],
     }),
