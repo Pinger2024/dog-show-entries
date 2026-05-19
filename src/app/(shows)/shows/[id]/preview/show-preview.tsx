@@ -507,6 +507,7 @@ export function ShowPreviewClient() {
     entryCloseDate?: string | null;
     acceptsPostalEntries?: boolean;
     kcLicenceNo?: string | null;
+    hasPublishedResults?: boolean;
     scheduleData?: {
       prizeMoney?: string;
       awardsDescription?: string;
@@ -738,22 +739,35 @@ export function ShowPreviewClient() {
         </div>
       </header>
 
-      {/* ─── LIVE RESULTS banner — only while the show is in progress ── */}
-      {show.status === 'in_progress' && (
+      {/* ─── LIVE RESULTS banner — appears as soon as ANY class has been
+           published, regardless of whether the show is formally
+           "in_progress". Drops to a calmer "Results available" tone
+           once the show is completed so the pulsing dot doesn't carry
+           on weeks later. ── */}
+      {(showAny.hasPublishedResults || show.status === 'in_progress') && (
         <Link
           href={`/shows/${slug}/results`}
-          className="block bg-gradient-to-r from-red-600 via-red-500 to-red-600 text-white shadow-md transition-opacity hover:opacity-95"
+          className={cn(
+            'block text-white shadow-md transition-opacity hover:opacity-95',
+            show.status === 'completed'
+              ? 'bg-gradient-to-r from-stone-700 via-stone-600 to-stone-700'
+              : 'bg-gradient-to-r from-red-600 via-red-500 to-red-600'
+          )}
         >
           <div className="mx-auto flex max-w-6xl items-center justify-center gap-3 px-3 py-3 sm:gap-4 sm:py-3.5">
-            <span className="relative flex size-3 shrink-0">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
-              <span className="relative inline-flex size-3 rounded-full bg-white" />
-            </span>
+            {show.status !== 'completed' && (
+              <span className="relative flex size-3 shrink-0">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
+                <span className="relative inline-flex size-3 rounded-full bg-white" />
+              </span>
+            )}
             <span className="text-sm font-bold uppercase tracking-[0.2em] sm:text-base sm:tracking-[0.25em]">
-              Live Results
+              {show.status === 'completed' ? 'Results Available' : 'Live Results'}
             </span>
             <span className="hidden text-xs font-medium opacity-90 sm:inline">
-              See who's winning right now →
+              {show.status === 'completed'
+                ? 'See who took the top prizes →'
+                : "See who's winning right now →"}
             </span>
             <span className="text-xs font-semibold sm:hidden">View →</span>
           </div>
@@ -770,14 +784,19 @@ export function ShowPreviewClient() {
                 Enter This Show
               </Link>
             </Button>
-          ) : show.status === 'in_progress' || show.status === 'completed' ? (
+          ) : show.status === 'in_progress' || show.status === 'completed' || showAny.hasPublishedResults ? (
             <Button
-              className="h-12 flex-1 px-5 text-base font-semibold shadow-lg shadow-red-600/30 sm:h-11 sm:flex-initial sm:shrink-0 sm:px-5 bg-red-600 hover:bg-red-700 text-white"
+              className={cn(
+                'h-12 flex-1 px-5 text-base font-semibold shadow-lg sm:h-11 sm:flex-initial sm:shrink-0 sm:px-5 text-white',
+                show.status === 'completed'
+                  ? 'bg-stone-700 hover:bg-stone-800 shadow-stone-700/30'
+                  : 'bg-red-600 hover:bg-red-700 shadow-red-600/30'
+              )}
               asChild
             >
               <Link href={`/shows/${slug}/results`}>
                 <Trophy className="size-5 sm:size-4" />
-                {show.status === 'in_progress' ? 'View Live Results' : 'View Results'}
+                {show.status === 'completed' ? 'View Results' : 'View Live Results'}
               </Link>
             </Button>
           ) : (
