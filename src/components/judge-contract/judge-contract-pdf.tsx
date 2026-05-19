@@ -39,6 +39,12 @@ export type JudgeContractPdfData = {
     jepLevel: number | null;
   };
   breedsAssigned: string[];
+  /** New: matches the offer email's "Breed: ... / Classification: ..." split.
+   *  When present, the PDF renders the two-line format instead of the legacy
+   *  combined breedsAssigned. Legacy contracts (pre-2026-05-19) won't have
+   *  these set and fall through to the old single-line rendering. */
+  breedLine?: string;
+  classificationLine?: string;
   expenses: {
     hotelPence: number | null;
     travelPence: number | null;
@@ -324,12 +330,29 @@ export function JudgeContractPdf({ data }: { data: JudgeContractPdfData }) {
         <View style={s.section}>
           <Text style={s.sectionHeading}>Appointment</Text>
           <View style={s.breedsBlock}>
-            <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Breeds to be judged</Text>
-            <Text>
-              {data.breedsAssigned.length > 0
-                ? data.breedsAssigned.join(', ')
-                : 'All breeds scheduled at the show'}
-            </Text>
+            {data.breedLine || data.classificationLine ? (
+              <>
+                <Text style={{ marginBottom: 3 }}>
+                  <Text style={{ fontWeight: 'bold' }}>Breed: </Text>
+                  {data.breedLine || 'All breeds scheduled at the show'}
+                </Text>
+                {data.classificationLine && (
+                  <Text>
+                    <Text style={{ fontWeight: 'bold' }}>Classification: </Text>
+                    {data.classificationLine}
+                  </Text>
+                )}
+              </>
+            ) : (
+              <>
+                <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Breeds to be judged</Text>
+                <Text>
+                  {data.breedsAssigned.length > 0
+                    ? data.breedsAssigned.join(', ')
+                    : 'All breeds scheduled at the show'}
+                </Text>
+              </>
+            )}
           </View>
         </View>
 

@@ -17,6 +17,7 @@ import {
   JudgeContractPdf,
   type JudgeContractPdfData,
 } from '@/components/judge-contract/judge-contract-pdf';
+import { buildJudgeBreedAndClassification } from '@/lib/judge-breed-classification';
 
 export type GenerateResult =
   | { status: 'generated' }
@@ -31,7 +32,7 @@ export async function generateJudgeContractPdf(
   const contract = await db.query.judgeContracts.findFirst({
     where: eq(judgeContracts.id, contractId),
     with: {
-      show: { with: { venue: true, organisation: true } },
+      show: { with: { venue: true, organisation: true, breed: true } },
       judge: true,
     },
   });
@@ -60,6 +61,25 @@ export async function generateJudgeContractPdf(
 
   const show = contract.show;
 
+  // Match the offer email's "Breed: ... / Classification: ..." split
+  // so the contract PDF agrees with what the judge accepted.
+  const showBreedNames: string[] = [];
+  if (show.breed?.name) showBreedNames.push(show.breed.name);
+  for (const a of assignments) {
+    if (a.breed?.name && !showBreedNames.includes(a.breed.name)) {
+      showBreedNames.push(a.breed.name);
+    }
+  }
+  const { breedLine, classificationLine } = buildJudgeBreedAndClassification(
+    assignments.map((a) => ({
+      breed: a.breed ? { name: a.breed.name } : null,
+      sex: a.sex,
+      isSpecialAwardsClassesJudge: a.isSpecialAwardsClassesJudge,
+    })),
+    showBreedNames,
+    show.name,
+  );
+
   const pdfData: JudgeContractPdfData = {
     societyName: show.organisation?.name ?? 'The Show Society',
     secretaryEmail: show.secretaryEmail ?? null,
@@ -77,6 +97,8 @@ export async function generateJudgeContractPdf(
       jepLevel: contract.judge?.jepLevel ?? null,
     },
     breedsAssigned,
+    breedLine,
+    classificationLine,
     expenses: {
       hotelPence: contract.hotelCost,
       travelPence: contract.travelCost,
