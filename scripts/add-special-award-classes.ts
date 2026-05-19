@@ -28,14 +28,19 @@ const rows = [
     description: `For dogs of 6 and not exceeding 18 calendar months of age on the first day of the show. ${SAC_NOT_ELIGIBLE}`,
   },
   {
+    name: 'Special Award Class - Special Yearling',
+    sortOrder: 215,
+    description: `For dogs of 6 and not exceeding 24 calendar months of age on the first day of the show. ${SAC_NOT_ELIGIBLE}`,
+  },
+  {
     name: 'Special Award Class - Post Graduate',
     sortOrder: 220,
-    description: `For dogs which have not won a CC or 5 or more first prizes at Championship Shows. ${SAC_NOT_ELIGIBLE}`,
+    description: `For dogs which have not won a Challenge Certificate/CACIB/CAC/Green Star or five or more First Prizes at Championship Shows in Post Graduate, Minor Limit, Mid Limit, Limit and Open classes, whether restricted or not, where Challenge Certificates were offered for the breed. ${SAC_NOT_ELIGIBLE}`,
   },
   {
     name: 'Special Award Class - Open',
     sortOrder: 230,
-    description: `For all dogs of the breed eligible for entry at the show. No restrictions. ${SAC_NOT_ELIGIBLE}`,
+    description: `For all dogs of the breed for which the class is provided and eligible for entry at the Show. ${SAC_NOT_ELIGIBLE}`,
   },
   {
     name: 'Special Award Class - Veteran',

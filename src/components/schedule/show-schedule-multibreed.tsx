@@ -834,10 +834,24 @@ export function ShowScheduleMultibreed({
         </View>
 
         {(() => {
+          const isSac = (c: ScheduleClass) =>
+            c.classType === 'special' && c.className.startsWith('Special Award Class');
+          const sacDisplayName = (c: ScheduleClass) => {
+            const base = c.className.replace(/^Special Award Class\s*-\s*/, 'Special Award ');
+            return c.sex == null ? `${base} Dog or Bitch` : base;
+          };
+
           type GroupBucket = { name: string; sortOrder: number; classes: ScheduleClass[] };
           const buckets = new Map<string, GroupBucket>();
           const ungrouped: ScheduleClass[] = [];
+          const sacClasses: ScheduleClass[] = [];
+          const sacJudges = judges.filter((j) => j.role === 'Special Awards Classes');
           for (const cls of deduplicatedClasses) {
+            // Special Award Classes go in their own section after everything else.
+            if (isSac(cls)) {
+              sacClasses.push(cls);
+              continue;
+            }
             if (cls.breedGroupName) {
               const key = cls.breedGroupName;
               if (!buckets.has(key)) {
@@ -906,18 +920,12 @@ export function ShowScheduleMultibreed({
             );
           };
 
-          // Single-group multi-breed shows (e.g. a tiny group champ within
-          // one RKC group) skip the heading band to avoid visual noise.
-          if (sections.length === 1 && ungrouped.length === 0) {
-            return sections[0].classes.map(renderRow);
-          }
-
-          return sections.map((section, si) => (
-            <View key={`section-${si}`}>
+          const sacSection = sacClasses.length > 0 ? (
+            <View key="sac-section" wrap={false} style={{ marginTop: 12 }}>
               <View style={s.twoColMixedHeader} wrap={false}>
-                <Text style={s.twoColHeaderText}>{section.heading}</Text>
+                <Text style={s.twoColHeaderText}>SPECIAL AWARD CLASSES (to be held during the lunch break)</Text>
               </View>
-              {section.judges && section.judges.length > 0 && (
+              {sacJudges.length > 0 && (
                 <View
                   style={{
                     paddingVertical: 4,
@@ -928,22 +936,78 @@ export function ShowScheduleMultibreed({
                   }}
                   wrap={false}
                 >
-                  {section.judges.map((j, ji) => (
-                    <Text
-                      key={ji}
-                      style={{ fontFamily: 'Inter', fontSize: 7.5, color: C.textDark, marginVertical: 0.5 }}
-                    >
-                      <Text style={{ fontWeight: 'bold', color: C.primary }}>
-                        {j.roleShortLabel ?? j.roleName}:
-                      </Text>{' '}
-                      {j.displayLabel}
-                    </Text>
-                  ))}
+                  {sacJudges.map((j, ji) => {
+                    const namePart = j.affix ? `${j.name} (${j.affix})` : j.name;
+                    return (
+                      <Text key={ji} style={{ fontFamily: 'Inter', fontSize: 7.5, color: C.textDark, marginVertical: 0.5 }}>
+                        <Text style={{ fontWeight: 'bold', color: C.primary }}>Judge:</Text> {namePart}
+                      </Text>
+                    );
+                  })}
                 </View>
               )}
-              {section.classes.map((cls, i) => renderRow(cls, i))}
+              {sacClasses.map((cls, i) => (
+                <View key={`sac-${i}`} style={[s.classRow, i % 2 !== 0 && s.classRowAlt]} wrap={false}>
+                  <View style={s.colNo}><Text style={s.cellBold}>{cls.classLabel}</Text></View>
+                  <View style={s.colClass}><Text style={s.cellBold}>{sacDisplayName(cls)}</Text></View>
+                  <View style={s.colSex}><Text style={s.cellMuted}>Mixed</Text></View>
+                  <View style={s.colBreed}><Text style={s.cell}>{cls.breedName ?? ''}</Text></View>
+                </View>
+              ))}
+              <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 7.5, lineHeight: 1.4, color: C.textMedium, marginTop: 6, paddingHorizontal: 8 }}>
+                Special Awards are scheduled by kind permission of the Royal Kennel Club to enable aspiring judges to gain more experience. Exhibits beaten in Special Awards but unbeaten in the main Open Show classes are deemed to remain unbeaten when competing for Best in Show in the main Open Show. Entries must be made on the entry form in the usual way.
+              </Text>
             </View>
-          ));
+          ) : null;
+
+          // Single-group multi-breed shows (e.g. a tiny group champ within
+          // one RKC group) skip the heading band to avoid visual noise.
+          if (sections.length === 1 && ungrouped.length === 0) {
+            return (
+              <>
+                {sections[0].classes.map(renderRow)}
+                {sacSection}
+              </>
+            );
+          }
+
+          return (
+            <>
+              {sections.map((section, si) => (
+                <View key={`section-${si}`}>
+                  <View style={s.twoColMixedHeader} wrap={false}>
+                    <Text style={s.twoColHeaderText}>{section.heading}</Text>
+                  </View>
+                  {section.judges && section.judges.length > 0 && (
+                    <View
+                      style={{
+                        paddingVertical: 4,
+                        paddingHorizontal: 8,
+                        backgroundColor: C.cardBg,
+                        borderBottomWidth: 0.5,
+                        borderBottomColor: C.cardBorder,
+                      }}
+                      wrap={false}
+                    >
+                      {section.judges.map((j, ji) => (
+                        <Text
+                          key={ji}
+                          style={{ fontFamily: 'Inter', fontSize: 7.5, color: C.textDark, marginVertical: 0.5 }}
+                        >
+                          <Text style={{ fontWeight: 'bold', color: C.primary }}>
+                            {j.roleShortLabel ?? j.roleName}:
+                          </Text>{' '}
+                          {j.displayLabel}
+                        </Text>
+                      ))}
+                    </View>
+                  )}
+                  {section.classes.map((cls, i) => renderRow(cls, i))}
+                </View>
+              ))}
+              {sacSection}
+            </>
+          );
         })()}
 
         <Text style={s.footer} render={footerRender} fixed />

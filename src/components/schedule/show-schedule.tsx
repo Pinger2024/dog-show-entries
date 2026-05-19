@@ -81,11 +81,25 @@ export function ShowSchedule({
   // ShowScheduleMultibreed). Class splitting matches RKC ordering for
   // single-breed shows: Mixed non-JH (Veteran, etc.) above Dog/Bitch, JH-only
   // Mixed below as the "Junior Handling" section.
-  const dogClasses = deduplicatedClasses.filter((c) => c.sex === 'dog');
-  const bitchClasses = deduplicatedClasses.filter((c) => c.sex === 'bitch');
+  const isSac = (c: ScheduleClass) =>
+    c.classType === 'special' && c.className.startsWith('Special Award Class');
+
+  // "Special Award Class - Junior" → "Special Award Junior" so the schedule
+  // reads cleanly under its own heading. Mixed-sex SACs get a "Dog or Bitch"
+  // suffix matching RKC schedule convention.
+  const sacDisplayName = (c: ScheduleClass) => {
+    const base = c.className.replace(/^Special Award Class\s*-\s*/, 'Special Award ');
+    return c.sex == null ? `${base} Dog or Bitch` : base;
+  };
+
+  const dogClasses = deduplicatedClasses.filter((c) => c.sex === 'dog' && !isSac(c));
+  const bitchClasses = deduplicatedClasses.filter((c) => c.sex === 'bitch' && !isSac(c));
   const mixedClasses = deduplicatedClasses.filter((c) => c.sex !== 'dog' && c.sex !== 'bitch');
-  const mixedTopClasses = mixedClasses.filter((c) => c.classType !== 'junior_handler');
+  // SAC classes get their own section after Junior Handling (Amanda 2026-05-19).
+  const mixedTopClasses = mixedClasses.filter((c) => c.classType !== 'junior_handler' && !isSac(c));
   const mixedBottomClasses = mixedClasses.filter((c) => c.classType === 'junior_handler');
+  const sacClasses = deduplicatedClasses.filter(isSac);
+  const sacJudges = judges.filter((j) => j.role === 'Special Awards Classes');
 
   const footerRender = ({ pageNumber, totalPages }: { pageNumber: number; totalPages: number }) =>
     `${show.name}  ·  Schedule  ·  Page ${pageNumber} of ${totalPages}`;
@@ -702,14 +716,17 @@ export function ShowSchedule({
       <Page size="A5" style={s.page}>
         <SectionBand title="Classification" />
 
-        {/* Judge name(s) above the table — singular for single-breed shows. */}
-        {judges.length > 0 && (
+        {/* Judge name(s) above the table — singular for single-breed shows.
+            SAC judges render with the SAC section below, not here. */}
+        {judges.filter((j) => j.role !== 'Special Awards Classes').length > 0 && (
           <View style={{ marginBottom: 10 }}>
-            {judges.map((judge, i) => (
-              <Text key={i} style={{ fontFamily: 'Inter', fontSize: 9, fontWeight: 'bold', textAlign: 'center', color: C.textDark, marginBottom: 2 }}>
-                {judge.displayLabel ?? judge.name}
-              </Text>
-            ))}
+            {judges
+              .filter((j) => j.role !== 'Special Awards Classes')
+              .map((judge, i) => (
+                <Text key={i} style={{ fontFamily: 'Inter', fontSize: 9, fontWeight: 'bold', textAlign: 'center', color: C.textDark, marginBottom: 2 }}>
+                  {judge.displayLabel ?? judge.name}
+                </Text>
+              ))}
           </View>
         )}
 
@@ -770,6 +787,38 @@ export function ShowSchedule({
                 <Text style={s.twoColName}>{cls.className}</Text>
               </View>
             ))}
+          </View>
+        )}
+
+        {/* Special Award Classes — their own section after Junior Handling,
+            judged in the lunch break. Labelled A, B, C, … and not counted
+            against the RKC-licensed class total. Amanda 2026-05-19. */}
+        {sacClasses.length > 0 && (
+          <View style={{ marginTop: 12 }} wrap={false}>
+            <View style={s.twoColMixedHeader}>
+              <Text style={s.twoColHeaderText}>Special Award Classes (to be held during the lunch break)</Text>
+            </View>
+            {sacJudges.length > 0 && (
+              <View style={{ marginTop: 6, marginBottom: 4 }}>
+                {sacJudges.map((j, i) => {
+                  const namePart = j.affix ? `${j.name} (${j.affix})` : j.name;
+                  return (
+                    <Text key={i} style={{ fontFamily: 'Inter', fontSize: 9, fontWeight: 'bold', textAlign: 'center', color: C.textDark }}>
+                      Judge: {namePart}
+                    </Text>
+                  );
+                })}
+              </View>
+            )}
+            {sacClasses.map((cls, i) => (
+              <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
+                <Text style={s.twoColNum}>{cls.classLabel}</Text>
+                <Text style={s.twoColName}>{sacDisplayName(cls)}</Text>
+              </View>
+            ))}
+            <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 7.5, lineHeight: 1.4, color: C.textMedium, marginTop: 6 }}>
+              Special Awards are scheduled by kind permission of the Royal Kennel Club to enable aspiring judges to gain more experience. Exhibits beaten in Special Awards but unbeaten in the main Open Show classes are deemed to remain unbeaten when competing for Best in Show in the main Open Show. Entries must be made on the entry form in the usual way.
+            </Text>
           </View>
         )}
 

@@ -1778,14 +1778,20 @@ export const secretaryRouter = createTRPCRouter({
         return a.sortOrder - b.sortOrder;
       });
 
-      // RKC show licences count only breed classes, not Junior Handler —
-      // so JH classes stay unnumbered (classNumber = null) and are
-      // rendered as JHA, JHB, … at display time. Numbered sequence is
+      // RKC show licences count only breed classes — Junior Handler and
+      // Special Award Classes sit outside the licensed count. JH classes
+      // render as JHA, JHB, … and SAC classes as A, B, C, … at display time,
+      // both with classNumber = null in the DB. Numbered sequence is
       // reserved for the RKC-licensed breed classes.
+      const isUnnumbered = (cls: (typeof sorted)[number]) =>
+        cls.classDefinition?.type === 'junior_handler' ||
+        (cls.classDefinition?.type === 'special' &&
+          (cls.classDefinition?.name?.startsWith('Special Award Class') ?? false));
+
       let numbered = 0;
       let skipped = 0;
       for (const cls of sorted) {
-        if (cls.classDefinition?.type === 'junior_handler') {
+        if (isUnnumbered(cls)) {
           await ctx.db
             .update(showClasses)
             .set({ classNumber: null })

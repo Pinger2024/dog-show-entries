@@ -18,7 +18,7 @@ import {
 import { trpc } from '@/lib/trpc/client';
 import { formatCurrency, parseLocalDate } from '@/lib/date-utils';
 import { showTypeLabels } from '@/lib/show-types';
-import { buildClassLabelMap } from '@/lib/class-labels';
+import { buildClassLabelMap, isSpecialAwardClass } from '@/lib/class-labels';
 import { sortOfficers } from '@/components/schedule/shared/officers';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -67,6 +67,8 @@ export default function SchedulePage({
     }>();
 
     for (const sc of show.showClasses) {
+      // SAC classes get their own dedicated section, not lumped under a breed.
+      if (isSpecialAwardClass(sc)) continue;
       const breedName = sc.breed?.name ?? 'Any Breed';
       if (!map.has(breedName)) {
         map.set(breedName, {
@@ -110,6 +112,30 @@ export default function SchedulePage({
         return a.localeCompare(b);
       });
   }, [show?.showClasses, show?.judgeAssignments]);
+
+  // Special Award Classes — surface as a dedicated section after the
+  // breed classes, with letter labels and the lunch-break preamble.
+  const sacClasses = useMemo(() => {
+    if (!show?.showClasses) return [];
+    return show.showClasses.filter(isSpecialAwardClass);
+  }, [show?.showClasses]);
+
+  // The SAC judge sits in a separate assignment lane — pull names from
+  // the show's judgeAssignments where the assignment is tagged as the
+  // Special Awards Classes judge.
+  const sacJudgeNames = useMemo(() => {
+    if (!show?.judgeAssignments) return [] as string[];
+    const seen = new Set<string>();
+    for (const ja of show.judgeAssignments as Array<{
+      isSpecialAwardsClassesJudge?: boolean | null;
+      judge?: { name?: string | null } | null;
+    }>) {
+      if (!ja.isSpecialAwardsClassesJudge) continue;
+      const name = ja.judge?.name;
+      if (name) seen.add(name);
+    }
+    return Array.from(seen);
+  }, [show?.judgeAssignments]);
 
   // Unique judges
   const judges = useMemo(() => {
@@ -325,6 +351,48 @@ export default function SchedulePage({
               </div>
             ))}
           </div>
+        </section>
+      )}
+
+      {/* ── Special Award Classes ── */}
+      {sacClasses.length > 0 && (
+        <section>
+          <SectionHeading icon={Ticket} title="Special Award Classes" />
+          <p className="text-xs text-muted-foreground mb-2">
+            To be held during the lunch break.
+            {sacJudgeNames.length > 0 && (
+              <> Judge: <span className="font-semibold">{sacJudgeNames.join(', ')}</span>.</>
+            )}
+          </p>
+          <div className="space-y-1">
+            {sacClasses
+              .toSorted((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+              .map((sc) => {
+                const display = classLabelMap.get(sc.id);
+                const baseName = (sc.classDefinition?.name ?? '').replace(
+                  /^Special Award Class\s*-\s*/,
+                  'Special Award ',
+                );
+                return (
+                  <div key={sc.id} className="flex items-baseline gap-2 py-1 text-sm">
+                    {display && (
+                      <span className="w-8 shrink-0 text-right text-xs font-bold text-muted-foreground">
+                        {display}
+                      </span>
+                    )}
+                    <div className="min-w-0">
+                      <span className="font-medium">{baseName} Dog or Bitch</span>
+                      {sc.classDefinition?.description && (
+                        <span className="ml-1.5 text-xs text-muted-foreground">— {sc.classDefinition.description}</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+          <p className="mt-3 text-xs italic text-muted-foreground leading-relaxed">
+            Special Awards are scheduled by kind permission of the Royal Kennel Club to enable aspiring judges to gain more experience. Exhibits beaten in Special Awards but unbeaten in the main Open Show classes are deemed to remain unbeaten when competing for Best in Show in the main Open Show. Entries must be made on the entry form in the usual way.
+          </p>
         </section>
       )}
 
