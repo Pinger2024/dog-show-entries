@@ -598,7 +598,7 @@ export function ClassManager({ showId, showType, showScope, classes }: ClassMana
                                                 #{sc.classNumber ?? '—'}
                                               </span>
                                               <span className="truncate text-sm font-medium">
-                                                {sc.classDefinition?.name ?? 'Unknown'}
+                                                {(sc.classDefinition?.name ?? 'Unknown').replace(/^SV /, '')}
                                               </span>
                                             </div>
                                             <div className="mt-0.5 flex items-center gap-2">

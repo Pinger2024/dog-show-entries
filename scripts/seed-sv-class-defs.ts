@@ -4,11 +4,15 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { classDefinitions } from '../src/server/db/schema';
 import { eq } from 'drizzle-orm';
 
+// Age ranges follow the WUSV/GSDL-BRG specification (verified against the
+// GSDL British Regional Group Spring 2026 schedule, 2026-05-19). RKC age
+// classes share some names (Minor Puppy/Puppy/Junior/Yearling) but with
+// different age bands — keep the SV-specific rows distinct via type='sv_age'.
 const SV_CLASSES = [
-  { name: 'Baby Puppy',     minAgeMonths: 2,  maxAgeMonths: 4,    sortOrder: 500 },
-  { name: 'SV Minor Puppy', minAgeMonths: 4,  maxAgeMonths: 6,    sortOrder: 511 },
-  { name: 'SV Puppy',       minAgeMonths: 6,  maxAgeMonths: 9,    sortOrder: 521 },
-  { name: 'SV Junior',      minAgeMonths: 9,  maxAgeMonths: 18,   sortOrder: 531 },
+  { name: 'Baby Puppy',     minAgeMonths: 4,  maxAgeMonths: 6,    sortOrder: 500 },
+  { name: 'SV Minor Puppy', minAgeMonths: 6,  maxAgeMonths: 9,    sortOrder: 511 },
+  { name: 'SV Puppy',       minAgeMonths: 9,  maxAgeMonths: 12,   sortOrder: 521 },
+  { name: 'SV Junior',      minAgeMonths: 12, maxAgeMonths: 18,   sortOrder: 531 },
   { name: 'SV Yearling',    minAgeMonths: 18, maxAgeMonths: 24,   sortOrder: 541 },
   { name: 'Adult',          minAgeMonths: 24, maxAgeMonths: null, sortOrder: 550 },
   { name: 'Working',        minAgeMonths: 24, maxAgeMonths: null, sortOrder: 560 },
