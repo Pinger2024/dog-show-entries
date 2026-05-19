@@ -391,7 +391,7 @@ export default function SchedulePage({
               })}
           </div>
           <p className="mt-3 text-xs italic text-muted-foreground leading-relaxed">
-            Special Awards are scheduled by kind permission of the Royal Kennel Club to enable aspiring judges to gain more experience. Exhibits beaten in Special Awards but unbeaten in the main Open Show classes are deemed to remain unbeaten when competing for Best in Show in the main Open Show. Entries must be made on the entry form in the usual way.
+            Special Awards are scheduled by kind permission of the Royal Kennel Club to enable aspiring judges to gain more experience. Exhibits beaten in Special Awards but unbeaten in the main show classes are deemed to remain unbeaten when competing for Best in Show in the main show. Entries must be made on the entry form in the usual way.
           </p>
         </section>
       )}

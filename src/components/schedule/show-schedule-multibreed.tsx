@@ -955,7 +955,7 @@ export function ShowScheduleMultibreed({
                 </View>
               ))}
               <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 7.5, lineHeight: 1.4, color: C.textMedium, marginTop: 6, paddingHorizontal: 8 }}>
-                Special Awards are scheduled by kind permission of the Royal Kennel Club to enable aspiring judges to gain more experience. Exhibits beaten in Special Awards but unbeaten in the main Open Show classes are deemed to remain unbeaten when competing for Best in Show in the main Open Show. Entries must be made on the entry form in the usual way.
+                Special Awards are scheduled by kind permission of the Royal Kennel Club to enable aspiring judges to gain more experience. Exhibits beaten in Special Awards but unbeaten in the main show classes are deemed to remain unbeaten when competing for Best in Show in the main show. Entries must be made on the entry form in the usual way.
               </Text>
             </View>
           ) : null;
