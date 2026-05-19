@@ -19,6 +19,7 @@ import { trpc } from '@/lib/trpc/client';
 import { formatCurrency, parseLocalDate } from '@/lib/date-utils';
 import { showTypeLabels } from '@/lib/show-types';
 import { buildClassLabelMap } from '@/lib/class-labels';
+import { sortOfficers } from '@/components/schedule/shared/officers';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { ScheduleData } from '@/server/db/schema/shows';
@@ -332,7 +333,7 @@ export default function SchedulePage({
         <section>
           <SectionHeading icon={Users} title="Officers" />
           <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
-            {sd.officers.map((officer, i) => (
+            {sortOfficers(sd.officers).map((officer, i) => (
               <div key={i} className="rounded-lg border p-3">
                 <p className="text-xs font-medium text-muted-foreground">{officer.position}</p>
                 <p className="text-sm font-semibold">{officer.name}</p>

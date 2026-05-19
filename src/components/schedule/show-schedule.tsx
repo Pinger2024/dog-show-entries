@@ -20,6 +20,8 @@ import {
   s,
 } from './shared/styles';
 import { SectionBand, InfoCard, GoldRule, Rule } from './shared/elements';
+import { sortOfficers } from './shared/officers';
+import { buildEntryFeeGroups } from './shared/entry-fee-groups';
 
 // Re-export so existing consumers (route.ts, pdf-generation.ts, tests,
 // preview scripts) continue importing from this module path.
@@ -343,36 +345,16 @@ export function ShowSchedule({
                 <Text style={s.infoValue}>{formatCurrency(show.juniorHandlerFee)}</Text>
               </View>
             )}
-            {/* Per-class fee overrides — any class whose entryFee differs
-                from the show's default first-entry fee. Groups identical
-                overrides (e.g. all Special Award Classes priced at £3) so
-                the panel doesn't fill with one row per class. */}
-            {(() => {
-              const overrides = new Map<number, typeof classes>();
-              for (const c of classes) {
-                if (
-                  c.entryFee != null &&
-                  show.firstEntryFee != null &&
-                  c.entryFee !== show.firstEntryFee
-                ) {
-                  const bucket = overrides.get(c.entryFee) ?? [];
-                  bucket.push(c);
-                  overrides.set(c.entryFee, bucket);
-                }
-              }
-              if (overrides.size === 0) return null;
-              return Array.from(overrides.entries()).map(([fee, cls]) => {
-                const label = cls
-                  .map((c) => `#${c.classLabel}`)
-                  .join(', ');
-                return (
-                  <View key={fee} style={s.infoRow}>
-                    <Text style={s.infoLabel}>{`Classes ${label}`}</Text>
-                    <Text style={s.infoValue}>{formatCurrency(fee)}</Text>
-                  </View>
-                );
-              });
-            })()}
+            {/* Per-class fee overrides — surface as "Baby Puppy classes — £4"
+                rather than the class numbers. Junior Handler classes are
+                skipped (they have their own Junior Handler row above) and
+                "Special Award Class - X" variants collapse into one bucket. */}
+            {buildEntryFeeGroups(classes, show.firstEntryFee).map(({ label, fee }) => (
+              <View key={`${label}|${fee}`} style={s.infoRow}>
+                <Text style={s.infoLabel}>{label}</Text>
+                <Text style={s.infoValue}>{formatCurrency(fee)}</Text>
+              </View>
+            ))}
           </InfoCard>
         )}
 
@@ -544,7 +526,7 @@ export function ShowSchedule({
 
           {sd?.officers && sd.officers.length > 0 && (
             <InfoCard title="Officers &amp; Committee">
-              {sd.officers.map((o, i) => (
+              {sortOfficers(sd.officers).map((o, i) => (
                 <View key={i} style={s.officialRow}>
                   <Text style={s.officialPosition}>{o.position}</Text>
                   <Text style={s.officialName}>{o.name}</Text>

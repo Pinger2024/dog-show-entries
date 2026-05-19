@@ -53,6 +53,7 @@ import { Resend } from 'resend';
 import { searchKcJudges, fetchKcJudgeProfile } from '@/server/services/kc-judges';
 import { ensureCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { generateJudgeContractPdf } from '@/server/services/judge-contract-pdf';
+import { normaliseOfficers } from '@/components/schedule/shared/officers';
 import { CATALOGUE_NAME_PATTERN, isCatalogueItem } from '@/lib/catalogue-utils';
 import {
   aggregateShowMetrics,
@@ -5539,7 +5540,12 @@ export const secretaryRouter = createTRPCRouter({
         columns: { scheduleData: true, organisationId: true },
       });
       const existingScheduleData = (currentShow?.scheduleData ?? {}) as Record<string, unknown>;
-      const mergedScheduleData = { ...existingScheduleData, ...input.scheduleData };
+      // Trim + dedupe officers so a trailing-space typo can't render
+      // the same person twice on the schedule (Amanda 2026-05-19).
+      const normalisedInput = input.scheduleData.officers
+        ? { ...input.scheduleData, officers: normaliseOfficers(input.scheduleData.officers) }
+        : input.scheduleData;
+      const mergedScheduleData = { ...existingScheduleData, ...normalisedInput };
 
       const showUpdates: Record<string, unknown> = { scheduleData: mergedScheduleData };
       if (input.showOpenTime !== undefined) showUpdates.showOpenTime = input.showOpenTime || null;

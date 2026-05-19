@@ -21,6 +21,8 @@ import {
   s,
 } from './shared/styles';
 import { SectionBand, InfoCard, GoldRule, Rule } from './shared/elements';
+import { sortOfficers } from './shared/officers';
+import { buildEntryFeeGroups } from './shared/entry-fee-groups';
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 //
@@ -348,32 +350,14 @@ export function ShowScheduleMultibreed({
                 <Text style={s.infoValue}>{formatCurrency(show.juniorHandlerFee)}</Text>
               </View>
             )}
-            {(() => {
-              const overrides = new Map<number, typeof classes>();
-              for (const c of classes) {
-                if (
-                  c.entryFee != null &&
-                  show.firstEntryFee != null &&
-                  c.entryFee !== show.firstEntryFee
-                ) {
-                  const bucket = overrides.get(c.entryFee) ?? [];
-                  bucket.push(c);
-                  overrides.set(c.entryFee, bucket);
-                }
-              }
-              if (overrides.size === 0) return null;
-              return Array.from(overrides.entries()).map(([fee, cls]) => {
-                const label = cls
-                  .map((c) => `#${c.classLabel}`)
-                  .join(', ');
-                return (
-                  <View key={fee} style={s.infoRow}>
-                    <Text style={s.infoLabel}>{`Classes ${label}`}</Text>
-                    <Text style={s.infoValue}>{formatCurrency(fee)}</Text>
-                  </View>
-                );
-              });
-            })()}
+            {/* Per-class fee overrides — group by class definition name,
+                skip Junior Handler classes (own row), collapse SAC variants. */}
+            {buildEntryFeeGroups(classes, show.firstEntryFee).map(({ label, fee }) => (
+              <View key={`${label}|${fee}`} style={s.infoRow}>
+                <Text style={s.infoLabel}>{label}</Text>
+                <Text style={s.infoValue}>{formatCurrency(fee)}</Text>
+              </View>
+            ))}
           </InfoCard>
         )}
 
@@ -545,7 +529,7 @@ export function ShowScheduleMultibreed({
 
           {sd?.officers && sd.officers.length > 0 && (
             <InfoCard title="Officers &amp; Committee">
-              {sd.officers.map((o, i) => (
+              {sortOfficers(sd.officers).map((o, i) => (
                 <View key={i} style={s.officialRow}>
                   <Text style={s.officialPosition}>{o.position}</Text>
                   <Text style={s.officialName}>{o.name}</Text>
