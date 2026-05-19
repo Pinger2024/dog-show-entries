@@ -701,6 +701,51 @@ export const showsRouter = createTRPCRouter({
         await Promise.all(batches);
       }
 
+      // SV/WUSV ruleset auto-setup: spin up the full SV age-class structure
+      // (Baby Puppy → Working, split by sex × coat type) so SV secretaries
+      // don't have to tick every class one at a time. They can then
+      // customise on /secretary/shows/[id]/wusv-classes (Amanda 2026-05-19).
+      if (showData.showRuleset === 'wusv') {
+        const svAgeDefs = await ctx.db.query.classDefinitions.findMany({
+          where: eq(classDefinitions.type, 'sv_age'),
+          orderBy: [asc(classDefinitions.sortOrder)],
+        });
+        const fee = firstEntryFee ?? entryFee ?? 0;
+        const COMBOS: Array<{ sex: 'bitch' | 'dog'; coat: 'stock' | 'long_stock' }> = [
+          { sex: 'bitch', coat: 'stock' },
+          { sex: 'bitch', coat: 'long_stock' },
+          { sex: 'dog', coat: 'stock' },
+          { sex: 'dog', coat: 'long_stock' },
+        ];
+        const svValues: Array<{
+          showId: string;
+          classDefinitionId: string;
+          sex: 'dog' | 'bitch' | null;
+          svCoatType: 'stock' | 'long_stock' | null;
+          entryFee: number;
+          sortOrder: number;
+          classNumber: number;
+        }> = [];
+        let idx = 0;
+        for (const def of svAgeDefs) {
+          for (const { sex, coat } of COMBOS) {
+            svValues.push({
+              showId: show!.id,
+              classDefinitionId: def.id,
+              sex,
+              svCoatType: coat,
+              entryFee: fee,
+              sortOrder: idx,
+              classNumber: idx + 1,
+            });
+            idx++;
+          }
+        }
+        if (svValues.length > 0) {
+          await ctx.db.insert(showClasses).values(svValues);
+        }
+      }
+
       return show!;
     }),
 

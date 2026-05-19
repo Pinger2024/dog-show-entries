@@ -333,6 +333,16 @@ export default function MyClubPage() {
         </CardContent>
       </Card>
 
+      {/* Section: Show Ruleset — which governing body's rules the club's
+          shows follow. RKC by default; SV clubs (WUSV-affiliated GSD regional
+          clubs) flip this to "SV" and the create-show wizard adapts. */}
+      {org?.id && (
+        <ShowRulesetCard
+          organisationId={org.id}
+          currentRuleset={(org as { showRuleset?: 'rkc' | 'wusv' }).showRuleset ?? 'rkc'}
+        />
+      )}
+
       {/* Section: Payout bank details — where entry money gets sent after each show */}
       {org?.id && <PayoutDetailsCard organisationId={org.id} />}
 
@@ -600,5 +610,69 @@ export default function MyClubPage() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+// ── Show Ruleset Card ─────────────────────────────────────────────────────
+//
+// SV / WUSV regional GSD clubs follow a different rulebook to the Royal Kennel
+// Club. Flipping this from RKC → SV reshapes the new-show wizard (hides show
+// type/scope/breed, auto-applies the SV class set, etc.) so secretaries
+// don't have to manually rebuild every form.
+
+function ShowRulesetCard({
+  organisationId,
+  currentRuleset,
+}: {
+  organisationId: string;
+  currentRuleset: 'rkc' | 'wusv';
+}) {
+  const utils = trpc.useUtils();
+  const mutation = trpc.secretary.updateOrgRuleset.useMutation({
+    onSuccess: async () => {
+      await utils.secretary.getOrganisation.invalidate();
+      toast.success('Show ruleset updated');
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to update ruleset'),
+  });
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 font-serif text-base sm:text-lg">
+          <Shield className="size-4 sm:size-5 text-primary" />
+          Show Ruleset
+        </CardTitle>
+        <CardDescription>
+          Which governing body&apos;s rules do your shows follow? Most clubs use the Royal Kennel Club (RKC). German Shepherd regional clubs affiliated to WUSV use the SV (Schäferhund-Verein) ruleset.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-2 max-w-md">
+          <Label htmlFor="show-ruleset">Ruleset</Label>
+          <Select
+            value={currentRuleset}
+            onValueChange={(value) =>
+              mutation.mutate({
+                organisationId,
+                showRuleset: value as 'rkc' | 'wusv',
+              })
+            }
+            disabled={mutation.isPending}
+          >
+            <SelectTrigger id="show-ruleset">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="rkc">Royal Kennel Club (RKC)</SelectItem>
+              <SelectItem value="wusv">SV / WUSV (Regional GSD shows)</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Switching changes the create-show flow. Existing shows on the club keep whichever ruleset they were created under.
+          </p>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

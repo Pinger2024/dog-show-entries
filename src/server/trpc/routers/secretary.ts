@@ -478,6 +478,29 @@ export const secretaryRouter = createTRPCRouter({
     }),
 
   /**
+   * Dedicated mutation for changing the club's show ruleset (RKC ↔ SV).
+   * Lives separate from updateOrganisation so the My Club page can flip
+   * the ruleset without having to re-send name/email/phone/website on
+   * every change.
+   */
+  updateOrgRuleset: secretaryProcedure
+    .input(
+      z.object({
+        organisationId: z.string().uuid(),
+        showRuleset: z.enum(['rkc', 'wusv']),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
+      const [updated] = await ctx.db
+        .update(organisations)
+        .set({ showRuleset: input.showRuleset })
+        .where(eq(organisations.id, input.organisationId))
+        .returning({ id: organisations.id, showRuleset: organisations.showRuleset });
+      return updated!;
+    }),
+
+  /**
    * Get the club's current payout bank details. Returned as the full
    * sort code + account number — the secretary is a member of the club
    * and is authorised to see these (auth check via verifyOrgAccess).

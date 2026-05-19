@@ -291,13 +291,38 @@ export default function NewShowPage() {
     }
   }, [currentOrgId, organisations, form]);
 
-  // Lock show ruleset to the org's ruleset (WUSV orgs only ever run WUSV shows)
+  // Lock show ruleset to the org's ruleset (WUSV orgs only ever run WUSV
+  // shows). For WUSV orgs we also auto-set the implicit values for fields
+  // that don't apply to SV regional shows so the secretary doesn't have to
+  // tick them: scope is always single_breed and breed is German Shepherd
+  // Dog. Show type defaults to 'championship' for SV regional shows (Amanda
+  // 2026-05-19 — SV shows are always a championship-style regional event).
   useEffect(() => {
     if (!currentOrgId) return;
     const org = organisations.find((o) => o.id === currentOrgId);
     if (!org?.showRuleset) return;
     form.setValue('showRuleset', org.showRuleset as 'rkc' | 'wusv', { shouldDirty: false });
-  }, [currentOrgId, organisations, form]);
+    if (org.showRuleset === 'wusv') {
+      if (!form.getValues('showType')) {
+        form.setValue('showType', 'championship', { shouldDirty: false });
+      }
+      if (!form.getValues('showScope')) {
+        form.setValue('showScope', 'single_breed', { shouldDirty: false });
+      }
+      const gsd = (allBreeds ?? []).find(
+        (b) => b.name === 'German Shepherd Dog',
+      );
+      if (gsd && !form.getValues('breedId')) {
+        form.setValue('breedId', gsd.id, { shouldDirty: false });
+      }
+    }
+  }, [currentOrgId, organisations, form, allBreeds]);
+
+  // Whether the currently-selected org is an SV/WUSV club. Drives a few
+  // UI sections that should be hidden for SV shows (Show Type/Scope/Breed
+  // — values are implicit; show ruleset picker — locked to wusv).
+  const isWusvOrg =
+    organisations.find((o) => o.id === currentOrgId)?.showRuleset === 'wusv';
 
   // Fetch venues for this org
   const { data: venues } = trpc.secretary.listVenues.useQuery(
@@ -700,54 +725,62 @@ export default function NewShowPage() {
                   />
                 )}
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <FormField
-                    control={form.control}
-                    name="showType"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Show Type <span className="text-destructive">*</span></FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value ?? ''}>
-                          <FormControl>
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Select show type" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {showTypes.map((t) => (
-                              <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="showScope"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Show Scope <span className="text-destructive">*</span></FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value ?? ''}>
-                          <FormControl>
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Select show scope" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {showScopes.map((s) => (
-                              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                {/* SV/WUSV clubs always run single-breed GSD championship-style
+                    shows, so the Show Type / Show Scope dropdowns are
+                    hidden — values are set server-side from the org's
+                    ruleset (Amanda 2026-05-19). */}
+                {!isWusvOrg && (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <FormField
+                      control={form.control}
+                      name="showType"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Show Type <span className="text-destructive">*</span></FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value ?? ''}>
+                            <FormControl>
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Select show type" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {showTypes.map((t) => (
+                                <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="showScope"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Show Scope <span className="text-destructive">*</span></FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value ?? ''}>
+                            <FormControl>
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Select show scope" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {showScopes.map((s) => (
+                                <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                )}
 
-                {/* Show Ruleset — RKC or WUSV/SV */}
+                {/* Show Ruleset — RKC or WUSV/SV. Hidden for WUSV orgs
+                    because there's no meaningful choice. */}
+                {!isWusvOrg && (
                 <FormField
                   control={form.control}
                   name="showRuleset"
@@ -790,9 +823,11 @@ export default function NewShowPage() {
                     );
                   }}
                 />
+                )}
 
-                {/* Breed selector for single-breed shows */}
-                {watchedShowScope === 'single_breed' && (
+                {/* Breed selector for single-breed shows. Hidden for SV
+                    orgs — breed is always German Shepherd Dog. */}
+                {watchedShowScope === 'single_breed' && !isWusvOrg && (
                   <FormField
                     control={form.control}
                     name="breedId"
@@ -1467,7 +1502,35 @@ export default function NewShowPage() {
             </Card>
           )}
 
-          {step === 3 && watchedShowScope !== 'general' && (
+          {step === 3 && watchedShowScope !== 'general' && isWusvOrg && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2.5 font-serif text-lg">
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
+                    <LayoutGrid className="size-4 text-primary" />
+                  </div>
+                  SV Classification
+                </CardTitle>
+                <CardDescription>
+                  Your SV/WUSV show will be set up with the full SV class structure when you create it.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="rounded-lg border bg-primary/5 p-4 space-y-2">
+                  <p className="text-sm font-medium">What gets set up automatically</p>
+                  <ul className="text-sm text-muted-foreground list-disc pl-5 space-y-1">
+                    <li>All SV age classes (Baby Puppy → Working) split by sex × coat type (Stock / Long Stock)</li>
+                    <li>Same entry fee on every SV age class</li>
+                  </ul>
+                  <p className="text-xs text-muted-foreground pt-1">
+                    You can fine-tune which age classes to include, change the fee, or add Junior Handling on the <strong>SV Classes</strong> page after the show is created.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {step === 3 && watchedShowScope !== 'general' && !isWusvOrg && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2.5 font-serif text-lg">
@@ -1488,7 +1551,7 @@ export default function NewShowPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {getRelevantTemplates(watchedShowType, watchedShowScope).map((t) => {
+                  {getRelevantTemplates(watchedShowType, watchedShowScope, watchedShowRuleset).map((t) => {
                     const isActive = selectedTemplates.includes(t.id);
                     return (
                       <button

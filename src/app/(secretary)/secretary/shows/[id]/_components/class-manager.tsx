@@ -809,7 +809,11 @@ export function BulkClassCreator({ showId }: { showId: string }) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {getRelevantTemplates(showData?.showType ?? undefined).map((t) => (
+          {getRelevantTemplates(
+            showData?.showType ?? undefined,
+            showData?.showScope ?? undefined,
+            (showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset,
+          ).map((t) => (
             <button
               key={t.id}
               type="button"
