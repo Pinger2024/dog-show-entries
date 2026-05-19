@@ -63,12 +63,22 @@ export async function generateMetadata({
   const org = show.organisation?.name;
 
   const title = org ? `${show.name} — ${org}` : `${show.name} — ${showType}`;
-  const description = [
-    showDate,
-    venue,
-    org,
-    show.status === 'entries_open' ? 'Now accepting entries on Remi.' : undefined,
-  ]
+
+  // Pick the metadata tagline based on the show's actual state — the
+  // status field can lag a few minutes after the close cron, so a
+  // status=entries_open show whose close date has passed should not
+  // still claim "now accepting entries".
+  const closeDatePast = show.entryCloseDate
+    ? new Date(show.entryCloseDate).getTime() < Date.now()
+    : false;
+  let tagline: string | undefined;
+  if (show.status === 'in_progress') tagline = 'Live results on Remi.';
+  else if (show.status === 'completed') tagline = 'Results on Remi.';
+  else if (show.status === 'cancelled') tagline = 'Cancelled.';
+  else if (show.status === 'entries_open' && !closeDatePast) tagline = 'Now accepting entries on Remi.';
+  else tagline = 'Entries closed.';
+
+  const description = [showDate, venue, org, tagline]
     .filter(Boolean)
     .join(' · ');
 
