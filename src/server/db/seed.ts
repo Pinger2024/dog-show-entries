@@ -116,6 +116,13 @@ async function seed() {
       // Special
       { name: 'Good Citizen Dog Scheme', type: 'special' as const, sortOrder: 150, description: 'For dogs that have passed any level of the Royal Kennel Club Good Citizen Dog Scheme.' },
       { name: 'Special Beginners', type: 'special' as const, sortOrder: 140, description: 'For dogs whose owners/handlers have never won a CC or Reserve CC at Championship Shows.' },
+      // Special Award Classes — same wording as the standard age/achievement
+      // class they shadow, plus a CC-eligibility line per Amanda 2026-05-19.
+      { name: 'Special Award Class - Puppy', type: 'special' as const, sortOrder: 200, description: 'For dogs of 6 and not exceeding 12 calendar months of age on the first day of the show. They are not eligible for Challenge Certificates.' },
+      { name: 'Special Award Class - Junior', type: 'special' as const, sortOrder: 210, description: 'For dogs of 6 and not exceeding 18 calendar months of age on the first day of the show. They are not eligible for Challenge Certificates.' },
+      { name: 'Special Award Class - Post Graduate', type: 'special' as const, sortOrder: 220, description: 'For dogs which have not won a CC or 5 or more first prizes at Championship Shows. They are not eligible for Challenge Certificates.' },
+      { name: 'Special Award Class - Open', type: 'special' as const, sortOrder: 230, description: 'For all dogs of the breed eligible for entry at the show. No restrictions. They are not eligible for Challenge Certificates.' },
+      { name: 'Special Award Class - Veteran', type: 'special' as const, sortOrder: 240, description: 'For dogs of not less than 7 years of age on the first day of the show. They are not eligible for Challenge Certificates.' },
       // Junior Handler classes (legacy — kept for existing entries)
       { name: 'Junior Handler (6-11)', type: 'junior_handler' as const, sortOrder: 310, minAgeMonths: 72, maxAgeMonths: 143, description: 'For handlers aged 6-11 years on the day of the show. Judged on handling skill, not the dog.' },
       { name: 'Junior Handler (12-16)', type: 'junior_handler' as const, sortOrder: 320, minAgeMonths: 144, maxAgeMonths: 203, description: 'For handlers aged 12-16 years on the day of the show. Judged on handling skill, not the dog.' },
