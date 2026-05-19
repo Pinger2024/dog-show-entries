@@ -720,7 +720,7 @@ export function ShowPreviewClient() {
             <div className="mt-10 sm:mt-12">
               <div className="mx-auto grid max-w-xl grid-cols-2 divide-amber-500/20 text-center sm:divide-x">
                 <EditorialStat label="Classes" value={totalClasses} highlight />
-                <EditorialStat label="Breeds" value={breedGroups.length} />
+                <EditorialStat label="Breeds" value={breedGroups.filter((g) => !g.isJH).length} />
               </div>
             </div>
           )}
@@ -1004,7 +1004,11 @@ export function ShowPreviewClient() {
       {breedGroups.length > 0 && (
         <section className="border-y bg-stone-50/60">
           <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
-            <SectionHeading eyebrow="The card" title={breedGroups.length === 1 ? 'Classes on Offer' : `${breedGroups.length} Breeds`} />
+            <SectionHeading eyebrow="The card" title={(() => {
+              const breedCount = breedGroups.filter((g) => !g.isJH).length;
+              if (breedCount <= 1) return 'Classes on Offer';
+              return `${breedCount} Breeds`;
+            })()} />
             <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {breedGroups.map(({ breed, classes, judgeName }) => (
                 <div
