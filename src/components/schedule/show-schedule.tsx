@@ -91,6 +91,7 @@ export function ShowSchedule({
   // F-rules layout per the GSDL BRG reference (Amanda 2026-05-19). Detect
   // up front so each section can branch on the flag.
   const isWusv = show.showRuleset === 'wusv';
+  const variant: 'rkc' | 'sv' = isWusv ? 'sv' : 'rkc';
   const svGroups: SvClassificationGroups | null = isWusv ? groupSvClasses(classes) : null;
 
   const isSac = (c: ScheduleClass) =>
@@ -158,7 +159,7 @@ export function ShowSchedule({
           <Text style={s.coverShowName}>{show.name}</Text>
 
           {/* Show type badge */}
-          <View style={s.coverBadge}>
+          <View style={[s.coverBadge, isWusv && { backgroundColor: CSv.primary }]}>
             <Text style={s.coverBadgeText}>{isWusv ? 'Regional' : showTypeLabel}</Text>
           </View>
 
@@ -202,10 +203,10 @@ export function ShowSchedule({
             </Text>
           )}
 
-          <GoldRule />
+          <GoldRule variant={variant} />
 
           {/* ── Key details card ── */}
-          <View style={s.coverDetailCard}>
+          <View style={[s.coverDetailCard, isWusv && { borderLeftColor: CSv.streak, backgroundColor: CSv.cardBg }]}>
             <View style={s.coverDetailRow}>
               <Text style={s.coverDetailLabel}>Date</Text>
               <Text style={s.coverDetailValue}>{showDate}</Text>
@@ -254,8 +255,8 @@ export function ShowSchedule({
 
           {/* ── Secretary details ── */}
           {(show.secretaryName || show.secretaryEmail) && (
-            <View style={{ ...s.coverDetailCard, borderLeftColor: C.primary }}>
-              <Text style={s.coverSectionLabel}>Show Secretary</Text>
+            <View style={{ ...s.coverDetailCard, borderLeftColor: isWusv ? CSv.primary : C.primary, ...(isWusv ? { backgroundColor: CSv.cardBg } : {}) }}>
+              <Text style={[s.coverSectionLabel, isWusv && { color: CSv.primary }]}>Show Secretary</Text>
               {show.secretaryName && (
                 <Text style={s.coverSectionText}>{show.secretaryName}</Text>
               )}
@@ -274,7 +275,7 @@ export function ShowSchedule({
           {/* On-call vet */}
           {show.onCallVet && (
             <View style={{ width: '100%', marginBottom: 4 }}>
-              <Text style={s.coverSectionLabel}>On-Call Veterinary Surgeon</Text>
+              <Text style={[s.coverSectionLabel, isWusv && { color: CSv.primary }]}>On-Call Veterinary Surgeon</Text>
               <Text style={s.coverSectionText}>{show.onCallVet}</Text>
             </View>
           )}
@@ -282,22 +283,23 @@ export function ShowSchedule({
           {/* First Aider(s) — RKC compliance, Amanda 2026-05-14 */}
           {sd?.firstAiders && sd.firstAiders.length > 0 && (
             <View style={{ width: '100%', marginBottom: 4 }}>
-              <Text style={s.coverSectionLabel}>
+              <Text style={[s.coverSectionLabel, isWusv && { color: CSv.primary }]}>
                 {sd.firstAiders.length === 1 ? 'First Aider' : 'First Aiders'}
               </Text>
               <Text style={s.coverSectionText}>{sd.firstAiders.join(', ')}</Text>
             </View>
           )}
 
-          {/* Show Manager */}
+          {/* Show Manager — labelled "Event Manager" on SV shows per the
+              GSDL convention (Amanda 2026-05-20). */}
           {sd?.showManager && (
             <View style={{ width: '100%', marginBottom: 4 }}>
-              <Text style={s.coverSectionLabel}>Show Manager</Text>
+              <Text style={[s.coverSectionLabel, isWusv && { color: CSv.primary }]}>{isWusv ? 'Event Manager' : 'Show Manager'}</Text>
               <Text style={s.coverSectionText}>{sd.showManager}</Text>
             </View>
           )}
 
-          <GoldRule />
+          <GoldRule variant={variant} />
 
           {/* Docking statement — MANDATORY on front cover per F(1)7.c(2) */}
           <Text style={s.coverDocking}>{dockingStatement}</Text>
@@ -336,11 +338,11 @@ export function ShowSchedule({
           ENTRY INFORMATION
           ════════════════════════════════════════════════════════════════════ */}
       <Page size="A5" style={s.page}>
-        <SectionBand title="Entry Information" />
+        <SectionBand variant={variant} title="Entry Information" />
 
         {/* Fees */}
         {(show.firstEntryFee != null || show.subsequentEntryFee != null || show.nfcEntryFee != null) && (
-          <InfoCard title="Entry Fees">
+          <InfoCard variant={variant} title="Entry Fees">
             {show.firstEntryFee != null && (
               <View style={s.infoRow}>
                 <Text style={s.infoLabel}>First entry</Text>
@@ -399,7 +401,7 @@ export function ShowSchedule({
         )}
 
         {/* Important dates */}
-        <InfoCard title="Important Dates">
+        <InfoCard variant={variant} title="Important Dates">
           {show.entriesOpenDate && (
             <View style={s.infoRow}>
               <Text style={s.infoLabel}>Entries open</Text>
@@ -431,7 +433,7 @@ export function ShowSchedule({
         </InfoCard>
 
         {/* Show timing */}
-        <InfoCard title="Show Timing">
+        <InfoCard variant={variant} title="Show Timing">
           {show.showOpenTime && (
             <View style={s.infoRow}>
               <Text style={s.infoLabel}>Time of opening</Text>
@@ -464,7 +466,7 @@ export function ShowSchedule({
         </Text>
 
         {/* NFC */}
-        <InfoCard title="Not For Competition">
+        <InfoCard variant={variant} title="Not For Competition">
           <Text style={s.infoText}>
             {sd?.acceptsNfc !== false
               ? 'Not For Competition entries are accepted. NFC dogs must be registered with the Royal Kennel Club and aged 12 weeks or over.'
@@ -474,7 +476,7 @@ export function ShowSchedule({
 
         {/* Venue */}
         {show.venue && (
-          <InfoCard title="Venue">
+          <InfoCard variant={variant} title="Venue">
             <Text style={s.infoText}>{show.venue.name}</Text>
             {show.venue.address && <Text style={s.infoText}>{show.venue.address}</Text>}
             {show.venue.postcode && <Text style={s.infoText}>{show.venue.postcode}</Text>}
@@ -486,7 +488,7 @@ export function ShowSchedule({
 
         {/* Judges */}
         {judges.length > 0 && (
-          <InfoCard title="Judges">
+          <InfoCard variant={variant} title="Judges">
             {judges.map((judge, i) => {
               // Prefer the API-computed role label (includes "Junior Handling",
               // "Dogs & Bitches" etc.); fall back to breed list for multi-breed shows.
@@ -504,7 +506,7 @@ export function ShowSchedule({
         )}
 
         {/* Online entries */}
-        <InfoCard title="Online Entries">
+        <InfoCard variant={variant} title="Online Entries">
           <Text style={s.infoText}>
             Enter online at{' '}
             <Link src={showPageUrl} style={{ color: C.primary, textDecoration: 'none' }}>
@@ -515,14 +517,14 @@ export function ShowSchedule({
 
         {/* Awards */}
         {sd?.awardsDescription && (
-          <InfoCard title="Awards">
+          <InfoCard variant={variant} title="Awards">
             <Text style={s.infoText}>{sd.awardsDescription}</Text>
           </InfoCard>
         )}
 
         {/* Prize money */}
         {sd?.prizeMoney && (
-          <InfoCard title="Prize Money">
+          <InfoCard variant={variant} title="Prize Money">
             <Text style={s.infoText}>{sd.prizeMoney}</Text>
           </InfoCard>
         )}
@@ -562,10 +564,10 @@ export function ShowSchedule({
           ════════════════════════════════════════════════════════════════════ */}
       {(sd?.officers?.length || sd?.showManager || show.onCallVet) && (
         <Page size="A5" style={s.page}>
-          <SectionBand title="Officials" />
+          <SectionBand variant={variant} title="Officials" />
 
           {sd?.officers && sd.officers.length > 0 && (
-            <InfoCard title="Officers &amp; Committee">
+            <InfoCard variant={variant} title="Officers &amp; Committee">
               {sortOfficers(sd.officers).map((o, i) => (
                 <View key={i} style={s.officialRow}>
                   <Text style={s.officialPosition}>{o.position}</Text>
@@ -575,20 +577,26 @@ export function ShowSchedule({
             </InfoCard>
           )}
 
-          <InfoCard title="Jurisdiction and Responsibilities">
-            <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 7.5, lineHeight: 1.4, color: C.textMedium }}>
-              The Officers and Committee members of the society holding the licence are deemed responsible for organising and conducting the show safely and in accordance with the Rules and Regulations of the Royal Kennel Club and agree to abide by and adopt any decision of the Board or any authority to whom the Board may delegate its powers, subject to the conditions of Regulation F16. In so doing those appointed as Officers and Committee members accept that they are jointly and severally responsible for the organisation of the show and that this is a binding undertaking (vide Royal Kennel Club General Show Regulations F4 and F5).
-            </Text>
-          </InfoCard>
+          {/* Jurisdiction and Responsibilities — RKC F4/F5 verbiage. Hidden
+              for SV regional shows, which operate under WUSV/GSDL-BRG
+              rules and have their own 28-rule block instead. Amanda
+              2026-05-20. */}
+          {!isWusv && (
+            <InfoCard variant={variant} title="Jurisdiction and Responsibilities">
+              <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 7.5, lineHeight: 1.4, color: C.textMedium }}>
+                The Officers and Committee members of the society holding the licence are deemed responsible for organising and conducting the show safely and in accordance with the Rules and Regulations of the Royal Kennel Club and agree to abide by and adopt any decision of the Board or any authority to whom the Board may delegate its powers, subject to the conditions of Regulation F16. In so doing those appointed as Officers and Committee members accept that they are jointly and severally responsible for the organisation of the show and that this is a binding undertaking (vide Royal Kennel Club General Show Regulations F4 and F5).
+              </Text>
+            </InfoCard>
+          )}
 
           {sd?.showManager && (
-            <InfoCard title="Show Manager">
+            <InfoCard variant={variant} title={isWusv ? 'Event Manager' : 'Show Manager'}>
               <Text style={s.infoText}>{sd.showManager}</Text>
             </InfoCard>
           )}
 
           {show.onCallVet && (
-            <InfoCard title="On-Call Veterinary Surgeon">
+            <InfoCard variant={variant} title="On-Call Veterinary Surgeon">
               <Text style={s.infoText}>{show.onCallVet}</Text>
             </InfoCard>
           )}
@@ -603,7 +611,7 @@ export function ShowSchedule({
           ════════════════════════════════════════════════════════════════════ */}
       {sponsors.length > 0 && (
         <Page size="A5" style={s.page}>
-          <SectionBand title="Sponsors &amp; Acknowledgements" />
+          <SectionBand variant={variant} title="Sponsors &amp; Acknowledgements" />
 
           <View style={{ marginBottom: 10 }}>
             <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 8, color: C.textMedium, textAlign: 'center' }}>
@@ -1034,7 +1042,7 @@ export function ShowSchedule({
           ════════════════════════════════════════════════════════════════════ */}
       {!isWusv && (
       <Page size="A5" style={s.page}>
-        <SectionBand title="Classification" />
+        <SectionBand variant={variant} title="Classification" />
 
         {/* Judge name(s) above the table — singular for single-breed shows.
             SAC judges render with the SAC section below, not here. */}
@@ -1152,7 +1160,7 @@ export function ShowSchedule({
           ════════════════════════════════════════════════════════════════════ */}
       {!isWusv && (
       <Page size="A5" style={s.page}>
-        <SectionBand title="Definitions of Classes" />
+        <SectionBand variant={variant} title="Definitions of Classes" />
 
         <Text style={{ ...s.infoText, fontSize: 7.5, color: C.textMedium, marginBottom: 4 }}>
           In the following definitions, a Challenge Certificate includes any Show award that counts towards the title of Champion under the Rules of any governing body recognised by The Royal Kennel Club.
@@ -1235,7 +1243,7 @@ export function ShowSchedule({
           ════════════════════════════════════════════════════════════════════ */}
       {!isWusv && (
       <Page size="A5" style={s.page}>
-        <SectionBand title="Rules and Regulations" />
+        <SectionBand variant={variant} title="Rules and Regulations" />
 
         <View style={{ marginBottom: 10, paddingHorizontal: 2 }} wrap={false}>
           <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 8, lineHeight: 1.4, color: C.textMedium }}>
@@ -1332,7 +1340,7 @@ export function ShowSchedule({
           ADDITIONAL RULES AND REGULATIONS  (RKC only)
           ════════════════════════════════════════════════════════════════════ */}
       {!isWusv && <Page size="A5" style={s.page}>
-        <SectionBand title="Additional Rules" />
+        <SectionBand variant={variant} title="Additional Rules" />
 
         <Rule num="i">Should any judge be prevented from fulfilling their engagement, the Committee reserves to themselves the right of appointing other judges to fulfil their duties. Exhibitors are at liberty to withdraw from competition but no entry fees can be refunded.</Rule>
         <Rule num="ii">Any owner, competitor or other person in charge of a dog is required to remove as soon as possible any fouling caused by their dog(s) at any Royal Kennel Club licensed venue and within the environs of that event including car and caravan parks and approaches. Adequate receptacles for the disposal of such fouling will be provided.</Rule>
@@ -1372,7 +1380,7 @@ export function ShowSchedule({
           REGULATIONS FOR PREPARATION F(B)   (RKC only)
           ════════════════════════════════════════════════════════════════════ */}
       {!isWusv && <Page size="A5" style={s.page}>
-        <SectionBand title="Regulations for Preparation F(B)" />
+        <SectionBand variant={variant} title="Regulations for Preparation F(B)" />
 
         <Text style={s.ruleText}>
           <Text style={s.ruleNumber}>1.</Text> These Regulations must be observed when a dog is prepared for exhibition for any Royal Kennel Club Licensed event.{'\n'}
@@ -1400,7 +1408,7 @@ export function ShowSchedule({
           ════════════════════════════════════════════════════════════════════ */}
       {!isWusv && (
       <Page size="A5" style={s.page}>
-        <SectionBand title="Notices to Exhibitors" />
+        <SectionBand variant={variant} title="Notices to Exhibitors" />
 
         <View style={{ marginBottom: 14 }} wrap={false}>
           <Text style={{ fontFamily: 'Inter', fontSize: 9, fontWeight: 'bold', color: C.primary, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>
@@ -1445,28 +1453,28 @@ export function ShowSchedule({
           ════════════════════════════════════════════════════════════════════ */}
       {(sd?.directions || sd?.catering || sd?.futureShowDates || sd?.additionalNotes) && (
         <Page size="A5" style={s.page}>
-          <SectionBand title="Additional Information" />
+          <SectionBand variant={variant} title="Additional Information" />
 
           {sd?.directions && (
-            <InfoCard title="Directions to Venue">
+            <InfoCard variant={variant} title="Directions to Venue">
               <Text style={s.infoText}>{sd.directions}</Text>
             </InfoCard>
           )}
 
           {sd?.catering && (
-            <InfoCard title="Catering">
+            <InfoCard variant={variant} title="Catering">
               <Text style={s.infoText}>{sd.catering}</Text>
             </InfoCard>
           )}
 
           {sd?.futureShowDates && (
-            <InfoCard title="Future Show Dates">
+            <InfoCard variant={variant} title="Future Show Dates">
               <Text style={s.infoText}>{sd.futureShowDates}</Text>
             </InfoCard>
           )}
 
           {sd?.additionalNotes && (
-            <InfoCard title="Notes">
+            <InfoCard variant={variant} title="Notes">
               <Text style={s.infoText}>{sd.additionalNotes}</Text>
             </InfoCard>
           )}
@@ -1481,7 +1489,7 @@ export function ShowSchedule({
           ════════════════════════════════════════════════════════════════════ */}
       {show.acceptsPostalEntries && (
         <Page size="A5" style={s.page}>
-          <SectionBand title="Entry Form" />
+          <SectionBand variant={variant} title="Entry Form" />
 
           <Text style={{ fontFamily: 'Inter', fontSize: 7, color: C.textLight, marginBottom: 8, textAlign: 'center' }}>
             Enter online at{' '}

@@ -70,6 +70,11 @@ export interface ScheduleClass {
   sex: string | null;
   breedName: string | null;
   classType?: string | null;
+  /** SV/WUSV coat-type variant on the showClasses row — 'stock' or
+   *  'long_stock'. Needed by the SV breed classification renderer so
+   *  it can group rows into numbered classes with a/b coat sub-letters
+   *  (Amanda 2026-05-20). Null for non-SV classes. */
+  svCoatType?: 'stock' | 'long_stock' | null;
   /** Per-class entry fee in pence. When this differs from the show's
    *  show.firstEntryFee the schedule should surface it as a "Special
    *  class fees" override line — e.g. SAC or Junior classes priced at
