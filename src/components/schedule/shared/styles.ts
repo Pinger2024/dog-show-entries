@@ -65,6 +65,35 @@ export const C = {
   ruleLight: '#D4CFC5',
 };
 
+/** WUSV / SV regional show palette — red/blue/black per the British Regional
+ *  Group branding (Amanda 2026-05-19). Used in place of the Remi-green
+ *  palette when isWusv is true. */
+export const CSv = {
+  primary: '#C8102E',        // BRG red
+  accent: '#003B6F',         // BRG blue
+  streak: '#F7941D',         // orange streak from the BRG logo
+
+  cardBg: '#FFF6F4',         // soft pink tint
+  cardBorder: '#F0CDC9',
+
+  textDark: '#1A1A1A',
+  textMedium: '#4A4A4A',
+  textLight: '#7A7A7A',
+  textOnPrimary: '#FFFFFF',
+
+  tableRowAlt: '#FFF6F4',
+
+  warningBg: '#FFF8E1',
+  warningBorder: '#D4A017',
+
+  ruleLight: '#F0CDC9',
+};
+
+/** Pick the palette for a show — RKC uses Remi green, WUSV uses BRG red. */
+export function paletteFor(isWusv: boolean): typeof C {
+  return isWusv ? (CSv as typeof C) : C;
+}
+
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 export const SHOW_TYPE_LABELS: Record<string, string> = {

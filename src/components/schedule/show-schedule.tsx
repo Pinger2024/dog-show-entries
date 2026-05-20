@@ -10,6 +10,7 @@ import type {
 } from './shared/types';
 import {
   C,
+  CSv,
   SHOW_TYPE_LABELS,
   formatVenue,
   formatDate,
@@ -124,9 +125,9 @@ export function ShowSchedule({
           COVER PAGE
           ════════════════════════════════════════════════════════════════════ */}
       <Page size="A5" style={s.coverPage}>
-        {/* ── Green top band with organisation name ── */}
+        {/* Cover top band — Remi green for RKC shows, BRG red for SV shows. */}
         {show.organisation && (
-          <View style={s.coverTopBand}>
+          <View style={[s.coverTopBand, isWusv && { backgroundColor: CSv.primary }]}>
             <Text style={s.coverOrgName}>{show.organisation.name}</Text>
           </View>
         )}
@@ -323,7 +324,7 @@ export function ShowSchedule({
         </View>
 
         {/* Green bottom band */}
-        <View style={s.coverBottomBand} />
+        <View style={[s.coverBottomBand, isWusv && { backgroundColor: CSv.primary }]} />
       </Page>
 
       {/* Inside-front-cover adverts — render right after the cover page. */}
@@ -745,7 +746,7 @@ export function ShowSchedule({
       {isWusv && svGroups && (
         <Page size="A5" style={s.page}>
           {/* Title */}
-          <Text style={{ fontFamily: 'Inter', fontSize: 14, fontWeight: 'bold', textAlign: 'center', color: C.textDark, textDecoration: 'underline', marginBottom: 6 }}>
+          <Text style={{ fontFamily: 'Inter', fontSize: 14, fontWeight: 'bold', textAlign: 'center', color: CSv.primary, textDecoration: 'underline', marginBottom: 6 }}>
             BREED CLASSIFICATION
           </Text>
           <Text style={{ fontFamily: 'Inter', fontSize: 9, textAlign: 'center', color: C.textMedium, marginBottom: 10 }}>
@@ -880,7 +881,7 @@ export function ShowSchedule({
           ════════════════════════════════════════════════════════════════════ */}
       {isWusv && (
         <Page size="A5" style={s.page}>
-          <Text style={{ fontFamily: 'Inter', fontSize: 12, fontWeight: 'bold', textAlign: 'center', color: C.textDark, textDecoration: 'underline', marginBottom: 6 }}>
+          <Text style={{ fontFamily: 'Inter', fontSize: 12, fontWeight: 'bold', textAlign: 'center', color: CSv.primary, textDecoration: 'underline', marginBottom: 6 }}>
             Time schedule and class order
           </Text>
           <View style={{ marginBottom: 6 }}>
@@ -972,10 +973,10 @@ export function ShowSchedule({
           ════════════════════════════════════════════════════════════════════ */}
       {isWusv && (
         <Page size="A5" style={s.page}>
-          <Text style={{ fontFamily: 'Inter', fontSize: 11, fontWeight: 'bold', textAlign: 'center', color: C.textDark, textDecoration: 'underline', marginBottom: 2 }}>
+          <Text style={{ fontFamily: 'Inter', fontSize: 11, fontWeight: 'bold', textAlign: 'center', color: CSv.primary, textDecoration: 'underline', marginBottom: 2 }}>
             Summary of the WUSV / GSDL-British Regional Group
           </Text>
-          <Text style={{ fontFamily: 'Inter', fontSize: 11, fontWeight: 'bold', textAlign: 'center', color: C.textDark, marginBottom: 8 }}>
+          <Text style={{ fontFamily: 'Inter', fontSize: 11, fontWeight: 'bold', textAlign: 'center', color: CSv.primary, marginBottom: 8 }}>
             Rules &amp; Regulations for a Regional Event
           </Text>
           <Text style={{ fontFamily: 'Inter', fontSize: 8, fontStyle: 'italic', textAlign: 'center', color: C.textMedium, marginBottom: 10 }}>
