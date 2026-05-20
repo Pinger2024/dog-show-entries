@@ -44,43 +44,101 @@ export function formatPedigreeKC(
  * Per RKC regulations, when an owner is also the exhibitor the address
  * is replaced with "Exh." (short for "Exhibitor").
  *
- * If `withhold` is true, owner details are replaced with "Details withheld"
- * per the exhibitor's right under F(1).11.b.(6)/(8) to have their name and
- * address kept out of publication.
+ * If `withhold` is true, the owner NAME is still printed (exhibitors
+ * need to be identifiable by judges / attendees) but the address is
+ * replaced with "address withheld". Amanda 2026-04-17: F(1).11.b.(6)/(8)
+ * suppresses personal contact details, not exhibitor identity.
  */
+// "Amanda McAteer" → "McAteer, Amanda". Single-word names left untouched.
+// Used by the back-of-catalogue exhibitor index per Amanda's spec
+// (2026-05-14) so the index reads like a phone book sorted by surname.
+export function toPhoneBookName(fullName: string): string {
+  const trimmed = fullName.trim();
+  if (!trimmed) return trimmed;
+  const parts = trimmed.split(/\s+/);
+  if (parts.length < 2) return trimmed;
+  const surname = parts[parts.length - 1]!;
+  const first = parts.slice(0, -1).join(' ');
+  return `${surname}, ${first}`;
+}
+
+export function surnameOf(fullName: string): string {
+  const parts = fullName.trim().split(/\s+/);
+  return (parts[parts.length - 1] ?? '').toLowerCase();
+}
+
+// Heading + sort key for the exhibitor index. Owners array is the
+// source of truth when populated (gives joint owners structured per
+// person); falls back to the single exhibitor string otherwise.
+// Joint owners join with " & ", each flipped to phone-book format.
+export function ownerHeading(
+  owners: { name: string; address: string | null }[],
+  exhibitor: string | null | undefined,
+): { heading: string; sortKey: string } {
+  if (owners.length > 0) {
+    const formatted = owners.map((o) => toPhoneBookName(o.name).toUpperCase());
+    return { heading: formatted.join(' & '), sortKey: surnameOf(owners[0]!.name) };
+  }
+  const fallback = exhibitor ?? 'Unknown';
+  return { heading: toPhoneBookName(fallback).toUpperCase(), sortKey: surnameOf(fallback) };
+}
+
 export function formatOwnerKC(
   owners: { name: string; address: string | null; userId: string | null }[],
   exhibitorId?: string | undefined,
   withhold?: boolean
 ): string {
-  if (withhold) return 'Details withheld';
-  if (owners.length === 0) return '';
+  if (owners.length === 0) return withhold ? 'Details withheld' : '';
   return owners
     .map((o) => {
       const name = uppercaseName(o.name);
       const isExhibitor = exhibitorId && o.userId && o.userId === exhibitorId;
-      // Always show the address. Append "Exh." when the owner is also the exhibitor.
       const parts = [name];
-      if (o.address) parts.push(o.address);
+      if (withhold) {
+        parts.push('address withheld');
+      } else if (o.address) {
+        parts.push(o.address);
+      }
       if (isExhibitor) parts.push('Exh.');
       return parts.join(', ');
     })
     .join(' & ');
 }
 
-/** Format class list with numbers: "1. Minor Puppy, 3. Novice" */
+/**
+ * Format class list with labels: "1. Minor Puppy, 3. Novice, JHA. Junior Handler 6-11"
+ * When the caller can supply an `id` per class + a label map, JH classes
+ * render as JHA/JHB rather than a number. Falls back to `classNumber`
+ * when no map is provided (legacy callers).
+ */
 export function formatClassList(
-  classes: { name: string | undefined; classNumber: number | null | undefined; sortOrder: number | undefined }[]
+  classes: {
+    id?: string | null;
+    name: string | undefined;
+    classNumber: number | null | undefined;
+    sortOrder: number | undefined;
+  }[],
+  labelMap?: Map<string, string>,
 ): string {
+  const getLabel = (c: (typeof classes)[number]): string | null => {
+    if (c.id && labelMap?.get(c.id)) return labelMap.get(c.id)!;
+    if (c.classNumber != null) return String(c.classNumber);
+    return null;
+  };
+  const sortKey = (c: (typeof classes)[number]): number => {
+    const mapped = c.id ? labelMap?.get(c.id) : undefined;
+    // JH labels sort after all numbered classes (position in map already
+    // puts them in JHA → JHB → JHC order).
+    if (mapped && mapped.startsWith('JH')) {
+      return 1_000_000 + mapped.charCodeAt(2);
+    }
+    return c.classNumber ?? c.sortOrder ?? 999;
+  };
   return classes
-    .sort((a, b) => {
-      if (a.classNumber != null && b.classNumber != null) return a.classNumber - b.classNumber;
-      if (a.classNumber != null) return -1;
-      if (b.classNumber != null) return 1;
-      return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
-    })
+    .sort((a, b) => sortKey(a) - sortKey(b))
     .map((c) => {
-      if (c.classNumber != null && c.name) return `${c.classNumber}. ${c.name}`;
+      const label = getLabel(c);
+      if (label && c.name) return `${label}. ${c.name}`;
       return c.name;
     })
     .filter(Boolean)
@@ -211,6 +269,7 @@ export interface CatalogueEntryBase {
     name: string | undefined;
     sex: string | null | undefined;
     classNumber: number | null | undefined;
+    classLabel?: string;
     sortOrder: number | undefined;
   }[];
 }
@@ -220,6 +279,7 @@ export interface ShowClassesInfo {
   allShowClasses?: {
     className: string;
     classNumber: number | null;
+    classLabel?: string;
     sortOrder: number;
     sex: string | null;
   }[];
@@ -227,6 +287,7 @@ export interface ShowClassesInfo {
 
 export interface ClassGroup {
   classNumber: number | null | undefined;
+  classLabel?: string;
   className: string;
   sex: string | null | undefined;
   sortOrder: number | undefined;
@@ -240,15 +301,26 @@ export function groupByClass<T extends CatalogueEntryBase>(
 ): ClassGroup[] {
   const byKey = new Map<string, ClassGroup>();
 
+  // JH classes (classLabel='JHA'/'JHB') can all share classNumber=null, so
+  // key on classLabel when present to avoid collapsing distinct JH classes.
+  const keyFor = (
+    label: string | undefined,
+    num: number | null | undefined,
+    name: string | undefined,
+    sex: string | null | undefined,
+  ) => {
+    if (label) return `lbl:${label}`;
+    if (num != null) return `num:${num}`;
+    return `name:${name ?? ''}-${sex ?? 'any'}`;
+  };
+
   for (const entry of entries) {
     for (const cls of entry.classes) {
-      const key =
-        cls.classNumber != null
-          ? `num:${cls.classNumber}`
-          : `name:${cls.name ?? ''}-${cls.sex ?? 'any'}`;
+      const key = keyFor(cls.classLabel, cls.classNumber, cls.name, cls.sex);
       if (!byKey.has(key)) {
         byKey.set(key, {
           classNumber: cls.classNumber,
+          classLabel: cls.classLabel,
           className: cls.name ?? 'Unknown Class',
           sex: cls.sex,
           sortOrder: cls.sortOrder,
@@ -261,13 +333,11 @@ export function groupByClass<T extends CatalogueEntryBase>(
 
   if (show.allShowClasses) {
     for (const sc of show.allShowClasses) {
-      const key =
-        sc.classNumber != null
-          ? `num:${sc.classNumber}`
-          : `name:${sc.className}-${sc.sex ?? 'any'}`;
+      const key = keyFor(sc.classLabel, sc.classNumber, sc.className, sc.sex);
       if (!byKey.has(key)) {
         byKey.set(key, {
           classNumber: sc.classNumber,
+          classLabel: sc.classLabel,
           className: sc.className,
           sex: sc.sex,
           sortOrder: sc.sortOrder,
@@ -277,11 +347,14 @@ export function groupByClass<T extends CatalogueEntryBase>(
     }
   }
 
+  // Sort numbered classes first (by classNumber), then JH/unnumbered by
+  // classLabel (JHA, JHB, …), then anything else by sortOrder.
   return Array.from(byKey.values()).sort((a, b) => {
     if (a.classNumber != null && b.classNumber != null)
       return a.classNumber - b.classNumber;
     if (a.classNumber != null) return -1;
     if (b.classNumber != null) return 1;
+    if (a.classLabel && b.classLabel) return a.classLabel.localeCompare(b.classLabel);
     return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
   });
 }

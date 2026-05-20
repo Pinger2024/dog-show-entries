@@ -25,9 +25,18 @@ export interface ClassTemplate {
 }
 
 /** Filter templates to those relevant for a given show type and scope.
- *  GSD-only templates are shown for single-breed shows (user picks if relevant). */
-export function getRelevantTemplates(showType?: string, showScope?: string): ClassTemplate[] {
+ *  GSD-only templates are shown for single-breed shows (user picks if relevant).
+ *  WUSV/SV shows have their own class management UI (/wusv-classes) — the
+ *  RKC class templates don't apply, so for SV shows we only surface the
+ *  handling add-ons. */
+export function getRelevantTemplates(
+  showType?: string,
+  showScope?: string,
+  showRuleset?: 'rkc' | 'wusv',
+): ClassTemplate[] {
   return CLASS_TEMPLATES.filter((t) => {
+    // WUSV shows don't use the RKC class templates — only handling add-ons.
+    if (showRuleset === 'wusv') return t.isHandling === true;
     // Handling templates always shown (they're add-ons)
     if (t.isHandling) return true;
     // GSD-only templates: show for single-breed shows, hide for all-breed
@@ -45,6 +54,7 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
     description: 'Full RKC championship class schedule with all standard classes, split by sex.',
     showTypes: ['championship'],
     classNames: [
+      'Baby Puppy',
       'Minor Puppy',
       'Puppy',
       'Junior',
@@ -66,6 +76,7 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
     description: 'Standard open show class schedule with popular classes.',
     showTypes: ['open', 'premier_open'],
     classNames: [
+      'Baby Puppy',
       'Minor Puppy',
       'Puppy',
       'Junior',
@@ -84,6 +95,7 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
     description: 'Basic limited show schedule with core classes.',
     showTypes: ['limited', 'primary'],
     classNames: [
+      'Baby Puppy',
       'Puppy',
       'Junior',
       'Novice',
@@ -100,6 +112,7 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
     showTypes: ['championship'],
     gsdOnly: true,
     classNames: [
+      'Baby Puppy',
       'Minor Puppy',
       'Puppy',
       'Junior',
@@ -128,6 +141,7 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
     showTypes: ['open', 'premier_open'],
     gsdOnly: true,
     classNames: [
+      'Baby Puppy',
       'Minor Puppy',
       'Puppy',
       'Junior',
@@ -152,6 +166,7 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
     description: 'Companion show schedule for fun and social events.',
     showTypes: ['companion'],
     classNames: [
+      'Baby Puppy',
       'Puppy',
       'Open',
       'Veteran',

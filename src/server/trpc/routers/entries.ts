@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, isNull, inArray, asc, desc, sql } from 'drizzle-orm';
+import { and, eq, isNull, inArray, notInArray, asc, desc, sql } from 'drizzle-orm';
 import { differenceInMonths, differenceInWeeks } from 'date-fns';
 import {
   protectedProcedure,
@@ -15,13 +15,25 @@ import {
   dogPhotos,
   shows,
   showClasses,
+  orders,
   payments,
   entryAuditLog,
   users,
   dogOwners,
   judgeAssignments,
+  showDiscountGroups,
+  dogSvProfile,
 } from '@/server/db/schema';
-import { createPaymentIntent, getStripe } from '@/server/services/stripe';
+import {
+  computeOrderFees,
+  type DogEntryInput,
+  type FeeContext,
+} from '@/lib/fee-calc';
+import {
+  createPaymentIntent,
+  calculatePlatformFee,
+  getStripe,
+} from '@/server/services/stripe';
 
 export const entriesRouter = createTRPCRouter({
   create: protectedProcedure
@@ -226,6 +238,7 @@ export const entriesRouter = createTRPCRouter({
           inArray(showClasses.id, input.classIds),
           eq(showClasses.showId, input.showId)
         ),
+        with: { classDefinition: true },
       });
 
       if (selectedClasses.length !== input.classIds.length) {
@@ -233,6 +246,52 @@ export const entriesRouter = createTRPCRouter({
           code: 'BAD_REQUEST',
           message: 'One or more classes are invalid for this show',
         });
+      }
+
+      // WUSV coat type validation: if the class specifies a coat type, the dog must match
+      if (show.showRuleset === 'wusv' && dog.coatType) {
+        for (const sc of selectedClasses) {
+          if (sc.svCoatType && sc.svCoatType !== dog.coatType) {
+            const expected = sc.svCoatType === 'stock' ? 'Stock Coat' : 'Long Stock Coat';
+            const actual = dog.coatType === 'stock' ? 'Stock Coat' : 'Long Stock Coat';
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `This class is for ${expected} dogs but your dog is registered as ${actual}. Please select the correct class.`,
+            });
+          }
+        }
+      }
+
+      // WUSV health-data validation: Yearling / Adult / Working entries
+      // require hip + elbow scores and DNA recording per GSDL/WUSV rules
+      // (Amanda 2026-05-20). Junior class is exempt — scores aren't
+      // mandatory at that age (must be disclosed only if granted).
+      if (show.showRuleset === 'wusv') {
+        const SV_HEALTH_REQUIRED_CLASSES = new Set([
+          'SV Yearling',
+          'Adult',
+          'Working',
+        ]);
+        const needsHealth = selectedClasses.some(
+          (sc) => sc.classDefinition && SV_HEALTH_REQUIRED_CLASSES.has(sc.classDefinition.name),
+        );
+        if (needsHealth) {
+          const svProfile = await ctx.db.query.dogSvProfile.findFirst({
+            where: eq(dogSvProfile.dogId, dog.id),
+          });
+          const missing: string[] = [];
+          const isEmpty = (v: string | null | undefined) =>
+            !v || v === 'not_required';
+          if (isEmpty(svProfile?.hipGrade ?? null)) missing.push('hip score');
+          if (isEmpty(svProfile?.elbowGrade ?? null)) missing.push('elbow score');
+          if (!svProfile?.dna) missing.push('DNA recording');
+          if (missing.length > 0) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `${dog.registeredName} can't be entered in Yearling, Adult or Working classes without ${missing.join(', ')}. Add the missing data on the dog's profile (SV Health & Working Titles section) and try again.`,
+            });
+          }
+        }
       }
 
       // Calculate total fee for the new classes
@@ -446,10 +505,24 @@ export const entriesRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
+      // Entries on a fully-refunded order don't belong in the entries list
+      // — the exhibitor pulled out and got their money back. Their entry
+      // rows stay in the DB for audit; the Financial tab's refund history
+      // is where they surface.
+      const refundedOrderRows = await ctx.db
+        .select({ id: orders.id })
+        .from(orders)
+        .where(and(eq(orders.showId, input.showId), eq(orders.status, 'refunded')));
+      const refundedOrderIds = refundedOrderRows.map((r) => r.id);
+
       const conditions = [
         eq(entries.showId, input.showId),
         isNull(entries.deletedAt),
       ];
+
+      if (refundedOrderIds.length > 0) {
+        conditions.push(notInArray(entries.orderId, refundedOrderIds));
+      }
 
       if (input.status) {
         conditions.push(eq(entries.status, input.status));
@@ -475,7 +548,15 @@ export const entriesRouter = createTRPCRouter({
               },
             },
           },
+          // Payments are linked at the order level (one Stripe charge per
+          // multi-entry order). entries.payments (via payments.entry_id) is
+          // currently always empty; order.payments is the live link.
           payments: true,
+          order: {
+            with: {
+              payments: true,
+            },
+          },
         },
         orderBy: [asc(entries.createdAt)],
         limit: input.limit,
@@ -600,16 +681,105 @@ export const entriesRouter = createTRPCRouter({
       }
 
       const oldFee = entry.totalFee;
-      // Use show-level tiered pricing if available, otherwise sum per-class fees
+
+      // Recompute fees via the shared service. When this entry is part of
+      // an order we also load the order's discount-group + sibling entries
+      // so the multi-dog package re-slots correctly. Without an order we
+      // still use the service — it cleanly handles the simple single-entry
+      // ladder case.
+      const orderId = entry.orderId;
       let newFee: number;
+      let perClassFees: number[];
+
       if (entry.show.firstEntryFee != null) {
-        const subsequentRate = entry.show.subsequentEntryFee ?? entry.show.firstEntryFee;
-        newFee = newClasses.length > 0
-          ? entry.show.firstEntryFee + subsequentRate * (newClasses.length - 1)
-          : 0;
+        const entryKind = entry.entryType === 'junior_handler'
+          ? 'junior_handler'
+          : entry.isNfc
+            ? 'nfc'
+            : 'standard';
+
+        let discountGroup: FeeContext['discountGroup'] = null;
+        let siblingEntries: { id: string; entryType: string; isNfc: boolean; entryClasses: { id: string }[]; totalFee: number }[] = [
+          {
+            id: input.id,
+            entryType: entry.entryType,
+            isNfc: entry.isNfc,
+            entryClasses: newClasses.map((_, i) => ({ id: `c${i}` })),
+            totalFee: entry.totalFee,
+          },
+        ];
+
+        if (orderId) {
+          const [orderRow, dbSiblings] = await Promise.all([
+            ctx.db.query.orders.findFirst({
+              where: eq(orders.id, orderId),
+              columns: { discountGroupId: true },
+            }),
+            ctx.db.query.entries.findMany({
+              where: and(eq(entries.orderId, orderId), isNull(entries.deletedAt)),
+              with: { entryClasses: { columns: { id: true } } },
+            }),
+          ]);
+          siblingEntries = dbSiblings;
+
+          if (orderRow?.discountGroupId) {
+            const dg = await ctx.db.query.showDiscountGroups.findFirst({
+              where: eq(showDiscountGroups.id, orderRow.discountGroupId),
+            });
+            if (dg) {
+              discountGroup = {
+                firstEntryFeePence: dg.firstEntryFeePence,
+                multiDogPackagePence: dg.multiDogPackagePence,
+              };
+            }
+          }
+        }
+
+        const feeCtx: FeeContext = {
+          firstEntryFeePence: entry.show.firstEntryFee,
+          subsequentEntryFeePence: entry.show.subsequentEntryFee,
+          nfcEntryFeePence: entry.show.nfcEntryFee,
+          juniorHandlerFeePence: entry.show.juniorHandlerFee,
+          multiDogThreshold: entry.show.multiDogThreshold,
+          multiDogPackagePence: entry.show.multiDogPackagePence,
+          discountGroup,
+        };
+
+        const dogEntries: DogEntryInput[] = siblingEntries.map((e) => ({
+          key: e.id,
+          kind: (e.id === input.id ? entryKind : e.entryType === 'junior_handler'
+            ? 'junior_handler'
+            : e.isNfc
+              ? 'nfc'
+              : 'standard'),
+          classCount: e.id === input.id ? newClasses.length : e.entryClasses.length,
+        }));
+
+        const result = computeOrderFees(dogEntries, feeCtx);
+        const myBreak = result.perEntry.find((b) => b.key === input.id)!;
+        newFee = myBreak.fee;
+        perClassFees = myBreak.perClassFees;
+
+        // Re-slot sibling fees only when an order exists — the multi-dog
+        // package may have shifted across rounding.
+        if (orderId) {
+          for (const sib of siblingEntries) {
+            if (sib.id === input.id) continue;
+            const sibBreak = result.perEntry.find((b) => b.key === sib.id);
+            if (sibBreak && sibBreak.fee !== sib.totalFee) {
+              await ctx.db
+                .update(entries)
+                .set({ totalFee: sibBreak.fee })
+                .where(eq(entries.id, sib.id));
+            }
+          }
+        }
       } else {
+        // Legacy per-class fallback for shows that never set show-level fees.
         newFee = newClasses.reduce((sum, sc) => sum + sc.entryFee, 0);
+        perClassFees = newClasses.map((sc) => sc.entryFee);
       }
+
       const feeDiff = newFee - oldFee;
 
       const oldClassIds = entry.entryClasses.map((ec) => ec.showClassId);
@@ -620,10 +790,10 @@ export const entriesRouter = createTRPCRouter({
         .where(eq(entryClasses.entryId, input.id));
 
       await ctx.db.insert(entryClasses).values(
-        newClasses.map((sc) => ({
+        newClasses.map((sc, idx) => ({
           entryId: input.id,
           showClassId: sc.id,
-          fee: sc.entryFee,
+          fee: perClassFees[idx] ?? sc.entryFee,
         }))
       );
 
@@ -653,18 +823,25 @@ export const entriesRouter = createTRPCRouter({
 
       // Handle fee difference
       if (feeDiff > 0) {
-        // Additional payment needed
-        const pi = await createPaymentIntent(feeDiff, {
+        // Additional payment needed. Platform-mode charge — money lands
+        // in Remi's balance, we include the diff in the next payout to
+        // the club.
+        const platformFeePence = calculatePlatformFee(feeDiff);
+        const grossAmount = feeDiff + platformFeePence;
+
+        const pi = await createPaymentIntent(grossAmount, {
           entryId: input.id,
           showId: entry.showId,
           exhibitorId: ctx.session.user.id,
           type: 'adjustment',
+          platformFeePence: String(platformFeePence),
+          subtotalPence: String(feeDiff),
         });
 
         await ctx.db.insert(payments).values({
           entryId: input.id,
           stripePaymentId: pi.id,
-          amount: feeDiff,
+          amount: grossAmount,
           status: 'pending',
           type: 'adjustment',
         });

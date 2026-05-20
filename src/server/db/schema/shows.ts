@@ -10,7 +10,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
-import { showTypeEnum, showScopeEnum, showStatusEnum, classSexArrangementEnum } from './enums';
+import { showTypeEnum, showScopeEnum, showStatusEnum, classSexArrangementEnum, showRulesetEnum } from './enums';
 
 // ── Schedule data stored as JSONB on each show ──
 export interface ScheduleData {
@@ -36,6 +36,10 @@ export interface ScheduleData {
   showManager?: string;
   guarantors?: { name: string; address?: string }[];
   officers?: { name: string; position: string }[];
+  /** First aider name(s) — required to be on the schedule and catalogue
+   *  per Amanda's RKC compliance ask 2026-05-14. One per single-breed
+   *  show, sometimes 2+ on multi-breed shows. */
+  firstAiders?: string[];
 
   // Awards & prizes
   awardsDescription?: string;
@@ -54,6 +58,12 @@ export interface ScheduleData {
 
   // Customisable best award names (e.g. Best in Show, Best Dog, Best Bitch, etc.)
   bestAwards?: string[];
+
+  // Best Veteran in Show — RKC requires explicit eligibility criteria when offered
+  /** Whether a Best Veteran in Show competition is being held at this show */
+  hasBestVeteranInShow?: boolean;
+  /** Eligibility criteria text — RKC mandates this be in the schedule if BVIS is held */
+  bestVeteranInShowEligibility?: string;
 
   // Custom statements (e.g. "OUTSIDE ATTRACTION - KC RULE F(1) 16h WILL BE STRICTLY ENFORCED")
   customStatements?: string[];
@@ -90,6 +100,7 @@ import { stewardAssignments } from './steward-assignments';
 import { showChecklistItems } from './show-checklist';
 import { sundryItems } from './sundry-items';
 import { showSponsors } from './sponsors';
+import { showDiscountGroups } from './show-discount-groups';
 
 export const shows = pgTable(
   'shows',
@@ -99,6 +110,7 @@ export const shows = pgTable(
     slug: text('slug').unique(),
     showType: showTypeEnum('show_type').notNull(),
     showScope: showScopeEnum('show_scope').notNull(),
+    showRuleset: showRulesetEnum('show_ruleset').notNull().default('rkc'),
     organisationId: uuid('organisation_id')
       .notNull()
       .references(() => organisations.id),
@@ -131,6 +143,10 @@ export const shows = pgTable(
     subsequentEntryFee: integer('subsequent_entry_fee'),
     nfcEntryFee: integer('nfc_entry_fee'),
     juniorHandlerFee: integer('junior_handler_fee'),
+    // Multi-dog package — when threshold paying dogs entered in one order,
+    // the per-dog first-class fees are replaced by this flat package price.
+    multiDogThreshold: integer('multi_dog_threshold'),
+    multiDogPackagePence: integer('multi_dog_package_pence'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -176,4 +192,5 @@ export const showsRelations = relations(shows, ({ one, many }) => ({
   checklistItems: many(showChecklistItems),
   sundryItems: many(sundryItems),
   showSponsors: many(showSponsors),
+  discountGroups: many(showDiscountGroups),
 }));

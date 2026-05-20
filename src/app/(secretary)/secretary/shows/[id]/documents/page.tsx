@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import {
   Award,
@@ -15,6 +15,7 @@ import {
   Gavel,
   Hash,
   List,
+  Loader2,
   Map,
   Printer,
   Share2,
@@ -60,8 +61,69 @@ interface DocumentLink {
   badge?: string;
 }
 
+/**
+ * True on narrow screens OR when the app is running as an installed PWA.
+ * In both cases, target="_blank" links boot the user out of the app context
+ * (iOS PWAs open external links in Safari with no easy way back, and a
+ * mobile browser tab with a PDF hides the back affordance). In download
+ * mode we fetch the PDF as a Blob and save it via a programmatic anchor
+ * click — this bypasses the iOS PWA standalone-mode quirk where a plain
+ * `<a download href="...">` tap just does nothing.
+ */
+function useDownloadInsteadOfOpen(): boolean {
+  const [downloadMode, setDownloadMode] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mobile = window.matchMedia('(max-width: 767px)');
+    const standalone = window.matchMedia('(display-mode: standalone)');
+    const update = () => setDownloadMode(mobile.matches || standalone.matches);
+    update();
+    mobile.addEventListener('change', update);
+    standalone.addEventListener('change', update);
+    return () => {
+      mobile.removeEventListener('change', update);
+      standalone.removeEventListener('change', update);
+    };
+  }, []);
+  return downloadMode;
+}
+
+/**
+ * Derive a sensible filename for a downloaded PDF from its API route and a
+ * human label. The server's Content-Disposition header already contains a
+ * filename, but iOS Safari PWA ignores it when the download is triggered
+ * via a programmatic blob-URL click — so we pass the filename explicitly
+ * via the `download` attribute on the temporary anchor.
+ */
+function filenameFromLabel(label: string): string {
+  const safe = label.replace(/[^a-zA-Z0-9\- ]/g, '').replace(/\s+/g, '-');
+  return `${safe}.pdf`;
+}
+
+/**
+ * Fetch a PDF from a same-origin URL and kick off a download via a
+ * temporary anchor + object URL. Works inside an iOS-PWA standalone
+ * session where a plain <a download> link is silently ignored.
+ */
+async function downloadBlob(url: string, filename: string) {
+  const res = await fetch(url, { credentials: 'include' });
+  if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+  const blob = await res.blob();
+  const blobUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = blobUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  // Defer revoke so iOS has time to hand the blob to the Files app.
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 10_000);
+}
+
 function DocumentLinkCard({ doc }: { doc: DocumentLink }) {
   const [copied, setCopied] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const downloadMode = useDownloadInsteadOfOpen();
 
   const fullUrl = typeof window !== 'undefined'
     ? `${window.location.origin}${doc.href}`
@@ -71,6 +133,31 @@ function DocumentLinkCard({ doc }: { doc: DocumentLink }) {
     e.preventDefault();
     e.stopPropagation();
 
+    // Preferred path: share the actual PDF file so the recipient gets
+    // the document, not a login-gated URL. Amanda's use case is sharing
+    // a generated catalogue with Michael — the API endpoint requires an
+    // active session + org membership, so a URL share 404s for anyone
+    // without the right access.
+    if (typeof navigator !== 'undefined' && typeof navigator.canShare === 'function') {
+      try {
+        const filename = filenameFromLabel(doc.label);
+        const res = await fetch(doc.href, { credentials: 'include' });
+        if (res.ok) {
+          const blob = await res.blob();
+          const file = new File([blob], filename, { type: 'application/pdf' });
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({ title: doc.label, files: [file] });
+            return;
+          }
+        }
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return;
+        // fall through to URL / clipboard paths
+      }
+    }
+
+    // Secondary: share the URL (only useful if the recipient has an
+    // active session — we warn in the toast).
     if (typeof navigator !== 'undefined' && navigator.share) {
       try {
         await navigator.share({ title: doc.label, url: fullUrl });
@@ -79,11 +166,26 @@ function DocumentLinkCard({ doc }: { doc: DocumentLink }) {
         if ((err as Error).name === 'AbortError') return;
       }
     }
-    // Fallback: copy link
+
+    // Fallback: copy link (recipient will need to be signed in).
     await navigator.clipboard.writeText(fullUrl);
     setCopied(true);
-    toast.success('PDF link copied');
+    toast.success('PDF link copied — recipient must be signed in');
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function handleDownload(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      await downloadBlob(doc.href, filenameFromLabel(doc.label));
+    } catch (err) {
+      toast.error(`Download failed — ${(err as Error).message}`);
+    } finally {
+      setDownloading(false);
+    }
   }
 
   return (
@@ -104,15 +206,27 @@ function DocumentLinkCard({ doc }: { doc: DocumentLink }) {
           {doc.description}
         </p>
         <div className="mt-2 flex gap-2">
-          <a
-            href={doc.href}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex min-h-[2.75rem] items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
-          >
-            <ExternalLink className="size-3" />
-            Open
-          </a>
+          {downloadMode ? (
+            <button
+              type="button"
+              onClick={handleDownload}
+              disabled={downloading}
+              className="inline-flex min-h-[2.75rem] items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-60"
+            >
+              {downloading ? <Loader2 className="size-3 animate-spin" /> : <Download className="size-3" />}
+              {downloading ? 'Downloading…' : 'Download'}
+            </button>
+          ) : (
+            <a
+              href={doc.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-h-[2.75rem] items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+            >
+              <ExternalLink className="size-3" />
+              Open
+            </a>
+          )}
           <button
             onClick={handleShare}
             className="inline-flex min-h-[2.75rem] items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
@@ -138,6 +252,20 @@ function DocumentGrid({ documents }: { documents: DocumentLink[] }) {
 
 export default function DocumentsPage() {
   const showId = useShowId();
+  const downloadMode = useDownloadInsteadOfOpen();
+  const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
+
+  async function handleDownload(key: string, href: string, label: string) {
+    if (downloadingKey) return;
+    setDownloadingKey(key);
+    try {
+      await downloadBlob(href, filenameFromLabel(label));
+    } catch (err) {
+      toast.error(`Download failed — ${(err as Error).message}`);
+    } finally {
+      setDownloadingKey(null);
+    }
+  }
 
   const { data: catalogueData } =
     trpc.secretary.getCatalogueData.useQuery({ showId });
@@ -228,6 +356,13 @@ export default function DocumentsPage() {
       icon: <Map className="size-4" />,
       description:
         'Ring assignments showing judges, breeds, and classes with entry counts',
+    },
+    {
+      label: 'Award Board',
+      href: `/api/award-board/${showId}`,
+      icon: <Award className="size-4" />,
+      description:
+        'A4 landscape wipe-clean grid — laminate and re-use with a dry-wipe marker to record placements and best-of awards on the day',
     },
   ];
 
@@ -424,18 +559,48 @@ export default function DocumentsPage() {
               </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <Button asChild className="w-full sm:w-auto min-h-[2.75rem]">
-                <a href={prizeCardPrintHref} target="_blank" rel="noopener noreferrer">
-                  <Printer className="size-4" />
-                  Print
-                </a>
-              </Button>
-              <Button asChild variant="outline" className="w-full sm:w-auto min-h-[2.75rem]">
-                <a href={prizeCardHref} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="size-4" />
-                  Preview PDF
-                </a>
-              </Button>
+              {downloadMode ? (
+                <>
+                  <Button
+                    type="button"
+                    className="w-full sm:w-auto min-h-[2.75rem]"
+                    disabled={downloadingKey === 'prize-print'}
+                    onClick={() => handleDownload('prize-print', prizeCardPrintHref, 'Prize-Cards-Print')}
+                  >
+                    {downloadingKey === 'prize-print'
+                      ? <Loader2 className="size-4 animate-spin" />
+                      : <Download className="size-4" />}
+                    {downloadingKey === 'prize-print' ? 'Downloading…' : 'Download'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full sm:w-auto min-h-[2.75rem]"
+                    disabled={downloadingKey === 'prize-preview'}
+                    onClick={() => handleDownload('prize-preview', prizeCardHref, 'Prize-Cards-Preview')}
+                  >
+                    {downloadingKey === 'prize-preview'
+                      ? <Loader2 className="size-4 animate-spin" />
+                      : <Download className="size-4" />}
+                    {downloadingKey === 'prize-preview' ? 'Downloading…' : 'Download Preview'}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button asChild className="w-full sm:w-auto min-h-[2.75rem]">
+                    <a href={prizeCardPrintHref} target="_blank" rel="noopener noreferrer">
+                      <Printer className="size-4" />
+                      Print
+                    </a>
+                  </Button>
+                  <Button asChild variant="outline" className="w-full sm:w-auto min-h-[2.75rem]">
+                    <a href={prizeCardHref} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="size-4" />
+                      Preview PDF
+                    </a>
+                  </Button>
+                </>
+              )}
             </div>
           </div>
 
@@ -458,16 +623,35 @@ export default function DocumentsPage() {
                   red blanks, print page 1 × N copies, swap to blue, print page 2, etc.
                 </p>
               </div>
-              <Button asChild variant="outline" className="w-full sm:w-auto min-h-[2.75rem]">
-                <a
-                  href={`/api/prize-card-overprint/${showId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
+              {downloadMode ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full sm:w-auto min-h-[2.75rem]"
+                  disabled={downloadingKey === 'overprint'}
+                  onClick={() => handleDownload(
+                    'overprint',
+                    `/api/prize-card-overprint/${showId}`,
+                    'Prize-Cards-Mixam-Overprint',
+                  )}
                 >
-                  <Download className="size-4" />
-                  Download Overprint
-                </a>
-              </Button>
+                  {downloadingKey === 'overprint'
+                    ? <Loader2 className="size-4 animate-spin" />
+                    : <Download className="size-4" />}
+                  {downloadingKey === 'overprint' ? 'Downloading…' : 'Download Overprint'}
+                </Button>
+              ) : (
+                <Button asChild variant="outline" className="w-full sm:w-auto min-h-[2.75rem]">
+                  <a
+                    href={`/api/prize-card-overprint/${showId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Download className="size-4" />
+                    Download Overprint
+                  </a>
+                </Button>
+              )}
             </div>
           )}
 

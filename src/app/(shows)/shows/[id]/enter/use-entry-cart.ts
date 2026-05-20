@@ -233,9 +233,22 @@ function loadSavedState(showId: string): CartState {
     const saved = localStorage.getItem(getStorageKey(showId));
     if (!saved) return initialState;
     const parsed = JSON.parse(saved) as CartState;
-    // Don't restore if already checked out
     if (parsed.step === 'confirmation' || parsed.step === 'payment') return initialState;
-    return parsed;
+
+    // Discard entries that were never committed (dog picked but no classes/NFC selected).
+    // Navigating away mid-wizard should not trap the user in a partial state on return.
+    const completeEntries = parsed.entries.filter(
+      (e) => e.classIds.length > 0 || e.isNfc
+    );
+    if (completeEntries.length === 0) return initialState;
+
+    return {
+      ...parsed,
+      entries: completeEntries,
+      step: 'cart_review',
+      activeEntryId: null,
+      editingExisting: false,
+    };
   } catch {
     return initialState;
   }

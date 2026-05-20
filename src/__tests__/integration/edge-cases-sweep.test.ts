@@ -99,6 +99,40 @@ describe('orders.checkout edge cases', () => {
       }),
     ).rejects.toThrow(/not owned by you/);
   });
+
+  // Amanda 2026-04-24: live-site bug. Cart with one NFC entry (no classes)
+  // plus a £5 donation sundry crashed checkout with "values() must be called
+  // with at least one value" — the entryClasses insert was called with an
+  // empty array because NFC entries legitimately carry zero classes.
+  it('accepts a cart of NFC-only entry + sundry item (no classes)', async () => {
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const org = await makeOrg();
+    const breed = await makeBreed();
+    const show = await makeShow({
+      organisationId: org.id, breedId: breed.id, status: 'entries_open',
+      firstEntryFee: 1000, nfcEntryFee: 0,
+    });
+    const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+    const { sundryItems: sundryItemsTable } = await import('@/server/db/schema');
+    const [donation] = await testDb.insert(sundryItemsTable).values({
+      showId: show.id,
+      name: 'Voluntary donation',
+      priceInPence: 500,
+      sortOrder: 0,
+    }).returning();
+
+    const res = await createTestCaller(exhibitor).orders.checkout({
+      showId: show.id,
+      entries: [{ entryType: 'standard', dogId: dog.id, classIds: [], isNfc: true }],
+      sundryItems: [{ sundryItemId: donation!.id, quantity: 1 }],
+    });
+
+    const { orders: ordersTable } = await import('@/server/db/schema');
+    const order = await testDb.query.orders.findFirst({
+      where: eq(ordersTable.id, res.orderId),
+    });
+    expect(order?.totalAmount).toBe(500);
+  });
 });
 
 describe('dogs.getShowResults', () => {

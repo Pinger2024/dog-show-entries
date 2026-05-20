@@ -3,7 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { and, eq, inArray, isNull, or, asc, desc, sql } from 'drizzle-orm';
 import { protectedProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
-import { dogs, dogOwners, dogTitles, dogPhotos, users, entries, entryClasses, showClasses, shows, results, classDefinitions, achievements, judgeAssignments, judges } from '@/server/db/schema';
+import { dogs, dogOwners, dogTitles, dogPhotos, users, entries, entryClasses, showClasses, shows, results, classDefinitions, achievements, judgeAssignments, judges, dogSvProfile } from '@/server/db/schema';
 import { deleteFromR2 } from '@/server/services/storage';
 import { scrapeKcDog, searchKcDogs, fetchKcDogProfile } from '@/server/services/firecrawl';
 import { isCcType, isRccType } from '@/lib/placements';
@@ -334,12 +334,12 @@ export const dogsRouter = createTRPCRouter({
         breederName: z.string().optional(),
         colour: z.string().optional(),
         owners: z.array(z.object({
-          ownerName: z.string().min(1),
-          ownerAddress: z.string().min(1),
+          ownerName: z.string().min(1, 'Owner name is required'),
+          ownerAddress: z.string().min(1, 'Owner address is required'),
           ownerEmail: z.string().email(),
           ownerPhone: z.string().optional(),
           isPrimary: z.boolean().default(false),
-        })).optional(),
+        })).min(1, 'At least one owner with name and address is required'),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -358,36 +358,18 @@ export const dogsRouter = createTRPCRouter({
         })
         .returning();
 
-      // Create owner records — auto-create primary from user if not provided
-      if (owners && owners.length > 0) {
-        await ctx.db.insert(dogOwners).values(
-          owners.map((o, i) => ({
-            dogId: dog!.id,
-            userId: i === 0 ? ctx.session.user.id : null,
-            ownerName: o.ownerName,
-            ownerAddress: o.ownerAddress,
-            ownerEmail: o.ownerEmail,
-            ownerPhone: o.ownerPhone ?? null,
-            isPrimary: o.isPrimary || i === 0,
-            sortOrder: i,
-          }))
-        );
-      } else {
-        // Default: create primary owner from session user
-        const user = await ctx.db.query.users.findFirst({
-          where: eq(users.id, ctx.session.user.id),
-        });
-        await ctx.db.insert(dogOwners).values({
+      await ctx.db.insert(dogOwners).values(
+        owners.map((o, i) => ({
           dogId: dog!.id,
-          userId: ctx.session.user.id,
-          ownerName: ctx.session.user.name,
-          ownerAddress: user?.address ?? '',
-          ownerEmail: ctx.session.user.email,
-          ownerPhone: user?.phone ?? null,
-          isPrimary: true,
-          sortOrder: 0,
-        });
-      }
+          userId: i === 0 ? ctx.session.user.id : null,
+          ownerName: o.ownerName,
+          ownerAddress: o.ownerAddress,
+          ownerEmail: o.ownerEmail,
+          ownerPhone: o.ownerPhone ?? null,
+          isPrimary: o.isPrimary || i === 0,
+          sortOrder: i,
+        }))
+      );
 
       return dog!;
     }),
@@ -406,6 +388,20 @@ export const dogsRouter = createTRPCRouter({
         breederName: z.string().nullable().optional(),
         colour: z.string().nullable().optional(),
         bio: z.string().nullable().optional(),
+        // Breeder location split — Amanda 2026-05-19, useful for SV
+        // catalogues which list breeder origin.
+        breederCountry: z.string().nullable().optional(),
+        breederCity: z.string().nullable().optional(),
+        breederPostcode: z.string().nullable().optional(),
+        // SV / WUSV fields
+        registrationBody: z.enum(['kc', 'sv', 'ikc', 'other']).nullable().optional(),
+        registrationBodyOther: z.string().nullable().optional(),
+        coatType: z.enum(['stock', 'long_stock']).nullable().optional(),
+        microchipNumber: z.string().nullable().optional(),
+        sireRegistrationBody: z.enum(['kc', 'sv', 'ikc', 'other']).nullable().optional(),
+        sireRegistrationNumber: z.string().nullable().optional(),
+        damRegistrationBody: z.enum(['kc', 'sv', 'ikc', 'other']).nullable().optional(),
+        damRegistrationNumber: z.string().nullable().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -679,11 +675,11 @@ export const dogsRouter = createTRPCRouter({
     .input(z.object({ query: z.string().min(2).max(255) }))
     .mutation(async ({ input }) => {
       // Require at least a space in the query to prevent overly broad searches
-      // (e.g. just "Hundark" returns hundreds — need "Hundark D" or "Hundark Phantom")
+      // — a bare kennel name can match hundreds of dogs.
       if (!input.query.trim().includes(' ')) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
-          message: 'Please enter at least the kennel name and the first letter of the dog\'s name (e.g. "Hundark D") for a more accurate search.',
+          message: 'Please enter at least the kennel name and the first letter of the dog\'s name (e.g. "Thornfield S") for a more accurate search.',
         });
       }
       const results = await searchKcDogs(input.query);
@@ -1426,5 +1422,68 @@ export const dogsRouter = createTRPCRouter({
             ? 'This dog has 5+ RCCs under different judges and is ineligible for Limited shows (2026 rule)'
             : null,
       };
+    }),
+
+  // ── SV / WUSV profile ────────────────────────────────────
+
+  getSvProfile: protectedProcedure
+    .input(z.object({ dogId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const dog = await ctx.db.query.dogs.findFirst({
+        where: and(eq(dogs.id, input.dogId), isNull(dogs.deletedAt)),
+        columns: { ownerId: true },
+      });
+      if (!dog) throw new TRPCError({ code: 'NOT_FOUND', message: 'Dog not found' });
+      if (dog.ownerId !== ctx.session.user.id)
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
+
+      const profile = await ctx.db.query.dogSvProfile.findFirst({
+        where: eq(dogSvProfile.dogId, input.dogId),
+      });
+      return profile ?? null;
+    }),
+
+  upsertSvProfile: protectedProcedure
+    .input(
+      z.object({
+        dogId: z.string().uuid(),
+        breedSurveyClass: z.string().nullable().optional(),
+        breedSurveyYear: z.number().int().min(1900).max(2100).nullable().optional(),
+        breedSurveyor: z.string().nullable().optional(),
+        // Amanda 2026-05-19: BVA + ANKC added as recognised hip / elbow
+        // grading bodies; "other" already supported with hipScoreOther /
+        // elbowScoreOther free-text fields.
+        hipGrade: z.enum(['not_required', 'normal', 'fast_normal', 'noch_zugelassen', 'bva', 'ankc', 'other']).nullable().optional(),
+        hipScore: z.string().nullable().optional(),
+        hipScoreOther: z.string().nullable().optional(),
+        elbowGrade: z.enum(['not_required', 'normal', 'fast_normal', 'noch_zugelassen', 'bva', 'ankc', 'other']).nullable().optional(),
+        elbowScore: z.string().nullable().optional(),
+        elbowScoreOther: z.string().nullable().optional(),
+        haemophiliaClear: z.enum(['not_required', 'yes', 'no', 'not_tested']).nullable().optional(),
+        dmTest: z.enum(['not_required', 'clear', 'carrier', 'affected', 'not_tested']).nullable().optional(),
+        koerung: z.enum(['none', 'current_year', 'lebenzeit']).nullable().optional(),
+        dna: z.enum(['recorded', 'proven']).nullable().optional(),
+        workingTitle: z.string().nullable().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const dog = await ctx.db.query.dogs.findFirst({
+        where: and(eq(dogs.id, input.dogId), isNull(dogs.deletedAt)),
+        columns: { ownerId: true },
+      });
+      if (!dog) throw new TRPCError({ code: 'NOT_FOUND', message: 'Dog not found' });
+      if (dog.ownerId !== ctx.session.user.id)
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
+
+      const { dogId, ...profileData } = input;
+      const [profile] = await ctx.db
+        .insert(dogSvProfile)
+        .values({ dogId, ...profileData })
+        .onConflictDoUpdate({
+          target: dogSvProfile.dogId,
+          set: { ...profileData, updatedAt: new Date() },
+        })
+        .returning();
+      return profile!;
     }),
 });

@@ -36,6 +36,7 @@ export interface CatalogueEntry {
     name: string | undefined;
     sex: string | null | undefined;
     classNumber: number | null | undefined;
+    classLabel?: string;
     sortOrder: number | undefined;
     showClassId?: string | undefined;
   }[];
@@ -57,6 +58,7 @@ export interface ShowSponsorInfo {
 export interface ShowClassInfo {
   className: string;
   classNumber: number | null;
+  classLabel?: string;
   sortOrder: number;
   sex: string | null;
 }
@@ -65,6 +67,7 @@ export interface ShowClassInfo {
 export interface ClassSponsorshipInfo {
   className: string;
   classNumber: number | null;
+  classLabel?: string;
   trophyName: string | null;
   trophyDonor: string | null;
   sponsorName: string | null;
@@ -119,6 +122,9 @@ export interface CatalogueShowInfo {
   outsideAttraction?: boolean;
   /** Show manager name */
   showManager?: string;
+  /** First aider name(s). One on a single-breed show, possibly 2+ on a
+   *  multi-breed show. RKC compliance per Amanda 2026-05-14. */
+  firstAiders?: string[];
   /** Docking statement per F(1).7.c(2) — varies by country and public admission */
   dockingStatement?: string;
 
@@ -160,4 +166,15 @@ export interface CatalogueShowInfo {
   country?: 'england' | 'wales' | 'scotland' | 'northern_ireland';
   /** Whether the show is open to the public (vs. exhibitors only) */
   publicAdmission?: boolean;
+  /** Full-page A5 adverts to slot into the catalogue at the chosen positions.
+   *  Secretaries upload these via /secretary/shows/[id]/adverts. The server
+   *  passes only catalogue-bound adverts here — both `'catalogue'` and
+   *  `'both'` document values match. */
+  adverts?: Array<{
+    id: string;
+    advertiserName: string;
+    position: 'inside_front' | 'inside_back' | 'last_page';
+    imageUrl: string | null;
+    sortOrder: number;
+  }>;
 }

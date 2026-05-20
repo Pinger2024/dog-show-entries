@@ -25,7 +25,6 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc/client';
 import { cn } from '@/lib/utils';
-import { PostcodeLookup, formatAddress } from '@/components/postcode-lookup';
 import { ClubApplicationForm } from '@/components/club-application-form';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -157,7 +156,7 @@ const profileSchema = z.object({
   phone: z.string().optional(),
 });
 
-/** Whether address fields have values (from lookup or pre-existing) */
+/** Whether address fields are already populated. */
 function hasAddress(address: string | undefined, postcode: string | undefined) {
   return !!(address && postcode);
 }
@@ -457,7 +456,6 @@ function ProfileStep({
                 </FormItem>
               )}
             />
-            {/* Address — compact summary when filled, postcode lookup + fields when editing */}
             {addressFilled && !editingAddress ? (
               <div className="rounded-lg border bg-muted/30 p-3">
                 <div className="flex items-start justify-between gap-2">
@@ -479,13 +477,6 @@ function ProfileStep({
               </div>
             ) : (
               <>
-                <PostcodeLookup
-                  onSelect={(result) => {
-                    form.setValue('address', formatAddress(result));
-                    form.setValue('postcode', result.postcode);
-                    setEditingAddress(false);
-                  }}
-                />
                 <div className="grid gap-3 grid-cols-1 sm:grid-cols-[1fr_auto]">
                   <FormField
                     control={form.control}
@@ -495,7 +486,7 @@ function ProfileStep({
                         <FormLabel>Address</FormLabel>
                         <FormControl>
                           <Input
-                            placeholder="Your postal address"
+                            placeholder="House/flat, street, town"
                             className="h-11 sm:h-12"
                             {...field}
                           />
@@ -523,7 +514,7 @@ function ProfileStep({
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Your address appears in show catalogues as required by RKC regulations.
+                  Your full address appears in show catalogues as required by RKC regulations.
                 </p>
               </>
             )}
@@ -588,6 +579,11 @@ function DogStep({
 
   const { data: breeds, isLoading: breedsLoading } =
     trpc.breeds.list.useQuery();
+
+  // Owner name + address are mandatory on dog creation. The profile step
+  // runs before this one so the user always has them on file — pull them
+  // here and attach to the createDog payload.
+  const { data: userProfile } = trpc.users.getProfile.useQuery();
 
   const utils = trpc.useUtils();
 
@@ -746,7 +742,30 @@ function DogStep({
       <CardContent>
         <Form {...form}>
           <form
-            onSubmit={form.handleSubmit((data) => createDog.mutate(data))}
+            onSubmit={form.handleSubmit((data) => {
+              const ownerAddress = [userProfile?.address, userProfile?.postcode]
+                .filter(Boolean)
+                .join(', ');
+              if (!userProfile?.name || !ownerAddress) {
+                toast.error('Please finish your profile first', {
+                  description:
+                    'Owner name and full address are required — add them in the previous step.',
+                });
+                return;
+              }
+              createDog.mutate({
+                ...data,
+                owners: [
+                  {
+                    ownerName: userProfile.name,
+                    ownerAddress,
+                    ownerEmail: userProfile.email ?? '',
+                    ownerPhone: userProfile.phone ?? undefined,
+                    isPrimary: true,
+                  },
+                ],
+              });
+            })}
             className="space-y-4"
           >
             {/* RKC Reg + Name + Lookup */}
@@ -811,7 +830,7 @@ function DogStep({
                     lookup.
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground/70">
-                    Tip: type the name exactly as it appears on your RKC registration certificate, including affixes (e.g. &quot;Dorabella Dancing Queen At Hundark&quot;).
+                    Tip: type the name exactly as it appears on your RKC registration certificate, including affixes (e.g. &quot;Thornfield Silver Dream At Ashcroft&quot;).
                   </p>
                   <Button
                     type="button"

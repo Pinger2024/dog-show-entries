@@ -228,6 +228,25 @@ export const styles = StyleSheet.create({
     paddingLeft: 6,
   },
 
+  // Placements row appended after each class block. Mirrors the
+  // traditional UK printed catalogue: "1st .....   2nd .....   3rd .....
+  // Res .....   VHC .....", one row, evenly spaced, write-in lines for
+  // the judge to fill on the day. Amanda's spec 2026-05-14.
+  placementsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingTop: 3,
+    paddingBottom: 4,
+    paddingLeft: 6,
+    paddingRight: 6,
+  },
+  placementsCell: {
+    fontFamily: 'Inter',
+    fontSize: 7,
+    color: C.textDark,
+    flex: 1,
+  },
+
   // ── Absentee table ───────────────────────────
   absenteeRow: {
     flexDirection: 'row',
@@ -333,8 +352,10 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
   },
   coverLogo: {
-    width: 80,
-    height: 80,
+    maxWidth: 140,
+    maxHeight: 80,
+    objectFit: 'contain',
+    alignSelf: 'center',
     marginBottom: 10,
   },
   coverShowName: {

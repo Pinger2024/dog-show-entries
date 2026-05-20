@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { trpc } from '@/lib/trpc';
 import { uploadImage } from '@/lib/upload';
+import { useActiveOrganisation } from '@/lib/use-active-organisation';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -62,7 +63,15 @@ function resetFormFromOrg(
 }
 
 export default function SettingsPage() {
-  const { data: org, isLoading } = trpc.secretary.getOrganisation.useQuery();
+  // Respect the active-org switcher — otherwise a user with memberships in
+  // multiple clubs would silently edit their "first" membership rather than
+  // the org they switched to. The club + billing pages already do this;
+  // Settings was missed in the original switcher rollout.
+  const { activeOrgId } = useActiveOrganisation();
+  const { data: org, isLoading } = trpc.secretary.getOrganisation.useQuery(
+    { organisationId: activeOrgId ?? undefined },
+    { enabled: activeOrgId !== null },
+  );
   const updateMutation = trpc.secretary.updateOrganisation.useMutation();
   const utils = trpc.useUtils();
 

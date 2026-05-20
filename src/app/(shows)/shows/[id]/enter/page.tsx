@@ -35,6 +35,8 @@ import { toast } from 'sonner';
 import { isWithinAgeRange, handlerAgeYearsOnDate, formatCurrency } from '@/lib/date-utils';
 import { trpc } from '@/lib/trpc/client';
 import { formatDogName } from '@/lib/utils';
+import { readReferralSource } from '@/lib/referral-source';
+import { computeOrderFees, type DogEntryInput, type FeeContext } from '@/lib/fee-calc';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -75,6 +77,7 @@ const EMPTY_GROUPED_CLASSES = {
   achievement: [] as never[],
   special: [] as never[],
   junior_handler: [] as never[],
+  sv_age: [] as never[],
 };
 
 export default function EnterShowPage() {
@@ -90,7 +93,16 @@ export default function EnterShowPage() {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState(0);
+  // Subtotal and handling-fee breakdown — the club gets subtotalAmount,
+  // Remi gets platformFeePence, exhibitor pays the sum (paymentAmount).
+  const [subtotalAmount, setSubtotalAmount] = useState(0);
+  const [platformFeePence, setPlatformFeePence] = useState(0);
   const [shareCopied, setShareCopied] = useState(false);
+  // Discount group declaration (e.g. "I am a Member") at checkout.
+  // Stored as the group id or null. Sent to the server with the order
+  // so the fee-calc service can apply the group's first-class rate
+  // and (if set) member-specific multi-dog package price.
+  const [discountGroupId, setDiscountGroupId] = useState<string | null>(null);
 
   // JH form state
   const [jhName, setJhName] = useState('');
@@ -203,6 +215,50 @@ export default function EnterShowPage() {
     { enabled: !!showId && (cart.step === 'select_classes' || cart.step === 'cart_review') }
   );
 
+  // Show's discount groups (Members, Pensioners, etc.) — exhibitor declares
+  // one at checkout. Empty list = feature disabled for this show.
+  const { data: discountGroups } = trpc.shows.getDiscountGroups.useQuery(
+    { showId },
+    { enabled: !!showId && cart.step === 'cart_review' }
+  );
+
+  // Live fee preview — mirrors server-side computation so the exhibitor sees
+  // the right total before paying. The server recomputes authoritatively at
+  // checkout, so this is purely informational; mismatch would be caught there.
+  const feePreview = useMemo(() => {
+    if (!show || show.firstEntryFee == null) return null;
+    const selectedGroup = discountGroups?.find((g) => g.id === discountGroupId) ?? null;
+    const feeCtx: FeeContext = {
+      firstEntryFeePence: show.firstEntryFee,
+      subsequentEntryFeePence: show.subsequentEntryFee,
+      nfcEntryFeePence: show.nfcEntryFee,
+      juniorHandlerFeePence: show.juniorHandlerFee,
+      multiDogThreshold: show.multiDogThreshold ?? null,
+      multiDogPackagePence: show.multiDogPackagePence ?? null,
+      discountGroup: selectedGroup
+        ? {
+            firstEntryFeePence: selectedGroup.firstEntryFeePence,
+            multiDogPackagePence: selectedGroup.multiDogPackagePence,
+          }
+        : null,
+    };
+    const dogEntries: DogEntryInput[] = cart.entries
+      .filter((e) => e.classIds.length > 0 || e.isNfc)
+      .map((e, i) => ({
+        key: String(i),
+        kind:
+          e.entryType === 'junior_handler'
+            ? 'junior_handler'
+            : e.isNfc
+              ? 'nfc'
+              : 'standard',
+        classCount: e.classIds.length,
+      }));
+    if (dogEntries.length === 0) return null;
+    return computeOrderFees(dogEntries, feeCtx);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [show, discountGroups, discountGroupId, cart.entries]);
+
   // Sync cart sundry item prices/names with server data (handles secretary price changes)
   useEffect(() => {
     if (!sundryItemsData) return;
@@ -270,9 +326,15 @@ export default function EnterShowPage() {
       ? showClasses.filter((sc) => !sc.sex || sc.sex === selectedDogSex)
       : showClasses;
 
+    // WUSV shows: filter by dog's coat type when set (stock vs long_stock)
+    const selectedDogCoatType = selectedDog?.coatType as 'stock' | 'long_stock' | null | undefined;
+    const coatFiltered = selectedDogCoatType
+      ? sexFiltered.filter((sc) => !(sc as { svCoatType?: string | null }).svCoatType || (sc as { svCoatType?: string | null }).svCoatType === selectedDogCoatType)
+      : sexFiltered;
+
     // RKC rule: AVNSC classes are hidden when the show has breed-specific classes
     // for this breed. Check if any classes have the dog's breedId set.
-    const hasBreedClasses = sexFiltered.some((sc) => sc.breedId != null);
+    const hasBreedClasses = coatFiltered.some((sc) => sc.breedId != null);
     const isAvnsc = (name: string) =>
       /avnsc|not separately classified/i.test(name);
 
@@ -280,8 +342,8 @@ export default function EnterShowPage() {
     const isGsd = isGsdBreed(selectedDog?.breed?.name ?? '');
 
     const eligible = (hasBreedClasses
-      ? sexFiltered.filter((sc) => sc.breedId != null || !isAvnsc(sc.classDefinition.name))
-      : sexFiltered
+      ? coatFiltered.filter((sc) => sc.breedId != null || !isAvnsc(sc.classDefinition.name))
+      : coatFiltered
     ).filter((sc) => !isGsdOnlyClass(sc.classDefinition.name) || isGsd);
 
     const byCanonicalOrder = (a: (typeof eligible)[0], b: (typeof eligible)[0]) =>
@@ -292,8 +354,9 @@ export default function EnterShowPage() {
       achievement: eligible.filter((sc) => sc.classDefinition.type === 'achievement').sort(byCanonicalOrder),
       special: eligible.filter((sc) => sc.classDefinition.type === 'special').sort(byCanonicalOrder),
       junior_handler: eligible.filter((sc) => sc.classDefinition.type === 'junior_handler').sort(byCanonicalOrder),
+      sv_age: eligible.filter((sc) => sc.classDefinition.type === 'sv_age').sort(byCanonicalOrder),
     };
-  }, [showClasses, selectedDogSex, selectedDog?.breed?.name]);
+  }, [showClasses, selectedDogSex, selectedDog?.breed?.name, selectedDog?.coatType]);
 
   // Filter classes by entry type (and by handler age for JH entries)
   const availableClasses = useMemo(() => {
@@ -310,6 +373,7 @@ export default function EnterShowPage() {
     }
     return [
       ...groupedClasses.age,
+      ...groupedClasses.sv_age,
       ...groupedClasses.achievement,
       ...groupedClasses.special,
     ];
@@ -333,6 +397,26 @@ export default function EnterShowPage() {
       setSelectedClassIds([availableClasses[0].id]);
     }
   }, [cart.step, cart.activeEntry?.entryType, cart.editingExisting, availableClasses, selectedClassIds.length]);
+
+  // Auto-select the single eligible SV age class for WUSV shows
+  const wusvAutoSelectedRef = useRef(false);
+  useEffect(() => {
+    if (cart.step !== 'select_classes') {
+      wusvAutoSelectedRef.current = false;
+      return;
+    }
+    if (
+      show?.showRuleset === 'wusv' &&
+      cart.activeEntry?.entryType === 'standard' &&
+      !cart.editingExisting &&
+      groupedClasses.sv_age.length === 1 &&
+      selectedClassIds.length === 0 &&
+      !wusvAutoSelectedRef.current
+    ) {
+      wusvAutoSelectedRef.current = true;
+      setSelectedClassIds([(groupedClasses.sv_age[0] as { id: string }).id]);
+    }
+  }, [cart.step, cart.activeEntry?.entryType, cart.editingExisting, groupedClasses.sv_age, selectedClassIds.length, show?.showRuleset]);
 
   // Calculate total for current selection using show-level fee tiers
   const isJuniorHandler = cart.activeEntry?.entryType === 'junior_handler';
@@ -416,6 +500,10 @@ export default function EnterShowPage() {
 
   async function handleProceedToPayment() {
     try {
+      // Read the referral channel captured on the show page (if any) so the
+      // resulting order row carries its provenance.
+      const referralSource = readReferralSource(idOrSlug) ?? undefined;
+
       const result = await checkoutMutation.mutateAsync({
         showId,
         catalogueRequested: false,
@@ -435,6 +523,8 @@ export default function EnterShowPage() {
           sundryItemId: s.sundryItemId,
           quantity: s.quantity,
         })),
+        referralSource,
+        discountGroupId: discountGroupId ?? undefined,
       });
 
       // Free entries (£0) — skip payment, go straight to success
@@ -446,7 +536,18 @@ export default function EnterShowPage() {
 
       setClientSecret(result.clientSecret);
       setOrderId(result.orderId);
-      setPaymentAmount(result.totalAmount);
+      // Paid branch of orders.checkout always returns totalAmount +
+      // grossAmount + platformFeePence — the cast is because the full
+      // union includes a free-entry variant without those fields, already
+      // handled by the early return above.
+      const paid = result as {
+        totalAmount: number;
+        platformFeePence: number;
+        grossAmount: number;
+      };
+      setSubtotalAmount(paid.totalAmount);
+      setPlatformFeePence(paid.platformFeePence);
+      setPaymentAmount(paid.grossAmount);
       cart.setStep('payment');
     } catch {
       // Error is handled by tRPC
@@ -604,8 +705,8 @@ export default function EnterShowPage() {
           <div className="flex items-center gap-2 text-xs sm:text-sm">
             <ShoppingCart className="size-4" />
             <span>
-              {cart.entries.filter((e) => e.classIds.length > 0).length} entr
-              {cart.entries.filter((e) => e.classIds.length > 0).length !== 1 ? 'ies' : 'y'} in cart
+              {cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length} entr
+              {cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length !== 1 ? 'ies' : 'y'} in cart
             </span>
             {cart.grandTotal > 0 && (
               <Badge variant="secondary">{formatCurrency(cart.grandTotal)}</Badge>
@@ -615,7 +716,7 @@ export default function EnterShowPage() {
             variant="ghost"
             size="sm"
             onClick={() => cart.setStep('cart_review')}
-            disabled={cart.entries.filter((e) => e.classIds.length > 0).length === 0}
+            disabled={cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length === 0}
           >
             View Cart
           </Button>
@@ -1029,6 +1130,40 @@ export default function EnterShowPage() {
                       </p>
                     </div>
                   )}
+                  {groupedClasses.sv_age.length > 0 && (
+                    <>
+                      {/* SV shows: warn when the dog has no coat type set
+                          on its profile — without it we can't auto-filter
+                          to the correct Standard/Long Coat class and the
+                          exhibitor sees the list duplicated. Amanda
+                          2026-05-20. */}
+                      {show?.showRuleset === 'wusv' && !selectedDog?.coatType && (
+                        <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
+                          <Info className="mt-0.5 size-4 shrink-0 text-amber-600" />
+                          <p className="text-sm text-amber-800 dark:text-amber-200">
+                            <span className="font-medium">{selectedDog?.registeredName ?? 'This dog'}</span> doesn&apos;t have a coat type set on the profile yet. Both Standard Coat and Long Coat classes are showing — pick the correct one, or set the coat type on the dog&apos;s profile so we can filter automatically.
+                          </p>
+                        </div>
+                      )}
+                      {groupedClasses.sv_age.length === 1 && selectedClassIds.length === 1 && (
+                        <div className="flex gap-3 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-950">
+                          <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-green-600" />
+                          <p className="text-sm text-green-800 dark:text-green-200">
+                            Based on your dog&apos;s age and coat type, they are eligible for{' '}
+                            <span className="font-medium">{(groupedClasses.sv_age[0] as { classDefinition: { name: string } }).classDefinition.name}</span>.
+                            This has been automatically selected.
+                          </p>
+                        </div>
+                      )}
+                      <ClassGroup
+                        title="SV Age Classes"
+                        classes={groupedClasses.sv_age}
+                        selectedIds={selectedClassIds}
+                        onToggle={toggleClass}
+                        getAgeEligibility={getAgeEligibility}
+                      />
+                    </>
+                  )}
                   {groupedClasses.age.length > 0 && (
                     <ClassGroup
                       title="Age Classes"
@@ -1089,8 +1224,9 @@ export default function EnterShowPage() {
                 </>
               )}
 
-              {/* NFC option */}
-              {cart.activeEntry?.entryType === 'standard' && (
+              {/* NFC option — RKC-only concept. Hidden for SV shows
+                  (Amanda 2026-05-20). */}
+              {cart.activeEntry?.entryType === 'standard' && show?.showRuleset !== 'wusv' && (
                 <>
                   <Separator />
                   <label className="flex cursor-pointer items-center gap-3">
@@ -1205,7 +1341,7 @@ export default function EnterShowPage() {
 
           {/* Cart entries */}
           {cart.entries
-            .filter((e) => e.classIds.length > 0)
+            .filter((e) => e.classIds.length > 0 || e.isNfc)
             .map((entry) => (
               <Card key={entry.id}>
                 <CardHeader className="pb-3">
@@ -1383,15 +1519,68 @@ export default function EnterShowPage() {
             </div>
           )}
 
+          {/* Discount group declaration — only when the show offers groups */}
+          {discountGroups && discountGroups.length > 0 && (
+            <div className="rounded-lg border bg-card p-4">
+              <div className="space-y-1">
+                <p className="text-sm font-semibold">Are you eligible for a discount?</p>
+                <p className="text-xs text-muted-foreground">
+                  Tick the option that applies to you. By checking it you confirm you qualify.
+                </p>
+              </div>
+              <div className="mt-3 space-y-2">
+                {discountGroups.map((g) => (
+                  <label key={g.id} className="flex cursor-pointer items-start gap-3 rounded-md border p-3 hover:bg-muted/30">
+                    <input
+                      type="radio"
+                      name="discount-group"
+                      checked={discountGroupId === g.id}
+                      onChange={() => setDiscountGroupId(g.id)}
+                      className="mt-0.5 size-4 cursor-pointer"
+                    />
+                    <span className="text-sm">
+                      <span className="font-medium">I am a {g.label}</span>
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        {formatCurrency(g.firstEntryFeePence)}/first class
+                      </span>
+                    </span>
+                  </label>
+                ))}
+                <label className="flex cursor-pointer items-start gap-3 rounded-md border p-3 hover:bg-muted/30">
+                  <input
+                    type="radio"
+                    name="discount-group"
+                    checked={discountGroupId === null}
+                    onChange={() => setDiscountGroupId(null)}
+                    className="mt-0.5 size-4 cursor-pointer"
+                  />
+                  <span className="text-sm font-medium">None of the above (standard rate)</span>
+                </label>
+              </div>
+            </div>
+          )}
+
+          {/* Multi-dog savings banner */}
+          {feePreview?.multiDogApplied && feePreview.multiDogSavings > 0 && (
+            <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900">
+              <p className="font-medium">
+                Multi-dog discount applied — saving {formatCurrency(feePreview.multiDogSavings)}
+              </p>
+              <p className="mt-0.5 text-xs text-green-800/80">
+                You&apos;ve entered {feePreview.payingDogCount} dogs in paying classes.
+              </p>
+            </div>
+          )}
+
           {/* Grand total with breakdown */}
           <div className="rounded-lg border bg-muted/50 p-3 sm:p-4">
             <div className="space-y-1.5">
               <div className="flex justify-between text-sm text-muted-foreground">
                 <span>
-                  {cart.entries.filter((e) => e.classIds.length > 0).length} entr
-                  {cart.entries.filter((e) => e.classIds.length > 0).length !== 1 ? 'ies' : 'y'}
+                  {cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length} entr
+                  {cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length !== 1 ? 'ies' : 'y'}
                 </span>
-                <span>{formatCurrency(cart.entriesTotal)}</span>
+                <span>{formatCurrency(feePreview?.total ?? cart.entriesTotal)}</span>
               </div>
               {cart.sundryTotal > 0 && (
                 <div className="flex justify-between text-sm text-muted-foreground">
@@ -1401,7 +1590,7 @@ export default function EnterShowPage() {
               )}
               <div className="flex justify-between border-t pt-1.5 text-sm font-bold sm:text-base">
                 <span>Grand Total</span>
-                <span>{formatCurrency(cart.grandTotal)}</span>
+                <span>{formatCurrency((feePreview?.total ?? cart.entriesTotal) + cart.sundryTotal)}</span>
               </div>
             </div>
           </div>
@@ -1409,33 +1598,47 @@ export default function EnterShowPage() {
           {/* Second add-dog button — easier to find after scrolling through entries */}
           {cart.entries.length >= 2 && addDogsButtons}
 
-          {/* RKC Declaration — official KC wording required on all entries */}
+          {/* Declaration — RKC wording for RKC shows, GSDL/WUSV placeholder
+              wording for SV shows. Amanda 2026-05-20 will source the
+              official SV declaration; until then a sensible placeholder
+              that names the right ruleset. */}
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold">RKC Declaration</h3>
+            <h3 className="text-sm font-semibold">
+              {show?.showRuleset === 'wusv' ? 'GSDL-BRG Declaration' : 'RKC Declaration'}
+            </h3>
             <div className="max-h-40 overflow-y-auto rounded-md border bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">
-              I/We agree to submit to and be bound by Kennel Club Limited Rules
-              &amp; Regulations in their present form or as they may be amended
-              from time to time in relation to all canine matters with which the
-              Kennel Club is concerned and that this entry is made upon the basis
-              that all current single or joint registered owners of this dog(s)
-              have authorised/consented to this entry. I/We also undertake to
-              abide by the Regulations of this Show and not to bring to the Show
-              any dog which has contracted or been knowingly exposed to any
-              infectious or contagious disease during the 21 days prior to the
-              Show, or which is suffering from a visible condition which adversely
-              affects its health or welfare or to bring any dog which has been
-              prepared for exhibition contrary to Kennel Club Regulations for the
-              Preparation of Dogs for Exhibition F (Annex B). I/We agree without
-              reservation that any Veterinary Surgeon operating on any of my/our
-              dogs in such a way that the operation alters the natural
-              conformation of the dog or part thereof may report such operations
-              to the Kennel Club. I/We declare that where any alteration has been
-              made to the natural conformation of the dog(s) the relevant
-              permission to show has been granted by the Kennel Club. I/We
-              further declare that I believe to the best of my knowledge that the
-              dogs are not liable to disqualification under Kennel Club Show
-              Regulations. I/We also confirm that I/we understand the eligibility
-              of the classes entered.
+              {show?.showRuleset === 'wusv' ? (
+                <>
+                  I/We agree to abide by the GSDL-British Regional Group Rules &amp; Regulations (based on WUSV/SV Rules &amp; Regulations) for this Regional Event. I/We confirm that the information provided about the dog is accurate, and that the dog meets the eligibility requirements for the classes entered — including any health test disclosure, DNA recording, Koerung or working title requirements that apply to the class. I/We undertake not to bring to the Event any dog which has contracted or been knowingly exposed to any infectious or contagious disease during the 21 days prior to the Event, or which is suffering from a visible condition that adversely affects its health or welfare. I/We acknowledge that exhibitors are obligated to make true statements about their dog(s) and to show sportsmanlike conduct; any attempt at deception may result in disqualification and disciplinary action by the GSDL-BRG.
+                </>
+              ) : (
+                <>
+                  I/We agree to submit to and be bound by Royal Kennel Club Limited
+                  Rules &amp; Regulations in their present form or as they may be
+                  amended from time to time in relation to all canine matters with
+                  which the Royal Kennel Club is concerned and that this entry is
+                  made upon the basis that all current single or joint registered
+                  owners of this dog(s) have authorised/consented to this entry.
+                  I/We also undertake to abide by the Regulations of this Show and
+                  not to bring to the Show any dog which has contracted or been
+                  knowingly exposed to any infectious or contagious disease during
+                  the 21 days prior to the Show, or which is suffering from a
+                  visible condition which adversely affects its health or welfare or
+                  to bring any dog which has been prepared for exhibition contrary
+                  to Royal Kennel Club Regulations for the Preparation of Dogs for
+                  Exhibition F (Annex B). I/We agree without reservation that any
+                  Veterinary Surgeon operating on any of my/our dogs in such a way
+                  that the operation alters the natural conformation of the dog or
+                  part thereof may report such operations to the Royal Kennel Club.
+                  I/We declare that where any alteration has been made to the
+                  natural conformation of the dog(s) the relevant permission to show
+                  has been granted by the Royal Kennel Club. I/We further declare
+                  that I believe to the best of my knowledge that the dogs are not
+                  liable to disqualification under Royal Kennel Club Show
+                  Regulations. I/We also confirm that I/we understand the
+                  eligibility of the classes entered.
+                </>
+              )}
             </div>
             <label className="flex cursor-pointer items-start gap-3">
               <Checkbox
@@ -1500,7 +1703,12 @@ export default function EnterShowPage() {
                 !healthDeclared ||
                 !termsAccepted ||
                 checkoutMutation.isPending ||
-                cart.entries.filter((e) => e.classIds.length > 0).length === 0
+                // An entry is submittable if it has at least one class OR it's
+                // an NFC ("not for competition") entry — those deliberately have
+                // no classes. Mirrors the filter in handleProceedToPayment's
+                // mutation payload; previously they diverged and NFC-only carts
+                // were silently blocked here.
+                cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length === 0
               }
             >
               {checkoutMutation.isPending ? (
@@ -1510,9 +1718,11 @@ export default function EnterShowPage() {
                 </>
               ) : (
                 <>
-                  {cart.grandTotal === 0
-                    ? 'Confirm Entry — Free'
-                    : <>Proceed to Payment &middot; {formatCurrency(cart.grandTotal)}</>}
+                  {(() => {
+                    const previewGrand = (feePreview?.total ?? cart.entriesTotal) + cart.sundryTotal;
+                    if (previewGrand === 0) return 'Confirm Entry — Free';
+                    return <>Proceed to Payment &middot; {formatCurrency(previewGrand)}</>;
+                  })()}
                 </>
               )}
             </Button>
@@ -1531,7 +1741,27 @@ export default function EnterShowPage() {
               </CardTitle>
               <CardDescription>Secure payment powered by Stripe</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              {platformFeePence > 0 && (
+                <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Entry fees</span>
+                    <span>{formatCurrency(subtotalAmount)}</span>
+                  </div>
+                  <div className="mt-1 flex justify-between text-muted-foreground">
+                    <span>
+                      Platform fee{' '}
+                      <span className="text-xs opacity-75">(£1 + 1%)</span>
+                    </span>
+                    <span>{formatCurrency(platformFeePence)}</span>
+                  </div>
+                  <div className="mt-2 flex justify-between border-t pt-2 font-semibold text-foreground">
+                    <span>Total</span>
+                    <span>{formatCurrency(paymentAmount)}</span>
+                  </div>
+                </div>
+              )}
+
               <StripeProvider clientSecret={clientSecret}>
                 <PaymentForm
                   amount={paymentAmount}
@@ -1575,10 +1805,10 @@ export default function EnterShowPage() {
               )}
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Entries</span>
-                <span>{cart.entries.filter((e) => e.classIds.length > 0).length}</span>
+                <span>{cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length}</span>
               </div>
               {cart.entries
-                .filter((e) => e.classIds.length > 0)
+                .filter((e) => e.classIds.length > 0 || e.isNfc)
                 .map((entry) => (
                   <div key={entry.id} className="space-y-1 text-sm">
                     <div className="flex justify-between">
@@ -1621,26 +1851,78 @@ export default function EnterShowPage() {
             const shareText = `I've just entered ${dogLabel} into ${show?.name ?? 'a show'}! \u{1F415} ${showUrl}`;
             const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
 
+            const trackShare = (channel: string) => {
+              if (!show?.id) return;
+              fetch('/api/share-events', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ showId: show.id, channel }),
+                keepalive: true,
+              }).catch(() => {
+                // Fire-and-forget
+              });
+            };
+            const fbShareUrl = `${showUrl}?src=facebook`;
+
             return (
               <Card className="mx-auto w-full max-w-md border-primary/20 bg-primary/5">
-                <CardContent className="py-5 text-center space-y-3">
+                <CardContent className="space-y-3 py-5 text-center">
                   <p className="text-sm font-semibold">
-                    Let your breed group know you&apos;re coming!
+                    You&apos;re in! Let your breed group know you&apos;re coming.
                   </p>
                   <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
                     <Button
-                      className="min-h-[2.75rem] gap-2 bg-[#25D366] hover:bg-[#20BD5A] text-white"
+                      className="min-h-[2.75rem] gap-2 bg-[#25D366] text-white hover:bg-[#20BD5A]"
                       asChild
                     >
-                      <a href={whatsappUrl} target="_blank" rel="noopener noreferrer">
+                      <a
+                        href={whatsappUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => trackShare('whatsapp')}
+                      >
                         <svg className="size-4" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
                         WhatsApp
                       </a>
                     </Button>
                     <Button
                       variant="outline"
+                      className="min-h-[2.75rem] gap-2 border-[#1877F2]/30 bg-white text-[#1877F2]"
+                      onClick={async () => {
+                        trackShare('facebook');
+                        // Mobile: FB app hijacks facebook.com URLs and shows
+                        // a blank screen — copy the link instead (years-old
+                        // Meta bug, no client-side fix). Desktop: no app to
+                        // intercept so the web sharer works fine.
+                        const mobile =
+                          typeof navigator !== 'undefined' &&
+                          /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+                        if (mobile) {
+                          try {
+                            await navigator.clipboard.writeText(fbShareUrl);
+                            toast.success('Link copied — paste it into your Facebook post or group');
+                          } catch {
+                            toast.error('Could not copy the link. Long-press to copy it manually.');
+                          }
+                          return;
+                        }
+                        window.open(
+                          `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(fbShareUrl)}`,
+                          '_blank',
+                          'noopener,noreferrer'
+                        );
+                      }}
+                    >
+                      <svg className="size-4" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073" />
+                      </svg>
+                      Facebook
+                    </Button>
+                    <Button
+                      variant="outline"
                       className="min-h-[2.75rem] gap-2"
                       onClick={async () => {
+                        trackShare('copy');
                         if (typeof navigator !== 'undefined' && navigator.share) {
                           try {
                             await navigator.share({
@@ -1671,6 +1953,9 @@ export default function EnterShowPage() {
                       {shareCopied ? 'Copied!' : 'Copy Link'}
                     </Button>
                   </div>
+                  <p className="text-xs italic text-muted-foreground">
+                    A share from you is worth ten from us.
+                  </p>
                 </CardContent>
               </Card>
             );
@@ -1777,7 +2062,7 @@ function ClassGroup({
   // Filter out age-ineligible classes if eligibility info is available
   const visibleClasses = getAgeEligibility
     ? classes.filter((sc) => {
-        if (sc.classDefinition.type !== 'age') return true;
+        if (sc.classDefinition.type !== 'age' && sc.classDefinition.type !== 'sv_age') return true;
         const elig = getAgeEligibility(
           sc.classDefinition.minAgeMonths,
           sc.classDefinition.maxAgeMonths
@@ -1816,10 +2101,19 @@ function ClassGroup({
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                   <span className="font-medium">
-                    {sc.classDefinition.name}
+                    {sc.classDefinition.name.replace(/^SV\s+/, '')}
                     {sc.sex && (
                       <span className="ml-1">
                         {sc.sex === 'dog' ? 'Dog' : 'Bitch'}
+                      </span>
+                    )}
+                    {/* Surface coat type on SV classes so secretaries +
+                        exhibitors can distinguish the otherwise-identical
+                        Adult Bitch (stock) and Adult Bitch (long_stock)
+                        rows. Amanda 2026-05-20. */}
+                    {(sc as { svCoatType?: 'stock' | 'long_stock' | null }).svCoatType && (
+                      <span className="ml-1 text-muted-foreground">
+                        — {(sc as { svCoatType?: 'stock' | 'long_stock' }).svCoatType === 'long_stock' ? 'Long Coat' : 'Standard Coat'}
                       </span>
                     )}
                   </span>

@@ -5,7 +5,9 @@ import {
   Check,
   ChevronDown,
   ChevronsUpDown,
+  Download,
   FileCheck,
+  Pencil,
   Gavel,
   Loader2,
   Mail,
@@ -72,6 +74,23 @@ import {
 import { contractStageConfig } from '../_lib/show-utils';
 import { JudgeCoverageDashboard } from '@/components/judges/judge-coverage-dashboard';
 import { AddJudgeWizard } from '@/components/judges/add-judge-wizard';
+import { GroupJudgesPanel } from '@/components/judges/group-judges-panel';
+
+function formatContractTimeline(contract: {
+  offerSentAt: Date | string | null;
+  acceptedAt: Date | string | null;
+  confirmedAt: Date | string | null;
+  declinedAt: Date | string | null;
+}): string {
+  const short = (d: Date | string) =>
+    new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  const parts: string[] = [];
+  if (contract.offerSentAt) parts.push(`Offer sent ${short(contract.offerSentAt)}`);
+  if (contract.acceptedAt) parts.push(`Accepted ${short(contract.acceptedAt)}`);
+  if (contract.confirmedAt) parts.push(`Confirmed ${short(contract.confirmedAt)}`);
+  if (contract.declinedAt) parts.push(`Declined ${short(contract.declinedAt)}`);
+  return parts.join(' · ');
+}
 
 export function JudgesSection({ showId }: { showId: string }) {
   const [adding, setAdding] = useState(false);
@@ -104,6 +123,7 @@ export function JudgesSection({ showId }: { showId: string }) {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardPrefillBreedId, setWizardPrefillBreedId] = useState<string | null | undefined>(undefined);
   const [wizardPrefillSex, setWizardPrefillSex] = useState<string | null | undefined>(undefined);
+  const [wizardPrefillSpecialAwards, setWizardPrefillSpecialAwards] = useState(false);
   const utils = trpc.useUtils();
 
   const { data: assignments, isLoading } =
@@ -183,6 +203,9 @@ export function JudgesSection({ showId }: { showId: string }) {
       setSelectedRingId('');
       setSelectedSexFilter('both');
       utils.secretary.getShowJudges.invalidate({ showId });
+      utils.secretary.getJudgeCoverage.invalidate({ showId });
+      utils.secretary.getPhaseBlockers.invalidate({ showId });
+      utils.secretary.getChecklistAutoDetect.invalidate({ showId });
     },
     onError: (err) => {
       const msg = err.message ?? 'Failed to assign judge';
@@ -202,6 +225,9 @@ export function JudgesSection({ showId }: { showId: string }) {
       setSelectedRingId('');
       setSelectedSexFilter('both');
       utils.secretary.getShowJudges.invalidate({ showId });
+      utils.secretary.getJudgeCoverage.invalidate({ showId });
+      utils.secretary.getPhaseBlockers.invalidate({ showId });
+      utils.secretary.getChecklistAutoDetect.invalidate({ showId });
     },
     onError: (err) => {
       const msg = err.message ?? 'Failed to assign judge';
@@ -218,6 +244,8 @@ export function JudgesSection({ showId }: { showId: string }) {
       toast.success('Judge assignment removed');
       utils.secretary.getShowJudges.invalidate({ showId });
       utils.secretary.getJudgeCoverage.invalidate({ showId });
+      utils.secretary.getPhaseBlockers.invalidate({ showId });
+      utils.secretary.getChecklistAutoDetect.invalidate({ showId });
     },
     onError: () => toast.error('Failed to remove judge assignment'),
   });
@@ -270,6 +298,35 @@ export function JudgesSection({ showId }: { showId: string }) {
     onError: (err) => toast.error(err.message ?? 'Failed to send confirmation'),
   });
 
+  // Edit judge — corrects a mis-entered email / phone / affix on an
+  // existing judge record without going through the add-judge wizard.
+  const [editJudgeId, setEditJudgeId] = useState<string | null>(null);
+  const [editJudgeForm, setEditJudgeForm] = useState({
+    name: '',
+    contactEmail: '',
+    contactPhone: '',
+    kennelClubAffix: '',
+  });
+  const updateJudgeMutation = trpc.secretary.updateJudge.useMutation({
+    onSuccess: () => {
+      toast.success('Judge details updated');
+      setEditJudgeId(null);
+      utils.secretary.getShowJudges.invalidate({ showId });
+      utils.secretary.searchJudges.invalidate();
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to update judge'),
+  });
+
+  function openEditJudge(judge: { judgeId: string; name: string; contactEmail: string | null; contactPhone: string | null; kennelClubAffix?: string | null }) {
+    setEditJudgeForm({
+      name: judge.name,
+      contactEmail: judge.contactEmail ?? '',
+      contactPhone: judge.contactPhone ?? '',
+      kennelClubAffix: judge.kennelClubAffix ?? '',
+    });
+    setEditJudgeId(judge.judgeId);
+  }
+
   // Build a map of judgeId -> latest contract for quick lookups
   const contractsByJudge = useMemo(() => {
     const map = new Map<string, NonNullable<typeof contracts>[number]>();
@@ -284,39 +341,124 @@ export function JudgesSection({ showId }: { showId: string }) {
 
   // Deduplicate judges from assignments (a judge may have multiple breed/ring assignments)
   const uniqueJudges = useMemo(() => {
-    const seen = new Map<string, {
+    type JudgeRow = {
       judgeId: string;
       name: string;
       kcNumber: string | null;
       contactEmail: string | null;
+      contactPhone: string | null;
+      kennelClubAffix: string | null;
       breeds: string[];
+      // Sexes covered per breed — used to derive the classification label
+      // (Dogs / Bitches / Dogs & Bitches) per Amanda's spec 2026-05-15.
+      breedSexes: Map<string, Set<'dog' | 'bitch' | 'both'>>;
       rings: string[];
       assignmentIds: string[];
-    }>();
+      hasSpecialAwards: boolean;
+      hasJuniorHandling: boolean;
+      hasBreedAssignment: boolean;
+    };
+    // SV regional shows have only one implicit breed (German Shepherd Dog) —
+    // judge_assignments don't carry an explicit breed FK so the "main
+    // classes" judge looks like breed=null+sex=dog/bitch. Treat that pattern
+    // as a main-classes assignment using the show's overall breed (Amanda
+    // 2026-05-19 fix).
+    const showBreedName = showData?.breed?.name ?? null;
+    const isSvShow = (showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset === 'wusv';
+
+    const seen = new Map<string, JudgeRow>();
     for (const a of assignments ?? []) {
+      // Group-level assignments (with a judgeRoleId) are shown in GroupJudgesPanel, not here
+      if (a.judgeRole) continue;
+      const isSac = (a as { isSpecialAwardsClassesJudge?: boolean }).isSpecialAwardsClassesJudge === true;
+      const isJhShape = !isSac && a.breed === null && a.sex === null;
+      // SV main-class assignment: breed null + sex set + not SAC + isSvShow
+      const isSvMainClass = !isSac && isSvShow && a.breed === null && (a.sex === 'dog' || a.sex === 'bitch');
+      // Effective breed name for breed-sex mapping (real FK for RKC,
+      // show's implicit breed for SV main classes).
+      const effectiveBreed = a.breed?.name ?? (isSvMainClass ? showBreedName : null);
       const existing = seen.get(a.judgeId);
       if (existing) {
-        if (a.breed && !existing.breeds.includes(a.breed.name)) {
-          existing.breeds.push(a.breed.name);
+        if (effectiveBreed && !isSac && !existing.breeds.includes(effectiveBreed)) {
+          existing.breeds.push(effectiveBreed);
+        }
+        if (effectiveBreed && !isSac) {
+          const set = existing.breedSexes.get(effectiveBreed) ?? new Set();
+          set.add(a.sex === 'dog' ? 'dog' : a.sex === 'bitch' ? 'bitch' : 'both');
+          existing.breedSexes.set(effectiveBreed, set);
         }
         if (a.ring && !existing.rings.includes(`Ring ${a.ring.number}`)) {
           existing.rings.push(`Ring ${a.ring.number}`);
         }
         existing.assignmentIds.push(a.id);
+        if (isSac) existing.hasSpecialAwards = true;
+        if (isJhShape) existing.hasJuniorHandling = true;
+        if ((a.breed && !isSac) || isSvMainClass) existing.hasBreedAssignment = true;
       } else {
+        const breedSexes = new Map<string, Set<'dog' | 'bitch' | 'both'>>();
+        if (effectiveBreed && !isSac) {
+          breedSexes.set(effectiveBreed, new Set([a.sex === 'dog' ? 'dog' : a.sex === 'bitch' ? 'bitch' : 'both']));
+        }
         seen.set(a.judgeId, {
           judgeId: a.judgeId,
           name: a.judge.name,
           kcNumber: a.judge.kcNumber,
           contactEmail: a.judge.contactEmail,
-          breeds: a.breed ? [a.breed.name] : [],
+          contactPhone: a.judge.contactPhone,
+          kennelClubAffix: a.judge.kennelClubAffix,
+          breeds: effectiveBreed && !isSac ? [effectiveBreed] : [],
+          breedSexes,
           rings: a.ring ? [`Ring ${a.ring.number}`] : [],
           assignmentIds: [a.id],
+          hasSpecialAwards: isSac,
+          hasJuniorHandling: isJhShape,
+          hasBreedAssignment: (!!a.breed && !isSac) || isSvMainClass,
         });
       }
     }
     return Array.from(seen.values());
-  }, [assignments]);
+  }, [assignments, showData]);
+
+  // Build the breed + classification labels Amanda wants shown on the
+  // assignments card and inside the offer email preview (2026-05-15).
+  // breed line = the actual breed(s); classification = what kind of
+  // judging (breed classes / Special Awards / Junior Handling).
+  function deriveJudgeLabels(j: typeof uniqueJudges[number]): {
+    breedLine: string;
+    classificationLines: string[];
+  } {
+    const showBreed = showData?.breed?.name ?? null;
+    const breedsForDisplay = j.breeds.length > 0
+      ? j.breeds
+      : (showBreed ? [showBreed] : []);
+    const breedLine = breedsForDisplay.length > 0
+      ? breedsForDisplay.join(', ')
+      : (showData?.name ?? 'All breeds');
+
+    const classifications: string[] = [];
+    if (j.hasBreedAssignment) {
+      for (const breed of j.breeds) {
+        const sexes = j.breedSexes.get(breed);
+        let sexLabel = '';
+        if (sexes) {
+          const hasDog = sexes.has('dog');
+          const hasBitch = sexes.has('bitch');
+          const hasBoth = sexes.has('both');
+          if (hasBoth || (hasDog && hasBitch)) sexLabel = 'Dogs & Bitches';
+          else if (hasDog) sexLabel = 'Dogs';
+          else if (hasBitch) sexLabel = 'Bitches';
+        }
+        classifications.push(sexLabel ? `${breed} ${sexLabel} classes` : `${breed} classes`);
+      }
+    }
+    if (j.hasSpecialAwards) {
+      classifications.push(showBreed ? `${showBreed} Special Award Classes` : 'Special Award Classes');
+    }
+    if (j.hasJuniorHandling) {
+      classifications.push('Junior Handling');
+    }
+    return { breedLine, classificationLines: classifications };
+  }
 
   function openOfferDialog(judgeId: string, email: string) {
     setOfferJudgeId(judgeId);
@@ -334,9 +476,10 @@ export function JudgesSection({ showId }: { showId: string }) {
       {/* Coverage Dashboard */}
       <JudgeCoverageDashboard
         showId={showId}
-        onAddJudge={(breedId, sex) => {
+        onAddJudge={(breedId, sex, isSpecialAwards) => {
           setWizardPrefillBreedId(breedId);
           setWizardPrefillSex(sex);
+          setWizardPrefillSpecialAwards(isSpecialAwards);
           setWizardOpen(true);
         }}
       />
@@ -348,7 +491,13 @@ export function JudgesSection({ showId }: { showId: string }) {
         onOpenChange={setWizardOpen}
         prefillBreedId={wizardPrefillBreedId}
         prefillSex={wizardPrefillSex}
+        prefillSpecialAwards={wizardPrefillSpecialAwards}
       />
+
+      {/* Group & show-level judges — multi-breed shows only */}
+      {showData?.showScope === 'general' && (
+        <GroupJudgesPanel showId={showId} />
+      )}
 
       {/* Current judge assignments with contract status */}
       <Card>
@@ -393,17 +542,29 @@ export function JudgesSection({ showId }: { showId: string }) {
                             <Badge variant="outline" className="text-muted-foreground">No Contract</Badge>
                           )}
                         </div>
-                        <div className="mt-1 flex flex-wrap gap-1.5">
-                          {j.breeds.length > 0 ? (
-                            j.breeds.map((b) => (
-                              <Badge key={b} variant="outline" className="text-xs">{b}</Badge>
-                            ))
-                          ) : (
-                            <span className="text-xs text-muted-foreground">All breeds</span>
-                          )}
-                          {j.rings.map((r) => (
-                            <Badge key={r} variant="outline" className="text-xs">{r}</Badge>
-                          ))}
+                        <div className="mt-1 space-y-1">
+                          {(() => {
+                            const { breedLine, classificationLines } = deriveJudgeLabels(j);
+                            return (
+                              <>
+                                <p className="text-xs text-muted-foreground">
+                                  <span className="font-medium text-foreground">Breed:</span> {breedLine}
+                                </p>
+                                {classificationLines.length > 0 && (
+                                  <p className="text-xs text-muted-foreground">
+                                    <span className="font-medium text-foreground">Classification:</span> {classificationLines.join('; ')}
+                                  </p>
+                                )}
+                                {j.rings.length > 0 && (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {j.rings.map((r) => (
+                                      <Badge key={r} variant="outline" className="text-xs">{r}</Badge>
+                                    ))}
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
                         </div>
                         {j.contactEmail && (
                           <p className="mt-1 text-xs text-muted-foreground flex items-center gap-1">
@@ -413,11 +574,17 @@ export function JudgesSection({ showId }: { showId: string }) {
                         )}
                         {contract?.offerSentAt && (
                           <p className="mt-1 text-xs text-muted-foreground">
-                            Offer sent {new Date(contract.offerSentAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                            {contract.acceptedAt && ` · Accepted ${new Date(contract.acceptedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`}
-                            {contract.confirmedAt && ` · Confirmed ${new Date(contract.confirmedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`}
-                            {contract.declinedAt && ` · Declined ${new Date(contract.declinedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`}
+                            {formatContractTimeline(contract)}
                           </p>
+                        )}
+                        {contract?.contractPdfKey && (
+                          <a
+                            href={`/api/judge-contract-pdf/${contract.id}`}
+                            className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                          >
+                            <Download className="size-3.5" />
+                            Download signed contract (PDF)
+                          </a>
                         )}
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
@@ -476,6 +643,15 @@ export function JudgesSection({ showId }: { showId: string }) {
                             New Offer
                           </Button>
                         )}
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-11 text-muted-foreground hover:text-foreground"
+                          onClick={() => openEditJudge(j)}
+                          aria-label={`Edit ${j.name}`}
+                        >
+                          <Pencil className="size-3.5" />
+                        </Button>
                         <Button
                           size="icon"
                           variant="ghost"
@@ -617,15 +793,11 @@ export function JudgesSection({ showId }: { showId: string }) {
           {/* Email preview */}
           {(() => {
             const judge = uniqueJudges.find((j) => j.judgeId === offerJudgeId);
-            // Derive breed names: judge's assigned breeds → show breed → class breeds → show name
-            const showBreedName = showData?.breed?.name;
-            const classBreedNames = [...new Set(
-              (showData?.showClasses ?? []).filter((sc) => sc.breed).map((sc) => sc.breed!.name)
-            )];
-            const fallbackBreed = showBreedName ?? (classBreedNames.length > 0 ? classBreedNames.join(', ') : (showData?.name ?? 'All breeds'));
-            const breedsText = judge?.breeds.length
-              ? judge.breeds.join(', ')
-              : fallbackBreed;
+            const labels = judge ? deriveJudgeLabels(judge) : { breedLine: '—', classificationLines: [] };
+            const breedLine = labels.breedLine;
+            const classificationText = labels.classificationLines.length > 0
+              ? labels.classificationLines.join(' / ')
+              : '—';
             const showDate = showData?.startDate
               ? new Date(showData.startDate).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
               : 'TBC';
@@ -650,12 +822,18 @@ export function JudgesSection({ showId }: { showId: string }) {
                   <span>{showDate}</span>
                   <span className="font-medium">Venue</span>
                   <span>{venue}</span>
-                  <span className="font-medium">Breeds</span>
-                  <span>{breedsText}</span>
+                  <span className="font-medium">Breed</span>
+                  <span>{breedLine}</span>
+                  <span className="font-medium">Classification</span>
+                  <span>{classificationText}</span>
                   {showData?.showType && (
                     <>
                       <span className="font-medium">Type</span>
-                      <span className="capitalize">{showData.showType.replace('_', ' ')}</span>
+                      <span className="capitalize">
+                        {(showData as { showRuleset?: 'rkc' | 'wusv' }).showRuleset === 'wusv'
+                          ? 'Regional'
+                          : showData.showType.replace('_', ' ')}
+                      </span>
                     </>
                   )}
                 </div>
@@ -780,6 +958,85 @@ export function JudgesSection({ showId }: { showId: string }) {
                 <Send className="size-4" />
               )}
               Send Offer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Judge Dialog — corrects mis-entered contact details */}
+      <Dialog
+        open={editJudgeId !== null}
+        onOpenChange={(open) => { if (!open) setEditJudgeId(null); }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit judge details</DialogTitle>
+            <DialogDescription>
+              Update the judge&apos;s name, contact details, or affix. Changes
+              apply to every show this judge is on.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label htmlFor="edit-judge-name" className="text-sm">Name</Label>
+              <Input
+                id="edit-judge-name"
+                value={editJudgeForm.name}
+                onChange={(e) => setEditJudgeForm((f) => ({ ...f, name: e.target.value }))}
+                className="mt-1 h-11"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-judge-email" className="text-sm">Email</Label>
+              <Input
+                id="edit-judge-email"
+                type="email"
+                placeholder="Leave blank to clear"
+                value={editJudgeForm.contactEmail}
+                onChange={(e) => setEditJudgeForm((f) => ({ ...f, contactEmail: e.target.value }))}
+                className="mt-1 h-11"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-judge-phone" className="text-sm">Phone</Label>
+              <Input
+                id="edit-judge-phone"
+                type="tel"
+                value={editJudgeForm.contactPhone}
+                onChange={(e) => setEditJudgeForm((f) => ({ ...f, contactPhone: e.target.value }))}
+                className="mt-1 h-11"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-judge-affix" className="text-sm">Kennel Club affix</Label>
+              <Input
+                id="edit-judge-affix"
+                value={editJudgeForm.kennelClubAffix}
+                onChange={(e) => setEditJudgeForm((f) => ({ ...f, kennelClubAffix: e.target.value }))}
+                placeholder="e.g. Sadira"
+                className="mt-1 h-11"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditJudgeId(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!editJudgeId) return;
+                updateJudgeMutation.mutate({
+                  judgeId: editJudgeId,
+                  name: editJudgeForm.name.trim() || undefined,
+                  contactEmail: editJudgeForm.contactEmail.trim(),
+                  contactPhone: editJudgeForm.contactPhone.trim(),
+                  kennelClubAffix: editJudgeForm.kennelClubAffix.trim(),
+                });
+              }}
+              disabled={updateJudgeMutation.isPending || !editJudgeForm.name.trim()}
+            >
+              {updateJudgeMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+              Save changes
             </Button>
           </DialogFooter>
         </DialogContent>

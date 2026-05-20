@@ -18,6 +18,8 @@ import {
 import { trpc } from '@/lib/trpc/client';
 import { formatCurrency, parseLocalDate } from '@/lib/date-utils';
 import { showTypeLabels } from '@/lib/show-types';
+import { buildClassLabelMap, isSpecialAwardClass } from '@/lib/class-labels';
+import { sortOfficers } from '@/components/schedule/shared/officers';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { ScheduleData } from '@/server/db/schema/shows';
@@ -47,6 +49,13 @@ export default function SchedulePage({
   const { id } = use(params);
   const { data: show, isLoading } = trpc.shows.getById.useQuery({ id });
 
+  // Shared JHA/JHB resolver — non-JH classes display their classNumber,
+  // JH classes get JHA/JHB/... labels outside the RKC-licensed count.
+  const classLabelMap = useMemo(
+    () => buildClassLabelMap(show?.showClasses ?? []),
+    [show?.showClasses],
+  );
+
   const breedGroups = useMemo(() => {
     if (!show?.showClasses) return [];
     const map = new Map<string, {
@@ -58,6 +67,8 @@ export default function SchedulePage({
     }>();
 
     for (const sc of show.showClasses) {
+      // SAC classes get their own dedicated section, not lumped under a breed.
+      if (isSpecialAwardClass(sc)) continue;
       const breedName = sc.breed?.name ?? 'Any Breed';
       if (!map.has(breedName)) {
         map.set(breedName, {
@@ -101,6 +112,30 @@ export default function SchedulePage({
         return a.localeCompare(b);
       });
   }, [show?.showClasses, show?.judgeAssignments]);
+
+  // Special Award Classes — surface as a dedicated section after the
+  // breed classes, with letter labels and the lunch-break preamble.
+  const sacClasses = useMemo(() => {
+    if (!show?.showClasses) return [];
+    return show.showClasses.filter(isSpecialAwardClass);
+  }, [show?.showClasses]);
+
+  // The SAC judge sits in a separate assignment lane — pull names from
+  // the show's judgeAssignments where the assignment is tagged as the
+  // Special Awards Classes judge.
+  const sacJudgeNames = useMemo(() => {
+    if (!show?.judgeAssignments) return [] as string[];
+    const seen = new Set<string>();
+    for (const ja of show.judgeAssignments as Array<{
+      isSpecialAwardsClassesJudge?: boolean | null;
+      judge?: { name?: string | null } | null;
+    }>) {
+      if (!ja.isSpecialAwardsClassesJudge) continue;
+      const name = ja.judge?.name;
+      if (name) seen.add(name);
+    }
+    return Array.from(seen);
+  }, [show?.judgeAssignments]);
 
   // Unique judges
   const judges = useMemo(() => {
@@ -297,12 +332,12 @@ export default function SchedulePage({
 
                 {/* Dog classes */}
                 {group.dogClasses.length > 0 && (
-                  <ClassList label="Dog Classes" classes={group.dogClasses} />
+                  <ClassList label="Dog Classes" classes={group.dogClasses} labelMap={classLabelMap} />
                 )}
 
                 {/* Bitch classes */}
                 {group.bitchClasses.length > 0 && (
-                  <ClassList label="Bitch Classes" classes={group.bitchClasses} />
+                  <ClassList label="Bitch Classes" classes={group.bitchClasses} labelMap={classLabelMap} />
                 )}
 
                 {/* Combined / unsexed classes */}
@@ -310,6 +345,7 @@ export default function SchedulePage({
                   <ClassList
                     label={group.dogClasses.length > 0 || group.bitchClasses.length > 0 ? 'Open to Dog & Bitch' : undefined}
                     classes={group.combinedClasses}
+                    labelMap={classLabelMap}
                   />
                 )}
               </div>
@@ -318,12 +354,54 @@ export default function SchedulePage({
         </section>
       )}
 
+      {/* ── Special Award Classes ── */}
+      {sacClasses.length > 0 && (
+        <section>
+          <SectionHeading icon={Ticket} title="Special Award Classes" />
+          <p className="text-xs text-muted-foreground mb-2">
+            To be held during the lunch break.
+            {sacJudgeNames.length > 0 && (
+              <> Judge: <span className="font-semibold">{sacJudgeNames.join(', ')}</span>.</>
+            )}
+          </p>
+          <div className="space-y-1">
+            {sacClasses
+              .toSorted((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+              .map((sc) => {
+                const display = classLabelMap.get(sc.id);
+                const baseName = (sc.classDefinition?.name ?? '').replace(
+                  /^Special Award Class\s*-\s*/,
+                  'Special Award ',
+                );
+                return (
+                  <div key={sc.id} className="flex items-baseline gap-2 py-1 text-sm">
+                    {display && (
+                      <span className="w-8 shrink-0 text-right text-xs font-bold text-muted-foreground">
+                        {display}
+                      </span>
+                    )}
+                    <div className="min-w-0">
+                      <span className="font-medium">{baseName} Dog or Bitch</span>
+                      {sc.classDefinition?.description && (
+                        <span className="ml-1.5 text-xs text-muted-foreground">— {sc.classDefinition.description}</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+          <p className="mt-3 text-xs italic text-muted-foreground leading-relaxed">
+            Special Awards are scheduled by kind permission of the Royal Kennel Club to enable aspiring judges to gain more experience. Exhibits beaten in Special Awards but unbeaten in the main show classes are deemed to remain unbeaten when competing for Best in Show in the main show. Entries must be made on the entry form in the usual way.
+          </p>
+        </section>
+      )}
+
       {/* ── Officers ── */}
       {sd?.officers && sd.officers.length > 0 && (
         <section>
           <SectionHeading icon={Users} title="Officers" />
           <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
-            {sd.officers.map((officer, i) => (
+            {sortOfficers(sd.officers).map((officer, i) => (
               <div key={i} className="rounded-lg border p-3">
                 <p className="text-xs font-medium text-muted-foreground">{officer.position}</p>
                 <p className="text-sm font-semibold">{officer.name}</p>
@@ -410,7 +488,19 @@ function InfoCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ClassList({ label, classes }: { label?: string; classes: { id: string; classNumber?: number | null; classDefinition?: { name?: string | null; description?: string | null } | null }[] }) {
+function ClassList({
+  label,
+  classes,
+  labelMap,
+}: {
+  label?: string;
+  classes: {
+    id: string;
+    classNumber?: number | null;
+    classDefinition?: { name?: string | null; description?: string | null } | null;
+  }[];
+  labelMap: Map<string, string>;
+}) {
   return (
     <div className="mb-3">
       {label && (
@@ -419,21 +509,24 @@ function ClassList({ label, classes }: { label?: string; classes: { id: string; 
       <div className="space-y-1">
         {classes
           .toSorted((a, b) => (a.classNumber ?? 999) - (b.classNumber ?? 999))
-          .map((cls) => (
-            <div key={cls.id} className="flex items-baseline gap-2 py-1 text-sm">
-              {cls.classNumber != null && (
-                <span className="w-6 shrink-0 text-right text-xs font-bold text-muted-foreground">
-                  {cls.classNumber}
-                </span>
-              )}
-              <div className="min-w-0">
-                <span className="font-medium">{cls.classDefinition?.name ?? 'Class'}</span>
-                {cls.classDefinition?.description && (
-                  <span className="ml-1.5 text-xs text-muted-foreground">— {cls.classDefinition.description}</span>
+          .map((cls) => {
+            const display = labelMap.get(cls.id);
+            return (
+              <div key={cls.id} className="flex items-baseline gap-2 py-1 text-sm">
+                {display && (
+                  <span className="w-8 shrink-0 text-right text-xs font-bold text-muted-foreground">
+                    {display}
+                  </span>
                 )}
+                <div className="min-w-0">
+                  <span className="font-medium">{cls.classDefinition?.name ?? 'Class'}</span>
+                  {cls.classDefinition?.description && (
+                    <span className="ml-1.5 text-xs text-muted-foreground">— {cls.classDefinition.description}</span>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
       </div>
     </div>
   );

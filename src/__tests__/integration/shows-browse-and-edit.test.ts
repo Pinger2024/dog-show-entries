@@ -147,12 +147,14 @@ describe('entries.update (class edit + fee diff)', () => {
     });
     expect(ecRows.map((r) => r.showClassId).sort()).toEqual([c1.id, c2.id].sort());
 
-    // Adjustment payment row inserted
+    // Adjustment payment row inserted. payment.amount is the GROSS charge
+    // (diff subtotal + £1 + 1% platform fee) so it reconciles with Stripe.
+    // 400 diff + (100 + round(400 * 0.01)) = 504.
     const adjPayment = await testDb.query.payments.findFirst({
       where: eq(payments.entryId, entry.id),
     });
     expect(adjPayment?.type).toBe('adjustment');
-    expect(adjPayment?.amount).toBe(400);
+    expect(adjPayment?.amount).toBe(504);
   });
 
   it('removes a class — fee goes down, refund issued via Stripe (mocked)', async () => {

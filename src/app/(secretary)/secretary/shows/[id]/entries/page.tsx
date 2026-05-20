@@ -65,10 +65,28 @@ export default function EntriesPage() {
   const total = entriesData?.total ?? 0;
 
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  // Default to "active" — withdrawn/cancelled entries are noise on the
+  // primary entries view (and their visible count drifts from the layout
+  // banner's confirmed count, which secretaries flag as a discrepancy).
+  // The dropdown still has explicit Withdrawn/Cancelled/All options for
+  // when they need to drill in.
+  const [statusFilter, setStatusFilter] = useState('active');
   const [editingEntry, setEditingEntry] = useState<EntryItem | null>(null);
   const [transferringEntry, setTransferringEntry] = useState<EntryItem | null>(null);
   const [showAddEntry, setShowAddEntry] = useState(false);
+
+  const formatClassWithSex = (ec: {
+    showClass?: {
+      sex?: string | null;
+      classDefinition?: { name?: string | null } | null;
+    } | null;
+  }): string => {
+    const name = ec.showClass?.classDefinition?.name ?? '?';
+    const sex = ec.showClass?.sex;
+    if (sex === 'dog') return `${name} Dog`;
+    if (sex === 'bitch') return `${name} Bitch`;
+    return name;
+  };
 
   const filtered = useMemo(() => {
     return entries.filter((entry) => {
@@ -80,7 +98,11 @@ export default function EntriesPage() {
         entry.dog?.breed?.name?.toLowerCase().includes(q);
 
       const matchesStatus =
-        statusFilter === 'all' || entry.status === statusFilter;
+        statusFilter === 'all'
+          ? true
+          : statusFilter === 'active'
+            ? entry.status !== 'withdrawn' && entry.status !== 'cancelled'
+            : entry.status === statusFilter;
 
       return matchesSearch && matchesStatus;
     });
@@ -105,8 +127,8 @@ export default function EntriesPage() {
       e.dog?.registeredName ?? '',
       e.dog?.breed?.name ?? '',
       e.entryClasses
-        .map((ec) => ec.showClass?.classDefinition?.name ?? '')
-        .filter(Boolean)
+        .map((ec) => formatClassWithSex(ec))
+        .filter((s) => s && s !== '?')
         .join('; '),
       (e.totalFee / 100).toFixed(2),
       e.status,
@@ -136,9 +158,14 @@ export default function EntriesPage() {
         <CardHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
             <div>
-              <CardTitle className="text-base sm:text-lg">Entries ({total})</CardTitle>
+              <CardTitle className="text-base sm:text-lg">Entries ({filtered.length})</CardTitle>
               <CardDescription>
-                All entries for this show
+                {statusFilter === 'active' && 'Active entries — withdrawn and cancelled hidden by default'}
+                {statusFilter === 'all' && 'Every entry on this show, including withdrawn and cancelled'}
+                {statusFilter === 'pending' && 'Entries on orders awaiting payment'}
+                {statusFilter === 'confirmed' && 'Confirmed entries on paid orders'}
+                {statusFilter === 'withdrawn' && 'Entries the exhibitor pulled out of after paying'}
+                {statusFilter === 'cancelled' && 'Cancelled entries'}
               </CardDescription>
               {total > entries.length && (
                 <p className="text-xs text-amber-600">
@@ -181,6 +208,7 @@ export default function EntriesPage() {
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="active">Active</SelectItem>
                 <SelectItem value="all">All Statuses</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="confirmed">Confirmed</SelectItem>
@@ -262,7 +290,7 @@ export default function EntriesPage() {
                               variant="secondary"
                               className="text-xs"
                             >
-                              {ec.showClass?.classDefinition?.name ?? '?'}
+                              {formatClassWithSex(ec)}
                             </Badge>
                           ))}
                         </div>
@@ -325,7 +353,7 @@ export default function EntriesPage() {
                                 variant="secondary"
                                 className="text-xs"
                               >
-                                {ec.showClass?.classDefinition?.name ?? '?'}
+                                {formatClassWithSex(ec)}
                               </Badge>
                             ))}
                           </div>

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, isNull, isNotNull, asc } from 'drizzle-orm';
+import { and, eq, isNull, isNotNull, asc, sql } from 'drizzle-orm';
 import { stewardProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import type { Database } from '@/server/db';
@@ -145,9 +145,11 @@ export const stewardRouter = createTRPCRouter({
         const confirmedEntries = sc.entryClasses.filter(
           (ec) => ec.entry.status === 'confirmed' && !ec.entry.deletedAt
         );
-        const resultsCount = confirmedEntries.filter(
-          (ec) => ec.result !== null
-        ).length;
+        const resultsRows = confirmedEntries
+          .map((ec) => ec.result)
+          .filter((r): r is NonNullable<typeof r> => r !== null);
+        const resultsCount = resultsRows.length;
+        const publishedResults = resultsRows.filter((r) => r.publishedAt !== null);
         const absentCount = confirmedEntries.filter(
           (ec) => ec.entry.absent
         ).length;
@@ -163,6 +165,11 @@ export const stewardRouter = createTRPCRouter({
           absentCount,
           resultsCount,
           hasResults: resultsCount > 0,
+          // Publish status: published when every current result is live,
+          // partially published when some are live, and "dirty" when new
+          // results have been added since the steward last published.
+          isPublished: resultsCount > 0 && publishedResults.length === resultsCount,
+          hasUnpublishedChanges: publishedResults.length > 0 && publishedResults.length < resultsCount,
         };
       });
     }),
@@ -190,10 +197,10 @@ export const stewardRouter = createTRPCRouter({
         showClass.showId
       );
 
-      // Fetch show scope for placement rules
+      // Fetch show scope and ruleset for placement rules
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, showClass.showId),
-        columns: { showScope: true },
+        columns: { showScope: true, showRuleset: true },
       });
 
       // Fetch judge for this class's breed to check breeder conflicts
@@ -230,6 +237,12 @@ export const stewardRouter = createTRPCRouter({
         (ec) => ec.entry.status === 'confirmed' && !ec.entry.deletedAt
       );
 
+      // Publish status — derived from per-result publishedAt timestamps.
+      const allResults = confirmed.map((ec) => ec.result).filter((r): r is NonNullable<typeof r> => r != null);
+      const publishedResults = allResults.filter((r) => r.publishedAt !== null);
+      const isPublished = allResults.length > 0 && publishedResults.length === allResults.length;
+      const hasUnpublishedChanges = publishedResults.length > 0 && publishedResults.length < allResults.length;
+
       return {
         showClass: {
           id: showClass.id,
@@ -238,6 +251,9 @@ export const stewardRouter = createTRPCRouter({
           breed: showClass.breed,
           sex: showClass.sex,
           showScope: show?.showScope ?? 'general',
+          showRuleset: show?.showRuleset ?? 'rkc',
+          isPublished,
+          hasUnpublishedChanges,
         },
         judgeName,
         entries: confirmed
@@ -280,6 +296,7 @@ export const stewardRouter = createTRPCRouter({
                     placementStatus: ec.result.placementStatus,
                     specialAward: ec.result.specialAward,
                     critiqueText: ec.result.critiqueText,
+                    svGrade: ec.result.svGrade,
                   }
                 : null,
             };
@@ -293,14 +310,16 @@ export const stewardRouter = createTRPCRouter({
       z.object({
         entryClassId: z.string().uuid(),
         // `placement` and `placementStatus` are mutually exclusive — an
-        // entry is either numerically placed (1-7) OR has a non-numeric
-        // status ('withheld' / 'unplaced'), never both.
-        placement: z.number().int().min(1).max(7).nullable(),
+        // entry is either numerically placed OR has a non-numeric
+        // status ('withheld' / 'unplaced'), never both. Max 50 to allow
+        // GSD-style "place every dog in the class" judging.
+        placement: z.number().int().min(1).max(50).nullable(),
         placementStatus: z.enum(['withheld', 'unplaced']).nullable().optional(),
         specialAward: z.string().nullable().optional(),
         critiqueText: z.string().nullable().optional(),
         winnerPhotoUrl: z.string().nullable().optional(),
         winnerPhotoStorageKey: z.string().nullable().optional(),
+        svGrade: z.enum(['v', 'sg', 'g', 'a', 'u', 'disqualified']).nullable().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -327,6 +346,17 @@ export const stewardRouter = createTRPCRouter({
         });
       }
 
+      // Dogs marked absent shouldn't receive placements. The UI dims
+      // absent rows but that's CSS-only — a direct API call with the
+      // entryClassId still lands here, so we need a server-side guard
+      // to prevent ghost placements for no-shows.
+      if (ec.entry.absent) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Cannot record a placement for an absent entry',
+        });
+      }
+
       await verifyStewardAssignment(
         ctx.db,
         ctx.session.user.id,
@@ -346,6 +376,7 @@ export const stewardRouter = createTRPCRouter({
           critiqueText: input.critiqueText ?? null,
           winnerPhotoUrl: input.winnerPhotoUrl ?? null,
           winnerPhotoStorageKey: input.winnerPhotoStorageKey ?? null,
+          svGrade: input.svGrade ?? null,
           recordedBy: ctx.session.user.id,
           recordedAt: new Date(),
         })
@@ -358,6 +389,7 @@ export const stewardRouter = createTRPCRouter({
             critiqueText: input.critiqueText ?? null,
             winnerPhotoUrl: input.winnerPhotoUrl ?? null,
             winnerPhotoStorageKey: input.winnerPhotoStorageKey ?? null,
+            svGrade: input.svGrade ?? null,
             recordedBy: ctx.session.user.id,
             recordedAt: new Date(),
           },
@@ -365,6 +397,71 @@ export const stewardRouter = createTRPCRouter({
         .returning();
 
       return result!;
+    }),
+
+  // ── Publish / unpublish a single class's results (steward-side) ──
+  publishClassResults: stewardProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        showClassId: z.string().uuid(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyStewardAssignment(ctx.db, ctx.session.user.id, input.showId);
+
+      const now = new Date();
+      try {
+        await ctx.db.execute(sql`
+          UPDATE results r
+          SET published_at = ${now.toISOString()}::timestamptz
+          FROM entry_classes ec
+          JOIN entries e ON ec.entry_id = e.id
+          WHERE r.entry_class_id = ec.id
+            AND e.show_id = ${input.showId}
+            AND ec.show_class_id = ${input.showClassId}
+            AND r.published_at IS NULL
+        `);
+      } catch (error) {
+        console.error('[steward.publishClassResults] SQL error:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to publish class results. Please try again.',
+        });
+      }
+
+      return { published: true, classId: input.showClassId };
+    }),
+
+  unpublishClassResults: stewardProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        showClassId: z.string().uuid(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyStewardAssignment(ctx.db, ctx.session.user.id, input.showId);
+
+      try {
+        await ctx.db.execute(sql`
+          UPDATE results r
+          SET published_at = NULL
+          FROM entry_classes ec
+          JOIN entries e ON ec.entry_id = e.id
+          WHERE r.entry_class_id = ec.id
+            AND e.show_id = ${input.showId}
+            AND ec.show_class_id = ${input.showClassId}
+        `);
+      } catch (error) {
+        console.error('[steward.unpublishClassResults] SQL error:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to unpublish results. Please try again.',
+        });
+      }
+
+      return { unpublished: true, classId: input.showClassId };
     }),
 
   // ── Update winner photo only (no data loss) ──────────────
@@ -891,7 +988,31 @@ export const stewardRouter = createTRPCRouter({
       const crypto = await import('crypto');
       const sharedToken = crypto.randomUUID();
 
-      // Update all assignment rows with the shared token
+      // Send approval email FIRST — if it fails, DB stays clean and steward can retry
+      try {
+        await sendJudgeApprovalRequestEmail({
+          judge: { name: judge.name, email: judge.contactEmail },
+          show: {
+            name: show.name,
+            startDate: show.startDate,
+            slug: show.slug,
+            id: show.id,
+            organisation: show.organisation,
+          },
+          approvalToken: sharedToken,
+          breeds: assignments
+            .filter((a) => a.breedId)
+            .map((a) => a.breedId!),
+        });
+      } catch (error) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `Could not send approval email to ${judge.contactEmail}. Please check the address and try again.`,
+          cause: error,
+        });
+      }
+
+      // Email went out — record it
       await ctx.db
         .update(judgeAssignments)
         .set({
@@ -905,22 +1026,6 @@ export const stewardRouter = createTRPCRouter({
             eq(judgeAssignments.judgeId, input.judgeId)
           )
         );
-
-      // Send approval email
-      await sendJudgeApprovalRequestEmail({
-        judge: { name: judge.name, email: judge.contactEmail },
-        show: {
-          name: show.name,
-          startDate: show.startDate,
-          slug: show.slug,
-          id: show.id,
-          organisation: show.organisation,
-        },
-        approvalToken: sharedToken,
-        breeds: assignments
-          .filter((a) => a.breedId)
-          .map((a) => a.breedId!),
-      });
 
       return { sent: true, judgeEmail: judge.contactEmail };
     }),

@@ -6,6 +6,7 @@ import { ChevronLeft, Dog, Loader2 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { DogForm } from '@/components/dogs/dog-form';
+import { DogSvHealthCard } from '@/components/dogs/dog-sv-health-card';
 
 export default function EditDogPage({
   params,
@@ -56,7 +57,7 @@ export default function EditDogPage({
         </p>
       </div>
 
-      <div className="max-w-2xl">
+      <div className="max-w-2xl space-y-6">
         <DogForm
           mode="edit"
           dogId={id}
@@ -70,8 +71,25 @@ export default function EditDogPage({
             sireName: dog.sireName ?? '',
             damName: dog.damName ?? '',
             breederName: dog.breederName ?? '',
+            breederCountry: (dog as { breederCountry?: string | null }).breederCountry ?? '',
+            breederCity: (dog as { breederCity?: string | null }).breederCity ?? '',
+            breederPostcode: (dog as { breederPostcode?: string | null }).breederPostcode ?? '',
+            registrationBody: dog.registrationBody ?? undefined,
+            registrationBodyOther: dog.registrationBodyOther ?? '',
+            coatType: dog.coatType ?? undefined,
+            microchipNumber: dog.microchipNumber ?? '',
+            sireRegistrationBody: dog.sireRegistrationBody ?? undefined,
+            sireRegistrationNumber: dog.sireRegistrationNumber ?? '',
+            damRegistrationBody: dog.damRegistrationBody ?? undefined,
+            damRegistrationNumber: dog.damRegistrationNumber ?? '',
           }}
         />
+
+        {/* SV Health & Working Titles — surfaced on the edit page (as well
+            as the dog detail page) so SV owners can fill in everything
+            in one place rather than save → navigate → find a separate
+            card (Amanda 2026-05-20). */}
+        <DogSvHealthCard dogId={id} isOwner={true} sex={dog.sex} />
       </div>
     </div>
   );

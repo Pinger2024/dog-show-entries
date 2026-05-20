@@ -1015,6 +1015,7 @@ export async function populateShowWithTestData(opts: PopulateOptions): Promise<P
           classSponsorshipValues.push({
             showClassId: sc.id,
             showSponsorId: insertedShowSponsors[i].id,
+            sponsorName: sponsorData[i].name,
             trophyName: `${sponsorData[i].name} ${pick(trophyNames)}`,
             prizeDescription: `Sponsored by ${sponsorData[i].name}`,
           });

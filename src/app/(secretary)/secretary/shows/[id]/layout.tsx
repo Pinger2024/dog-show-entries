@@ -40,6 +40,7 @@ import { statusConfig } from './_lib/show-utils';
 import { ShowIdProvider } from './_lib/show-context';
 import { ShowSectionNav } from './_components/show-section-nav';
 import { LifecycleBanner } from './_components/lifecycle-banner';
+import { EditShowNameDialog } from './_components/edit-show-name-dialog';
 import { formatRelativeTime, formatCompactRevenue } from './_lib/show-utils';
 
 export default function ShowManagementLayout({
@@ -171,6 +172,7 @@ export default function ShowManagementLayout({
             <h1 className="truncate text-lg font-bold tracking-tight sm:text-2xl">
               {show.name}
             </h1>
+            <EditShowNameDialog showId={show.id} currentName={show.name} />
             <Badge variant={showStatus.variant} className="shrink-0">
               {showStatus.label}
             </Badge>
@@ -426,7 +428,7 @@ export default function ShowManagementLayout({
 
       {/* Section navigation + content */}
       <div className="md:flex md:gap-6">
-        <ShowSectionNav showId={show.id} />
+        <ShowSectionNav showId={show.id} isWusv={show.showRuleset === 'wusv'} />
         <div className="min-w-0 flex-1">
           <ShowIdProvider showId={show.id}>{children}</ShowIdProvider>
         </div>

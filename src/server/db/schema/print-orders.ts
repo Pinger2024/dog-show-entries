@@ -40,7 +40,8 @@ export const printOrders = pgTable(
     markupAmount: integer('markup_amount').notNull().default(0),
     totalAmount: integer('total_amount').notNull().default(0),
 
-    // Stripe
+    // Payment
+    paymentMethod: text('payment_method'), // 'card' | 'deducted_from_payout' — null until paid
     stripePaymentIntentId: text('stripe_payment_intent_id'),
     stripePaymentStatus: text('stripe_payment_status'),
 

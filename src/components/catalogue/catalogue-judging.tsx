@@ -45,8 +45,9 @@ const s = StyleSheet.create({
   },
   // Cover block
   coverLogo: {
-    width: 48,
-    height: 48,
+    maxWidth: 84,
+    maxHeight: 48,
+    objectFit: 'contain',
     alignSelf: 'center',
     marginBottom: 6,
   },
@@ -298,7 +299,7 @@ export function CatalogueJudging({ show, entries }: Props) {
 
   // Class legend for cover — compact list of all classes
   const legend = allClasses.map((c) => ({
-    number: c.classNumber,
+    label: c.classLabel ?? (c.classNumber != null ? String(c.classNumber) : ''),
     name: c.className,
     sex: c.sex,
   }));
@@ -344,7 +345,7 @@ export function CatalogueJudging({ show, entries }: Props) {
             <View style={s.legendRow}>
               {legend.map((c, i) => (
                 <Text key={i} style={s.legendItem}>
-                  {c.number != null ? `${c.number}. ` : ''}
+                  {c.label ? `${c.label}. ` : ''}
                   {c.name}
                   {c.sex ? ` (${c.sex === 'dog' ? 'D' : 'B'})` : ''}
                 </Text>
@@ -377,12 +378,12 @@ export function CatalogueJudging({ show, entries }: Props) {
               const sorted = sortEntries(classGroup.entries);
               return (
                 <View
-                  key={`cls-${section.key}-${classGroup.classNumber ?? classGroup.className}-${classIdx}`}
+                  key={`cls-${section.key}-${classGroup.classLabel || classGroup.className}-${classIdx}`}
                   wrap={false}
                 >
                 <View style={s.classHeader}>
                   <Text style={s.classHeaderText}>
-                    {classGroup.classNumber != null ? `${classGroup.classNumber}. ` : ''}
+                    {classGroup.classLabel ? `${classGroup.classLabel}. ` : ''}
                     {classGroup.className}
                     {classGroup.sex ? ` ${classGroup.sex === 'dog' ? '(Dogs)' : '(Bitches)'}` : ''}
                   </Text>
@@ -394,7 +395,7 @@ export function CatalogueJudging({ show, entries }: Props) {
                 <View style={s.entriesGrid}>
                   {sorted.map((entry, entryIdx) => (
                     <View
-                      key={`${classGroup.classNumber ?? classGroup.className}-${entry.catalogueNumber ?? 'nocat'}-${entryIdx}`}
+                      key={`${classGroup.classLabel || classGroup.className}-${entry.catalogueNumber ?? 'nocat'}-${entryIdx}`}
                       style={s.entryCell}
                     >
                       <Text style={s.entryNumber}>

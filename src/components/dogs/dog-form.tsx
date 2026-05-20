@@ -51,7 +51,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { PostcodeLookup, formatAddress } from '@/components/postcode-lookup';
 
 const ownerSchema = z.object({
   ownerName: z.string().min(1, 'Name is required'),
@@ -61,6 +60,11 @@ const ownerSchema = z.object({
   isPrimary: z.boolean(),
 });
 
+// Owners are required at create-time (RKC catalogue listing), but in edit
+// mode the form only updates top-level dog fields — the submit handler
+// strips `owners` before mutating. Baking `.min(1)` into the schema silently
+// blocked edit saves when the form loaded with no owners. We enforce the
+// create-mode requirement at submission time instead.
 const dogFormSchema = z.object({
   registeredName: z
     .string()
@@ -76,9 +80,27 @@ const dogFormSchema = z.object({
   sireName: z.string().optional(),
   damName: z.string().optional(),
   breederName: z.string().optional(),
+  breederCountry: z.string().optional(),
+  breederCity: z.string().optional(),
+  breederPostcode: z.string().optional(),
   bio: z.string().optional(),
-  owners: z.array(ownerSchema).optional(),
-});
+  owners: z.array(ownerSchema),
+  // SV / WUSV fields
+  registrationBody: z.enum(['kc', 'sv', 'ikc', 'other']).optional(),
+  registrationBodyOther: z.string().optional(),
+  coatType: z.enum(['stock', 'long_stock']).optional(),
+  microchipNumber: z.string().optional(),
+  sireRegistrationBody: z.enum(['kc', 'sv', 'ikc', 'other']).optional(),
+  sireRegistrationNumber: z.string().optional(),
+  damRegistrationBody: z.enum(['kc', 'sv', 'ikc', 'other']).optional(),
+  damRegistrationNumber: z.string().optional(),
+}).refine(
+  (data) => !data.registrationBody || (data.kcRegNumber && data.kcRegNumber.trim().length > 0),
+  {
+    message: 'Registration number is required when a registration body is selected',
+    path: ['kcRegNumber'],
+  },
+);
 
 type DogFormValues = z.infer<typeof dogFormSchema>;
 
@@ -344,6 +366,9 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
       sireName: '',
       damName: '',
       breederName: '',
+      breederCountry: '',
+      breederCity: '',
+      breederPostcode: '',
       bio: '',
       owners: [],
       ...defaultValues,
@@ -388,6 +413,14 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
 
   function onSubmit(data: DogFormValues) {
     if (mode === 'create') {
+      if (!data.owners || data.owners.length === 0) {
+        form.setError('owners', {
+          type: 'manual',
+          message: 'At least one owner with name and address is required',
+        });
+        toast.error('Please add at least one owner');
+        return;
+      }
       createDog.mutate(data);
     } else if (dogId) {
       const { owners: _owners, ...dogFields } = data;
@@ -419,25 +452,61 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Registration Number — label + helper text adapt to the
+                chosen Registration Body so IKC / SV / Other dogs get a
+                relevant prompt rather than the RKC-only one (Amanda
+                2026-05-19). */}
             <FormField
               control={form.control}
               name="kcRegNumber"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>RKC Registration Number <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="e.g. AQ04052601"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Found on your Royal Kennel Club registration certificate. Leave
-                    blank if not yet registered.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
+              render={({ field }) => {
+                const body = form.watch('registrationBody');
+                const labelByBody: Record<string, { label: string; placeholder: string; helper: string }> = {
+                  kc: {
+                    label: 'RKC Registration Number',
+                    placeholder: 'e.g. AQ04052601',
+                    helper: 'Found on your Royal Kennel Club registration certificate. Leave blank if not yet registered.',
+                  },
+                  sv: {
+                    label: 'SV Registration Number',
+                    placeholder: 'e.g. SZ 2355001',
+                    helper: 'Found on the SV (Verein für Deutsche Schäferhunde) pedigree.',
+                  },
+                  ikc: {
+                    label: 'IKC Registration Number',
+                    placeholder: 'e.g. A12345',
+                    helper: 'Irish Kennel Club registration number.',
+                  },
+                  other: {
+                    label: 'Registration Number',
+                    placeholder: 'Registration number',
+                    helper: 'Use whichever format the registering body issued.',
+                  },
+                };
+                const cfg = body && labelByBody[body] ? labelByBody[body] : labelByBody.kc;
+                // Required whenever a registration body is selected — Amanda
+                // 2026-05-20: SV regional shows demand a registration number
+                // regardless of body (RKC/SV/IKC/Other). For RKC-only dogs
+                // not registered yet, the user can leave Body blank.
+                const isRequired = !!body;
+                return (
+                  <FormItem>
+                    <FormLabel>
+                      {cfg.label} {' '}
+                      {isRequired ? (
+                        <span className="text-destructive">*</span>
+                      ) : (
+                        <span className="text-muted-foreground font-normal">(optional)</span>
+                      )}
+                    </FormLabel>
+                    <FormControl>
+                      <Input placeholder={cfg.placeholder} {...field} />
+                    </FormControl>
+                    <FormDescription>{cfg.helper}</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
             />
 
             <FormField
@@ -448,7 +517,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                   <FormLabel>Registered Name</FormLabel>
                   <FormControl>
                     <Input
-                      placeholder="e.g. Dorabella Dancing Queen"
+                      placeholder="e.g. Thornfield Silver Dream"
                       {...field}
                     />
                   </FormControl>
@@ -871,6 +940,206 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                 </FormItem>
               )}
             />
+
+            {/* Breeder location — Amanda 2026-05-19. SV/WUSV catalogues
+                typically list the breeder's location (especially for
+                overseas imports), so we capture Country/City/Postcode
+                as separate fields. */}
+            <div className="grid gap-3 sm:grid-cols-3">
+              <FormField
+                control={form.control}
+                name="breederCountry"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Breeder Country <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. Germany" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="breederCity"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Breeder City <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. Augsburg" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="breederPostcode"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Breeder Postcode <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. 86150" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* SV / WUSV Details */}
+        <Card>
+          <CardHeader>
+            <CardTitle>SV / WUSV Details</CardTitle>
+            <CardDescription>
+              For German Shepherd Dogs entered in WUSV/SV regional shows. Leave blank if not applicable.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 sm:space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="registrationBody"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Registration Body <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
+                    <Select onValueChange={(v) => field.onChange(v === 'none' ? undefined : v)} value={field.value ?? 'none'}>
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select body" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">— Not specified —</SelectItem>
+                        <SelectItem value="kc">Royal Kennel Club (RKC)</SelectItem>
+                        <SelectItem value="sv">SV (Germany)</SelectItem>
+                        <SelectItem value="ikc">IKC (Ireland)</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="coatType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Coat Type <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
+                    <Select onValueChange={(v) => field.onChange(v === 'none' ? undefined : v)} value={field.value ?? 'none'}>
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select coat type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">— Not specified —</SelectItem>
+                        <SelectItem value="stock">Stock Coat</SelectItem>
+                        <SelectItem value="long_stock">Long Stock Coat</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <FormField
+              control={form.control}
+              name="microchipNumber"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Microchip Number <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
+                  <FormControl>
+                    <Input placeholder="15-digit microchip number" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="sireRegistrationBody"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Sire Registration Body <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                    <Select onValueChange={(v) => field.onChange(v === 'none' ? undefined : v)} value={field.value ?? 'none'}>
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select body" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">— Not specified —</SelectItem>
+                        <SelectItem value="kc">RKC</SelectItem>
+                        <SelectItem value="sv">SV</SelectItem>
+                        <SelectItem value="ikc">IKC</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="sireRegistrationNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Sire Registration Number <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. SZ 2355001" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="damRegistrationBody"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Dam Registration Body <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                    <Select onValueChange={(v) => field.onChange(v === 'none' ? undefined : v)} value={field.value ?? 'none'}>
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select body" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">— Not specified —</SelectItem>
+                        <SelectItem value="kc">RKC</SelectItem>
+                        <SelectItem value="sv">SV</SelectItem>
+                        <SelectItem value="ikc">IKC</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="damRegistrationNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Dam Registration Number <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. SZ 2344555" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
           </CardContent>
         </Card>
 
@@ -908,7 +1177,8 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
           <CardHeader>
             <CardTitle>Owners</CardTitle>
             <CardDescription>
-              Add up to 4 owners. At least one owner with name, address, and email is required for show entries.
+              Owner name and full postal address are required — RKC catalogues
+              must list them. Add up to 4 owners.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -964,20 +1234,17 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                     )}
                   />
                 </div>
-                <PostcodeLookup
-                  compact
-                  onSelect={(result) => {
-                    form.setValue(`owners.${index}.ownerAddress`, formatAddress(result) + ', ' + result.postcode);
-                  }}
-                />
                 <FormField
                   control={form.control}
                   name={`owners.${index}.ownerAddress`}
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Address</FormLabel>
+                      <FormLabel>Full postal address</FormLabel>
                       <FormControl>
-                        <Input placeholder="Full postal address" {...field} />
+                        <Input
+                          placeholder="House, street, town, postcode"
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

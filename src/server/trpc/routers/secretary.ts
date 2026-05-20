@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, sql, isNull, inArray, asc, desc, ilike } from 'drizzle-orm';
+import { and, eq, sql, isNull, isNotNull, inArray, asc, desc, ilike } from 'drizzle-orm';
 import { secretaryProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { verifyShowAccess } from '../verify-show-access';
@@ -37,16 +37,30 @@ import {
   classSponsorships,
   organisationPeople,
   achievements,
+  judgeRoles,
+  breedGroups,
+  catalogueAdverts,
+  showDiscountGroups,
 } from '@/server/db/schema';
 import {
   DEFAULT_CHECKLIST_ITEMS,
   calculateDueDate,
 } from '@/lib/default-checklist';
 import { getStripe } from '@/server/services/stripe';
+import { executeStripeRefund } from '@/server/services/stripe-refunds';
 import { penceToPoundsString } from '@/lib/date-utils';
 import { Resend } from 'resend';
 import { searchKcJudges, fetchKcJudgeProfile } from '@/server/services/kc-judges';
-import { CATALOGUE_NAME_PATTERN } from '@/lib/catalogue-utils';
+import { ensureCatalogueNumbers } from '@/server/services/catalogue-numbering';
+import { generateJudgeContractPdf } from '@/server/services/judge-contract-pdf';
+import { normaliseOfficers } from '@/components/schedule/shared/officers';
+import { CATALOGUE_NAME_PATTERN, isCatalogueItem } from '@/lib/catalogue-utils';
+import {
+  aggregateShowMetrics,
+  computeShowMetrics,
+  computeShowsMetrics,
+  getPaidOrderIdsForShow,
+} from '@/server/services/show-metrics';
 
 /** Build human-readable breed text for judge offer emails.
  *  When assignments have breedId=null, falls back to showBreedNames, then showName. */
@@ -65,6 +79,22 @@ function buildJudgeBreedText(
     parts.push(name + suffix);
   }
   return [...new Set(parts)].join(', ') || 'All breeds';
+}
+
+import { buildJudgeBreedAndClassification } from '@/lib/judge-breed-classification';
+
+/**
+ * Derive a sundry row's status from the entries in the same order
+ * rather than the order's payment status. The order might be
+ * 'pending_payment' because the exhibitor abandoned checkout, but
+ * if the entry itself was withdrawn the sundries were withdrawn
+ * with it — showing "Pending" would misrepresent the state.
+ * Preference: confirmed > withdrawn > pending.
+ */
+function statusFromEntries(orderEntries: ReadonlyArray<{ status: string }>): string {
+  if (orderEntries.some((e) => e.status === 'confirmed')) return 'confirmed';
+  if (orderEntries.every((e) => e.status === 'withdrawn')) return 'withdrawn';
+  return orderEntries[0]?.status ?? 'pending';
 }
 
 export const secretaryRouter = createTRPCRouter({
@@ -112,76 +142,34 @@ export const secretaryRouter = createTRPCRouter({
       inactiveStatuses.includes(s.status)
     );
 
-    // Get entries/revenue for active shows only
+    // Canonical metrics for all org shows — one batched call, paid-only
+    // revenue (sundries included, net of refunds).
     const activeShowIds = activeShows.map((s) => s.id);
     const allShowIds = orgShows.map((s) => s.id);
+    const metricsByShow = await computeShowsMetrics(ctx.db, allShowIds);
+
     let totalEntries = 0;
     let activeRevenue = 0;
     let totalRevenue = 0;
-
-    if (allShowIds.length > 0) {
-      const allStats = await ctx.db
-        .select({
-          count: sql<number>`count(*)`,
-          revenue: sql<number>`coalesce(sum(${entries.totalFee}), 0)`,
-        })
-        .from(entries)
-        .where(
-          and(inArray(entries.showId, allShowIds), isNull(entries.deletedAt))
-        );
-
-      totalEntries = Number(allStats[0]?.count ?? 0);
-      totalRevenue = Number(allStats[0]?.revenue ?? 0);
-    }
-
-    if (activeShowIds.length > 0) {
-      const activeStats = await ctx.db
-        .select({
-          revenue: sql<number>`coalesce(sum(${entries.totalFee}), 0)`,
-        })
-        .from(entries)
-        .where(
-          and(
-            inArray(entries.showId, activeShowIds),
-            isNull(entries.deletedAt)
-          )
-        );
-
-      activeRevenue = Number(activeStats[0]?.revenue ?? 0);
-    }
-
-    // Per-show entry counts (single query, grouped)
-    const perShowStats: Record<string, { entryCount: number; revenue: number }> = {};
-    if (allShowIds.length > 0) {
-      const perShow = await ctx.db
-        .select({
-          showId: entries.showId,
-          entryCount: sql<number>`count(*)`,
-          revenue: sql<number>`coalesce(sum(${entries.totalFee}), 0)`,
-        })
-        .from(entries)
-        .where(
-          and(
-            inArray(entries.showId, allShowIds),
-            isNull(entries.deletedAt),
-            inArray(entries.status, ['pending', 'confirmed'])
-          )
-        )
-        .groupBy(entries.showId);
-
-      for (const row of perShow) {
-        perShowStats[row.showId] = {
-          entryCount: Number(row.entryCount),
-          revenue: Number(row.revenue),
-        };
+    for (const showId of allShowIds) {
+      const m = metricsByShow.get(showId);
+      if (!m) continue;
+      const entryCount = m.confirmedEntryCount + m.pendingEntryCount;
+      totalEntries += entryCount;
+      totalRevenue += m.clubReceivablePence;
+      if (activeShowIds.includes(showId)) {
+        activeRevenue += m.clubReceivablePence;
       }
     }
 
-    const enrichShow = (s: (typeof orgShows)[number]) => ({
-      ...s,
-      entryCount: perShowStats[s.id]?.entryCount ?? 0,
-      showRevenue: perShowStats[s.id]?.revenue ?? 0,
-    });
+    const enrichShow = (s: (typeof orgShows)[number]) => {
+      const m = metricsByShow.get(s.id);
+      return {
+        ...s,
+        entryCount: m ? m.confirmedEntryCount + m.pendingEntryCount : 0,
+        showRevenue: m?.clubReceivablePence ?? 0,
+      };
+    };
 
     return {
       organisations: userMemberships.map((m) => m.organisation),
@@ -195,16 +183,33 @@ export const secretaryRouter = createTRPCRouter({
     };
   }),
 
-  getOrganisation: secretaryProcedure.query(async ({ ctx }) => {
-    const membership = await ctx.db.query.memberships.findFirst({
-      where: and(
-        eq(memberships.userId, ctx.session.user.id),
-        eq(memberships.status, 'active')
-      ),
-      with: { organisation: true },
-    });
-    return membership?.organisation ?? null;
-  }),
+  getOrganisation: secretaryProcedure
+    .input(z.object({ organisationId: z.string().uuid().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      // If an explicit org id is passed, return that one (gated on
+      // active membership). Otherwise fall back to the user's first
+      // active membership — legacy behaviour for callers that haven't
+      // been migrated to pass the active-org id yet.
+      if (input?.organisationId) {
+        const membership = await ctx.db.query.memberships.findFirst({
+          where: and(
+            eq(memberships.userId, ctx.session.user.id),
+            eq(memberships.organisationId, input.organisationId),
+            eq(memberships.status, 'active')
+          ),
+          with: { organisation: true },
+        });
+        return membership?.organisation ?? null;
+      }
+      const membership = await ctx.db.query.memberships.findFirst({
+        where: and(
+          eq(memberships.userId, ctx.session.user.id),
+          eq(memberships.status, 'active')
+        ),
+        with: { organisation: true },
+      });
+      return membership?.organisation ?? null;
+    }),
 
   /** List active members of an organisation (for secretary picker, etc.) */
   orgMembers: secretaryProcedure
@@ -260,32 +265,39 @@ export const secretaryRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
-      const entryCounts = await ctx.db
-        .select({
-          count: sql<number>`count(*)`,
-          revenue: sql<number>`coalesce(sum(${entries.totalFee}), 0)`,
-          confirmed: sql<number>`count(*) filter (where ${entries.status} = 'confirmed')`,
-          pending: sql<number>`count(*) filter (where ${entries.status} = 'pending')`,
-        })
-        .from(entries)
-        .where(
-          and(
-            eq(entries.showId, input.showId),
-            isNull(entries.deletedAt)
-          )
-        );
+      const [metrics, classCount] = await Promise.all([
+        computeShowMetrics(ctx.db, input.showId),
+        ctx.db
+          .select({ count: sql<number>`count(*)` })
+          .from(showClasses)
+          .where(eq(showClasses.showId, input.showId)),
+      ]);
 
-      const classCount = await ctx.db
-        .select({ count: sql<number>`count(*)` })
-        .from(showClasses)
-        .where(eq(showClasses.showId, input.showId));
-
+      // "Active" revenue is paid-orders-only, net of refunds, INCLUDING
+      // sundry items (catalogues, donations, sponsorships). See the
+      // show-metrics service for the canonical definition.
       return {
-        totalEntries: Number(entryCounts[0]?.count ?? 0),
-        totalRevenue: Number(entryCounts[0]?.revenue ?? 0),
-        confirmedEntries: Number(entryCounts[0]?.confirmed ?? 0),
-        pendingEntries: Number(entryCounts[0]?.pending ?? 0),
+        // Revenue (paid only, sundry-inclusive)
+        clubReceivablePence: metrics.clubReceivablePence,
+        paidEntryFeesPence: metrics.paidEntryFeesPence,
+        paidSundryRevenuePence: metrics.paidSundryRevenuePence,
+        paidPlatformFeePence: metrics.paidPlatformFeePence,
+        grossChargedPence: metrics.grossChargedPence,
+        refundedPence: metrics.refundedPence,
+        pendingClubReceivablePence: metrics.pendingClubReceivablePence,
+        pendingPlatformFeePence: metrics.pendingPlatformFeePence,
+        // Entry counts
+        confirmedEntries: metrics.confirmedEntryCount,
+        pendingEntries: metrics.pendingEntryCount,
+        withdrawnEntries: metrics.withdrawnEntryCount,
+        totalEntries: metrics.confirmedEntryCount + metrics.pendingEntryCount + metrics.withdrawnEntryCount,
+        // Catalogue counts (paid only)
+        paidPrintedCatalogueCount: metrics.paidPrintedCatalogueCount,
+        paidOnlineCatalogueCount: metrics.paidOnlineCatalogueCount,
+        // Class count
         totalClasses: Number(classCount[0]?.count ?? 0),
+        // Back-compat alias — totalRevenue now means "club receivable, paid-only"
+        totalRevenue: metrics.clubReceivablePence,
       };
     }),
 
@@ -465,6 +477,97 @@ export const secretaryRouter = createTRPCRouter({
       return updated!;
     }),
 
+  /**
+   * Dedicated mutation for changing the club's show ruleset (RKC ↔ SV).
+   * Lives separate from updateOrganisation so the My Club page can flip
+   * the ruleset without having to re-send name/email/phone/website on
+   * every change.
+   */
+  updateOrgRuleset: secretaryProcedure
+    .input(
+      z.object({
+        organisationId: z.string().uuid(),
+        showRuleset: z.enum(['rkc', 'wusv']),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
+      const [updated] = await ctx.db
+        .update(organisations)
+        .set({ showRuleset: input.showRuleset })
+        .where(eq(organisations.id, input.organisationId))
+        .returning({ id: organisations.id, showRuleset: organisations.showRuleset });
+      return updated!;
+    }),
+
+  /**
+   * Get the club's current payout bank details. Returned as the full
+   * sort code + account number — the secretary is a member of the club
+   * and is authorised to see these (auth check via verifyOrgAccess).
+   * If you ever expose this outside the secretary context, mask the
+   * middle of the account number.
+   */
+  getPayoutDetails: secretaryProcedure
+    .input(z.object({ organisationId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
+      const org = await ctx.db.query.organisations.findFirst({
+        where: eq(organisations.id, input.organisationId),
+        columns: {
+          payoutAccountName: true,
+          payoutSortCode: true,
+          payoutAccountNumber: true,
+        },
+      });
+      return {
+        accountName: org?.payoutAccountName ?? null,
+        sortCode: org?.payoutSortCode ?? null,
+        accountNumber: org?.payoutAccountNumber ?? null,
+      };
+    }),
+
+  /**
+   * Save the club's payout bank details. We validate the shape (UK sort
+   * code 6 digits, account number 8 digits) but don't verify the account
+   * exists — that gets confirmed the first time we send a payment and
+   * it either lands or bounces.
+   *
+   * All three fields must be provided together. Partial updates don't
+   * make sense for bank details — you either have a full set or you
+   * don't.
+   */
+  updatePayoutDetails: secretaryProcedure
+    .input(
+      z.object({
+        organisationId: z.string().uuid(),
+        accountName: z.string().min(1).max(140),
+        sortCode: z
+          .string()
+          .regex(/^\d{2}-?\d{2}-?\d{2}$/, 'Sort code must be 6 digits (e.g. 10-88-00)'),
+        accountNumber: z
+          .string()
+          .regex(/^\d{8}$/, 'Account number must be exactly 8 digits'),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
+      // Normalise the sort code to hyphenated form so storage matches
+      // what we render back.
+      const digits = input.sortCode.replace(/-/g, '');
+      const normalisedSortCode = `${digits.slice(0, 2)}-${digits.slice(2, 4)}-${digits.slice(4, 6)}`;
+
+      await ctx.db
+        .update(organisations)
+        .set({
+          payoutAccountName: input.accountName,
+          payoutSortCode: normalisedSortCode,
+          payoutAccountNumber: input.accountNumber,
+        })
+        .where(eq(organisations.id, input.organisationId));
+
+      return { success: true };
+    }),
+
   // ── Catalogue number assignment ────────────────────────────
 
   assignCatalogueNumbers: secretaryProcedure
@@ -545,6 +648,11 @@ export const secretaryRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
+      // Auto-assign catalogue numbers in class order the first time the
+      // secretary opens the catalogue page, so they don't have to hunt
+      // for a button. No-op if numbers already exist.
+      await ensureCatalogueNumbers(ctx.db, input.showId);
+
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
         with: {
@@ -587,9 +695,16 @@ export const secretaryRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
+      // An absentee is only meaningful for entries that were actually paid
+      // for. Withdrawn entries from abandoned checkouts (order still in
+      // pending_payment) never made the catalogue.
+      const paidOrderIds = await getPaidOrderIdsForShow(ctx.db, input.showId);
+      if (paidOrderIds.length === 0) return [];
+
       return ctx.db.query.entries.findMany({
         where: and(
           eq(entries.showId, input.showId),
+          inArray(entries.orderId, paidOrderIds),
           sql`(${entries.status} = 'withdrawn' OR ${entries.absent} = true)`,
           isNull(entries.deletedAt)
         ),
@@ -618,9 +733,16 @@ export const secretaryRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
+      // Only entries on paid orders belong in reports — abandoned
+      // pending_payment checkouts produce ghost entries that inflate
+      // "Total Entries" and leak non-paying exhibitors into the tally.
+      const paidOrderIds = await getPaidOrderIdsForShow(ctx.db, input.showId);
+      if (paidOrderIds.length === 0) return [];
+
       return ctx.db.query.entries.findMany({
         where: and(
           eq(entries.showId, input.showId),
+          inArray(entries.orderId, paidOrderIds),
           isNull(entries.deletedAt)
         ),
         with: {
@@ -647,54 +769,207 @@ export const secretaryRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
-      const showEntries = await ctx.db.query.entries.findMany({
-        where: and(
-          eq(entries.showId, input.showId),
-          isNull(entries.deletedAt)
-        ),
-        with: {
-          payments: true,
-          exhibitor: true,
-          dog: true,
-        },
-      });
-
-      // Compute sundry totals per order so we can include them in per-entry totals
-      const orderIds = showEntries.map((e) => e.orderId).filter(Boolean) as string[];
-      const sundryTotalsMap = new Map<string, number>();
-      if (orderIds.length > 0) {
-        const sundryTotals = await ctx.db
+      const [showEntries, orderRows, sundryLines, paymentRefundRows] = await Promise.all([
+        // Exclude entries on refunded orders — they'd otherwise show up
+        // as "cancelled" ghost rows in the report. Refund history lives
+        // on the Financial tab's refund UI.
+        ctx.db.query.entries.findMany({
+          where: and(
+            eq(entries.showId, input.showId),
+            isNull(entries.deletedAt),
+            sql`(${entries.orderId} IS NULL OR ${entries.orderId} NOT IN (
+              SELECT id FROM ${orders} WHERE show_id = ${input.showId} AND status = 'refunded'
+            ))`
+          ),
+          with: { payments: true, exhibitor: true, dog: true },
+        }),
+        ctx.db.query.orders.findMany({
+          where: eq(orders.showId, input.showId),
+          with: { exhibitor: true, payments: true },
+        }),
+        ctx.db
           .select({
             orderId: orderSundryItems.orderId,
-            total: sql<number>`sum(${orderSundryItems.quantity} * ${orderSundryItems.unitPrice})`,
+            itemName: sundryItems.name,
+            quantity: orderSundryItems.quantity,
+            unitPrice: orderSundryItems.unitPrice,
           })
           .from(orderSundryItems)
-          .where(inArray(orderSundryItems.orderId, orderIds))
-          .groupBy(orderSundryItems.orderId);
-        for (const row of sundryTotals) {
-          sundryTotalsMap.set(row.orderId, Number(row.total));
+          .innerJoin(orders, eq(orderSundryItems.orderId, orders.id))
+          .innerJoin(sundryItems, eq(orderSundryItems.sundryItemId, sundryItems.id))
+          .where(eq(orders.showId, input.showId)),
+        ctx.db
+          .select({
+            orderId: payments.orderId,
+            refundAmount: payments.refundAmount,
+          })
+          .from(payments)
+          .innerJoin(orders, eq(payments.orderId, orders.id))
+          .where(and(eq(orders.showId, input.showId), isNotNull(payments.refundAmount))),
+      ]);
+
+      // Aggregate sundries per order (one "Sundry items" row per order,
+      // not per line item — matches what secretaries reconcile against
+      // their bank).
+      const sundryTotalsByOrder = new Map<string, number>();
+      const sundryBreakdownByOrder = new Map<string, string[]>();
+      for (const line of sundryLines) {
+        const total = line.quantity * line.unitPrice;
+        sundryTotalsByOrder.set(
+          line.orderId,
+          (sundryTotalsByOrder.get(line.orderId) ?? 0) + total
+        );
+        const arr = sundryBreakdownByOrder.get(line.orderId) ?? [];
+        arr.push(`${line.itemName}${line.quantity > 1 ? ` ×${line.quantity}` : ''}`);
+        sundryBreakdownByOrder.set(line.orderId, arr);
+      }
+
+      type ReportRow = {
+        kind: 'entry' | 'sundry';
+        id: string;
+        orderId: string | null;
+        exhibitor: { name: string | null; email: string | null } | null;
+        itemLabel: string;
+        itemDetail?: string;  // tooltip/secondary line (sundry breakdown)
+        entryFee: number;
+        addons: number;
+        total: number;
+        status: string;
+        // Payments live on the order. We attach them to the LAST row of
+        // each order group so they read as the order's single total
+        // payment in the UI rather than repeating on every line.
+        payments: Array<{ amount: number; status: string }>;
+      };
+
+      // Group visible entries by orderId so we can attach sundries and
+      // payments correctly. Orders whose entries are all deleted
+      // (cancelled & soft-deleted) never appear in showEntries and are
+      // therefore invisible here — exactly what we want: no ghost
+      // "Sundry items — Cancelled" rows for abandoned checkouts.
+      const entriesByOrder = new Map<string, typeof showEntries>();
+      for (const e of showEntries) {
+        if (!e.orderId) continue;
+        const arr = entriesByOrder.get(e.orderId) ?? [];
+        arr.push(e);
+        entriesByOrder.set(e.orderId, arr);
+      }
+
+      // Orders that are visible (i.e. have at least one non-deleted
+      // entry), in the order they first appear in showEntries. We use
+      // this ordering to group the output so each order's entries +
+      // sundry row appear contiguous on screen.
+      const visibleOrderIds: string[] = [];
+      const seen = new Set<string>();
+      for (const e of showEntries) {
+        const oid = e.orderId;
+        if (oid && !seen.has(oid)) {
+          visibleOrderIds.push(oid);
+          seen.add(oid);
         }
       }
 
-      const enrichedEntries = showEntries.map((e) => ({
-        ...e,
-        sundryTotal: (e.orderId ? sundryTotalsMap.get(e.orderId) : undefined) ?? 0,
-      }));
+      const orderById = new Map(orderRows.map((o) => [o.id, o] as const));
+      const rows: ReportRow[] = [];
 
-      const totalRevenue = enrichedEntries.reduce(
-        (sum, e) => sum + e.totalFee + e.sundryTotal,
-        0
-      );
-      const paidEntries = enrichedEntries.filter((e) => e.status === 'confirmed');
-      const pendingEntries = enrichedEntries.filter((e) => e.status === 'pending');
+      // Also include entries with no orderId (unusual) as their own
+      // rows without grouping. Preserve the historical behaviour that
+      // every non-deleted entry shows up.
+      for (const e of showEntries) {
+        if (e.orderId) continue;
+        rows.push({
+          kind: 'entry',
+          id: `entry-${e.id}`,
+          orderId: null,
+          exhibitor: e.exhibitor
+            ? { name: e.exhibitor.name, email: e.exhibitor.email }
+            : null,
+          itemLabel: e.dog?.registeredName ?? 'Junior Handler',
+          entryFee: e.totalFee,
+          addons: 0,
+          total: e.totalFee,
+          status: e.status,
+          payments: e.payments.map((p) => ({ amount: p.amount, status: p.status })),
+        });
+      }
+
+      for (const orderId of visibleOrderIds) {
+        const orderEntries = entriesByOrder.get(orderId) ?? [];
+        const order = orderById.get(orderId);
+        const sundryTotal = sundryTotalsByOrder.get(orderId) ?? 0;
+        const hasSundry = sundryTotal > 0;
+        const orderStatus = statusFromEntries(orderEntries);
+        const orderPayments = (order?.payments ?? []).map((p) => ({
+          amount: p.amount,
+          status: p.status,
+        }));
+
+        // Emit entry rows for this order. Payments are attached only
+        // to the LAST row of the group (sundry if present, otherwise
+        // the last entry).
+        orderEntries.forEach((e, idx) => {
+          const isLastRowOfGroup = !hasSundry && idx === orderEntries.length - 1;
+          rows.push({
+            kind: 'entry',
+            id: `entry-${e.id}`,
+            orderId,
+            exhibitor: e.exhibitor
+              ? { name: e.exhibitor.name, email: e.exhibitor.email }
+              : null,
+            itemLabel: e.dog?.registeredName ?? 'Junior Handler',
+            entryFee: e.totalFee,
+            addons: 0,
+            total: e.totalFee,
+            status: e.status,
+            payments: isLastRowOfGroup ? orderPayments : [],
+          });
+        });
+
+        if (hasSundry) {
+          const breakdown = sundryBreakdownByOrder.get(orderId) ?? [];
+          const firstExhibitor = orderEntries[0]?.exhibitor;
+          rows.push({
+            kind: 'sundry',
+            id: `sundry-${orderId}`,
+            orderId,
+            exhibitor: firstExhibitor
+              ? { name: firstExhibitor.name, email: firstExhibitor.email }
+              : null,
+            itemLabel: 'Sundry items',
+            itemDetail: breakdown.join(', '),
+            entryFee: 0,
+            addons: sundryTotal,
+            total: sundryTotal,
+            status: orderStatus,
+            payments: orderPayments,
+          });
+        }
+      }
+
+      const metrics = aggregateShowMetrics({
+        orders: orderRows.map((o) => ({
+          id: o.id,
+          status: o.status,
+          totalAmount: o.totalAmount,
+          platformFeePence: o.platformFeePence,
+        })),
+        entries: showEntries.map((e) => ({
+          id: e.id,
+          orderId: e.orderId,
+          status: e.status,
+          totalFee: e.totalFee,
+          deletedAt: e.deletedAt,
+        })),
+        sundries: sundryLines,
+        payments: paymentRefundRows,
+      });
 
       return {
-        entries: enrichedEntries,
+        rows,
         summary: {
-          totalRevenue,
-          paidCount: paidEntries.length,
-          pendingCount: pendingEntries.length,
-          totalEntries: enrichedEntries.length,
+          totalRevenue: metrics.clubReceivablePence,
+          paidCount: metrics.confirmedEntryCount,
+          pendingCount: metrics.pendingEntryCount,
+          totalEntries: showEntries.length,
         },
       };
     }),
@@ -719,7 +994,8 @@ export const secretaryRouter = createTRPCRouter({
 
       const catalogueItemIds = catalogueItems.map((i) => i.id);
 
-      // Find all orders for these catalogue items with exhibitor info
+      // Only paid orders count — a catalogue "order" that never paid
+      // isn't an order the club needs to fulfil.
       const catalogueOrders = await ctx.db
         .select({
           itemName: sundryItems.name,
@@ -731,9 +1007,13 @@ export const secretaryRouter = createTRPCRouter({
         .innerJoin(sundryItems, eq(orderSundryItems.sundryItemId, sundryItems.id))
         .innerJoin(orders, eq(orderSundryItems.orderId, orders.id))
         .innerJoin(users, eq(orders.exhibitorId, users.id))
-        .where(inArray(orderSundryItems.sundryItemId, catalogueItemIds));
+        .where(
+          and(
+            inArray(orderSundryItems.sundryItemId, catalogueItemIds),
+            eq(orders.status, 'paid')
+          )
+        );
 
-      // Split into printed vs online
       const printed: { name: string; email: string; quantity: number }[] = [];
       const online: { name: string; email: string; quantity: number }[] = [];
 
@@ -848,6 +1128,144 @@ export const secretaryRouter = createTRPCRouter({
         },
         orderBy: [desc(entryAuditLog.createdAt)],
       });
+    }),
+
+  /**
+   * Higham-style Extras Summary report. Groups every paid add-on
+   * purchase (sundry items: catalogues, memberships, donations etc;
+   * class sponsorships; show sponsors) by item type and lists each
+   * buyer's contact details under that section. Per Amanda's spec
+   * 2026-05-14.
+   */
+  getExtrasSummary: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      // Sundry line items on paid orders only. Refunded orders are
+      // excluded because the buyer no longer holds the item.
+      const sundryRows = await ctx.db
+        .select({
+          itemName: sundryItems.name,
+          quantity: orderSundryItems.quantity,
+          unitPrice: orderSundryItems.unitPrice,
+          buyerName: users.name,
+          buyerEmail: users.email,
+          buyerPhone: users.phone,
+        })
+        .from(orderSundryItems)
+        .innerJoin(orders, eq(orderSundryItems.orderId, orders.id))
+        .innerJoin(sundryItems, eq(orderSundryItems.sundryItemId, sundryItems.id))
+        .innerJoin(users, eq(orders.exhibitorId, users.id))
+        .where(and(eq(orders.showId, input.showId), eq(orders.status, 'paid')));
+
+      // Class sponsorships — secretary-entered, not a purchase. Still
+      // useful in the extras summary so the secretary has one list of
+      // every external contributor to the show.
+      const classSponsorRows = await ctx.db
+        .select({
+          className: classDefinitions.name,
+          sponsorName: classSponsorships.sponsorName,
+          sponsorAffix: classSponsorships.sponsorAffix,
+          trophyName: classSponsorships.trophyName,
+          trophyDonor: classSponsorships.trophyDonor,
+          prizeMoney: classSponsorships.prizeMoney,
+          prizeDescription: classSponsorships.prizeDescription,
+        })
+        .from(classSponsorships)
+        .innerJoin(showClasses, eq(classSponsorships.showClassId, showClasses.id))
+        .innerJoin(classDefinitions, eq(showClasses.classDefinitionId, classDefinitions.id))
+        .where(eq(showClasses.showId, input.showId));
+
+      // Show-level sponsors. Stored on showSponsors with optional ad/
+      // tier info. We list each one as a sponsor entry.
+      const showSponsorRows = await ctx.db
+        .select({
+          tier: showSponsors.tier,
+          customTitle: showSponsors.customTitle,
+          specialPrizes: showSponsors.specialPrizes,
+          prizeMoney: showSponsors.prizeMoney,
+          sponsorName: sponsors.name,
+          sponsorEmail: sponsors.contactEmail,
+        })
+        .from(showSponsors)
+        .innerJoin(sponsors, eq(showSponsors.sponsorId, sponsors.id))
+        .where(eq(showSponsors.showId, input.showId));
+
+      type SundryBuyer = {
+        name: string | null;
+        email: string | null;
+        phone: string | null;
+        quantity: number;
+        unitPrice: number;
+      };
+      type SponsorRow = {
+        sponsorName: string;
+        email?: string | null;
+        phone?: string | null;
+        detail: string;
+        amountPence?: number;
+      };
+
+      // Group sundry rows by item name
+      const sundryGroups = new Map<string, SundryBuyer[]>();
+      for (const r of sundryRows) {
+        const arr = sundryGroups.get(r.itemName) ?? [];
+        arr.push({
+          name: r.buyerName,
+          email: r.buyerEmail,
+          phone: r.buyerPhone,
+          quantity: r.quantity,
+          unitPrice: r.unitPrice,
+        });
+        sundryGroups.set(r.itemName, arr);
+      }
+
+      const sections = [
+        ...Array.from(sundryGroups.entries())
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([label, buyers]) => ({
+            kind: 'sundry' as const,
+            label,
+            buyers: buyers.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '')),
+            totalQuantity: buyers.reduce((s, b) => s + b.quantity, 0),
+            totalPence: buyers.reduce((s, b) => s + b.quantity * b.unitPrice, 0),
+          })),
+      ];
+
+      const classSponsorEntries: SponsorRow[] = classSponsorRows
+        .filter((r) => r.sponsorName || r.trophyName || r.prizeMoney || r.prizeDescription)
+        .map((r) => {
+          const parts: string[] = [];
+          if (r.trophyName) parts.push(r.trophyName);
+          if (r.prizeMoney) parts.push(`£${(r.prizeMoney / 100).toFixed(2)}`);
+          if (r.prizeDescription) parts.push(r.prizeDescription);
+          return {
+            sponsorName: [r.sponsorName, r.sponsorAffix].filter(Boolean).join(' ') || (r.trophyDonor ?? 'Class sponsor'),
+            detail: `${r.className}${parts.length ? ' — ' + parts.join(', ') : ''}`,
+            amountPence: r.prizeMoney ?? undefined,
+          };
+        });
+
+      const showSponsorEntries: SponsorRow[] = showSponsorRows.map((r) => {
+        const parts: string[] = [];
+        if (r.customTitle) parts.push(r.customTitle);
+        if (r.specialPrizes) parts.push(r.specialPrizes);
+        if (r.prizeMoney) parts.push(`£${(r.prizeMoney / 100).toFixed(2)}`);
+        return {
+          sponsorName: r.sponsorName,
+          email: r.sponsorEmail,
+          phone: null,
+          detail: [r.tier, ...parts].filter(Boolean).join(' — '),
+          amountPence: r.prizeMoney ?? undefined,
+        };
+      });
+
+      return {
+        sundrySections: sections,
+        classSponsors: classSponsorEntries,
+        showSponsors: showSponsorEntries,
+      };
     }),
 
   // ── Class transfer ─────────────────────────────────────────
@@ -1342,32 +1760,76 @@ export const secretaryRouter = createTRPCRouter({
         orderBy: [asc(showClasses.sortOrder)],
       });
 
-      // Sort by: breed group name → breed name → sex (dog first) → class sort order
+      // Single-breed shows often have breed_id set inconsistently across
+      // classes. Skip breed in the sort unless there are genuinely ≥3
+      // distinct breeds — otherwise a "German Shepherd Dog" value sorts
+      // before the "ZZZ" null-breed fallback and bubbles mixed-breed
+      // classes to the wrong position.
+      const distinctBreeds = new Set(classes.filter((c) => c.breed).map((c) => c.breed!.name));
+      const isMultiBreed = distinctBreeds.size >= 3;
+
+      // Sex tier for numbering order:
+      //   0 = non-JH Mixed (Veteran etc.) — class 1, rendered at the top
+      //   1 = Dog
+      //   2 = Bitch
+      //   3 = JH (excluded from numbering below)
+      // Non-JH Mixed classes go first because RKC ordering places Veteran
+      // before the per-sex classes — a Veteran-winning dog must still be
+      // eligible for the Dog Challenge, which hasn't been judged yet.
+      const sexTier = (cls: (typeof classes)[number]): number => {
+        if (cls.classDefinition?.type === 'junior_handler') return 3;
+        if (cls.sex === 'dog') return 1;
+        if (cls.sex === 'bitch') return 2;
+        return 0;
+      };
+
       const sorted = [...classes].sort((a, b) => {
-        const groupA = a.breed?.group?.name ?? 'ZZZ';
-        const groupB = b.breed?.group?.name ?? 'ZZZ';
-        if (groupA !== groupB) return groupA.localeCompare(groupB);
+        if (isMultiBreed) {
+          const groupA = a.breed?.group?.name ?? 'ZZZ';
+          const groupB = b.breed?.group?.name ?? 'ZZZ';
+          if (groupA !== groupB) return groupA.localeCompare(groupB);
 
-        const breedA = a.breed?.name ?? 'ZZZ';
-        const breedB = b.breed?.name ?? 'ZZZ';
-        if (breedA !== breedB) return breedA.localeCompare(breedB);
+          const breedA = a.breed?.name ?? 'ZZZ';
+          const breedB = b.breed?.name ?? 'ZZZ';
+          if (breedA !== breedB) return breedA.localeCompare(breedB);
+        }
 
-        // Dog before Bitch, null last
-        const sexOrder = (s: string | null) => s === 'dog' ? 0 : s === 'bitch' ? 1 : 2;
-        if (sexOrder(a.sex) !== sexOrder(b.sex)) return sexOrder(a.sex) - sexOrder(b.sex);
+        const tierA = sexTier(a);
+        const tierB = sexTier(b);
+        if (tierA !== tierB) return tierA - tierB;
 
         return a.sortOrder - b.sortOrder;
       });
 
-      // Assign sequential numbers
-      for (let i = 0; i < sorted.length; i++) {
-        await ctx.db
-          .update(showClasses)
-          .set({ classNumber: i + 1 })
-          .where(eq(showClasses.id, sorted[i]!.id));
+      // RKC show licences count only breed classes — Junior Handler and
+      // Special Award Classes sit outside the licensed count. JH classes
+      // render as JHA, JHB, … and SAC classes as A, B, C, … at display time,
+      // both with classNumber = null in the DB. Numbered sequence is
+      // reserved for the RKC-licensed breed classes.
+      const isUnnumbered = (cls: (typeof sorted)[number]) =>
+        cls.classDefinition?.type === 'junior_handler' ||
+        (cls.classDefinition?.type === 'special' &&
+          (cls.classDefinition?.name?.startsWith('Special Award Class') ?? false));
+
+      let numbered = 0;
+      let skipped = 0;
+      for (const cls of sorted) {
+        if (isUnnumbered(cls)) {
+          await ctx.db
+            .update(showClasses)
+            .set({ classNumber: null })
+            .where(eq(showClasses.id, cls.id));
+          skipped++;
+        } else {
+          numbered++;
+          await ctx.db
+            .update(showClasses)
+            .set({ classNumber: numbered })
+            .where(eq(showClasses.id, cls.id));
+        }
       }
 
-      return { assigned: sorted.length };
+      return { assigned: numbered, jhSkipped: skipped };
     }),
 
   resortShowClasses: secretaryProcedure
@@ -1869,8 +2331,45 @@ export const secretaryRouter = createTRPCRouter({
           judge: true,
           breed: true,
           ring: true,
+          breedGroup: true,
+          judgeRole: true,
         },
       });
+    }),
+
+  getJudgeRoles: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      return ctx.db.query.judgeRoles.findMany({
+        orderBy: (jr, { asc }) => [asc(jr.sortOrder), asc(jr.name)],
+      });
+    }),
+
+  assignGroupJudge: secretaryProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        judgeId: z.string().uuid(),
+        breedGroupId: z.string().uuid().nullable().optional(),
+        judgeRoleId: z.string().uuid().nullable().optional(),
+      }).refine((d) => d.breedGroupId || d.judgeRoleId, {
+        message: 'At least one of breedGroupId or judgeRoleId must be provided',
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      const [assignment] = await ctx.db
+        .insert(judgeAssignments)
+        .values({
+          showId: input.showId,
+          judgeId: input.judgeId,
+          breedGroupId: input.breedGroupId ?? null,
+          judgeRoleId: input.judgeRoleId ?? null,
+        })
+        .returning();
+      return assignment!;
     }),
 
   assignJudge: secretaryProcedure
@@ -1985,10 +2484,13 @@ export const secretaryRouter = createTRPCRouter({
       judgeId: z.string().uuid(),
       name: z.string().min(1).max(255).optional(),
       kcNumber: z.string().max(50).optional(),
-      contactEmail: z.string().email().optional(),
+      // Allow an empty string so secretaries can clear a mis-entered
+      // email — the mutation normalises '' → null below. Non-empty values
+      // must still look like an email.
+      contactEmail: z.union([z.string().email().max(255), z.literal('')]).optional(),
       contactPhone: z.string().max(50).optional(),
       bio: z.string().max(2000).optional(),
-      photoUrl: z.string().url().max(500).optional(),
+      photoUrl: z.union([z.string().url().max(500), z.literal('')]).optional(),
       kennelClubAffix: z.string().max(100).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -2019,7 +2521,11 @@ export const secretaryRouter = createTRPCRouter({
       // Judge details
       name: z.string().min(1).max(255),
       kcNumber: z.string().max(50).optional(),
-      contactEmail: z.string().email(),
+      // Required for breed-judge assignments (needed to email the offer)
+      // but optional for JH-only assignments — we don't send offers for JH.
+      // The wizard enforces the "required when breed assignment present"
+      // rule client-side; server stays tolerant of a blank string.
+      contactEmail: z.union([z.string().email(), z.literal('')]).optional(),
       contactPhone: z.string().max(50).optional(),
       kcJudgeId: z.string().max(100).optional(),
       kennelClubAffix: z.string().max(100).optional(),
@@ -2027,6 +2533,9 @@ export const secretaryRouter = createTRPCRouter({
       assignments: z.array(z.object({
         breedId: z.string().uuid().nullable(),
         sex: z.enum(['dog', 'bitch']).nullable(),
+        /** True for the lunchtime Special Awards Classes judge — breedId/sex ignored
+         *  on the schedule and they render as "Special Awards Classes" instead. */
+        isSpecialAwardsClassesJudge: z.boolean().optional(),
       })).min(1),
       ringId: z.string().uuid().nullable().optional(),
     }))
@@ -2081,6 +2590,7 @@ export const secretaryRouter = createTRPCRouter({
         breedId: a.breedId,
         ringId: input.ringId ?? null,
         sex: a.sex,
+        isSpecialAwardsClassesJudge: a.isSpecialAwardsClassesJudge ?? false,
       }));
 
       const rows = await ctx.db.insert(judgeAssignments)
@@ -2123,41 +2633,63 @@ export const secretaryRouter = createTRPCRouter({
       ]);
       const assignments = assignmentRows;
 
-      // Build unique breed+sex requirements from classes
-      // Group classes by breedId+sex to get the unique combos that need judges
+      // Build unique requirements from classes. Split by:
+      //   1. breedId + sex (the original axes)
+      //   2. AND whether the class is a Special Award Class — those need
+      //      a separate "Special Awards Classes" judge per Amanda's spec
+      //      2026-05-14, and must never be lumped with the breed's
+      //      regular null-sex classes (e.g. Veteran).
       const requirementsMap = new Map<string, {
         breedId: string | null;
         breedName: string | null;
-        label: string; // Display label — breed name or class definition name (e.g. "Junior Handling")
+        label: string;
         sex: string | null;
         classCount: number;
+        isSpecialAwards: boolean;
       }>();
 
+      const isSpecialAwardClass = (sc: typeof classes[number]) =>
+        sc.classDefinition?.name?.startsWith('Special Award Class') ?? false;
+
       for (const sc of classes) {
-        const key = `${sc.breedId ?? 'all'}:${sc.sex ?? 'both'}`;
+        const sac = isSpecialAwardClass(sc);
+        const key = sac
+          ? `sac:${sc.breedId ?? 'all'}`
+          : `${sc.breedId ?? 'all'}:${sc.sex ?? 'both'}`;
         const existing = requirementsMap.get(key);
         if (existing) {
           existing.classCount++;
         } else {
           // For breed-less classes: use breed name, class name (JH), or scope-aware fallback
-          const isJuniorHandling = sc.classDefinition?.name?.toLowerCase().includes('handling');
-          const label = sc.breed?.name
-            ?? (isJuniorHandling ? 'Junior Handling'
-              : show?.showScope === 'single_breed' ? 'Breed Classes' : 'All Breeds');
+          const isJuniorHandling = sc.classDefinition?.type === 'junior_handler';
+          const label = sac
+            ? (sc.breed?.name ? `${sc.breed.name} — Special Awards Classes` : 'Special Awards Classes')
+            : (sc.breed?.name
+                ?? (isJuniorHandling ? 'Junior Handling'
+                  : show?.showScope === 'single_breed' ? 'Breed Classes' : 'All Breeds'));
           requirementsMap.set(key, {
             breedId: sc.breedId,
             breedName: sc.breed?.name ?? null,
             label,
-            sex: sc.sex,
+            sex: sac ? null : sc.sex,
             classCount: 1,
+            isSpecialAwards: sac,
           });
         }
       }
 
       // Check which requirements are covered by assignments
       const coverage = Array.from(requirementsMap.values()).map((req) => {
-        // Find ALL matching assignments, preferring sex-specific over catch-all
-        const matching = assignments.filter((a) => {
+        // SAC assignments and "regular breed-judge" assignments live in
+        // different lanes — keep them apart so a SAC assignment doesn't
+        // appear to cover Junior Handling and vice versa.
+        const lanedAssignments = req.isSpecialAwards
+          ? assignments.filter((a) => a.isSpecialAwardsClassesJudge)
+          : assignments.filter((a) => !a.isSpecialAwardsClassesJudge);
+
+        // Find ALL matching assignments. breed=null or sex=null on an
+        // assignment is treated as a catch-all — "any breed" / "any sex".
+        const matching = lanedAssignments.filter((a) => {
           const breedMatch = req.breedId
             ? a.breedId === req.breedId || a.breedId === null
             : a.breedId === null;
@@ -2167,8 +2699,17 @@ export const secretaryRouter = createTRPCRouter({
           return breedMatch && sexMatch;
         });
 
-        // Prefer exact sex match over catch-all (sex: null)
-        const exact = matching.filter((a) => a.sex === req.sex);
+        // Prefer assignments that match BOTH breed and sex exactly over
+        // catch-all matches. Without this, a null-breed null-sex assignment
+        // (e.g. Junior Handling) wrongly claims coverage of a breed-
+        // specific mixed-sex class like Veteran — they have the same
+        // shape in the DB. Exact breed + exact sex wins; catch-alls
+        // only appear when nothing more specific exists.
+        const exact = matching.filter(
+          (a) =>
+            a.sex === req.sex &&
+            (req.breedId ? a.breedId === req.breedId : a.breedId === null),
+        );
         const best = exact.length > 0 ? exact : matching;
 
         // Deduplicate by judge
@@ -2187,6 +2728,7 @@ export const secretaryRouter = createTRPCRouter({
           label: req.label,
           sex: req.sex,
           classCount: req.classCount,
+          isSpecialAwards: req.isSpecialAwards,
           covered: judges.length > 0,
           judges,
           // Keep flat fields for backwards compat
@@ -2235,6 +2777,115 @@ export const secretaryRouter = createTRPCRouter({
     }),
 
   // ─── Refund Management ────────────────────────────────
+
+  /**
+   * Every paid order on a show with the full line-item breakdown needed to
+   * render a refund card: exhibitor, entries (with dog + JH handler), sundry
+   * lines (with item names), and the original Stripe payment + refund
+   * history. Paid-only — draft/pending/cancelled orders never appear.
+   */
+  getRefundableOrders: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      return ctx.db.query.orders.findMany({
+        where: and(eq(orders.showId, input.showId), eq(orders.status, 'paid')),
+        with: {
+          exhibitor: { columns: { id: true, name: true, email: true } },
+          entries: {
+            where: isNull(entries.deletedAt),
+            with: {
+              dog: true,
+              juniorHandlerDetails: true,
+              entryClasses: {
+                with: {
+                  showClass: { with: { classDefinition: true } },
+                },
+              },
+            },
+          },
+          orderSundryItems: {
+            with: { sundryItem: true },
+          },
+          payments: true,
+        },
+        orderBy: [desc(orders.createdAt)],
+      });
+    }),
+
+  /**
+   * Full-order refund: refunds every remaining penny on the order's Stripe
+   * PaymentIntent (entry fees + sundries + platform fee all come back to the
+   * exhibitor), cancels every live entry, and marks the payment refunded.
+   *
+   * Use this when the exhibitor pulls out entirely. For "refund one entry
+   * but keep the catalogue", use issueRefund with an entryId instead.
+   */
+  refundOrder: secretaryProcedure
+    .input(
+      z.object({
+        orderId: z.string().uuid(),
+        reason: z.string().max(500).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const order = await ctx.db.query.orders.findFirst({
+        where: eq(orders.id, input.orderId),
+      });
+      if (!order) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Order not found' });
+      }
+      await verifyShowAccess(ctx.db, ctx.session.user.id, order.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      if (order.status !== 'paid') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only paid orders can be refunded' });
+      }
+
+      // Match any payment that still has money to give back — succeeded AND
+      // partially_refunded both qualify. A pure 'succeeded' filter here would
+      // break after any prior entry-level partial refund flipped the status.
+      const originalPayment = await ctx.db.query.payments.findFirst({
+        where: and(
+          eq(payments.orderId, input.orderId),
+          inArray(payments.status, ['succeeded', 'partially_refunded'])
+        ),
+      });
+      if (!originalPayment?.stripePaymentId) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'No completed payment found for this order',
+        });
+      }
+
+      const alreadyRefunded = originalPayment.refundAmount ?? 0;
+      const remainingPence = originalPayment.amount - alreadyRefunded;
+      if (remainingPence <= 0) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Order has already been fully refunded',
+        });
+      }
+
+      const result = await executeStripeRefund(ctx.db, originalPayment, {
+        amountPence: remainingPence,
+        reason: input.reason,
+      });
+
+      // Cancel every live entry on this order — exhibitor has pulled out
+      await ctx.db
+        .update(entries)
+        .set({ status: 'cancelled' })
+        .where(
+          and(
+            eq(entries.orderId, input.orderId),
+            inArray(entries.status, ['pending', 'confirmed'])
+          )
+        );
+
+      return { refunded: true, amount: result.amount };
+    }),
+
   issueRefund: secretaryProcedure
     .input(
       z.object({
@@ -2256,13 +2907,23 @@ export const secretaryRouter = createTRPCRouter({
 
       await verifyShowAccess(ctx.db, ctx.session.user.id, entry.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
-      // Find the original succeeded payment with a Stripe payment ID
-      const originalPayment = await ctx.db.query.payments.findFirst({
-        where: and(
-          eq(payments.entryId, input.entryId),
-          eq(payments.status, 'succeeded'),
-        ),
-      });
+      // Payments on new (merchant-of-record) orders are linked by orderId —
+      // multiple entries share one order + one Stripe charge. Fall back to
+      // the legacy per-entry payment linkage for older test/data rows where
+      // payment.entryId is populated instead.
+      const originalPayment = entry.orderId
+        ? await ctx.db.query.payments.findFirst({
+            where: and(
+              eq(payments.orderId, entry.orderId),
+              eq(payments.status, 'succeeded'),
+            ),
+          })
+        : await ctx.db.query.payments.findFirst({
+            where: and(
+              eq(payments.entryId, input.entryId),
+              eq(payments.status, 'succeeded'),
+            ),
+          });
 
       if (!originalPayment?.stripePaymentId) {
         throw new TRPCError({
@@ -2282,37 +2943,15 @@ export const secretaryRouter = createTRPCRouter({
         });
       }
 
-      // Issue refund via Stripe
-      const stripe = getStripe();
-      await stripe.refunds.create({
-        payment_intent: originalPayment.stripePaymentId,
-        amount: refundAmount,
-        ...(input.reason ? { reason: 'requested_by_customer' as const } : {}),
-      });
-
-      // Record the refund payment
-      await ctx.db.insert(payments).values({
+      const result = await executeStripeRefund(ctx.db, originalPayment, {
+        amountPence: refundAmount,
+        reason: input.reason,
         entryId: input.entryId,
-        orderId: originalPayment.orderId,
-        stripePaymentId: originalPayment.stripePaymentId,
-        amount: refundAmount,
-        status: 'refunded',
-        type: 'refund',
       });
 
-      // Update original payment's refund tracking
-      const newRefundTotal = alreadyRefunded + refundAmount;
-      const isFullyRefunded = newRefundTotal >= originalPayment.amount;
-      await ctx.db
-        .update(payments)
-        .set({
-          refundAmount: newRefundTotal,
-          status: isFullyRefunded ? 'refunded' : 'partially_refunded',
-        })
-        .where(eq(payments.id, originalPayment.id));
-
-      // If fully refunded, cancel the entry
-      if (isFullyRefunded) {
+      // If this refund cleared the remaining balance, the whole order is
+      // gone — cancel this entry so it drops out of the catalogue.
+      if (result.fullyRefunded) {
         await ctx.db
           .update(entries)
           .set({ status: 'cancelled' })
@@ -2321,8 +2960,8 @@ export const secretaryRouter = createTRPCRouter({
 
       return {
         refunded: true,
-        amount: refundAmount,
-        fullyRefunded: isFullyRefunded,
+        amount: result.amount,
+        fullyRefunded: result.fullyRefunded,
       };
     }),
 
@@ -2509,6 +3148,36 @@ export const secretaryRouter = createTRPCRouter({
         })
         .returning();
 
+      // If the show already has catalogue numbers assigned to earlier
+      // entries, slot this new entry in at the next available number so
+      // Amanda doesn't have to remember to re-run the "Assign catalogue
+      // numbers" action every time she adds a late entry. This uses
+      // append-mode (max+1) so existing numbers stay stable — secretary
+      // can still run a full class-first re-sort explicitly if desired.
+      const existingNumbered = await ctx.db.query.entries.findFirst({
+        where: and(
+          eq(entries.showId, input.showId),
+          eq(entries.status, 'confirmed'),
+          isNotNull(entries.catalogueNumber),
+        ),
+      });
+      let nextCatalogueNumber: string | null = null;
+      if (existingNumbered) {
+        const allNumbered = await ctx.db.query.entries.findMany({
+          where: and(
+            eq(entries.showId, input.showId),
+            eq(entries.status, 'confirmed'),
+            isNotNull(entries.catalogueNumber),
+          ),
+          columns: { catalogueNumber: true },
+        });
+        const highest = allNumbered.reduce((max, e) => {
+          const n = Number(e.catalogueNumber);
+          return Number.isFinite(n) && n > max ? n : max;
+        }, 0);
+        nextCatalogueNumber = String(highest + 1);
+      }
+
       // Create entry — auto-confirmed for secretary entries
       const [entry] = await ctx.db
         .insert(entries)
@@ -2520,6 +3189,7 @@ export const secretaryRouter = createTRPCRouter({
           totalFee: classFee,
           orderId: order!.id,
           status: 'confirmed',
+          catalogueNumber: nextCatalogueNumber,
         })
         .returning();
 
@@ -2844,6 +3514,15 @@ export const secretaryRouter = createTRPCRouter({
 
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
+        with: {
+          organisation: {
+            columns: {
+              payoutSortCode: true,
+              payoutAccountNumber: true,
+              payoutAccountName: true,
+            },
+          },
+        },
       });
 
       if (!show) return {};
@@ -2902,6 +3581,14 @@ export const secretaryRouter = createTRPCRouter({
         judges_assigned: allJudgesCovered,
         stewards_assigned: Number(stewardCount?.count) > 0,
         rings_created: Number(ringCount?.count) > 0,
+        // Club needs payout bank details saved before we can open entries —
+        // entry fees land in Remi's balance and we pay out by BACS after
+        // the show.
+        payout_details_set: !!(
+          show.organisation?.payoutSortCode &&
+          show.organisation?.payoutAccountNumber &&
+          show.organisation?.payoutAccountName
+        ),
       };
 
       // Check if all assigned judges have been sent offer letters
@@ -2926,7 +3613,11 @@ export const secretaryRouter = createTRPCRouter({
       const scheduleData = show.scheduleData as Record<string, unknown> | null;
       const guarantors = (scheduleData?.guarantors as { name: string }[] | undefined) ?? [];
       const minGuarantors = show.showType === 'championship' ? 6 : 3;
-      detected.guarantors_added = guarantors.length >= minGuarantors;
+      // SV/WUSV regional shows aren't licensed under the RKC F-rules
+      // framework that requires guarantors, so the check auto-passes
+      // (Amanda 2026-05-19/20).
+      const isWusvShow = (show as { showRuleset?: 'rkc' | 'wusv' }).showRuleset === 'wusv';
+      detected.guarantors_added = isWusvShow || guarantors.length >= minGuarantors;
 
       // Championship shows: check Open + Limit for each sex per breed
       if (show.showType === 'championship' && Number(classCount?.count) > 0) {
@@ -2985,6 +3676,9 @@ export const secretaryRouter = createTRPCRouter({
       const scheduleData = show.scheduleData as Record<string, unknown> | null;
       const guarantors = (scheduleData?.guarantors as { name: string }[] | undefined) ?? [];
       const minGuarantors = show.showType === 'championship' ? 6 : 3;
+      // SV regional shows don't operate under the RKC F-rules framework,
+      // so the guarantor + RKC class-minimum checks don't apply.
+      const isWusvShow = (show as { showRuleset?: 'rkc' | 'wusv' }).showRuleset === 'wusv';
 
       type Blocker = {
         key: string;
@@ -3032,7 +3726,7 @@ export const secretaryRouter = createTRPCRouter({
           actionPath: '', severity: 'required',
         });
       }
-      if (guarantors.length < minGuarantors) {
+      if (!isWusvShow && guarantors.length < minGuarantors) {
         openEntriesBlockers.push({
           key: 'insufficient_guarantors',
           label: `Guarantors (${guarantors.length} of ${minGuarantors})`,
@@ -3040,8 +3734,10 @@ export const secretaryRouter = createTRPCRouter({
           actionPath: '/schedule', severity: 'required',
         });
       }
-      // Minimum class count validation (RKC regulation, non-companion shows only)
-      if (show.showType !== 'companion') {
+      // Minimum class count validation (RKC regulation, non-companion shows
+      // only). SV shows are exempt — their class count is governed by the
+      // WUSV/GSDL rules, not RKC F-rules.
+      if (!isWusvShow && show.showType !== 'companion') {
         const numClasses = Number(classCount[0]?.count);
         const minClasses = show.showScope === 'single_breed' ? 12 : 16;
         if (numClasses > 0 && numClasses < minClasses) {
@@ -3266,11 +3962,15 @@ export const secretaryRouter = createTRPCRouter({
         with: { breed: true, ring: true },
       });
 
-      // Derive breed text: show.breed (single-breed), class breeds, or show name
+      // Derive breed + classification labels per Amanda's 2026-05-15 spec.
       const showBreedNames = show.breed
         ? [show.breed.name]
         : [...new Set(show.showClasses.filter((sc) => sc.breed).map((sc) => sc.breed!.name))];
-      const breedsText = buildJudgeBreedText(assignments, showBreedNames, show.name);
+      const { breedLine, classificationLine } = buildJudgeBreedAndClassification(
+        assignments,
+        showBreedNames,
+        show.name,
+      );
 
       // Token expires in 30 days
       const tokenExpiresAt = new Date();
@@ -3366,8 +4066,12 @@ export const secretaryRouter = createTRPCRouter({
             <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${venue}</td>
           </tr>
           <tr>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Breeds</td>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${breedsText}</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Breed</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${breedLine}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Classification</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${classificationLine}</td>
           </tr>
           ${show.showType ? `<tr>
             <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Show Type</td>
@@ -3492,7 +4196,11 @@ export const secretaryRouter = createTRPCRouter({
       const showBreedNames = contract.show.breed
         ? [contract.show.breed.name]
         : [...new Set(contract.show.showClasses.filter((sc) => sc.breed).map((sc) => sc.breed!.name))];
-      const breedsText = buildJudgeBreedText(assignments, showBreedNames, contract.show.name);
+      const { breedLine, classificationLine } = buildJudgeBreedAndClassification(
+        assignments,
+        showBreedNames,
+        contract.show.name,
+      );
 
       const baseUrl = getBaseUrl();
       const acceptUrl = `${baseUrl}/api/judge-contract/${contract.offerToken}`;
@@ -3536,7 +4244,8 @@ export const secretaryRouter = createTRPCRouter({
           <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444; width: 120px;">Show</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${show.name}</td></tr>
           <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Date</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${showDate}</td></tr>
           <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Venue</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${venue}</td></tr>
-          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Breeds</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${breedsText}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Breed</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${breedLine}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Classification</td><td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${classificationLine}</td></tr>
         </table>
         <div style="text-align: center; margin: 28px 0;">
           <a href="${acceptUrl}?action=accept" style="display: inline-block; background: #2D5F3F; color: #ffffff; padding: 14px 32px; border-radius: 8px; font-size: 16px; font-weight: 600; text-decoration: none; margin-bottom: 12px;">Accept Appointment</a>
@@ -3645,6 +4354,18 @@ export const secretaryRouter = createTRPCRouter({
         .update(judgeContracts)
         .set({ stage: 'confirmed', confirmedAt: new Date() })
         .where(eq(judgeContracts.id, input.contractId));
+
+      // Backfill for contracts confirmed before the archive feature landed.
+      if (!contract.contractPdfKey) {
+        try {
+          await generateJudgeContractPdf(input.contractId);
+        } catch (err) {
+          console.error(
+            `[judge-contract] Failed to backfill PDF snapshot for contract ${input.contractId} (show ${contract.showId}):`,
+            err,
+          );
+        }
+      }
 
       // Auto-update checklist items for this judge
       await ctx.db
@@ -4654,65 +5375,44 @@ export const secretaryRouter = createTRPCRouter({
   getShowEntryStats: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      // Entry counts by status
-      const statusCounts = await ctx.db
-        .select({
-          status: entries.status,
-          count: sql<number>`count(*)`,
-        })
-        .from(entries)
-        .where(eq(entries.showId, input.showId))
-        .groupBy(entries.status);
-
-      // Revenue from paid orders
-      const revenueResult = await ctx.db
-        .select({
-          totalRevenue: sql<number>`coalesce(sum(${orders.totalAmount}), 0)`,
-          orderCount: sql<number>`count(*)`,
-        })
-        .from(orders)
-        .where(
-          and(
-            eq(orders.showId, input.showId),
-            eq(orders.status, 'paid')
-          )
-        );
-
-      // Unique exhibitors
-      const exhibitorResult = await ctx.db
-        .select({
-          count: sql<number>`count(distinct ${entries.exhibitorId})`,
-        })
-        .from(entries)
-        .where(
-          and(
-            eq(entries.showId, input.showId),
-            inArray(entries.status, ['pending', 'confirmed'])
-          )
-        );
-
-      // Most recent entry date
-      const latestEntry = await ctx.db
-        .select({ createdAt: entries.createdAt })
-        .from(entries)
-        .where(eq(entries.showId, input.showId))
-        .orderBy(desc(entries.createdAt))
-        .limit(1);
-
-      const counts: Record<string, number> = {};
-      for (const row of statusCounts) {
-        counts[row.status] = Number(row.count);
-      }
+      const [metrics, exhibitorResult, latestEntry] = await Promise.all([
+        computeShowMetrics(ctx.db, input.showId),
+        // Unique exhibitors across alive, not-cancelled entries
+        ctx.db
+          .select({
+            count: sql<number>`count(distinct ${entries.exhibitorId})`,
+          })
+          .from(entries)
+          .where(
+            and(
+              eq(entries.showId, input.showId),
+              isNull(entries.deletedAt),
+              inArray(entries.status, ['pending', 'confirmed'])
+            )
+          ),
+        ctx.db
+          .select({ createdAt: entries.createdAt })
+          .from(entries)
+          .where(and(eq(entries.showId, input.showId), isNull(entries.deletedAt)))
+          .orderBy(desc(entries.createdAt))
+          .limit(1),
+      ]);
 
       return {
-        totalEntries: Object.values(counts).reduce((a, b) => a + b, 0),
-        confirmed: counts.confirmed ?? 0,
-        pending: counts.pending ?? 0,
-        withdrawn: counts.withdrawn ?? 0,
-        cancelled: counts.cancelled ?? 0,
-        transferred: counts.transferred ?? 0,
-        totalRevenue: Number(revenueResult[0]?.totalRevenue ?? 0),
-        paidOrders: Number(revenueResult[0]?.orderCount ?? 0),
+        // Entry counts — live (not soft-deleted) entries, bucketed by order state
+        totalEntries:
+          metrics.confirmedEntryCount +
+          metrics.pendingEntryCount +
+          metrics.withdrawnEntryCount,
+        confirmed: metrics.confirmedEntryCount,
+        pending: metrics.pendingEntryCount,
+        withdrawn: metrics.withdrawnEntryCount,
+        // Legacy shape — we don't separately track transferred/cancelled here
+        cancelled: 0,
+        transferred: 0,
+        // Revenue is club receivable (entries + sundries, net of refunds)
+        totalRevenue: metrics.clubReceivablePence,
+        paidOrders: metrics.paidOrderCount,
         uniqueExhibitors: Number(exhibitorResult[0]?.count ?? 0),
         lastEntryAt: latestEntry[0]?.createdAt ?? null,
       };
@@ -4829,14 +5529,63 @@ export const secretaryRouter = createTRPCRouter({
           additionalNotes: z.string().optional(),
           welcomeNote: z.string().optional(),
           outsideAttraction: z.boolean().optional(),
+          hasBestVeteranInShow: z.boolean().optional(),
+          bestVeteranInShowEligibility: z.string().optional(),
         }),
       })
     )
     .mutation(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
-      // Save show-level fields alongside scheduleData JSONB
-      const showUpdates: Record<string, unknown> = { scheduleData: input.scheduleData };
+      // Time ordering must be sane so the schedule doesn't print nonsense
+      // like "Judging starts 08:30, Show opens 09:00". Strings are "HH:MM"
+      // so lexical comparison works.
+      const showOpen = input.showOpenTime?.trim() || null;
+      const judgingStart = input.judgingStartTime?.trim() || null;
+      const latestArrival = input.scheduleData.latestArrivalTime?.trim() || null;
+
+      if (showOpen && judgingStart && judgingStart <= showOpen) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Judging start (${judgingStart}) must be after the show opens (${showOpen}).`,
+        });
+      }
+      if (latestArrival && showOpen && latestArrival < showOpen) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Latest arrival (${latestArrival}) can't be before the show opens (${showOpen}).`,
+        });
+      }
+      if (latestArrival && judgingStart && latestArrival > judgingStart) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Latest arrival (${latestArrival}) must be before judging starts (${judgingStart}).`,
+        });
+      }
+
+      // Merge (rather than replace) scheduleData against the current
+      // DB value. The mutation is called from several places (schedule
+      // form autosave, sponsors page, catalogue-settings page), all
+      // of which build their payload by spreading the client-side
+      // React Query cache — a cache that can go stale. Merging
+      // against the authoritative DB state makes partial payloads
+      // safe: a stale client missing a field no longer drags that
+      // field out when it saves. Clearing a field via this mutation
+      // still works — send the field explicitly as empty string or
+      // null — but omission means "leave alone", not "erase".
+      const currentShow = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+        columns: { scheduleData: true, organisationId: true },
+      });
+      const existingScheduleData = (currentShow?.scheduleData ?? {}) as Record<string, unknown>;
+      // Trim + dedupe officers so a trailing-space typo can't render
+      // the same person twice on the schedule (Amanda 2026-05-19).
+      const normalisedInput = input.scheduleData.officers
+        ? { ...input.scheduleData, officers: normaliseOfficers(input.scheduleData.officers) }
+        : input.scheduleData;
+      const mergedScheduleData = { ...existingScheduleData, ...normalisedInput };
+
+      const showUpdates: Record<string, unknown> = { scheduleData: mergedScheduleData };
       if (input.showOpenTime !== undefined) showUpdates.showOpenTime = input.showOpenTime || null;
       if (input.judgingStartTime !== undefined) showUpdates.startTime = input.judgingStartTime || null;
       if (input.onCallVet !== undefined) showUpdates.onCallVet = input.onCallVet || null;
@@ -4846,16 +5595,22 @@ export const secretaryRouter = createTRPCRouter({
         .set(showUpdates)
         .where(eq(shows.id, input.showId));
 
-      // Sync new officers into organisation_people so they're available for future shows
+      // Sync new officers into organisation_people so they're available for future shows.
+      //
+      // Important: the form auto-saves on every keystroke, so a partially
+      // typed name like "Phili" would otherwise be inserted as its own
+      // roster row each tick. Only sync an officer when BOTH the name and
+      // the position are filled in — position is a single-click dropdown,
+      // so its presence is the strongest signal that the user has
+      // committed to this officer rather than still typing.
+      //
+      // Also require a space in the name (i.e. first + surname) as a
+      // second guard against incidental single-letter or partial entries.
       const scheduleOfficers = input.scheduleData.officers;
-      if (scheduleOfficers && scheduleOfficers.length > 0) {
-        const show = await ctx.db.query.shows.findFirst({
-          where: eq(shows.id, input.showId),
-          columns: { organisationId: true },
-        });
-        if (show) {
+      if (scheduleOfficers && scheduleOfficers.length > 0 && currentShow) {
+        {
           const existingPeople = await ctx.db.query.organisationPeople.findMany({
-            where: eq(organisationPeople.organisationId, show.organisationId),
+            where: eq(organisationPeople.organisationId, currentShow.organisationId),
             columns: { name: true },
           });
           const existingNames = new Set(
@@ -4871,9 +5626,16 @@ export const secretaryRouter = createTRPCRouter({
           );
 
           const newPeople = scheduleOfficers
-            .filter((o) => o.name.trim() && !existingNames.has(o.name.toLowerCase().trim()))
+            .filter((o) => {
+              const name = o.name.trim();
+              const position = (o.position ?? '').trim();
+              if (!name || !position) return false;
+              if (!name.includes(' ')) return false;
+              if (existingNames.has(name.toLowerCase())) return false;
+              return true;
+            })
             .map((o) => ({
-              organisationId: show.organisationId,
+              organisationId: currentShow.organisationId,
               name: o.name.trim(),
               position: o.position || null,
               isGuarantor: guarantorNames.has(o.name.toLowerCase().trim()),
@@ -5129,7 +5891,10 @@ export const secretaryRouter = createTRPCRouter({
         with: {
           classDefinition: true,
           breed: true,
-          classSponsorships: true,
+          // Insertion order keeps Trophy above Rosettes on the page.
+          // Secretaries add Trophy first; without an explicit order
+          // the rows shuffle between edits.
+          classSponsorships: { orderBy: [asc(classSponsorships.createdAt)] },
         },
         orderBy: [asc(showClasses.sortOrder)],
       });
@@ -5140,15 +5905,32 @@ export const secretaryRouter = createTRPCRouter({
     .input(z.object({ organisationId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
+      // Names are drawn from two sources: class-level sponsorships
+      // (class_sponsorships.sponsor_name) and show-level awards
+      // (shows.schedule_data->'awardSponsors'[*]). UNION + GROUP BY
+      // collapses duplicates that appear in both.
       const rows = await ctx.db.execute(sql`
-        SELECT DISTINCT cs.sponsor_name, cs.sponsor_affix
-        FROM class_sponsorships cs
-        JOIN show_classes sc ON cs.show_class_id = sc.id
-        JOIN shows s ON sc.show_id = s.id
-        WHERE s.organisation_id = ${input.organisationId}
-          AND cs.sponsor_name IS NOT NULL
-          AND cs.sponsor_name != ''
-        ORDER BY cs.sponsor_name
+        SELECT sponsor_name, MAX(sponsor_affix) AS sponsor_affix
+        FROM (
+          SELECT cs.sponsor_name, cs.sponsor_affix
+          FROM class_sponsorships cs
+          JOIN show_classes sc ON cs.show_class_id = sc.id
+          JOIN shows s ON sc.show_id = s.id
+          WHERE s.organisation_id = ${input.organisationId}
+            AND cs.sponsor_name IS NOT NULL
+            AND cs.sponsor_name != ''
+          UNION ALL
+          SELECT
+            entry->>'sponsorName' AS sponsor_name,
+            entry->>'sponsorAffix' AS sponsor_affix
+          FROM shows s,
+               jsonb_array_elements(COALESCE(s.schedule_data->'awardSponsors', '[]'::jsonb)) AS entry
+          WHERE s.organisation_id = ${input.organisationId}
+            AND entry->>'sponsorName' IS NOT NULL
+            AND entry->>'sponsorName' != ''
+        ) combined
+        GROUP BY sponsor_name
+        ORDER BY sponsor_name
       `);
       return rows as { sponsor_name: string; sponsor_affix: string | null }[];
     }),
@@ -5416,6 +6198,30 @@ export const secretaryRouter = createTRPCRouter({
       const crypto = await import('crypto');
       const sharedToken = crypto.randomUUID();
 
+      // Send the email FIRST — if it fails, DB state doesn't change and the
+      // previous approval token (if any) remains valid for the judge to use.
+      const { sendJudgeApprovalRequestEmail } = await import('@/server/services/email');
+      try {
+        await sendJudgeApprovalRequestEmail({
+          judge: { name: judge.name, email: judge.contactEmail },
+          show: {
+            name: show.name,
+            startDate: show.startDate,
+            slug: show.slug,
+            id: show.id,
+            organisation: show.organisation,
+          },
+          approvalToken: sharedToken,
+          breeds: assignments.filter((a) => a.breedId).map((a) => a.breedId!),
+        });
+      } catch (error) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `Could not send approval email to ${judge.contactEmail}. Please check the address and try again.`,
+          cause: error,
+        });
+      }
+
       await ctx.db
         .update(judgeAssignments)
         .set({
@@ -5431,20 +6237,6 @@ export const secretaryRouter = createTRPCRouter({
             eq(judgeAssignments.judgeId, input.judgeId)
           )
         );
-
-      const { sendJudgeApprovalRequestEmail } = await import('@/server/services/email');
-      await sendJudgeApprovalRequestEmail({
-        judge: { name: judge.name, email: judge.contactEmail },
-        show: {
-          name: show.name,
-          startDate: show.startDate,
-          slug: show.slug,
-          id: show.id,
-          organisation: show.organisation,
-        },
-        approvalToken: sharedToken,
-        breeds: assignments.filter((a) => a.breedId).map((a) => a.breedId!),
-      });
 
       return { sent: true };
     }),
@@ -5690,5 +6482,306 @@ export const secretaryRouter = createTRPCRouter({
         );
 
       return { removed: true };
+    }),
+
+  // ── WUSV / SV class management ───────────────────────────
+
+  listWusvClassDefs: publicProcedure.query(async ({ ctx }) => {
+    return ctx.db.query.classDefinitions.findMany({
+      where: eq(classDefinitions.type, 'sv_age'),
+      orderBy: [asc(classDefinitions.sortOrder)],
+    });
+  }),
+
+  setupWusvClasses: secretaryProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        entryFee: z.number().int().min(0),
+        selectedAgeDefIds: z.array(z.string().uuid()),
+        includeJh6_11: z.boolean(),
+        includeJh12_16: z.boolean(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      // Load existing show classes with their entry counts
+      const existing = await ctx.db.query.showClasses.findMany({
+        where: eq(showClasses.showId, input.showId),
+        with: {
+          classDefinition: { columns: { type: true } },
+          entryClasses: { columns: { id: true } },
+        },
+      });
+
+      const managed = existing.filter(
+        (sc) => sc.classDefinition?.type === 'sv_age' || sc.classDefinition?.type === 'junior_handler'
+      );
+      const managedIds = managed.map((sc) => sc.id);
+
+      // Guard: refuse if any managed class already has entries
+      const entriedClasses = managed.filter((sc) => sc.entryClasses.length > 0);
+      if (entriedClasses.length > 0) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: `Cannot modify SV classes — ${entriedClasses.length} class(es) already have entries. Cancel or refund entries first.`,
+        });
+      }
+
+      const hasClasses = input.selectedAgeDefIds.length > 0 || input.includeJh6_11 || input.includeJh12_16;
+
+      // Load defs before opening transaction (reads don't need to be atomic with the writes)
+      const [ageDefs, jhDefs] = await Promise.all([
+        input.selectedAgeDefIds.length > 0
+          ? ctx.db.query.classDefinitions.findMany({
+              where: and(
+                eq(classDefinitions.type, 'sv_age'),
+                inArray(classDefinitions.id, input.selectedAgeDefIds)
+              ),
+              orderBy: [asc(classDefinitions.sortOrder)],
+            })
+          : Promise.resolve([]),
+        (input.includeJh6_11 || input.includeJh12_16)
+          ? ctx.db.query.classDefinitions.findMany({
+              where: eq(classDefinitions.type, 'junior_handler'),
+              orderBy: [asc(classDefinitions.sortOrder)],
+            })
+          : Promise.resolve([]),
+      ]);
+
+      if (input.includeJh6_11 && !jhDefs.find((d) => d.name === 'Junior Handler (6-11)')) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Junior Handler (6-11) class definition not found' });
+      }
+      if (input.includeJh12_16 && !jhDefs.find((d) => d.name === 'Junior Handler (12-16)')) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Junior Handler (12-16) class definition not found' });
+      }
+
+      const nonManaged = existing.filter((sc) => !managedIds.includes(sc.id));
+      const baseClassNumber = nonManaged.reduce((max, sc) => Math.max(max, sc.classNumber ?? 0), 0);
+
+      type CoatSex = { sex: 'bitch' | 'dog'; coat: 'stock' | 'long_stock' };
+      // Bitch Long Stock → Bitch Stock → Dog Long Stock → Dog Stock per
+      // Amanda's SV convention 2026-05-19.
+      const COMBOS: CoatSex[] = [
+        { sex: 'bitch', coat: 'long_stock' },
+        { sex: 'bitch', coat: 'stock' },
+        { sex: 'dog', coat: 'long_stock' },
+        { sex: 'dog', coat: 'stock' },
+      ];
+
+      const values: {
+        showId: string;
+        classDefinitionId: string;
+        sex: 'dog' | 'bitch' | null;
+        svCoatType: 'stock' | 'long_stock' | null;
+        entryFee: number;
+        sortOrder: number;
+        classNumber: number;
+      }[] = [];
+
+      let idx = 0;
+      for (const def of ageDefs) {
+        for (const { sex, coat } of COMBOS) {
+          values.push({
+            showId: input.showId,
+            classDefinitionId: def.id,
+            sex,
+            svCoatType: coat,
+            entryFee: input.entryFee,
+            sortOrder: nonManaged.length + idx,
+            classNumber: baseClassNumber + idx + 1,
+          });
+          idx++;
+        }
+      }
+
+      if (input.includeJh6_11) {
+        const def = jhDefs.find((d) => d.name === 'Junior Handler (6-11)')!;
+        values.push({
+          showId: input.showId,
+          classDefinitionId: def.id,
+          sex: null,
+          svCoatType: null,
+          entryFee: 0,
+          sortOrder: nonManaged.length + idx,
+          classNumber: baseClassNumber + idx + 1,
+        });
+        idx++;
+      }
+
+      if (input.includeJh12_16) {
+        const def = jhDefs.find((d) => d.name === 'Junior Handler (12-16)')!;
+        values.push({
+          showId: input.showId,
+          classDefinitionId: def.id,
+          sex: null,
+          svCoatType: null,
+          entryFee: 0,
+          sortOrder: nonManaged.length + idx,
+          classNumber: baseClassNumber + idx + 1,
+        });
+        idx++;
+      }
+
+      await ctx.db.transaction(async (tx) => {
+        if (managedIds.length > 0) {
+          await tx.delete(showClasses).where(inArray(showClasses.id, managedIds));
+        }
+
+        if (hasClasses && values.length > 0) {
+          await tx.insert(showClasses).values(values);
+        }
+      });
+
+      return { created: values.length };
+    }),
+
+  // ── Catalogue adverts ────────────────────────────────────
+
+  getCatalogueAdverts: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      return ctx.db.query.catalogueAdverts.findMany({
+        where: eq(catalogueAdverts.showId, input.showId),
+        orderBy: [asc(catalogueAdverts.sortOrder)],
+      });
+    }),
+
+  upsertCatalogueAdvert: secretaryProcedure
+    .input(
+      z.object({
+        id: z.string().uuid().optional(),
+        showId: z.string().uuid(),
+        advertiserName: z.string().min(1).max(255),
+        adType: z.enum(['full_page', 'half_page', 'quarter_page']).default('full_page'),
+        document: z.enum(['schedule', 'catalogue', 'both']).default('catalogue'),
+        position: z.enum(['inside_front', 'inside_back', 'last_page']).default('last_page'),
+        imageStorageKey: z.string().nullable().optional(),
+        imageUrl: z.string().nullable().optional(),
+        textContent: z.string().nullable().optional(),
+        sortOrder: z.number().int().min(0).default(0),
+        isPaid: z.boolean().default(false),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+
+      const { id, ...data } = input;
+      if (id) {
+        const existing = await ctx.db.query.catalogueAdverts.findFirst({
+          where: and(eq(catalogueAdverts.id, id), eq(catalogueAdverts.showId, input.showId)),
+          columns: { id: true },
+        });
+        if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Advert not found' });
+
+        const [updated] = await ctx.db
+          .update(catalogueAdverts)
+          .set({ ...data, updatedAt: new Date() })
+          .where(eq(catalogueAdverts.id, id))
+          .returning();
+        return updated!;
+      }
+
+      const [created] = await ctx.db
+        .insert(catalogueAdverts)
+        .values(data)
+        .returning();
+      return created!;
+    }),
+
+  deleteCatalogueAdvert: secretaryProcedure
+    .input(z.object({ id: z.string().uuid(), showId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId);
+      await ctx.db
+        .delete(catalogueAdverts)
+        .where(
+          and(eq(catalogueAdverts.id, input.id), eq(catalogueAdverts.showId, input.showId))
+        );
+      return { deleted: true };
+    }),
+
+  // ── Discount groups ──────────────────────────────────────
+  // Named per-show discount tiers (Members, Pensioners, etc.) — the
+  // exhibitor declares one at checkout and pays the group's reduced
+  // first-class fee. If a group also sets multiDogPackagePence, that
+  // package replaces the show-wide one when the group is claimed.
+
+  listDiscountGroups: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      return ctx.db.query.showDiscountGroups.findMany({
+        where: eq(showDiscountGroups.showId, input.showId),
+        orderBy: [asc(showDiscountGroups.displayOrder)],
+      });
+    }),
+
+  createDiscountGroup: secretaryProcedure
+    .input(z.object({
+      showId: z.string().uuid(),
+      label: z.string().min(1).max(100),
+      firstEntryFeePence: z.number().int().min(0),
+      multiDogPackagePence: z.number().int().min(0).nullable().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      const [maxOrder] = await ctx.db
+        .select({ max: sql<number>`COALESCE(MAX(display_order), -1)` })
+        .from(showDiscountGroups)
+        .where(eq(showDiscountGroups.showId, input.showId));
+      const [created] = await ctx.db
+        .insert(showDiscountGroups)
+        .values({
+          showId: input.showId,
+          label: input.label,
+          firstEntryFeePence: input.firstEntryFeePence,
+          multiDogPackagePence: input.multiDogPackagePence ?? null,
+          displayOrder: (maxOrder?.max ?? -1) + 1,
+        })
+        .returning();
+      return created!;
+    }),
+
+  updateDiscountGroup: secretaryProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      label: z.string().min(1).max(100).optional(),
+      firstEntryFeePence: z.number().int().min(0).optional(),
+      multiDogPackagePence: z.number().int().min(0).nullable().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.showDiscountGroups.findFirst({
+        where: eq(showDiscountGroups.id, input.id),
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Discount group not found' });
+      await verifyShowAccess(ctx.db, ctx.session.user.id, existing.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      const updates: Record<string, unknown> = {};
+      if (input.label !== undefined) updates.label = input.label;
+      if (input.firstEntryFeePence !== undefined) updates.firstEntryFeePence = input.firstEntryFeePence;
+      if (input.multiDogPackagePence !== undefined) updates.multiDogPackagePence = input.multiDogPackagePence;
+      if (Object.keys(updates).length === 0) return existing;
+
+      const [updated] = await ctx.db
+        .update(showDiscountGroups)
+        .set(updates)
+        .where(eq(showDiscountGroups.id, input.id))
+        .returning();
+      return updated!;
+    }),
+
+  deleteDiscountGroup: secretaryProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.showDiscountGroups.findFirst({
+        where: eq(showDiscountGroups.id, input.id),
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Discount group not found' });
+      await verifyShowAccess(ctx.db, ctx.session.user.id, existing.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      await ctx.db.delete(showDiscountGroups).where(eq(showDiscountGroups.id, input.id));
+      return { deleted: true };
     }),
 });

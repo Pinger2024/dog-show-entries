@@ -2,7 +2,7 @@ import { auth } from '@/lib/auth';
 import { NextResponse } from 'next/server';
 
 const publicRoutes = ['/', '/login', '/register', '/forgot-password', '/reset-password'];
-const publicPrefixes = ['/shows', '/dog', '/api/auth', '/api/trpc', '/api/upload', '/api/webhooks', '/api/catalogue', '/api/schedule', '/api/judge-contract', '/about', '/help', '/privacy', '/terms', '/invite', '/pricing', '/promo', '/features'];
+const publicPrefixes = ['/shows', '/dog', '/api/auth', '/api/trpc', '/api/upload', '/api/webhooks', '/api/catalogue', '/api/schedule', '/api/judge-contract', '/api/share-events', '/api/shares', '/about', '/help', '/privacy', '/terms', '/invite', '/pricing', '/promo', '/features', '/for-secretaries'];
 
 // Routes that match a public prefix but require authentication
 const authRequiredPatterns = [
@@ -49,5 +49,5 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|manifest.json|serwist|icons|apple-touch-icon).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|manifest.json|serwist|icons|apple-touch-icon|sitemap.xml|robots.txt|\\.well-known).*)'],
 };

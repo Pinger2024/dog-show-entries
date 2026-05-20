@@ -67,6 +67,7 @@ export const classTypeEnum = pgEnum('class_type', [
   'achievement',
   'special',
   'junior_handler',
+  'sv_age',
 ]);
 
 // ── New enums for Amanda's requirements ──────────────────
@@ -88,6 +89,7 @@ export const orderStatusEnum = pgEnum('order_status', [
   'paid',
   'failed',
   'cancelled',
+  'refunded',
 ]);
 
 export const entryAuditActionEnum = pgEnum('entry_audit_action', [
@@ -148,6 +150,25 @@ export const subscriptionStatusEnum = pgEnum('subscription_status', [
   'past_due',
   'cancelled',
   'none',
+]);
+
+/**
+ * Lifecycle of a club's Stripe Connect (Standard) account.
+ * - not_started: no account created yet
+ * - pending: account created but KYC / details not yet submitted by the club
+ * - restricted: Stripe requires more info before charges can resume
+ * - active: charges_enabled=true, ready to accept entry payments
+ * - rejected: Stripe has declined the account (rare; blocks all charges)
+ *
+ * The authoritative source is Stripe itself; we mirror it to gate show
+ * publishing without a round-trip to Stripe on every render.
+ */
+export const stripeAccountStatusEnum = pgEnum('stripe_account_status', [
+  'not_started',
+  'pending',
+  'restricted',
+  'active',
+  'rejected',
 ]);
 
 export const invitationStatusEnum = pgEnum('invitation_status', [
@@ -230,6 +251,20 @@ export const adSizeEnum = pgEnum('ad_size', [
   'quarter_page',
 ]);
 
+/** Which document the advert renders in. */
+export const advertDocumentEnum = pgEnum('advert_document', [
+  'schedule',
+  'catalogue',
+  'both',
+]);
+
+/** Where in the document the advert slots in. */
+export const advertPositionEnum = pgEnum('advert_position', [
+  'inside_front',
+  'inside_back',
+  'last_page',
+]);
+
 // ── Print Shop enums ──────────────────────────────────
 
 export const printOrderStatusEnum = pgEnum('print_order_status', [
@@ -248,4 +283,80 @@ export const printServiceLevelEnum = pgEnum('print_service_level', [
   'saver',
   'standard',
   'express',
+]);
+
+// ── WUSV / SV regional show enums ──────────────────────────
+
+export const showRulesetEnum = pgEnum('show_ruleset', ['rkc', 'wusv']);
+
+export const coatTypeEnum = pgEnum('coat_type', ['stock', 'long_stock']);
+
+export const registrationBodyEnum = pgEnum('registration_body', [
+  'kc',
+  'sv',
+  'ikc',
+  'other',
+]);
+
+export const hipGradeEnum = pgEnum('hip_grade', [
+  'not_required',
+  'normal',
+  'fast_normal',
+  'noch_zugelassen',
+  'bva',
+  'ankc',
+  'other',
+]);
+
+export const elbowGradeEnum = pgEnum('elbow_grade', [
+  'not_required',
+  'normal',
+  'fast_normal',
+  'noch_zugelassen',
+  'bva',
+  'ankc',
+  'other',
+]);
+
+export const haemophiliaClearEnum = pgEnum('haemophilia_clear', [
+  'not_required',
+  'yes',
+  'no',
+  'not_tested',
+]);
+
+export const dmTestEnum = pgEnum('dm_test', [
+  'not_required',
+  'clear',
+  'carrier',
+  'affected',
+  'not_tested',
+]);
+
+/** DNA status for SV dogs. "Recorded" means the dog's DNA profile is on
+ *  file with the SV / national kennel club; "Proven" means parentage has
+ *  been verified via DNA comparison (a stronger claim). Amanda 2026-05-20. */
+export const dnaRecordingEnum = pgEnum('dna_recording', ['recorded', 'proven']);
+
+export const koerungEnum = pgEnum('koerung', [
+  'none',
+  'current_year',
+  'lebenzeit',
+]);
+
+export const wusvClubEnum = pgEnum('wusv_club', [
+  'gsdl',
+  'gsdl_brg',
+  'bagsd',
+  'sv',
+  'other',
+]);
+
+export const svGradeEnum = pgEnum('sv_grade', [
+  'v',
+  'sg',
+  'g',
+  'a',
+  'u',
+  'disqualified',
 ]);

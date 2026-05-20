@@ -26,7 +26,7 @@ export interface RingBoardRing {
   breeds: {
     breedName: string | null;
     classes: {
-      classNumber: number | null;
+      classLabel: string;
       className: string;
       sex: string | null;
       entryCount: number;
@@ -229,7 +229,7 @@ export function RingBoard({
                     return (
                       <View key={ci} style={s.classRow}>
                         <Text style={s.classNumber}>
-                          {cls.classNumber ? `${cls.classNumber}.` : ''}
+                          {cls.classLabel ? `${cls.classLabel}.` : ''}
                         </Text>
                         <Text style={s.className}>{cls.className}</Text>
                         {sexLabel ? <Text style={s.classSex}>{sexLabel}</Text> : <View style={{ width: 50 }} />}

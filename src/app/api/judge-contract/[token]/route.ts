@@ -4,6 +4,7 @@ import { db } from '@/server/db';
 import { judgeContracts, judgeAssignments, showChecklistItems } from '@/server/db/schema';
 import { getBaseUrl } from '@/server/lib/utils';
 import { Resend } from 'resend';
+import { generateJudgeContractPdf } from '@/server/services/judge-contract-pdf';
 
 function renderPage(title: string, body: string) {
   return `
@@ -300,6 +301,16 @@ export async function POST(
       .update(judgeContracts)
       .set({ stage: 'offer_accepted', acceptedAt: new Date() })
       .where(eq(judgeContracts.id, contract.id));
+
+    // Fire-and-forget: render + R2 upload would make the judge wait 2–3s on
+    // Accept, and the stage transition is already persisted. If archiving
+    // fails, the backfill path in secretary.sendJudgeConfirmation covers it.
+    void generateJudgeContractPdf(contract.id).catch((err) => {
+      console.error(
+        `[judge-contract] Failed to archive PDF snapshot for contract ${contract.id} (show ${contract.showId}):`,
+        err,
+      );
+    });
 
     // Auto-update checklist: "Receive judge acceptance letters"
     await db

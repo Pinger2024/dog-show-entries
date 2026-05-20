@@ -17,7 +17,11 @@ import { sexLabel } from './utils';
 
 interface JudgeCoverageDashboardProps {
   showId: string;
-  onAddJudge?: (breedId: string | null, sex: string | null) => void;
+  onAddJudge?: (
+    breedId: string | null,
+    sex: string | null,
+    isSpecialAwards: boolean,
+  ) => void;
 }
 
 export function JudgeCoverageDashboard({ showId, onAddJudge }: JudgeCoverageDashboardProps) {
@@ -102,7 +106,7 @@ export function JudgeCoverageDashboard({ showId, onAddJudge }: JudgeCoverageDash
                   </span>
                   <button
                     type="button"
-                    onClick={() => onAddJudge?.(item.breedId, item.sex)}
+                    onClick={() => onAddJudge?.(item.breedId, item.sex, item.isSpecialAwards ?? false)}
                     className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
                     title="Change judge"
                   >
@@ -114,7 +118,7 @@ export function JudgeCoverageDashboard({ showId, onAddJudge }: JudgeCoverageDash
                   size="sm"
                   variant="outline"
                   className="h-8 min-h-[2.75rem] text-xs"
-                  onClick={() => onAddJudge?.(item.breedId, item.sex)}
+                  onClick={() => onAddJudge?.(item.breedId, item.sex, item.isSpecialAwards ?? false)}
                 >
                   <Plus className="size-3" />
                   Add

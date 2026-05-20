@@ -42,6 +42,11 @@ export const judgeContracts = pgTable(
     travelCost: integer('travel_cost'),
     otherExpenses: integer('other_expenses'),
     expenseNotes: text('expense_notes'),
+    // Snapshot PDF of the fully-agreed contract, written at the moment the
+    // judge accepts. Preserves the exact terms both parties saw for
+    // RKC-audit purposes even if the DB row is later edited.
+    contractPdfKey: text('contract_pdf_key'),
+    contractPdfGeneratedAt: timestamp('contract_pdf_generated_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),

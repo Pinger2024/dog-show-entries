@@ -14,12 +14,10 @@ import {
 } from 'lucide-react';
 import { auth } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
-import { PricingCards } from './pricing-cards';
-
 export const metadata = {
   title: 'Pricing - Remi',
   description:
-    'Simple, transparent pricing for dog show clubs. Choose DIY or let us manage everything. Single breed and multi breed club plans available.',
+    'Get in touch to find a plan that fits your club. DIY and fully-managed options available for dog show clubs across the UK.',
 };
 
 const steps = [
@@ -53,34 +51,14 @@ const faqs = [
       'Each show is a single event — for example, an Open Show or a Championship Show. If you run a double-header weekend with two separate shows, that counts as two shows.',
   },
   {
-    question: 'When do we get charged the per-entry fee?',
-    answer:
-      'The per-entry fee (£1.50) is deducted automatically from each entry payment before funds are transferred to your Stripe account. You never need to pay it separately.',
-  },
-  {
-    question: 'Can we switch from DIY to Managed?',
-    answer:
-      'Absolutely. You can upgrade to the Managed plan at any time and we will pro-rate the difference. You can also downgrade at your next renewal.',
-  },
-  {
-    question: 'Is there a contract or minimum term?',
-    answer:
-      'No. Plans renew annually but you can cancel at any time. If you cancel mid-year, you keep access until the end of your billing period.',
-  },
-  {
     question: 'What payment methods do exhibitors use?',
     answer:
-      'Exhibitors pay by credit or debit card via Stripe at the point of entry. Payments are processed securely and funds are transferred directly to your club\'s bank account.',
+      'Exhibitors pay by credit or debit card via Stripe at the point of entry. Card details are handled by Stripe (regulated by the FCA) and never touch us. Remi collects the entry fees as merchant of record and transfers the net amount to your club by BACS within 21 days of entries closing.',
   },
   {
     question: 'Do you support Championship shows?',
     answer:
       'Yes. Remi supports all RKC-licensed show types including Companion, Primary, Limited, Open, Premier Open, and Championship shows.',
-  },
-  {
-    question: 'What does "Exhibitor query handling" mean on the Managed plan?',
-    answer:
-      'We respond to exhibitor questions on your behalf — things like class eligibility queries, entry amendments, and payment issues. You stay in the loop but we handle the day-to-day.',
   },
   {
     question: 'Can multiple people manage our shows?',
@@ -118,21 +96,57 @@ export default async function PricingPage() {
         <div className="mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-3xl text-center">
             <h1 className="animate-fade-in-up font-serif text-[2.5rem] font-bold leading-[1.15] tracking-tight sm:text-5xl">
-              Simple, transparent pricing{' '}
-              <span className="text-primary">for your club</span>
+              A plan to fit{' '}
+              <span className="text-primary">your club</span>
             </h1>
             <p className="gold-rule-center mx-auto mt-6 max-w-2xl animate-fade-in-up text-lg leading-relaxed text-muted-foreground [animation-delay:100ms] sm:text-xl">
-              The first self-service dog show management platform in the UK.
-              Choose DIY or let us handle everything.
+              Every club is different. We&apos;ll work out the right plan with you — whether
+              you run one show a year or a busy calendar of championships.
             </p>
+            <div className="mx-auto mt-8 max-w-2xl animate-fade-in-up rounded-2xl border bg-card/60 p-6 text-left text-sm leading-relaxed text-muted-foreground [animation-delay:200ms] sm:text-base">
+              <p>
+                <strong className="text-foreground">For your club:</strong>{' '}
+                a simple per-show price scaled to the level of support you need.
+                We&apos;ll agree it with you before your show goes live — no
+                surprise invoices, no hidden charges.
+              </p>
+              <p className="mt-3">
+                <strong className="text-foreground">For your exhibitors:</strong>{' '}
+                a small platform fee of £1 + 1% of their entry total, clearly shown
+                at checkout before they pay.
+              </p>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Pricing section */}
+      {/* Contact-to-discuss section */}
       <section className="border-t bg-card">
-        <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
-          <PricingCards ctaHref={bottomCtaHref} ctaLabel={bottomCtaLabel} />
+        <div className="mx-auto max-w-3xl px-4 py-16 text-center sm:px-6 sm:py-20 lg:px-8">
+          <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/5 via-background to-background p-8 sm:p-12">
+            <Mail className="mx-auto size-10 text-primary" />
+            <h2 className="mt-5 font-serif text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+              Let&apos;s talk
+            </h2>
+            <p className="mx-auto mt-4 max-w-xl leading-relaxed text-muted-foreground">
+              Send us a note with a few details about your club — number of shows a year,
+              typical entry numbers, whether you&apos;d like to run things yourself or have us
+              take care of the admin. We&apos;ll come back with a plan that makes sense.
+            </p>
+            <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <Button size="lg" asChild>
+                <a href="mailto:feedback@inbound.remishowmanager.co.uk?subject=Pricing%20enquiry">
+                  <Mail className="size-4" />
+                  Contact us to discuss
+                </a>
+              </Button>
+              <Button size="lg" variant="outline" asChild>
+                <Link href={bottomCtaHref}>
+                  {bottomCtaLabel}
+                </Link>
+              </Button>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -193,7 +207,7 @@ export default async function PricingPage() {
                 icon: CreditCard,
                 title: 'Secure Payments',
                 description:
-                  'Stripe handles all payments. Funds go straight to your club account, minus the platform fee.',
+                  'Stripe takes card payments securely. We collect the entry fees and BACS the net to your club within 21 days of entries closing.',
               },
               {
                 icon: FileText,

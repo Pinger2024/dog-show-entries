@@ -5,6 +5,7 @@ import {
   Check,
   ChevronRight,
   Loader2,
+  Plus,
   Search,
   UserPlus,
 } from 'lucide-react';
@@ -49,6 +50,7 @@ interface BreedSexCombo {
   notApproved?: boolean;
   alreadyAssigned?: string; // judge name if already assigned
   isJuniorHandling?: boolean;
+  isSpecialAwardsClasses?: boolean;
 }
 
 interface AddJudgeWizardProps {
@@ -58,6 +60,11 @@ interface AddJudgeWizardProps {
   /** Pre-select a specific breed+sex when triggered from the coverage dashboard */
   prefillBreedId?: string | null;
   prefillSex?: string | null;
+  /** True when the coverage cell that triggered this wizard was a Special
+   *  Awards Classes cell. Routes the prefill to the SAC combo only and
+   *  prevents the regular breed combo (which also matches breedId=GSD)
+   *  from being auto-ticked. Fixes Amanda's bug 2026-05-15. */
+  prefillSpecialAwards?: boolean;
 }
 
 import { sexLabel } from './utils';
@@ -78,6 +85,7 @@ export function AddJudgeWizard({
   onOpenChange,
   prefillBreedId,
   prefillSex,
+  prefillSpecialAwards = false,
 }: AddJudgeWizardProps) {
   // ── Step state ──
   const [step, setStep] = useState<Step>('find');
@@ -111,10 +119,17 @@ export function AddJudgeWizard({
   const kcSearchMutation = trpc.secretary.kcJudgeSearch.useMutation();
   const kcProfileMutation = trpc.secretary.kcJudgeProfile.useMutation();
 
+  // SV regional shows draw most of their judges from overseas, so the RKC
+  // database is rarely useful — skip the auto-search + hide the RKC search
+  // affordance (Amanda 2026-05-19). Local Remi search still runs.
+  const isWusvShow =
+    (showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset === 'wusv';
+
   // Auto-search RKC when local DB has no results and query is long enough (debounced)
   const lastAutoSearchRef = useRef('');
   useEffect(() => {
     if (
+      isWusvShow ||
       searchQuery.length < 2 ||
       !localSearchQuery.isFetched ||
       (localSearchQuery.data?.length ?? 0) > 0 ||
@@ -129,7 +144,7 @@ export function AddJudgeWizard({
     }, 400);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery, localSearchQuery.isFetched, localSearchQuery.data?.length, kcSearchMutation.isPending]);
+  }, [isWusvShow, searchQuery, localSearchQuery.isFetched, localSearchQuery.data?.length, kcSearchMutation.isPending]);
   const addAndAssignMutation = trpc.secretary.addAndAssignJudge.useMutation({
     onSuccess: (data) => {
       toast.success(`${data.judge.name} added — ${data.assignmentCount} assignment${data.assignmentCount !== 1 ? 's' : ''} created`);
@@ -146,9 +161,13 @@ export function AddJudgeWizard({
   // ── Derive show breed+sex combos for the assign step ──
   const showBreedSexCombos = useMemo(() => {
     if (!showData?.showClasses) return [];
-    const combos = new Map<string, { breedId: string | null; breedName: string | null; sex: string | null; isJuniorHandling: boolean }>();
+    const combos = new Map<string, { breedId: string | null; breedName: string | null; sex: string | null; isJuniorHandling: boolean; isSpecialAwardsClasses: boolean }>();
+    let hasSpecialAwardsClasses = false;
     for (const sc of showData.showClasses) {
       const isJH = sc.classDefinition?.type === 'junior_handler';
+      if (sc.classDefinition?.name?.startsWith('Special Award Class')) {
+        hasSpecialAwardsClasses = true;
+      }
       // Junior Handling gets its own combo, separate from breed classes
       const prefix = isJH ? 'jh' : 'breed';
       const key = `${prefix}:${sc.breed?.id ?? 'all'}:${sc.sex ?? 'both'}`;
@@ -158,10 +177,25 @@ export function AddJudgeWizard({
           breedName: isJH ? 'Junior Handling' : (sc.breed?.name ?? null),
           sex: sc.sex,
           isJuniorHandling: isJH,
+          isSpecialAwardsClasses: false,
         });
       }
     }
-    return Array.from(combos.values());
+    const arr = Array.from(combos.values());
+    // Virtual combo for the lunchtime Special Awards Classes judge — only
+    // surfaced when the show has at least one Special Award Class set up.
+    // Amanda's spec (2026-05-14): one judge covers all three SAC classes,
+    // separate from the breed judge.
+    if (hasSpecialAwardsClasses) {
+      arr.push({
+        breedId: null,
+        breedName: 'Special Awards Classes',
+        sex: null,
+        isJuniorHandling: false,
+        isSpecialAwardsClasses: true,
+      });
+    }
+    return arr;
   }, [showData]);
 
   // ── Reset ──
@@ -187,6 +221,10 @@ export function AddJudgeWizard({
     // Build a set of already-assigned breed+sex combos from existing assignments
     const assignedMap = new Map<string, string>(); // key -> judge name
     for (const a of existingAssignments ?? []) {
+      if ((a as { isSpecialAwardsClassesJudge?: boolean }).isSpecialAwardsClassesJudge) {
+        assignedMap.set('sac', a.judge.name);
+        continue;
+      }
       // An assignment with sex=null covers both sexes
       if (a.sex === null) {
         assignedMap.set(`${a.breedId ?? 'all'}:both`, a.judge.name);
@@ -199,14 +237,28 @@ export function AddJudgeWizard({
 
     // Build breed combos, marking already-assigned ones
     const combos: BreedSexCombo[] = showBreedSexCombos.map((c) => {
-      const key = `${c.breedId ?? 'all'}:${c.sex ?? 'both'}`;
+      const key = c.isSpecialAwardsClasses
+        ? 'sac'
+        : `${c.breedId ?? 'all'}:${c.sex ?? 'both'}`;
       const assignedTo = assignedMap.get(key);
 
-      // If triggered from coverage dashboard with a specific breed/sex, pre-select that
-      const isPrefilled = !assignedTo
-        && prefillBreedId !== undefined
-        && c.breedId === prefillBreedId
-        && (prefillSex === undefined || c.sex === prefillSex);
+      // Prefill rules — Amanda's 2026-05-15 bugs forced a tightening here:
+      //  • If the user clicked Add on the SAC coverage cell, ONLY the SAC
+      //    combo should pre-tick. Regular breed combos must stay clear
+      //    even when they share the same breedId.
+      //  • Otherwise (regular breed cell), the regular breed combo
+      //    pre-ticks but neither SAC nor JH does — those need an
+      //    explicit click because their breedId/sex shape overlaps with
+      //    breed-null prefills.
+      let isPrefilled = false;
+      if (prefillSpecialAwards) {
+        isPrefilled = !assignedTo && c.isSpecialAwardsClasses === true;
+      } else if (!c.isJuniorHandling && !c.isSpecialAwardsClasses) {
+        isPrefilled = !assignedTo
+          && prefillBreedId !== undefined
+          && c.breedId === prefillBreedId
+          && (prefillSex === undefined || c.sex === prefillSex);
+      }
 
       return {
         breedId: c.breedId,
@@ -215,6 +267,7 @@ export function AddJudgeWizard({
         selected: isPrefilled,
         alreadyAssigned: assignedTo,
         isJuniorHandling: c.isJuniorHandling,
+        isSpecialAwardsClasses: c.isSpecialAwardsClasses,
       };
     });
 
@@ -281,9 +334,12 @@ export function AddJudgeWizard({
       return;
     }
 
-    // Use the email from the form — the user may have entered/updated it on the confirm step
+    // Email is only strictly required when we'll need to email this judge
+    // their offer — i.e. at least one breed-class assignment. JH-only
+    // judges don't get an offer email, so email is optional for them.
     const email = selectedJudge.contactEmail ?? manualEmail;
-    if (!email) {
+    const hasBreedAssignment = selectedCombos.some((c) => !c.isJuniorHandling);
+    if (hasBreedAssignment && !email) {
       toast.error('Email is required — judges need it to receive their offer');
       return;
     }
@@ -292,13 +348,14 @@ export function AddJudgeWizard({
       showId,
       name: selectedJudge.name,
       kcNumber: selectedJudge.kcNumber ?? undefined,
-      contactEmail: email,
+      contactEmail: email || undefined,
       contactPhone: selectedJudge.contactPhone ?? undefined,
       kcJudgeId: selectedJudge.kcJudgeId,
       kennelClubAffix: selectedJudge.kennelClubAffix ?? undefined,
       assignments: selectedCombos.map((c) => ({
         breedId: c.breedId,
         sex: c.sex as 'dog' | 'bitch' | null,
+        isSpecialAwardsClassesJudge: c.isSpecialAwardsClasses ?? false,
       })),
     });
   }
@@ -400,8 +457,9 @@ export function AddJudgeWizard({
               </div>
             )}
 
-            {/* RKC search trigger */}
-            {searchQuery.length >= 2 && (
+            {/* RKC search trigger — hidden for SV regional shows (most
+                SV judges are overseas and not in the RKC database). */}
+            {!isWusvShow && searchQuery.length >= 2 && (
               <div className="flex items-center gap-2">
                 <Button
                   size="sm"
@@ -432,8 +490,8 @@ export function AddJudgeWizard({
               </div>
             )}
 
-            {/* RKC results */}
-            {kcSearchMutation.data && (
+            {/* RKC results — hidden for SV regional shows. */}
+            {!isWusvShow && kcSearchMutation.data && (
               <div>
                 <p className="mb-1.5 text-xs font-medium text-muted-foreground">
                   RKC Results ({kcSearchMutation.data.length})
@@ -472,16 +530,31 @@ export function AddJudgeWizard({
               </div>
             )}
 
-            {/* Manual entry fallback */}
+            {/* Manual entry fallback — for SV shows this is the primary
+                add path (most SV judges are overseas, not in RKC), so it
+                renders as a prominent button rather than a hyperlink. */}
             <div className="border-t pt-3">
               {!manualMode ? (
-                <button
-                  type="button"
-                  onClick={() => setManualMode(true)}
-                  className="text-sm text-primary hover:underline"
-                >
-                  Not found? Enter details manually
-                </button>
+                isWusvShow ? (
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    onClick={() => setManualMode(true)}
+                    className="min-h-[2.75rem]"
+                  >
+                    <Plus className="size-4" />
+                    Add judge details manually
+                  </Button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setManualMode(true)}
+                    className="text-sm text-primary hover:underline"
+                  >
+                    Not found? Enter details manually
+                  </button>
+                )
               ) : (
                 <div className="space-y-3">
                   <p className="text-sm font-medium">Enter Judge Details</p>
@@ -496,7 +569,9 @@ export function AddJudgeWizard({
                       />
                     </div>
                     <div>
-                      <Label className="text-xs text-muted-foreground">Email *</Label>
+                      <Label className="text-xs text-muted-foreground">
+                        Email — required for breed judges (not for Junior Handling)
+                      </Label>
                       <Input
                         type="email"
                         inputMode="email"
@@ -542,7 +617,7 @@ export function AddJudgeWizard({
                   <Button
                     size="sm"
                     onClick={selectManual}
-                    disabled={!manualName.trim() || !manualEmail.trim()}
+                    disabled={!manualName.trim()}
                     className="min-h-[2.75rem]"
                   >
                     Next — Assign Breeds
@@ -579,10 +654,13 @@ export function AddJudgeWizard({
               )}
             </div>
 
-            {/* Email if not yet provided (required) — use manualEmail as sole source of truth */}
+            {/* Email if not yet provided — required for breed judges (to send
+                the offer), optional for JH-only judges (no offer). */}
             {!selectedJudge.contactEmail && (
               <div>
-                <Label className="text-xs text-muted-foreground">Email * (required for sending offers)</Label>
+                <Label className="text-xs text-muted-foreground">
+                  Email — required for breed judges (not for Junior Handling)
+                </Label>
                 <Input
                   type="email"
                   inputMode="email"

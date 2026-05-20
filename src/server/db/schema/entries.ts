@@ -45,6 +45,7 @@ export const entries = pgTable(
      *  displays "Owner withheld" in place of owner name/address. */
     withholdFromPublication: boolean('withhold_from_publication').notNull().default(false),
     absent: boolean('absent').notNull().default(false),
+    svMembershipNumber: text('sv_membership_number'),
     totalFee: integer('total_fee').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()

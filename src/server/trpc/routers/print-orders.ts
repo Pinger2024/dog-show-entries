@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { and, eq, desc, sql, isNull, inArray } from 'drizzle-orm';
+import { and, eq, desc, sql, inArray, notInArray } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { createTRPCRouter } from '../init';
 import { secretaryProcedure } from '../procedures';
@@ -7,34 +7,25 @@ import { verifyShowAccess } from '../verify-show-access';
 import {
   printOrders,
   printOrderItems,
-  entries,
   showClasses,
   rings,
-  entryClasses,
 } from '@/server/db/schema';
 import {
-  getPrintableProducts,
   getProductByType,
-  getPresetSpecs,
-  calculateSellingPrice,
-  calculateUnitSellingPrice,
+  getPackageTier,
+  calculatePrintOrderFee,
+  PRINT_PACKAGE_TIERS,
+  PRINT_PAYMENT_METHODS,
   CANCELLABLE_STATUSES,
   PENDING_STATUSES,
-  formatOrderRef,
   type ShowStats,
 } from '@/lib/print-products';
-import {
-  getAvailableQuantities,
-  getDeliveryEstimate,
-  getOrderStatus,
-} from '@/server/services/mixam';
-import { sendPrintOrderDispatchEmail } from '@/server/services/email';
-import {
-  getCachedTotalPrice,
-  getDistinctSpecValues,
-} from '@/server/services/print-price-refresh';
+import { formatCurrency } from '@/lib/date-utils';
+import { getOrderStatus } from '@/server/services/mixam';
+import { sendPrintOrderDispatchEmail, sendPrintOrderAdminNotificationEmail, sendPrintOrderConfirmationEmail } from '@/server/services/email';
 import { createPaymentIntent } from '@/server/services/stripe';
 import { generateAndUploadForPrint } from '@/server/services/pdf-generation';
+import { computeShowMetrics } from '@/server/services/show-metrics';
 
 // ── Tradeprint status mapping ──
 
@@ -80,247 +71,56 @@ async function applyTradeprintStatus(
 }
 
 export const printOrdersRouter = createTRPCRouter({
-  /** Get available products with pricing, presets, and quantity suggestions */
-  getAvailableProducts: secretaryProcedure
-    .input(z.object({
-      showId: z.string().uuid(),
-      serviceLevel: z.enum(['saver', 'standard', 'express']).default('standard'),
-    }))
+  /** Get package options for a show (tier, quantities, prices) */
+  getPackageOptions: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
-
       const stats = await getShowStatsForPrinting(ctx.db, input.showId);
-      const products = getPrintableProducts();
-
-      const quantities = getAvailableQuantities();
-
-      const available = await Promise.all(
-        products.map(async (product) => {
-          try {
-            // Use show-aware quantity options if available, otherwise the canonical Mixam list
-            const displayQuantities = product.getQuantityOptions
-              ? product.getQuantityOptions(stats, quantities)
-              : quantities;
-
-            const suggestedQty = product.suggestQuantity(stats);
-            const bestQty = displayQuantities.find((q) => q >= suggestedQty) ?? displayQuantities[displayQuantities.length - 1];
-
-            // Fetch the default-spec price and all preset prices in parallel
-            const defaultTotalCost = await getCachedTotalPrice(
-              product.tradeprintProductName,
-              product.defaultSpecs,
-              bestQty,
-            );
-
-            const presetPricing = await Promise.all(
-              product.presets.map(async (preset) => {
-                const totalCost = await getCachedTotalPrice(
-                  product.tradeprintProductName,
-                  preset.specs,
-                  bestQty,
-                );
-                return {
-                  id: preset.id,
-                  label: preset.label,
-                  description: preset.description,
-                  tier: preset.tier,
-                  specs: preset.specs,
-                  unitSellingPrice: totalCost !== null
-                    ? calculateUnitSellingPrice(totalCost, bestQty)
-                    : null,
-                  available: totalCost !== null,
-                };
-              })
-            );
-
-            return {
-              documentType: product.documentType,
-              tradeprintProductName: product.tradeprintProductName,
-              label: product.label,
-              description: product.description,
-              suggestedQuantity: bestQty,
-              availableQuantities: displayQuantities,
-              tradeprintProductId: product.tradeprintProductId,
-              unitSellingPrice: defaultTotalCost !== null
-                ? calculateUnitSellingPrice(defaultTotalCost, bestQty)
-                : null,
-              presets: presetPricing,
-              configurableSpecs: product.configurableSpecs,
-            };
-          } catch {
-            return null;
-          }
-        })
-      );
-
-      return { products: available.filter(Boolean), stats };
-    }),
-
-  /** Get spec options AND price for a product (combined to avoid tRPC batch bug) */
-  getSpecOptions: secretaryProcedure
-    .input(z.object({
-      productName: z.string(),
-      serviceLevel: z.enum(['saver', 'standard', 'express']).default('standard'),
-      currentSpecs: z.record(z.string(), z.string()).optional(),
-      quantity: z.number().optional(),
-    }))
-    .query(async ({ input }) => {
-      const product = getPrintableProducts().find(
-        (p) => p.tradeprintProductName === input.productName
-      );
-      if (!product) return { options: {} as Record<string, string[]>, price: null };
-
-      // Build filter using only configurable spec keys (not static ones like Print Process)
-      const allSpecs = input.currentSpecs ?? product.defaultSpecs;
-      const configurableKeys = new Set(product.configurableSpecs.map((s) => s.key));
-
-      // getDistinctSpecValues is synchronous (pure product-config lookup);
-      // only the price query actually hits Mixam.
-      const specEntries = product.configurableSpecs.map((spec) => {
-        const values = getDistinctSpecValues(input.productName, spec.key);
-        return [spec.key, values] as const;
-      });
-
-      const totalCost = input.currentSpecs && input.quantity
-        ? await getCachedTotalPrice(input.productName, input.currentSpecs, input.quantity)
-        : null;
-
-      const price = totalCost !== null && input.quantity
-        ? {
-            unitSellingPrice: calculateUnitSellingPrice(totalCost, input.quantity),
-            totalSellingPrice: calculateSellingPrice(totalCost),
-          }
-        : null;
-
-      return { options: Object.fromEntries(specEntries) as Record<string, string[]>, price };
-    }),
-
-  /** Get a quote for selected items (supports custom specs via presets or manual selection) */
-  getQuote: secretaryProcedure
-    .input(
-      z.object({
-        showId: z.string().uuid(),
-        items: z.array(
-          z.object({
-            documentType: z.string(),
-            documentFormat: z.string().optional(),
-            quantity: z.number().int().positive(),
-            presetId: z.string().optional(),
-            customSpecs: z.record(z.string(), z.string()).optional(),
-          })
-        ),
-        serviceLevel: z.enum(['saver', 'standard', 'express']).default('standard'),
-        postcode: z.string().min(3),
-      })
-    )
-    .query(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
-
-      const firstProduct = getProductByType(input.items[0].documentType);
-
-      const [quotedItems, deliveryEst] = await Promise.all([
-        Promise.all(
-          input.items.map(async (item) => {
-            const product = getProductByType(item.documentType);
-            if (!product || product.downloadOnly) {
-              throw new TRPCError({
-                code: 'BAD_REQUEST',
-                message: `Product not available: ${item.documentType}`,
-              });
-            }
-
-            // Resolve specs: custom > preset > default
-            const specs = item.customSpecs
-              ?? (item.presetId ? getPresetSpecs(product, item.presetId) : product.defaultSpecs);
-
-            const totalTradeCost = await getCachedTotalPrice(
-              product.tradeprintProductName,
-              specs,
-              item.quantity,
-            );
-
-            if (totalTradeCost === null) {
-              throw new TRPCError({
-                code: 'BAD_REQUEST',
-                message: `Quantity ${item.quantity} not available for ${product.label}. Try a different quantity.`,
-              });
-            }
-
-            const totalSellingPrice = calculateSellingPrice(totalTradeCost);
-            const unitSellingPrice = calculateUnitSellingPrice(totalTradeCost, item.quantity);
-            const unitTradeCost = Math.ceil(totalTradeCost / item.quantity);
-
-            return {
-              documentType: item.documentType,
-              documentFormat: item.documentFormat,
-              label: product.label,
-              quantity: item.quantity,
-              unitTradeCost,
-              unitSellingPrice,
-              lineTotal: totalSellingPrice,
-              tradeprintProductId: product.tradeprintProductId,
-              printSpecs: specs,
-              presetId: item.presetId,
-            };
-          })
-        ),
-        firstProduct
-          ? getDeliveryEstimate(
-              firstProduct.tradeprintProductId,
-              input.items[0].quantity,
-              firstProduct.defaultSpecs,
-            )
-          : null,
-      ]);
-
-      const subtotal = quotedItems.reduce((sum, item) => sum + item.lineTotal, 0);
-
+      const tier = getPackageTier(stats.confirmedEntries);
       return {
-        items: quotedItems,
-        subtotal,
-        total: subtotal,
-        deliveryEstimate: deliveryEst?.formattedDate ?? null,
-        serviceLevel: input.serviceLevel,
+        confirmedEntries: stats.confirmedEntries,
+        tier,
+        tooLarge: tier === null,
       };
     }),
 
-  /** Create a draft print order */
-  createDraftOrder: secretaryProcedure
-    .input(
-      z.object({
-        showId: z.string().uuid(),
-        items: z.array(
-          z.object({
-            documentType: z.string(),
-            documentFormat: z.string().optional(),
-            documentLabel: z.string(),
-            quantity: z.number().int().positive(),
-            unitTradeCost: z.number().int(),
-            unitSellingPrice: z.number().int(),
-            lineTotal: z.number().int(),
-            tradeprintProductId: z.string(),
-            printSpecs: z.record(z.string(), z.string()).optional(),
-          })
-        ),
-        serviceLevel: z.enum(['saver', 'standard', 'express']).default('standard'),
-        deliveryName: z.string().min(1),
-        deliveryAddress1: z.string().min(1),
-        deliveryAddress2: z.string().optional(),
-        deliveryTown: z.string().min(1),
-        deliveryPostcode: z.string().min(3),
-        deliveryPhone: z.string().optional(),
-        estimatedDeliveryDate: z.string().optional(),
-      })
-    )
+  /** Create a draft package order (catalogue + prize cards) */
+  createPackageOrder: secretaryProcedure
+    .input(z.object({
+      showId: z.string().uuid(),
+      catalogueQty: z.number().int().positive(),
+      deliveryName: z.string().min(1),
+      deliveryAddress1: z.string().min(1),
+      deliveryAddress2: z.string().optional(),
+      deliveryTown: z.string().min(1),
+      deliveryPostcode: z.string().min(3),
+      deliveryPhone: z.string().optional(),
+    }))
     .mutation(async ({ ctx, input }) => {
       const show = await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      const stats = await getShowStatsForPrinting(ctx.db, input.showId);
+      const tier = getPackageTier(stats.confirmedEntries);
 
-      const subtotal = input.items.reduce((sum, item) => sum + item.lineTotal, 0);
-      const tradeCostTotal = input.items.reduce(
-        (sum, item) => sum + item.unitTradeCost * item.quantity,
-        0
-      );
-      const markupAmount = subtotal - Math.round(tradeCostTotal * 1.2);
+      if (!tier) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Your show is too large for package pricing. Please contact us.',
+        });
+      }
+
+      const option = tier.options.find((o) => o.catalogueQty === input.catalogueQty);
+      if (!option) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `${input.catalogueQty} catalogues is not a valid option for your show size.`,
+        });
+      }
+
+      const fee = calculatePrintOrderFee(option.pricePence);
+      const totalAmount = option.pricePence + fee;
+      const catalogueProduct = getProductByType('catalogue');
+      const prizeCardsProduct = getProductByType('prize_cards');
 
       const [order] = await ctx.db
         .insert(printOrders)
@@ -329,34 +129,43 @@ export const printOrdersRouter = createTRPCRouter({
           orderedByUserId: ctx.session.user.id,
           organisationId: show.organisationId,
           status: 'draft',
-          subtotalAmount: subtotal,
-          markupAmount,
-          totalAmount: subtotal,
-          serviceLevel: input.serviceLevel,
+          subtotalAmount: option.pricePence,
+          markupAmount: 0,
+          totalAmount,
+          serviceLevel: 'standard',
           deliveryName: input.deliveryName,
           deliveryAddress1: input.deliveryAddress1,
           deliveryAddress2: input.deliveryAddress2 ?? null,
           deliveryTown: input.deliveryTown,
           deliveryPostcode: input.deliveryPostcode,
           deliveryPhone: input.deliveryPhone ?? null,
-          estimatedDeliveryDate: input.estimatedDeliveryDate ?? null,
         })
         .returning();
 
-      await ctx.db.insert(printOrderItems).values(
-        input.items.map((item) => ({
+      await ctx.db.insert(printOrderItems).values([
+        {
           printOrderId: order.id,
-          documentType: item.documentType,
-          documentFormat: item.documentFormat ?? null,
-          documentLabel: item.documentLabel,
-          tradeprintProductId: item.tradeprintProductId,
-          quantity: item.quantity,
-          printSpecs: item.printSpecs ?? null,
-          unitTradeCost: item.unitTradeCost,
-          unitSellingPrice: item.unitSellingPrice,
-          lineTotal: item.lineTotal,
-        }))
-      );
+          documentType: 'catalogue',
+          documentLabel: catalogueProduct?.label ?? 'Catalogues',
+          tradeprintProductId: catalogueProduct?.tradeprintProductId ?? '',
+          quantity: input.catalogueQty,
+          printSpecs: catalogueProduct?.defaultSpecs ?? null,
+          unitTradeCost: 0,
+          unitSellingPrice: Math.round(option.pricePence / input.catalogueQty),
+          lineTotal: option.pricePence,
+        },
+        {
+          printOrderId: order.id,
+          documentType: 'prize_cards',
+          documentLabel: prizeCardsProduct?.label ?? 'Prize Cards',
+          tradeprintProductId: prizeCardsProduct?.tradeprintProductId ?? '',
+          quantity: 1,
+          printSpecs: prizeCardsProduct?.defaultSpecs ?? null,
+          unitTradeCost: 0,
+          unitSellingPrice: 0,
+          lineTotal: 0,
+        },
+      ]);
 
       return { orderId: order.id };
     }),
@@ -504,6 +313,79 @@ export const printOrdersRouter = createTRPCRouter({
       return { success: true };
     }),
 
+  /** Return the balance available for payout-deduction payment */
+  getDeductionBalance: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      return computeDeductionBalance(ctx.db, input.showId);
+    }),
+
+  /** Pay a draft order by deducting from the show's entry income payout */
+  completeByDeduction: secretaryProcedure
+    .input(z.object({ orderId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const order = await ctx.db.query.printOrders.findFirst({
+        where: eq(printOrders.id, input.orderId),
+        with: { items: true },
+      });
+      if (!order) throw new TRPCError({ code: 'NOT_FOUND', message: 'Order not found' });
+      await verifyShowAccess(ctx.db, ctx.session.user.id, order.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      if (order.status !== 'draft') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Order is not in draft status' });
+      }
+
+      // Check balance before generating PDFs to avoid wasted R2 writes
+      const { availablePence } = await computeDeductionBalance(ctx.db, order.showId);
+      if (availablePence < order.totalAmount) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Insufficient balance. ${formatCurrency(availablePence)} available, ${formatCurrency(order.totalAmount)} needed.`,
+        });
+      }
+
+      // Generate PDFs and upload to R2
+      const pdfResults = await Promise.all(
+        order.items.map(async (item) => {
+          try {
+            const { storageKey, publicUrl } = await generateAndUploadForPrint(
+              order.showId,
+              item.documentType,
+              item.documentFormat ?? undefined
+            );
+            return { itemId: item.id, storageKey, publicUrl };
+          } catch (err) {
+            console.error(`[deduction] PDF generation failed for ${item.documentType}:`, err);
+            throw new TRPCError({
+              code: 'INTERNAL_SERVER_ERROR',
+              message: `Failed to generate ${item.documentLabel} PDF`,
+            });
+          }
+        })
+      );
+
+      await Promise.all(
+        pdfResults.map((r) =>
+          ctx.db
+            .update(printOrderItems)
+            .set({ pdfStorageKey: r.storageKey, pdfPublicUrl: r.publicUrl, pdfGeneratedAt: new Date() })
+            .where(eq(printOrderItems.id, r.itemId))
+        )
+      );
+
+      await ctx.db
+        .update(printOrders)
+        .set({ status: 'paid', paymentMethod: PRINT_PAYMENT_METHODS.DEDUCTED_FROM_PAYOUT })
+        .where(eq(printOrders.id, order.id));
+
+      Promise.all([
+        sendPrintOrderAdminNotificationEmail(order.id),
+        sendPrintOrderConfirmationEmail(order.id),
+      ]).catch((err) => console.error('[deduction] Email failed:', err));
+
+      return { success: true };
+    }),
+
   /** Refresh status from Tradeprint */
   refreshStatus: secretaryProcedure
     .input(z.object({ orderId: z.string().uuid() }))
@@ -582,21 +464,14 @@ async function getShowStatsForPrinting(
   db: Parameters<typeof verifyShowAccess>[0],
   showId: string
 ): Promise<ShowStats> {
-  // Run independent queries in parallel; combine both entries counts into one query
-  const [entryStats, classCount, ringCount] = await Promise.all([
-    db
-      .select({
-        confirmed: sql<number>`count(*)`,
-        catalogueOrders: sql<number>`count(*) filter (where ${entries.catalogueRequested} = true)`,
-      })
-      .from(entries)
-      .where(
-        and(
-          eq(entries.showId, showId),
-          eq(entries.status, 'confirmed'),
-          isNull(entries.deletedAt)
-        )
-      ),
+  // catalogueOrders comes from the show-metrics service — catalogues
+  // are sold as sundry items now, not via the legacy
+  // entries.catalogue_requested flag (which is dead — every checkout
+  // hardcodes false). This used to count entries with that flag set,
+  // which silently always returned 0 and made the Print Shop suggest
+  // "0 catalogues" no matter how many were actually sold.
+  const [metrics, classCount, ringCount] = await Promise.all([
+    computeShowMetrics(db, showId),
     db
       .select({ count: sql<number>`count(*)` })
       .from(showClasses)
@@ -608,10 +483,33 @@ async function getShowStatsForPrinting(
   ]);
 
   return {
-    confirmedEntries: Number(entryStats[0]?.confirmed ?? 0),
+    confirmedEntries: metrics.confirmedEntryCount,
     totalClasses: Number(classCount[0]?.count ?? 0),
-    catalogueOrders: Number(entryStats[0]?.catalogueOrders ?? 0),
+    catalogueOrders: metrics.paidPrintedCatalogueCount,
     ringCount: Number(ringCount[0]?.count ?? 0),
     placementsPerClass: 4,
+  };
+}
+
+async function computeDeductionBalance(
+  db: Parameters<typeof verifyShowAccess>[0],
+  showId: string
+) {
+  const [metrics, [row]] = await Promise.all([
+    computeShowMetrics(db, showId),
+    db
+      .select({ total: sql<string>`coalesce(sum(total_amount), '0')` })
+      .from(printOrders)
+      .where(and(
+        eq(printOrders.showId, showId),
+        eq(printOrders.paymentMethod, PRINT_PAYMENT_METHODS.DEDUCTED_FROM_PAYOUT),
+        notInArray(printOrders.status, ['cancelled', 'failed']),
+      )),
+  ]);
+  const alreadyDeductedPence = Number(row?.total ?? 0);
+  return {
+    clubReceivablePence: metrics.clubReceivablePence,
+    alreadyDeductedPence,
+    availablePence: metrics.clubReceivablePence - alreadyDeductedPence,
   };
 }

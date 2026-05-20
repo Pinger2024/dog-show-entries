@@ -16,6 +16,42 @@ import {
 } from '../helpers/factories';
 
 describe('secretary.updateScheduleData', () => {
+  it('merges scheduleData — a partial payload does not wipe unrelated fields', async () => {
+    // Regression for the 2026-04-22 awardsDescription wipe: the
+    // sponsors/catalogue-settings pages send a partial scheduleData
+    // payload by spreading their React Query cache of show.scheduleData.
+    // If that cache was stale (e.g. missing a field that was written by
+    // another path), a REPLACE-semantics server would drag that field
+    // out of the DB. Merge semantics preserve it.
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({
+      organisationId: org.id,
+      scheduleData: {
+        country: 'england',
+        showManager: 'Keep Me',
+        awardsDescription: 'Trophies 1st to 3rd in all classes',
+        officers: [{ name: 'Keep Me', position: 'President' }],
+      },
+    });
+
+    // Client sends a partial payload missing awardsDescription + officers
+    // (e.g. a stale cache from before those fields were written).
+    await createTestCaller(user).secretary.updateScheduleData({
+      showId: show.id,
+      scheduleData: {
+        country: 'england',
+        welcomeNote: 'Welcome!',
+      },
+    });
+
+    const dbShow = await testDb.query.shows.findFirst({ where: eq(shows.id, show.id) });
+    expect(dbShow?.scheduleData?.welcomeNote).toBe('Welcome!');
+    // Crucially, fields NOT in the incoming payload are preserved:
+    expect(dbShow?.scheduleData?.showManager).toBe('Keep Me');
+    expect(dbShow?.scheduleData?.awardsDescription).toBe('Trophies 1st to 3rd in all classes');
+    expect(dbShow?.scheduleData?.officers).toEqual([{ name: 'Keep Me', position: 'President' }]);
+  });
+
   it('saves scheduleData JSONB + show-level showOpenTime/judgingStartTime/onCallVet', async () => {
     const { user, org } = await makeSecretaryWithOrg();
     const show = await makeShow({ organisationId: org.id });
@@ -186,6 +222,62 @@ describe('secretary.resendJudgeOffer', () => {
     await expect(
       createTestCaller(user).secretary.resendJudgeOffer({ contractId: contract.id }),
     ).rejects.toThrow(/offer sent/);
+  });
+});
+
+// ── Backlog #101 — time-ordering validation ────────────────
+describe('secretary.updateScheduleData time validation', () => {
+  it('rejects judging start before or equal to show-open time', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id });
+    await expect(
+      createTestCaller(user).secretary.updateScheduleData({
+        showId: show.id,
+        showOpenTime: '09:00',
+        judgingStartTime: '08:30',
+        scheduleData: { country: 'england' },
+      })
+    ).rejects.toThrow(/must be after/);
+  });
+
+  it('rejects latest arrival before show-open', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id });
+    await expect(
+      createTestCaller(user).secretary.updateScheduleData({
+        showId: show.id,
+        showOpenTime: '09:00',
+        judgingStartTime: '10:00',
+        scheduleData: { country: 'england', latestArrivalTime: '08:45' },
+      })
+    ).rejects.toThrow(/before the show opens/);
+  });
+
+  it('rejects latest arrival after judging starts', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id });
+    await expect(
+      createTestCaller(user).secretary.updateScheduleData({
+        showId: show.id,
+        showOpenTime: '09:00',
+        judgingStartTime: '10:00',
+        scheduleData: { country: 'england', latestArrivalTime: '10:30' },
+      })
+    ).rejects.toThrow(/must be before judging starts/);
+  });
+
+  it('accepts a sensible 09:00 / 09:30 / 10:00 ordering', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id });
+    await createTestCaller(user).secretary.updateScheduleData({
+      showId: show.id,
+      showOpenTime: '09:00',
+      judgingStartTime: '10:00',
+      scheduleData: { country: 'england', latestArrivalTime: '09:30' },
+    });
+    const dbShow = await testDb.query.shows.findFirst({ where: eq(shows.id, show.id) });
+    expect(dbShow?.showOpenTime).toBe('09:00');
+    expect(dbShow?.startTime).toBe('10:00');
   });
 });
 

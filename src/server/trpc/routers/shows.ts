@@ -15,6 +15,8 @@ import {
   sundryItems,
   memberships,
   entries,
+  entryClasses,
+  results,
   showSponsors,
   dogs,
   breeds,
@@ -22,6 +24,8 @@ import {
   classDefinitions,
   orders,
   orderSundryItems,
+  shareEvents,
+  showDiscountGroups,
 } from '@/server/db/schema';
 import { verifyShowAccess } from '../verify-show-access';
 import { isUuid, generateShowSlug } from '@/lib/slugify';
@@ -227,6 +231,7 @@ export const showsRouter = createTRPCRouter({
           organisation: true,
           venue: true,
           breed: true,
+          discountGroups: true,
           showClasses: {
             with: {
               classDefinition: true,
@@ -277,7 +282,23 @@ export const showsRouter = createTRPCRouter({
         });
       }
 
-      return show;
+      // Surface whether this show has any published results — drives the
+      // public-facing "LIVE RESULTS" banner. One small COUNT, much cheaper
+      // than fetching all live results just to test for non-empty.
+      const publishedCount = await ctx.db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(results)
+        .innerJoin(entryClasses, eq(entryClasses.id, results.entryClassId))
+        .innerJoin(entries, eq(entries.id, entryClasses.entryId))
+        .where(
+          and(
+            eq(entries.showId, show.id),
+            isNotNull(results.publishedAt),
+          ),
+        );
+      const hasPublishedResults = (publishedCount[0]?.n ?? 0) > 0;
+
+      return { ...show, hasPublishedResults };
     }),
 
   getClasses: publicProcedure
@@ -482,6 +503,7 @@ export const showsRouter = createTRPCRouter({
         onCallVet: z.string().optional(),
         acceptsPostalEntries: z.boolean().optional(),
         classSexArrangement: z.enum(['separate_sex', 'combined_sex']).optional(),
+        showRuleset: z.enum(['rkc', 'wusv']).optional().default('rkc'),
         classDefinitionIds: z.array(z.string().uuid()).optional(),
         entryFee: z.number().int().min(0).optional(),
         firstEntryFee: z.number().int().min(0).optional(),
@@ -680,6 +702,53 @@ export const showsRouter = createTRPCRouter({
         await Promise.all(batches);
       }
 
+      // SV/WUSV ruleset auto-setup: spin up the full SV age-class structure
+      // (Baby Puppy → Working, split by sex × coat type) so SV secretaries
+      // don't have to tick every class one at a time. They can then
+      // customise on /secretary/shows/[id]/wusv-classes (Amanda 2026-05-19).
+      if (showData.showRuleset === 'wusv') {
+        const svAgeDefs = await ctx.db.query.classDefinitions.findMany({
+          where: eq(classDefinitions.type, 'sv_age'),
+          orderBy: [asc(classDefinitions.sortOrder)],
+        });
+        const fee = firstEntryFee ?? entryFee ?? 0;
+        // Amanda's SV convention 2026-05-19: bitch classes first (Long Stock,
+        // then Stock), then dog classes (Long Stock, then Stock).
+        const COMBOS: Array<{ sex: 'bitch' | 'dog'; coat: 'stock' | 'long_stock' }> = [
+          { sex: 'bitch', coat: 'long_stock' },
+          { sex: 'bitch', coat: 'stock' },
+          { sex: 'dog', coat: 'long_stock' },
+          { sex: 'dog', coat: 'stock' },
+        ];
+        const svValues: Array<{
+          showId: string;
+          classDefinitionId: string;
+          sex: 'dog' | 'bitch' | null;
+          svCoatType: 'stock' | 'long_stock' | null;
+          entryFee: number;
+          sortOrder: number;
+          classNumber: number;
+        }> = [];
+        let idx = 0;
+        for (const def of svAgeDefs) {
+          for (const { sex, coat } of COMBOS) {
+            svValues.push({
+              showId: show!.id,
+              classDefinitionId: def.id,
+              sex,
+              svCoatType: coat,
+              entryFee: fee,
+              sortOrder: idx,
+              classNumber: idx + 1,
+            });
+            idx++;
+          }
+        }
+        if (svValues.length > 0) {
+          await ctx.db.insert(showClasses).values(svValues);
+        }
+      }
+
       return show!;
     }),
 
@@ -734,12 +803,45 @@ export const showsRouter = createTRPCRouter({
         subsequentEntryFee: z.number().int().min(0).nullable().optional(),
         nfcEntryFee: z.number().int().min(0).nullable().optional(),
         juniorHandlerFee: z.number().int().min(0).nullable().optional(),
+        multiDogThreshold: z.number().int().min(2).nullable().optional(),
+        multiDogPackagePence: z.number().int().min(0).nullable().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const { id, entriesOpenDate, entryCloseDate, postalCloseDate, ...rest } = input;
 
       await verifyShowAccess(ctx.db, ctx.session.user.id, id, { callerIsAdmin: ctx.callerIsAdmin });
+
+      // Gate: can't open entries unless the host club has saved their
+      // payout bank details. Remi is merchant of record, so clubs don't
+      // need a Stripe account — but we do need their sort code + account
+      // number so we can BACS them the entry fees after the show.
+      if (input.status === 'entries_open') {
+        const row = await ctx.db.query.shows.findFirst({
+          where: eq(shows.id, id),
+          columns: { organisationId: true },
+          with: {
+            organisation: {
+              columns: {
+                payoutSortCode: true,
+                payoutAccountNumber: true,
+                payoutAccountName: true,
+              },
+            },
+          },
+        });
+        if (
+          !row?.organisation?.payoutSortCode ||
+          !row.organisation.payoutAccountNumber ||
+          !row.organisation.payoutAccountName
+        ) {
+          throw new TRPCError({
+            code: 'PRECONDITION_FAILED',
+            message:
+              "Add your club's bank details before opening entries — we need them to send the entry fees on to you after the show. Visit the Club page to add them.",
+          });
+        }
+      }
 
       // Validate that close dates are before the show start date
       const effectiveStartDate = rest.startDate;
@@ -782,6 +884,18 @@ export const showsRouter = createTRPCRouter({
         .where(eq(shows.id, id))
         .returning();
 
+      // Amanda's spec 2026-04-17: catalogue numbers should lock in at
+      // the moment entries close. Fire ensureCatalogueNumbers on any
+      // transition into entries_closed (or further along the lifecycle
+      // — in_progress / completed — for shows that skip that status).
+      if (
+        input.status &&
+        ['entries_closed', 'in_progress', 'completed'].includes(input.status)
+      ) {
+        const { ensureCatalogueNumbers } = await import('@/server/services/catalogue-numbering');
+        await ensureCatalogueNumbers(ctx.db, id);
+      }
+
       return updated!;
     }),
 
@@ -795,6 +909,16 @@ export const showsRouter = createTRPCRouter({
           eq(sundryItems.enabled, true)
         ),
         orderBy: [asc(sundryItems.sortOrder), asc(sundryItems.createdAt)],
+      });
+    }),
+
+  /** Public list of a show's discount groups (used by the exhibitor checkout). */
+  getDiscountGroups: publicProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.db.query.showDiscountGroups.findMany({
+        where: eq(showDiscountGroups.showId, input.showId),
+        orderBy: [asc(showDiscountGroups.displayOrder)],
       });
     }),
 
@@ -837,6 +961,28 @@ export const showsRouter = createTRPCRouter({
         startDate: show.startDate,
         status: show.status,
       };
+    }),
+
+  /**
+   * How many times this show has been shared in the last 7 days. Feeds the
+   * "Shared N times this week" social-proof chip on the show page.
+   * Returns 0 when there's nothing to brag about yet — the client chooses
+   * whether to show it.
+   */
+  getShareCount: publicProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const rows = await ctx.db
+        .select({ n: sql<number>`count(*)` })
+        .from(shareEvents)
+        .where(
+          and(
+            eq(shareEvents.showId, input.showId),
+            gte(shareEvents.createdAt, sevenDaysAgo)
+          )
+        );
+      return { weekly: Number(rows[0]?.n ?? 0) };
     }),
 
   getShowSponsors: publicProcedure

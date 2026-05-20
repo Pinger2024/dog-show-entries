@@ -67,6 +67,23 @@ export function Footer() {
               </a>
             </p>
           </div>
+          <div className="mt-5 border-t pt-5 text-center sm:text-left">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Remi is a trading name of Michael James and Amanda McAteer,
+              a partnership trading from William House, Mobbs Way,
+              Lowestoft, NR32 3AL, United Kingdom. Registered with the
+              UK Information Commissioner&rsquo;s Office, no. C1920187.
+            </p>
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              Card payments are processed by Stripe Payments UK, Ltd.,
+              regulated by the Financial Conduct Authority.
+            </p>
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              Remi is an independent platform for shows licensed by The
+              Royal Kennel Club. Remi is not operated by, affiliated with,
+              or endorsed by The Royal Kennel Club unless expressly stated.
+            </p>
+          </div>
         </div>
       </div>
     </footer>

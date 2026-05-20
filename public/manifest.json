@@ -1,7 +1,8 @@
 {
+  "id": "/",
   "name": "Remi — Dog Show Entries",
   "short_name": "Remi",
-  "description": "The modern way to enter dog shows. Find KC-licensed shows, enter your dogs, and manage entries from home or ringside.",
+  "description": "The modern way to enter dog shows. Find RKC-licensed shows, enter your dogs, and manage entries from home or ringside.",
   "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",

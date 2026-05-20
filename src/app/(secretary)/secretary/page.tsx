@@ -24,6 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader, PageTitle, PageDescription, PageActions } from '@/components/ui/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 import { StatCard } from '@/components/ui/stat-card';
+import { displayShowTitle } from '@/lib/show-types';
 
 const statusConfig: Record<
   string,
@@ -227,7 +228,7 @@ function ShowList({
           >
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <p className="truncate font-medium">{show.name}</p>
+                <p className="truncate font-medium">{displayShowTitle(show.name, show.organisation?.name)}</p>
                 <Badge variant={status.variant}>{status.label}</Badge>
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-muted-foreground">

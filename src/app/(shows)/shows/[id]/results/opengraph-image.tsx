@@ -1,5 +1,7 @@
 import { ImageResponse } from 'next/og';
 import { eq } from 'drizzle-orm';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { db } from '@/server/db';
 import { shows, showClasses } from '@/server/db/schema';
 import { isUuid } from '@/lib/slugify';
@@ -26,17 +28,16 @@ export default async function OGImage({
 }) {
   const { id } = await params;
 
-  const [baskervilleBold, interRegular, interSemibold] = await Promise.all([
-    fetch(new URL('../../../../../../public/fonts/libre-baskerville-bold.ttf', import.meta.url)).then(
-      (r) => r.arrayBuffer()
-    ),
-    fetch(new URL('../../../../../../public/fonts/inter-regular.ttf', import.meta.url)).then(
-      (r) => r.arrayBuffer()
-    ),
-    fetch(new URL('../../../../../../public/fonts/inter-semibold.ttf', import.meta.url)).then(
-      (r) => r.arrayBuffer()
-    ),
-  ]);
+  // Load fonts from disk — see /shows/[id]/opengraph-image.tsx for why we avoid
+  // the `fetch(new URL(..., import.meta.url))` pattern in prod.
+  const fontsDir = join(process.cwd(), 'public', 'fonts');
+  const readFont = (name: string): ArrayBuffer => {
+    const buf = readFileSync(join(fontsDir, name));
+    return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+  };
+  const baskervilleBold = readFont('libre-baskerville-bold.ttf');
+  const interRegular = readFont('inter-regular.ttf');
+  const interSemibold = readFont('inter-semibold.ttf');
 
   const show = await db?.query.shows.findFirst({
     where: isUuid(id) ? eq(shows.id, id) : eq(shows.slug, id),

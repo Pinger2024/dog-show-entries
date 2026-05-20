@@ -10,11 +10,13 @@ import {
   FileText,
   FolderOpen,
   Handshake,
+  Image as ImageIcon,
   LayoutDashboard,
   ListChecks,
   PoundSterling,
   Printer,
   Settings,
+  Shield,
   Ticket,
   Trophy,
   Users,
@@ -37,7 +39,7 @@ type Section = {
   hasBadge?: boolean;
 };
 
-const sections: Section[] = [
+const BASE_SECTIONS: Section[] = [
   { path: '', label: 'Secretary Tools', icon: LayoutDashboard, exact: true },
   { path: '/checklist', label: 'Show Checklist', icon: ListChecks, hasBadge: true },
   { path: '/schedule', label: 'Schedule', icon: CalendarDays },
@@ -49,27 +51,12 @@ const sections: Section[] = [
   { path: '/reports', label: 'Reports', icon: FileText },
   { path: '/people', label: 'People', icon: Users },
   { path: '/sponsors', label: 'Sponsors', icon: Handshake },
+  { path: '/adverts', label: 'Adverts', icon: ImageIcon },
   { path: '/documents', label: 'Documents', icon: FolderOpen },
   { path: '/print-shop', label: 'Print Shop', icon: Printer },
 ];
 
-// Grouped for the mobile sheet
-const sectionGroups = [
-  {
-    label: 'Manage',
-    items: ['', '/checklist', '/schedule', '/entries', '/results'],
-  },
-  {
-    label: 'Finance & Print',
-    items: ['/financial', '/catalogue', '/catalogue-settings', '/reports', '/print-shop'],
-  },
-  {
-    label: 'Setup',
-    items: ['/people', '/sponsors', '/documents'],
-  },
-];
-
-const sectionMap = new Map(sections.map((s) => [s.path, s]));
+const WUSV_SECTION: Section = { path: '/wusv-classes', label: 'SV Classes', icon: Shield };
 
 function isActive(section: Section, pathname: string, basePath: string): boolean {
   if (section.exact) {
@@ -78,10 +65,31 @@ function isActive(section: Section, pathname: string, basePath: string): boolean
   return pathname.startsWith(`${basePath}${section.path}`);
 }
 
-export function ShowSectionNav({ showId }: { showId: string }) {
+export function ShowSectionNav({ showId, isWusv = false }: { showId: string; isWusv?: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
   const basePath = `/secretary/shows/${showId}`;
+
+  const sections: Section[] = isWusv
+    ? [...BASE_SECTIONS, WUSV_SECTION]
+    : BASE_SECTIONS;
+
+  const sectionMap = new Map(sections.map((s) => [s.path, s]));
+
+  const sectionGroups = [
+    {
+      label: 'Manage',
+      items: ['', '/checklist', '/schedule', '/entries', '/results', ...(isWusv ? ['/wusv-classes'] : [])],
+    },
+    {
+      label: 'Finance & Print',
+      items: ['/financial', '/catalogue', '/catalogue-settings', '/reports', '/print-shop'],
+    },
+    {
+      label: 'Setup',
+      items: ['/people', '/sponsors', '/adverts', '/documents'],
+    },
+  ];
   const [open, setOpen] = useState(false);
 
   // Check for pending actions (accepted judges needing confirmation)
