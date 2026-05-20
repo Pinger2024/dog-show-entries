@@ -6,6 +6,7 @@ import {
   haemophiliaClearEnum,
   dmTestEnum,
   koerungEnum,
+  dnaRecordingEnum,
 } from './enums';
 import { dogs } from './dogs';
 
@@ -30,6 +31,9 @@ export const dogSvProfile = pgTable('dog_sv_profile', {
   haemophiliaClear: haemophiliaClearEnum('haemophilia_clear'),
   dmTest: dmTestEnum('dm_test'),
   koerung: koerungEnum('koerung'),
+  /** SV DNA status — mandatory for Yearling+ classes per GSDL/WUSV
+   *  rules. 'recorded' = DNA on file; 'proven' = parentage verified. */
+  dna: dnaRecordingEnum('dna'),
   workingTitle: text('working_title'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true })

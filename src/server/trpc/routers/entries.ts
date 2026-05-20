@@ -22,6 +22,7 @@ import {
   dogOwners,
   judgeAssignments,
   showDiscountGroups,
+  dogSvProfile,
 } from '@/server/db/schema';
 import {
   computeOrderFees,
@@ -237,6 +238,7 @@ export const entriesRouter = createTRPCRouter({
           inArray(showClasses.id, input.classIds),
           eq(showClasses.showId, input.showId)
         ),
+        with: { classDefinition: true },
       });
 
       if (selectedClasses.length !== input.classIds.length) {
@@ -255,6 +257,38 @@ export const entriesRouter = createTRPCRouter({
             throw new TRPCError({
               code: 'BAD_REQUEST',
               message: `This class is for ${expected} dogs but your dog is registered as ${actual}. Please select the correct class.`,
+            });
+          }
+        }
+      }
+
+      // WUSV health-data validation: Yearling / Adult / Working entries
+      // require hip + elbow scores and DNA recording per GSDL/WUSV rules
+      // (Amanda 2026-05-20). Junior class is exempt — scores aren't
+      // mandatory at that age (must be disclosed only if granted).
+      if (show.showRuleset === 'wusv') {
+        const SV_HEALTH_REQUIRED_CLASSES = new Set([
+          'SV Yearling',
+          'Adult',
+          'Working',
+        ]);
+        const needsHealth = selectedClasses.some(
+          (sc) => sc.classDefinition && SV_HEALTH_REQUIRED_CLASSES.has(sc.classDefinition.name),
+        );
+        if (needsHealth) {
+          const svProfile = await ctx.db.query.dogSvProfile.findFirst({
+            where: eq(dogSvProfile.dogId, dog.id),
+          });
+          const missing: string[] = [];
+          const isEmpty = (v: string | null | undefined) =>
+            !v || v === 'not_required';
+          if (isEmpty(svProfile?.hipGrade ?? null)) missing.push('hip score');
+          if (isEmpty(svProfile?.elbowGrade ?? null)) missing.push('elbow score');
+          if (!svProfile?.dna) missing.push('DNA recording');
+          if (missing.length > 0) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `${dog.registeredName} can't be entered in Yearling, Adult or Working classes without ${missing.join(', ')}. Add the missing data on the dog's profile (SV Health & Working Titles section) and try again.`,
             });
           }
         }

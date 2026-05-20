@@ -333,6 +333,11 @@ export const dmTestEnum = pgEnum('dm_test', [
   'not_tested',
 ]);
 
+/** DNA status for SV dogs. "Recorded" means the dog's DNA profile is on
+ *  file with the SV / national kennel club; "Proven" means parentage has
+ *  been verified via DNA comparison (a stronger claim). Amanda 2026-05-20. */
+export const dnaRecordingEnum = pgEnum('dna_recording', ['recorded', 'proven']);
+
 export const koerungEnum = pgEnum('koerung', [
   'none',
   'current_year',

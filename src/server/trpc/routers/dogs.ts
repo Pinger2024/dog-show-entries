@@ -1462,6 +1462,7 @@ export const dogsRouter = createTRPCRouter({
         haemophiliaClear: z.enum(['not_required', 'yes', 'no', 'not_tested']).nullable().optional(),
         dmTest: z.enum(['not_required', 'clear', 'carrier', 'affected', 'not_tested']).nullable().optional(),
         koerung: z.enum(['none', 'current_year', 'lebenzeit']).nullable().optional(),
+        dna: z.enum(['recorded', 'proven']).nullable().optional(),
         workingTitle: z.string().nullable().optional(),
       })
     )

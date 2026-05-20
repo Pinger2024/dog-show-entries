@@ -62,6 +62,15 @@ const KOERUNG_OPTIONS = [
   { value: 'lebenzeit', label: 'Koerung Lebenzeit' },
 ] as const;
 
+// DNA — mandatory for Yearling+ entries per GSDL/WUSV rules (Amanda
+// 2026-05-20). Default blank so dogs without yet-recorded DNA aren't
+// silently claiming they have it.
+const DNA_OPTIONS = [
+  { value: '__unset__', label: '— Not specified —' },
+  { value: 'recorded', label: 'Recorded' },
+  { value: 'proven', label: 'Proven (parentage verified)' },
+] as const;
+
 // Working titles per Amanda 2026-05-19 — SchH replaced with the modern
 // IGP nomenclature; HGH (Herdengebrauchshund / herding) included.
 const WORKING_TITLE_OPTIONS = [
@@ -105,6 +114,7 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
   const [haemophiliaClear, setHaemophiliaClear] = useState<string>('not_required');
   const [dmTest, setDmTest] = useState<string>('not_required');
   const [koerung, setKoerung] = useState<string>('__unset__');
+  const [dna, setDna] = useState<string>('__unset__');
   const [workingTitle, setWorkingTitle] = useState('');
   // Tracks which dropdown option is currently selected. Stored as either
   // a preset code or the sentinel '__other__'. The actual title text lives
@@ -128,6 +138,7 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
       setHaemophiliaClear(profile.haemophiliaClear ?? 'not_required');
       setDmTest(profile.dmTest ?? 'not_required');
       setKoerung(profile.koerung ?? '__unset__');
+      setDna((profile as { dna?: 'recorded' | 'proven' | null }).dna ?? '__unset__');
       const wt = profile.workingTitle ?? '';
       setWorkingTitle(wt);
       setWorkingTitleChoice(wt && !WORKING_TITLE_PRESETS.has(wt) ? '__other__' : wt);
@@ -152,6 +163,7 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
       haemophiliaClear: (isMale ? haemophiliaClear : 'not_required') as typeof HAEM_OPTIONS[number]['value'],
       dmTest: dmTest as typeof DM_OPTIONS[number]['value'],
       koerung: koerung === '__unset__' ? null : (koerung as 'none' | 'current_year' | 'lebenzeit'),
+      dna: dna === '__unset__' ? null : (dna as 'recorded' | 'proven'),
       workingTitle: workingTitle || null,
       breedSurveyClass: breedSurveyClass || null,
       breedSurveyYear: breedSurveyYear ? Number(breedSurveyYear) : null,
@@ -300,8 +312,24 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
             </div>
           </div>
 
-          {/* Koerung + Breed Survey details */}
+          {/* DNA — mandatory for Yearling+ entries per GSDL/WUSV rules.
+              Default blank so dogs without yet-recorded DNA aren't
+              silently flagged as recorded (Amanda 2026-05-20). */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>DNA</Label>
+              <Select value={dna} onValueChange={setDna} disabled={readOnly}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DNA_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">Required for Yearling, Adult and Working class entries.</p>
+            </div>
             <div className="space-y-1.5">
               <Label>Koerung</Label>
               <Select value={koerung} onValueChange={setKoerung} disabled={readOnly}>
@@ -315,15 +343,16 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
-              <Label>Breed Survey Class <span className="text-muted-foreground font-normal">(opt.)</span></Label>
-              <Input
-                value={breedSurveyClass}
-                onChange={(e) => setBreedSurveyClass(e.target.value)}
-                placeholder="e.g. KK1"
-                disabled={readOnly}
-              />
-            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Breed Survey Class <span className="text-muted-foreground font-normal">(opt.)</span></Label>
+            <Input
+              value={breedSurveyClass}
+              onChange={(e) => setBreedSurveyClass(e.target.value)}
+              placeholder="e.g. KK1"
+              disabled={readOnly}
+            />
           </div>
 
           {/* Breed Survey Year + Surveyor — Amanda 2026-05-19: mandatory
