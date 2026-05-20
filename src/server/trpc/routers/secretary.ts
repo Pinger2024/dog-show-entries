@@ -3613,7 +3613,11 @@ export const secretaryRouter = createTRPCRouter({
       const scheduleData = show.scheduleData as Record<string, unknown> | null;
       const guarantors = (scheduleData?.guarantors as { name: string }[] | undefined) ?? [];
       const minGuarantors = show.showType === 'championship' ? 6 : 3;
-      detected.guarantors_added = guarantors.length >= minGuarantors;
+      // SV/WUSV regional shows aren't licensed under the RKC F-rules
+      // framework that requires guarantors, so the check auto-passes
+      // (Amanda 2026-05-19/20).
+      const isWusvShow = (show as { showRuleset?: 'rkc' | 'wusv' }).showRuleset === 'wusv';
+      detected.guarantors_added = isWusvShow || guarantors.length >= minGuarantors;
 
       // Championship shows: check Open + Limit for each sex per breed
       if (show.showType === 'championship' && Number(classCount?.count) > 0) {
@@ -3672,6 +3676,9 @@ export const secretaryRouter = createTRPCRouter({
       const scheduleData = show.scheduleData as Record<string, unknown> | null;
       const guarantors = (scheduleData?.guarantors as { name: string }[] | undefined) ?? [];
       const minGuarantors = show.showType === 'championship' ? 6 : 3;
+      // SV regional shows don't operate under the RKC F-rules framework,
+      // so the guarantor + RKC class-minimum checks don't apply.
+      const isWusvShow = (show as { showRuleset?: 'rkc' | 'wusv' }).showRuleset === 'wusv';
 
       type Blocker = {
         key: string;
@@ -3719,7 +3726,7 @@ export const secretaryRouter = createTRPCRouter({
           actionPath: '', severity: 'required',
         });
       }
-      if (guarantors.length < minGuarantors) {
+      if (!isWusvShow && guarantors.length < minGuarantors) {
         openEntriesBlockers.push({
           key: 'insufficient_guarantors',
           label: `Guarantors (${guarantors.length} of ${minGuarantors})`,
@@ -3727,8 +3734,10 @@ export const secretaryRouter = createTRPCRouter({
           actionPath: '/schedule', severity: 'required',
         });
       }
-      // Minimum class count validation (RKC regulation, non-companion shows only)
-      if (show.showType !== 'companion') {
+      // Minimum class count validation (RKC regulation, non-companion shows
+      // only). SV shows are exempt — their class count is governed by the
+      // WUSV/GSDL rules, not RKC F-rules.
+      if (!isWusvShow && show.showType !== 'companion') {
         const numClasses = Number(classCount[0]?.count);
         const minClasses = show.showScope === 'single_breed' ? 12 : 16;
         if (numClasses > 0 && numClasses < minClasses) {
