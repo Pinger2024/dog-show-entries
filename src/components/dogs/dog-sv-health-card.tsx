@@ -162,8 +162,15 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
       // Haemophilia is meaningless for bitches — persist as not_required.
       haemophiliaClear: (isMale ? haemophiliaClear : 'not_required') as typeof HAEM_OPTIONS[number]['value'],
       dmTest: dmTest as typeof DM_OPTIONS[number]['value'],
-      koerung: koerung === '__unset__' ? null : (koerung as 'none' | 'current_year' | 'lebenzeit'),
-      dna: dna === '__unset__' ? null : (dna as 'recorded' | 'proven'),
+      // Defensive guard: anything that isn't a valid enum value becomes
+      // null on save (covers the '__unset__' sentinel + an empty string
+      // if the Select ever ends up uncontrolled — Amanda 2026-05-20).
+      koerung: (['none', 'current_year', 'lebenzeit'] as const).includes(koerung as 'none')
+        ? (koerung as 'none' | 'current_year' | 'lebenzeit')
+        : null,
+      dna: (['recorded', 'proven'] as const).includes(dna as 'recorded')
+        ? (dna as 'recorded' | 'proven')
+        : null,
       workingTitle: workingTitle || null,
       breedSurveyClass: breedSurveyClass || null,
       breedSurveyYear: breedSurveyYear ? Number(breedSurveyYear) : null,
