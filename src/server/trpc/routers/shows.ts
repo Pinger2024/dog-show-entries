@@ -231,6 +231,7 @@ export const showsRouter = createTRPCRouter({
           organisation: true,
           venue: true,
           breed: true,
+          discountGroups: true,
           showClasses: {
             with: {
               classDefinition: true,

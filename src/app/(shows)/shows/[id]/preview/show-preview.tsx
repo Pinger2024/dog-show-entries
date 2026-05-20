@@ -500,6 +500,9 @@ export function ShowPreviewClient() {
     subsequentEntryFee?: number | null;
     nfcEntryFee?: number | null;
     juniorHandlerFee?: number | null;
+    multiDogThreshold?: number | null;
+    multiDogPackagePence?: number | null;
+    showRuleset?: 'rkc' | 'wusv';
     endTime?: string | null;
     startTime?: string | null;
     showOpenTime?: string | null;
@@ -508,6 +511,11 @@ export function ShowPreviewClient() {
     acceptsPostalEntries?: boolean;
     kcLicenceNo?: string | null;
     hasPublishedResults?: boolean;
+    discountGroups?: Array<{
+      label: string;
+      firstEntryFeePence: number;
+      multiDogPackagePence: number | null;
+    }>;
     scheduleData?: {
       prizeMoney?: string;
       awardsDescription?: string;
@@ -907,30 +915,77 @@ export function ShowPreviewClient() {
           </p>
           <div className="mt-8 overflow-hidden rounded-2xl border bg-white">
             <dl className="divide-y">
-              <FeeRow label="First entry" sub="Per dog, first class" value={showAny.firstEntryFee} />
-              <FeeRow
-                label="Subsequent entries"
-                sub="Same dog, additional classes"
-                value={showAny.subsequentEntryFee ?? showAny.firstEntryFee}
-                note={showAny.subsequentEntryFee == null || showAny.subsequentEntryFee === showAny.firstEntryFee ? 'Same rate' : undefined}
-              />
-              <FeeRow
-                label="NFC entries"
-                sub="Not for competition — socialise and support"
-                value={showAny.nfcEntryFee}
-                available={showAny.scheduleData?.acceptsNfc ?? false}
-              />
-              <FeeRow
-                label="Junior Handler"
-                sub="Handling classes for under-18s"
-                value={showAny.juniorHandlerFee}
-              />
-              <FeeRow
-                label="Postal entries"
-                sub="Paper form via post"
-                available={showAny.acceptsPostalEntries ?? false}
-                custom={showAny.acceptsPostalEntries ? 'Accepted — same rates' : 'Online only'}
-              />
+              {showAny.showRuleset === 'wusv' ? (
+                <>
+                  {/* SV regional shows charge a flat per-dog-per-class fee
+                       (no subsequent-entry discount, no NFC concept). Show
+                       discount groups + multi-dog package if set. */}
+                  <FeeRow label="Per dog, per class" sub="Standard rate" value={showAny.firstEntryFee} />
+                  {(showAny.discountGroups ?? []).map((g) => (
+                    <FeeRow
+                      key={g.label}
+                      label={`${g.label} rate`}
+                      sub={`Per dog, per class — claim at checkout`}
+                      value={g.firstEntryFeePence}
+                    />
+                  ))}
+                  {showAny.multiDogThreshold != null && showAny.multiDogPackagePence != null && (
+                    <FeeRow
+                      label={`${showAny.multiDogThreshold}+ dog package`}
+                      sub={`Flat package price when entering ${showAny.multiDogThreshold} or more dogs`}
+                      value={showAny.multiDogPackagePence}
+                    />
+                  )}
+                  {(showAny.discountGroups ?? [])
+                    .filter((g) => g.multiDogPackagePence != null)
+                    .map((g) => (
+                      <FeeRow
+                        key={`${g.label}-pkg`}
+                        label={`${g.label} ${showAny.multiDogThreshold ?? 3}+ dog package`}
+                        sub="Members get a reduced package price"
+                        value={g.multiDogPackagePence!}
+                      />
+                    ))}
+                  {(showAny.juniorHandlerFee == null || showAny.juniorHandlerFee === 0) ? (
+                    <FeeRow label="Junior Handling" sub="Handling classes for under-18s" custom="Free" />
+                  ) : (
+                    <FeeRow label="Junior Handling" sub="Handling classes for under-18s" value={showAny.juniorHandlerFee} />
+                  )}
+                  <FeeRow
+                    label="Postal entries"
+                    sub="Paper form via post"
+                    available={showAny.acceptsPostalEntries ?? false}
+                    custom={showAny.acceptsPostalEntries ? 'Accepted — same rates' : 'Online only'}
+                  />
+                </>
+              ) : (
+                <>
+                  <FeeRow label="First entry" sub="Per dog, first class" value={showAny.firstEntryFee} />
+                  <FeeRow
+                    label="Subsequent entries"
+                    sub="Same dog, additional classes"
+                    value={showAny.subsequentEntryFee ?? showAny.firstEntryFee}
+                    note={showAny.subsequentEntryFee == null || showAny.subsequentEntryFee === showAny.firstEntryFee ? 'Same rate' : undefined}
+                  />
+                  <FeeRow
+                    label="NFC entries"
+                    sub="Not for competition — socialise and support"
+                    value={showAny.nfcEntryFee}
+                    available={showAny.scheduleData?.acceptsNfc ?? false}
+                  />
+                  <FeeRow
+                    label="Junior Handler"
+                    sub="Handling classes for under-18s"
+                    value={showAny.juniorHandlerFee}
+                  />
+                  <FeeRow
+                    label="Postal entries"
+                    sub="Paper form via post"
+                    available={showAny.acceptsPostalEntries ?? false}
+                    custom={showAny.acceptsPostalEntries ? 'Accepted — same rates' : 'Online only'}
+                  />
+                </>
+              )}
               <div className="flex flex-wrap items-center justify-between gap-2 border-t border-amber-200 bg-amber-50 px-5 py-3.5 text-sm font-medium text-stone-800 sm:px-6">
                 <span className="inline-flex items-center gap-1.5"><Info className="size-4 text-amber-700" /> A card processing fee is added at checkout</span>
                 <span className="text-xs text-stone-600">All prices in GBP</span>

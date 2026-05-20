@@ -454,25 +454,35 @@ export function ShowSchedule({
           )}
         </InfoCard>
 
-        <Text style={s.infoText}>
-          {sd?.isBenched
-            ? sd.benchingRemovalTime
-              ? `Benched show. ${sd.benchingRemovalTime}`
-              : 'Benched show. Dogs may only be removed from benches with the permission of the Show Secretary.'
-            : 'Unbenched show. Dogs may be removed after judging of their breed is complete.'}
-        </Text>
-        <Text style={{ ...s.infoText, marginBottom: 8 }}>
-          The show closes half an hour after all judging has been completed.
-        </Text>
+        {/* Benching note — RKC concept; SV regional shows are outdoor with
+            dogs ringside as needed, so the block is hidden for SV (Amanda
+            2026-05-20). */}
+        {!isWusv && (
+          <>
+            <Text style={s.infoText}>
+              {sd?.isBenched
+                ? sd.benchingRemovalTime
+                  ? `Benched show. ${sd.benchingRemovalTime}`
+                  : 'Benched show. Dogs may only be removed from benches with the permission of the Show Secretary.'
+                : 'Unbenched show. Dogs may be removed after judging of their breed is complete.'}
+            </Text>
+            <Text style={{ ...s.infoText, marginBottom: 8 }}>
+              The show closes half an hour after all judging has been completed.
+            </Text>
+          </>
+        )}
 
-        {/* NFC */}
-        <InfoCard variant={variant} title="Not For Competition">
-          <Text style={s.infoText}>
-            {sd?.acceptsNfc !== false
-              ? 'Not For Competition entries are accepted. NFC dogs must be registered with the Royal Kennel Club and aged 12 weeks or over.'
-              : 'Not For Competition entries are not accepted at this show.'}
-          </Text>
-        </InfoCard>
+        {/* NFC — RKC-only concept (Not For Competition is a registration
+            status under RKC rules). Hidden for SV shows. Amanda 2026-05-20. */}
+        {!isWusv && (
+          <InfoCard variant={variant} title="Not For Competition">
+            <Text style={s.infoText}>
+              {sd?.acceptsNfc !== false
+                ? 'Not For Competition entries are accepted. NFC dogs must be registered with the Royal Kennel Club and aged 12 weeks or over.'
+                : 'Not For Competition entries are not accepted at this show.'}
+            </Text>
+          </InfoCard>
+        )}
 
         {/* Venue */}
         {show.venue && (

@@ -1132,6 +1132,19 @@ export default function EnterShowPage() {
                   )}
                   {groupedClasses.sv_age.length > 0 && (
                     <>
+                      {/* SV shows: warn when the dog has no coat type set
+                          on its profile — without it we can't auto-filter
+                          to the correct Standard/Long Coat class and the
+                          exhibitor sees the list duplicated. Amanda
+                          2026-05-20. */}
+                      {show?.showRuleset === 'wusv' && !selectedDog?.coatType && (
+                        <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
+                          <Info className="mt-0.5 size-4 shrink-0 text-amber-600" />
+                          <p className="text-sm text-amber-800 dark:text-amber-200">
+                            <span className="font-medium">{selectedDog?.registeredName ?? 'This dog'}</span> doesn&apos;t have a coat type set on the profile yet. Both Standard Coat and Long Coat classes are showing — pick the correct one, or set the coat type on the dog&apos;s profile so we can filter automatically.
+                          </p>
+                        </div>
+                      )}
                       {groupedClasses.sv_age.length === 1 && selectedClassIds.length === 1 && (
                         <div className="flex gap-3 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-950">
                           <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-green-600" />
@@ -1211,8 +1224,9 @@ export default function EnterShowPage() {
                 </>
               )}
 
-              {/* NFC option */}
-              {cart.activeEntry?.entryType === 'standard' && (
+              {/* NFC option — RKC-only concept. Hidden for SV shows
+                  (Amanda 2026-05-20). */}
+              {cart.activeEntry?.entryType === 'standard' && show?.showRuleset !== 'wusv' && (
                 <>
                   <Separator />
                   <label className="flex cursor-pointer items-center gap-3">
@@ -2074,10 +2088,19 @@ function ClassGroup({
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                   <span className="font-medium">
-                    {sc.classDefinition.name}
+                    {sc.classDefinition.name.replace(/^SV\s+/, '')}
                     {sc.sex && (
                       <span className="ml-1">
                         {sc.sex === 'dog' ? 'Dog' : 'Bitch'}
+                      </span>
+                    )}
+                    {/* Surface coat type on SV classes so secretaries +
+                        exhibitors can distinguish the otherwise-identical
+                        Adult Bitch (stock) and Adult Bitch (long_stock)
+                        rows. Amanda 2026-05-20. */}
+                    {(sc as { svCoatType?: 'stock' | 'long_stock' | null }).svCoatType && (
+                      <span className="ml-1 text-muted-foreground">
+                        — {(sc as { svCoatType?: 'stock' | 'long_stock' }).svCoatType === 'long_stock' ? 'Long Coat' : 'Standard Coat'}
                       </span>
                     )}
                   </span>
