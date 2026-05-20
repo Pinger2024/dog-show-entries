@@ -374,7 +374,7 @@ export async function generatePrizeCardsPdf(
 export async function generateSchedulePdf(showId: string): Promise<Buffer> {
   const show = await db.query.shows.findFirst({
     where: eq(schema.shows.id, showId),
-    with: { organisation: true, venue: true },
+    with: { organisation: true, venue: true, breed: true },
   });
 
   if (!show) throw new Error(`Show ${showId} not found`);
@@ -567,6 +567,8 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
       multiDogPackagePence: g.multiDogPackagePence,
     })),
     acceptsPostalEntries: show.acceptsPostalEntries ?? false,
+    showRuleset: (show as { showRuleset?: 'rkc' | 'wusv' }).showRuleset,
+    breedName: (show as { breed?: { name?: string | null } }).breed?.name ?? null,
     scheduleData: show.scheduleData as ScheduleShowInfo['scheduleData'],
     organisation: show.organisation ? {
       name: show.organisation.name,

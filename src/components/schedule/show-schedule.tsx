@@ -24,6 +24,7 @@ import { sortOfficers } from './shared/officers';
 import { buildEntryFeeGroups } from './shared/entry-fee-groups';
 import { AdvertPage, selectAdverts } from './shared/advert-page';
 import type { ScheduleAdvert } from './shared/types';
+import { groupSvClasses, type SvClassificationGroups } from './shared/sv-classification';
 
 // Re-export so existing consumers (route.ts, pdf-generation.ts, tests,
 // preview scripts) continue importing from this module path.
@@ -85,6 +86,12 @@ export function ShowSchedule({
   // ShowScheduleMultibreed). Class splitting matches RKC ordering for
   // single-breed shows: Mixed non-JH (Veteran, etc.) above Dog/Bitch, JH-only
   // Mixed below as the "Junior Handling" section.
+  // WUSV / SV regional shows render with a different cover/classification/
+  // F-rules layout per the GSDL BRG reference (Amanda 2026-05-19). Detect
+  // up front so each section can branch on the flag.
+  const isWusv = show.showRuleset === 'wusv';
+  const svGroups: SvClassificationGroups | null = isWusv ? groupSvClasses(classes) : null;
+
   const isSac = (c: ScheduleClass) =>
     c.classType === 'special' && c.className.startsWith('Special Award Class');
 
@@ -151,7 +158,7 @@ export function ShowSchedule({
 
           {/* Show type badge */}
           <View style={s.coverBadge}>
-            <Text style={s.coverBadgeText}>{showTypeLabel}</Text>
+            <Text style={s.coverBadgeText}>{isWusv ? 'Regional' : showTypeLabel}</Text>
           </View>
 
           {/* Show-level sponsor logos below badge */}
@@ -172,17 +179,26 @@ export function ShowSchedule({
             );
           })()}
 
-          {/* Class count */}
+          {/* Class count — SV shows use the GSDL "{N} Class Regional Show"
+              subtitle and the WUSV/GSDL jurisdiction line (Amanda 2026-05-19). */}
           <Text style={s.coverClassCount}>
-            {classCount} Class{classCount !== 1 ? 'es' : ''}
+            {isWusv && svGroups
+              ? `${svGroups.totalCount} Class Regional Show`
+              : `${classCount} Class${classCount !== 1 ? 'es' : ''}`}
           </Text>
 
-          {/* RKC jurisdiction */}
           <Text style={s.coverRegulatory}>
-            Held under Royal Kennel Club Rules &amp; Show Regulations F(1)
+            {isWusv
+              ? 'Held under GSDL British Regional Group Rules and Regulations based on those of the WUSV'
+              : 'Held under Royal Kennel Club Rules & Show Regulations F(1)'}
           </Text>
-          {sd?.judgedOnGroupSystem && (
+          {!isWusv && sd?.judgedOnGroupSystem && (
             <Text style={s.coverRegulatory}>Judged on the Group System</Text>
+          )}
+          {isWusv && (
+            <Text style={[s.coverRegulatory, { color: '#c0392b', fontWeight: 'bold' }]}>
+              To be Judged Outside — please dress appropriately for the weather
+            </Text>
           )}
 
           <GoldRule />
@@ -720,8 +736,147 @@ export function ShowSchedule({
       )}
 
       {/* ════════════════════════════════════════════════════════════════════════
-          SCHEDULE OF CLASSES
+          BREED CLASSIFICATION (WUSV/SV) — GSDL BRG layout
+          One numbered class per (age × sex), with a/b coat sub-letters
+          underneath. Bitch precedes Dog within each age. JH classes append
+          (13/14). Excludes Baby Puppy from the numbered set per the GSDL
+          example. Amanda 2026-05-19.
           ════════════════════════════════════════════════════════════════════ */}
+      {isWusv && svGroups && (
+        <Page size="A5" style={s.page}>
+          {/* Title */}
+          <Text style={{ fontFamily: 'Inter', fontSize: 14, fontWeight: 'bold', textAlign: 'center', color: C.textDark, textDecoration: 'underline', marginBottom: 6 }}>
+            BREED CLASSIFICATION
+          </Text>
+          <Text style={{ fontFamily: 'Inter', fontSize: 9, textAlign: 'center', color: C.textMedium, marginBottom: 10 }}>
+            Verbal Critiques will be given after the Judging of each Class has been completed.
+          </Text>
+
+          {/* Top banner: Judging commences {time} */}
+          <View style={{ borderWidth: 1, borderColor: C.textDark, padding: 6, marginBottom: 0 }}>
+            <Text style={{ fontFamily: 'Inter', fontSize: 9.5, textAlign: 'center', color: C.textDark }}>
+              Judging commences {show.startTime ?? '9:00 AM'}
+            </Text>
+          </View>
+          {/* Date + judge banner */}
+          {judges.filter((j) => j.role !== 'Special Awards Classes').length > 0 && (
+            <View style={{ borderWidth: 1, borderTopWidth: 0, borderColor: C.textDark, padding: 6, marginBottom: 0, backgroundColor: '#f3f3f3' }}>
+              <Text style={{ fontFamily: 'Inter', fontSize: 10, fontWeight: 'bold', textAlign: 'center', color: C.textDark }}>
+                {showDate}
+                {' – '}
+                {judges
+                  .filter((j) => j.role !== 'Special Awards Classes')
+                  .map((j) => j.name)
+                  .join(' / ')}
+              </Text>
+            </View>
+          )}
+          {/* Standing italic about coat-type judging */}
+          <View style={{ borderWidth: 1, borderTopWidth: 0, borderColor: C.textDark, padding: 6, marginBottom: 8 }}>
+            <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 8, textAlign: 'center', color: C.textDark, lineHeight: 1.4 }}>
+              Both coat types in each class will be presented for their individual stand at the same time and then separately in the final movement judging.
+            </Text>
+          </View>
+
+          {/* 2-column class list */}
+          <View style={{ borderWidth: 1, borderColor: C.textDark, padding: 8, marginBottom: 0 }}>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              {[0, 1].map((col) => {
+                // Split breed classes roughly half-half between columns
+                const half = Math.ceil(svGroups.breedClasses.length / 2);
+                const slice = col === 0
+                  ? svGroups.breedClasses.slice(0, half)
+                  : svGroups.breedClasses.slice(half);
+                return (
+                  <View key={col} style={{ flex: 1 }}>
+                    {slice.map((cls) => (
+                      <View key={cls.number} style={{ marginBottom: 4 }} wrap={false}>
+                        <Text style={{ fontFamily: 'Inter', fontSize: 9.5, fontWeight: 'bold', color: C.textDark }}>
+                          {cls.number}.  {cls.name} {cls.sex === 'bitch' ? 'Bitch' : 'Dog'}
+                        </Text>
+                        {cls.coatRows.map((r) => (
+                          <Text key={r.letter} style={{ fontFamily: 'Inter', fontSize: 8.5, color: C.textMedium, marginLeft: 16 }}>
+                            {r.letter}    {r.label}
+                          </Text>
+                        ))}
+                      </View>
+                    ))}
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Awards banners: "Most Promising" / "Best Dog & Bitch" */}
+          {svGroups.breedClasses.length > 0 && (() => {
+            // Best-of-X derivation per GSDL spec:
+            //  - "Most Promising Young Dog and Young Bitch" — winners of
+            //    classes 1–6 (Minor Puppy / Puppy / Junior — the under-18m
+            //    classes). When the show has fewer than 6 numbered classes
+            //    we just say "all numbered classes".
+            //  - "Best Dog and Bitch" — winners of the older classes (7+).
+            const total = svGroups.breedClasses.length;
+            const youngerCap = Math.min(6, total);
+            const olderStart = youngerCap + 1;
+            const youngLabel = `classes 1–${youngerCap}`;
+            const bestLabel = olderStart <= total ? `classes ${olderStart}–${total}` : 'the remaining classes';
+            return (
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: -1 }}>
+                <View style={{ flex: 1, borderWidth: 1, borderColor: C.textDark, padding: 6 }}>
+                  <Text style={{ fontFamily: 'Inter', fontSize: 8, textAlign: 'center', color: C.textDark, lineHeight: 1.4 }}>
+                    Most Promising Young Dog and Young Bitch to be judged from the winners of {youngLabel}
+                  </Text>
+                </View>
+                <View style={{ flex: 1, borderWidth: 1, borderColor: C.textDark, padding: 6 }}>
+                  <Text style={{ fontFamily: 'Inter', fontSize: 8, textAlign: 'center', color: C.textDark, lineHeight: 1.4 }}>
+                    Best Dog and Bitch to be judged from the winners of {bestLabel}
+                  </Text>
+                </View>
+              </View>
+            );
+          })()}
+
+          {/* Junior Handling block */}
+          {svGroups.juniorHandling.length > 0 && (
+            <View style={{ marginTop: 10, borderWidth: 1, borderColor: C.textDark }} wrap={false}>
+              <View style={{ padding: 6, borderBottomWidth: 1, borderBottomColor: C.textDark, backgroundColor: '#fef9c3' }}>
+                <Text style={{ fontFamily: 'Inter', fontSize: 10, fontWeight: 'bold', textAlign: 'center', color: C.textDark }}>
+                  {sacJudges.length > 0 ? sacJudges.map((j) => j.name).join(' / ') : 'TBC'}
+                </Text>
+              </View>
+              <View style={{ padding: 6, borderBottomWidth: 1, borderBottomColor: C.textDark }}>
+                <Text style={{ fontFamily: 'Inter', fontSize: 8.5, textAlign: 'center', color: C.textDark }}>
+                  Junior Handling Judging to take place during Lunch break.
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row' }}>
+                {svGroups.juniorHandling.map((jh, i) => (
+                  <View key={jh.number} style={{ flex: 1, padding: 6, borderRightWidth: i < svGroups.juniorHandling.length - 1 ? 1 : 0, borderRightColor: C.textDark }}>
+                    <Text style={{ fontFamily: 'Inter', fontSize: 9, color: C.textDark }}>
+                      {jh.number}. {jh.label}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* Standing footer about young dogs in the ring */}
+          <View style={{ marginTop: 10, borderWidth: 1, borderColor: C.textDark, padding: 6 }}>
+            <Text style={{ fontFamily: 'Inter', fontSize: 7.5, textAlign: 'center', color: C.textDark, lineHeight: 1.4 }}>
+              It is permitted to bring young dogs into the ring whilst the judge is doing individual assessments for training purposes. Please do not wear a ring bib to assist the stewards and ensure that you do not interrupt judging in any way. Please leave the ring as soon as asked to by the steward.{' '}
+              <Text style={{ fontWeight: 'bold' }}>THIS IS NOT ALLOWED DURING THE JUNIOR HANDLING CLASSES FOR SAFETY REASONS.</Text>
+            </Text>
+          </View>
+
+          <Text style={s.footer} render={footerRender} fixed />
+        </Page>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════════════
+          SCHEDULE OF CLASSES (RKC)
+          ════════════════════════════════════════════════════════════════════ */}
+      {!isWusv && (
       <Page size="A5" style={s.page}>
         <SectionBand title="Classification" />
 
@@ -834,10 +989,12 @@ export function ShowSchedule({
 
           <Text style={s.footer} render={footerRender} fixed />
       </Page>
+      )}
 
       {/* ════════════════════════════════════════════════════════════════════════
-          DEFINITIONS OF CLASSES
+          DEFINITIONS OF CLASSES (RKC only — SV uses a different rules block)
           ════════════════════════════════════════════════════════════════════ */}
+      {!isWusv && (
       <Page size="A5" style={s.page}>
         <SectionBand title="Definitions of Classes" />
 
@@ -915,10 +1072,12 @@ export function ShowSchedule({
 
           <Text style={s.footer} render={footerRender} fixed />
       </Page>
+      )}
 
       {/* ════════════════════════════════════════════════════════════════════════
-          RULES AND REGULATIONS
+          RULES AND REGULATIONS (RKC only — SV uses the WUSV/GSDL 28-rule block)
           ════════════════════════════════════════════════════════════════════ */}
+      {!isWusv && (
       <Page size="A5" style={s.page}>
         <SectionBand title="Rules and Regulations" />
 
@@ -1011,10 +1170,12 @@ export function ShowSchedule({
 
           <Text style={s.footer} render={footerRender} fixed />
       </Page>
+      )}
 
       {/* ════════════════════════════════════════════════════════════════════════
-          ADDITIONAL RULES AND REGULATIONS          ════════════════════════════════════════════════════════════════════ */}
-      {<Page size="A5" style={s.page}>
+          ADDITIONAL RULES AND REGULATIONS  (RKC only)
+          ════════════════════════════════════════════════════════════════════ */}
+      {!isWusv && <Page size="A5" style={s.page}>
         <SectionBand title="Additional Rules" />
 
         <Rule num="i">Should any judge be prevented from fulfilling their engagement, the Committee reserves to themselves the right of appointing other judges to fulfil their duties. Exhibitors are at liberty to withdraw from competition but no entry fees can be refunded.</Rule>
@@ -1052,8 +1213,9 @@ export function ShowSchedule({
       </Page>}
 
       {/* ════════════════════════════════════════════════════════════════════════
-          REGULATIONS FOR PREPARATION F(B)          ════════════════════════════════════════════════════════════════════ */}
-      {<Page size="A5" style={s.page}>
+          REGULATIONS FOR PREPARATION F(B)   (RKC only)
+          ════════════════════════════════════════════════════════════════════ */}
+      {!isWusv && <Page size="A5" style={s.page}>
         <SectionBand title="Regulations for Preparation F(B)" />
 
         <Text style={s.ruleText}>
@@ -1080,6 +1242,7 @@ export function ShowSchedule({
       {/* ════════════════════════════════════════════════════════════════════════
           ADVISED NOTICES (RKC Annex A) — Electrical Equipment + Security
           ════════════════════════════════════════════════════════════════════ */}
+      {!isWusv && (
       <Page size="A5" style={s.page}>
         <SectionBand title="Notices to Exhibitors" />
 
@@ -1119,9 +1282,10 @@ export function ShowSchedule({
 
           <Text style={s.footer} render={footerRender} fixed />
       </Page>
+      )}
 
       {/* ════════════════════════════════════════════════════════════════════════
-          ADDITIONAL INFORMATION (optional)
+          ADDITIONAL INFORMATION (optional, both rulesets)
           ════════════════════════════════════════════════════════════════════ */}
       {(sd?.directions || sd?.catering || sd?.futureShowDates || sd?.additionalNotes) && (
         <Page size="A5" style={s.page}>

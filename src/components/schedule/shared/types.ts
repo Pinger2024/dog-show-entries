@@ -38,6 +38,13 @@ export interface ScheduleShowInfo {
     multiDogPackagePence: number | null;
   }>;
   acceptsPostalEntries: boolean;
+  /** RKC or WUSV/SV — when 'wusv' the renderer swaps the cover-page
+   *  jurisdiction line, the breed-classification layout, the F-rules
+   *  block, and the colour palette to the GSDL BRG format. */
+  showRuleset?: 'rkc' | 'wusv';
+  /** Show's primary breed name — needed for the SV cover when no
+   *  organisation logo URL is set (used to derive "GSD" branding). */
+  breedName?: string | null;
   scheduleData: ScheduleData | null;
   organisation: {
     name: string;

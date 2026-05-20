@@ -29,7 +29,7 @@ export async function GET(
 
   const show = await db.query.shows.findFirst({
     where: eq(schema.shows.id, showId),
-    with: { organisation: true, venue: true },
+    with: { organisation: true, venue: true, breed: true },
   });
 
   if (!show) {
@@ -302,6 +302,8 @@ export async function GET(
       multiDogPackagePence: g.multiDogPackagePence,
     })),
     acceptsPostalEntries: show.acceptsPostalEntries ?? false,
+    showRuleset: (show as { showRuleset?: 'rkc' | 'wusv' }).showRuleset,
+    breedName: (show as { breed?: { name?: string | null } }).breed?.name ?? null,
     scheduleData: show.scheduleData ?? null,
     organisation: show.organisation
       ? {
