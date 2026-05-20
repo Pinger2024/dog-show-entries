@@ -1342,7 +1342,7 @@ export default function DogDetailPage({
       <TitleProgressCard dogId={id} />
 
       {/* SV Health & Working Titles */}
-      <DogSvHealthCard dogId={id} isOwner={true} />
+      <DogSvHealthCard dogId={id} isOwner={true} sex={dog.sex} />
 
       {/* Achievements (with self-report) */}
       <AchievementsCard dogId={id} achievements={dog.achievements ?? []} />

@@ -388,6 +388,11 @@ export const dogsRouter = createTRPCRouter({
         breederName: z.string().nullable().optional(),
         colour: z.string().nullable().optional(),
         bio: z.string().nullable().optional(),
+        // Breeder location split — Amanda 2026-05-19, useful for SV
+        // catalogues which list breeder origin.
+        breederCountry: z.string().nullable().optional(),
+        breederCity: z.string().nullable().optional(),
+        breederPostcode: z.string().nullable().optional(),
         // SV / WUSV fields
         registrationBody: z.enum(['kc', 'sv', 'ikc', 'other']).nullable().optional(),
         registrationBodyOther: z.string().nullable().optional(),
@@ -1443,10 +1448,17 @@ export const dogsRouter = createTRPCRouter({
       z.object({
         dogId: z.string().uuid(),
         breedSurveyClass: z.string().nullable().optional(),
-        hipGrade: z.enum(['not_required', 'normal', 'fast_normal', 'noch_zugelassen', 'other']).nullable().optional(),
+        breedSurveyYear: z.number().int().min(1900).max(2100).nullable().optional(),
+        breedSurveyor: z.string().nullable().optional(),
+        // Amanda 2026-05-19: BVA + ANKC added as recognised hip / elbow
+        // grading bodies; "other" already supported with hipScoreOther /
+        // elbowScoreOther free-text fields.
+        hipGrade: z.enum(['not_required', 'normal', 'fast_normal', 'noch_zugelassen', 'bva', 'ankc', 'other']).nullable().optional(),
         hipScore: z.string().nullable().optional(),
-        elbowGrade: z.enum(['not_required', 'normal', 'fast_normal', 'noch_zugelassen', 'other']).nullable().optional(),
+        hipScoreOther: z.string().nullable().optional(),
+        elbowGrade: z.enum(['not_required', 'normal', 'fast_normal', 'noch_zugelassen', 'bva', 'ankc', 'other']).nullable().optional(),
         elbowScore: z.string().nullable().optional(),
+        elbowScoreOther: z.string().nullable().optional(),
         haemophiliaClear: z.enum(['not_required', 'yes', 'no', 'not_tested']).nullable().optional(),
         dmTest: z.enum(['not_required', 'clear', 'carrier', 'affected', 'not_tested']).nullable().optional(),
         koerung: z.enum(['none', 'current_year', 'lebenzeit']).nullable().optional(),

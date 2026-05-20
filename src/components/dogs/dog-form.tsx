@@ -80,6 +80,9 @@ const dogFormSchema = z.object({
   sireName: z.string().optional(),
   damName: z.string().optional(),
   breederName: z.string().optional(),
+  breederCountry: z.string().optional(),
+  breederCity: z.string().optional(),
+  breederPostcode: z.string().optional(),
   bio: z.string().optional(),
   owners: z.array(ownerSchema),
   // SV / WUSV fields
@@ -357,6 +360,9 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
       sireName: '',
       damName: '',
       breederName: '',
+      breederCountry: '',
+      breederCity: '',
+      breederPostcode: '',
       bio: '',
       owners: [],
       ...defaultValues,
@@ -440,25 +446,57 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Registration Number — label + helper text adapt to the
+                chosen Registration Body so IKC / SV / Other dogs get a
+                relevant prompt rather than the RKC-only one (Amanda
+                2026-05-19). */}
             <FormField
               control={form.control}
               name="kcRegNumber"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>RKC Registration Number <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="e.g. AQ04052601"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Found on your Royal Kennel Club registration certificate. Leave
-                    blank if not yet registered.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
+              render={({ field }) => {
+                const body = form.watch('registrationBody');
+                const labelByBody: Record<string, { label: string; placeholder: string; helper: string }> = {
+                  kc: {
+                    label: 'RKC Registration Number',
+                    placeholder: 'e.g. AQ04052601',
+                    helper: 'Found on your Royal Kennel Club registration certificate. Leave blank if not yet registered.',
+                  },
+                  sv: {
+                    label: 'SV Registration Number',
+                    placeholder: 'e.g. SZ 2355001',
+                    helper: 'Found on the SV (Verein für Deutsche Schäferhunde) pedigree.',
+                  },
+                  ikc: {
+                    label: 'IKC Registration Number',
+                    placeholder: 'e.g. A12345',
+                    helper: 'Irish Kennel Club registration number.',
+                  },
+                  other: {
+                    label: 'Registration Number',
+                    placeholder: 'Registration number',
+                    helper: 'Use whichever format the registering body issued.',
+                  },
+                };
+                const cfg = body && labelByBody[body] ? labelByBody[body] : labelByBody.kc;
+                const isRequired = body === 'kc';
+                return (
+                  <FormItem>
+                    <FormLabel>
+                      {cfg.label} {' '}
+                      {isRequired ? (
+                        <span className="text-destructive">*</span>
+                      ) : (
+                        <span className="text-muted-foreground font-normal">(optional)</span>
+                      )}
+                    </FormLabel>
+                    <FormControl>
+                      <Input placeholder={cfg.placeholder} {...field} />
+                    </FormControl>
+                    <FormDescription>{cfg.helper}</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
             />
 
             <FormField
@@ -892,6 +930,52 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                 </FormItem>
               )}
             />
+
+            {/* Breeder location — Amanda 2026-05-19. SV/WUSV catalogues
+                typically list the breeder's location (especially for
+                overseas imports), so we capture Country/City/Postcode
+                as separate fields. */}
+            <div className="grid gap-3 sm:grid-cols-3">
+              <FormField
+                control={form.control}
+                name="breederCountry"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Breeder Country <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. Germany" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="breederCity"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Breeder City <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. Augsburg" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="breederPostcode"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Breeder Postcode <span className="text-muted-foreground font-normal">(opt.)</span></FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. 86150" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
           </CardContent>
         </Card>
 

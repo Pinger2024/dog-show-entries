@@ -303,6 +303,8 @@ export const hipGradeEnum = pgEnum('hip_grade', [
   'normal',
   'fast_normal',
   'noch_zugelassen',
+  'bva',
+  'ankc',
   'other',
 ]);
 
@@ -311,6 +313,8 @@ export const elbowGradeEnum = pgEnum('elbow_grade', [
   'normal',
   'fast_normal',
   'noch_zugelassen',
+  'bva',
+  'ankc',
   'other',
 ]);
 

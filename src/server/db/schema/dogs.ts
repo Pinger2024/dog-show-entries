@@ -40,6 +40,9 @@ export const dogs = pgTable(
     damRegistrationBody: registrationBodyEnum('dam_registration_body'),
     damRegistrationNumber: text('dam_registration_number'),
     breederName: text('breeder_name'),
+    breederCountry: text('breeder_country'),
+    breederCity: text('breeder_city'),
+    breederPostcode: text('breeder_postcode'),
     colour: text('colour'),
     registrationStatus: text('registration_status'), // null=registered, 'naf', 'taf', 'cnaf'
     bio: text('bio'),
