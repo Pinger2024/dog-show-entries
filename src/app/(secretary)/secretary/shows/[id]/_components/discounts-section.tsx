@@ -57,22 +57,24 @@ export function DiscountsSection({ showId, multiDog, onMultiDogChange }: Props) 
   const multiDogEnabled = !!multiDog.threshold;
 
   return (
-    <div className="rounded-lg border bg-muted/20">
+    <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/20">
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
+        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left transition-colors hover:bg-emerald-100/40 dark:hover:bg-emerald-950/30"
       >
         <div>
-          <p className="text-sm font-semibold">Advanced discounts</p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+            Advanced discounts
+          </p>
+          <p className="text-xs text-emerald-800/70 dark:text-emerald-200/70">
             Optional — members rates, multi-dog packages
           </p>
         </div>
         {expanded ? (
-          <ChevronDown className="size-4 text-muted-foreground" />
+          <ChevronDown className="size-4 text-emerald-700 dark:text-emerald-300" />
         ) : (
-          <ChevronRight className="size-4 text-muted-foreground" />
+          <ChevronRight className="size-4 text-emerald-700 dark:text-emerald-300" />
         )}
       </button>
 
@@ -204,9 +206,42 @@ export function DiscountsSection({ showId, multiDog, onMultiDogChange }: Props) 
                     </div>
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Discount groups can set their own package price — edit a group above to do so.
-                </p>
+                {/* Per-discount-group multi-dog package summary —
+                    surfaces the per-group package price (e.g. BRG Members
+                    3-dog £45 vs everyone-else £56) where the secretary
+                    actually sets the standard package, so it's not
+                    hidden behind "edit the group" (Amanda 2026-05-19). */}
+                {groups && groups.length > 0 && (
+                  <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+                    <p className="text-xs font-semibold">Group-specific package prices</p>
+                    <ul className="space-y-1 text-xs">
+                      {groups.map((g) => (
+                        <li key={g.id} className="flex items-center justify-between gap-2">
+                          <span className="truncate">{g.label}</span>
+                          <span className="shrink-0 font-medium">
+                            {g.multiDogPackagePence != null
+                              ? `£${(g.multiDogPackagePence / 100).toFixed(2)}`
+                              : (
+                                <button
+                                  type="button"
+                                  className="text-primary hover:underline"
+                                  onClick={() => {
+                                    setEditingGroup(g);
+                                    setGroupDialogOpen(true);
+                                  }}
+                                >
+                                  Set group price
+                                </button>
+                              )}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-[11px] text-muted-foreground">
+                      A group&apos;s own package price replaces the standard one above when a member claims the rate at checkout.
+                    </p>
+                  </div>
+                )}
                 <Button
                   type="button"
                   variant="ghost"

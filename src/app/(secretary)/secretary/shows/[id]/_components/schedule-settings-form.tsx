@@ -752,6 +752,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
                       guarantorCount={guarantorCount}
                       requiredGuarantors={requiredGuarantors}
                       showType={showData?.showType ?? 'open'}
+                      isWusvShow={(showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset === 'wusv'}
                     />
                   )}
                   {section.id === 'awards' && (
@@ -761,6 +762,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
                       hasBestVeteranInShow={hasBestVeteranInShow} setHasBestVeteranInShow={setHasBestVeteranInShow}
                       bestVeteranInShowEligibility={bestVeteranInShowEligibility} setBestVeteranInShowEligibility={setBestVeteranInShowEligibility}
                       showId={showId}
+                      isWusvShow={(showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset === 'wusv'}
                     />
                   )}
                   {section.id === 'venue' && (
@@ -1048,7 +1050,7 @@ function PeopleSection({
   showManager, setShowManager, officers,
   addOfficer, removeOfficer, updateOfficer,
   clubPeople, clubPickerOpen, setClubPickerOpen, addFromClub,
-  guarantorCount, requiredGuarantors, showType,
+  guarantorCount, requiredGuarantors, showType, isWusvShow,
 }: {
   showManager: string; setShowManager: (v: string) => void;
   officers: OfficerWithGuarantor[];
@@ -1059,20 +1061,23 @@ function PeopleSection({
   clubPickerOpen: boolean; setClubPickerOpen: (v: boolean) => void;
   addFromClub: (person: NonNullable<typeof clubPeople>[number]) => void;
   guarantorCount: number; requiredGuarantors: number; showType: string;
+  isWusvShow: boolean;
 }) {
   const met = guarantorCount >= requiredGuarantors;
 
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
-        <Label htmlFor="showManager" className="text-xs">Show Manager <span className="text-destructive">*</span></Label>
+        <Label htmlFor="showManager" className="text-xs">
+          {isWusvShow ? 'Event Manager' : 'Show Manager'} <span className="text-destructive">*</span>
+        </Label>
         <Input id="showManager" value={showManager} onChange={(e) => setShowManager(e.target.value)} placeholder="Full name" className="min-h-[2.75rem]" />
       </div>
 
       {/* Officers */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <Label className="text-xs">Officers & Guarantors</Label>
+          <Label className="text-xs">{isWusvShow ? 'Officers' : 'Officers & Guarantors'}</Label>
           <div className="flex gap-1.5">
             {clubPeople && clubPeople.length > 0 && (
               <Popover open={clubPickerOpen} onOpenChange={setClubPickerOpen}>
@@ -1172,15 +1177,18 @@ function PeopleSection({
                 </div>
 
                 <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3">
-                  {/* Guarantor checkbox — clearly labelled, was previously a tiny G icon nobody noticed */}
-                  <label className="flex items-center gap-2 text-sm font-medium cursor-pointer select-none whitespace-nowrap">
-                    <Checkbox
-                      checked={officer.isGuarantor}
-                      onCheckedChange={(checked) => updateOfficer(idx, 'isGuarantor', checked === true)}
-                      className="size-5"
-                    />
-                    Guarantor
-                  </label>
+                  {/* Guarantor checkbox — RKC concept only, hidden for SV
+                      regional shows (Amanda 2026-05-19). */}
+                  {!isWusvShow && (
+                    <label className="flex items-center gap-2 text-sm font-medium cursor-pointer select-none whitespace-nowrap">
+                      <Checkbox
+                        checked={officer.isGuarantor}
+                        onCheckedChange={(checked) => updateOfficer(idx, 'isGuarantor', checked === true)}
+                        className="size-5"
+                      />
+                      Guarantor
+                    </label>
+                  )}
                   <Button variant="ghost" size="icon" className="shrink-0 size-8" onClick={() => removeOfficer(idx)}>
                     <X className="size-3.5 text-muted-foreground" />
                   </Button>
@@ -1190,24 +1198,29 @@ function PeopleSection({
           </div>
         )}
 
-        <div
-          className={cn(
-            'rounded-lg border px-3 py-2 text-sm flex items-start gap-2',
-            met
-              ? 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200'
-              : 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200',
-          )}
-        >
-          {met ? <Check className="size-4 mt-0.5 shrink-0" /> : <AlertTriangle className="size-4 mt-0.5 shrink-0" />}
-          <div>
-            <p className="font-medium">{guarantorCount} of {requiredGuarantors} guarantors</p>
-            {!met && (
-              <p className="text-xs mt-0.5 opacity-80">
-                Tick the &quot;Guarantor&quot; box next to each officer who is acting as a guarantor for this show. {showType === 'championship' ? 'Championship' : 'Open'} shows need {requiredGuarantors}.
-              </p>
+        {/* Guarantor count banner — RKC-only artefact (SV/WUSV regional
+            shows aren't licensed under the RKC F-rules framework that
+            requires guarantors). Hidden for SV shows per Amanda 2026-05-19. */}
+        {!isWusvShow && (
+          <div
+            className={cn(
+              'rounded-lg border px-3 py-2 text-sm flex items-start gap-2',
+              met
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200'
+                : 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200',
             )}
+          >
+            {met ? <Check className="size-4 mt-0.5 shrink-0" /> : <AlertTriangle className="size-4 mt-0.5 shrink-0" />}
+            <div>
+              <p className="font-medium">{guarantorCount} of {requiredGuarantors} guarantors</p>
+              {!met && (
+                <p className="text-xs mt-0.5 opacity-80">
+                  Tick the &quot;Guarantor&quot; box next to each officer who is acting as a guarantor for this show. {showType === 'championship' ? 'Championship' : 'Open'} shows need {requiredGuarantors}.
+                </p>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
     </div>
@@ -1220,13 +1233,14 @@ function AwardsSection({
   awardsDescription, setAwardsDescription, prizeMoney, setPrizeMoney,
   hasBestVeteranInShow, setHasBestVeteranInShow,
   bestVeteranInShowEligibility, setBestVeteranInShowEligibility,
-  showId,
+  showId, isWusvShow,
 }: {
   awardsDescription: string; setAwardsDescription: (v: string) => void;
   prizeMoney: string; setPrizeMoney: (v: string) => void;
   hasBestVeteranInShow: boolean; setHasBestVeteranInShow: (v: boolean) => void;
   bestVeteranInShowEligibility: string; setBestVeteranInShowEligibility: (v: string) => void;
   showId: string;
+  isWusvShow: boolean;
 }) {
   const { data: sponsors } = trpc.secretary.listShowSponsors.useQuery({ showId });
   const sponsorCount = sponsors?.length ?? 0;
@@ -1243,28 +1257,32 @@ function AwardsSection({
         <Input id="prizeMoney" value={prizeMoney} onChange={(e) => setPrizeMoney(e.target.value)} placeholder="e.g. No prize money offered" className="min-h-[2.75rem]" />
       </div>
 
-      {/* Best Veteran in Show — RKC requires explicit eligibility criteria when offered */}
-      <div className="space-y-2 rounded-lg border p-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <Label className="text-xs">Best Veteran in Show</Label>
-            <p className="text-xs text-muted-foreground">RKC requires the eligibility criteria to be printed in the schedule</p>
+      {/* Best Veteran in Show — RKC requires explicit eligibility criteria
+          when offered. SV regional shows don't have a Veteran class so the
+          block is hidden entirely (Amanda 2026-05-19). */}
+      {!isWusvShow && (
+        <div className="space-y-2 rounded-lg border p-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-xs">Best Veteran in Show</Label>
+              <p className="text-xs text-muted-foreground">RKC requires the eligibility criteria to be printed in the schedule</p>
+            </div>
+            <Switch checked={hasBestVeteranInShow} onCheckedChange={setHasBestVeteranInShow} />
           </div>
-          <Switch checked={hasBestVeteranInShow} onCheckedChange={setHasBestVeteranInShow} />
+          {hasBestVeteranInShow && (
+            <div className="space-y-1.5 pt-1">
+              <Label htmlFor="bvisEligibility" className="text-xs">Eligibility criteria</Label>
+              <Textarea
+                id="bvisEligibility"
+                value={bestVeteranInShowEligibility}
+                onChange={(e) => setBestVeteranInShowEligibility(e.target.value)}
+                placeholder="Leave blank to use the standard wording (Best Veteran of Sex from each breed). Override only if your club has different rules."
+                rows={3}
+              />
+            </div>
+          )}
         </div>
-        {hasBestVeteranInShow && (
-          <div className="space-y-1.5 pt-1">
-            <Label htmlFor="bvisEligibility" className="text-xs">Eligibility criteria</Label>
-            <Textarea
-              id="bvisEligibility"
-              value={bestVeteranInShowEligibility}
-              onChange={(e) => setBestVeteranInShowEligibility(e.target.value)}
-              placeholder="Leave blank to use the standard wording (Best Veteran of Sex from each breed). Override only if your club has different rules."
-              rows={3}
-            />
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Sponsors link */}
       <Link

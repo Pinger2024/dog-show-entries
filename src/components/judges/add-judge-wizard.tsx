@@ -5,6 +5,7 @@ import {
   Check,
   ChevronRight,
   Loader2,
+  Plus,
   Search,
   UserPlus,
 } from 'lucide-react';
@@ -118,10 +119,17 @@ export function AddJudgeWizard({
   const kcSearchMutation = trpc.secretary.kcJudgeSearch.useMutation();
   const kcProfileMutation = trpc.secretary.kcJudgeProfile.useMutation();
 
+  // SV regional shows draw most of their judges from overseas, so the RKC
+  // database is rarely useful — skip the auto-search + hide the RKC search
+  // affordance (Amanda 2026-05-19). Local Remi search still runs.
+  const isWusvShow =
+    (showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset === 'wusv';
+
   // Auto-search RKC when local DB has no results and query is long enough (debounced)
   const lastAutoSearchRef = useRef('');
   useEffect(() => {
     if (
+      isWusvShow ||
       searchQuery.length < 2 ||
       !localSearchQuery.isFetched ||
       (localSearchQuery.data?.length ?? 0) > 0 ||
@@ -136,7 +144,7 @@ export function AddJudgeWizard({
     }, 400);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery, localSearchQuery.isFetched, localSearchQuery.data?.length, kcSearchMutation.isPending]);
+  }, [isWusvShow, searchQuery, localSearchQuery.isFetched, localSearchQuery.data?.length, kcSearchMutation.isPending]);
   const addAndAssignMutation = trpc.secretary.addAndAssignJudge.useMutation({
     onSuccess: (data) => {
       toast.success(`${data.judge.name} added — ${data.assignmentCount} assignment${data.assignmentCount !== 1 ? 's' : ''} created`);
@@ -449,8 +457,9 @@ export function AddJudgeWizard({
               </div>
             )}
 
-            {/* RKC search trigger */}
-            {searchQuery.length >= 2 && (
+            {/* RKC search trigger — hidden for SV regional shows (most
+                SV judges are overseas and not in the RKC database). */}
+            {!isWusvShow && searchQuery.length >= 2 && (
               <div className="flex items-center gap-2">
                 <Button
                   size="sm"
@@ -481,8 +490,8 @@ export function AddJudgeWizard({
               </div>
             )}
 
-            {/* RKC results */}
-            {kcSearchMutation.data && (
+            {/* RKC results — hidden for SV regional shows. */}
+            {!isWusvShow && kcSearchMutation.data && (
               <div>
                 <p className="mb-1.5 text-xs font-medium text-muted-foreground">
                   RKC Results ({kcSearchMutation.data.length})
@@ -521,16 +530,31 @@ export function AddJudgeWizard({
               </div>
             )}
 
-            {/* Manual entry fallback */}
+            {/* Manual entry fallback — for SV shows this is the primary
+                add path (most SV judges are overseas, not in RKC), so it
+                renders as a prominent button rather than a hyperlink. */}
             <div className="border-t pt-3">
               {!manualMode ? (
-                <button
-                  type="button"
-                  onClick={() => setManualMode(true)}
-                  className="text-sm text-primary hover:underline"
-                >
-                  Not found? Enter details manually
-                </button>
+                isWusvShow ? (
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    onClick={() => setManualMode(true)}
+                    className="min-h-[2.75rem]"
+                  >
+                    <Plus className="size-4" />
+                    Add judge details manually
+                  </Button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setManualMode(true)}
+                    className="text-sm text-primary hover:underline"
+                  >
+                    Not found? Enter details manually
+                  </button>
+                )
               ) : (
                 <div className="space-y-3">
                   <p className="text-sm font-medium">Enter Judge Details</p>

@@ -358,21 +358,34 @@ export function JudgesSection({ showId }: { showId: string }) {
       hasJuniorHandling: boolean;
       hasBreedAssignment: boolean;
     };
+    // SV regional shows have only one implicit breed (German Shepherd Dog) —
+    // judge_assignments don't carry an explicit breed FK so the "main
+    // classes" judge looks like breed=null+sex=dog/bitch. Treat that pattern
+    // as a main-classes assignment using the show's overall breed (Amanda
+    // 2026-05-19 fix).
+    const showBreedName = showData?.breed?.name ?? null;
+    const isSvShow = (showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset === 'wusv';
+
     const seen = new Map<string, JudgeRow>();
     for (const a of assignments ?? []) {
       // Group-level assignments (with a judgeRoleId) are shown in GroupJudgesPanel, not here
       if (a.judgeRole) continue;
       const isSac = (a as { isSpecialAwardsClassesJudge?: boolean }).isSpecialAwardsClassesJudge === true;
       const isJhShape = !isSac && a.breed === null && a.sex === null;
+      // SV main-class assignment: breed null + sex set + not SAC + isSvShow
+      const isSvMainClass = !isSac && isSvShow && a.breed === null && (a.sex === 'dog' || a.sex === 'bitch');
+      // Effective breed name for breed-sex mapping (real FK for RKC,
+      // show's implicit breed for SV main classes).
+      const effectiveBreed = a.breed?.name ?? (isSvMainClass ? showBreedName : null);
       const existing = seen.get(a.judgeId);
       if (existing) {
-        if (a.breed && !existing.breeds.includes(a.breed.name)) {
-          existing.breeds.push(a.breed.name);
+        if (effectiveBreed && !isSac && !existing.breeds.includes(effectiveBreed)) {
+          existing.breeds.push(effectiveBreed);
         }
-        if (a.breed && !isSac) {
-          const set = existing.breedSexes.get(a.breed.name) ?? new Set();
+        if (effectiveBreed && !isSac) {
+          const set = existing.breedSexes.get(effectiveBreed) ?? new Set();
           set.add(a.sex === 'dog' ? 'dog' : a.sex === 'bitch' ? 'bitch' : 'both');
-          existing.breedSexes.set(a.breed.name, set);
+          existing.breedSexes.set(effectiveBreed, set);
         }
         if (a.ring && !existing.rings.includes(`Ring ${a.ring.number}`)) {
           existing.rings.push(`Ring ${a.ring.number}`);
@@ -380,11 +393,11 @@ export function JudgesSection({ showId }: { showId: string }) {
         existing.assignmentIds.push(a.id);
         if (isSac) existing.hasSpecialAwards = true;
         if (isJhShape) existing.hasJuniorHandling = true;
-        if (a.breed && !isSac) existing.hasBreedAssignment = true;
+        if ((a.breed && !isSac) || isSvMainClass) existing.hasBreedAssignment = true;
       } else {
         const breedSexes = new Map<string, Set<'dog' | 'bitch' | 'both'>>();
-        if (a.breed && !isSac) {
-          breedSexes.set(a.breed.name, new Set([a.sex === 'dog' ? 'dog' : a.sex === 'bitch' ? 'bitch' : 'both']));
+        if (effectiveBreed && !isSac) {
+          breedSexes.set(effectiveBreed, new Set([a.sex === 'dog' ? 'dog' : a.sex === 'bitch' ? 'bitch' : 'both']));
         }
         seen.set(a.judgeId, {
           judgeId: a.judgeId,
@@ -393,18 +406,18 @@ export function JudgesSection({ showId }: { showId: string }) {
           contactEmail: a.judge.contactEmail,
           contactPhone: a.judge.contactPhone,
           kennelClubAffix: a.judge.kennelClubAffix,
-          breeds: a.breed && !isSac ? [a.breed.name] : [],
+          breeds: effectiveBreed && !isSac ? [effectiveBreed] : [],
           breedSexes,
           rings: a.ring ? [`Ring ${a.ring.number}`] : [],
           assignmentIds: [a.id],
           hasSpecialAwards: isSac,
           hasJuniorHandling: isJhShape,
-          hasBreedAssignment: !!a.breed && !isSac,
+          hasBreedAssignment: (!!a.breed && !isSac) || isSvMainClass,
         });
       }
     }
     return Array.from(seen.values());
-  }, [assignments]);
+  }, [assignments, showData]);
 
   // Build the breed + classification labels Amanda wants shown on the
   // assignments card and inside the offer email preview (2026-05-15).
@@ -816,7 +829,11 @@ export function JudgesSection({ showId }: { showId: string }) {
                   {showData?.showType && (
                     <>
                       <span className="font-medium">Type</span>
-                      <span className="capitalize">{showData.showType.replace('_', ' ')}</span>
+                      <span className="capitalize">
+                        {(showData as { showRuleset?: 'rkc' | 'wusv' }).showRuleset === 'wusv'
+                          ? 'Regional'
+                          : showData.showType.replace('_', ' ')}
+                      </span>
                     </>
                   )}
                 </div>
