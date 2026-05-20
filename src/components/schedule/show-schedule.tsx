@@ -874,6 +874,161 @@ export function ShowSchedule({
       )}
 
       {/* ════════════════════════════════════════════════════════════════════════
+          TIME SCHEDULE + DEFINITION OF CLASSES (WUSV/SV) — Page 2 of the SV
+          schedule block. Verbatim from the GSDL BRG reference except where
+          noted. Amanda 2026-05-19.
+          ════════════════════════════════════════════════════════════════════ */}
+      {isWusv && (
+        <Page size="A5" style={s.page}>
+          <Text style={{ fontFamily: 'Inter', fontSize: 12, fontWeight: 'bold', textAlign: 'center', color: C.textDark, textDecoration: 'underline', marginBottom: 6 }}>
+            Time schedule and class order
+          </Text>
+          <View style={{ marginBottom: 6 }}>
+            <Text style={{ fontFamily: 'Inter', fontSize: 9, textAlign: 'center', color: C.textDark }}>
+              Show Ground open to Exhibitors and Visitors from {show.showOpenTime ?? '8:30 AM'}
+            </Text>
+            <Text style={{ fontFamily: 'Inter', fontSize: 9, fontWeight: 'bold', textAlign: 'center', color: C.textDark }}>
+              All Dogs MUST be identifiable by MICROCHIP
+            </Text>
+            <Text style={{ fontFamily: 'Inter', fontSize: 9, fontWeight: 'bold', textAlign: 'center', color: '#c0392b', marginTop: 2 }}>
+              All exhibitors are to collect and return their ring bib to the Secretary.
+            </Text>
+          </View>
+
+          <Text style={{ fontFamily: 'Inter', fontSize: 8, color: C.textDark, lineHeight: 1.45, marginBottom: 8 }}>
+            Identification checks will take place in the ring at the start of the class. The handler / owner should be aware of the position of an exhibit&apos;s micro-chip. The owner of any exhibit whose id number does not match that submitted on the entry form must provide original documentation to prove the id number of the exhibit matches the name of that exhibit before its individual assessment commences, if this cannot be provided the exhibit will not be allowed to compete.
+          </Text>
+
+          <Text style={{ fontFamily: 'Inter', fontSize: 12, fontWeight: 'bold', textAlign: 'center', color: C.textDark, textDecoration: 'underline', marginVertical: 8 }}>
+            PLEASE NOTE — Judging Starts at {show.startTime ?? '9:00 AM'}
+          </Text>
+
+          <Text style={{ fontFamily: 'Inter', fontSize: 8, color: C.textDark, marginBottom: 4 }}>
+            It is our aim to ensure the show runs as efficiently as possible without any long delays between judging and finishing at a reasonable time.
+          </Text>
+          <Text style={{ fontFamily: 'Inter', fontSize: 8.5, fontWeight: 'bold', color: C.textDark, marginBottom: 4 }}>
+            All classes will be completed in the order of the catalogue.
+          </Text>
+          <Text style={{ fontFamily: 'Inter', fontSize: 8, color: C.textDark, marginBottom: 10 }}>
+            Any exhibit not present for the gun test for their class will NOT be allowed to compete in the class — gun tests will not be repeated for individuals.
+          </Text>
+
+          <Text style={{ fontFamily: 'Inter', fontSize: 10, fontWeight: 'bold', color: C.textDark, marginTop: 4, marginBottom: 4, textDecoration: 'underline' }}>
+            DEFINITION OF CLASSES
+          </Text>
+
+          <View style={{ gap: 4 }}>
+            <Text style={{ fontFamily: 'Inter', fontSize: 8.5, color: C.textDark }}>
+              <Text style={{ fontWeight: 'bold' }}>BABY PUPPY: </Text>
+              For dogs of four (4) and up to six (6) calendar months of age.
+            </Text>
+            <Text style={{ fontFamily: 'Inter', fontSize: 8.5, color: C.textDark }}>
+              <Text style={{ fontWeight: 'bold' }}>MINOR PUPPY: </Text>
+              For dogs of six (6) and up to nine (9) calendar months of age.
+            </Text>
+            <Text style={{ fontFamily: 'Inter', fontSize: 8.5, color: C.textDark }}>
+              <Text style={{ fontWeight: 'bold' }}>PUPPY: </Text>
+              For dogs of nine (9) and up to twelve (12) calendar months of age.
+            </Text>
+            <Text style={{ fontFamily: 'Inter', fontSize: 8.5, color: C.textDark }}>
+              <Text style={{ fontWeight: 'bold' }}>JUNIOR (Youth / Jugend): </Text>
+              For dogs of twelve (12) and up to eighteen (18) calendar months of age. Hip and elbow scores* are not required, however if a score has been granted it MUST be disclosed.
+            </Text>
+            <Text style={{ fontFamily: 'Inter', fontSize: 8.5, color: C.textDark }}>
+              <Text style={{ fontWeight: 'bold' }}>YEARLING (Young / Junghund): </Text>
+              For dogs of eighteen (18) and up to twenty four (24) calendar months of age. Health test scores* MUST be disclosed. DNA recording is mandatory. Parentage proven is recommended.
+            </Text>
+            <Text style={{ fontFamily: 'Inter', fontSize: 8, fontStyle: 'italic', color: C.textMedium, marginTop: 2 }}>
+              For clarity, the first day of the show is taken for calculating age. If a dog reaches the upper limit of the age class on the first day of the show, they must move to the next class.
+            </Text>
+            <Text style={{ fontFamily: 'Inter', fontSize: 8, color: C.textDark, marginTop: 4 }}>
+              <Text style={{ fontWeight: 'bold' }}>ADULT — 24 Months +: </Text>
+              Any dog without a SchH/VPG/IPO or equivalent Training Degree can enter the Adult Class provided they meet the above health test criteria. Health test scores* MUST be disclosed. DNA recording is mandatory. Parentage proven is recommended. Dogs born on or after 1st January 2025 must have completed an SV character assessment.
+            </Text>
+            <Text style={{ fontFamily: 'Inter', fontSize: 8, color: C.textDark, marginTop: 4 }}>
+              <Text style={{ fontWeight: 'bold' }}>WORKING (Gebrauchshund) — 24 Months +: </Text>
+              All dogs must have a Training Degree of at least a SchH1 / VPG1 / IPO1 / IGP1 or equivalent. Health test scores* MUST be disclosed. DNA recording is mandatory. All dogs will be subject to off-lead gaiting (no more than one lap of the ring). Any dog without a Koerung may participate up to three years and six months old maximum, whereby they can achieve the maximum grading of V; thereafter they will only be eligible for the maximum grading of SG (Very Good). Dogs born on or after 1st January 2025 must have completed an SV character assessment.
+            </Text>
+            <Text style={{ fontFamily: 'Inter', fontSize: 8, color: C.textDark, marginTop: 4 }}>
+              <Text style={{ fontWeight: 'bold' }}>LONG COAT CLASS: </Text>
+              All dogs with a long coat of which an undercoat MUST be present.
+            </Text>
+            <Text style={{ fontFamily: 'Inter', fontSize: 8, color: C.textDark, marginTop: 4 }}>
+              <Text style={{ fontWeight: 'bold' }}>ADDITIONAL REQUIREMENTS: </Text>
+              ALL dogs over 12 months will be required to pass a GUN TEST. ALL dogs over 12 months may be measured.
+            </Text>
+            <Text style={{ fontFamily: 'Inter', fontSize: 7.5, fontStyle: 'italic', color: C.textMedium, marginTop: 6 }}>
+              * Exhibits with health test results which do not meet the following criteria are not eligible to compete at GSDL-BRG events. Hip scores must be BVA/ANKC max 20 and no more than 12 on either side or SV A-stamp; Elbow scores must be BVA/ANKC 0 or 1 or SV A-stamp. If the score is being appealed, the exhibit is not eligible to compete until the result of the appeal is known.
+            </Text>
+          </View>
+
+          <Text style={s.footer} render={footerRender} fixed />
+        </Page>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════════════
+          WUSV / GSDL-BRG RULES (28-rule block) — replaces RKC F-rules for SV.
+          Verbatim from the GSDL BRG reference (Amanda 2026-05-19).
+          ════════════════════════════════════════════════════════════════════ */}
+      {isWusv && (
+        <Page size="A5" style={s.page}>
+          <Text style={{ fontFamily: 'Inter', fontSize: 11, fontWeight: 'bold', textAlign: 'center', color: C.textDark, textDecoration: 'underline', marginBottom: 2 }}>
+            Summary of the WUSV / GSDL-British Regional Group
+          </Text>
+          <Text style={{ fontFamily: 'Inter', fontSize: 11, fontWeight: 'bold', textAlign: 'center', color: C.textDark, marginBottom: 8 }}>
+            Rules &amp; Regulations for a Regional Event
+          </Text>
+          <Text style={{ fontFamily: 'Inter', fontSize: 8, fontStyle: 'italic', textAlign: 'center', color: C.textMedium, marginBottom: 10 }}>
+            (Based on WUSV / SV Rules &amp; Regulations)
+          </Text>
+
+          <View style={{ gap: 3 }}>
+            {[
+              'The Event is open to German Shepherd Dogs only. All dogs must be registered with the governing body in their country of birth. All dogs permanently imported to the UK must register with the Royal Kennel Club within 12 months of their first BRG show entry.',
+              'The Event will be held under the rules of the GSDL-BRG based on WUSV Rules & Regulations.',
+              `The Event will open at ${show.showOpenTime ?? '8:30 AM'}.`,
+              `Judging will commence at ${show.startTime ?? '9:00 AM'}.`,
+              'Entry Fees must accompany the Entry.',
+              'The GSD Club/Group reserves the right to refuse entries.',
+              'The Judges’ decisions are final.',
+              'Exhibitors are responsible for arriving in time for their Class.',
+              'The GSD Club/Group reserves the right to exclude any dog which is not fit for exhibition due to disease or other cause.',
+              'Should any Judge be prevented from fulfilling his/her engagement another Judge will be appointed.',
+              'ALL handlers when exhibiting in the Ring must wear a Numbered Bib. The Bib must be clearly visible. It is the dog owner’s responsibility to ensure the Bib is returned to the Steward/s at the end of each Class, otherwise a charge of £10 will be levied against the owner for each non-returned bib/s.',
+              'ALL Exhibits must have verifiable identification of a ISO approved Microchip.',
+              'ALL exhibitors should report to the IDENTIFICATION STEWARD, who will check the dogs Tattoo Number / Microchip Number in the ring at the start of the class. Teeth & Testicles will be checked by the Judge, or appointed competent person.',
+              'ALL dogs over 12 months will be measured.',
+              'ALL exhibitors and handlers must abide by all instructions given by the Judges / Ring Stewards & Event Manager.',
+              'Cheques / Postal orders must be made payable to the club. If any cheque or postal order is not honoured upon first presentation to the Bank the entries will either be returned or the cheque re-presented. Exhibitors will be liable for any costs or fees that are incurred.',
+              'In the event a “Regional Event” has to be cancelled due to unforeseen circumstances the Club/Group will refund any fees less reasonable expenses to all Exhibitors on request provided they produce a Statement of the Costs.',
+              'Dogs must not be left unattended in the precincts of the Event and under no circumstances are they to be tied up. Dogs in cars — Remedial action will be taken in the event of dogs left in cars found to be in a distressed condition. Warning: if your dog is found to be at risk forcible entry to your vehicle may be necessary without liability for any damage caused.',
+              'Exhibitors are responsible for the behaviour of their children & will be held responsible for any damage they cause.',
+              'Awards will be given out at the end of each Class.',
+              'Winners may use the Titles of “Regional Sieger / Regional Siegerin” of their respective Classes.',
+              `Entries close on ${show.entryCloseDate ? new Date(show.entryCloseDate).toLocaleDateString('en-GB') : 'the published closing date'} and the Group is not obliged to accept entries after that date; it is at the sole discretion of the event secretary whether late entries will be accepted. No entries will be accepted on the day.`,
+              'Please respect the Venue and clean up after your animal. Anyone found not cleaning up after their animals will be asked to leave the Venue.',
+              'In the interest of SAFETY no running around the outside of the ring will be allowed, except in the designated area specifically provided for this practice.',
+              'The use of Remote Trainers and Pinch Collars will not be allowed and anyone found using them will be reported and disqualified.',
+              'Exhibitors are obligated to make true statements about their dog(s). Any attempt at deception may lead to the implementation of disciplinary procedures by the GSDL-BRG, which may result in disqualification of the Owners and the dog(s) from this and any future GSDL-BRG Regional Event based on WUSV Rules & Regulations.',
+              'Exhibitors are obligated to show sportsmanlike conduct. Offences determined by the Group’s disciplinary procedures could lead to a reprimand and / or to the disqualification of the dog(s). Also Exhibitors who intentionally make wrong statements or do not answer questions put to them by the Event Officials, also those who make or tolerate changes in their dog(s), or take actions intended to deceive the Judge will lose any award already given to their dog(s) at this Event and can, according to the gravity of the case, be excluded from future GSDL-BRG Events or have another penalty administered by the organizing Club/Group.',
+              'It is not allowed for the Judge at a Regional Event to judge dogs that are bred or owned by himself and/or his agents. Extreme caution should be exercised regarding dogs that are owned or cared for by the Judges’ near relatives. This includes persons one lives with, breeds with, owns dogs with and share households with.',
+            ].map((text, i) => (
+              <View key={i} style={{ flexDirection: 'row', gap: 4 }} wrap={false}>
+                <Text style={{ fontFamily: 'Inter', fontSize: 7.5, fontWeight: 'bold', color: C.textDark, width: 14 }}>
+                  {i + 1}.
+                </Text>
+                <Text style={{ fontFamily: 'Inter', fontSize: 7.5, color: C.textDark, lineHeight: 1.4, flex: 1 }}>
+                  {text}
+                </Text>
+              </View>
+            ))}
+          </View>
+
+          <Text style={s.footer} render={footerRender} fixed />
+        </Page>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════════════
           SCHEDULE OF CLASSES (RKC)
           ════════════════════════════════════════════════════════════════════ */}
       {!isWusv && (
