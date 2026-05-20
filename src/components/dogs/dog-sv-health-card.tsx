@@ -50,7 +50,13 @@ const HAEM_OPTIONS = [
   { value: 'not_tested', label: 'Not tested' },
 ] as const;
 
+// Sentinel value '__unset__' represents "haven't filled this in yet" and
+// maps to NULL in the database. Distinct from 'none' which means the dog
+// definitively has no Koerung. Default to '__unset__' so the dropdown
+// starts blank rather than implicitly claiming "no Koerung" (Amanda
+// 2026-05-20).
 const KOERUNG_OPTIONS = [
+  { value: '__unset__', label: '— Not specified —' },
   { value: 'none', label: 'None' },
   { value: 'current_year', label: 'Current Year Koerung' },
   { value: 'lebenzeit', label: 'Koerung Lebenzeit' },
@@ -98,7 +104,7 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
   const [elbowScoreOther, setElbowScoreOther] = useState('');
   const [haemophiliaClear, setHaemophiliaClear] = useState<string>('not_required');
   const [dmTest, setDmTest] = useState<string>('not_required');
-  const [koerung, setKoerung] = useState<string>('none');
+  const [koerung, setKoerung] = useState<string>('__unset__');
   const [workingTitle, setWorkingTitle] = useState('');
   // Tracks which dropdown option is currently selected. Stored as either
   // a preset code or the sentinel '__other__'. The actual title text lives
@@ -121,7 +127,7 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
       setElbowScoreOther((profile as { elbowScoreOther?: string | null }).elbowScoreOther ?? '');
       setHaemophiliaClear(profile.haemophiliaClear ?? 'not_required');
       setDmTest(profile.dmTest ?? 'not_required');
-      setKoerung(profile.koerung ?? 'none');
+      setKoerung(profile.koerung ?? '__unset__');
       const wt = profile.workingTitle ?? '';
       setWorkingTitle(wt);
       setWorkingTitleChoice(wt && !WORKING_TITLE_PRESETS.has(wt) ? '__other__' : wt);
@@ -145,7 +151,7 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
       // Haemophilia is meaningless for bitches — persist as not_required.
       haemophiliaClear: (isMale ? haemophiliaClear : 'not_required') as typeof HAEM_OPTIONS[number]['value'],
       dmTest: dmTest as typeof DM_OPTIONS[number]['value'],
-      koerung: koerung as typeof KOERUNG_OPTIONS[number]['value'],
+      koerung: koerung === '__unset__' ? null : (koerung as 'none' | 'current_year' | 'lebenzeit'),
       workingTitle: workingTitle || null,
       breedSurveyClass: breedSurveyClass || null,
       breedSurveyYear: breedSurveyYear ? Number(breedSurveyYear) : null,

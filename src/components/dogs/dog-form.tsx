@@ -94,7 +94,13 @@ const dogFormSchema = z.object({
   sireRegistrationNumber: z.string().optional(),
   damRegistrationBody: z.enum(['kc', 'sv', 'ikc', 'other']).optional(),
   damRegistrationNumber: z.string().optional(),
-});
+}).refine(
+  (data) => !data.registrationBody || (data.kcRegNumber && data.kcRegNumber.trim().length > 0),
+  {
+    message: 'Registration number is required when a registration body is selected',
+    path: ['kcRegNumber'],
+  },
+);
 
 type DogFormValues = z.infer<typeof dogFormSchema>;
 
@@ -478,7 +484,11 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
                   },
                 };
                 const cfg = body && labelByBody[body] ? labelByBody[body] : labelByBody.kc;
-                const isRequired = body === 'kc';
+                // Required whenever a registration body is selected — Amanda
+                // 2026-05-20: SV regional shows demand a registration number
+                // regardless of body (RKC/SV/IKC/Other). For RKC-only dogs
+                // not registered yet, the user can leave Body blank.
+                const isRequired = !!body;
                 return (
                   <FormItem>
                     <FormLabel>
