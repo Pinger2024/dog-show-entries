@@ -320,7 +320,7 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
                   <StepJudge showId={showId} />
                 )}
                 {step.id === 'details' && (
-                  <StepDetails showId={showId} show={show} />
+                  <StepDetails showId={showId} show={show} onSaved={goNext} />
                 )}
                 {step.id === 'schedule' && (
                   <StepSchedule showId={showId} onSaved={goNext} />
@@ -329,7 +329,11 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
                   <StepOpenEntries showId={showId} />
                 )}
 
-                {/* Navigation */}
+                {/* Navigation — hide standalone Next on steps that have
+                    their own Save button (Details, Schedule). Otherwise
+                    clicking Next would advance without persisting the
+                    half-typed values on the page, which surfaced 2026-05-20
+                    as the "multi-dog package not saving" bug. */}
                 <div className="mt-6 flex items-center justify-between border-t pt-4">
                   {i > 0 ? (
                     <Button
@@ -343,7 +347,7 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
                   ) : (
                     <div />
                   )}
-                  {i < STEPS.length - 1 && (
+                  {i < STEPS.length - 1 && step.id !== 'details' && step.id !== 'schedule' && (
                     <Button
                       size="sm"
                       className="min-h-[2.75rem] text-sm"
@@ -598,7 +602,15 @@ function SecretaryDetails({
 
 // ── Step 3: Show Details ──────────────────────────────────
 
-function StepDetails({ showId, show }: { showId: string; show: Show }) {
+function StepDetails({
+  showId,
+  show,
+  onSaved,
+}: {
+  showId: string;
+  show: Show;
+  onSaved?: () => void;
+}) {
   const [firstEntryFee, setFirstEntryFee] = useState(
     show.firstEntryFee != null ? penceToPoundsString(show.firstEntryFee) : '',
   );
@@ -646,6 +658,10 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
       utils.secretary.getChecklistAutoDetect.invalidate({ showId });
       utils.secretary.getPhaseBlockers.invalidate({ showId });
       toast.success('Show details saved');
+      // Advance to the next step on successful save — the wizard's standalone
+      // Next button is hidden on this step (2026-05-20 fix for the multi-dog
+      // package not saving when users clicked Next instead of Save Details).
+      onSaved?.();
     },
     onError: (err) => toast.error(err.message ?? 'Failed to save details'),
   });
@@ -875,7 +891,9 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
         />
       </div>
 
-      {/* Save */}
+      {/* Save + advance — single button does both so half-typed values
+          (like the multi-dog package fields) can't get left behind by a
+          Next click that doesn't save. */}
       <Button
         className="w-full min-h-[2.75rem] sm:w-auto"
         onClick={handleSave}
@@ -887,7 +905,10 @@ function StepDetails({ showId, show }: { showId: string; show: Show }) {
             Saving...
           </>
         ) : (
-          'Save Details'
+          <>
+            Save &amp; Continue
+            <ChevronRight className="ml-1 size-3.5" />
+          </>
         )}
       </Button>
 
