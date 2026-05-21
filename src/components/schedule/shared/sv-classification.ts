@@ -155,8 +155,14 @@ export function groupSvClasses(classes: readonly ScheduleClass[]): SvClassificat
     seenJh.add(c.className);
     jhDeduped.push(c);
   }
-  // JH order: 6-11 before 12-16 by sorted className.
-  jhDeduped.sort((a, b) => a.className.localeCompare(b.className, 'en'));
+  // JH order: youngest age block first ("6-11 yrs" before "12-16 yrs").
+  // Extract the leading age digit from the class name and sort numerically —
+  // alphabetic sort puts "12-..." before "6-..." which is the wrong way round.
+  const leadingAge = (name: string): number => {
+    const m = name.match(/(\d+)/);
+    return m ? parseInt(m[1], 10) : 0;
+  };
+  jhDeduped.sort((a, b) => leadingAge(a.className) - leadingAge(b.className));
 
   const juniorHandling = jhDeduped.map((c, i) => ({
     number: breedClasses.length + i + 1,

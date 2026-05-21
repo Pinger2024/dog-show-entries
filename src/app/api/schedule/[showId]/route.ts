@@ -333,7 +333,10 @@ export async function GET(
   }
 
   try {
-    const ScheduleComponent = pickScheduleComponent(showInfo.showScope);
+    const ScheduleComponent = pickScheduleComponent(
+      showInfo.showScope,
+      showInfo.showRuleset ?? 'rkc',
+    );
     const pdfDocument = React.createElement(ScheduleComponent, {
       show: showInfo,
       classes,
