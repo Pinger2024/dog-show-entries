@@ -149,7 +149,7 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
     }
   }, [profile]);
 
-  function handleSave(e: React.FormEvent) {
+  function handleSave(e: React.MouseEvent | React.FormEvent) {
     e.preventDefault();
     upsert.mutate({
       dogId,
@@ -214,7 +214,11 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSave} className="space-y-4">
+        {/* Not a <form> — this card is rendered INSIDE the DogForm's
+            <form>, and nested forms are invalid HTML (hydration error).
+            The "Save Health Data" button is a type="button" with an
+            explicit onClick handler instead (Amanda 2026-05-21). */}
+        <div className="space-y-4">
           {/* Hips — body dropdown + numeric score for BVA/ANKC + free text for Other */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
@@ -436,7 +440,7 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
           </div>
 
           {!readOnly && (
-            <Button type="submit" size="sm" disabled={upsert.isPending} className="min-h-[2.75rem]">
+            <Button type="button" onClick={handleSave} size="sm" disabled={upsert.isPending} className="min-h-[2.75rem]">
               {upsert.isPending ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : saved ? (
@@ -449,7 +453,7 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
               )}
             </Button>
           )}
-        </form>
+        </div>
       </CardContent>
     </Card>
   );
