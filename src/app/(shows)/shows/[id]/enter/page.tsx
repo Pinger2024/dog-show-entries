@@ -167,6 +167,14 @@ export default function EnterShowPage() {
   }, [dogs, showBreedIds]);
 
   const selectedDog = dogs?.find((d) => d.id === cart.activeEntry?.dogId);
+
+  // SV health profile — fetched only when we're on an SV show with a dog
+  // selected, so we can client-side gate Yearling/Adult/Working entries
+  // before the user gets all the way to checkout (Amanda 2026-05-21).
+  const { data: selectedDogSvProfile } = trpc.dogs.getSvProfile.useQuery(
+    { dogId: cart.activeEntry?.dogId ?? '' },
+    { enabled: !!cart.activeEntry?.dogId && show?.showRuleset === 'wusv' },
+  );
   const selectedDogSex = selectedDog?.sex as 'dog' | 'bitch' | undefined;
 
   const breedIdForClasses =
@@ -1085,6 +1093,32 @@ export default function EnterShowPage() {
           return ageMonths < 6;
         })();
 
+        // SV/WUSV health gate (Amanda 2026-05-21): for Yearling/Adult/Working
+        // the dog must have hip + elbow + DNA on file. Server enforces this in
+        // entries.create and orders.checkout, but we surface it here so the
+        // exhibitor doesn't reach the cart Review step before being told.
+        const SV_HEALTH_REQUIRED_CLASSES = new Set(['SV Yearling', 'Adult', 'Working']);
+        const selectedSvHealthClasses = (showClasses ?? []).filter(
+          (sc) =>
+            selectedClassIds.includes(sc.id) &&
+            sc.classDefinition &&
+            SV_HEALTH_REQUIRED_CLASSES.has(sc.classDefinition.name),
+        );
+        const svHealthRequired =
+          show?.showRuleset === 'wusv' &&
+          cart.activeEntry?.entryType === 'standard' &&
+          selectedSvHealthClasses.length > 0;
+        const svHealthMissing: string[] = (() => {
+          if (!svHealthRequired) return [];
+          const profile = selectedDogSvProfile;
+          const missing: string[] = [];
+          const isEmpty = (v: string | null | undefined) => !v || v === 'not_required';
+          if (isEmpty(profile?.hipGrade ?? null)) missing.push('hip score');
+          if (isEmpty(profile?.elbowGrade ?? null)) missing.push('elbow score');
+          if (!profile?.dna) missing.push('DNA recording');
+          return missing;
+        })();
+
         return (
         <div className="space-y-6">
           <div>
@@ -1105,6 +1139,38 @@ export default function EnterShowPage() {
                   Per RKC regulations, dogs must be at least 6 months old for competition classes.
                   You can still enter Not For Competition (NFC) — tick the NFC checkbox below.
                 </p>
+              </div>
+            </div>
+          )}
+
+          {svHealthMissing.length > 0 && (
+            <div className="flex gap-3 rounded-lg border border-amber-400 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+              <div className="text-sm text-amber-900 dark:text-amber-100">
+                <p className="font-medium">
+                  Health data required for{' '}
+                  {selectedSvHealthClasses
+                    .map((sc) => sc.classDefinition!.name)
+                    .join(', ')}
+                </p>
+                <p className="mt-0.5 text-xs">
+                  SV/WUSV rules require this dog to have a recorded{' '}
+                  <strong>{svHealthMissing.join(', ')}</strong> before it can be
+                  entered into these classes. Add the details on the dog&apos;s
+                  profile, then come back to complete your entry.
+                </p>
+                {cart.activeEntry?.dogId && (
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 h-9 border-amber-400 bg-white text-amber-900 hover:bg-amber-100"
+                  >
+                    <Link href={`/dogs/${cart.activeEntry.dogId}/edit`}>
+                      Add health data to {cart.activeEntry.dogName ?? 'this dog'}
+                    </Link>
+                  </Button>
+                )}
               </div>
             </div>
           )}
@@ -1280,7 +1346,8 @@ export default function EnterShowPage() {
                   onClick={handleConfirmClasses}
                   disabled={
                     (selectedClassIds.length === 0 && !isNfc) ||
-                    (dogUnder6Months && !isNfc)
+                    (dogUnder6Months && !isNfc) ||
+                    svHealthMissing.length > 0
                   }
                 >
                   {cart.editingExisting ? 'Update' : 'Add to Cart'}
