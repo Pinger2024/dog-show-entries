@@ -119,9 +119,14 @@ interface DogFormProps {
   mode: 'create' | 'edit';
   defaultValues?: Partial<DogFormValues>;
   dogId?: string;
+  /** Slot for SV/WUSV-specific cards. Rendered inside the form immediately
+   *  after the SV/WUSV Details card (Amanda 2026-05-21 — keeps all the
+   *  German-Shepherd-specific data together as one visual block). Only
+   *  rendered when the selected breed matches German Shepherd. */
+  svSection?: React.ReactNode;
 }
 
-export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
+export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps) {
   const router = useRouter();
   const [breedOpen, setBreedOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -1157,6 +1162,12 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
         </Card>
         )}
 
+        {/* SV Health & Working Titles — rendered inline alongside the
+            SV/WUSV Details card so all the German-Shepherd-specific data
+            lives as one visual block. The slot is filled by the dog edit
+            page when breed = GSD (Amanda 2026-05-21). */}
+        {isGsd && svSection}
+
         {/* Bio */}
         <Card>
           <CardHeader>
@@ -1407,11 +1418,19 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
           </Card>
         )}
 
-        {/* Submit */}
+        {/* Submit. Note for SV/GSD dogs: the SV Health card above has its
+            own "Save Health Data" button — both need to be clicked to
+            persist their respective data. (Amanda 2026-05-21: she lost
+            health data because she only clicked one of the two buttons.) */}
+        {isGsd && mode === 'edit' && (
+          <p className="text-xs text-amber-700 dark:text-amber-400">
+            Don&apos;t forget — the SV Health card above has its own <span className="font-semibold">Save Health Data</span> button. Click that one too to save the health/Koerung/breed survey fields.
+          </p>
+        )}
         <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
           <Button type="submit" disabled={isPending} size="lg" className="w-full sm:w-auto">
             {isPending && <Loader2 className="size-4 animate-spin" />}
-            {mode === 'create' ? 'Add Dog' : 'Save Changes'}
+            {mode === 'create' ? 'Add Dog' : 'Save Dog Details'}
           </Button>
           <Button
             type="button"
