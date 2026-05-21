@@ -197,14 +197,20 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
   const readOnly = !isOwner;
 
   return (
-    <Card>
+    <Card className="border-amber-200/60 dark:border-amber-900/40">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Shield className="size-4 text-primary" />
           SV Health &amp; Working Titles
         </CardTitle>
-        <CardDescription>
-          Health screening results and working titles required for WUSV/SV regional shows.
+        <CardDescription className="space-y-1">
+          <span className="block">
+            <span className="font-semibold text-foreground">Required for SV Regional shows and the British Sieger.</span>{' '}
+            These events are governed by the GSDL-BRG / WUSV, not the Royal Kennel Club, and exhibitors must disclose health screening, DNA recording and (for Working class) Koerung + Working Title.
+          </span>
+          <span className="block text-xs">
+            Hip score, elbow score and DNA are mandatory before a dog can be entered in Yearling, Adult or Working classes.
+          </span>
         </CardDescription>
       </CardHeader>
       <CardContent>

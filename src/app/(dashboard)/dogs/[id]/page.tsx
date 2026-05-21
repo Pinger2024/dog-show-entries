@@ -1341,8 +1341,10 @@ export default function DogDetailPage({
       {/* RKC Title Progress */}
       <TitleProgressCard dogId={id} />
 
-      {/* SV Health & Working Titles */}
-      <DogSvHealthCard dogId={id} isOwner={true} sex={dog.sex} />
+      {/* SV Health & Working Titles — only for German Shepherds. */}
+      {/german\s+shepherd/i.test(dog.breed?.name ?? '') && (
+        <DogSvHealthCard dogId={id} isOwner={true} sex={dog.sex} />
+      )}
 
       {/* Achievements (with self-report) */}
       <AchievementsCard dogId={id} achievements={dog.achievements ?? []} />

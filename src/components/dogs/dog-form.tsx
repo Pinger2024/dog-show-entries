@@ -411,6 +411,12 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
 
   const isPending = createDog.isPending || updateDog.isPending;
 
+  // SV/WUSV fields apply only to German Shepherd Dogs — for any other
+  // breed the whole section is irrelevant and hidden (Amanda 2026-05-21).
+  const watchedBreedId = form.watch('breedId');
+  const selectedBreedName = breeds?.find((b) => b.id === watchedBreedId)?.name ?? '';
+  const isGsd = /german\s+shepherd/i.test(selectedBreedName);
+
   function onSubmit(data: DogFormValues) {
     if (mode === 'create') {
       if (!data.owners || data.owners.length === 0) {
@@ -989,12 +995,19 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
           </CardContent>
         </Card>
 
-        {/* SV / WUSV Details */}
-        <Card>
+        {/* German Shepherd / SV Details — only relevant for GSDs.
+            Hidden entirely for any other breed (Amanda 2026-05-21). */}
+        {isGsd && (
+        <Card className="border-amber-200/60 dark:border-amber-900/40">
           <CardHeader>
-            <CardTitle>SV / WUSV Details</CardTitle>
-            <CardDescription>
-              For German Shepherd Dogs entered in WUSV/SV regional shows. Leave blank if not applicable.
+            <CardTitle>German Shepherd — SV / WUSV Details</CardTitle>
+            <CardDescription className="space-y-1">
+              <span className="block">
+                The fields in this section are <span className="font-semibold text-foreground">required for SV Regional shows and the British Sieger</span> — these events are governed by the GSDL-BRG / WUSV, not the Royal Kennel Club.
+              </span>
+              <span className="block text-xs">
+                For RKC shows the section is optional. The dog&apos;s registration number can be entered either at the top of the form or below — both feed the same field.
+              </span>
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 sm:space-y-4">
@@ -1142,6 +1155,7 @@ export function DogForm({ mode, defaultValues, dogId }: DogFormProps) {
             </div>
           </CardContent>
         </Card>
+        )}
 
         {/* Bio */}
         <Card>

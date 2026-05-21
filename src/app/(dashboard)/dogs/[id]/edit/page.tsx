@@ -85,11 +85,12 @@ export default function EditDogPage({
           }}
         />
 
-        {/* SV Health & Working Titles — surfaced on the edit page (as well
-            as the dog detail page) so SV owners can fill in everything
-            in one place rather than save → navigate → find a separate
-            card (Amanda 2026-05-20). */}
-        <DogSvHealthCard dogId={id} isOwner={true} sex={dog.sex} />
+        {/* SV Health & Working Titles — only relevant for German
+            Shepherds; hidden for any other breed so non-SV exhibitors
+            aren't shown irrelevant fields (Amanda 2026-05-21). */}
+        {/german\s+shepherd/i.test(dog.breed?.name ?? '') && (
+          <DogSvHealthCard dogId={id} isOwner={true} sex={dog.sex} />
+        )}
       </div>
     </div>
   );
