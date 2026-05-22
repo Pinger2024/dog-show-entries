@@ -88,11 +88,15 @@ function pickBreedJudge(judges: readonly ScheduleJudge[]): ScheduleJudge | null 
  * by page index so the document feels alive without being busy.
  */
 function CornerSplash({ corner }: { corner: 'tl' | 'tr' | 'bl' | 'br' }) {
-  // Frame matches the A5 inner page width-ish; SVG viewBox is 100×100 so
-  // the path coords are page-agnostic. The wrap is sized in mm relative to
-  // page padding so the stroke reads as a corner accent, not a centrepiece.
-  const w = '78mm';
-  const h = '60mm';
+  // A swoosh modelled on the BRG marketing banner — a wide, flat single
+  // arc with several parallel brush strokes in pinks, lavender and blue,
+  // each tapered with `strokeLinecap: round` so the wash fades at the
+  // ends rather than ending abruptly. Anchored to a page corner and
+  // bleeding off the edge so it reads as a gesture, not a centrepiece.
+  // Amanda 2026-05-22: "do a swoosh like the banner photo, just in the
+  // corner".
+  const w = '95mm';
+  const h = '30mm';
   const pos =
     corner === 'tl'
       ? { top: 0, left: 0 }
@@ -102,21 +106,16 @@ function CornerSplash({ corner }: { corner: 'tl' | 'tr' | 'bl' | 'br' }) {
           ? { bottom: 0, left: 0 }
           : { bottom: 0, right: 0 };
 
-  // Watercolour wash: a stack of overlapping flat-colour brush strokes,
-  // each at low opacity, that blend to a soft multi-tone arc. We tried an
-  // SVG LinearGradient first but @react-pdf/renderer drops the url(#…)
-  // reference and falls back to black; flat overlaid strokes are reliable
-  // and feel the same on the page.
+  // Each path is a single Q-curve (no S-curve, no T-continuation) — a
+  // simple flat arc. The 5 strokes sit at slightly different heights /
+  // widths and overlap, blending into the multi-tone wash seen in the
+  // BRG banner. Opacities stay low so text overlay reads cleanly.
   const strokes = [
-    // (path, colour, width, opacity) — drawn back-to-front, palette taken
-    // from the BRG banner Amanda shared. Opacities are intentionally low
-    // so the wash sits *behind* text without obscuring it (Amanda 2026-05-22:
-    // "light touch splash of colour, just on the corners").
-    { d: 'M -10 55 Q 25 -5 60 25 T 110 60', c: '#F4A5C0', w: 36, o: 0.22 }, // pink wash
-    { d: 'M -5 50 Q 28 -5 62 28 T 108 58',  c: '#B89AD0', w: 28, o: 0.2 },  // lavender
-    { d: 'M 0 48 Q 30 -3 64 30 T 105 56',   c: '#7FA8D8', w: 18, o: 0.22 }, // soft blue
-    { d: 'M 5 45 Q 32 0 66 30 T 102 54',    c: '#E8638F', w: 8,  o: 0.28 }, // magenta accent
-    { d: 'M 8 43 Q 34 2 68 32 T 100 52',    c: '#D4537A', w: 3,  o: 0.32 }, // soft red highlight
+    { d: 'M -5 70 Q 50 5 105 50',  c: '#F4A5C0', w: 18, o: 0.32 }, // pink — widest, lowest
+    { d: 'M -5 62 Q 50 0 105 45',  c: '#B89AD0', w: 14, o: 0.32 }, // lavender — middle band
+    { d: 'M -5 78 Q 50 18 105 58', c: '#7FA8D8', w: 12, o: 0.28 }, // soft blue — under-stroke
+    { d: 'M -5 58 Q 50 -4 105 42', c: '#E8638F', w: 5,  o: 0.5 },  // magenta — thin accent
+    { d: 'M -5 56 Q 50 -5 105 41', c: '#D4537A', w: 2,  o: 0.6 },  // red — thinnest highlight
   ];
 
   return (
@@ -129,7 +128,7 @@ function CornerSplash({ corner }: { corner: 'tl' | 'tr' | 'bl' | 'br' }) {
       }}
       fixed
     >
-      <Svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%' }}>
+      <Svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%' }} preserveAspectRatio="none">
         {strokes.map((s, i) => (
           <Path
             key={i}
