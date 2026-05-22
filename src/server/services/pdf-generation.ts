@@ -380,7 +380,7 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
 
   if (!show) throw new Error(`Show ${showId} not found`);
 
-  const [showClasses, judgeAssignments, showSponsors, discountGroups, advertRows] = await Promise.all([
+  const [showClasses, judgeAssignments, showSponsors, discountGroups, advertRows, sundryItemRows] = await Promise.all([
     db.query.showClasses.findMany({
       where: eq(schema.showClasses.showId, showId),
       with: {
@@ -405,6 +405,10 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     db.query.catalogueAdverts.findMany({
       where: eq(schema.catalogueAdverts.showId, showId),
       orderBy: [asc(schema.catalogueAdverts.sortOrder)],
+    }),
+    db.query.sundryItems.findMany({
+      where: eq(schema.sundryItems.showId, showId),
+      orderBy: [asc(schema.sundryItems.sortOrder)],
     }),
   ]);
 
@@ -569,6 +573,13 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
       multiDogPackagePence: g.multiDogPackagePence,
     })),
     acceptsPostalEntries: show.acceptsPostalEntries ?? false,
+    sundryItems: sundryItemRows
+      .filter((s) => s.enabled)
+      .map((s) => ({
+        name: s.name,
+        description: s.description,
+        priceInPence: s.priceInPence,
+      })),
     showRuleset: (show as { showRuleset?: 'rkc' | 'wusv' }).showRuleset,
     breedName: (show as { breed?: { name?: string | null } }).breed?.name ?? null,
     scheduleData: show.scheduleData as ScheduleShowInfo['scheduleData'],

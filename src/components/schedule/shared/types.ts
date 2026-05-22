@@ -38,6 +38,15 @@ export interface ScheduleShowInfo {
     multiDogPackagePence: number | null;
   }>;
   acceptsPostalEntries: boolean;
+  /** Secretary-defined optional purchases at checkout (sponsorship slots,
+   *  advert space, catalogues, donations, etc.). The SV schedule surfaces
+   *  these under a "Sponsorship & Adverts" subsection so the prospectus
+   *  reflects what's actually on offer (Amanda 2026-05-22). */
+  sundryItems?: Array<{
+    name: string;
+    description: string | null;
+    priceInPence: number;
+  }>;
   /** RKC or WUSV/SV — when 'wusv' the renderer swaps the cover-page
    *  jurisdiction line, the breed-classification layout, the F-rules
    *  block, and the colour palette to the GSDL BRG format. */

@@ -344,18 +344,29 @@ function SvOverview({ show }: { show: ScheduleShowInfo }) {
   const memberTier = show.discountGroups?.[0] ?? null;
   const firstAider = show.scheduleData?.firstAiders?.[0] ?? null;
 
+  // Sundry items the secretary has configured (sponsorship slots, advert
+  // space, donations etc.) — surface on the schedule so the prospectus
+  // reflects everything that's on offer. Amanda 2026-05-22.
+  //
+  // Items already represented in the hardcoded fee rows are filtered out
+  // so they don't show twice (catalogue prints as a fee row above).
+  const sundryExtras = (show.sundryItems ?? []).filter((s) => {
+    const name = s.name.toLowerCase();
+    return !name.includes('catalogue');
+  });
+
   return (
     <Page size="A5" style={ss.page}>
       <CornerSplash corner="bl" />
       <Topper num={2} subject={show.name} />
 
-      <View style={{ marginTop: 14 }}>
+      <View style={{ marginTop: 8 }}>
         <Text style={[ss.displayIt, { fontSize: 10, color: SV.ink3 }]}>At a glance —</Text>
-        <Text style={[ss.display, { fontSize: 28, lineHeight: 1, marginTop: 2 }]}>the essentials.</Text>
+        <Text style={[ss.display, { fontSize: 22, lineHeight: 1, marginTop: 2 }]}>the essentials.</Text>
       </View>
 
       {/* Two-column body */}
-      <View style={{ flexDirection: 'row', marginTop: 12 }}>
+      <View style={{ flexDirection: 'row', marginTop: 8 }}>
         {/* LEFT */}
         <View style={{ width: '50%', paddingRight: 10 }}>
           <SectionTitle title="Fees" />
@@ -384,24 +395,38 @@ function SvOverview({ show }: { show: ScheduleShowInfo }) {
           />
           {/* Catalogue prices — static fallback per HANDOFF decision-needed. */}
           <FeeRow label="Catalogue (pre-paid)" value="£5.00" />
-          <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 7.5, color: SV.ink3, marginTop: 5, fontStyle: 'italic' }}>
-            Multi-dog: exhibits must share at least 50% common ownership.
-          </Text>
+          {/* Multi-dog ownership note — only show when there's no sundry
+              block competing for vertical space (Amanda 2026-05-22). */}
+          {sundryExtras.length === 0 ? (
+            <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 7.5, color: SV.ink3, marginTop: 5, fontStyle: 'italic' }}>
+              Multi-dog: exhibits must share at least 50% common ownership.
+            </Text>
+          ) : null}
 
-          <View style={{ height: 7 }} />
+          {sundryExtras.length > 0 ? (
+            <>
+              <View style={{ height: 4 }} />
+              <SectionTitle title="Sponsorship & adverts" />
+              {sundryExtras.map((s) => (
+                <FeeRow key={s.name} label={s.name} value={fmtMoney(s.priceInPence)} />
+              ))}
+            </>
+          ) : null}
+
+          <View style={{ height: 4 }} />
           <SectionTitle title="Awards" />
           {/* Amanda 2026-05-22: drop per-class derivation. Two big awards
               groups split by sex, with plain-English eligibility lines. */}
           {[
-            { name: 'Most Promising Young Bitch', desc: 'All winners up to and including Junior classes' },
-            { name: 'Most Promising Young Dog',   desc: 'All winners up to and including Junior classes' },
-            { name: 'Best Bitch',                 desc: 'All winners from Yearling to Working classes' },
-            { name: 'Best Dog',                   desc: 'All winners from Yearling to Working classes' },
+            { name: 'Most Promising Young Bitch', desc: 'From winners up to Junior class' },
+            { name: 'Most Promising Young Dog',   desc: 'From winners up to Junior class' },
+            { name: 'Best Bitch',                 desc: 'From Yearling to Working class winners' },
+            { name: 'Best Dog',                   desc: 'From Yearling to Working class winners' },
           ].map((a, i, arr) => (
             <View
               key={a.name}
               style={{
-                paddingVertical: 4,
+                paddingVertical: 2.5,
                 borderBottomWidth: i < arr.length - 1 ? 0.5 : 0,
                 borderBottomColor: SV.rule,
               }}
@@ -409,7 +434,7 @@ function SvOverview({ show }: { show: ScheduleShowInfo }) {
               <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 8.5, color: SV.ink, fontWeight: 'bold' }}>
                 {a.name}
               </Text>
-              <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 7.5, color: SV.ink3, marginTop: 1 }}>
+              <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 7, color: SV.ink3, marginTop: 0.5 }}>
                 {a.desc}
               </Text>
             </View>
@@ -487,13 +512,17 @@ function SvOverview({ show }: { show: ScheduleShowInfo }) {
         </View>
       </View>
 
-      {/* Pull quote */}
-      <View style={{ marginTop: 8 }}>
-        <View style={ss.ruleThin} />
-        <Text style={[ss.pullQuote, { fontSize: 10, marginTop: 5, lineHeight: 1.25 }]}>
-          &ldquo;Verbal critiques will be given after the judging of each class — both coat types presented at the same stand, then separately in final movement.&rdquo;
-        </Text>
-      </View>
+      {/* Pull quote — hidden when sundry items are present so the page
+          fits in one A5 (Amanda 2026-05-22). The quote is decorative;
+          the sponsorship/adverts info is more useful when present. */}
+      {sundryExtras.length === 0 ? (
+        <View style={{ marginTop: 8 }}>
+          <View style={ss.ruleThin} />
+          <Text style={[ss.pullQuote, { fontSize: 10, marginTop: 5, lineHeight: 1.25 }]}>
+            &ldquo;Verbal critiques will be given after the judging of each class — both coat types presented at the same stand, then separately in final movement.&rdquo;
+          </Text>
+        </View>
+      ) : null}
 
       <Folio num={2} label="At a glance" />
     </Page>

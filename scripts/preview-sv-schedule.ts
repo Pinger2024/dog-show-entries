@@ -48,6 +48,12 @@ async function main() {
     acceptsPostalEntries: true,
     showRuleset: 'wusv',
     breedName: 'German Shepherd Dog',
+    sundryItems: [
+      { name: 'Sponsorship', description: 'Club banner sponsorship', priceInPence: 2500 },
+      { name: 'Adverts (full page colour)', description: null, priceInPence: 2000 },
+      { name: 'Class Sponsorship', description: 'Your kennel name on the class banner', priceInPence: 2000 },
+      { name: 'Donation', description: 'Support the club with a voluntary donation', priceInPence: 500 },
+    ],
     scheduleData: {
       firstAiders: ['Heather Macdonald'],
     },
