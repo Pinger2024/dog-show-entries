@@ -21,6 +21,7 @@ import {
   View,
   Svg,
   Path,
+  Image,
 } from '@react-pdf/renderer';
 import type {
   ScheduleShowInfo,
@@ -210,14 +211,26 @@ function Topper({ num, subject }: { num: number; subject: string }) {
 
 // ── PAGE 1 — COVER ─────────────────────────────────────────────────────────
 
-function SvCover({ show, judges, totalClasses }: { show: ScheduleShowInfo; judges: readonly ScheduleJudge[]; totalClasses: number }) {
+function SvCover({
+  show,
+  judges,
+  rkcClassCount,
+}: {
+  show: ScheduleShowInfo;
+  judges: readonly ScheduleJudge[];
+  /** Count of actual classes running — long coat + short coat each count
+   *  separately per RKC convention. e.g. a 12-age × 2-coat SV regional
+   *  shows "24-Class" rather than the 12 numbered groupings. JH is
+   *  listed separately and isn't included in this total. */
+  rkcClassCount: number;
+}) {
   const judge = pickBreedJudge(judges);
   const judgeAffix = judge?.affix ? ` (${judge.affix})` : '';
   // Affiliation line — Amanda (2026-05-21) confirmed every BRG club uses its
   // own name (Midland Regional GSD Group, Scottish Progressive, National
-  // Long Coat etc.) all under the GSDL-British Regional Group banner, so the
-  // host-club name on the cover sits above this single banner line.
+  // Long Coat etc.) all under the GSDL-British Regional Group banner.
   const affiliation = 'Under the banner of GSDL — British Regional Group';
+  const clubLogo = show.organisation?.logoUrl ?? null;
 
   return (
     <Page size="A5" style={ss.page}>
@@ -233,33 +246,43 @@ function SvCover({ show, judges, totalClasses }: { show: ScheduleShowInfo; judge
         ) : null}
       </View>
 
-      {/* Hero — "A {N}-Class / Regional / Schedule" */}
-      <View style={{ marginTop: 28 }}>
-        <Text style={[ss.displayIt, { fontSize: 20, color: SV.ink2, marginBottom: 4 }]}>
-          A {totalClasses}-Class
+      {/* Hero — club name dominant, "Regional Schedule" smaller with logo
+          beside it (Amanda 2026-05-22). */}
+      <View style={{ marginTop: 22 }}>
+        <Text style={[ss.displayIt, { fontSize: 14, color: SV.ink2, marginBottom: 4 }]}>
+          A {rkcClassCount}-Class
         </Text>
-        <Text style={[ss.display, { fontSize: 60, lineHeight: 0.95, marginBottom: 2 }]}>
-          Regional
+        <Text style={[ss.display, { fontSize: 30, lineHeight: 1.02, marginBottom: 2 }]}>
+          {show.organisation?.name ?? ''}
         </Text>
-        <Text style={[ss.displayIt, { fontSize: 38, lineHeight: 1, color: SV.accent, marginBottom: 16 }]}>
-          Schedule
-        </Text>
+        <Text style={[ss.bodySmall, { marginTop: 2, marginBottom: 10 }]}>{affiliation}</Text>
+
+        {/* "Regional Schedule" + club logo, side-by-side */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <View style={{ flexShrink: 1, paddingRight: 8 }}>
+            <Text style={[ss.display, { fontSize: 26, lineHeight: 1, color: SV.ink }]}>
+              Regional
+            </Text>
+            <Text style={[ss.displayIt, { fontSize: 22, lineHeight: 1, color: SV.accent, marginTop: 2 }]}>
+              Schedule
+            </Text>
+          </View>
+          {clubLogo ? (
+            <Image
+              src={clubLogo}
+              style={{ width: 110, height: 110, objectFit: 'contain' }}
+            />
+          ) : null}
+        </View>
 
         <View style={ss.rule} />
       </View>
 
-      {/* 2×2 detail grid — Host Club / Date / Venue / Breed Judge */}
-      <View style={{ marginTop: 12, flexDirection: 'row', flexWrap: 'wrap' }}>
-        {/* Host Club */}
-        <View style={{ width: '50%', paddingRight: 8, marginBottom: 14 }}>
-          <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Host Club</Text>
-          <Text style={[ss.display, { fontSize: 14, lineHeight: 1.15 }]}>
-            {show.organisation?.name ?? ''}
-          </Text>
-          <Text style={[ss.bodySmall, { marginTop: 2 }]}>{affiliation}</Text>
-        </View>
+      {/* Detail grid — Host Club cell is gone because the club name is now
+          the hero headline. Date / Venue / Breed Judge stack 2-up. */}
+      <View style={{ marginTop: 10, flexDirection: 'row', flexWrap: 'wrap' }}>
         {/* Date */}
-        <View style={{ width: '50%', paddingLeft: 8, marginBottom: 14 }}>
+        <View style={{ width: '50%', paddingRight: 8, marginBottom: 14 }}>
           <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Date</Text>
           <Text style={[ss.display, { fontSize: 14, lineHeight: 1.15 }]}>
             {fmtDate(show.date)}
@@ -271,7 +294,7 @@ function SvCover({ show, judges, totalClasses }: { show: ScheduleShowInfo; judge
           </Text>
         </View>
         {/* Venue */}
-        <View style={{ width: '50%', paddingRight: 8, marginBottom: 14 }}>
+        <View style={{ width: '50%', paddingLeft: 8, marginBottom: 14 }}>
           <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Venue</Text>
           <Text style={[ss.display, { fontSize: 13, lineHeight: 1.15 }]}>
             {show.venue?.name ?? ''}
@@ -281,7 +304,7 @@ function SvCover({ show, judges, totalClasses }: { show: ScheduleShowInfo; judge
           </Text>
         </View>
         {/* Breed Judge */}
-        <View style={{ width: '50%', paddingLeft: 8, marginBottom: 14 }}>
+        <View style={{ width: '50%', paddingRight: 8, marginBottom: 14 }}>
           <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Breed Judge</Text>
           <Text style={[ss.display, { fontSize: 13, lineHeight: 1.15 }]}>
             {judge ? judge.name : 'Judge TBC'}
@@ -854,7 +877,15 @@ export function SvShowSchedule({
   panelJudges?: unknown;
 }) {
   const groups = groupSvClasses(classes);
+  // Total numbered classes (breed + JH) — used by the page 3 header.
   const totalClasses = groups.totalCount;
+  // RKC convention: each coat counts as its own class. A 12-age × 2-coat
+  // SV regional therefore renders as "24-Class" on the cover, not 12 or
+  // 14 (Amanda 2026-05-22).
+  const rkcClassCount = groups.breedClasses.reduce(
+    (n, c) => n + c.coatRows.length,
+    0,
+  );
   // Awards copy is static (Amanda 2026-05-22) — see SvOverview.
 
   // Junior Handling judge label, if one is assigned.
@@ -867,7 +898,7 @@ export function SvShowSchedule({
 
   return (
     <Document title={`Schedule — ${show.name}`} author="Remi Show Manager">
-      <SvCover show={show} judges={judges} totalClasses={totalClasses} />
+      <SvCover show={show} judges={judges} rkcClassCount={rkcClassCount} />
 
       {selectAdverts(adverts, 'schedule', 'inside_front').map((ad) => (
         <AdvertPage key={`ad-if-${ad.id}`} advert={ad} />
