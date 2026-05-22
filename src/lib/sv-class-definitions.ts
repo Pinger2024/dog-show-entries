@@ -39,7 +39,7 @@ export const SV_CLASS_DEFINITIONS: SvClassDefinition[] = [
     code: 'Adult',
     age: '24 mths +',
     reqs:
-      'Health + DNA mandatory. From 1 Jan 2025 — SV character assessment required.',
+      'Health + DNA mandatory. Dogs born on or after 1 Jan 2025 require an SV character assessment.',
   },
   {
     code: 'Working',
