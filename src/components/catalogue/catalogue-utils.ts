@@ -13,7 +13,7 @@ export function formatDobKC(dob: string | null | undefined): string {
   return `${day}.${month}.${year}`;
 }
 
-/** UPPER CASE a name (for dog names and owner names in RKC catalogues) */
+/** UPPER CASE a name (for dog names in RKC catalogues) */
 export function uppercaseName(name: string | null | undefined): string {
   if (!name) return '';
   return name.toUpperCase();
@@ -25,6 +25,47 @@ export function titleCase(name: string | null | undefined): string {
   return name
     .toLowerCase()
     .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
+ * Owner-name formatter for catalogue display. Amanda 2026-05-22: print
+ * owners in Title Case rather than the RKC-traditional UPPERCASE.
+ *
+ * Behaviour, derived from real exhibitor data:
+ *  • "alan william hall"          → "Alan William Hall"
+ *  • "MALCOLM READMAN"            → "Malcolm Readman"
+ *  • "Mandy McAteer"              → "Mandy McAteer"   (mixed-case preserved)
+ *  • "O'Brien" / "o'brien"        → "O'Brien"
+ *  • "Smith-Jones" / "smith-jones"→ "Smith-Jones"
+ *  • "A Swift & N Dodds"          → "A Swift & N Dodds"  (initials + &)
+ *
+ * Rule: tokens that already contain BOTH upper and lower-case letters
+ * are left alone — that preserves McAteer / O'Brien / etc. without
+ * needing a lookup table. Single-letter tokens (initials) become
+ * uppercase. All-lower / all-upper tokens get title-cased, with
+ * capitals after hyphens and apostrophes.
+ */
+export function smartOwnerTitleCase(name: string | null | undefined): string {
+  if (!name) return '';
+  return name
+    .trim()
+    .split(/\s+/)
+    .map(titleCaseToken)
+    .join(' ');
+}
+
+function titleCaseToken(token: string): string {
+  if (!token) return token;
+  // Non-letter separators (&, +, /) stay as typed.
+  if (/^[^A-Za-z]+$/.test(token)) return token;
+  // Initials always uppercase.
+  if (token.length === 1) return token.toUpperCase();
+  // Already mixed-case (e.g. McAteer, deWitt) — author got it right, leave alone.
+  if (/[A-Z]/.test(token) && /[a-z]/.test(token)) return token;
+  // All-lower or all-upper: title-case, capitalising first letter and any
+  // letter following a hyphen or apostrophe.
+  const lower = token.toLowerCase();
+  return lower.replace(/(^|['-])([a-z])/g, (_m, sep, ch) => sep + ch.toUpperCase());
 }
 
 /** Format pedigree as "By [Sire] ex [Dam]" (RKC standard) */
@@ -76,11 +117,11 @@ export function ownerHeading(
   exhibitor: string | null | undefined,
 ): { heading: string; sortKey: string } {
   if (owners.length > 0) {
-    const formatted = owners.map((o) => toPhoneBookName(o.name).toUpperCase());
+    const formatted = owners.map((o) => toPhoneBookName(smartOwnerTitleCase(o.name)));
     return { heading: formatted.join(' & '), sortKey: surnameOf(owners[0]!.name) };
   }
   const fallback = exhibitor ?? 'Unknown';
-  return { heading: toPhoneBookName(fallback).toUpperCase(), sortKey: surnameOf(fallback) };
+  return { heading: toPhoneBookName(smartOwnerTitleCase(fallback)), sortKey: surnameOf(fallback) };
 }
 
 export function formatOwnerKC(
@@ -91,7 +132,7 @@ export function formatOwnerKC(
   if (owners.length === 0) return withhold ? 'Details withheld' : '';
   return owners
     .map((o) => {
-      const name = uppercaseName(o.name);
+      const name = smartOwnerTitleCase(o.name);
       const isExhibitor = exhibitorId && o.userId && o.userId === exhibitorId;
       const parts = [name];
       if (withhold) {

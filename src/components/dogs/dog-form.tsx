@@ -1202,8 +1202,10 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
           <CardHeader>
             <CardTitle>Owners</CardTitle>
             <CardDescription>
-              Owner name and full postal address are required — RKC catalogues
-              must list them. Add up to 4 owners.
+              <strong>Owner 1 should be you.</strong> If the dog is jointly
+              owned with a partner, family member or co-breeder, tap{' '}
+              <em>Add New Owner</em> below to add each joint owner — every
+              name will appear together on the RKC catalogue. Up to 4 owners.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -1211,8 +1213,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
               <div key={field.id} className="space-y-3 rounded-lg border p-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">
-                    Owner {index + 1}
-                    {index === 0 && ' (Primary)'}
+                    {index === 0 ? 'Owner 1 — You' : `Joint Owner ${index + 1}`}
                   </span>
                   {index > 0 && (
                     <Button
@@ -1308,7 +1309,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
                   }
                 >
                   <Plus className="size-4" />
-                  Add New Owner
+                  Add Joint Owner
                 </Button>
                 {mode === 'create' && ownerProfiles && ownerProfiles.length > 0 && (
                   <Popover>
