@@ -25,7 +25,7 @@ export interface CatalogueEntry {
   sire: string | null | undefined;
   dam: string | null | undefined;
   breeder: string | null | undefined;
-  owners: { name: string; address: string | null; userId: string | null }[];
+  owners: { title: string | null; name: string; address: string | null; userId: string | null }[];
   exhibitorId: string | undefined;
   // handler comes from an optional related row — the name field there is
   // nullable, so the full join can yield null as well as undefined.

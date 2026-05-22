@@ -4,6 +4,7 @@ import {
   surnameOf,
   ownerHeading,
   smartOwnerTitleCase,
+  formatRkcOwnerHeading,
 } from '../catalogue-utils';
 
 // Locked with Amanda 2026-05-14: the exhibitor index at the back of
@@ -41,50 +42,55 @@ describe('surnameOf', () => {
   });
 });
 
-describe('ownerHeading — single owner', () => {
-  it('formats as phone-book title case (Amanda 2026-05-22)', () => {
+describe('ownerHeading — RKC compound format (Amanda 2026-05-22)', () => {
+  it('single owner with title', () => {
+    const result = ownerHeading(
+      [{ title: 'Mrs', name: 'Amanda McAteer', address: null }],
+      null,
+    );
+    expect(result).toEqual({ heading: 'MCATEER, MRS A', sortKey: 'mcateer' });
+  });
+
+  it('single owner without title falls back to bare initial', () => {
     const result = ownerHeading([{ name: 'Amanda McAteer', address: null }], null);
-    expect(result).toEqual({ heading: 'McAteer, Amanda', sortKey: 'mcateer' });
+    expect(result.heading).toBe('MCATEER, A');
   });
 
-  it('normalises raw all-lower input to title case', () => {
-    const result = ownerHeading([{ name: 'alan william hall', address: null }], null);
-    expect(result.heading).toBe('Hall, Alan William');
-  });
-
-  it('normalises raw all-upper input to title case', () => {
-    const result = ownerHeading([{ name: 'MALCOLM READMAN', address: null }], null);
-    expect(result.heading).toBe('Readman, Malcolm');
-  });
-
-  it('falls back to exhibitor when owners array empty', () => {
-    const result = ownerHeading([], 'Denise Hensley');
-    expect(result).toEqual({ heading: 'Hensley, Denise', sortKey: 'hensley' });
-  });
-
-  it('returns Unknown when both empty', () => {
-    const result = ownerHeading([], null);
-    expect(result.heading).toBe('Unknown');
-    expect(result.sortKey).toBe('unknown');
-  });
-});
-
-describe('ownerHeading — joint owners (Amanda fixture)', () => {
-  it('Andy Johnstone + Mandy McAteer → sorts under Johnstone, both flipped', () => {
+  it('joint owners — surnames combined alphabetically, titles in same order', () => {
     const result = ownerHeading(
       [
-        { name: 'Andy Johnstone', address: null },
-        { name: 'Mandy McAteer', address: null },
+        { title: 'Ms', name: 'Ann Swift', address: null },
+        { title: 'Mr', name: 'Neil Dodds', address: null },
       ],
       null,
     );
-    expect(result).toEqual({
-      heading: 'Johnstone, Andy & McAteer, Mandy',
-      sortKey: 'johnstone',
-    });
+    expect(result.heading).toBe('DODDS & SWIFT, MR N & MS A');
   });
 
-  it('uses FIRST owner surname even when later names sort earlier', () => {
+  it('joint owners — works with three owners', () => {
+    const result = ownerHeading(
+      [
+        { title: 'Mr', name: 'John McGough', address: null },
+        { title: 'Ms', name: 'Rachel Craik', address: null },
+        { title: 'Mr', name: 'Liam Henderson', address: null },
+      ],
+      null,
+    );
+    expect(result.heading).toBe('CRAIK & HENDERSON & MCGOUGH, MS R & MR L & MR J');
+  });
+
+  it('mixes present + missing titles', () => {
+    const result = ownerHeading(
+      [
+        { title: 'Miss', name: 'Amber Kemble', address: null },
+        { name: 'Ben Pascoe', address: null },
+      ],
+      null,
+    );
+    expect(result.heading).toBe('KEMBLE & PASCOE, MISS A & B');
+  });
+
+  it('sortKey is the alphabetically-first surname', () => {
     const result = ownerHeading(
       [
         { name: 'Zoe Young', address: null },
@@ -92,7 +98,55 @@ describe('ownerHeading — joint owners (Amanda fixture)', () => {
       ],
       null,
     );
-    expect(result.sortKey).toBe('young');
+    expect(result.sortKey).toBe('adams');
+  });
+
+  it('falls back to exhibitor when owners empty', () => {
+    const result = ownerHeading([], 'Denise Hensley');
+    expect(result).toEqual({ heading: 'HENSLEY, D', sortKey: 'hensley' });
+  });
+
+  it('returns UNKNOWN when both empty', () => {
+    const result = ownerHeading([], null);
+    expect(result.heading).toBe('UNKNOWN');
+    expect(result.sortKey).toBe('unknown');
+  });
+});
+
+describe('formatRkcOwnerHeading — direct unit tests', () => {
+  it('Amanda fixture: Dodds & Swift', () => {
+    expect(
+      formatRkcOwnerHeading([
+        { title: 'Mr', name: 'N Dodds' },
+        { title: 'Ms', name: 'A Swift' },
+      ]),
+    ).toBe('DODDS & SWIFT, MR N & MS A');
+  });
+
+  it('Amanda fixture: Kemble & Pascoe', () => {
+    expect(
+      formatRkcOwnerHeading([
+        { title: 'Miss', name: 'Amber Kemble' },
+        { title: 'Mr', name: 'Ben Pascoe' },
+      ]),
+    ).toBe('KEMBLE & PASCOE, MISS A & MR B');
+  });
+
+  it('Amanda fixture: Landgren & Towning (both Miss)', () => {
+    expect(
+      formatRkcOwnerHeading([
+        { title: 'Miss', name: 'R Landgren' },
+        { title: 'Miss', name: 'L Towning' },
+      ]),
+    ).toBe('LANDGREN & TOWNING, MISS R & MISS L');
+  });
+
+  it('empty array → UNKNOWN', () => {
+    expect(formatRkcOwnerHeading([])).toBe('UNKNOWN');
+  });
+
+  it('single owner, no title', () => {
+    expect(formatRkcOwnerHeading([{ title: null, name: 'Cher' }])).toBe('CHER, C');
   });
 });
 

@@ -349,6 +349,7 @@ export const dogsRouter = createTRPCRouter({
         breederName: z.string().optional(),
         colour: z.string().optional(),
         owners: z.array(z.object({
+          ownerTitle: z.string().optional(),
           ownerName: z.string().min(1, 'Owner name is required'),
           ownerAddress: z.string().min(1, 'Owner address is required'),
           ownerEmail: z.string().email(),
@@ -377,6 +378,7 @@ export const dogsRouter = createTRPCRouter({
         owners.map((o, i) => ({
           dogId: dog!.id,
           userId: i === 0 ? ctx.session.user.id : null,
+          ownerTitle: o.ownerTitle || null,
           ownerName: o.ownerName,
           ownerAddress: o.ownerAddress,
           ownerEmail: o.ownerEmail,
@@ -507,6 +509,7 @@ export const dogsRouter = createTRPCRouter({
     .input(
       z.object({
         dogId: z.string().uuid(),
+        ownerTitle: z.string().optional(),
         ownerName: z.string().min(1),
         ownerAddress: z.string().min(1),
         ownerEmail: z.string().email(),
@@ -534,6 +537,7 @@ export const dogsRouter = createTRPCRouter({
         .insert(dogOwners)
         .values({
           dogId: input.dogId,
+          ownerTitle: input.ownerTitle || null,
           ownerName: input.ownerName,
           ownerAddress: input.ownerAddress,
           ownerEmail: input.ownerEmail,
@@ -550,6 +554,7 @@ export const dogsRouter = createTRPCRouter({
     .input(
       z.object({
         id: z.string().uuid(),
+        ownerTitle: z.string().nullable().optional(),
         ownerName: z.string().min(1).optional(),
         ownerAddress: z.string().min(1).optional(),
         ownerEmail: z.string().email().optional(),
@@ -726,6 +731,7 @@ export const dogsRouter = createTRPCRouter({
     // Uses a subquery to deduplicate by email and return the most recent version.
     const ownerRows = await ctx.db
       .selectDistinctOn([dogOwners.ownerEmail], {
+        ownerTitle: dogOwners.ownerTitle,
         ownerName: dogOwners.ownerName,
         ownerAddress: dogOwners.ownerAddress,
         ownerEmail: dogOwners.ownerEmail,

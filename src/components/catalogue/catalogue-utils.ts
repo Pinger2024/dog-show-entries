@@ -68,6 +68,56 @@ function titleCaseToken(token: string): string {
   return lower.replace(/(^|['-])([a-z])/g, (_m, sep, ch) => sep + ch.toUpperCase());
 }
 
+/**
+ * RKC catalogue owner heading — combines surnames first, then titles and
+ * initials in the same order. Amanda 2026-05-22:
+ *
+ *   "Ann Swift" + "Neil Dodds"        → "DODDS & SWIFT, MR N & MS A"     (alphabetical surnames)
+ *   "Amber Kemble" + "Ben Pascoe"     → "KEMBLE & PASCOE, MISS A & MR B"
+ *   "Maxine Cowan"                    → "COWAN, MRS M"                   (single owner)
+ *   "Rachel Craik"                    → "CRAIK, MS R"
+ *
+ * Sorts owners alphabetically by surname so the heading reads cleanly
+ * regardless of the entry order. When a title isn't recorded, just the
+ * initial appears ("DODDS & SWIFT, N & A").
+ */
+export interface RkcOwnerEntry {
+  title: string | null;
+  name: string;
+}
+
+function firstInitial(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return '';
+  // First word's first letter. "Ann Swift" → "A", "A Swift" → "A".
+  const head = trimmed.split(/\s+/)[0]!;
+  return head.charAt(0).toUpperCase();
+}
+
+function surnameUpper(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return '';
+  const parts = trimmed.split(/\s+/);
+  return (parts[parts.length - 1] ?? '').toUpperCase();
+}
+
+export function formatRkcOwnerHeading(owners: readonly RkcOwnerEntry[]): string {
+  if (owners.length === 0) return 'UNKNOWN';
+  // Sort by surname A-Z so the heading reads cleanly.
+  const sorted = [...owners].sort((a, b) =>
+    surnameUpper(a.name).localeCompare(surnameUpper(b.name), 'en'),
+  );
+  const surnames = sorted.map((o) => surnameUpper(o.name)).join(' & ');
+  const initials = sorted
+    .map((o) => {
+      const title = (o.title ?? '').trim().toUpperCase();
+      const ini = firstInitial(o.name);
+      return title ? `${title} ${ini}` : ini;
+    })
+    .join(' & ');
+  return `${surnames}, ${initials}`;
+}
+
 /** Format pedigree as "By [Sire] ex [Dam]" (RKC standard) */
 export function formatPedigreeKC(
   sire: string | null | undefined,
@@ -113,37 +163,55 @@ export function surnameOf(fullName: string): string {
 // person); falls back to the single exhibitor string otherwise.
 // Joint owners join with " & ", each flipped to phone-book format.
 export function ownerHeading(
-  owners: { name: string; address: string | null }[],
+  owners: { title?: string | null; name: string; address: string | null }[],
   exhibitor: string | null | undefined,
 ): { heading: string; sortKey: string } {
   if (owners.length > 0) {
-    const formatted = owners.map((o) => toPhoneBookName(smartOwnerTitleCase(o.name)));
-    return { heading: formatted.join(' & '), sortKey: surnameOf(owners[0]!.name) };
+    const heading = formatRkcOwnerHeading(
+      owners.map((o) => ({ title: o.title ?? null, name: o.name })),
+    );
+    // Sort by the alphabetically-first surname so headings group correctly.
+    const firstSurname = [...owners]
+      .map((o) => surnameOf(o.name))
+      .sort((a, b) => a.localeCompare(b, 'en'))[0] ?? '';
+    return { heading, sortKey: firstSurname };
   }
-  const fallback = exhibitor ?? 'Unknown';
-  return { heading: toPhoneBookName(smartOwnerTitleCase(fallback)), sortKey: surnameOf(fallback) };
+  if (!exhibitor) return { heading: 'UNKNOWN', sortKey: 'unknown' };
+  return {
+    heading: formatRkcOwnerHeading([{ title: null, name: exhibitor }]),
+    sortKey: surnameOf(exhibitor),
+  };
 }
 
 export function formatOwnerKC(
-  owners: { name: string; address: string | null; userId: string | null }[],
+  owners: { title?: string | null; name: string; address: string | null; userId: string | null }[],
   exhibitorId?: string | undefined,
   withhold?: boolean
 ): string {
   if (owners.length === 0) return withhold ? 'Details withheld' : '';
-  return owners
-    .map((o) => {
-      const name = smartOwnerTitleCase(o.name);
-      const isExhibitor = exhibitorId && o.userId && o.userId === exhibitorId;
-      const parts = [name];
-      if (withhold) {
-        parts.push('address withheld');
-      } else if (o.address) {
-        parts.push(o.address);
-      }
-      if (isExhibitor) parts.push('Exh.');
-      return parts.join(', ');
-    })
-    .join(' & ');
+
+  // Compound heading per RKC convention — surnames combined, then titles +
+  // initials in the same surname order (Amanda 2026-05-22).
+  const heading = formatRkcOwnerHeading(
+    owners.map((o) => ({ title: o.title ?? null, name: o.name })),
+  );
+
+  // Address: use the primary (first) owner's address. If "Exh." applies
+  // to any owner, append it.
+  const primary = owners[0]!;
+  const isExhibitor = owners.some(
+    (o) => exhibitorId && o.userId && o.userId === exhibitorId,
+  );
+
+  const tail: string[] = [];
+  if (withhold) {
+    tail.push('address withheld');
+  } else if (primary.address) {
+    tail.push(primary.address);
+  }
+  if (isExhibitor) tail.push('Exh.');
+
+  return tail.length > 0 ? `${heading}, ${tail.join(', ')}` : heading;
 }
 
 /**

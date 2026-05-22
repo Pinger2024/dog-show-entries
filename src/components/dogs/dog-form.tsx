@@ -53,6 +53,7 @@ import {
 } from '@/components/ui/card';
 
 const ownerSchema = z.object({
+  ownerTitle: z.string().optional(),
   ownerName: z.string().min(1, 'Name is required'),
   ownerAddress: z.string().min(1, 'Address is required'),
   ownerEmail: z.string().email('Valid email required'),
@@ -386,6 +387,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
     if (mode === 'create' && userProfile && !ownerPrepopulated.current && form.getValues('owners').length === 0) {
       ownerPrepopulated.current = true;
       form.setValue('owners', [{
+        ownerTitle: '',
         ownerName: userProfile.name ?? '',
         ownerAddress: [userProfile.address, userProfile.postcode].filter(Boolean).join(', '),
         ownerEmail: userProfile.email ?? '',
@@ -1226,7 +1228,35 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
                     </Button>
                   )}
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-3 sm:grid-cols-[7rem_1fr]">
+                  <FormField
+                    control={form.control}
+                    name={`owners.${index}.ownerTitle`}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Title</FormLabel>
+                        <Select
+                          onValueChange={(v) => field.onChange(v === '__none__' ? '' : v)}
+                          value={field.value || '__none__'}
+                        >
+                          <FormControl>
+                            <SelectTrigger className="w-full h-11">
+                              <SelectValue placeholder="—" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="__none__">—</SelectItem>
+                            <SelectItem value="Mr">Mr</SelectItem>
+                            <SelectItem value="Mrs">Mrs</SelectItem>
+                            <SelectItem value="Miss">Miss</SelectItem>
+                            <SelectItem value="Ms">Ms</SelectItem>
+                            <SelectItem value="Dr">Dr</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                   <FormField
                     control={form.control}
                     name={`owners.${index}.ownerName`}
@@ -1240,6 +1270,8 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
                       </FormItem>
                     )}
                   />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-1">
                   <FormField
                     control={form.control}
                     name={`owners.${index}.ownerEmail`}
@@ -1300,6 +1332,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
                   size="sm"
                   onClick={() =>
                     appendOwner({
+                      ownerTitle: '',
                       ownerName: '',
                       ownerAddress: '',
                       ownerEmail: '',
@@ -1334,6 +1367,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
                             className="flex w-full flex-col items-start gap-0.5 rounded-md px-3 py-2.5 text-left transition-colors hover:bg-accent"
                             onClick={() => {
                               appendOwner({
+                                ownerTitle: profile.ownerTitle ?? '',
                                 ownerName: profile.ownerName,
                                 ownerAddress: profile.ownerAddress,
                                 ownerEmail: profile.ownerEmail,

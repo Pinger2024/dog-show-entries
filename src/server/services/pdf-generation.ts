@@ -212,6 +212,7 @@ export async function generateCataloguePdf(
     dam: entry.dog?.damName,
     breeder: entry.dog?.breederName,
     owners: entry.dog?.owners?.map((o) => ({
+      title: o.ownerTitle,
       name: o.ownerName,
       address: o.ownerAddress,
       userId: o.userId,
