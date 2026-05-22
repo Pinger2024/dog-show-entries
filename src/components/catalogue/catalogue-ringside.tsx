@@ -176,13 +176,15 @@ const s = StyleSheet.create({
     borderTopWidth: 0.5,
     borderTopColor: C.primary,
   },
-  // Exhibitor index styles
+  // Exhibitor index styles. Owner names ship Title Case rather than the
+  // RKC-traditional UPPERCASE — Amanda's call (2026-05-22). The
+  // smartOwnerTitleCase helper in catalogue-utils handles the casing
+  // upstream; this style must NOT re-uppercase.
   exhibitorName: {
     fontFamily: 'Inter',
     fontSize: 8,
     fontWeight: 'bold',
     color: C.textDark,
-    textTransform: 'uppercase',
     lineHeight: 1.3,
   },
   exhibitorAddress: {
