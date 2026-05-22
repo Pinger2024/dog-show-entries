@@ -29,6 +29,9 @@ export type JudgeContractPdfData = {
     name: string;
     startDate: Date;
     showType: string | null;
+    /** WUSV/SV regional shows still carry the legacy show_type column but
+     *  should print "Regional" as the type — keyed off ruleset, not type. */
+    showRuleset?: 'rkc' | 'wusv' | null;
     venueName: string | null;
     venuePostcode: string | null;
   };
@@ -241,9 +244,11 @@ function formatDateShort(d: Date): string {
 }
 
 export function JudgeContractPdf({ data }: { data: JudgeContractPdfData }) {
-  const showTypeLabel = data.show.showType
-    ? SHOW_TYPE_LABELS[data.show.showType] ?? data.show.showType
-    : null;
+  const showTypeLabel = data.show.showRuleset === 'wusv'
+    ? 'Regional'
+    : data.show.showType
+      ? SHOW_TYPE_LABELS[data.show.showType] ?? data.show.showType
+      : null;
   const venue = data.show.venueName
     ? `${data.show.venueName}${data.show.venuePostcode ? `, ${data.show.venuePostcode}` : ''}`
     : 'Venue to be confirmed';

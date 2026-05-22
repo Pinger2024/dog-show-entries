@@ -4073,10 +4073,19 @@ export const secretaryRouter = createTRPCRouter({
             <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Classification</td>
             <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${classificationLine}</td>
           </tr>
-          ${show.showType ? `<tr>
+          ${(() => {
+            // SV/WUSV regional shows still carry show_type='championship' on
+            // the legacy column, so render "Regional" when the ruleset is
+            // wusv (Amanda 2026-05-22).
+            const isWusvHere = (show as { showRuleset?: 'rkc' | 'wusv' }).showRuleset === 'wusv';
+            const showTypeText = isWusvHere
+              ? 'Regional'
+              : (show.showType ? show.showType.replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) : null);
+            return showTypeText ? `<tr>
             <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #444;">Show Type</td>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${show.showType.replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}</td>
-          </tr>` : ''}
+            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">${showTypeText}</td>
+          </tr>` : '';
+          })()}
           ${(() => {
             const parts: string[] = [];
             if (input.hotelCost && input.hotelCost > 0) parts.push(`Hotel: £${(input.hotelCost / 100).toFixed(2)}`);

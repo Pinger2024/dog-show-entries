@@ -87,6 +87,7 @@ export async function generateJudgeContractPdf(
       name: show.name,
       startDate: new Date(show.startDate),
       showType: show.showType,
+      showRuleset: (show as { showRuleset?: 'rkc' | 'wusv' | null }).showRuleset ?? null,
       venueName: show.venue?.name ?? null,
       venuePostcode: show.venue?.postcode ?? null,
     },

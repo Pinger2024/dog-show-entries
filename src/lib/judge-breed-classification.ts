@@ -39,6 +39,13 @@ export function buildJudgeBreedAndClassification(
   let hasJh = false;
   let hasSac = false;
 
+  // Single-breed shows (especially SV regional) store breed-class judge
+  // assignments with breed_id = NULL because the breed is implicit on the
+  // shows row. Use the show's primary breed as a fallback so a row with
+  // `breed=null, sex='dog'` still renders as "{Breed} Dogs classes" rather
+  // than being dropped silently (Amanda 2026-05-22).
+  const singleBreedFallback = showBreedNames.length === 1 ? showBreedNames[0]! : null;
+
   for (const a of assignments) {
     const isSac = a.isSpecialAwardsClassesJudge === true;
     if (isSac) {
@@ -46,11 +53,14 @@ export function buildJudgeBreedAndClassification(
       for (const b of showBreedNames) breeds.add(b);
       continue;
     }
-    if (a.breed?.name) {
-      breeds.add(a.breed.name);
-      const set = breedSexes.get(a.breed.name) ?? new Set();
+    const effectiveBreed =
+      a.breed?.name ??
+      (a.sex !== null && singleBreedFallback ? singleBreedFallback : null);
+    if (effectiveBreed) {
+      breeds.add(effectiveBreed);
+      const set = breedSexes.get(effectiveBreed) ?? new Set();
       set.add(a.sex === 'dog' ? 'dog' : a.sex === 'bitch' ? 'bitch' : 'both');
-      breedSexes.set(a.breed.name, set);
+      breedSexes.set(effectiveBreed, set);
     } else if (a.sex === null) {
       hasJh = true;
     }
