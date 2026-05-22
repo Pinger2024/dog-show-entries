@@ -224,9 +224,21 @@ export const dogsRouter = createTRPCRouter({
 
   list: protectedProcedure.query(async ({ ctx }) => {
     const dogList = await ctx.db.query.dogs.findMany({
+      // Amanda 2026-05-22: joint owners should see the dog in their "My
+      // Dogs" too, not just the creator. Match on legacy `dogs.owner_id`
+      // OR any `dog_owners.user_id` row linking the dog to this user.
       where: and(
-        eq(dogs.ownerId, ctx.session.user.id),
-        isNull(dogs.deletedAt)
+        isNull(dogs.deletedAt),
+        or(
+          eq(dogs.ownerId, ctx.session.user.id),
+          inArray(
+            dogs.id,
+            ctx.db
+              .select({ id: dogOwners.dogId })
+              .from(dogOwners)
+              .where(eq(dogOwners.userId, ctx.session.user.id)),
+          ),
+        ),
       ),
       with: {
         breed: {
@@ -289,7 +301,10 @@ export const dogsRouter = createTRPCRouter({
         });
       }
 
-      if (dog.ownerId !== ctx.session.user.id) {
+      // Joint owners (any dog_owners row linked to this user) can view the
+      // dog too — not just the legacy creator. Amanda 2026-05-22.
+      const isJointOwner = dog.owners.some((o) => o.userId === ctx.session.user.id);
+      if (dog.ownerId !== ctx.session.user.id && !isJointOwner) {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'You do not own this dog',
