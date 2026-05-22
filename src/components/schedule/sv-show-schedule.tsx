@@ -14,7 +14,14 @@
  * Adverts (inside-front / inside-back / last-page) slot in via the existing
  * `AdvertPage` helper, same as the RKC renderer.
  */
-import { Document, Page, Text, View } from '@react-pdf/renderer';
+import {
+  Document,
+  Page,
+  Text,
+  View,
+  Svg,
+  Path,
+} from '@react-pdf/renderer';
 import type {
   ScheduleShowInfo,
   ScheduleClass,
@@ -72,6 +79,72 @@ function pickBreedJudge(judges: readonly ScheduleJudge[]): ScheduleJudge | null 
 }
 
 // ── Atoms ──────────────────────────────────────────────────────────────────
+
+/**
+ * Soft watercolour-style corner accent — pink/magenta/blue/purple gradient
+ * brush stroke. Renders absolutely positioned, so it sits behind page
+ * content. Amanda (2026-05-22): "splash of colour on each page similar to
+ * the BRG banner — light touch, just on the corners". Alternates corners
+ * by page index so the document feels alive without being busy.
+ */
+function CornerSplash({ corner }: { corner: 'tl' | 'tr' | 'bl' | 'br' }) {
+  // Frame matches the A5 inner page width-ish; SVG viewBox is 100×100 so
+  // the path coords are page-agnostic. The wrap is sized in mm relative to
+  // page padding so the stroke reads as a corner accent, not a centrepiece.
+  const w = '78mm';
+  const h = '60mm';
+  const pos =
+    corner === 'tl'
+      ? { top: 0, left: 0 }
+      : corner === 'tr'
+        ? { top: 0, right: 0 }
+        : corner === 'bl'
+          ? { bottom: 0, left: 0 }
+          : { bottom: 0, right: 0 };
+
+  // Watercolour wash: a stack of overlapping flat-colour brush strokes,
+  // each at low opacity, that blend to a soft multi-tone arc. We tried an
+  // SVG LinearGradient first but @react-pdf/renderer drops the url(#…)
+  // reference and falls back to black; flat overlaid strokes are reliable
+  // and feel the same on the page.
+  const strokes = [
+    // (path, colour, width, opacity) — drawn back-to-front, palette taken
+    // from the BRG banner Amanda shared. Opacities are intentionally low
+    // so the wash sits *behind* text without obscuring it (Amanda 2026-05-22:
+    // "light touch splash of colour, just on the corners").
+    { d: 'M -10 55 Q 25 -5 60 25 T 110 60', c: '#F4A5C0', w: 36, o: 0.22 }, // pink wash
+    { d: 'M -5 50 Q 28 -5 62 28 T 108 58',  c: '#B89AD0', w: 28, o: 0.2 },  // lavender
+    { d: 'M 0 48 Q 30 -3 64 30 T 105 56',   c: '#7FA8D8', w: 18, o: 0.22 }, // soft blue
+    { d: 'M 5 45 Q 32 0 66 30 T 102 54',    c: '#E8638F', w: 8,  o: 0.28 }, // magenta accent
+    { d: 'M 8 43 Q 34 2 68 32 T 100 52',    c: '#D4537A', w: 3,  o: 0.32 }, // soft red highlight
+  ];
+
+  return (
+    <View
+      style={{
+        position: 'absolute',
+        width: w,
+        height: h,
+        ...pos,
+      }}
+      fixed
+    >
+      <Svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%' }}>
+        {strokes.map((s, i) => (
+          <Path
+            key={i}
+            d={s.d}
+            stroke={s.c}
+            strokeWidth={s.w}
+            strokeLinecap="round"
+            strokeOpacity={s.o}
+            fill="none"
+          />
+        ))}
+      </Svg>
+    </View>
+  );
+}
 
 function Folio({ num, total = 6, label }: { num: number; total?: number; label: string }) {
   return (
@@ -135,6 +208,7 @@ function SvCover({ show, judges, totalClasses }: { show: ScheduleShowInfo; judge
 
   return (
     <Page size="A5" style={ss.page}>
+      <CornerSplash corner="tr" />
       {/* Top strip — jurisdiction line + licence number */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <View>
@@ -242,6 +316,7 @@ function SvOverview({
 
   return (
     <Page size="A5" style={ss.page}>
+      <CornerSplash corner="bl" />
       <Topper num={2} subject={show.name} />
 
       <View style={{ marginTop: 14 }}>
@@ -422,6 +497,7 @@ function SvClassificationPage({
 
   return (
     <Page size="A5" style={ss.page}>
+      <CornerSplash corner="tr" />
       <Topper num={3} subject={`Classes 1 – ${breedClasses.length + juniorHandling.length}`} />
 
       <View style={{ marginTop: 10 }}>
@@ -551,6 +627,7 @@ function SvClassificationPage({
 function SvEligibilityPage() {
   return (
     <Page size="A5" style={ss.page}>
+      <CornerSplash corner="bl" />
       <Topper num={4} subject="Class definitions & eligibility" />
 
       <View style={{ marginTop: 14 }}>
@@ -667,6 +744,7 @@ function GradingCol({ title, rows, accentFirst }: { title: string; rows: SvGrade
 function SvGradingPage() {
   return (
     <Page size="A5" style={ss.page}>
+      <CornerSplash corner="tr" />
       <Topper num={5} subject="SV grading system" />
 
       <View style={{ marginTop: 10 }}>
@@ -721,6 +799,7 @@ function SvRulesPage() {
 
   return (
     <Page size="A5" style={ss.page}>
+      <CornerSplash corner="bl" />
       <Topper num={6} subject="Summary of WUSV / BRG rules" />
 
       <View style={{ marginTop: 14 }}>
