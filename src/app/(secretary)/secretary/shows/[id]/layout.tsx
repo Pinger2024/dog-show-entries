@@ -19,6 +19,13 @@ import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -173,9 +180,30 @@ export default function ShowManagementLayout({
               {show.name}
             </h1>
             <EditShowNameDialog showId={show.id} currentName={show.name} />
-            <Badge variant={showStatus.variant} className="shrink-0">
-              {showStatus.label}
-            </Badge>
+            {/* Status — the badge is now a clickable dropdown so the
+                secretary can jump between draft / entries open / closed /
+                cancelled etc. without waiting for the auto-transition.
+                Amanda 2026-05-22 reported the free-form switcher had gone
+                missing; restored. */}
+            <Select value={show.status} onValueChange={handleStatusChange}>
+              <SelectTrigger
+                aria-label="Change show status"
+                className="h-auto shrink-0 gap-1 border-none bg-transparent p-0 shadow-none focus:ring-0 focus:ring-offset-0"
+              >
+                <Badge variant={showStatus.variant} className="shrink-0 cursor-pointer hover:opacity-80">
+                  {showStatus.label}
+                </Badge>
+              </SelectTrigger>
+              <SelectContent align="end">
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="published">Published</SelectItem>
+                <SelectItem value="entries_open">Entries Open</SelectItem>
+                <SelectItem value="entries_closed">Entries Closed</SelectItem>
+                <SelectItem value="in_progress">In Progress</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
             {show.organisation?.name}
