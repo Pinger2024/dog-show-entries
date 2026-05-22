@@ -60,6 +60,22 @@ function fmtDate(iso: string | null | undefined): string {
   });
 }
 
+/** Shorter form for the right-column "Key dates" list — "Sun 31 May 2026". The
+ *  full long-form fmtDate runs into the label when stacked at 50% page width
+ *  (Amanda 2026-05-22). */
+function fmtDateShort(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const datePart = iso.slice(0, 10);
+  const d = new Date(`${datePart}T12:00:00Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 function fmtMoney(pence: number | null | undefined): string {
   if (pence == null) return '—';
   return '£' + (pence / 100).toFixed(pence % 100 === 0 ? 0 : 2);
@@ -168,16 +184,14 @@ function SectionTitle({ title }: { title: string }) {
 function FeeRow({
   label,
   value,
-  highlight,
 }: {
   label: string;
   value: string;
-  highlight?: boolean;
 }) {
   return (
     <View style={ss.feeRow}>
-      <Text style={[ss.feeRowLabel, highlight && ss.feeRowLabelHi]}>{label}</Text>
-      <Text style={[ss.feeRowValue, highlight && ss.feeRowValueHi]}>{value}</Text>
+      <Text style={ss.feeRowLabel}>{label}</Text>
+      <Text style={ss.feeRowValue}>{value}</Text>
     </View>
   );
 }
@@ -303,13 +317,7 @@ function SvCover({ show, judges, totalClasses }: { show: ScheduleShowInfo; judge
 
 // ── PAGE 2 — AT A GLANCE ───────────────────────────────────────────────────
 
-function SvOverview({
-  show,
-  awards,
-}: {
-  show: ScheduleShowInfo;
-  awards: Array<{ name: string; from: string }>;
-}) {
+function SvOverview({ show }: { show: ScheduleShowInfo }) {
   const memberTier = show.discountGroups?.[0] ?? null;
   const firstAider = show.scheduleData?.firstAiders?.[0] ?? null;
 
@@ -324,7 +332,7 @@ function SvOverview({
       </View>
 
       {/* Two-column body */}
-      <View style={{ flexDirection: 'row', marginTop: 18 }}>
+      <View style={{ flexDirection: 'row', marginTop: 12 }}>
         {/* LEFT */}
         <View style={{ width: '50%', paddingRight: 10 }}>
           <SectionTitle title="Fees" />
@@ -333,7 +341,6 @@ function SvOverview({
             <FeeRow
               label={memberTier.label}
               value={fmtMoney(memberTier.firstEntryFeePence)}
-              highlight
             />
           ) : null}
           {show.multiDogPackagePence != null ? (
@@ -346,7 +353,6 @@ function SvOverview({
             <FeeRow
               label="Members · multi-dog"
               value={fmtMoney(memberTier.multiDogPackagePence)}
-              highlight
             />
           ) : null}
           <FeeRow
@@ -359,24 +365,29 @@ function SvOverview({
             Multi-dog: exhibits must share at least 50% common ownership.
           </Text>
 
-          <View style={{ height: 12 }} />
+          <View style={{ height: 7 }} />
           <SectionTitle title="Awards" />
-          {awards.map((a, i) => (
+          {/* Amanda 2026-05-22: drop per-class derivation. Two big awards
+              groups split by sex, with plain-English eligibility lines. */}
+          {[
+            { name: 'Most Promising Young Bitch', desc: 'All winners up to and including Junior classes' },
+            { name: 'Most Promising Young Dog',   desc: 'All winners up to and including Junior classes' },
+            { name: 'Best Bitch',                 desc: 'All winners from Yearling to Working classes' },
+            { name: 'Best Dog',                   desc: 'All winners from Yearling to Working classes' },
+          ].map((a, i, arr) => (
             <View
-              key={i}
+              key={a.name}
               style={{
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                paddingVertical: 3,
-                borderBottomWidth: i < awards.length - 1 ? 0.5 : 0,
+                paddingVertical: 4,
+                borderBottomWidth: i < arr.length - 1 ? 0.5 : 0,
                 borderBottomColor: SV.rule,
               }}
             >
-              <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 8.5, color: SV.ink, flex: 1 }}>
+              <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 8.5, color: SV.ink, fontWeight: 'bold' }}>
                 {a.name}
               </Text>
-              <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 7.5, color: SV.ink3, textAlign: 'right', maxWidth: '52%' }}>
-                {a.from}
+              <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 7.5, color: SV.ink3, marginTop: 1 }}>
+                {a.desc}
               </Text>
             </View>
           ))}
@@ -388,14 +399,16 @@ function SvOverview({
         {/* RIGHT */}
         <View style={{ width: '50%', paddingLeft: 10 }}>
           <SectionTitle title="Key dates" />
-          <FeeRow label="Entries open" value={fmtDate(show.entriesOpenDate)} />
-          {show.postalCloseDate ? (
-            <FeeRow label="Postal close" value={fmtDate(show.postalCloseDate)} />
+          {/* Short date format here so long weekday + month names don't
+              overrun the label column (Amanda 2026-05-22). */}
+          <FeeRow label="Entries open" value={fmtDateShort(show.entriesOpenDate)} />
+          {show.acceptsPostalEntries && show.postalCloseDate ? (
+            <FeeRow label="Postal close" value={fmtDateShort(show.postalCloseDate)} />
           ) : null}
-          <FeeRow label="Entries close" value={fmtDate(show.entryCloseDate)} highlight />
-          <FeeRow label="Show day" value={fmtDate(show.date)} />
+          <FeeRow label="Entries close" value={fmtDateShort(show.entryCloseDate)} />
+          <FeeRow label="Show day" value={fmtDateShort(show.date)} />
 
-          <View style={{ height: 12 }} />
+          <View style={{ height: 7 }} />
           <SectionTitle title="Event Secretary" />
           <View>
             <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 9, fontWeight: 'bold', color: SV.ink }}>
@@ -420,7 +433,7 @@ function SvOverview({
 
           {show.onCallVet ? (
             <>
-              <View style={{ height: 12 }} />
+              <View style={{ height: 7 }} />
               <SectionTitle title="On-call vet" />
               <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 8, color: SV.ink2, lineHeight: 1.4 }}>
                 {show.onCallVet}
@@ -430,7 +443,7 @@ function SvOverview({
 
           {firstAider ? (
             <>
-              <View style={{ height: 12 }} />
+              <View style={{ height: 7 }} />
               <SectionTitle title="First Aider" />
               <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 8.5, color: SV.ink2 }}>
                 {firstAider}
@@ -438,18 +451,23 @@ function SvOverview({
             </>
           ) : null}
 
-          <View style={{ height: 12 }} />
+          <View style={{ height: 7 }} />
           <SectionTitle title="Payment" />
+          {/* Amanda 2026-05-22: only surface the postal/bank-transfer line
+              when the show actually accepts postal entries — otherwise just
+              say online via Remi. */}
           <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 8, color: SV.ink2, lineHeight: 1.45 }}>
-            Paid by Remi at entry. Bank transfer accepted for postal entries — surname as reference. No entries by phone, text or social media.
+            {show.acceptsPostalEntries
+              ? 'Paid by Remi at entry. Bank transfer accepted for postal entries — surname as reference. No entries by phone, text or social media.'
+              : 'Online payment only via Remi at entry. No entries by phone, text, post or social media.'}
           </Text>
         </View>
       </View>
 
       {/* Pull quote */}
-      <View style={{ marginTop: 14 }}>
+      <View style={{ marginTop: 8 }}>
         <View style={ss.ruleThin} />
-        <Text style={ss.pullQuote}>
+        <Text style={[ss.pullQuote, { fontSize: 10, marginTop: 5, lineHeight: 1.25 }]}>
           &ldquo;Verbal critiques will be given after the judging of each class — both coat types presented at the same stand, then separately in final movement.&rdquo;
         </Text>
       </View>
@@ -820,41 +838,6 @@ function SvRulesPage() {
   );
 }
 
-// ── Awards derivation ──────────────────────────────────────────────────────
-
-/** Derive page-2 awards block from the numbered breed classes. Implements
- *  HANDOFF "Awards derivation" option 1 (static derivation from the SV
- *  numbering, which is deterministic). */
-function deriveAwards(
-  breedClasses: SvNumberedClass[],
-  juniorHandling: Array<{ number: number }>,
-): Array<{ name: string; from: string }> {
-  const numbersByNameAndSex = (name: string, sex: 'bitch' | 'dog') =>
-    breedClasses.filter((c) => c.name === name && c.sex === sex).map((c) => c.number);
-
-  const youngBitchSrc = ['Minor Puppy', 'Puppy', 'Junior']
-    .flatMap((n) => numbersByNameAndSex(n, 'bitch'));
-  const youngDogSrc = ['Minor Puppy', 'Puppy', 'Junior']
-    .flatMap((n) => numbersByNameAndSex(n, 'dog'));
-  const adultBitchSrc = ['Adult', 'Working'].flatMap((n) => numbersByNameAndSex(n, 'bitch'));
-  const adultDogSrc = ['Adult', 'Working'].flatMap((n) => numbersByNameAndSex(n, 'dog'));
-
-  const fmt = (nums: number[]) =>
-    nums.length === 0 ? '—' : `Winners of Cl. ${nums.sort((a, b) => a - b).join(', ')}`;
-
-  const out: Array<{ name: string; from: string }> = [];
-  if (youngBitchSrc.length) out.push({ name: 'Most Promising Young Bitch', from: fmt(youngBitchSrc) });
-  if (youngDogSrc.length) out.push({ name: 'Most Promising Young Dog', from: fmt(youngDogSrc) });
-  if (adultBitchSrc.length) out.push({ name: 'Regional Siegerin', from: fmt(adultBitchSrc) });
-  if (adultDogSrc.length) out.push({ name: 'Regional Sieger', from: fmt(adultDogSrc) });
-  if (juniorHandling.length)
-    out.push({
-      name: 'Best Junior Handler',
-      from: `Winners of Cl. ${juniorHandling.map((j) => j.number).join(' & ')}`,
-    });
-  return out;
-}
-
 // ── Top-level document ─────────────────────────────────────────────────────
 
 export function SvShowSchedule({
@@ -872,7 +855,7 @@ export function SvShowSchedule({
 }) {
   const groups = groupSvClasses(classes);
   const totalClasses = groups.totalCount;
-  const awards = deriveAwards(groups.breedClasses, groups.juniorHandling);
+  // Awards copy is static (Amanda 2026-05-22) — see SvOverview.
 
   // Junior Handling judge label, if one is assigned.
   const jhJudge = judges.find((j) => j.role === 'Junior Handling') ?? null;
@@ -890,7 +873,7 @@ export function SvShowSchedule({
         <AdvertPage key={`ad-if-${ad.id}`} advert={ad} />
       ))}
 
-      <SvOverview show={show} awards={awards} />
+      <SvOverview show={show} />
       <SvClassificationPage
         breedClasses={groups.breedClasses}
         juniorHandling={groups.juniorHandling}
