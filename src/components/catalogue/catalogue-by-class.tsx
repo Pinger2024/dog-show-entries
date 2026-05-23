@@ -53,7 +53,12 @@ function splitTownPostcode(address: string | null | undefined): { town: string; 
 // branch of CatalogueByClass — easier to read here than in a separate
 // stylesheet file, and they live on the SV palette (sv-styles.ts).
 const svEntry = {
-  row: { marginBottom: 6 } as const,
+  // marginTop carries the spacing between entries (and between the
+  // class header and the first entry) — using marginTop rather than
+  // marginBottom keeps the gap symmetric whether the entry is the
+  // first in the block (after the header's entry-count line) or the
+  // nth (after another entry's last line).
+  row: { marginTop: 8 } as const,
   line1: { flexDirection: 'row', alignItems: 'baseline', gap: 6 } as const,
   catNumber: {
     fontFamily: SV_FONTS.serif,
