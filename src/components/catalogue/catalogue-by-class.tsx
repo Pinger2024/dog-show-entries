@@ -356,8 +356,13 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
           often than they read alphabetical reference indexes. */}
       <CoverPage show={show} />
       <AdvertPages adverts={show.adverts} position="inside_front" />
-      <FrontMatterPage show={show} compact={compact} />
-      {!show.skipTrophiesPage && !compact && (
+      {/* SV catalogues skip the RKC-styled front-matter pages — the SV
+          cover already carries the essential show info (host club,
+          date, venue, breed judge, secretary). RKC F4/F5 jurisdiction
+          block doesn't apply either. Skipping keeps the document on
+          the SV palette front-to-back (Michael 2026-05-23). */}
+      {!isSvShow && <FrontMatterPage show={show} compact={compact} />}
+      {!isSvShow && !show.skipTrophiesPage && !compact && (
         <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />
       )}
 
@@ -627,8 +632,13 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
       </Page>
       ))}
 
-      {/* Back matter: exhibitor index — moved to the end per backlog #93 */}
-      <ExhibitorIndexPage show={show} entries={entries} compact={compact} />
+      {/* Back matter: exhibitor index — moved to the end per backlog #93.
+          Skipped for SV catalogues to keep the document on the SV
+          palette; owner contact details are already on every entry's
+          line 5 (Michael 2026-05-23). */}
+      {!isSvShow && (
+        <ExhibitorIndexPage show={show} entries={entries} compact={compact} />
+      )}
       <AdvertPages adverts={show.adverts} position="inside_back" />
       <AdvertPages adverts={show.adverts} position="last_page" />
     </Document>
