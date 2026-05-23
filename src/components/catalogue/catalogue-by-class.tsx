@@ -4,6 +4,12 @@ import { CatalogueHeader } from './catalogue-header';
 import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
 import { formatDobKC, formatPedigreeKC, formatOwnerKC, formatRkcOwnerHeading, uppercaseName, buildSponsorLines } from './catalogue-utils';
 import { CoverPage, FrontMatterPage, TrophiesPage, ExhibitorIndexPage } from './catalogue-front-matter';
+import {
+  SvAcknowledgementsPage,
+  SvClassificationPage,
+  SvJudgesPage,
+  SvPointsPage,
+} from './sv-front-matter';
 import { TonalWash } from '@/components/sv-pdf/cover-atoms';
 import { SV, SV_FONTS } from '@/components/schedule/shared/sv-styles';
 
@@ -361,14 +367,25 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
           often than they read alphabetical reference indexes. */}
       <CoverPage show={show} />
       <AdvertPages adverts={show.adverts} position="inside_front" />
-      {/* SV catalogues skip the RKC-styled front-matter pages — the SV
-          cover already carries the essential show info (host club,
-          date, venue, breed judge, secretary). RKC F4/F5 jurisdiction
-          block doesn't apply either. Skipping keeps the document on
-          the SV palette front-to-back (Michael 2026-05-23). */}
-      {!isSvShow && <FrontMatterPage show={show} compact={compact} />}
-      {!isSvShow && !show.skipTrophiesPage && !compact && (
-        <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />
+      {/* SV catalogues use their own front-matter set (acknowledgements,
+          breed classification, judges bios, BRG points system) — all on
+          the SV palette so the document reads as one piece front-to-back
+          (Amanda 2026-05-23). RKC catalogues keep the existing
+          FrontMatterPage + TrophiesPage. */}
+      {isSvShow ? (
+        <>
+          <SvAcknowledgementsPage show={show} />
+          <SvClassificationPage show={show} />
+          <SvJudgesPage show={show} />
+          <SvPointsPage show={show} />
+        </>
+      ) : (
+        <>
+          <FrontMatterPage show={show} compact={compact} />
+          {!show.skipTrophiesPage && !compact && (
+            <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />
+          )}
+        </>
       )}
 
       {classChunks.map((chunkKeys, chunkIdx) => (
