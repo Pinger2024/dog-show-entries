@@ -61,6 +61,13 @@ export interface ScheduleShowInfo {
     contactPhone: string | null;
     website: string | null;
     logoUrl: string | null;
+    /** Hex codes pulled from the club's logo via node-vibrant — used
+     *  by the SV schedule's tonal wash so the cover feels brand-aligned.
+     *  Null when the logo hasn't been processed yet or has no
+     *  saturated colours (logoMonochrome=true). */
+    logoColorPrimary?: string | null;
+    logoColorSecondary?: string | null;
+    logoMonochrome?: boolean | null;
   } | null;
   venue: {
     name: string;

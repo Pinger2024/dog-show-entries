@@ -589,6 +589,9 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
       contactPhone: show.organisation.contactPhone,
       website: show.organisation.website,
       logoUrl: show.organisation.logoUrl,
+      logoColorPrimary: (show.organisation as { logoColorPrimary?: string | null }).logoColorPrimary ?? null,
+      logoColorSecondary: (show.organisation as { logoColorSecondary?: string | null }).logoColorSecondary ?? null,
+      logoMonochrome: (show.organisation as { logoMonochrome?: boolean | null }).logoMonochrome ?? null,
     } : null,
     venue: show.venue ? {
       name: show.venue.name,
@@ -601,6 +604,25 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     showInfo.showScope,
     showInfo.showRuleset ?? 'rkc',
   );
+
+  // SV/WUSV: pre-bake the tonal-wash backgrounds from the org's brand
+  // colours (memoised). The React render below stays synchronous.
+  let washes: { cover: Buffer; inside: Buffer } | undefined;
+  if (showInfo.showRuleset === 'wusv') {
+    const { getTonalWash } = await import('./sv-tonal-wash');
+    const primary = showInfo.organisation?.logoMonochrome
+      ? null
+      : showInfo.organisation?.logoColorPrimary ?? null;
+    const secondary = showInfo.organisation?.logoMonochrome
+      ? null
+      : showInfo.organisation?.logoColorSecondary ?? null;
+    const [cover, inside] = await Promise.all([
+      getTonalWash(primary, secondary, 'cover'),
+      getTonalWash(primary, secondary, 'inside'),
+    ]);
+    washes = { cover, inside };
+  }
+
   const pdfDocument = React.createElement(ScheduleComponent, {
     show: showInfo,
     classes,
@@ -608,6 +630,7 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     sponsors,
     adverts,
     panelJudges,
+    washes,
   });
   return Buffer.from(await renderToBuffer(pdfDocument));
 }

@@ -324,6 +324,9 @@ export async function GET(
           contactPhone: show.organisation.contactPhone ?? null,
           website: show.organisation.website ?? null,
           logoUrl: show.organisation.logoUrl ?? null,
+          logoColorPrimary: (show.organisation as { logoColorPrimary?: string | null }).logoColorPrimary ?? null,
+          logoColorSecondary: (show.organisation as { logoColorSecondary?: string | null }).logoColorSecondary ?? null,
+          logoMonochrome: (show.organisation as { logoMonochrome?: boolean | null }).logoMonochrome ?? null,
         }
       : null,
     venue: show.venue
@@ -348,6 +351,28 @@ export async function GET(
       showInfo.showScope,
       showInfo.showRuleset ?? 'rkc',
     );
+
+    // For SV/WUSV shows we pre-bake the tonal-wash backgrounds (one for
+    // the cover, one for inside pages) from the club's brand colours so
+    // the React-PDF render is fully synchronous. The wash baker is
+    // memoised per (primary, secondary, variant) for the lifetime of
+    // the process — repeated renders of the same show are free.
+    let washes: { cover: Buffer; inside: Buffer } | undefined;
+    if (showInfo.showRuleset === 'wusv') {
+      const { getTonalWash } = await import('@/server/services/sv-tonal-wash');
+      const primary = showInfo.organisation?.logoMonochrome
+        ? null
+        : showInfo.organisation?.logoColorPrimary ?? null;
+      const secondary = showInfo.organisation?.logoMonochrome
+        ? null
+        : showInfo.organisation?.logoColorSecondary ?? null;
+      const [cover, inside] = await Promise.all([
+        getTonalWash(primary, secondary, 'cover'),
+        getTonalWash(primary, secondary, 'inside'),
+      ]);
+      washes = { cover, inside };
+    }
+
     const pdfDocument = React.createElement(ScheduleComponent, {
       show: showInfo,
       classes,
@@ -355,6 +380,7 @@ export async function GET(
       sponsors,
       adverts,
       panelJudges,
+      washes,
     });
     const buffer = await renderToBuffer(pdfDocument);
     const filename = `${sanitizeFilename(show.name)}-Schedule.pdf`;

@@ -113,21 +113,30 @@ function pickBreedJudge(judges: readonly ScheduleJudge[]): ScheduleJudge | null 
  * illustration. Cover page renders at full intensity; inside pages at a
  * faint ~0.3 wash so they stay quiet behind the text.
  */
-function TonalWash({ variant = 'inside' }: { variant?: 'cover' | 'inside' }) {
-  // React-PDF's SVG primitives can't produce a smooth radial gradient
-  // (RadialGradient doesn't honour multi-stop opacity falloff and stacked
-  // ellipses band visibly). We pre-bake the wash to PNG via
-  // `scripts/generate-sv-tonal-wash.ts` and use it as a fixed page-fill
-  // image — soft pink top-left, soft blue bottom-right, on transparent.
-  // Two variants: cover (full intensity) + inside (~25% intensity).
-  const file = variant === 'cover' ? 'wash-cover.png' : 'wash-inside.png';
-  const src = path.join(process.cwd(), 'public', 'sv-schedule', file);
+function TonalWash({
+  variant = 'inside',
+  buffer,
+}: {
+  variant?: 'cover' | 'inside';
+  /** Pre-baked wash PNG produced by `src/server/services/sv-tonal-wash.ts`
+   *  using the club's brand colours. When omitted we fall back to the
+   *  default Sieger dusty pink/blue PNGs in public/sv-schedule/. */
+  buffer?: Buffer;
+}) {
+  const src =
+    buffer ??
+    path.join(
+      process.cwd(),
+      'public',
+      'sv-schedule',
+      variant === 'cover' ? 'wash-cover.png' : 'wash-inside.png',
+    );
   return (
     <View
       style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       fixed
     >
-      <Image src={src} style={{ width: '100%', height: '100%', objectFit: 'fill' }} />
+      <Image src={src as unknown as string} style={{ width: '100%', height: '100%', objectFit: 'fill' }} />
     </View>
   );
 }
@@ -277,6 +286,7 @@ function SvCover({
   show,
   judges,
   rkcClassCount,
+  washes,
 }: {
   show: ScheduleShowInfo;
   judges: readonly ScheduleJudge[];
@@ -285,6 +295,7 @@ function SvCover({
    *  shows "24-Class" rather than the 12 numbered groupings. JH is
    *  listed separately and isn't included in this total. */
   rkcClassCount: number;
+  washes?: SvWashBuffers;
 }) {
   const judge = pickBreedJudge(judges);
   const judgeAffix = judge?.affix ? ` (${judge.affix})` : '';
@@ -296,7 +307,7 @@ function SvCover({
 
   return (
     <Page size="A5" style={[ss.page, { padding: 0 }]}>
-      <TonalWash variant="cover" />
+      <TonalWash variant="cover" buffer={washes?.cover} />
       <MastheadBand />
 
       {/* Editorial cover content below the masthead. The masthead is 52mm
@@ -421,7 +432,7 @@ function SvCover({
 
 // ── PAGE 2 — AT A GLANCE ───────────────────────────────────────────────────
 
-function SvOverview({ show }: { show: ScheduleShowInfo }) {
+function SvOverview({ show, washes }: { show: ScheduleShowInfo; washes?: SvWashBuffers }) {
   const memberTier = show.discountGroups?.[0] ?? null;
   const firstAider = show.scheduleData?.firstAiders?.[0] ?? null;
 
@@ -438,7 +449,7 @@ function SvOverview({ show }: { show: ScheduleShowInfo }) {
 
   return (
     <Page size="A5" style={ss.page}>
-      <TonalWash />
+      <TonalWash buffer={washes?.inside} />
       <Topper num={2} subject={show.name} />
 
       <View style={{ marginTop: 8 }}>
@@ -633,10 +644,12 @@ function SvClassificationPage({
   breedClasses,
   juniorHandling,
   juniorHandlingJudge,
+  washes,
 }: {
   breedClasses: SvNumberedClass[];
   juniorHandling: Array<{ number: number; label: string }>;
   juniorHandlingJudge: string | null;
+  washes?: SvWashBuffers;
 }) {
   // Pair breed classes [Bitch, Dog] by age — grouping is already in canonical
   // order (Minor Puppy → Working, bitch first).
@@ -647,7 +660,7 @@ function SvClassificationPage({
 
   return (
     <Page size="A5" style={ss.page}>
-      <TonalWash />
+      <TonalWash buffer={washes?.inside} />
       <Topper num={3} subject={`Classes 1 – ${breedClasses.length + juniorHandling.length}`} />
 
       <View style={{ marginTop: 10 }}>
@@ -774,10 +787,10 @@ function SvClassificationPage({
 
 // ── PAGE 4 — DEFINITIONS & ELIGIBILITY ─────────────────────────────────────
 
-function SvEligibilityPage() {
+function SvEligibilityPage({ washes }: { washes?: SvWashBuffers }) {
   return (
     <Page size="A5" style={ss.page}>
-      <TonalWash />
+      <TonalWash buffer={washes?.inside} />
       <Topper num={4} subject="Class definitions & eligibility" />
 
       <View style={{ marginTop: 14 }}>
@@ -891,10 +904,10 @@ function GradingCol({ title, rows, accentFirst }: { title: string; rows: SvGrade
   );
 }
 
-function SvGradingPage() {
+function SvGradingPage({ washes }: { washes?: SvWashBuffers }) {
   return (
     <Page size="A5" style={ss.page}>
-      <TonalWash />
+      <TonalWash buffer={washes?.inside} />
       <Topper num={5} subject="SV grading system" />
 
       <View style={{ marginTop: 10 }}>
@@ -929,7 +942,7 @@ function SvGradingPage() {
 
 // ── PAGE 6 — REGULATIONS ───────────────────────────────────────────────────
 
-function SvRulesPage() {
+function SvRulesPage({ washes }: { washes?: SvWashBuffers }) {
   // Split rules into two columns by halving — React-PDF doesn't support CSS
   // multi-column flow, so we lay out two flex columns and split the list.
   const mid = Math.ceil(SV_RULES.length / 2);
@@ -949,7 +962,7 @@ function SvRulesPage() {
 
   return (
     <Page size="A5" style={ss.page}>
-      <TonalWash />
+      <TonalWash buffer={washes?.inside} />
       <Topper num={6} subject="Summary of WUSV / BRG rules" />
 
       <View style={{ marginTop: 14 }}>
@@ -973,11 +986,17 @@ function SvRulesPage() {
 
 // ── Top-level document ─────────────────────────────────────────────────────
 
+export interface SvWashBuffers {
+  cover: Buffer;
+  inside: Buffer;
+}
+
 export function SvShowSchedule({
   show,
   classes,
   judges,
   adverts = [],
+  washes,
 }: {
   show: ScheduleShowInfo;
   classes: ScheduleClass[];
@@ -985,6 +1004,12 @@ export function SvShowSchedule({
   sponsors?: ScheduleSponsor[];
   adverts?: ScheduleAdvert[];
   panelJudges?: unknown;
+  /** Pre-baked tonal-wash backgrounds, tinted with the club's brand
+   *  colours (Michael 2026-05-23). Generated server-side via
+   *  `src/server/services/sv-tonal-wash.ts` so the React render stays
+   *  synchronous. When omitted, every page falls back to the default
+   *  Sieger dusty pink/blue PNGs in `public/sv-schedule/`. */
+  washes?: SvWashBuffers;
 }) {
   const groups = groupSvClasses(classes);
   // Total numbered classes (breed + JH) — used by the page 3 header.
@@ -1008,21 +1033,22 @@ export function SvShowSchedule({
 
   return (
     <Document title={`Schedule — ${show.name}`} author="Remi Show Manager">
-      <SvCover show={show} judges={judges} rkcClassCount={rkcClassCount} />
+      <SvCover show={show} judges={judges} rkcClassCount={rkcClassCount} washes={washes} />
 
       {selectAdverts(adverts, 'schedule', 'inside_front').map((ad) => (
         <AdvertPage key={`ad-if-${ad.id}`} advert={ad} />
       ))}
 
-      <SvOverview show={show} />
+      <SvOverview show={show} washes={washes} />
       <SvClassificationPage
         breedClasses={groups.breedClasses}
         juniorHandling={groups.juniorHandling}
         juniorHandlingJudge={jhJudgeLabel}
+        washes={washes}
       />
-      <SvEligibilityPage />
-      <SvGradingPage />
-      <SvRulesPage />
+      <SvEligibilityPage washes={washes} />
+      <SvGradingPage washes={washes} />
+      <SvRulesPage washes={washes} />
 
       {selectAdverts(adverts, 'schedule', 'inside_back').map((ad) => (
         <AdvertPage key={`ad-ib-${ad.id}`} advert={ad} />

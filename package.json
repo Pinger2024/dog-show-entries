@@ -14,7 +14,14 @@
     "db:seed": "tsx src/server/db/seed.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "pretest": "npm run db:push:test"
+    "pretest": "npm run db:push:test",
+    "demo": "bash scripts/demo.sh",
+    "demo:sync": "bash scripts/demo-sync.sh",
+    "demo:service:start": "launchctl load ~/Library/LaunchAgents/co.remishowmanager.demo.plist",
+    "demo:service:stop": "launchctl stop co.remishowmanager.demo",
+    "demo:service:restart": "launchctl stop co.remishowmanager.demo && sleep 3 && launchctl start co.remishowmanager.demo",
+    "demo:service:logs": "tail -f ~/Library/Logs/remi-demo.log",
+    "demo:service:uninstall": "launchctl unload ~/Library/LaunchAgents/co.remishowmanager.demo.plist"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.1",
@@ -48,6 +55,7 @@
     "next": "16.1.6",
     "next-auth": "^5.0.0-beta.30",
     "next-themes": "^0.4.6",
+    "node-vibrant": "^4.0.4",
     "pdf-lib": "^1.17.1",
     "postgres": "^3.4.8",
     "radix-ui": "^1.4.3",
@@ -79,6 +87,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^5.1.4",
+    "dotenv-cli": "^11.0.0",
     "drizzle-kit": "^0.31.9",
     "esbuild": "^0.27.3",
     "eslint": "^9",

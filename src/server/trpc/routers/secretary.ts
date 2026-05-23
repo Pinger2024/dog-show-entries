@@ -463,6 +463,53 @@ export const secretaryRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
 
+      // If the logo URL changed (or the org doesn't have extracted colours
+      // yet) we re-run node-vibrant so the SV schedule's tonal wash
+      // updates to the new branding. Runs synchronously here — Vibrant
+      // is fast on a typical logo (~200ms) and we only do it on update.
+      const existing = await ctx.db.query.organisations.findFirst({
+        where: eq(organisations.id, input.organisationId),
+        columns: { logoUrl: true, logoColorPrimary: true, logoMonochrome: true },
+      });
+      const newLogoUrl = input.logoUrl ?? null;
+      const logoChanged = newLogoUrl !== (existing?.logoUrl ?? null);
+      const needsExtraction =
+        newLogoUrl &&
+        (logoChanged || (!existing?.logoColorPrimary && !existing?.logoMonochrome));
+
+      let colorPatch: {
+        logoColorPrimary: string | null;
+        logoColorSecondary: string | null;
+        logoMonochrome: boolean;
+      } | null = null;
+      if (needsExtraction) {
+        try {
+          const res = await fetch(newLogoUrl);
+          if (res.ok) {
+            const buf = Buffer.from(await res.arrayBuffer());
+            const { extractBrandColors } = await import(
+              '@/server/services/extract-brand-colors'
+            );
+            const colors = await extractBrandColors(buf);
+            colorPatch = {
+              logoColorPrimary: colors.primary,
+              logoColorSecondary: colors.secondary,
+              logoMonochrome: colors.monochrome,
+            };
+          }
+        } catch (err) {
+          console.warn('[updateOrganisation] brand-colour extraction failed:', err);
+          // Non-fatal: the schedule will fall back to defaults.
+        }
+      } else if (!newLogoUrl && (existing?.logoColorPrimary || existing?.logoMonochrome)) {
+        // Logo removed → wipe extracted colours so the wash falls back.
+        colorPatch = {
+          logoColorPrimary: null,
+          logoColorSecondary: null,
+          logoMonochrome: false,
+        };
+      }
+
       const [updated] = await ctx.db
         .update(organisations)
         .set({
@@ -470,7 +517,8 @@ export const secretaryRouter = createTRPCRouter({
           contactEmail: input.contactEmail ?? null,
           contactPhone: input.contactPhone ?? null,
           website: input.website ?? null,
-          logoUrl: input.logoUrl ?? null,
+          logoUrl: newLogoUrl,
+          ...(colorPatch ?? {}),
         })
         .where(eq(organisations.id, input.organisationId))
         .returning();

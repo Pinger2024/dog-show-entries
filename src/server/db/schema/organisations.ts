@@ -56,6 +56,14 @@ export const organisations = pgTable('organisations', {
   }),
   showRuleset: showRulesetEnum('show_ruleset').notNull().default('rkc'),
   logoUrl: text('logo_url'),
+  /** Hex codes extracted from the logo via node-vibrant — used to tint
+   *  the SV schedule's tonal wash so the prospectus looks brand-aligned
+   *  per club. Null until extraction has run; logoMonochrome=true means
+   *  the logo had no saturated colours and the renderer should fall back
+   *  to the default Sieger dusty pink + blue wash. */
+  logoColorPrimary: text('logo_color_primary'),
+  logoColorSecondary: text('logo_color_secondary'),
+  logoMonochrome: boolean('logo_monochrome').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),
