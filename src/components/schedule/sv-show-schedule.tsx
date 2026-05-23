@@ -22,10 +22,6 @@ import {
   Svg,
   Path,
   Image,
-  Defs,
-  RadialGradient,
-  Stop,
-  Rect,
 } from '@react-pdf/renderer';
 import path from 'path';
 import type {
@@ -117,38 +113,21 @@ function pickBreedJudge(judges: readonly ScheduleJudge[]): ScheduleJudge | null 
  * illustration. Cover page renders at full intensity; inside pages at a
  * faint ~0.3 wash so they stay quiet behind the text.
  */
-function TonalWash({ intensity = 0.3 }: { intensity?: number }) {
-  // Opacity multipliers — clamp so we never go fully opaque even at 1.
-  const op = (base: number) => Math.min(0.85, base * intensity);
-
+function TonalWash({ variant = 'inside' }: { variant?: 'cover' | 'inside' }) {
+  // React-PDF's SVG primitives can't produce a smooth radial gradient
+  // (RadialGradient doesn't honour multi-stop opacity falloff and stacked
+  // ellipses band visibly). We pre-bake the wash to PNG via
+  // `scripts/generate-sv-tonal-wash.ts` and use it as a fixed page-fill
+  // image — soft pink top-left, soft blue bottom-right, on transparent.
+  // Two variants: cover (full intensity) + inside (~25% intensity).
+  const file = variant === 'cover' ? 'wash-cover.png' : 'wash-inside.png';
+  const src = path.join(process.cwd(), 'public', 'sv-schedule', file);
   return (
     <View
       style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       fixed
     >
-      <Svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%' }} preserveAspectRatio="none">
-        <Defs>
-          {/* Top-left warm rose wash. cx/cy outside the page so only the
-             tail bleeds in — no visible hot spot. */}
-          <RadialGradient id="tonal-rose" cx="0" cy="-10" rx="120" ry="60" fx="0" fy="-10">
-            <Stop offset="0%" stopColor="#D4889C" stopOpacity={op(0.55)} />
-            <Stop offset="60%" stopColor="#D4889C" stopOpacity={0} />
-          </RadialGradient>
-          {/* Bottom-right cool dusty-blue wash */}
-          <RadialGradient id="tonal-blue" cx="100" cy="110" rx="110" ry="55" fx="100" fy="110">
-            <Stop offset="0%" stopColor="#7A9BC5" stopOpacity={op(0.50)} />
-            <Stop offset="60%" stopColor="#7A9BC5" stopOpacity={0} />
-          </RadialGradient>
-          {/* Mid-page faint lavender lift — adds depth without colour shift */}
-          <RadialGradient id="tonal-lavender" cx="80" cy="30" rx="80" ry="40" fx="80" fy="30">
-            <Stop offset="0%" stopColor="#B09ACC" stopOpacity={op(0.30)} />
-            <Stop offset="65%" stopColor="#B09ACC" stopOpacity={0} />
-          </RadialGradient>
-        </Defs>
-        <Rect x="0" y="0" width="100" height="100" fill="url(#tonal-rose)" />
-        <Rect x="0" y="0" width="100" height="100" fill="url(#tonal-blue)" />
-        <Rect x="0" y="0" width="100" height="100" fill="url(#tonal-lavender)" />
-      </Svg>
+      <Image src={src} style={{ width: '100%', height: '100%', objectFit: 'fill' }} />
     </View>
   );
 }
@@ -317,7 +296,7 @@ function SvCover({
 
   return (
     <Page size="A5" style={[ss.page, { padding: 0 }]}>
-      <TonalWash intensity={1} />
+      <TonalWash variant="cover" />
       <MastheadBand />
 
       {/* Editorial cover content below the masthead. The masthead is 52mm
