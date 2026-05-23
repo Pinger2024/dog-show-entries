@@ -41,6 +41,14 @@ export interface CatalogueEntry {
   sire: string | null | undefined;
   dam: string | null | undefined;
   breeder: string | null | undefined;
+  /** Breeder town + postcode for the SV catalogue line "Breeder Name,
+   *  Town, Postcode" (Amanda 2026-05-23). Sourced from dogs.breederCity /
+   *  dogs.breederPostcode where populated. */
+  breederCity?: string | null;
+  breederPostcode?: string | null;
+  /** Titles earned by the dog — printed on the SV catalogue line 2
+   *  alongside hips/elbows. Comma-separated abbreviations. */
+  titles?: string[];
   owners: { title: string | null; name: string; address: string | null; userId: string | null }[];
   exhibitorId: string | undefined;
   // handler comes from an optional related row — the name field there is

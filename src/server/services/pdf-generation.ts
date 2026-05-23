@@ -225,6 +225,9 @@ export async function generateCataloguePdf(
     sire: entry.dog?.sireName,
     dam: entry.dog?.damName,
     breeder: entry.dog?.breederName,
+    breederCity: (entry.dog as { breederCity?: string | null })?.breederCity ?? null,
+    breederPostcode: (entry.dog as { breederPostcode?: string | null })?.breederPostcode ?? null,
+    titles: entry.dog?.titles?.map((t) => t.title).filter(Boolean) ?? [],
     owners: entry.dog?.owners?.map((o) => ({
       title: o.ownerTitle,
       name: o.ownerName,
