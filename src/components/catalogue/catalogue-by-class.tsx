@@ -604,7 +604,7 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
             )}
             {sorted.length > 0 && isSvShow && (
               <View wrap={false} style={{ marginTop: 6, paddingTop: 5, borderTopWidth: 0.5, borderTopColor: SV.rule }}>
-                <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 16, marginBottom: 3 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 16, marginBottom: 14 }}>
                   <Text
                     style={{
                       fontFamily: SV_FONTS.sans,
