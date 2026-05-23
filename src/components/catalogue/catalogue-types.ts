@@ -21,6 +21,22 @@ export interface CatalogueEntry {
   sex: string | undefined;
   dateOfBirth: string | null | undefined;
   kcRegNumber: string | null | undefined;
+  /** Microchip / ID number — printed on SV regional catalogues alongside
+   *  the KC reg number (Amanda 2026-05-22). */
+  microchipNumber?: string | null;
+  /** SV/WUSV health profile — hips, elbows, DNA, koerung. Surfaced on
+   *  the SV catalogue's per-entry line ("Hips Normal · Elbows Normal").
+   *  Only present when the dog has been entered in a WUSV-ruleset show. */
+  svProfile?: {
+    hipGrade: string | null;
+    hipScore: string | null;
+    hipScoreOther: string | null;
+    elbowGrade: string | null;
+    elbowScore: string | null;
+    elbowScoreOther: string | null;
+    dna: string | null;
+    koerung: string | null;
+  } | null;
   colour: string | null | undefined;
   sire: string | null | undefined;
   dam: string | null | undefined;
@@ -78,11 +94,20 @@ export interface ClassSponsorshipInfo {
 export interface CatalogueShowInfo {
   name: string;
   showType: string | undefined;
+  /** RKC or WUSV/SV — when 'wusv' the catalogue renders the
+   *  Sieger-Editorial cover (3-logo masthead + tonal wash + club crest)
+   *  and switches the per-entry layout to include the SV health line
+   *  (Amanda 2026-05-23). */
+  showRuleset?: 'rkc' | 'wusv' | null;
   date: string;
   endDate?: string;
   venue: string | undefined;
   venueAddress: string | undefined;
   organisation: string | undefined;
+  /** Pre-baked tonal-wash background buffers for the SV cover + inside
+   *  pages, tinted with the club's brand colours. Same pattern as the
+   *  schedule's SvShowSchedule.washes prop. */
+  svWashes?: { cover: Buffer; inside: Buffer };
   kcLicenceNo: string | null | undefined;
   startTime?: string | null;
   logoUrl?: string;

@@ -4,6 +4,40 @@ import { CatalogueHeader } from './catalogue-header';
 import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
 import { formatDobKC, formatPedigreeKC, formatOwnerKC, uppercaseName, buildSponsorLines } from './catalogue-utils';
 import { CoverPage, FrontMatterPage, TrophiesPage, ExhibitorIndexPage } from './catalogue-front-matter';
+import { TonalWash } from '@/components/sv-pdf/cover-atoms';
+
+/**
+ * Friendly SV health-line for the catalogue entry — "Hips Normal · Elbows
+ * Normal" or "Hips BVA 3-5=8 · Elbows BVA 0-0=0" depending on the grading
+ * scheme stored on the dog. Returns null when nothing useful to print
+ * (no profile / both fields empty / explicitly not_required).
+ */
+function formatSvHealth(profile: CatalogueEntry['svProfile']): string | null {
+  if (!profile) return null;
+
+  const formatSide = (
+    grade: string | null,
+    score: string | null,
+    other: string | null,
+  ): string | null => {
+    if (!grade || grade === 'not_required') return null;
+    if (grade === 'bva') return score ? `BVA ${score}` : 'BVA';
+    if (grade === 'ankc') return score ? `ANKC ${score}` : 'ANKC';
+    if (grade === 'other') return other ?? null;
+    if (grade === 'normal') return 'Normal';
+    if (grade === 'fast_normal') return 'Fast Normal';
+    if (grade === 'noch_zugelassen') return 'Noch Zugelassen';
+    return grade;
+  };
+
+  const hip = formatSide(profile.hipGrade, profile.hipScore, profile.hipScoreOther);
+  const elbow = formatSide(profile.elbowGrade, profile.elbowScore, profile.elbowScoreOther);
+  if (!hip && !elbow) return null;
+  const parts: string[] = [];
+  if (hip) parts.push(`Hips ${hip}`);
+  if (elbow) parts.push(`Elbows ${elbow}`);
+  return parts.join(' · ');
+}
 
 interface Props {
   show: CatalogueShowInfo;
@@ -56,6 +90,7 @@ function groupByClass(entries: CatalogueEntry[]) {
 }
 
 export function CatalogueByClass({ show, entries, compact }: Props) {
+  const isSvShow = show.showRuleset === 'wusv';
   // Build a lookup: classLabel -> sponsorship info (array, since one class
   // can have multiple sponsors — e.g. one for the trophy and another for
   // the rosettes). Keyed on label rather than classNumber so that JH class
@@ -153,7 +188,16 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
       )}
 
       {classChunks.map((chunkKeys, chunkIdx) => (
-      <Page key={`chunk-${chunkIdx}`} size="A5" style={styles.page} wrap>
+      <Page
+        key={`chunk-${chunkIdx}`}
+        size="A5"
+        // SV catalogue inside pages get the bone-paper background so the
+        // tonal wash sitting behind them is visible. RKC pages stay on
+        // white per the existing styles.page.
+        style={isSvShow ? { ...styles.page, backgroundColor: '#faf6ee' } : styles.page}
+        wrap
+      >
+      {isSvShow && <TonalWash variant="inside" buffer={show.svWashes?.inside} />}
       {chunkKeys.map((classKey, idx) => {
         const { className, sex, classLabel, entries: classEntries } = grouped[classKey];
         const sorted = [...classEntries].sort(
@@ -200,12 +244,16 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
           const pedigree = formatPedigreeKC(entry.sire, entry.dam);
           const metaParts = [
             entry.kcRegNumber,
+            // SV regional catalogues print the microchip / ID alongside
+            // the KC reg number (Amanda 2026-05-22).
+            isSvShow && entry.microchipNumber ? `ID ${entry.microchipNumber}` : null,
             entry.dateOfBirth ? `DOB ${formatDobKC(entry.dateOfBirth)}` : null,
             entry.colour,
             entry.sex === 'dog' ? 'Dog' : entry.sex === 'bitch' ? 'Bitch' : null,
             pedigree,
             entry.breeder ? `br ${entry.breeder}` : null,
           ].filter(Boolean);
+          const svHealth = isSvShow ? formatSvHealth(entry.svProfile ?? null) : null;
           return (
             <View key={rowKey} style={styles.entryRowWrap} wrap={false}>
               <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
@@ -215,6 +263,12 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
               {metaParts.length > 0 && (
                 <Text style={styles.entryDetail}>{metaParts.join('  ·  ')}</Text>
               )}
+              {svHealth ? (
+                <Text style={styles.entryDetail}>
+                  <Text style={styles.entryDetailLabel}>Health: </Text>
+                  {svHealth}
+                </Text>
+              ) : null}
               {entry.owners.length > 0 && (
                 <Text style={styles.entryDetail}>
                   <Text style={styles.entryDetailLabel}>
@@ -264,16 +318,31 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
 
             {sorted.slice(1).map((entry, sliceIdx) => renderEntry(entry, sliceIdx + 1))}
 
-            {/* Placements write-in row — traditional 1st/2nd/3rd/Res/VHC
-                line for the judge to fill in on the day. Only renders for
-                classes that actually have entries. Amanda's spec 2026-05-14. */}
-            {sorted.length > 0 && (
+            {/* Placements write-in row.
+                • RKC: 1st / 2nd / 3rd / Res / VHC (Amanda 2026-05-14).
+                • SV/WUSV: 1st / 2nd / 3rd + a separate Grading line
+                  (Amanda 2026-05-22 — SV judges award placements AND
+                  grade each exhibit against the breed standard). */}
+            {sorted.length > 0 && !isSvShow && (
               <View style={styles.placementsRow} wrap={false}>
                 <Text style={styles.placementsCell}>1st .....</Text>
                 <Text style={styles.placementsCell}>2nd .....</Text>
                 <Text style={styles.placementsCell}>3rd .....</Text>
                 <Text style={styles.placementsCell}>Res .....</Text>
                 <Text style={styles.placementsCell}>VHC .....</Text>
+              </View>
+            )}
+            {sorted.length > 0 && isSvShow && (
+              <View wrap={false} style={{ marginTop: 4 }}>
+                <View style={styles.placementsRow}>
+                  <Text style={styles.placementsCell}>Results</Text>
+                  <Text style={styles.placementsCell}>1st .....</Text>
+                  <Text style={styles.placementsCell}>2nd .....</Text>
+                  <Text style={styles.placementsCell}>3rd .....</Text>
+                </View>
+                <View style={styles.placementsRow}>
+                  <Text style={[styles.placementsCell, { width: '100%' }]}>Grading ........................................</Text>
+                </View>
               </View>
             )}
 

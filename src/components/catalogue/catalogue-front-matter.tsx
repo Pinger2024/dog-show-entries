@@ -3,6 +3,8 @@ import { Page, View, Text, Image } from '@react-pdf/renderer';
 import { styles, C } from './catalogue-styles';
 import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
 import { ownerHeading } from './catalogue-utils';
+import { MastheadBand, TonalWash, ClubCrestSlot } from '@/components/sv-pdf/cover-atoms';
+import { ss, SV, SV_FONTS } from '@/components/schedule/shared/sv-styles';
 
 const SHOW_TYPE_LABELS: Record<string, string> = {
   championship: 'Championship Show',
@@ -641,8 +643,141 @@ export function BestAwardsPage({ show }: FrontMatterProps) {
 
 // ── Cover Page ──────────────────────────────────────────────────
 
+/**
+ * SV/WUSV cover treatment — matches the SV schedule's Sieger Editorial
+ * design: full-page tonal wash + WUSV/GSDL/BRG masthead + hero lockup
+ * with the club crest beside it + 2×2 detail grid + bottom strip with
+ * entries-close + event secretary (Amanda 2026-05-23).
+ *
+ * Branched off from the standard `CoverPage` rather than threaded
+ * through it because the layouts are structurally different.
+ */
+function SvCoverPage({ show, entryCount }: { show: CatalogueShowInfo; entryCount: number }) {
+  const affiliation = 'Under the banner of GSDL — British Regional Group';
+  const dateDisplay = show.endDate
+    ? `${formatCoverDate(show.date)} — ${formatCoverDate(show.endDate)}`
+    : formatCoverDate(show.date);
+  const judges = show.judgesByBreedName ?? {};
+  const uniqueJudges = [...new Set(Object.values(judges))];
+  const coverJudges =
+    show.judgeDisplayList && show.judgeDisplayList.length > 0
+      ? show.judgeDisplayList
+      : uniqueJudges;
+  const breedJudge = coverJudges[0] ?? 'Judge TBC';
+
+  return (
+    <Page size="A5" style={{ backgroundColor: SV.paper, padding: 0, color: SV.ink, fontFamily: SV_FONTS.sans }}>
+      <TonalWash variant="cover" buffer={show.svWashes?.cover} />
+      <MastheadBand />
+
+      <View
+        style={{
+          position: 'absolute',
+          top: '55mm',
+          left: '14mm',
+          right: '14mm',
+          bottom: '10mm',
+        }}
+      >
+        {/* Tiny meta — show name + licence */}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <Text style={[ss.eyebrow, { maxWidth: '60%' }]}>{show.name}</Text>
+          {show.kcLicenceNo ? (
+            <Text style={[ss.eyebrow, { color: SV.ink3 }]}>№ {show.kcLicenceNo}</Text>
+          ) : null}
+        </View>
+
+        {/* Hero — "Catalogue" word, sized to match the schedule's
+            "Regional / Schedule" lockup; club crest to the right. */}
+        <View style={{ marginTop: '8mm', flexDirection: 'row', alignItems: 'flex-start' }}>
+          <View style={{ flex: 1, paddingRight: '10mm' }}>
+            <Text style={{ fontFamily: SV_FONTS.serif, fontStyle: 'italic', fontSize: 13, color: SV.ink3, marginBottom: 2 }}>
+              {entryCount} {entryCount === 1 ? 'entry' : 'entries'}
+            </Text>
+            <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 48, lineHeight: 0.92, letterSpacing: -0.5, color: SV.ink }}>
+              Official
+            </Text>
+            <Text style={{ fontFamily: SV_FONTS.serif, fontStyle: 'italic', fontSize: 28, lineHeight: 1, color: SV.accent, marginTop: 2 }}>
+              Catalogue
+            </Text>
+          </View>
+          <ClubCrestSlot logoUrl={show.logoUrl ?? null} />
+        </View>
+
+        <View style={{ height: 1, backgroundColor: SV.ink, marginTop: '10mm' }} />
+
+        {/* 2×2 info grid — Host Club / Date / Venue / Breed Judge */}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: '5mm' }}>
+          <View style={{ width: '50%', paddingRight: 8, marginBottom: '5mm' }}>
+            <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Host Club</Text>
+            <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 13, lineHeight: 1.15, color: SV.ink }}>
+              {show.organisation ?? ''}
+            </Text>
+            <Text style={[ss.bodySmall, { marginTop: 2 }]}>{affiliation}</Text>
+          </View>
+          <View style={{ width: '50%', paddingLeft: 8, marginBottom: '5mm' }}>
+            <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Date</Text>
+            <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 13, lineHeight: 1.15, color: SV.ink }}>
+              {dateDisplay}
+            </Text>
+            {(show.showOpenTime || show.startTime) ? (
+              <Text style={[ss.bodySmall, { marginTop: 2 }]}>
+                {show.showOpenTime ? `Grounds open ${show.showOpenTime}` : ''}
+                {show.showOpenTime && show.startTime ? ' · ' : ''}
+                {show.startTime ? `Judging from ${show.startTime}` : ''}
+              </Text>
+            ) : null}
+          </View>
+          <View style={{ width: '50%', paddingRight: 8 }}>
+            <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Venue</Text>
+            <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 13, lineHeight: 1.15, color: SV.ink }}>
+              {show.venue ?? ''}
+            </Text>
+            {show.venueAddress ? (
+              <Text style={[ss.bodySmall, { marginTop: 2 }]}>{show.venueAddress}</Text>
+            ) : null}
+          </View>
+          <View style={{ width: '50%', paddingLeft: 8 }}>
+            <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Breed Judge</Text>
+            <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 13, lineHeight: 1.15, color: SV.ink }}>
+              {breedJudge}
+            </Text>
+          </View>
+        </View>
+
+        <View style={{ flex: 1 }} />
+
+        {/* Bottom strip — Event Secretary contact */}
+        <View style={{ height: 1, backgroundColor: SV.ink }} />
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: '4mm' }}>
+          <View style={{ maxWidth: '50%' }}>
+            <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Show Date</Text>
+            <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 13, color: SV.ink }}>{formatCoverDate(show.date)}</Text>
+          </View>
+          <View style={{ alignItems: 'flex-end', maxWidth: '50%' }}>
+            <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Event Secretary</Text>
+            <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 13, lineHeight: 1.15, color: SV.ink }}>
+              {show.secretaryName ?? '—'}
+            </Text>
+            <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 7, color: SV.ink3, marginTop: 2 }}>
+              {[show.secretaryEmail, show.secretaryPhone].filter(Boolean).join(' · ')}
+            </Text>
+          </View>
+        </View>
+      </View>
+    </Page>
+  );
+}
+
 /** Cover page for the RKC standard catalogue — matching schedule design */
 export function CoverPage({ show }: FrontMatterProps) {
+  // SV/WUSV regionals get their own cover treatment matching the schedule.
+  if (show.showRuleset === 'wusv') {
+    // entryCount is not in CatalogueShowInfo — derive from totalClasses
+    // as a fallback. Real entry count plumbed in if needed later.
+    return <SvCoverPage show={show} entryCount={show.totalClasses ?? 0} />;
+  }
+
   const showTypeLabel = show.showType ? SHOW_TYPE_LABELS[show.showType] : undefined;
 
   // Show judges on cover for single-breed OR when there's only one unique judge

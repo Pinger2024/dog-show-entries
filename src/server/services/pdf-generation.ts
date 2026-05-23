@@ -76,6 +76,7 @@ export async function generateCataloguePdf(
             breed: { with: { group: true } },
             owners: { orderBy: [asc(schema.dogOwners.sortOrder)] },
             titles: true,
+            svProfile: true,
           },
         },
         exhibitor: true,
@@ -207,6 +208,19 @@ export async function generateCataloguePdf(
     sex: entry.dog?.sex,
     dateOfBirth: entry.dog?.dateOfBirth,
     kcRegNumber: entry.dog?.kcRegNumber,
+    microchipNumber: entry.dog?.microchipNumber ?? null,
+    svProfile: entry.dog?.svProfile
+      ? {
+          hipGrade: entry.dog.svProfile.hipGrade ?? null,
+          hipScore: entry.dog.svProfile.hipScore ?? null,
+          hipScoreOther: entry.dog.svProfile.hipScoreOther ?? null,
+          elbowGrade: entry.dog.svProfile.elbowGrade ?? null,
+          elbowScore: entry.dog.svProfile.elbowScore ?? null,
+          elbowScoreOther: entry.dog.svProfile.elbowScoreOther ?? null,
+          dna: entry.dog.svProfile.dna ?? null,
+          koerung: entry.dog.svProfile.koerung ?? null,
+        }
+      : null,
     colour: entry.dog?.colour,
     sire: entry.dog?.sireName,
     dam: entry.dog?.damName,
@@ -241,6 +255,7 @@ export async function generateCataloguePdf(
   const showInfo: CatalogueShowInfo = {
     name: show.name,
     showType: show.showType,
+    showRuleset: (show as { showRuleset?: 'rkc' | 'wusv' | null }).showRuleset ?? null,
     date: show.startDate,
     endDate: show.endDate !== show.startDate ? show.endDate : undefined,
     venue: show.venue?.name,
@@ -301,12 +316,35 @@ export async function generateCataloguePdf(
   };
 
   const isAllBreed = show.showScope !== 'single_breed';
+  const isWusv = showInfo.showRuleset === 'wusv';
+
+  // SV/WUSV regional shows always render as the by-class single-breed
+  // catalogue regardless of the requested format — Amanda 2026-05-23:
+  // "the only option will be 'by class' catalogue".
+  const effectiveFormat = isWusv ? 'by-class' : format;
   const formatComponents = {
     standard: CatalogueRingside,
     'by-class': isAllBreed ? CatalogueByBreed : CatalogueByClass,
   } as const;
 
-  const Component = formatComponents[format];
+  // For SV shows we pre-bake the cover + inside tonal washes from the
+  // org's brand colours so the catalogue render stays synchronous.
+  if (isWusv) {
+    const orgRow = show.organisation as
+      | { logoColorPrimary?: string | null; logoColorSecondary?: string | null; logoMonochrome?: boolean | null }
+      | null
+      | undefined;
+    const { getTonalWash } = await import('./sv-tonal-wash');
+    const primary = orgRow?.logoMonochrome ? null : orgRow?.logoColorPrimary ?? null;
+    const secondary = orgRow?.logoMonochrome ? null : orgRow?.logoColorSecondary ?? null;
+    const [cover, inside] = await Promise.all([
+      getTonalWash(primary, secondary, 'cover'),
+      getTonalWash(primary, secondary, 'inside'),
+    ]);
+    showInfo.svWashes = { cover, inside };
+  }
+
+  const Component = formatComponents[effectiveFormat];
   const pdfDocument = React.createElement(Component, { show: showInfo, entries: catalogueEntries });
   return Buffer.from(await renderToBuffer(pdfDocument));
 }
