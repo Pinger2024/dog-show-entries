@@ -22,7 +22,12 @@ import {
   Svg,
   Path,
   Image,
+  Defs,
+  RadialGradient,
+  Stop,
+  Rect,
 } from '@react-pdf/renderer';
+import path from 'path';
 import type {
   ScheduleShowInfo,
   ScheduleClass,
@@ -46,13 +51,22 @@ import { SV_RULES } from '@/lib/sv-rules';
 
 // ── Formatting helpers ─────────────────────────────────────────────────────
 
-function fmtDate(iso: string | null | undefined): string {
-  if (!iso) return '';
-  // Slice to the date portion for "YYYY-MM-DDTHH:..." inputs, then anchor at
+function toDateOnly(input: string | Date | null | undefined): Date | null {
+  if (!input) return null;
+  // Drizzle hands us Date objects for some date columns and ISO strings for
+  // others (depends on the column type + driver). Accept both, anchored at
   // noon UTC so we don't get a TZ-driven previous-day in en-GB.
-  const datePart = iso.slice(0, 10);
+  if (input instanceof Date) {
+    return Number.isNaN(input.getTime()) ? null : input;
+  }
+  const datePart = String(input).slice(0, 10);
   const d = new Date(`${datePart}T12:00:00Z`);
-  if (Number.isNaN(d.getTime())) return iso;
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function fmtDate(input: string | Date | null | undefined): string {
+  const d = toDateOnly(input);
+  if (!d) return '';
   return d.toLocaleDateString('en-GB', {
     weekday: 'long',
     day: 'numeric',
@@ -64,11 +78,9 @@ function fmtDate(iso: string | null | undefined): string {
 /** Shorter form for the right-column "Key dates" list — "Sun 31 May 2026". The
  *  full long-form fmtDate runs into the label when stacked at 50% page width
  *  (Amanda 2026-05-22). */
-function fmtDateShort(iso: string | null | undefined): string {
-  if (!iso) return '';
-  const datePart = iso.slice(0, 10);
-  const d = new Date(`${datePart}T12:00:00Z`);
-  if (Number.isNaN(d.getTime())) return iso;
+function fmtDateShort(input: string | Date | null | undefined): string {
+  const d = toDateOnly(input);
+  if (!d) return '';
   return d.toLocaleDateString('en-GB', {
     weekday: 'short',
     day: 'numeric',
@@ -98,66 +110,137 @@ function pickBreedJudge(judges: readonly ScheduleJudge[]): ScheduleJudge | null 
 // ── Atoms ──────────────────────────────────────────────────────────────────
 
 /**
- * Soft watercolour-style corner accent — pink/magenta/blue/purple gradient
- * brush stroke. Renders absolutely positioned, so it sits behind page
- * content. Amanda (2026-05-22): "splash of colour on each page similar to
- * the BRG banner — light touch, just on the corners". Alternates corners
- * by page index so the document feels alive without being busy.
+ * Soft tonal page wash — replaces the previous ribbon swoosh per Amanda's
+ * design template (2026-05-23). Two radial gradients painted across the
+ * full page: warm dusty-pink in the top-left, cool dusty-blue in the
+ * bottom-right. Echoes the GSDL/BRG palette as colour memory, not
+ * illustration. Cover page renders at full intensity; inside pages at a
+ * faint ~0.3 wash so they stay quiet behind the text.
  */
-function CornerSplash({ corner }: { corner: 'tl' | 'tr' | 'bl' | 'br' }) {
-  // A swoosh modelled on the BRG marketing banner — a wide, flat single
-  // arc with several parallel brush strokes in pinks, lavender and blue,
-  // each tapered with `strokeLinecap: round` so the wash fades at the
-  // ends rather than ending abruptly. Anchored to a page corner and
-  // bleeding off the edge so it reads as a gesture, not a centrepiece.
-  // Amanda 2026-05-22: "do a swoosh like the banner photo, just in the
-  // corner".
-  const w = '95mm';
-  const h = '30mm';
-  const pos =
-    corner === 'tl'
-      ? { top: 0, left: 0 }
-      : corner === 'tr'
-        ? { top: 0, right: 0 }
-        : corner === 'bl'
-          ? { bottom: 0, left: 0 }
-          : { bottom: 0, right: 0 };
+function TonalWash({ intensity = 0.3 }: { intensity?: number }) {
+  // Opacity multipliers — clamp so we never go fully opaque even at 1.
+  const op = (base: number) => Math.min(0.85, base * intensity);
 
-  // Each path is a single Q-curve (no S-curve, no T-continuation) — a
-  // simple flat arc. The 5 strokes sit at slightly different heights /
-  // widths and overlap, blending into the multi-tone wash seen in the
-  // BRG banner. Opacities stay low so text overlay reads cleanly.
-  const strokes = [
-    { d: 'M -5 70 Q 50 5 105 50',  c: '#F4A5C0', w: 18, o: 0.32 }, // pink — widest, lowest
-    { d: 'M -5 62 Q 50 0 105 45',  c: '#B89AD0', w: 14, o: 0.32 }, // lavender — middle band
-    { d: 'M -5 78 Q 50 18 105 58', c: '#7FA8D8', w: 12, o: 0.28 }, // soft blue — under-stroke
-    { d: 'M -5 58 Q 50 -4 105 42', c: '#E8638F', w: 5,  o: 0.5 },  // magenta — thin accent
-    { d: 'M -5 56 Q 50 -5 105 41', c: '#D4537A', w: 2,  o: 0.6 },  // red — thinnest highlight
-  ];
+  return (
+    <View
+      style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+      fixed
+    >
+      <Svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%' }} preserveAspectRatio="none">
+        <Defs>
+          {/* Top-left warm rose wash. cx/cy outside the page so only the
+             tail bleeds in — no visible hot spot. */}
+          <RadialGradient id="tonal-rose" cx="0" cy="-10" rx="120" ry="60" fx="0" fy="-10">
+            <Stop offset="0%" stopColor="#D4889C" stopOpacity={op(0.55)} />
+            <Stop offset="60%" stopColor="#D4889C" stopOpacity={0} />
+          </RadialGradient>
+          {/* Bottom-right cool dusty-blue wash */}
+          <RadialGradient id="tonal-blue" cx="100" cy="110" rx="110" ry="55" fx="100" fy="110">
+            <Stop offset="0%" stopColor="#7A9BC5" stopOpacity={op(0.50)} />
+            <Stop offset="60%" stopColor="#7A9BC5" stopOpacity={0} />
+          </RadialGradient>
+          {/* Mid-page faint lavender lift — adds depth without colour shift */}
+          <RadialGradient id="tonal-lavender" cx="80" cy="30" rx="80" ry="40" fx="80" fy="30">
+            <Stop offset="0%" stopColor="#B09ACC" stopOpacity={op(0.30)} />
+            <Stop offset="65%" stopColor="#B09ACC" stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Rect x="0" y="0" width="100" height="100" fill="url(#tonal-rose)" />
+        <Rect x="0" y="0" width="100" height="100" fill="url(#tonal-blue)" />
+        <Rect x="0" y="0" width="100" height="100" fill="url(#tonal-lavender)" />
+      </Svg>
+    </View>
+  );
+}
 
+/**
+ * Masthead band — three institutional logos sitting on the bone paper at
+ * the top of the cover. WUSV on the left, GSDL with "Held under the rules
+ * of" caption in the middle, BRG on the right. Hairline rule along the
+ * bottom marks the band's territory.
+ */
+function MastheadBand() {
+  const assetsDir = path.join(process.cwd(), 'public', 'sv-schedule');
   return (
     <View
       style={{
         position: 'absolute',
-        width: w,
-        height: h,
-        ...pos,
+        top: 0,
+        left: 0,
+        right: 0,
+        height: '52mm',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: '16mm',
       }}
-      fixed
     >
-      <Svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%' }} preserveAspectRatio="none">
-        {strokes.map((s, i) => (
-          <Path
-            key={i}
-            d={s.d}
-            stroke={s.c}
-            strokeWidth={s.w}
-            strokeLinecap="round"
-            strokeOpacity={s.o}
-            fill="none"
-          />
-        ))}
+      <Image
+        src={path.join(assetsDir, 'wusv-logo-tx.png')}
+        style={{ height: '22mm', width: 'auto', objectFit: 'contain' }}
+      />
+      <View style={{ alignItems: 'center' }}>
+        <Text style={[ss.eyebrow, { color: SV.ink3, fontSize: 6.5, marginBottom: 4 }]}>
+          Held under the rules of
+        </Text>
+        <Image
+          src={path.join(assetsDir, 'gsdl-logo-tx.png')}
+          style={{ height: '16mm', width: 'auto', objectFit: 'contain' }}
+        />
+      </View>
+      <Image
+        src={path.join(assetsDir, 'brg-logo-tx.png')}
+        style={{ height: '24mm', width: 'auto', objectFit: 'contain' }}
+      />
+    </View>
+  );
+}
+
+/**
+ * Placeholder for the club's uploaded crest. Diagonal hatch + shield
+ * outline + italic "Club Crest" label. In production this is replaced
+ * by <Image src={organisation.logoUrl} />.
+ */
+function ClubCrestSlot({ logoUrl }: { logoUrl?: string | null }) {
+  if (logoUrl) {
+    return (
+      <View
+        style={{
+          width: '36mm',
+          height: '36mm',
+          backgroundColor: SV.paper,
+          borderWidth: 0.5,
+          borderColor: SV.ink,
+          padding: 4,
+        }}
+      >
+        <Image src={logoUrl} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+      </View>
+    );
+  }
+  return (
+    <View
+      style={{
+        width: '36mm',
+        height: '36mm',
+        backgroundColor: SV.paper,
+        borderWidth: 0.5,
+        borderColor: SV.ink,
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 6,
+      }}
+    >
+      <Svg width="24" height="28" viewBox="0 0 60 70">
+        <Path
+          d="M 30 4 L 56 12 L 56 34 Q 56 54 30 66 Q 4 54 4 34 L 4 12 Z"
+          fill="none"
+          stroke={SV.ink2}
+          strokeWidth={1.2}
+        />
       </Svg>
+      <Text style={[ss.displayIt, { fontSize: 11, marginTop: 4 }]}>Club Crest</Text>
+      <Text style={[ss.eyebrow, { fontSize: 5.5, marginTop: 2 }]}>Uploaded · per show</Text>
     </View>
   );
 }
@@ -233,107 +316,126 @@ function SvCover({
   const clubLogo = show.organisation?.logoUrl ?? null;
 
   return (
-    <Page size="A5" style={ss.page}>
-      <CornerSplash corner="tr" />
-      {/* Top strip — jurisdiction line + licence number */}
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <View>
-          <Text style={ss.eyebrow}>Held under WUSV Rules</Text>
-          <Text style={[ss.eyebrow, { marginTop: 1 }]}>GSDL · British Regional Group</Text>
+    <Page size="A5" style={[ss.page, { padding: 0 }]}>
+      <TonalWash intensity={1} />
+      <MastheadBand />
+
+      {/* Editorial cover content below the masthead. The masthead is 52mm
+          tall; we anchor everything that follows from y=55mm so there's
+          a 3mm breathing gap below the hairline. */}
+      <View
+        style={{
+          position: 'absolute',
+          top: '55mm',
+          left: '14mm',
+          right: '14mm',
+          bottom: '10mm',
+        }}
+      >
+        {/* Tiny meta — show name + licence */}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <Text style={[ss.eyebrow, { maxWidth: '60%' }]}>
+            {show.name}
+          </Text>
+          {show.kcLicenceNo ? (
+            <Text style={[ss.eyebrow, { color: SV.ink3 }]}>№ {show.kcLicenceNo}</Text>
+          ) : null}
         </View>
-        {show.kcLicenceNo ? (
-          <Text style={ss.eyebrow}>№ {show.kcLicenceNo}</Text>
-        ) : null}
-      </View>
 
-      {/* Hero — club name dominant, "Regional Schedule" smaller with logo
-          beside it (Amanda 2026-05-22). */}
-      <View style={{ marginTop: 22 }}>
-        <Text style={[ss.displayIt, { fontSize: 14, color: SV.ink2, marginBottom: 4 }]}>
-          A {rkcClassCount}-Class
-        </Text>
-        <Text style={[ss.display, { fontSize: 30, lineHeight: 1.02, marginBottom: 2 }]}>
-          {show.organisation?.name ?? ''}
-        </Text>
-        <Text style={[ss.bodySmall, { marginTop: 2, marginBottom: 10 }]}>{affiliation}</Text>
-
-        {/* "Regional Schedule" + club logo, side-by-side */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <View style={{ flexShrink: 1, paddingRight: 8 }}>
-            <Text style={[ss.display, { fontSize: 26, lineHeight: 1, color: SV.ink }]}>
+        {/* Hero lockup — "A {n}-Class / Regional / Schedule" on the left,
+            club crest on the right. */}
+        <View
+          style={{
+            marginTop: '8mm',
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+          }}
+        >
+          <View style={{ flex: 1, paddingRight: '10mm' }}>
+            <Text style={[ss.displayIt, { fontSize: 13, color: SV.ink3, marginBottom: 2 }]}>
+              A {rkcClassCount}-Class
+            </Text>
+            <Text style={[ss.display, { fontSize: 48, lineHeight: 0.92, letterSpacing: -0.5 }]}>
               Regional
             </Text>
-            <Text style={[ss.displayIt, { fontSize: 22, lineHeight: 1, color: SV.accent, marginTop: 2 }]}>
+            <Text style={[ss.displayIt, { fontSize: 28, lineHeight: 1, color: SV.accent, marginTop: 2 }]}>
               Schedule
             </Text>
           </View>
-          {clubLogo ? (
-            <Image
-              src={clubLogo}
-              style={{ width: 110, height: 110, objectFit: 'contain' }}
-            />
-          ) : null}
+          <ClubCrestSlot logoUrl={clubLogo} />
         </View>
 
+        <View style={[ss.rule, { marginTop: '10mm' }]} />
+
+        {/* 2×2 info grid — Host Club / Date / Venue / Breed Judge */}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: '5mm' }}>
+          {/* Host Club */}
+          <View style={{ width: '50%', paddingRight: 8, marginBottom: '5mm' }}>
+            <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Host Club</Text>
+            <Text style={[ss.display, { fontSize: 13, lineHeight: 1.15 }]}>
+              {show.organisation?.name ?? ''}
+            </Text>
+            <Text style={[ss.bodySmall, { marginTop: 2 }]}>{affiliation}</Text>
+          </View>
+          {/* Date */}
+          <View style={{ width: '50%', paddingLeft: 8, marginBottom: '5mm' }}>
+            <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Date</Text>
+            <Text style={[ss.display, { fontSize: 13, lineHeight: 1.15 }]}>
+              {fmtDate(show.date)}
+            </Text>
+            <Text style={[ss.bodySmall, { marginTop: 2 }]}>
+              {show.showOpenTime ? `Grounds open ${show.showOpenTime}` : ''}
+              {show.showOpenTime && show.startTime ? ' · ' : ''}
+              {show.startTime ? `Judging from ${show.startTime}` : ''}
+            </Text>
+          </View>
+          {/* Venue */}
+          <View style={{ width: '50%', paddingRight: 8 }}>
+            <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Venue</Text>
+            <Text style={[ss.display, { fontSize: 13, lineHeight: 1.15 }]}>
+              {show.venue?.name ?? ''}
+            </Text>
+            <Text style={[ss.bodySmall, { marginTop: 2 }]}>
+              {[show.venue?.address, show.venue?.postcode].filter(Boolean).join(' · ')}
+            </Text>
+          </View>
+          {/* Breed Judge */}
+          <View style={{ width: '50%', paddingLeft: 8 }}>
+            <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Breed Judge</Text>
+            <Text style={[ss.display, { fontSize: 13, lineHeight: 1.15 }]}>
+              {judge ? judge.name : 'Judge TBC'}
+            </Text>
+            {judgeAffix ? (
+              <Text style={[ss.bodySmall, { marginTop: 2 }]}>{judgeAffix.trim().replace(/^\(|\)$/g, '')}</Text>
+            ) : null}
+          </View>
+        </View>
+
+        {/* Spacer pushes the bottom strip to the foot */}
+        <View style={{ flex: 1 }} />
+
+        {/* Bottom strip — Entries close · Event Secretary */}
         <View style={ss.rule} />
-      </View>
-
-      {/* Detail grid — Host Club cell is gone because the club name is now
-          the hero headline. Date / Venue / Breed Judge stack 2-up. */}
-      <View style={{ marginTop: 10, flexDirection: 'row', flexWrap: 'wrap' }}>
-        {/* Date */}
-        <View style={{ width: '50%', paddingRight: 8, marginBottom: 14 }}>
-          <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Date</Text>
-          <Text style={[ss.display, { fontSize: 14, lineHeight: 1.15 }]}>
-            {fmtDate(show.date)}
-          </Text>
-          <Text style={[ss.bodySmall, { marginTop: 2 }]}>
-            {show.showOpenTime ? `Grounds open ${show.showOpenTime}` : ''}
-            {show.showOpenTime && show.startTime ? ' · ' : ''}
-            {show.startTime ? `Judging from ${show.startTime}` : ''}
-          </Text>
-        </View>
-        {/* Venue */}
-        <View style={{ width: '50%', paddingLeft: 8, marginBottom: 14 }}>
-          <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Venue</Text>
-          <Text style={[ss.display, { fontSize: 13, lineHeight: 1.15 }]}>
-            {show.venue?.name ?? ''}
-          </Text>
-          <Text style={[ss.bodySmall, { marginTop: 2 }]}>
-            {[show.venue?.address, show.venue?.postcode].filter(Boolean).join(' · ')}
-          </Text>
-        </View>
-        {/* Breed Judge */}
-        <View style={{ width: '50%', paddingRight: 8, marginBottom: 14 }}>
-          <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Breed Judge</Text>
-          <Text style={[ss.display, { fontSize: 13, lineHeight: 1.15 }]}>
-            {judge ? judge.name : 'Judge TBC'}
-          </Text>
-          {judgeAffix ? (
-            <Text style={[ss.bodySmall, { marginTop: 2 }]}>{judgeAffix.trim().replace(/^\(|\)$/g, '')}</Text>
-          ) : null}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: '4mm' }}>
+          <View style={{ maxWidth: '50%' }}>
+            <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Entries close</Text>
+            <Text style={[ss.display, { fontSize: 13 }]}>{fmtDate(show.entryCloseDate)}</Text>
+          </View>
+          <View style={{ alignItems: 'flex-end', maxWidth: '50%' }}>
+            <Text style={[ss.eyebrow, { marginBottom: 3 }]}>Event Secretary</Text>
+            <Text style={[ss.display, { fontSize: 13, lineHeight: 1.15 }]}>
+              {show.secretaryName ?? '—'}
+            </Text>
+            <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 7, color: SV.ink3, marginTop: 2 }}>
+              {[show.secretaryEmail, show.secretaryPhone].filter(Boolean).join(' · ')}
+            </Text>
+          </View>
         </View>
       </View>
 
-      {/* Bottom strip — Entries close · Event Secretary */}
-      <View style={[ss.rule, { marginTop: 4, marginBottom: 8 }]} />
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-        <View style={{ maxWidth: '55%' }}>
-          <Text style={[ss.eyebrow, { marginBottom: 2 }]}>Entries close</Text>
-          <Text style={[ss.display, { fontSize: 11 }]}>{fmtDate(show.entryCloseDate)}</Text>
-        </View>
-        <View style={{ alignItems: 'flex-end', maxWidth: '45%' }}>
-          <Text style={[ss.eyebrow, { marginBottom: 2 }]}>Event Secretary</Text>
-          <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 9, color: SV.ink }}>
-            {show.secretaryName ?? '—'}
-          </Text>
-          <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 7.5, color: SV.ink3, marginTop: 1 }}>
-            {[show.secretaryEmail, show.secretaryPhone].filter(Boolean).join(' · ')}
-          </Text>
-        </View>
-      </View>
-
-      <Folio num={1} label="Cover" />
+      {/* Folio is intentionally hidden on the cover (Amanda's design
+          template 2026-05-23) so the masthead + hero read as a single
+          visual stack. */}
     </Page>
   );
 }
@@ -357,7 +459,7 @@ function SvOverview({ show }: { show: ScheduleShowInfo }) {
 
   return (
     <Page size="A5" style={ss.page}>
-      <CornerSplash corner="bl" />
+      <TonalWash />
       <Topper num={2} subject={show.name} />
 
       <View style={{ marginTop: 8 }}>
@@ -566,7 +668,7 @@ function SvClassificationPage({
 
   return (
     <Page size="A5" style={ss.page}>
-      <CornerSplash corner="tr" />
+      <TonalWash />
       <Topper num={3} subject={`Classes 1 – ${breedClasses.length + juniorHandling.length}`} />
 
       <View style={{ marginTop: 10 }}>
@@ -696,7 +798,7 @@ function SvClassificationPage({
 function SvEligibilityPage() {
   return (
     <Page size="A5" style={ss.page}>
-      <CornerSplash corner="bl" />
+      <TonalWash />
       <Topper num={4} subject="Class definitions & eligibility" />
 
       <View style={{ marginTop: 14 }}>
@@ -813,7 +915,7 @@ function GradingCol({ title, rows, accentFirst }: { title: string; rows: SvGrade
 function SvGradingPage() {
   return (
     <Page size="A5" style={ss.page}>
-      <CornerSplash corner="tr" />
+      <TonalWash />
       <Topper num={5} subject="SV grading system" />
 
       <View style={{ marginTop: 10 }}>
@@ -868,7 +970,7 @@ function SvRulesPage() {
 
   return (
     <Page size="A5" style={ss.page}>
-      <CornerSplash corner="bl" />
+      <TonalWash />
       <Topper num={6} subject="Summary of WUSV / BRG rules" />
 
       <View style={{ marginTop: 14 }}>
