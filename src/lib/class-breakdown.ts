@@ -40,6 +40,7 @@ export type EntryForBreakdown = {
     fee: number;
     showClass?: {
       sex?: 'dog' | 'bitch' | null;
+      svCoatType?: 'stock' | 'long_stock' | null;
       classDefinition?: {
         name?: string | null;
         type?: string | null;
@@ -47,6 +48,8 @@ export type EntryForBreakdown = {
     } | null;
   }> | null;
 };
+
+import { formatSvClassName } from './class-labels';
 
 const sumTotals = (items: ClassBreakdownItem[]): ClassTotals =>
   items.reduce(
@@ -76,9 +79,10 @@ export function computeClassBreakdown(
   for (const entry of entryReport ?? []) {
     if (entry.status === 'cancelled' || entry.status === 'withdrawn') continue;
     for (const ec of entry.entryClasses ?? []) {
-      const className = ec.showClass?.classDefinition?.name ?? 'Unknown';
+      const rawName = ec.showClass?.classDefinition?.name ?? 'Unknown';
       const sex = ec.showClass?.sex ?? null;
       const classType = ec.showClass?.classDefinition?.type ?? null;
+      const className = formatSvClassName(rawName, ec.showClass?.svCoatType);
       const fee = ec.fee;
 
       bumpBucket(combinedMap, className, fee);

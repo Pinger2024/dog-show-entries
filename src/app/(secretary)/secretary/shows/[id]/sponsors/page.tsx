@@ -22,6 +22,7 @@ import {
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { formatSvClassName } from '@/lib/class-labels';
 import { trpc } from '@/lib/trpc';
 import { uploadImage } from '@/lib/upload';
 import { Button } from '@/components/ui/button';
@@ -559,7 +560,10 @@ function ShowSponsorAssignments({
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium truncate">
                               {cs.showClass?.classNumber ? `${cs.showClass.classNumber}. ` : ''}
-                              {cs.showClass?.classDefinition?.name ?? 'Class'}
+                              {formatSvClassName(
+                                cs.showClass?.classDefinition?.name ?? 'Class',
+                                (cs.showClass as { svCoatType?: 'stock' | 'long_stock' | null } | undefined)?.svCoatType,
+                              )}
                               {cs.showClass?.breed && (
                                 <span className="text-muted-foreground"> — {cs.showClass.breed.name}</span>
                               )}
@@ -739,6 +743,7 @@ type ClassSponsorship = {
   sponsorName: string | null;
   sponsorAffix: string | null;
   trophyName: string | null;
+  bannerImageUrl?: string | null;
 };
 
 function SponsorshipRow({
@@ -746,11 +751,16 @@ function SponsorshipRow({
   suggestions,
   onSaved,
   onRemoved,
+  allowBanner = false,
 }: {
   sponsorship: ClassSponsorship;
   suggestions: Suggestion[];
   onSaved: () => void;
   onRemoved: () => void;
+  /** Per-class sponsor banners are SV/WUSV-only for now (Amanda
+   *  2026-05-23 — "I don't want this for RKC shows yet"). Defaults to
+   *  off so non-SV callers don't accidentally expose the controls. */
+  allowBanner?: boolean;
 }) {
   const [name, setName] = useState(sponsorship.sponsorName ?? '');
   const [affix, setAffix] = useState(sponsorship.sponsorAffix ?? '');
@@ -767,6 +777,36 @@ function SponsorshipRow({
     onSuccess: () => onRemoved(),
     onError: (err) => toast.error(err.message),
   });
+  const setBannerMutation = trpc.secretary.setClassSponsorBanner.useMutation({
+    onSuccess: () => {
+      toast.success('Banner saved');
+      onSaved();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const bannerInputRef = useRef<HTMLInputElement>(null);
+  const [bannerUploading, setBannerUploading] = useState(false);
+  const handleBannerUpload = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        setBannerUploading(true);
+        const publicUrl = await uploadImage(file);
+        setBannerMutation.mutate({ id: sponsorship.id, imageUrl: publicUrl, storageKey: null });
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Upload failed');
+      } finally {
+        setBannerUploading(false);
+        if (bannerInputRef.current) bannerInputRef.current.value = '';
+      }
+    },
+    [sponsorship.id, setBannerMutation]
+  );
+  const handleBannerRemove = useCallback(() => {
+    setBannerMutation.mutate({ id: sponsorship.id, imageUrl: null, storageKey: null });
+  }, [sponsorship.id, setBannerMutation]);
 
   const debouncedSave = useCallback(
     (field: 'sponsorName' | 'sponsorAffix' | 'trophyName', value: string) => {
@@ -874,7 +914,37 @@ function SponsorshipRow({
             className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-muted-foreground/40"
           />
         </div>
-        <div className="flex items-center justify-center border-b">
+        <div className="flex items-center justify-center gap-1 border-b">
+          {allowBanner && (
+            <>
+              <button
+                type="button"
+                onClick={() => bannerInputRef.current?.click()}
+                disabled={bannerUploading || setBannerMutation.isPending || !sponsorship.sponsorName?.trim()}
+                title={sponsorship.bannerImageUrl ? 'Replace class banner' : 'Upload class banner'}
+                className={cn(
+                  'flex size-7 items-center justify-center rounded transition-colors',
+                  sponsorship.bannerImageUrl
+                    ? 'text-emerald-600 hover:bg-emerald-50'
+                    : 'text-muted-foreground/50 hover:bg-muted hover:text-foreground',
+                  (bannerUploading || setBannerMutation.isPending) && 'opacity-60'
+                )}
+              >
+                {bannerUploading || setBannerMutation.isPending ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <ImageIcon className="size-3.5" />
+                )}
+              </button>
+              <input
+                ref={bannerInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleBannerUpload}
+              />
+            </>
+          )}
           <button
             type="button"
             onClick={() => removeMutation.mutate({ id: sponsorship.id })}
@@ -952,8 +1022,56 @@ function SponsorshipRow({
               <X className="size-3.5" />
             )}
           </button>
+          </div>
+          {/* Mobile: class banner preview / upload (SV/WUSV only) */}
+          {allowBanner && sponsorship.sponsorName?.trim() && (
+            <div className="mt-3 border-t pt-3">
+              {sponsorship.bannerImageUrl ? (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Class banner</p>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={sponsorship.bannerImageUrl}
+                    alt="Class banner"
+                    className="h-14 w-full rounded border object-cover"
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => bannerInputRef.current?.click()}
+                      disabled={bannerUploading || setBannerMutation.isPending}
+                      className="text-xs text-blue-600 underline-offset-2 hover:underline"
+                    >
+                      {bannerUploading ? 'Uploading…' : 'Replace'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleBannerRemove}
+                      disabled={setBannerMutation.isPending}
+                      className="text-xs text-muted-foreground underline-offset-2 hover:text-destructive hover:underline"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => bannerInputRef.current?.click()}
+                  disabled={bannerUploading || setBannerMutation.isPending}
+                  className="flex h-10 w-full items-center justify-center gap-2 rounded border border-dashed text-xs text-muted-foreground hover:border-foreground/40 hover:text-foreground"
+                >
+                  {bannerUploading || setBannerMutation.isPending ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <ImageIcon className="size-3.5" />
+                  )}
+                  {bannerUploading ? 'Uploading…' : 'Upload class banner (optional)'}
+                </button>
+              )}
+            </div>
+          )}
         </div>
-      </div>
     </>
   );
 }
@@ -1919,6 +2037,10 @@ function ClassSponsorshipTable({
     );
   }
 
+  // SV/WUSV gates per-class sponsor banner uploads — RKC shows don't
+  // get the controls yet (Amanda 2026-05-23).
+  const isSvShow = show?.showRuleset === 'wusv';
+
   type ShowClass = (typeof classes)[number];
 
   function renderAwardsSection() {
@@ -2071,7 +2193,7 @@ function ClassSponsorshipTable({
           {/* Rows */}
           {sectionClasses.map((cls, idx) => {
             const sponsorships = cls.classSponsorships ?? [];
-            const displayLabel = `#${cls.classNumber ?? '?'} ${cls.classDefinition.name}`;
+            const displayLabel = `#${cls.classNumber ?? '?'} ${formatSvClassName(cls.classDefinition.name, (cls as { svCoatType?: 'stock' | 'long_stock' | null }).svCoatType)}`;
             const rowBg = idx % 2 === 0 ? '' : 'bg-muted/20';
 
             return (
@@ -2096,6 +2218,7 @@ function ClassSponsorshipTable({
                       suggestions={suggestionsList}
                       onSaved={invalidate}
                       onRemoved={invalidate}
+                      allowBanner={isSvShow}
                     />
                   ))}
 
@@ -2115,7 +2238,7 @@ function ClassSponsorshipTable({
         <div className="space-y-2 sm:hidden">
           {sectionClasses.map((cls) => {
             const sponsorships = cls.classSponsorships ?? [];
-            const displayLabel = `#${cls.classNumber ?? '?'} ${cls.classDefinition.name}`;
+            const displayLabel = `#${cls.classNumber ?? '?'} ${formatSvClassName(cls.classDefinition.name, (cls as { svCoatType?: 'stock' | 'long_stock' | null }).svCoatType)}`;
 
             return (
               <div key={cls.id} className="rounded-lg border bg-card">
@@ -2130,6 +2253,7 @@ function ClassSponsorshipTable({
                       suggestions={suggestionsList}
                       onSaved={invalidate}
                       onRemoved={invalidate}
+                      allowBanner={isSvShow}
                     />
                   ))}
                   <NewSponsorshipRow

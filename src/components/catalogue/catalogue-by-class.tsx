@@ -55,53 +55,45 @@ function splitTownPostcode(address: string | null | undefined): { town: string; 
   return { town, postcode };
 }
 
-// SV entry-row styles. Kept inline because they're only used by the SV
-// branch of CatalogueByClass — easier to read here than in a separate
-// stylesheet file, and they live on the SV palette (sv-styles.ts).
+// SV entry-row styles. Densified per Amanda 2026-05-23 — page count
+// was ~30 for 65 entries, target is the SPGSD norm of ~20-22.
 const svEntry = {
-  // marginTop carries the spacing between entries (and between the
-  // class header and the first entry) — using marginTop rather than
-  // marginBottom keeps the gap symmetric whether the entry is the
-  // first in the block (after the header's entry-count line) or the
-  // nth (after another entry's last line).
-  row: { marginTop: 8 } as const,
+  row: { marginTop: 3 } as const,
   line1: { flexDirection: 'row', alignItems: 'baseline', gap: 6 } as const,
   catNumber: {
     fontFamily: SV_FONTS.serif,
-    fontSize: 14,
+    fontSize: 11,
     color: SV.accent,
-    width: 24,
+    width: 20,
   } as const,
   dogName: {
     fontFamily: SV_FONTS.sans,
-    fontSize: 9,
+    fontSize: 8.5,
     fontWeight: 'bold' as const,
     color: SV.ink,
     flexShrink: 1,
   } as const,
   microchip: {
     fontFamily: SV_FONTS.sans,
-    fontSize: 8,
+    fontSize: 7,
     fontWeight: 'bold' as const,
     color: SV.ink,
   } as const,
   meta: {
     fontFamily: SV_FONTS.sans,
-    fontSize: 8,
+    fontSize: 7,
     color: SV.ink2,
-    paddingLeft: 30,
-    marginTop: 0.5,
-    lineHeight: 1.35,
+    paddingLeft: 26,
+    lineHeight: 1.18,
   } as const,
   metaLabel: { fontWeight: 'bold' as const, color: SV.ink } as const,
   pedigree: {
     fontFamily: SV_FONTS.serif,
     fontStyle: 'italic' as const,
-    fontSize: 8,
+    fontSize: 7,
     color: SV.ink2,
-    paddingLeft: 30,
-    marginTop: 0.5,
-    lineHeight: 1.35,
+    paddingLeft: 26,
+    lineHeight: 1.18,
   } as const,
 };
 
@@ -139,84 +131,143 @@ function renderSvEntry(
     : splitTownPostcode(entry.owners[0]?.address);
 
   return (
-    <View key={rowKey} style={svEntry.row} wrap={false}>
-      {/* Line 1 — cat# · DOG NAME (bold) · KC reg · ID microchip (bold) */}
-      <View style={svEntry.line1}>
-        <Text style={svEntry.catNumber}>{entry.catalogueNumber ?? '—'}</Text>
-        <Text style={svEntry.dogName}>{uppercaseName(entry.dogName) || 'Unnamed'}</Text>
-      </View>
-      <Text style={svEntry.meta}>
-        {entry.kcRegNumber ? (
-          <>
-            <Text style={svEntry.metaLabel}>Reg </Text>
-            {entry.kcRegNumber}
-          </>
-        ) : null}
-        {entry.kcRegNumber && entry.microchipNumber ? '   ·   ' : ''}
-        {entry.microchipNumber ? (
-          <>
-            <Text style={svEntry.metaLabel}>ID {entry.microchipNumber}</Text>
-          </>
-        ) : null}
-        {dob && (entry.kcRegNumber || entry.microchipNumber) ? '   ·   ' : ''}
-        {dob ? <>DOB {dob}</> : null}
-      </Text>
-
-      {/* Line 2 — Hip · Elbow · Titles */}
-      <Text style={svEntry.meta}>
-        <Text style={svEntry.metaLabel}>Hips </Text>
-        {hip}
-        {'   ·   '}
-        <Text style={svEntry.metaLabel}>Elbows </Text>
-        {elbow}
-        {titlesStr ? (
-          <>
-            {'   ·   '}
-            <Text style={svEntry.metaLabel}>Titles </Text>
-            {titlesStr}
-          </>
-        ) : null}
-      </Text>
-
-      {/* Line 3 — Sire · Dam */}
-      {(entry.sire || entry.dam) && (
-        <Text style={svEntry.pedigree}>
-          {entry.sire ? (
+    <View key={rowKey} style={{ ...svEntry.row, flexDirection: 'row', alignItems: 'stretch' }} wrap={false}>
+      {/* Left: all entry data lines */}
+      <View style={{ flex: 1 }}>
+        {/* Line 1 — cat# · DOG NAME (bold) · KC reg · ID microchip (bold) */}
+        <View style={svEntry.line1}>
+          <Text style={svEntry.catNumber}>{entry.catalogueNumber ?? '—'}</Text>
+          <Text style={svEntry.dogName}>{uppercaseName(entry.dogName) || 'Unnamed'}</Text>
+        </View>
+        <Text style={svEntry.meta}>
+          {entry.kcRegNumber ? (
             <>
-              <Text style={svEntry.metaLabel}>Sire </Text>
-              {entry.sire}
+              <Text style={svEntry.metaLabel}>Reg </Text>
+              {entry.kcRegNumber}
             </>
           ) : null}
-          {entry.sire && entry.dam ? '    ·    ' : ''}
-          {entry.dam ? (
+          {entry.kcRegNumber && entry.microchipNumber ? '   ·   ' : ''}
+          {entry.microchipNumber ? (
             <>
-              <Text style={svEntry.metaLabel}>Dam </Text>
-              {entry.dam}
+              <Text style={svEntry.metaLabel}>ID {entry.microchipNumber}</Text>
+            </>
+          ) : null}
+          {dob && (entry.kcRegNumber || entry.microchipNumber) ? '   ·   ' : ''}
+          {dob ? <>DOB {dob}</> : null}
+        </Text>
+
+        {/* Line 2 — Hip · Elbow · Titles */}
+        <Text style={svEntry.meta}>
+          <Text style={svEntry.metaLabel}>Hips </Text>
+          {hip}
+          {'   ·   '}
+          <Text style={svEntry.metaLabel}>Elbows </Text>
+          {elbow}
+          {titlesStr ? (
+            <>
+              {'   ·   '}
+              <Text style={svEntry.metaLabel}>Titles </Text>
+              {titlesStr}
             </>
           ) : null}
         </Text>
-      )}
 
-      {/* Line 4 — Breeder, Town, Postcode */}
-      {breederParts.length > 0 && (
-        <Text style={svEntry.meta}>
-          <Text style={svEntry.metaLabel}>Breeder </Text>
-          {breederParts.join(', ')}
-        </Text>
-      )}
-
-      {/* Line 5 — Owner, Town, Postcode */}
-      {ownersHeading && (
-        <Text style={svEntry.meta}>
-          <Text style={svEntry.metaLabel}>
-            Owner{entry.owners.length > 1 ? 's' : ''}{' '}
+        {/* Line 3 — Sire · Dam */}
+        {(entry.sire || entry.dam) && (
+          <Text style={svEntry.pedigree}>
+            {entry.sire ? (
+              <>
+                <Text style={svEntry.metaLabel}>Sire </Text>
+                {entry.sire}
+              </>
+            ) : null}
+            {entry.sire && entry.dam ? '    ·    ' : ''}
+            {entry.dam ? (
+              <>
+                <Text style={svEntry.metaLabel}>Dam </Text>
+                {entry.dam}
+              </>
+            ) : null}
           </Text>
-          {ownersHeading}
-          {primaryOwnerAddr.town || primaryOwnerAddr.postcode
-            ? `, ${[primaryOwnerAddr.town, primaryOwnerAddr.postcode].filter(Boolean).join(', ')}`
-            : ''}
-        </Text>
-      )}
+        )}
+
+        {/* Line 4 — Breeder + Owner on one line, separated by a centred dot
+            (Amanda 2026-05-23 — saves a row per entry, page is denser). */}
+        {(breederParts.length > 0 || ownersHeading) && (
+          <Text style={svEntry.meta}>
+            {breederParts.length > 0 && (
+              <>
+                <Text style={svEntry.metaLabel}>Breeder </Text>
+                {breederParts.join(', ')}
+              </>
+            )}
+            {breederParts.length > 0 && ownersHeading ? '    ·    ' : ''}
+            {ownersHeading && (
+              <>
+                <Text style={svEntry.metaLabel}>
+                  Owner{entry.owners.length > 1 ? 's' : ''}{' '}
+                </Text>
+                {ownersHeading}
+                {primaryOwnerAddr.town || primaryOwnerAddr.postcode
+                  ? `, ${[primaryOwnerAddr.town, primaryOwnerAddr.postcode].filter(Boolean).join(', ')}`
+                  : ''}
+              </>
+            )}
+          </Text>
+        )}
+      </View>
+
+      {/* Right: per-entry Place + Grade write-in columns. SV judges
+          award a placement AND a grading to every dog in the class
+          (Amanda 2026-05-23). Side columns keep the layout dense and
+          let the judge or steward write straight next to the dog. */}
+      <View
+        style={{
+          width: 90,
+          paddingLeft: 8,
+          borderLeftWidth: 0.5,
+          borderLeftColor: SV.rule,
+          justifyContent: 'center',
+          gap: 4,
+        }}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+          <Text
+            style={{
+              fontFamily: SV_FONTS.sans,
+              fontSize: 6,
+              textTransform: 'uppercase',
+              letterSpacing: 0.8,
+              color: SV.ink3,
+              fontWeight: 'bold',
+              width: 26,
+            }}
+          >
+            Place
+          </Text>
+          <Text style={{ fontFamily: SV_FONTS.serif, fontStyle: 'italic', fontSize: 8, color: SV.ink2, flex: 1 }}>
+            …………
+          </Text>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+          <Text
+            style={{
+              fontFamily: SV_FONTS.sans,
+              fontSize: 6,
+              textTransform: 'uppercase',
+              letterSpacing: 0.8,
+              color: SV.ink3,
+              fontWeight: 'bold',
+              width: 26,
+            }}
+          >
+            Grade
+          </Text>
+          <Text style={{ fontFamily: SV_FONTS.serif, fontStyle: 'italic', fontSize: 8, color: SV.ink2, flex: 1 }}>
+            …………
+          </Text>
+        </View>
+      </View>
     </View>
   );
 }
@@ -246,6 +297,7 @@ function groupByClass(entries: CatalogueEntry[]) {
     classNumber: number | null | undefined;
     classLabel: string;
     sortOrder: number | undefined;
+    svCoatType?: 'stock' | 'long_stock' | null;
     entries: CatalogueEntry[];
   }> = {};
 
@@ -262,6 +314,7 @@ function groupByClass(entries: CatalogueEntry[]) {
         classNumber: cls.classNumber,
         classLabel: label,
         sortOrder: cls.sortOrder,
+        svCoatType: cls.svCoatType ?? null,
         entries: [],
       };
       classes[classKey].entries.push(entry);
@@ -304,8 +357,11 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
           classNumber: sc.classNumber,
           classLabel: label,
           sortOrder: sc.sortOrder,
+          svCoatType: sc.svCoatType ?? null,
           entries: [],
         };
+      } else if (grouped[classKey].svCoatType == null && sc.svCoatType) {
+        grouped[classKey].svCoatType = sc.svCoatType;
       }
     }
   }
@@ -338,10 +394,11 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
   //     classes-per-chunk keeps node count down)
   // 80 is conservative enough to survive sponsorship-heavy shows
   // without turning every chunk into one tiny Page.
-  // SV entries take more vertical space (5-line layout instead of 3),
-  // so we chunk more aggressively to keep each Page under react-pdf's
-  // node-count ceiling. Otherwise we hit `-9.979e+21` on bigger shows.
-  const PAGE_ENTRY_THRESHOLD = isSvShow ? 40 : 80;
+  // SV entries take more vertical space than RKC (extra health line +
+  // pedigree line). After densification (Amanda 2026-05-23) each entry
+  // fits in ~4 lines so we can pack more per chunk; bumped 40 → 60.
+  // Keep below the 80 ceiling to avoid the react-pdf `-9.979e+21` crash.
+  const PAGE_ENTRY_THRESHOLD = isSvShow ? 80 : 80;
   const classChunks: string[][] = [];
   let currentChunk: string[] = [];
   let currentCount = 0;
@@ -400,7 +457,7 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
       >
       {isSvShow && <TonalWash variant="inside" buffer={show.svWashes?.inside} />}
       {chunkKeys.map((classKey, idx) => {
-        const { className, sex, classLabel, entries: classEntries } = grouped[classKey];
+        const { className, sex, classLabel, svCoatType, entries: classEntries } = grouped[classKey];
         const sorted = [...classEntries].sort(
           (a, b) => (a.catalogueNumber ?? '').localeCompare(b.catalogueNumber ?? '', undefined, { numeric: true })
         );
@@ -460,7 +517,6 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
             pedigree,
             entry.breeder ? `br ${entry.breeder}` : null,
           ].filter(Boolean);
-          const svHealth = isSvShow ? formatSvHealth(entry.svProfile ?? null) : null;
           return (
             <View key={rowKey} style={styles.entryRowWrap} wrap={false}>
               <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
@@ -470,12 +526,6 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
               {metaParts.length > 0 && (
                 <Text style={styles.entryDetail}>{metaParts.join('  ·  ')}</Text>
               )}
-              {svHealth ? (
-                <Text style={styles.entryDetail}>
-                  <Text style={styles.entryDetailLabel}>Health: </Text>
-                  {svHealth}
-                </Text>
-              ) : null}
               {entry.owners.length > 0 && (
                 <Text style={styles.entryDetail}>
                   <Text style={styles.entryDetailLabel}>
@@ -503,35 +553,63 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
                 SV variant drops the green Remi band and uses the SV
                 palette to match the schedule (Michael 2026-05-23). */}
             <View wrap={false}>
-              {isSvShow ? (
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    justifyContent: 'space-between',
-                    alignItems: 'baseline',
-                    borderTopWidth: 1,
-                    borderTopColor: SV.ink,
-                    borderBottomWidth: 0.5,
-                    borderBottomColor: SV.rule,
-                    paddingTop: 5,
-                    paddingBottom: 3,
-                    marginTop: 4,
-                  }}
-                >
-                  <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 14, color: SV.ink }}>
-                    {classLabel ? `Class ${classLabel}` : ''}
-                    {classLabel && className ? '  ·  ' : ''}
-                    <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 11, color: SV.ink }}>
-                      {className}
+              {/* Class-sponsor banner — landscape strip above the class
+                  header when a class sponsor has uploaded a banner image
+                  (HUNDARK / ROBASDAN-style festive strips). SV/WUSV
+                  shows only per Amanda 2026-05-23 ("I don't want this
+                  for RKC shows yet"). */}
+              {isSvShow && (() => {
+                const banner = classLabel && sponsorsByClassLabel.has(classLabel)
+                  ? sponsorsByClassLabel.get(classLabel)!.find((s) => s.bannerImageUrl)?.bannerImageUrl
+                  : null;
+                if (!banner) return null;
+                return (
+                  <Image
+                    src={banner}
+                    style={{ width: '100%', height: 72, marginBottom: 4 }}
+                  />
+                );
+              })()}
+              {isSvShow ? (() => {
+                // Amanda 2026-05-23: drop "SV " prefix from class names and
+                // surface the coat type in the header — "Class 9b · Adult
+                // Bitch · Long Stock Coat". Coat type comes from the
+                // show_classes.sv_coat_type column, not from label-suffix
+                // guessing (some demos use sequential numeric labels).
+                const cleanName = className.replace(/^SV\s+/, '');
+                const sexWord = sex === 'dog' ? 'Dog' : sex === 'bitch' ? 'Bitch' : null;
+                const coatLabel = svCoatType === 'stock'
+                  ? 'Stock Coat'
+                  : svCoatType === 'long_stock'
+                    ? 'Long Stock Coat'
+                    : classLabel?.endsWith('a')
+                      ? 'Stock Coat'
+                      : classLabel?.endsWith('b')
+                        ? 'Long Stock Coat'
+                        : null;
+                const headParts = [
+                  classLabel ? `Class ${classLabel}` : null,
+                  sexWord ? `${cleanName} ${sexWord}` : cleanName,
+                  coatLabel,
+                ].filter(Boolean) as string[];
+                return (
+                  <View
+                    style={{
+                      borderTopWidth: 1,
+                      borderTopColor: SV.ink,
+                      borderBottomWidth: 0.5,
+                      borderBottomColor: SV.rule,
+                      paddingTop: 3,
+                      paddingBottom: 2,
+                      marginTop: 2,
+                    }}
+                  >
+                    <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 12, fontWeight: 'bold', color: SV.ink }}>
+                      {headParts.join('  ·  ')}
                     </Text>
-                  </Text>
-                  {sex && (
-                    <Text style={{ fontFamily: SV_FONTS.serif, fontStyle: 'italic', fontSize: 10, color: SV.accent }}>
-                      {sex === 'dog' ? 'Dogs' : sex === 'bitch' ? 'Bitches' : 'Open'}
-                    </Text>
-                  )}
-                </View>
-              ) : (
+                  </View>
+                );
+              })() : (
                 <View
                   style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', ...styles.groupHeading }}
                 >
@@ -564,24 +642,11 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
                   </Text>
                 ))}
 
-              <Text
-                style={
-                  isSvShow
-                    ? {
-                        fontFamily: SV_FONTS.sans,
-                        fontSize: 7,
-                        color: SV.ink3,
-                        textTransform: 'uppercase',
-                        letterSpacing: 0.8,
-                        marginTop: 3,
-                        marginBottom: 4,
-                        paddingLeft: 30,
-                      }
-                    : styles.classEntryCount
-                }
-              >
-                {sorted.length} {sorted.length === 1 ? 'entry' : 'entries'}
-              </Text>
+              {!isSvShow && (
+                <Text style={styles.classEntryCount}>
+                  {sorted.length} {sorted.length === 1 ? 'entry' : 'entries'}
+                </Text>
+              )}
 
               {sorted.length > 0 && renderEntry(sorted[0], 0)}
             </View>
@@ -602,44 +667,9 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
                 <Text style={styles.placementsCell}>VHC .....</Text>
               </View>
             )}
-            {sorted.length > 0 && isSvShow && (
-              <View wrap={false} style={{ marginTop: 6, paddingTop: 5, borderTopWidth: 0.5, borderTopColor: SV.rule }}>
-                <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 16, marginBottom: 14 }}>
-                  <Text
-                    style={{
-                      fontFamily: SV_FONTS.sans,
-                      fontSize: 7.5,
-                      textTransform: 'uppercase',
-                      letterSpacing: 1.2,
-                      color: SV.ink3,
-                      fontWeight: 'bold',
-                    }}
-                  >
-                    Results
-                  </Text>
-                  <Text style={{ fontFamily: SV_FONTS.serif, fontStyle: 'italic', fontSize: 9, color: SV.ink2 }}>1st ………………</Text>
-                  <Text style={{ fontFamily: SV_FONTS.serif, fontStyle: 'italic', fontSize: 9, color: SV.ink2 }}>2nd ………………</Text>
-                  <Text style={{ fontFamily: SV_FONTS.serif, fontStyle: 'italic', fontSize: 9, color: SV.ink2 }}>3rd ………………</Text>
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
-                  <Text
-                    style={{
-                      fontFamily: SV_FONTS.sans,
-                      fontSize: 7.5,
-                      textTransform: 'uppercase',
-                      letterSpacing: 1.2,
-                      color: SV.ink3,
-                      fontWeight: 'bold',
-                    }}
-                  >
-                    Grading
-                  </Text>
-                  <Text style={{ fontFamily: SV_FONTS.serif, fontStyle: 'italic', fontSize: 9, color: SV.ink2, flex: 1 }}>
-                    ……………………………………………………………………
-                  </Text>
-                </View>
-              </View>
-            )}
+            {/* Per-class Results/Grading stub removed 2026-05-23 — each
+                entry now carries its own Place + Grade write-in columns
+                on the right (SV judges grade every dog in the class). */}
 
           </View>
         );

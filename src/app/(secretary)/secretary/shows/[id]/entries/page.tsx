@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
+import { formatSvClassName } from '@/lib/class-labels';
 import { formatDogName } from '@/lib/utils';
 import { formatCurrency } from '@/lib/date-utils';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -955,7 +956,10 @@ function AddEntryDialog({
                         }}
                       />
                       <span className="flex-1 text-sm">
-                        {sc.classDefinition?.name ?? 'Unknown Class'}
+                        {formatSvClassName(
+                          sc.classDefinition?.name,
+                          (sc as { svCoatType?: 'stock' | 'long_stock' | null }).svCoatType,
+                        )}
                         {sc.sex ? ` (${sc.sex === 'dog' ? 'Dog' : 'Bitch'})` : ''}
                       </span>
                       <span className="text-xs text-muted-foreground">

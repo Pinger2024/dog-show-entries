@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { formatCurrency } from '@/lib/date-utils';
 import { formatDogName } from '@/lib/utils';
+import { formatSvClassName } from '@/lib/class-labels';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -144,7 +145,10 @@ export default function FinancialPage() {
       breed.entries += 1;
       for (const ec of entry.entryClasses ?? []) {
         breed.revenue += ec.fee;
-        const className = ec.showClass?.classDefinition?.name ?? 'Unknown';
+        const className = formatSvClassName(
+          ec.showClass?.classDefinition?.name,
+          (ec.showClass as { svCoatType?: 'stock' | 'long_stock' | null } | undefined)?.svCoatType,
+        );
         if (!breed.classes.has(className)) {
           breed.classes.set(className, { name: className, entries: 0, revenue: 0 });
         }

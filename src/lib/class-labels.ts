@@ -86,3 +86,27 @@ export function getClassLabel(
   if (isSpecialAwardClass(cls)) return '';
   return cls.classNumber != null ? String(cls.classNumber) : '';
 }
+
+/**
+ * Format a class name for SV/WUSV-aware display.
+ *
+ *   "SV Junior" + svCoatType='long_stock' → "Junior — Long Stock Coat"
+ *   "SV Junior" + svCoatType='stock'      → "Junior — Stock Coat"
+ *   "SV Junior" + svCoatType=null         → "Junior"
+ *   "Working"   + svCoatType=null         → "Working"
+ *
+ * Amanda 2026-05-23: every SV screen — entry picker, financial report,
+ * sponsor assignment, catalogue header — was rendering same-named Stock
+ * Coat / Long Stock Coat classes as visually identical rows. This helper
+ * is the single source of truth for the user-facing name so all four
+ * screens stay in lockstep.
+ */
+export function formatSvClassName(
+  rawName: string | null | undefined,
+  svCoatType: 'stock' | 'long_stock' | null | undefined,
+): string {
+  const base = (rawName ?? 'Unknown Class').replace(/^SV\s+/, '');
+  if (svCoatType === 'stock') return `${base} — Stock Coat`;
+  if (svCoatType === 'long_stock') return `${base} — Long Stock Coat`;
+  return base;
+}

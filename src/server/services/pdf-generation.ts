@@ -148,7 +148,8 @@ export async function generateCataloguePdf(
   for (const sc of showClassRows) {
     for (const cs of sc.classSponsorships ?? []) {
       const sponsorName = cs.sponsorName ?? cs.showSponsor?.sponsor?.name ?? null;
-      if (cs.trophyName || sponsorName || cs.prizeDescription) {
+      const bannerImageUrl = (cs as { bannerImageUrl?: string | null }).bannerImageUrl ?? null;
+      if (cs.trophyName || sponsorName || cs.prizeDescription || bannerImageUrl) {
         classSponsorshipInfos.push({
           className: sc.classDefinition?.name ?? 'Unknown Class',
           classNumber: sc.classNumber,
@@ -158,6 +159,7 @@ export async function generateCataloguePdf(
           sponsorName,
           sponsorAffix: cs.sponsorAffix ?? null,
           prizeDescription: cs.prizeDescription,
+          bannerImageUrl,
         });
       }
     }
@@ -177,6 +179,7 @@ export async function generateCataloguePdf(
     classLabel: classLabelMap.get(sc.id) ?? '',
     sortOrder: sc.sortOrder,
     sex: sc.sex,
+    svCoatType: (sc as { svCoatType?: 'stock' | 'long_stock' | null }).svCoatType ?? null,
   }));
 
   const seenDefIds = new Set<string>();
@@ -245,6 +248,7 @@ export async function generateCataloguePdf(
       classLabel: ec.showClass?.id ? classLabelMap.get(ec.showClass.id) : undefined,
       sortOrder: ec.showClass?.sortOrder,
       showClassId: ec.showClassId,
+      svCoatType: (ec.showClass as { svCoatType?: 'stock' | 'long_stock' | null } | undefined)?.svCoatType ?? null,
     })),
     status: entry.status,
     entryType: entry.entryType,

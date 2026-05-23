@@ -63,6 +63,10 @@ export interface CatalogueEntry {
     classLabel?: string;
     sortOrder: number | undefined;
     showClassId?: string | undefined;
+    /** SV/WUSV coat variant — 'stock' or 'long_stock'. Null for non-SV
+     *  classes. Drives the "Stock Coat" / "Long Stock Coat" class header
+     *  label on the SV catalogue (Amanda 2026-05-23). */
+    svCoatType?: 'stock' | 'long_stock' | null;
   }[];
   status: string;
   entryType: string;
@@ -85,6 +89,10 @@ export interface ShowClassInfo {
   classLabel?: string;
   sortOrder: number;
   sex: string | null;
+  /** SV/WUSV coat variant — 'stock' or 'long_stock'. Drives the
+   *  "Stock Coat" / "Long Stock Coat" label on the SV catalogue's
+   *  per-class header (Amanda 2026-05-23). Null for non-SV classes. */
+  svCoatType?: 'stock' | 'long_stock' | null;
 }
 
 /** Class-level sponsorship/trophy data used by the trophies page and inline class display */
@@ -97,6 +105,11 @@ export interface ClassSponsorshipInfo {
   sponsorName: string | null;
   sponsorAffix: string | null;
   prizeDescription: string | null;
+  /** Optional landscape banner (e.g. HUNDARK festive strip) rendered
+   *  above the class header in the catalogue. Shared per (show, sponsor)
+   *  pair so the same banner appears on every class that sponsor backs
+   *  in the show (Amanda 2026-05-23). */
+  bannerImageUrl?: string | null;
 }
 
 export interface CatalogueShowInfo {

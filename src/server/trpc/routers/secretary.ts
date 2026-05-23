@@ -5938,6 +5938,66 @@ export const secretaryRouter = createTRPCRouter({
       return updated;
     }),
 
+  /**
+   * Set / clear the class-header banner image for a class sponsorship.
+   * The banner is conceptually scoped to (show, sponsor) — Amanda's spec
+   * 2026-05-23: *"different banner for each show, same banner if
+   * sponsoring more than one class in the same show"*. So whenever we
+   * write to one row we propagate to every sibling row in the same show
+   * whose sponsor identity matches (by linked show_sponsor when present,
+   * otherwise by free-text sponsor_name, case-insensitive).
+   *
+   * `imageUrl` / `storageKey` null → clear.
+   */
+  setClassSponsorBanner: secretaryProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      imageUrl: z.string().url().nullable(),
+      storageKey: z.string().max(512).nullable(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const target = await ctx.db.query.classSponsorships.findFirst({
+        where: eq(classSponsorships.id, input.id),
+        with: { showClass: true },
+      });
+      if (!target) throw new TRPCError({ code: 'NOT_FOUND', message: 'Class sponsorship not found' });
+
+      await verifyShowAccess(ctx.db, ctx.session.user.id, target.showClass.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      // Find every class_sponsorship in the same show belonging to the
+      // same sponsor (linked show_sponsor takes precedence; fall back to
+      // case-insensitive sponsor_name match for free-text rows). One
+      // upload propagates across the lot.
+      const siblings = await ctx.db
+        .select({ id: classSponsorships.id })
+        .from(classSponsorships)
+        .innerJoin(showClasses, eq(classSponsorships.showClassId, showClasses.id))
+        .where(
+          and(
+            eq(showClasses.showId, target.showClass.showId),
+            target.showSponsorId
+              ? eq(classSponsorships.showSponsorId, target.showSponsorId)
+              : and(
+                  isNull(classSponsorships.showSponsorId),
+                  sql`LOWER(${classSponsorships.sponsorName}) = LOWER(${target.sponsorName ?? ''})`
+                )
+          )
+        );
+
+      const ids = siblings.map((s) => s.id);
+      if (ids.length === 0) ids.push(input.id);
+
+      await ctx.db
+        .update(classSponsorships)
+        .set({
+          bannerImageUrl: input.imageUrl,
+          bannerImageStorageKey: input.storageKey,
+        })
+        .where(inArray(classSponsorships.id, ids));
+
+      return { propagatedTo: ids.length };
+    }),
+
   // Get all classes for a show with their sponsorships (for the spreadsheet view)
   getClassesWithSponsorships: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))

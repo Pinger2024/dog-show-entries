@@ -200,12 +200,13 @@ export async function GET(
   const classLabelMap = buildClassLabelMap(showClassRows);
 
   // Collect class sponsorship data for trophies page + inline display
-  const classSponsorships: { className: string; classNumber: number | null; classLabel: string; trophyName: string | null; trophyDonor: string | null; sponsorName: string | null; sponsorAffix: string | null; prizeDescription: string | null }[] = [];
+  const classSponsorships: { className: string; classNumber: number | null; classLabel: string; trophyName: string | null; trophyDonor: string | null; sponsorName: string | null; sponsorAffix: string | null; prizeDescription: string | null; bannerImageUrl: string | null }[] = [];
   for (const sc of showClassRows) {
     for (const cs of sc.classSponsorships ?? []) {
       // Sponsor name comes from either the free-text field or the linked sponsor
       const sponsorName = cs.sponsorName ?? cs.showSponsor?.sponsor?.name ?? null;
-      if (cs.trophyName || sponsorName || cs.prizeDescription) {
+      const bannerImageUrl = (cs as { bannerImageUrl?: string | null }).bannerImageUrl ?? null;
+      if (cs.trophyName || sponsorName || cs.prizeDescription || bannerImageUrl) {
         classSponsorships.push({
           className: sc.classDefinition?.name ?? 'Unknown Class',
           classNumber: sc.classNumber,
@@ -215,6 +216,7 @@ export async function GET(
           sponsorName,
           sponsorAffix: cs.sponsorAffix ?? null,
           prizeDescription: cs.prizeDescription,
+          bannerImageUrl,
         });
       }
     }
@@ -274,6 +276,7 @@ export async function GET(
       classLabel: ec.showClass?.id ? classLabelMap.get(ec.showClass.id) : undefined,
       sortOrder: ec.showClass?.sortOrder,
       showClassId: ec.showClassId,
+      svCoatType: (ec.showClass as { svCoatType?: 'stock' | 'long_stock' | null } | undefined)?.svCoatType ?? null,
     })),
     status: entry.status,
     entryType: entry.entryType,
@@ -297,6 +300,7 @@ export async function GET(
     classLabel: classLabelMap.get(sc.id) ?? '',
     sortOrder: sc.sortOrder,
     sex: sc.sex,
+    svCoatType: (sc as { svCoatType?: 'stock' | 'long_stock' | null }).svCoatType ?? null,
   }));
 
   // `show.scheduleData` is typed as `ScheduleData | null` by Drizzle via the
