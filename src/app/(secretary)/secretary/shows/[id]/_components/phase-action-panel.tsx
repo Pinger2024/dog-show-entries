@@ -185,17 +185,20 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
   const checklist: ChecklistItem[] = [];
 
   const isChampionship = show.showType === 'championship';
+  // SV/WUSV regionals aren't RKC-licensed and don't need RKC's Open + Limit
+  // class requirements (Amanda 2026-05-24).
+  const isSvShow = (show as { showRuleset?: string }).showRuleset === 'wusv';
 
   const autoKeys: { key: string; label: string }[] = [
     { key: 'classes_created', label: 'Classes created' },
-    ...(isChampionship ? [{ key: 'championship_classes_complete', label: 'Open + Limit classes for each sex' }] : []),
+    ...(isChampionship && !isSvShow ? [{ key: 'championship_classes_complete', label: 'Open + Limit classes for each sex' }] : []),
     { key: 'judges_assigned', label: 'Judge assigned' },
     { key: 'entry_fees_set', label: 'Entry fees set' },
     { key: 'entry_close_date_set', label: 'Entry close date set' },
     { key: 'secretary_details_set', label: 'Secretary details added' },
     { key: 'guarantors_added', label: 'Guarantors added' },
     { key: 'venue_set', label: 'Venue confirmed' },
-    { key: 'kc_licence_recorded', label: 'RKC licence recorded' },
+    ...(isSvShow ? [] : [{ key: 'kc_licence_recorded', label: 'RKC licence recorded' }]),
   ];
 
   if (autoDetect) {

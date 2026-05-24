@@ -7,6 +7,19 @@ export const showTypeLabels: Record<string, string> = {
   championship: 'Championship',
 };
 
+/** SV/WUSV regionals are stored as `championship` showType under the
+ *  hood (the underlying judging IS championship-class), but they
+ *  belong to a different show hierarchy (Regional → National →
+ *  Sieger). Amanda 2026-05-24: render the badge as "Regional" instead
+ *  of "Championship" whenever the show is on the WUSV ruleset. */
+export function displayShowTypeLabel(
+  showType: string,
+  showRuleset?: string | null,
+): string {
+  if (showRuleset === 'wusv') return 'Regional';
+  return showTypeLabels[showType] ?? showType;
+}
+
 /** Generic show names auto-generated from the show type alone
  *  (e.g. when the secretary leaves the Show Name field blank and we
  *  fall back to the type label). If one of these exact strings is

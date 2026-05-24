@@ -315,6 +315,8 @@ export default function NewShowPage() {
       if (gsd && !form.getValues('breedId')) {
         form.setValue('breedId', gsd.id, { shouldDirty: false });
       }
+      // SV regionals are always separate Dog + Bitch (Amanda 2026-05-24).
+      form.setValue('classSexArrangement', 'separate_sex', { shouldDirty: false });
     }
   }, [currentOrgId, organisations, form, allBreeds]);
 
@@ -482,6 +484,14 @@ export default function NewShowPage() {
   const watchedEndDate = form.watch('endDate');
   const watchedAcceptsPostal = form.watch('acceptsPostalEntries');
   const watchedEntriesOpen = form.watch('entriesOpenDate');
+
+  // SV/WUSV regionals always run separate Dog + Bitch — force the form
+  // value if the secretary flips the ruleset after starting the wizard.
+  useEffect(() => {
+    if (watchedShowRuleset === 'wusv') {
+      form.setValue('classSexArrangement', 'separate_sex', { shouldDirty: false });
+    }
+  }, [watchedShowRuleset, form]);
 
   // Auto-compute endDate from startDate + showDays
   const [showDays, setShowDays] = useState(1);
@@ -859,28 +869,34 @@ export default function NewShowPage() {
                     </AccordionTrigger>
                     <AccordionContent className="space-y-6 pb-2">
 
-                <FormField
-                  control={form.control}
-                  name="classSexArrangement"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Class Structure</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value ?? ''}>
-                        <FormControl>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select class structure" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {classSexArrangements.map((a) => (
-                            <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {/* SV regionals are always separate Dog + Bitch — hide
+                    the picker entirely (Amanda 2026-05-24). The form
+                    value gets forced to 'separate_sex' below when the
+                    SV ruleset is selected. */}
+                {watchedShowRuleset !== 'wusv' && (
+                  <FormField
+                    control={form.control}
+                    name="classSexArrangement"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Class Structure</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value ?? ''}>
+                          <FormControl>
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select class structure" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {classSexArrangements.map((a) => (
+                              <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
 
                     </AccordionContent>
                   </AccordionItem>

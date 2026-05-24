@@ -22,7 +22,7 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { formatDateRange, poundsToPence } from '@/lib/date-utils';
-import { showTypeLabels } from '@/lib/show-types';
+import { showTypeLabels, displayShowTypeLabel } from '@/lib/show-types';
 import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -152,7 +152,7 @@ export default function OverviewPage() {
           {/* Type / Scope / Structure badges — dense horizontal row */}
           <div className="mt-3 flex flex-wrap gap-1.5">
             <Badge variant="secondary" className="text-[11px] font-medium">
-              {showTypeLabels[show.showType] ?? show.showType}
+              {displayShowTypeLabel(show.showType, show.showRuleset)}
             </Badge>
             <Badge variant="outline" className="text-[11px] font-medium capitalize">
               {show.showScope.replace('_', ' ')}

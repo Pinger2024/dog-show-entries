@@ -3805,7 +3805,9 @@ export const secretaryRouter = createTRPCRouter({
           actionPath: '', severity: 'recommended',
         });
       }
-      if (!show.kcLicenceNo) {
+      // SV/WUSV regionals aren't RKC-licensed — skip the warning entirely
+      // for that ruleset (Amanda 2026-05-24).
+      if (!show.kcLicenceNo && show.showRuleset !== 'wusv') {
         openEntriesBlockers.push({
           key: 'no_rkc_licence', label: 'RKC licence not recorded',
           detail: 'Record the RKC licence number',

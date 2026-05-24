@@ -30,7 +30,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { trpc } from '@/lib/trpc/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { showTypeLabels } from '@/lib/show-types';
+import { showTypeLabels, displayShowTypeLabel } from '@/lib/show-types';
 import { buildClassificationHeading } from '@/lib/show-classification';
 import { formatCurrency } from '@/lib/date-utils';
 import { LiveEntryStats } from '@/components/show/live-entry-stats';
@@ -723,7 +723,7 @@ export function ShowDetailClient() {
                   variant="outline"
                   className={`text-[11px] font-semibold uppercase tracking-wide ${t.showType}`}
                 >
-                  {showTypeLabels[show.showType] ?? show.showType}
+                  {displayShowTypeLabel(show.showType, show.showRuleset)}
                 </Badge>
                 {isCompleted && (
                   <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${t.mutedChip}`}>
@@ -949,7 +949,7 @@ export function ShowDetailClient() {
             )}
             <ShowShareDropdown
               showName={show.name}
-              showType={showTypeLabels[show.showType] ?? show.showType}
+              showType={displayShowTypeLabel(show.showType, show.showRuleset)}
               showDate={format(parseISO(show.startDate), 'd MMMM yyyy')}
               organisationName={show.organisation?.name ?? ''}
               venueName={show.venue?.name}
@@ -1038,7 +1038,7 @@ export function ShowDetailClient() {
               Show Details
             </h2>
             <dl className="mt-5 space-y-2.5 text-sm">
-              <InfoRow label="Type" value={showTypeLabels[show.showType] ?? show.showType} />
+              <InfoRow label="Type" value={displayShowTypeLabel(show.showType, show.showRuleset)} />
               <InfoRow label="Scope" value={show.showScope.replace(/_/g, ' ')} capitalize />
               {show.kcLicenceNo && <InfoRow label="RKC Licence" value={show.kcLicenceNo} />}
               {show.entryCloseDate && (
