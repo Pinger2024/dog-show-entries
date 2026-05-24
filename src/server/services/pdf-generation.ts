@@ -466,31 +466,43 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     sortOrder: ad.sortOrder,
   }));
 
-  // Build judges with sex-annotated display labels
-  // Group by (name + sex) to preserve sex-split assignments. Skip group/show-
-  // level (panel) assignments — those are surfaced via panelJudges below.
-  const judgeKey = (name: string, sex: string | null) => `${name}::${sex ?? 'all'}`;
-  const judgeEntries = new Map<string, { name: string; sex: string | null; breeds: string[]; isJH: boolean }>();
-  const specialAwardsJudges: Array<{ name: string }> = [];
+  // Group by judge — combining dog + bitch assignments into a single
+  // "Dogs & Bitches" row (Amanda 2026-05-24: "anyway we can have Hugh's
+  // name showing one with dogs & bitches"). Mirrors the user-facing
+  // /api/schedule/[showId] route's combining logic so both code paths
+  // produce identical schedules. Skip group/show-level (panel)
+  // assignments — those are surfaced via panelJudges below.
+  const judgeEntries = new Map<string, {
+    name: string;
+    breeds: Set<string>;
+    sexes: Set<string>;
+    hasNullSexAssignment: boolean;
+    subjectToRkcApproval: boolean;
+  }>();
+  const specialAwardsJudges: Array<{ name: string; subjectToRkcApproval: boolean }> = [];
   for (const ja of judgeAssignments) {
-    if (!ja.judge?.name) continue;
+    if (!ja.judge?.id || !ja.judge?.name) continue;
+    const subjectToRkcApproval = (ja as { subjectToRkcApproval?: boolean }).subjectToRkcApproval === true;
     if (ja.isSpecialAwardsClassesJudge) {
-      specialAwardsJudges.push({ name: ja.judge.name });
+      specialAwardsJudges.push({ name: ja.judge.name, subjectToRkcApproval });
       continue;
     }
     if (ja.judgeRoleId) continue;
-    const key = judgeKey(ja.judge.name, ja.sex);
+    const key = ja.judge.id;
     const existing = judgeEntries.get(key);
-    // Detect Junior Handling: no breed, sex=null, and class names contain "handling"
-    const isJH = !ja.breed && ja.sex === null;
     if (existing) {
-      if (ja.breed?.name) existing.breeds.push(ja.breed.name);
+      if (ja.breed?.name) existing.breeds.add(ja.breed.name);
+      if (ja.sex) existing.sexes.add(ja.sex);
+      else existing.hasNullSexAssignment = true;
+      // Any single assignment being subject-to-approval flags the whole judge entry.
+      if (subjectToRkcApproval) existing.subjectToRkcApproval = true;
     } else {
       judgeEntries.set(key, {
         name: ja.judge.name,
-        sex: ja.sex,
-        breeds: ja.breed?.name ? [ja.breed.name] : [],
-        isJH,
+        breeds: new Set(ja.breed?.name ? [ja.breed.name] : []),
+        sexes: new Set(ja.sex ? [ja.sex] : []),
+        hasNullSexAssignment: !ja.sex,
+        subjectToRkcApproval,
       });
     }
   }
@@ -499,9 +511,11 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
   const panelJudges: SchedulePanelJudge[] = judgeAssignments
     .filter((ja) => ja.judgeRoleId && ja.judge?.name && ja.judgeRole)
     .map((ja) => {
-      const namePart = ja.judge!.kennelClubAffix
+      const subjectToRkcApproval = (ja as { subjectToRkcApproval?: boolean }).subjectToRkcApproval === true;
+      const baseName = ja.judge!.kennelClubAffix
         ? `${ja.judge!.name} (${ja.judge!.kennelClubAffix})`
         : ja.judge!.name;
+      const namePart = `${baseName}${subjectToRkcApproval ? ' (subject to RKC approval)' : ''}`;
       return {
         displayLabel: namePart,
         roleName: ja.judgeRole!.name,
@@ -513,21 +527,32 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
       };
     });
 
-  // Build display labels: "Dogs — Mr A Winfrow" or "Junior Handling — Mandy McAteer"
-  function sexPrefix(sex: string | null, isJH: boolean): string | null {
-    if (isJH) return 'Junior Handling';
-    if (sex === 'dog') return 'Dogs';
-    if (sex === 'bitch') return 'Bitches';
-    return null; // both sexes — no prefix needed
-  }
+  const approvalSuffix = (subjectToRkcApproval: boolean) =>
+    subjectToRkcApproval ? ' (subject to RKC approval)' : '';
+
+  // Detect Junior Handling: a judge whose only assignments have no
+  // breed/sex set — JH classes don't FK to a breed and don't carry a sex.
+  const hasJuniorHandlerClasses = showClasses.some((sc) => sc.classDefinition?.type === 'junior_handler');
 
   const judges: ScheduleJudge[] = [...judgeEntries.values()].map((j) => {
-    const prefix = sexPrefix(j.sex, j.isJH);
+    const breedArr = Array.from(j.breeds);
+    const isJH = breedArr.length === 0 && j.sexes.size === 0 && j.hasNullSexAssignment && hasJuniorHandlerClasses;
+    const role = isJH
+      ? 'Junior Handling'
+      : j.sexes.has('dog') && j.sexes.has('bitch')
+        ? 'Dogs & Bitches'
+        : j.sexes.has('dog')
+          ? 'Dogs'
+          : j.sexes.has('bitch')
+            ? 'Bitches'
+            : null;
+    const suffix = approvalSuffix(j.subjectToRkcApproval);
+    const namePart = `${j.name}${suffix}`;
     return {
       name: j.name,
-      breeds: j.breeds,
-      sex: j.sex,
-      displayLabel: prefix ? `${prefix} — ${j.name}` : j.name,
+      breeds: breedArr,
+      sex: j.sexes.size === 1 ? (Array.from(j.sexes)[0] as 'dog' | 'bitch') : null,
+      displayLabel: role ? `${role} — ${namePart}` : namePart,
     };
   });
 
@@ -537,7 +562,7 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
       name: sac.name,
       breeds: [],
       sex: null,
-      displayLabel: `${sac.name} — Special Awards Classes`,
+      displayLabel: `${sac.name} — Special Awards Classes${approvalSuffix(sac.subjectToRkcApproval)}`,
     });
   }
 

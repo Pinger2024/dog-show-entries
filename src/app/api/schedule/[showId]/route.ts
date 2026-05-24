@@ -140,17 +140,19 @@ export async function GET(
     sexes: Set<string>; // 'dog' | 'bitch'
     hasNullSexAssignment: boolean; // any assignment with sex=null
   };
-  const judgeMap = new Map<string, JudgeAggregate>();
+  const judgeMap = new Map<string, JudgeAggregate & { subjectToRkcApproval: boolean }>();
   // Separate bucket for the lunchtime Special Awards Classes judge — gets
   // its own row on the schedule labelled "special awards classes" instead
   // of the breed name. Amanda's spec 2026-05-14.
-  const specialAwardsJudges: Array<{ name: string; affix: string | null }> = [];
+  const specialAwardsJudges: Array<{ name: string; affix: string | null; subjectToRkcApproval: boolean }> = [];
   for (const ja of judgeAssignments) {
     if (!ja.judge?.id || !ja.judge?.name) continue;
+    const subjectToRkcApproval = (ja as { subjectToRkcApproval?: boolean }).subjectToRkcApproval === true;
     if (ja.isSpecialAwardsClassesJudge) {
       specialAwardsJudges.push({
         name: ja.judge.name,
         affix: ja.judge.kennelClubAffix ?? null,
+        subjectToRkcApproval,
       });
       continue;
     }
@@ -166,6 +168,7 @@ export async function GET(
         breeds: new Set(),
         sexes: new Set(),
         hasNullSexAssignment: false,
+        subjectToRkcApproval,
       });
     }
     const agg = judgeMap.get(key)!;
@@ -175,6 +178,8 @@ export async function GET(
     } else {
       agg.hasNullSexAssignment = true;
     }
+    // Any single assignment carrying the flag promotes the whole judge.
+    if (subjectToRkcApproval) agg.subjectToRkcApproval = true;
   }
 
   // Multi-breed panel judges (group-level + show-level). Single-breed shows
@@ -182,9 +187,11 @@ export async function GET(
   const panelJudges: SchedulePanelJudge[] = judgeAssignments
     .filter((ja) => ja.judgeRoleId && ja.judge?.name && ja.judgeRole)
     .map((ja) => {
-      const namePart = ja.judge!.kennelClubAffix
+      const subjectToRkcApproval = (ja as { subjectToRkcApproval?: boolean }).subjectToRkcApproval === true;
+      const baseName = ja.judge!.kennelClubAffix
         ? `${ja.judge!.name} (${ja.judge!.kennelClubAffix})`
         : ja.judge!.name;
+      const namePart = `${baseName}${subjectToRkcApproval ? ' (subject to RKC approval)' : ''}`;
       return {
         displayLabel: namePart,
         roleName: ja.judgeRole!.name,
@@ -221,7 +228,8 @@ export async function GET(
       role = show.showScope === 'single_breed' ? 'Breed Classes' : 'All Breeds';
     }
 
-    const namePart = agg.affix ? `${agg.name} (${agg.affix})` : agg.name;
+    const baseNamePart = agg.affix ? `${agg.name} (${agg.affix})` : agg.name;
+    const namePart = `${baseNamePart}${agg.subjectToRkcApproval ? ' (subject to RKC approval)' : ''}`;
     const displayLabel = `${namePart} — ${role}`;
     return {
       name: agg.name,
@@ -247,7 +255,8 @@ export async function GET(
 
   // Append Special Awards Classes judges with their own role label.
   for (const sac of specialAwardsJudges) {
-    const namePart = sac.affix ? `${sac.name} (${sac.affix})` : sac.name;
+    const baseNamePart = sac.affix ? `${sac.name} (${sac.affix})` : sac.name;
+    const namePart = `${baseNamePart}${sac.subjectToRkcApproval ? ' (subject to RKC approval)' : ''}`;
     judges.push({
       name: sac.name,
       affix: sac.affix,

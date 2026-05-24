@@ -36,6 +36,12 @@ export const judgeAssignments = pgTable(
      *  This judge covers any showClasses whose class definition name starts
      *  with "Special Award Class". */
     isSpecialAwardsClassesJudge: boolean('is_special_awards_classes_judge').notNull().default(false),
+    /** When true, the schedule appends "(subject to RKC approval)" after
+     *  the judge's name. Used when a club has nominated a judge but the
+     *  RKC hasn't confirmed yet — e.g. South Western GSD 55th 2026
+     *  (Amanda 2026-05-24). Catalogue and other documents are unaffected
+     *  per Amanda's scope. */
+    subjectToRkcApproval: boolean('subject_to_rkc_approval').notNull().default(false),
     // Results approval fields
     approvalToken: uuid('approval_token'),
     approvalStatus: text('approval_status'), // null | 'pending' | 'approved' | 'declined'
