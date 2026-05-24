@@ -1033,7 +1033,7 @@ function SponsorshipRow({
                   <img
                     src={sponsorship.bannerImageUrl}
                     alt="Class banner"
-                    className="h-14 w-full rounded border object-cover"
+                    className="h-auto w-full rounded border bg-muted/30"
                   />
                   <div className="flex items-center gap-2">
                     <button

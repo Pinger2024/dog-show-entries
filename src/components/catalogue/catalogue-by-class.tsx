@@ -398,7 +398,11 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
   // pedigree line). After densification (Amanda 2026-05-23) each entry
   // fits in ~4 lines so we can pack more per chunk; bumped 40 → 60.
   // Keep below the 80 ceiling to avoid the react-pdf `-9.979e+21` crash.
-  const PAGE_ENTRY_THRESHOLD = isSvShow ? 80 : 80;
+  // Lower SV threshold once banners are in play — banner Image nodes
+  // bump the per-page node count and trigger the react-pdf
+  // `-9.979e+21` crash when chunks get too big (Amanda 2026-05-24, after
+  // uploading banners to several classes on the Midland show).
+  const PAGE_ENTRY_THRESHOLD = isSvShow ? 50 : 80;
   const classChunks: string[][] = [];
   let currentChunk: string[] = [];
   let currentCount = 0;
@@ -564,10 +568,26 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
                   : null;
                 if (!banner) return null;
                 return (
-                  <Image
-                    src={banner}
-                    style={{ width: '100%', height: 72, marginBottom: 4 }}
-                  />
+                  // Reserved 75pt strip + objectFit:contain so the
+                  // banner sits at its true aspect ratio instead of
+                  // being stretched (Amanda 2026-05-24). 75pt matches
+                  // a 5:1 banner exactly at A5 page width — narrower
+                  // banners centre-fit, taller banners letterbox.
+                  <View
+                    wrap={false}
+                    style={{
+                      width: '100%',
+                      height: 75,
+                      marginBottom: 4,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Image
+                      src={banner}
+                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                    />
+                  </View>
                 );
               })()}
               {isSvShow ? (() => {
