@@ -273,7 +273,9 @@ export default function OverviewPage() {
       )}
 
       {/* Sundry items management */}
-      <SundryItemManager showId={showId} />
+      <div id="sundry-items">
+        <SundryItemManager showId={showId} />
+      </div>
 
       {/* Delete show (draft only) */}
       {show.status === 'draft' && (

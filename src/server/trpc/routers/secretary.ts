@@ -3580,6 +3580,11 @@ export const secretaryRouter = createTRPCRouter({
         .from(showClasses)
         .where(eq(showClasses.showId, input.showId));
 
+      const [sundryItemCount] = await ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(sundryItems)
+        .where(eq(sundryItems.showId, input.showId));
+
       // Use the same coverage logic as getJudgeCoverage — query classes + assignments
       const [showClassRows, assignmentRows, stewardCountRow, ringCountRow] = await Promise.all([
         ctx.db.query.showClasses.findMany({
@@ -3658,6 +3663,11 @@ export const secretaryRouter = createTRPCRouter({
       detected.entry_fees_set = show.firstEntryFee != null && show.firstEntryFee > 0;
       detected.entry_close_date_set = show.entryCloseDate != null;
       detected.secretary_details_set = !!(show.secretaryName && show.secretaryEmail);
+      // Sundry items — surfaced in the setup checklist because Amanda
+      // kept missing the step on SV regional shows (2026-05-24). Counts
+      // both enabled and disabled rows, so the secretary can explicitly
+      // disable the presets and still tick the box.
+      detected.sundry_items_reviewed = Number(sundryItemCount?.count) > 0;
       const scheduleData = show.scheduleData as Record<string, unknown> | null;
       const guarantors = (scheduleData?.guarantors as { name: string }[] | undefined) ?? [];
       const minGuarantors = show.showType === 'championship' ? 6 : 3;
@@ -3812,6 +3822,23 @@ export const secretaryRouter = createTRPCRouter({
           key: 'no_rkc_licence', label: 'RKC licence not recorded',
           detail: 'Record the RKC licence number',
           actionPath: '', severity: 'recommended',
+        });
+      }
+
+      // Sundry items step is easy to miss on the show page — bump it onto
+      // the "Set up your show" checklist as a recommended item so Amanda
+      // doesn't keep forgetting it on SV regionals (her 2026-05-24
+      // feedback). Recommended-severity so it doesn't block entries
+      // opening — clubs that genuinely sell no sundries can ignore it.
+      const [sundryCountForBlocker] = await ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(sundryItems)
+        .where(eq(sundryItems.showId, input.showId));
+      if (Number(sundryCountForBlocker?.count) === 0) {
+        openEntriesBlockers.push({
+          key: 'no_sundry_items', label: 'Sundry items not added',
+          detail: 'Add catalogues, memberships, donations or other extras exhibitors can buy at checkout',
+          actionPath: `/secretary/shows/${input.showId}#sundry-items`, severity: 'recommended',
         });
       }
 

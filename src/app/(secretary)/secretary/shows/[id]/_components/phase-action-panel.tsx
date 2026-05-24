@@ -199,6 +199,7 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
     { key: 'guarantors_added', label: 'Guarantors added' },
     { key: 'venue_set', label: 'Venue confirmed' },
     ...(isSvShow ? [] : [{ key: 'kc_licence_recorded', label: 'RKC licence recorded' }]),
+    { key: 'sundry_items_reviewed', label: 'Sundry items added' },
   ];
 
   if (autoDetect) {
@@ -214,6 +215,7 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
         if (ak.key === 'venue_set' && b.key === 'no_venue') return true;
         if (ak.key === 'kc_licence_recorded' && b.key === 'no_rkc_licence') return true;
         if (ak.key === 'championship_classes_complete' && b.key === 'championship_missing_classes') return true;
+        if (ak.key === 'sundry_items_reviewed' && b.key === 'no_sundry_items') return true;
         return false;
       });
 
