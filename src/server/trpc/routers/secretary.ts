@@ -2559,6 +2559,34 @@ export const secretaryRouter = createTRPCRouter({
     }),
 
   /**
+   * Flip the "subject to RKC approval" flag for every assignment a judge has
+   * at a given show. The schedule renders "(subject to RKC approval)" after
+   * the judge's name when true. Per Amanda's spec (2026-05-24), the flag is
+   * per-assignment in the schema but always applied uniformly across a
+   * judge's assignments at a show — so this mutation toggles the lot.
+   */
+  setJudgeRkcApproval: secretaryProcedure
+    .input(z.object({
+      showId: z.string().uuid(),
+      judgeId: z.string().uuid(),
+      subjectToRkcApproval: z.boolean(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      const rows = await ctx.db.update(judgeAssignments)
+        .set({ subjectToRkcApproval: input.subjectToRkcApproval })
+        .where(and(
+          eq(judgeAssignments.showId, input.showId),
+          eq(judgeAssignments.judgeId, input.judgeId),
+        ))
+        .returning({ id: judgeAssignments.id });
+      if (rows.length === 0) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'No assignments found for that judge on this show' });
+      }
+      return { updated: rows.length };
+    }),
+
+  /**
    * Atomic create-or-find judge + assign to show.
    * If kcNumber is provided and a judge with that number exists, reuse them.
    * Creates assignments for each breedId+sex combination.

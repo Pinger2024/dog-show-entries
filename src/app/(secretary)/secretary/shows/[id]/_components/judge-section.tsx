@@ -26,6 +26,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Card,
   CardContent,
@@ -317,6 +318,18 @@ export function JudgesSection({ showId }: { showId: string }) {
     onError: (err) => toast.error(err.message ?? 'Failed to update judge'),
   });
 
+  const setRkcApprovalMutation = trpc.secretary.setJudgeRkcApproval.useMutation({
+    onSuccess: (_data, vars) => {
+      toast.success(
+        vars.subjectToRkcApproval
+          ? 'Judge flagged as subject to RKC approval'
+          : 'RKC approval flag cleared',
+      );
+      utils.secretary.getShowJudges.invalidate({ showId });
+    },
+    onError: (err) => toast.error(err.message ?? 'Failed to update RKC approval flag'),
+  });
+
   function openEditJudge(judge: { judgeId: string; name: string; contactEmail: string | null; contactPhone: string | null; kennelClubAffix?: string | null }) {
     setEditJudgeForm({
       name: judge.name,
@@ -357,6 +370,7 @@ export function JudgesSection({ showId }: { showId: string }) {
       hasSpecialAwards: boolean;
       hasJuniorHandling: boolean;
       hasBreedAssignment: boolean;
+      subjectToRkcApproval: boolean;
     };
     // SV regional shows have only one implicit breed (German Shepherd Dog) —
     // judge_assignments don't carry an explicit breed FK so the "main
@@ -394,6 +408,9 @@ export function JudgesSection({ showId }: { showId: string }) {
         if (isSac) existing.hasSpecialAwards = true;
         if (isJhShape) existing.hasJuniorHandling = true;
         if ((a.breed && !isSac) || isSvMainClass) existing.hasBreedAssignment = true;
+        if ((a as { subjectToRkcApproval?: boolean }).subjectToRkcApproval) {
+          existing.subjectToRkcApproval = true;
+        }
       } else {
         const breedSexes = new Map<string, Set<'dog' | 'bitch' | 'both'>>();
         if (effectiveBreed && !isSac) {
@@ -413,6 +430,7 @@ export function JudgesSection({ showId }: { showId: string }) {
           hasSpecialAwards: isSac,
           hasJuniorHandling: isJhShape,
           hasBreedAssignment: (!!a.breed && !isSac) || isSvMainClass,
+          subjectToRkcApproval: (a as { subjectToRkcApproval?: boolean }).subjectToRkcApproval === true,
         });
       }
     }
@@ -586,6 +604,29 @@ export function JudgesSection({ showId }: { showId: string }) {
                             Download signed contract (PDF)
                           </a>
                         )}
+                        <label
+                          htmlFor={`rkc-approval-${j.judgeId}`}
+                          className="mt-3 flex min-h-[2.75rem] cursor-pointer items-center gap-2.5 rounded-md border border-dashed border-muted-foreground/30 px-3 py-2 text-sm transition-colors hover:bg-muted/40"
+                        >
+                          <Checkbox
+                            id={`rkc-approval-${j.judgeId}`}
+                            checked={j.subjectToRkcApproval}
+                            disabled={setRkcApprovalMutation.isPending}
+                            onCheckedChange={(checked) => {
+                              setRkcApprovalMutation.mutate({
+                                showId,
+                                judgeId: j.judgeId,
+                                subjectToRkcApproval: checked === true,
+                              });
+                            }}
+                          />
+                          <span className="flex-1">
+                            <span className="font-medium">Subject to RKC approval</span>
+                            <span className="ml-1 text-xs text-muted-foreground">
+                              — adds the note after the judge&apos;s name on the schedule
+                            </span>
+                          </span>
+                        </label>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
                         {!contract && (
