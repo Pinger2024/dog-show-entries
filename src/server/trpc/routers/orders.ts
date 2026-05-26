@@ -350,6 +350,59 @@ export const ordersRouter = createTRPCRouter({
           .where(inArray(orders.id, staleOrderIds));
       }
 
+      // WUSV / regional rule (Amanda 2026-05-26): a dog can be entered
+      // in exactly ONE class at a regional show — the SV grading model
+      // assigns one age/coat/sex class per dog by definition. Enforce
+      // both axes of "one class per dog":
+      //   (a) within this order, each standard entry must select one class
+      //   (b) the dog must not already have a non-deleted entry on this show
+      // NFC and junior-handler entries are exempt (NFC is by definition
+      // not for grading; JH is a handler-skill class, not a dog class).
+      if (show.showRuleset === 'wusv') {
+        const seenDogIds = new Set<string>();
+        for (const entryInput of input.entries) {
+          if (entryInput.entryType !== 'standard' || entryInput.isNfc) continue;
+          if (entryInput.classIds.length > 1) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: 'At a regional show, a dog can only be entered in one class. Please pick a single class for each dog.',
+            });
+          }
+          if (entryInput.dogId) {
+            if (seenDogIds.has(entryInput.dogId)) {
+              const dog = await ctx.db.query.dogs.findFirst({
+                where: eq(dogs.id, entryInput.dogId),
+                columns: { registeredName: true },
+              });
+              throw new TRPCError({
+                code: 'BAD_REQUEST',
+                message: `${dog?.registeredName ?? 'This dog'} appears twice in your cart. Each dog can only be entered once at a regional.`,
+              });
+            }
+            seenDogIds.add(entryInput.dogId);
+
+            const dupOnShow = await ctx.db.query.entries.findFirst({
+              where: and(
+                eq(entries.dogId, entryInput.dogId),
+                eq(entries.showId, input.showId),
+                isNull(entries.deletedAt),
+              ),
+              columns: { id: true, status: true },
+            });
+            if (dupOnShow) {
+              const dog = await ctx.db.query.dogs.findFirst({
+                where: eq(dogs.id, entryInput.dogId),
+                columns: { registeredName: true },
+              });
+              throw new TRPCError({
+                code: 'BAD_REQUEST',
+                message: `${dog?.registeredName ?? 'This dog'} is already entered in this regional show. Each dog can only be entered once at a regional.`,
+              });
+            }
+          }
+        }
+      }
+
       // Check for duplicate classes against confirmed entries only
       // (pending entries from previous attempts have been cleaned up above)
       for (const entryInput of input.entries) {

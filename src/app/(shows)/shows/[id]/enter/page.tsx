@@ -474,11 +474,17 @@ export default function EnterShowPage() {
   }
 
   function toggleClass(classId: string) {
-    setSelectedClassIds((prev) =>
-      prev.includes(classId)
+    setSelectedClassIds((prev) => {
+      // WUSV / regional rule: one class per dog (Amanda 2026-05-26). Pick
+      // semantics: clicking the selected class deselects it; clicking a
+      // different class replaces the selection.
+      if (show?.showRuleset === 'wusv') {
+        return prev.includes(classId) ? [] : [classId];
+      }
+      return prev.includes(classId)
         ? prev.filter((id) => id !== classId)
-        : [...prev, classId]
-    );
+        : [...prev, classId];
+    });
   }
 
   function handleConfirmClasses() {

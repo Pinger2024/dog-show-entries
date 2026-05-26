@@ -181,6 +181,34 @@ export const entriesRouter = createTRPCRouter({
         }
       }
 
+      // WUSV / regional rule (Amanda 2026-05-26): one class per dog at a
+      // regional show, and once a dog is on the show they can't be entered
+      // again. Mirrors the same guard on the exhibitor checkout path in
+      // orders.ts createOrder.
+      if (show.showRuleset === 'wusv' && !input.isNfc) {
+        if (input.classIds.length > 1) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'At a regional show, a dog can only be entered in one class. Please pick a single class.',
+          });
+        }
+        const dupOnShow = await ctx.db.query.entries.findFirst({
+          where: and(
+            eq(entries.dogId, input.dogId),
+            eq(entries.showId, input.showId),
+            isNull(entries.deletedAt),
+          ),
+          columns: { id: true },
+        });
+        if (dupOnShow) {
+          const dogName = dog.registeredName ?? 'This dog';
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `${dogName} is already entered in this regional show. Each dog can only be entered once at a regional.`,
+          });
+        }
+      }
+
       // Check for duplicate classes against confirmed entries only
       // (pending entries from abandoned checkouts should not block re-entry)
       const existingEntry = await ctx.db.query.entries.findFirst({
