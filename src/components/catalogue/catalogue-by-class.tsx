@@ -465,28 +465,11 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
         const sorted = [...classEntries].sort(
           (a, b) => (a.catalogueNumber ?? '').localeCompare(b.catalogueNumber ?? '', undefined, { numeric: true })
         );
-        // De-duplicate the per-class sponsor banner across consecutive
-        // classes that share the same sponsor (Amanda 2026-05-26):
-        // when one sponsor backs four classes in a row, render the
-        // banner only above the first of the four, not all four.
-        // Saves ~50pt per repeat — meaningful page-density win.
-        const currentBannerUrl = classLabel && sponsorsByClassLabel.has(classLabel)
-          ? sponsorsByClassLabel.get(classLabel)!.find((s) => s.bannerImageUrl)?.bannerImageUrl ?? null
-          : null;
-        const prevKey = idx > 0 ? chunkKeys[idx - 1] : null;
-        const prevClassLabel = prevKey ? grouped[prevKey].classLabel : null;
-        const prevBannerUrl = prevClassLabel && sponsorsByClassLabel.has(prevClassLabel)
-          ? sponsorsByClassLabel.get(prevClassLabel)!.find((s) => s.bannerImageUrl)?.bannerImageUrl ?? null
-          : null;
-        const showBanner = !!currentBannerUrl && currentBannerUrl !== prevBannerUrl;
-        // Only the smallest classes (≤ 3 entries) stay strictly atomic.
-        // Above that we let classes break across pages because keeping
-        // larger classes glued together was wasting half-pages of
-        // whitespace before each class banner (Amanda 2026-05-26).
-        // The inner header-block (banner + class header + first entry)
-        // is still kept atomic below, so a class never orphans its
-        // header from its first dog — Amanda's earlier feedback.
-        const keepTogether = sorted.length <= 3;
+        // All classes can break across pages — page packing wins over
+        // keeping classes atomic. Amanda 2026-05-26: "I don't think it
+        // would create an orphaned banner ... I'd like to maximise our
+        // profit as much as possible" (fewer pages = lower print cost).
+        const keepTogether = false;
 
         // Render one entry — extracted so we can render the FIRST
         // entry inside the wrap=false header block (keeping header
@@ -566,21 +549,24 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
             style={idx > 0 ? { marginTop: 6 } : undefined}
           >
 
-            {/* Header block kept atomic with the FIRST entry so we
-                never orphan a class heading at the bottom of a page
-                with the dogs starting fresh on the next. Per Amanda:
-                "if there is a dog displayed immediately under the
-                classification … but it doesn't look right" without.
-                SV variant drops the green Remi band and uses the SV
-                palette to match the schedule (Michael 2026-05-23). */}
-            <View wrap={false}>
+            {/* Header block: Amanda 2026-05-26 turned off the
+                "atomic with first entry" constraint because it was
+                wasting half-pages of whitespace before each class.
+                The renderer can now break the banner / class header
+                from the entries beneath if that's how the page packs
+                tightest — Amanda accepts the occasional orphan in
+                exchange for a meaningfully smaller catalogue. */}
+            <View>
               {/* Class-sponsor banner — landscape strip above the class
                   header when a class sponsor has uploaded a banner image
                   (HUNDARK / ROBASDAN-style festive strips). SV/WUSV
                   shows only per Amanda 2026-05-23 ("I don't want this
                   for RKC shows yet"). */}
-              {isSvShow && showBanner && currentBannerUrl && (() => {
-                const banner = currentBannerUrl;
+              {isSvShow && (() => {
+                const banner = classLabel && sponsorsByClassLabel.has(classLabel)
+                  ? sponsorsByClassLabel.get(classLabel)!.find((s) => s.bannerImageUrl)?.bannerImageUrl
+                  : null;
+                if (!banner) return null;
                 return (
                   // Reserved 50pt strip + objectFit:contain so the
                   // banner sits at its true aspect ratio instead of
