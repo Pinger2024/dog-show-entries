@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
 import { Button } from '@/components/ui/button';
-import { showTypeLabels } from '@/lib/show-types';
+import { displayShowTypeLabel } from '@/lib/show-types';
 import { formatCurrency } from '@/lib/date-utils';
 import { ShareKitDialog } from '@/components/show/share-kit-dialog';
 import { ShareKitCard } from '@/components/show/share-kit';
@@ -544,7 +544,7 @@ export function ShowPreviewClient() {
   const dayName = format(parseISO(show.startDate), 'EEEE');
   const dayNum = format(parseISO(show.startDate), 'd');
   const monthYear = format(parseISO(show.startDate), 'MMMM yyyy');
-  const showType = showTypeLabels[show.showType] ?? show.showType;
+  const showType = displayShowTypeLabel(show.showType, show.showRuleset);
   const totalClasses = (show.showClasses ?? []).length;
   const titleSponsor = showSponsors?.find((s) => s.tier === 'title');
 
