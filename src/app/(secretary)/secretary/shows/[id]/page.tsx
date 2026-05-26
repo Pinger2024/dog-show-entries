@@ -434,6 +434,7 @@ function EditShowDetailsDialog({
     name: string;
     showType: string;
     showScope: string;
+    showRuleset: string | null;
     classSexArrangement: string | null;
     secretaryEmail: string | null;
     secretaryName: string | null;
@@ -460,6 +461,7 @@ function EditShowDetailsDialog({
   showId: string;
 }) {
   const [open, setOpen] = useState(false);
+  const isWusv = show.showRuleset === 'wusv';
   const [name, setName] = useState(show.name);
   const [showType, setShowType] = useState(show.showType);
   const [showScope, setShowScope] = useState(show.showScope);
@@ -707,61 +709,85 @@ function EditShowDetailsDialog({
                 onChange={(e) => setName(e.target.value)}
               />
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label>Show Type</Label>
-                <Select value={showType} onValueChange={setShowType}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="companion">Companion</SelectItem>
-                    <SelectItem value="primary">Primary</SelectItem>
-                    <SelectItem value="limited">Limited</SelectItem>
-                    <SelectItem value="open">Open</SelectItem>
-                    <SelectItem value="premier_open">Premier Open</SelectItem>
-                    <SelectItem value="championship">Championship</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Show Scope</Label>
-                <Select value={showScope} onValueChange={setShowScope}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="single_breed">Single Breed</SelectItem>
-                    <SelectItem value="group">Group</SelectItem>
-                    <SelectItem value="general">General</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label>Class Structure</Label>
-                <Select value={classSexArrangement} onValueChange={setClassSexArrangement}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select class structure" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="separate_sex">Separate Dog & Bitch</SelectItem>
-                    <SelectItem value="combined_sex">Combined Dog & Bitch</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="edit-secretary-email">Secretary Contact Email</Label>
-                <Input
-                  id="edit-secretary-email"
-                  type="email"
-                  value={secretaryEmail}
-                  onChange={(e) => setSecretaryEmail(e.target.value)}
-                  placeholder="e.g. secretary@club.co.uk"
-                />
-              </div>
-            </div>
+            {isWusv ? (
+              <>
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900/40 dark:bg-amber-950/30">
+                  <p className="font-medium text-amber-900 dark:text-amber-200">Show Format: Regional</p>
+                  <p className="mt-1 text-xs text-amber-900/80 dark:text-amber-200/80">
+                    WUSV / SV ruleset — single breed (German Shepherd Dog), separate Dog &amp; Bitch classes,
+                    coat type split. These are fixed for Regional shows and aren&apos;t editable here.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-secretary-email">Secretary Contact Email</Label>
+                  <Input
+                    id="edit-secretary-email"
+                    type="email"
+                    value={secretaryEmail}
+                    onChange={(e) => setSecretaryEmail(e.target.value)}
+                    placeholder="e.g. secretary@club.co.uk"
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label>Show Type</Label>
+                    <Select value={showType} onValueChange={setShowType}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="companion">Companion</SelectItem>
+                        <SelectItem value="primary">Primary</SelectItem>
+                        <SelectItem value="limited">Limited</SelectItem>
+                        <SelectItem value="open">Open</SelectItem>
+                        <SelectItem value="premier_open">Premier Open</SelectItem>
+                        <SelectItem value="championship">Championship</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Show Scope</Label>
+                    <Select value={showScope} onValueChange={setShowScope}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="single_breed">Single Breed</SelectItem>
+                        <SelectItem value="group">Group</SelectItem>
+                        <SelectItem value="general">General</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label>Class Structure</Label>
+                    <Select value={classSexArrangement} onValueChange={setClassSexArrangement}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select class structure" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="separate_sex">Separate Dog & Bitch</SelectItem>
+                        <SelectItem value="combined_sex">Combined Dog & Bitch</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit-secretary-email">Secretary Contact Email</Label>
+                    <Input
+                      id="edit-secretary-email"
+                      type="email"
+                      value={secretaryEmail}
+                      onChange={(e) => setSecretaryEmail(e.target.value)}
+                      placeholder="e.g. secretary@club.co.uk"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* Secretary & Schedule Details */}
             <div className="grid gap-4 sm:grid-cols-2">
