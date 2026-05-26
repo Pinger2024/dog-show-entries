@@ -465,6 +465,20 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
         const sorted = [...classEntries].sort(
           (a, b) => (a.catalogueNumber ?? '').localeCompare(b.catalogueNumber ?? '', undefined, { numeric: true })
         );
+        // De-duplicate the per-class sponsor banner across consecutive
+        // classes that share the same sponsor (Amanda 2026-05-26):
+        // when one sponsor backs four classes in a row, render the
+        // banner only above the first of the four, not all four.
+        // Saves ~50pt per repeat — meaningful page-density win.
+        const currentBannerUrl = classLabel && sponsorsByClassLabel.has(classLabel)
+          ? sponsorsByClassLabel.get(classLabel)!.find((s) => s.bannerImageUrl)?.bannerImageUrl ?? null
+          : null;
+        const prevKey = idx > 0 ? chunkKeys[idx - 1] : null;
+        const prevClassLabel = prevKey ? grouped[prevKey].classLabel : null;
+        const prevBannerUrl = prevClassLabel && sponsorsByClassLabel.has(prevClassLabel)
+          ? sponsorsByClassLabel.get(prevClassLabel)!.find((s) => s.bannerImageUrl)?.bannerImageUrl ?? null
+          : null;
+        const showBanner = !!currentBannerUrl && currentBannerUrl !== prevBannerUrl;
         // Only the smallest classes (≤ 3 entries) stay strictly atomic.
         // Above that we let classes break across pages because keeping
         // larger classes glued together was wasting half-pages of
@@ -565,11 +579,8 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
                   (HUNDARK / ROBASDAN-style festive strips). SV/WUSV
                   shows only per Amanda 2026-05-23 ("I don't want this
                   for RKC shows yet"). */}
-              {isSvShow && (() => {
-                const banner = classLabel && sponsorsByClassLabel.has(classLabel)
-                  ? sponsorsByClassLabel.get(classLabel)!.find((s) => s.bannerImageUrl)?.bannerImageUrl
-                  : null;
-                if (!banner) return null;
+              {isSvShow && showBanner && currentBannerUrl && (() => {
+                const banner = currentBannerUrl;
                 return (
                   // Reserved 50pt strip + objectFit:contain so the
                   // banner sits at its true aspect ratio instead of
