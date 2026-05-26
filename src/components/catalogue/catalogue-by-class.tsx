@@ -465,11 +465,14 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
         const sorted = [...classEntries].sort(
           (a, b) => (a.catalogueNumber ?? '').localeCompare(b.catalogueNumber ?? '', undefined, { numeric: true })
         );
-        // Small classes (≤ 8 entries) stay atomic — never split the header
-        // from its entries. Larger classes can break across pages if needed.
-        // Amanda's feedback: "just dont want a class broken up like that
-        // unless its a big class that takes up more than one page".
-        const keepTogether = sorted.length <= 8;
+        // Only the smallest classes (≤ 3 entries) stay strictly atomic.
+        // Above that we let classes break across pages because keeping
+        // larger classes glued together was wasting half-pages of
+        // whitespace before each class banner (Amanda 2026-05-26).
+        // The inner header-block (banner + class header + first entry)
+        // is still kept atomic below, so a class never orphans its
+        // header from its first dog — Amanda's earlier feedback.
+        const keepTogether = sorted.length <= 3;
 
         // Render one entry — extracted so we can render the FIRST
         // entry inside the wrap=false header block (keeping header
@@ -568,16 +571,20 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
                   : null;
                 if (!banner) return null;
                 return (
-                  // Reserved 75pt strip + objectFit:contain so the
+                  // Reserved 50pt strip + objectFit:contain so the
                   // banner sits at its true aspect ratio instead of
-                  // being stretched (Amanda 2026-05-24). 75pt matches
-                  // a 5:1 banner exactly at A5 page width — narrower
-                  // banners centre-fit, taller banners letterbox.
+                  // being stretched. Smaller than the original 75pt
+                  // strip (Amanda 2026-05-26): the bigger strip was
+                  // pushing the atomic header-block over the available
+                  // remaining-page space and triggering a page break
+                  // that wasted up to a third of the previous page.
+                  // 50pt at A5 width still fills a 5:1 banner nicely;
+                  // squarer banners centre-fit.
                   <View
                     wrap={false}
                     style={{
                       width: '100%',
-                      height: 75,
+                      height: 50,
                       marginBottom: 4,
                       alignItems: 'center',
                       justifyContent: 'center',
