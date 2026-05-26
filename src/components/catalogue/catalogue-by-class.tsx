@@ -8,7 +8,6 @@ import {
   SvAcknowledgementsPage,
   SvClassificationPage,
   SvJudgesPage,
-  SvPointsPage,
 } from './sv-front-matter';
 import { TonalWash } from '@/components/sv-pdf/cover-atoms';
 import { SV, SV_FONTS } from '@/components/schedule/shared/sv-styles';
@@ -220,11 +219,14 @@ function renderSvEntry(
       {/* Right: per-entry Place + Grade write-in columns. SV judges
           award a placement AND a grading to every dog in the class
           (Amanda 2026-05-23). Side columns keep the layout dense and
-          let the judge or steward write straight next to the dog. */}
+          let the judge or steward write straight next to the dog.
+          2026-05-26: shrunk from 90pt → 56pt — still wide enough for
+          VP1 / SG1 grading codes, gives entry text more horizontal
+          space and shortens the per-page footprint. */}
       <View
         style={{
-          width: 90,
-          paddingLeft: 8,
+          width: 56,
+          paddingLeft: 6,
           borderLeftWidth: 0.5,
           borderLeftColor: SV.rule,
           justifyContent: 'center',
@@ -237,16 +239,16 @@ function renderSvEntry(
               fontFamily: SV_FONTS.sans,
               fontSize: 6,
               textTransform: 'uppercase',
-              letterSpacing: 0.8,
+              letterSpacing: 0.6,
               color: SV.ink3,
               fontWeight: 'bold',
-              width: 26,
+              width: 20,
             }}
           >
             Place
           </Text>
           <Text style={{ fontFamily: SV_FONTS.serif, fontStyle: 'italic', fontSize: 8, color: SV.ink2, flex: 1 }}>
-            …………
+            ……
           </Text>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
@@ -255,16 +257,16 @@ function renderSvEntry(
               fontFamily: SV_FONTS.sans,
               fontSize: 6,
               textTransform: 'uppercase',
-              letterSpacing: 0.8,
+              letterSpacing: 0.6,
               color: SV.ink3,
               fontWeight: 'bold',
-              width: 26,
+              width: 20,
             }}
           >
             Grade
           </Text>
           <Text style={{ fontFamily: SV_FONTS.serif, fontStyle: 'italic', fontSize: 8, color: SV.ink2, flex: 1 }}>
-            …………
+            ……
           </Text>
         </View>
       </View>
@@ -438,7 +440,6 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
           <SvAcknowledgementsPage show={show} />
           <SvClassificationPage show={show} />
           <SvJudgesPage show={show} />
-          <SvPointsPage show={show} />
         </>
       ) : (
         <>

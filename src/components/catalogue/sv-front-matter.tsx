@@ -236,7 +236,7 @@ export function SvClassificationPage({ show }: { show: CatalogueShowInfo }) {
   return (
     <Page size="A5" style={PAGE_STYLE}>
       <TonalWash variant="inside" buffer={show.svWashes?.inside} />
-      <Topper num={3} subject="Breed classification" />
+      <Topper num={3} subject="Classification &amp; points" />
 
       <View style={{ marginTop: 12 }}>
         <Text style={{ fontFamily: SV_FONTS.serif, fontStyle: 'italic', fontSize: 10, color: SV.ink3 }}>
@@ -347,20 +347,53 @@ export function SvClassificationPage({ show }: { show: CatalogueShowInfo }) {
         )}
       </View>
 
-      {/* Time schedule + identification note */}
-      <View style={{ marginTop: 12 }}>
-        <SectionTitle title="Time schedule" />
-        <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 9, color: SV.ink2, lineHeight: 1.5 }}>
-          Show ground open to exhibitors and visitors at{' '}
-          <Text style={{ fontWeight: 'bold' }}>{show.showOpenTime ?? '09:00'}</Text>.{'\n'}
-          All dogs <Text style={{ fontWeight: 'bold' }}>must be identifiable by microchip</Text>.{'\n'}
-          Identification checks will take place in the ring at the start of each class.{'\n'}
-          Judging starts at <Text style={{ fontWeight: 'bold' }}>{show.startTime ?? '10:00'}</Text> sharp.
+      {/* BRG points system — folded onto the classification page
+          2026-05-26 (Amanda asked to save a front-matter page). The
+          points table is small enough to share the page with the
+          classification grid. */}
+      <View style={{ marginTop: 10 }}>
+        <SectionTitle title="BRG points system" />
+        <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 7.5, color: SV.ink2, lineHeight: 1.45, marginBottom: 4 }}>
+          Points toward the British Gold Medal (25 points lifetime, including
+          at least 5 in Adult/Working and one Adult SG1 at a regional with 3+
+          exhibits).
         </Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+          {[
+            { label: 'VV1 / VP1', value: '1' },
+            { label: 'SG1', value: '2' },
+            { label: 'SG1 adult', value: '4' },
+            { label: 'SG2', value: '1' },
+            { label: 'SG2 adult', value: '2' },
+            { label: 'V1 working', value: '5' },
+            { label: 'V2 working', value: '4' },
+            { label: 'VA working', value: '10' },
+          ].map((p, i) => (
+            <View
+              key={i}
+              style={{
+                width: '25%',
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                paddingVertical: 2,
+                paddingHorizontal: 4,
+                borderBottomWidth: 0.5,
+                borderBottomColor: SV.rule,
+              }}
+            >
+              <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 7, color: SV.ink, fontWeight: 'bold' }}>
+                {p.label}
+              </Text>
+              <Text style={{ fontFamily: SV_FONTS.serif, fontStyle: 'italic', fontSize: 7, color: SV.accent }}>
+                {p.value}
+              </Text>
+            </View>
+          ))}
+        </View>
       </View>
 
       <View style={{ position: 'absolute', bottom: '5mm', left: '11mm', right: '11mm', flexDirection: 'row', justifyContent: 'space-between' }} fixed>
-        <Text style={ss.eyebrow}>Breed classification</Text>
+        <Text style={ss.eyebrow}>Classification &amp; points</Text>
         <Text style={[ss.eyebrow, { color: SV.ink3 }]}>03</Text>
       </View>
     </Page>
