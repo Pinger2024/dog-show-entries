@@ -57,7 +57,7 @@ function splitTownPostcode(address: string | null | undefined): { town: string; 
 // SV entry-row styles. Densified per Amanda 2026-05-23 — page count
 // was ~30 for 65 entries, target is the SPGSD norm of ~20-22.
 const svEntry = {
-  row: { marginTop: 3 } as const,
+  row: { marginTop: 2 } as const,
   line1: { flexDirection: 'row', alignItems: 'baseline', gap: 6 } as const,
   catNumber: {
     fontFamily: SV_FONTS.serif,
@@ -83,7 +83,7 @@ const svEntry = {
     fontSize: 7,
     color: SV.ink2,
     paddingLeft: 26,
-    lineHeight: 1.18,
+    lineHeight: 1.1,
   } as const,
   metaLabel: { fontWeight: 'bold' as const, color: SV.ink } as const,
   pedigree: {
@@ -92,7 +92,7 @@ const svEntry = {
     fontSize: 7,
     color: SV.ink2,
     paddingLeft: 26,
-    lineHeight: 1.18,
+    lineHeight: 1.1,
   } as const,
 };
 
@@ -547,7 +547,7 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
           <View
             key={classKey}
             wrap={!keepTogether}
-            style={idx > 0 ? { marginTop: 6 } : undefined}
+            style={idx > 0 ? { marginTop: 4 } : undefined}
           >
 
             {/* Header block: Amanda 2026-05-26 turned off the
