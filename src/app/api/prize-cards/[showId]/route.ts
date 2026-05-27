@@ -8,7 +8,7 @@ import type { PrizeCardShowInfo, PrizeCardClass, PrizeCardStyle } from '@/compon
 import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, validateRasterLogoUrl, makePdfResponse } from '@/lib/pdf-utils';
-import { buildClassLabelMap } from '@/lib/class-labels';
+import { buildClassLabelMap, isSpecialAwardClass } from '@/lib/class-labels';
 
 export async function GET(
   request: NextRequest,
@@ -37,6 +37,10 @@ export async function GET(
   const includeJudgeName = searchParams.get('judge') !== 'false';
   const placements = Math.min(Math.max(parseInt(searchParams.get('placements') ?? '5'), 1), 5);
   const cardStyle = (searchParams.get('style') === 'outline' ? 'outline' : 'filled') as PrizeCardStyle;
+  // filter=sac restricts the output to Special Award Classes only — used
+  // when the secretary wants to print just the SAC cards locally rather
+  // than the full set (Amanda 2026-05-27).
+  const filterSac = searchParams.get('filter') === 'sac';
 
   // Run independent DB queries and logo validation in parallel
   const [showClasses, judgeAssignments, safeLogoUrl] = await Promise.all([
@@ -56,18 +60,36 @@ export async function GET(
   ]);
 
   const judgeByBreed = new Map<string | null, string>();
+  // SAC classes (Special Award Class — Junior / PG / Open) have a
+  // dedicated judge flagged on the assignment with
+  // isSpecialAwardsClassesJudge. The breed map can't surface them
+  // (their breedId is null and they collide with the breed-judge's
+  // null-breed assignment), so we pick the SAC judge separately and
+  // route SAC classes to them (Amanda 2026-05-27).
+  let sacJudgeName: string | null = null;
   for (const ja of judgeAssignments) {
-    if (ja.judge?.name) judgeByBreed.set(ja.breedId, ja.judge.name);
+    if (!ja.judge?.name) continue;
+    if (ja.isSpecialAwardsClassesJudge) {
+      sacJudgeName = ja.judge.name;
+    } else {
+      judgeByBreed.set(ja.breedId, ja.judge.name);
+    }
   }
 
   const classLabelMap = buildClassLabelMap(showClasses);
 
-  const classes: PrizeCardClass[] = showClasses.map((sc) => ({
+  const filteredShowClasses = filterSac
+    ? showClasses.filter((sc) => isSpecialAwardClass(sc))
+    : showClasses;
+
+  const classes: PrizeCardClass[] = filteredShowClasses.map((sc) => ({
     classLabel: classLabelMap.get(sc.id) ?? '',
     className: sc.classDefinition?.name ?? 'Unknown Class',
     sex: sc.sex,
     breedName: sc.breed?.name ?? null,
-    judgeName: judgeByBreed.get(sc.breedId) ?? judgeByBreed.get(null) ?? null,
+    judgeName: isSpecialAwardClass(sc)
+      ? sacJudgeName
+      : judgeByBreed.get(sc.breedId) ?? judgeByBreed.get(null) ?? null,
   }));
 
   const showInfo: PrizeCardShowInfo = {

@@ -28,7 +28,7 @@ import type { RingNumberShowInfo, RingNumberFormat } from '@/components/ring-num
 import React from 'react';
 import { uploadToR2, getPublicUrl } from '@/server/services/storage';
 import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
-import { buildClassLabelMap } from '@/lib/class-labels';
+import { buildClassLabelMap, isSpecialAwardClass } from '@/lib/class-labels';
 
 // ── Catalogue PDF ──
 
@@ -360,9 +360,9 @@ export async function generateCataloguePdf(
 
 export async function generatePrizeCardsPdf(
   showId: string,
-  options: { placements?: number; includeJudgeName?: boolean } = {}
+  options: { placements?: number; includeJudgeName?: boolean; onlySac?: boolean } = {}
 ): Promise<Buffer> {
-  const { placements = 5, includeJudgeName = true } = options;
+  const { placements = 5, includeJudgeName = true, onlySac = false } = options;
 
   const show = await db.query.shows.findFirst({
     where: eq(schema.shows.id, showId),
@@ -384,17 +384,28 @@ export async function generatePrizeCardsPdf(
   ]);
 
   const judgeByBreed = new Map<string | null, string>();
+  let sacJudgeName: string | null = null;
   for (const ja of judgeAssignments) {
-    if (ja.judge?.name) judgeByBreed.set(ja.breedId, ja.judge.name);
+    if (!ja.judge?.name) continue;
+    if (ja.isSpecialAwardsClassesJudge) {
+      sacJudgeName = ja.judge.name;
+    } else {
+      judgeByBreed.set(ja.breedId, ja.judge.name);
+    }
   }
 
   const prizeCardLabelMap = buildClassLabelMap(showClasses);
-  const classes: PrizeCardClass[] = showClasses.map((sc) => ({
+  const filteredShowClasses = onlySac
+    ? showClasses.filter((sc) => isSpecialAwardClass(sc))
+    : showClasses;
+  const classes: PrizeCardClass[] = filteredShowClasses.map((sc) => ({
     classLabel: prizeCardLabelMap.get(sc.id) ?? '',
     className: sc.classDefinition?.name ?? 'Unknown Class',
     sex: sc.sex,
     breedName: sc.breed?.name ?? null,
-    judgeName: judgeByBreed.get(sc.breedId) ?? judgeByBreed.get(null) ?? null,
+    judgeName: isSpecialAwardClass(sc)
+      ? sacJudgeName
+      : judgeByBreed.get(sc.breedId) ?? judgeByBreed.get(null) ?? null,
   }));
 
   const showInfo: PrizeCardShowInfo = {
