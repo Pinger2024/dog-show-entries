@@ -336,6 +336,7 @@ export function ShowPreviewClient() {
       breeds: Set<string>;
       sexes: Set<string>;
       hasNullSex: boolean;
+      isSac: boolean;
     };
     const m = new Map<string, Agg>();
     for (const ja of assignments) {
@@ -354,6 +355,7 @@ export function ShowPreviewClient() {
           breeds: new Set(),
           sexes: new Set(),
           hasNullSex: false,
+          isSac: false,
         });
       }
       const agg = m.get(jid)!;
@@ -362,13 +364,20 @@ export function ShowPreviewClient() {
       const sex = (ja as { sex?: string }).sex;
       if (sex) agg.sexes.add(sex);
       else agg.hasNullSex = true;
+      // SAC judge assignments are marked with isSpecialAwardsClassesJudge
+      // — without this check, the SAC judge (whose assignments have no
+      // breed and no sex) falls through to the Junior Handling bucket.
+      if ((ja as { isSpecialAwardsClassesJudge?: boolean }).isSpecialAwardsClassesJudge) {
+        agg.isSac = true;
+      }
     }
     return Array.from(m.values()).map((agg): JudgeData => {
       const breedArr = Array.from(agg.breeds).sort();
       const onlyJh = breedArr.length > 0 && breedArr.every((b) => juniorBreedSet.has(b) && !breedBreedSet.has(b));
-      const isJH = onlyJh || (hasJH && agg.hasNullSex && agg.sexes.size === 0);
+      const isJH = !agg.isSac && (onlyJh || (hasJH && agg.hasNullSex && agg.sexes.size === 0));
       let role: string;
-      if (isJH) role = 'Junior Handling';
+      if (agg.isSac) role = 'Special Awards Classes';
+      else if (isJH) role = 'Junior Handling';
       else if (agg.sexes.has('dog') && agg.sexes.has('bitch')) role = 'Dogs & Bitches';
       else if (agg.sexes.has('dog')) role = 'Dogs';
       else if (agg.sexes.has('bitch')) role = 'Bitches';
@@ -428,25 +437,35 @@ export function ShowPreviewClient() {
   const breedGroups = useMemo(() => {
     if (!show) return [] as { breed: string; classes: number; isJH: boolean; judgeName?: string }[];
 
-    const m = new Map<string, { classes: number; isJH: boolean; judgeName?: string }>();
+    const m = new Map<string, { classes: number; isJH: boolean; isSac: boolean; judgeName?: string }>();
     for (const sc of (show.showClasses ?? [])) {
-      const scAny = sc as { breed?: { name?: string } | null; classDefinition?: { type?: string } };
+      const scAny = sc as { breed?: { name?: string } | null; classDefinition?: { type?: string; name?: string } };
       const isJH = scAny.classDefinition?.type === 'junior_handler';
+      // SAC classes have classDefinition.type === 'special' and a name
+      // starting "Special Award Class". Surface them as their own bucket
+      // on "Classes on Offer" so they don't disappear inside the main
+      // breed count (Amanda 2026-05-27).
+      const isSac = scAny.classDefinition?.type === 'special'
+        && (scAny.classDefinition.name?.startsWith('Special Award Class') ?? false);
       const breedName = scAny.breed?.name;
       let groupName: string;
       if (isJH) groupName = 'Junior Handling';
+      else if (isSac) groupName = 'Special Award Classes';
       else if (breedName) groupName = breedName;
       else if (singleBreedName) groupName = singleBreedName;
       else groupName = 'Breed Classes';
 
-      if (!m.has(groupName)) m.set(groupName, { classes: 0, isJH });
+      if (!m.has(groupName)) m.set(groupName, { classes: 0, isJH, isSac });
       const entry = m.get(groupName)!;
       entry.classes += 1;
     }
 
     // Attach judges: use the pre-aggregated `judges` list with its resolved roles
     for (const [groupName, entry] of m) {
-      if (entry.isJH) {
+      if (entry.isSac) {
+        const sac = judges.find((j) => j.role === 'Special Awards Classes');
+        if (sac) entry.judgeName = sac.name;
+      } else if (entry.isJH) {
         const jh = judges.find((j) => j.role === 'Junior Handling');
         if (jh) entry.judgeName = jh.name;
       } else {
@@ -458,14 +477,40 @@ export function ShowPreviewClient() {
       }
     }
 
-    // Sort: main breed(s) first, Junior Handling last
+    // Sort: main breed(s) first, then Special Awards, then Junior Handling.
     return Array.from(m.entries())
       .map(([breed, v]) => ({ breed, ...v }))
       .sort((a, b) => {
-        if (a.isJH !== b.isJH) return a.isJH ? 1 : -1;
+        const rank = (g: typeof a) => (g.isJH ? 2 : g.isSac ? 1 : 0);
+        const ra = rank(a);
+        const rb = rank(b);
+        if (ra !== rb) return ra - rb;
         return a.breed.localeCompare(b.breed);
       });
   }, [show, judges, singleBreedName]);
+
+  /* Per-class fee groups — surfaces "Special Award classes £3",
+   * "Baby Puppy classes £4" etc. in the public Entry Fees panel
+   * when the secretary set a class fee override (Amanda 2026-05-27).
+   * Mirrors the same grouping the schedule PDF uses. */
+  const perClassFeeGroups = useMemo(() => {
+    const showAny = show as { firstEntryFee?: number | null; showClasses?: Array<{ entryFee?: number | null; classDefinition?: { name?: string; type?: string } }> } | null;
+    const firstFee = showAny?.firstEntryFee;
+    if (!showAny || firstFee == null) return [] as Array<{ label: string; fee: number }>;
+    const seen = new Map<string, { label: string; fee: number }>();
+    for (const sc of showAny.showClasses ?? []) {
+      if (sc.entryFee == null) continue;
+      if (sc.entryFee === firstFee) continue;
+      if (sc.classDefinition?.type === 'junior_handler') continue;
+      const rawName = sc.classDefinition?.name?.trim() ?? '';
+      if (!rawName) continue;
+      const groupName = rawName.startsWith('Special Award Class') ? 'Special Award' : rawName;
+      const key = `${groupName}|${sc.entryFee}`;
+      if (seen.has(key)) continue;
+      seen.set(key, { label: `${groupName} classes`, fee: sc.entryFee });
+    }
+    return Array.from(seen.values()).sort((a, b) => a.fee - b.fee || a.label.localeCompare(b.label));
+  }, [show]);
 
   /* Derive total class counts per judge for display */
   const judgeClassCounts = useMemo(() => {
@@ -978,6 +1023,14 @@ export function ShowPreviewClient() {
                     sub="Handling classes for under-18s"
                     value={showAny.juniorHandlerFee}
                   />
+                  {perClassFeeGroups.map((g) => (
+                    <FeeRow
+                      key={`${g.label}-${g.fee}`}
+                      label={g.label}
+                      sub="Per-class fee override"
+                      value={g.fee}
+                    />
+                  ))}
                   <FeeRow
                     label="Postal entries"
                     sub="Paper form via post"
