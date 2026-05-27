@@ -360,9 +360,19 @@ export async function generateCataloguePdf(
 
 export async function generatePrizeCardsPdf(
   showId: string,
-  options: { placements?: number; includeJudgeName?: boolean; onlySac?: boolean } = {}
+  options: {
+    placements?: number;
+    includeJudgeName?: boolean;
+    onlySac?: boolean;
+    cardStyle?: 'filled' | 'outline';
+  } = {}
 ): Promise<Buffer> {
-  const { placements = 5, includeJudgeName = true, onlySac = false } = options;
+  const {
+    placements = 5,
+    includeJudgeName = true,
+    onlySac = false,
+    cardStyle = 'filled',
+  } = options;
 
   const show = await db.query.shows.findFirst({
     where: eq(schema.shows.id, showId),
@@ -421,7 +431,7 @@ export async function generatePrizeCardsPdf(
     classes,
     includeJudgeName,
     placements,
-    cardStyle: 'filled' as const,
+    cardStyle,
   });
   return Buffer.from(await renderToBuffer(pdfDocument));
 }
