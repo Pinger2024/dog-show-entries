@@ -93,8 +93,11 @@ const s = StyleSheet.create({
     padding: 0,
     position: 'relative',
   },
-  // Decorative double border — outer is the bold accent frame, inner is a
-  // hairline rule offset by 4pt to create a "matted print" look.
+  // outerBorder is no longer used — see the four edge-bar Views in the
+  // Page render (react-pdf silently clipped the left edge of an
+  // absolutely-positioned bordered View, so we draw each side
+  // explicitly instead). Kept here only for reference if a future
+  // version of react-pdf fixes the underlying bug.
   outerBorder: {
     position: 'absolute',
     top: 12,
@@ -283,8 +286,17 @@ export function PrizeCards({ show, classes, includeJudgeName, placements, cardSt
                 : { size: 'A5' as const, orientation: 'landscape' as const, wrap: false as const })}
               style={{ ...s.page, backgroundColor: bgColor }}
             >
-              {/* Decorative double border — outer in placement colour, inner hairline */}
-              <View style={{ ...s.outerBorder, borderColor: colours.accent }} />
+              {/* Decorative double border — outer in placement colour,
+                  inner hairline. Implemented as four explicit edge bars
+                  rather than a single bordered View because react-pdf
+                  (3.x) clips the left edge of an absolutely-positioned
+                  View whose left+right offsets equal half-symmetrically
+                  on landscape pages — Amanda spotted the missing left
+                  red line on her SAC print test 2026-05-27. */}
+              <View style={{ position: 'absolute', top: 12, left: 12, right: 12, height: 3, backgroundColor: colours.accent }} />
+              <View style={{ position: 'absolute', bottom: 12, left: 12, right: 12, height: 3, backgroundColor: colours.accent }} />
+              <View style={{ position: 'absolute', top: 12, left: 12, bottom: 12, width: 3, backgroundColor: colours.accent }} />
+              <View style={{ position: 'absolute', top: 12, right: 12, bottom: 12, width: 3, backgroundColor: colours.accent }} />
               <View style={s.innerBorder} />
 
               <View style={s.content}>
