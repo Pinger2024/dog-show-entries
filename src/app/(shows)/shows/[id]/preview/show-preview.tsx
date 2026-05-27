@@ -773,7 +773,7 @@ export function ShowPreviewClient() {
             <div className="mt-10 sm:mt-12">
               <div className="mx-auto grid max-w-xl grid-cols-2 divide-amber-500/20 text-center sm:divide-x">
                 <EditorialStat label="Classes" value={totalClasses} highlight />
-                <EditorialStat label="Breeds" value={breedGroups.filter((g) => !g.isJH).length} />
+                <EditorialStat label="Breeds" value={breedGroups.filter((g) => !g.isJH && !g.isSac).length} />
               </div>
             </div>
           )}
@@ -1113,7 +1113,7 @@ export function ShowPreviewClient() {
         <section className="border-y bg-stone-50/60">
           <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
             <SectionHeading eyebrow="The card" title={(() => {
-              const breedCount = breedGroups.filter((g) => !g.isJH).length;
+              const breedCount = breedGroups.filter((g) => !g.isJH && !g.isSac).length;
               if (breedCount <= 1) return 'Classes on Offer';
               return `${breedCount} Breeds`;
             })()} />
