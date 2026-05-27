@@ -471,6 +471,13 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
         // would create an orphaned banner ... I'd like to maximise our
         // profit as much as possible" (fewer pages = lower print cost).
         const keepTogether = false;
+        // When a class sponsor has uploaded a banner image the banner
+        // already advertises who's sponsoring, so the "Sponsored by …"
+        // text caption is redundant under it (Amanda 2026-05-27).
+        // The text caption stays for SV classes WITHOUT a banner and
+        // for every RKC class (which never get banners).
+        const hasBanner = isSvShow && !!classLabel
+          && (sponsorsByClassLabel.get(classLabel)?.some((s) => s.bannerImageUrl) ?? false);
 
         // Render one entry — extracted so we can render the FIRST
         // entry inside the wrap=false header block (keeping header
@@ -550,14 +557,16 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
             style={idx > 0 ? { marginTop: 4 } : undefined}
           >
 
-            {/* Header block: Amanda 2026-05-26 turned off the
-                "atomic with first entry" constraint because it was
-                wasting half-pages of whitespace before each class.
-                The renderer can now break the banner / class header
-                from the entries beneath if that's how the page packs
-                tightest — Amanda accepts the occasional orphan in
-                exchange for a meaningfully smaller catalogue. */}
-            <View>
+            {/* Header block kept atomic with the FIRST entry so the
+                banner + class header never lands at the bottom of a
+                page with no dog underneath — Amanda 2026-05-27:
+                "I defo dont want the banner and class name on one
+                page without having 1 dog immediately underneath it
+                as it doesnt look correct." (Earlier on 2026-05-26
+                we'd dropped this constraint chasing tighter page
+                packing; the visual cost was worse than the page
+                saving so we're back to the atomic block.) */}
+            <View wrap={false}>
               {/* Class-sponsor banner — landscape strip above the class
                   header when a class sponsor has uploaded a banner image
                   (HUNDARK / ROBASDAN-style festive strips). SV/WUSV
@@ -565,7 +574,7 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
                   for RKC shows yet"). */}
               {isSvShow && (() => {
                 const banner = classLabel && sponsorsByClassLabel.has(classLabel)
-                  ? sponsorsByClassLabel.get(classLabel)!.find((s) => s.bannerImageUrl)?.bannerImageUrl
+                  ? sponsorsByClassLabel.get(classLabel)!.find((s) => s.bannerImageUrl)?.bannerImageUrl ?? null
                   : null;
                 if (!banner) return null;
                 return (
@@ -646,7 +655,7 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
                   )}
                 </View>
               )}
-              {classLabel && sponsorsByClassLabel.has(classLabel) &&
+              {classLabel && sponsorsByClassLabel.has(classLabel) && !hasBanner &&
                 buildSponsorLines(sponsorsByClassLabel.get(classLabel)!).map((line, i) => (
                   <Text
                     key={i}
