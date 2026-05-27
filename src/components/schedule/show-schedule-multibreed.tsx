@@ -932,7 +932,7 @@ export function ShowScheduleMultibreed({
           const sacSection = sacClasses.length > 0 ? (
             <View key="sac-section" wrap={false} style={{ marginTop: 12 }}>
               <View style={s.twoColMixedHeader} wrap={false}>
-                <Text style={s.twoColHeaderText}>SPECIAL AWARD CLASSES (to be held during the lunch break)</Text>
+                <Text style={s.twoColHeaderText}>SPECIAL AWARD CLASSES</Text>
               </View>
               {sacJudges.length > 0 && (
                 <View

@@ -1138,7 +1138,7 @@ export function ShowSchedule({
         {sacClasses.length > 0 && (
           <View style={{ marginTop: 12 }} wrap={false}>
             <View style={s.twoColMixedHeader}>
-              <Text style={s.twoColHeaderText}>Special Award Classes — to be judged at lunchtime</Text>
+              <Text style={s.twoColHeaderText}>Special Award Classes</Text>
             </View>
             {sacJudges.length > 0 && (
               <View style={{ marginTop: 6, marginBottom: 4 }}>
