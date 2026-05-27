@@ -126,9 +126,11 @@ export async function generateCataloguePdf(
   for (const ja of judgeAssignmentRows) {
     if (!ja.judge?.name) continue;
     if (ja.isSpecialAwardsClassesJudge) {
-      // Lunchtime SAC judges get their own labelled line per Amanda's
-      // spec 2026-05-14: "Judge: A Smith - special awards classes".
-      judgeDisplayList.push(`${ja.judge.name} — Special Awards Classes`);
+      // Lunchtime SAC judges. Amanda 2026-05-27: format as
+      // "Special Awards Classes — <name>" to mirror the other judges
+      // ("Dogs & Bitches — <name>", "Junior Handling — <name>") rather
+      // than the reversed name-first layout we'd been rendering.
+      judgeDisplayList.push(`Special Awards Classes — ${ja.judge.name}`);
       continue;
     }
     const key = `${ja.judge.name}::${ja.sex ?? 'all'}`;
@@ -581,12 +583,18 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
   });
 
   // Append Special Awards Classes judges with the explicit role label.
+  // Format mirrors the other judges (Amanda 2026-05-27):
+  // "Special Awards Classes — <name>". The role field is what the
+  // schedule component filters on to surface the SAC judge inside the
+  // SAC section, so it MUST be set — without it the dedicated SAC
+  // block silently rendered with no judge line (Amanda spotted it).
   for (const sac of specialAwardsJudges) {
     judges.push({
       name: sac.name,
       breeds: [],
       sex: null,
-      displayLabel: `${sac.name} — Special Awards Classes${approvalSuffix(sac.subjectToRkcApproval)}`,
+      role: 'Special Awards Classes',
+      displayLabel: `Special Awards Classes — ${sac.name}${approvalSuffix(sac.subjectToRkcApproval)}`,
     });
   }
 

@@ -116,10 +116,13 @@ const s = StyleSheet.create({
     borderWidth: 0.75,
     borderColor: '#999',
   },
-  // Content area — reduced padding so content reaches near the inner frame
+  // Content area — padded clear of the inner grey hairline (now at
+  // 26pt). 40pt top/bottom keeps the title and footer comfortably
+  // inside the matted frame even at the bigger heading font sizes.
+  // (Amanda 2026-05-27 spotted the club name overlapping the line.)
   content: {
     flex: 1,
-    padding: '20 28',
+    padding: '40 38',
     alignItems: 'center',
     justifyContent: 'space-between',
   },

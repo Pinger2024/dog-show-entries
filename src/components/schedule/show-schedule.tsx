@@ -1136,7 +1136,7 @@ export function ShowSchedule({
             disqualified from the main show, and a "SUPPORT AND ENTER"
             call-to-action that the host clubs actually use. */}
         {sacClasses.length > 0 && (
-          <View style={{ marginTop: 12 }}>
+          <View style={{ marginTop: 12 }} wrap={false}>
             <View style={s.twoColMixedHeader}>
               <Text style={s.twoColHeaderText}>Special Award Classes — Rosettes 1st – 4th (to be judged at lunchtime)</Text>
             </View>

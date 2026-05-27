@@ -263,7 +263,7 @@ export async function GET(
       breeds: [],
       sex: null,
       role: 'Special Awards Classes',
-      displayLabel: `${namePart} — Special Awards Classes`,
+      displayLabel: `Special Awards Classes — ${namePart}`,
     });
   }
 
