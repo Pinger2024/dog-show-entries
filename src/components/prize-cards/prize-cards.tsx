@@ -109,10 +109,10 @@ const s = StyleSheet.create({
   },
   innerBorder: {
     position: 'absolute',
-    top: 18,
-    left: 18,
-    right: 18,
-    bottom: 18,
+    top: 26,
+    left: 26,
+    right: 26,
+    bottom: 26,
     borderWidth: 0.75,
     borderColor: '#999',
   },
@@ -291,12 +291,14 @@ export function PrizeCards({ show, classes, includeJudgeName, placements, cardSt
                   rather than a single bordered View because react-pdf
                   (3.x) clips the left edge of an absolutely-positioned
                   View whose left+right offsets equal half-symmetrically
-                  on landscape pages — Amanda spotted the missing left
-                  red line on her SAC print test 2026-05-27. */}
-              <View style={{ position: 'absolute', top: 12, left: 12, right: 12, height: 3, backgroundColor: colours.accent }} />
-              <View style={{ position: 'absolute', bottom: 12, left: 12, right: 12, height: 3, backgroundColor: colours.accent }} />
-              <View style={{ position: 'absolute', top: 12, left: 12, bottom: 12, width: 3, backgroundColor: colours.accent }} />
-              <View style={{ position: 'absolute', top: 12, right: 12, bottom: 12, width: 3, backgroundColor: colours.accent }} />
+                  on landscape pages (Amanda 2026-05-27). 20pt insets
+                  (~7mm) keep the bars inside any home printer's
+                  unprintable margin — her first print test had a 5mm-
+                  ish left dead zone that ate the 4mm-inset version. */}
+              <View style={{ position: 'absolute', top: 20, left: 20, right: 20, height: 3, backgroundColor: colours.accent }} />
+              <View style={{ position: 'absolute', bottom: 20, left: 20, right: 20, height: 3, backgroundColor: colours.accent }} />
+              <View style={{ position: 'absolute', top: 20, left: 20, bottom: 20, width: 3, backgroundColor: colours.accent }} />
+              <View style={{ position: 'absolute', top: 20, right: 20, bottom: 20, width: 3, backgroundColor: colours.accent }} />
               <View style={s.innerBorder} />
 
               <View style={s.content}>
