@@ -1130,11 +1130,15 @@ export function ShowSchedule({
 
         {/* Special Award Classes — their own section after Junior Handling,
             judged in the lunch break. Labelled A, B, C, … and not counted
-            against the RKC-licensed class total. Amanda 2026-05-19. */}
+            against the RKC-licensed class total. Amanda 2026-05-19, expanded
+            2026-05-27 to mirror the SW GSD specimen wording: club-rationale
+            paragraph, N.B. emphasis that beaten dogs in SAC are NOT
+            disqualified from the main show, and a "SUPPORT AND ENTER"
+            call-to-action that the host clubs actually use. */}
         {sacClasses.length > 0 && (
-          <View style={{ marginTop: 12 }} wrap={false}>
+          <View style={{ marginTop: 12 }}>
             <View style={s.twoColMixedHeader}>
-              <Text style={s.twoColHeaderText}>Special Award Classes (to be held during the lunch break)</Text>
+              <Text style={s.twoColHeaderText}>Special Award Classes — Rosettes 1st – 4th (to be judged at lunchtime)</Text>
             </View>
             {sacJudges.length > 0 && (
               <View style={{ marginTop: 6, marginBottom: 4 }}>
@@ -1154,8 +1158,24 @@ export function ShowSchedule({
                 <Text style={s.twoColName}>{sacDisplayName(cls)}</Text>
               </View>
             ))}
-            <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 7.5, lineHeight: 1.4, color: C.textMedium, marginTop: 6 }}>
-              Special Awards are scheduled by kind permission of the Royal Kennel Club to enable aspiring judges to gain more experience. Exhibits beaten in Special Awards but unbeaten in the main show classes are deemed to remain unbeaten when competing for Best in Show in the main show. Entries must be made on the entry form in the usual way.
+            <Text style={{ fontFamily: 'Times', fontSize: 8, lineHeight: 1.5, color: C.textDark, marginTop: 8 }}>
+              As a Club we endeavour to assist aspiring judges to progress up the Judges Lists.
+              We have liaised with The Royal Kennel Club and decided to undertake &lsquo;Special Awards&rsquo;
+              at our Championship Shows, where hopefully there is already a sizeable captive audience
+              who will make a reasonable number for the invited judge to go over and include on their
+              judges&rsquo; CV.
+            </Text>
+            <Text style={{ fontFamily: 'Times', fontSize: 8, lineHeight: 1.5, color: C.textDark, marginTop: 6 }}>
+              <Text style={{ fontWeight: 'bold' }}>N.B. </Text>
+              The Special Awards are judged as an entirely separate entity from the show proper.{' '}
+              <Text style={{ fontWeight: 'bold' }}>
+                IF YOUR DOG IS BEATEN IN THE SPECIAL AWARD CLASS IT IS NOT CLASSED AS A BEATEN DOG
+                AND IS NOT DISQUALIFIED FROM CHALLENGING IN THE MAIN SHOW.
+              </Text>{' '}
+              The Special Awards are entirely arranged as a method of promoting aspiring judges.
+            </Text>
+            <Text style={{ fontFamily: 'Times', fontSize: 8.5, fontWeight: 'bold', textAlign: 'center', color: C.textDark, marginTop: 8 }}>
+              SO PLEASE DO SUPPORT AND ENTER — THANK YOU
             </Text>
           </View>
         )}
