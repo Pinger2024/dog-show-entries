@@ -854,7 +854,11 @@ export function ShowPreviewClient() {
             </Button>
           ) : (
             <div className="flex-1 text-sm font-medium text-stone-600 sm:flex-initial">{
-              show.status === 'cancelled' ? 'Cancelled' : 'Entries closed'
+              show.status === 'cancelled'
+                ? 'Cancelled'
+                : show.status === 'draft' || show.status === 'published'
+                  ? 'Entries opening soon'
+                  : 'Entries closed'
             }</div>
           )}
 
