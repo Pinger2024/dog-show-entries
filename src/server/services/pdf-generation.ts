@@ -365,6 +365,7 @@ export async function generatePrizeCardsPdf(
     includeJudgeName?: boolean;
     onlySac?: boolean;
     cardStyle?: 'filled' | 'outline';
+    pageSize?: [number, number];
   } = {}
 ): Promise<Buffer> {
   const {
@@ -372,6 +373,7 @@ export async function generatePrizeCardsPdf(
     includeJudgeName = true,
     onlySac = false,
     cardStyle = 'filled',
+    pageSize,
   } = options;
 
   const show = await db.query.shows.findFirst({
@@ -432,6 +434,7 @@ export async function generatePrizeCardsPdf(
     includeJudgeName,
     placements,
     cardStyle,
+    pageSize,
   });
   return Buffer.from(await renderToBuffer(pdfDocument));
 }

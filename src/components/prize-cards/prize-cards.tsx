@@ -37,6 +37,11 @@ interface PrizeCardsProps {
   placements: number;
   /** 'filled' = coloured background, 'outline' = white bg + coloured text/frame */
   cardStyle?: PrizeCardStyle;
+  /** Explicit page dimensions [width, height] in points. Defaults to the
+   *  traditional UK half-A5 prize card (210 × 107mm) which Mixam tiles 4-up
+   *  on an A3 sheet. Pass [595.28, 419.53] for full A5 landscape — fills an
+   *  A5 sheet edge-to-edge on a home printer (Amanda 2026-05-27). */
+  pageSize?: [number, number];
 }
 
 const SHOW_TYPE_LABELS: Record<string, string> = {
@@ -237,7 +242,7 @@ const s = StyleSheet.create({
   },
 });
 
-export function PrizeCards({ show, classes, includeJudgeName, placements, cardStyle = 'filled' }: PrizeCardsProps) {
+export function PrizeCards({ show, classes, includeJudgeName, placements, cardStyle = 'filled', pageSize }: PrizeCardsProps) {
   // Full date format with weekday + ordinal day matches the Higham Press
   // tradition (e.g. "Saturday 16 May 2026") — feels ceremonial vs the bare
   // "16 May 2026" the previous design used.
@@ -273,9 +278,9 @@ export function PrizeCards({ show, classes, includeJudgeName, placements, cardSt
           return (
             <Page
               key={`${classIdx}-${placement}`}
-              size="A5"
-              orientation="landscape"
-              wrap={false}
+              {...(pageSize
+                ? { size: pageSize }
+                : { size: 'A5' as const, orientation: 'landscape' as const, wrap: false as const })}
               style={{ ...s.page, backgroundColor: bgColor }}
             >
               {/* Decorative double border — outer in placement colour, inner hairline */}
