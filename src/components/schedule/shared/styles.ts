@@ -401,13 +401,14 @@ export const s = StyleSheet.create({
     fontFamily: 'Inter',
     fontSize: 8.5,
     fontWeight: 'bold',
-    width: '35%',
+    width: '55%',
+    paddingRight: 10,
     color: C.textDark,
   },
   judgeBreeds: {
     fontFamily: 'Inter',
     fontSize: 8.5,
-    width: '65%',
+    width: '45%',
     color: C.textMedium,
   },
 
