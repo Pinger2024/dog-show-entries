@@ -751,7 +751,10 @@ export function ShowPreviewClient() {
             )}
           </div>
 
-          {/* Countdown — elegant, inline */}
+          {/* Countdown — elegant, inline. Always render the absolute
+              close date alongside the countdown (Amanda 2026-05-27: a
+              BAGSD user was confused by "22 days" because the actual
+              date wasn't visible on mobile — was sm:block only). */}
           {isOpen && entryCloseDate && (
             <div className="mt-12 flex flex-col items-center gap-3 sm:flex-row sm:justify-center sm:gap-6">
               <p className="font-serif text-[10px] uppercase tracking-[0.3em] text-amber-800/80">
@@ -760,7 +763,7 @@ export function ShowPreviewClient() {
               <div className="inline-flex items-center gap-2 rounded-full border border-amber-400/50 bg-white/70 px-4 py-2 shadow-sm ring-1 ring-amber-100 backdrop-blur-sm">
                 <HeroCountdown target={entryCloseDate} />
               </div>
-              <p className="hidden text-xs text-stone-500 sm:block">{format(entryCloseDate, 'EEE d MMM · HH:mm')}</p>
+              <p className="text-xs text-stone-500">{format(entryCloseDate, 'EEE d MMM · HH:mm')}</p>
             </div>
           )}
 
