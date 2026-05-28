@@ -397,24 +397,6 @@ export function ShowPreviewClient() {
     });
   }, [show]);
 
-  /* ─── Class sponsor / trophy lookup ─── */
-  const trophyList = useMemo(() => {
-    if (!showSponsors) return [];
-    const items: { className: string; trophyName: string; sponsorName: string }[] = [];
-    for (const ss of showSponsors) {
-      for (const cs of ss.classSponsorships) {
-        if (cs.trophyName && cs.showClass) {
-          items.push({
-            className: cs.showClass.classDefinition?.name ?? 'Class',
-            trophyName: cs.trophyName,
-            sponsorName: ss.sponsor.name,
-          });
-        }
-      }
-    }
-    return items.slice(0, 8);
-  }, [showSponsors]);
-
   /* Resolve a fallback breed name for single-breed shows where individual classes
      may not carry a breed FK. */
   const singleBreedName = useMemo(() => {
@@ -591,7 +573,12 @@ export function ShowPreviewClient() {
   const monthYear = format(parseISO(show.startDate), 'MMMM yyyy');
   const showType = displayShowTypeLabel(show.showType, show.showRuleset);
   const totalClasses = (show.showClasses ?? []).length;
-  const titleSponsor = showSponsors?.find((s) => s.tier === 'title');
+  // Main show sponsors — Title and Show tiers both head the page.
+  // Class / Prize / Advertiser tiers stay off the public page per
+  // Amanda 2026-05-28 (keep the hero about the headline backers).
+  const mainSponsors = (showSponsors ?? []).filter(
+    (s) => s.tier === 'title' || s.tier === 'show',
+  );
 
   return (
     <div className="min-h-screen bg-white">
@@ -781,15 +768,29 @@ export function ShowPreviewClient() {
             </div>
           )}
 
-          {titleSponsor && (
-            <div className="mt-12 flex flex-col items-center gap-2 border-t border-amber-500/20 pt-8">
-              <span className="font-serif text-[10px] uppercase tracking-[0.3em] text-amber-800/80">In association with</span>
-              {titleSponsor.sponsor.logoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={titleSponsor.sponsor.logoUrl} alt={titleSponsor.sponsor.name} className="h-10 object-contain" />
-              ) : (
-                <span className="font-serif text-base font-semibold text-stone-900">{titleSponsor.sponsor.name}</span>
-              )}
+          {mainSponsors.length > 0 && (
+            <div className="mt-12 flex flex-col items-center gap-4 border-t border-amber-500/20 pt-8">
+              <span className="font-serif text-[10px] uppercase tracking-[0.3em] text-amber-800/80">
+                {mainSponsors.length === 1 ? 'In association with' : 'Proudly sponsored by'}
+              </span>
+              <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-4">
+                {mainSponsors.map((s) => (
+                  <div key={s.id} className="flex items-center">
+                    {s.sponsor.logoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={s.sponsor.logoUrl}
+                        alt={s.sponsor.name}
+                        className="h-10 object-contain sm:h-12"
+                      />
+                    ) : (
+                      <span className="font-serif text-base font-semibold text-stone-900 sm:text-lg">
+                        {s.sponsor.name}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -1056,7 +1057,7 @@ export function ShowPreviewClient() {
       </section>
 
       {/* ──────────────────────────── Prize & Trophy story ──────────────── */}
-      {(trophyList.length > 0 || showAny.scheduleData?.prizeMoney || showAny.scheduleData?.awardsDescription) && (
+      {(showAny.scheduleData?.prizeMoney || showAny.scheduleData?.awardsDescription) && (
         <section className="mx-auto max-w-4xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
           <SectionHeading eyebrow="The silverware" title="Awards & Prizes" />
 
@@ -1089,29 +1090,10 @@ export function ShowPreviewClient() {
             </div>
           )}
 
-          {/* Honour roll of sponsored trophies — only when we actually have some */}
-          {trophyList.length > 0 && (
-            <div className="mt-6 rounded-2xl border border-amber-300/60 bg-gradient-to-b from-[#fbf7ef] to-white p-6 shadow-sm sm:p-8">
-              <p className="text-center font-serif text-[11px] uppercase italic tracking-[0.35em] text-amber-800">
-                ◆ Trophy Honour Roll ◆
-              </p>
-              <ul className="mt-5 divide-y divide-amber-200/60">
-                {trophyList.map((t, i) => (
-                  <li key={i} className="flex flex-col gap-1 py-4 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-serif text-base font-bold leading-tight text-stone-900">{t.trophyName}</p>
-                      <p className="mt-0.5 font-serif text-sm italic text-stone-600">For the {t.className}</p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2 text-xs">
-                      <Trophy className="size-3.5 text-amber-600" />
-                      <span className="text-stone-500">presented by</span>
-                      <span className="font-serif font-semibold text-stone-800">{t.sponsorName}</span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+          {/* Per Amanda 2026-05-28: only main show sponsors (Title + Show
+              tiers, shown in the hero) appear on the public page. Class
+              sponsors / trophy attributions stay in the catalogue and
+              schedule, not on the public show page. */}
         </section>
       )}
 
