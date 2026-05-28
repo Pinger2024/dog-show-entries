@@ -725,23 +725,75 @@ export const stewardRouter = createTRPCRouter({
       return { removed: true };
     }),
 
+  /** Publish a single top-level achievement to the public results page.
+   *  Per Amanda 2026-05-28: stewards release awards class-by-class, e.g.
+   *  Dog CC + Reserve + Best Puppy Dog right after the male classes. */
+  publishAchievement: stewardProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        dogId: z.string().uuid(),
+        type: z.enum(ACHIEVEMENT_TYPES),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyStewardAssignment(ctx.db, ctx.session.user.id, input.showId);
+      await assertResultsNotLocked(ctx.db, input.showId);
+
+      await ctx.db
+        .update(achievements)
+        .set({ publishedAt: new Date() })
+        .where(
+          and(
+            eq(achievements.showId, input.showId),
+            eq(achievements.dogId, input.dogId),
+            eq(achievements.type, input.type),
+          ),
+        );
+
+      return { published: true };
+    }),
+
+  /** Pull a published achievement back to draft. */
+  unpublishAchievement: stewardProcedure
+    .input(
+      z.object({
+        showId: z.string().uuid(),
+        dogId: z.string().uuid(),
+        type: z.enum(ACHIEVEMENT_TYPES),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyStewardAssignment(ctx.db, ctx.session.user.id, input.showId);
+      await assertResultsNotLocked(ctx.db, input.showId);
+
+      await ctx.db
+        .update(achievements)
+        .set({ publishedAt: null })
+        .where(
+          and(
+            eq(achievements.showId, input.showId),
+            eq(achievements.dogId, input.dogId),
+            eq(achievements.type, input.type),
+          ),
+        );
+
+      return { unpublished: true };
+    }),
+
   getPublicShowAchievements: publicProcedure
     .input(z.object({ showId: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
       const showId = await resolveShowId(ctx.db, input.showId);
 
-      // Check publication status for non-privileged users
+      // Per-achievement publication (Amanda 2026-05-28): stewards release
+      // top awards as the day progresses. Non-privileged callers only see
+      // achievements that have been explicitly published; secretaries /
+      // stewards / admins always see the full picture for editing.
       const userRole = ctx.session?.user?.role;
       const isPrivileged = userRole && ['secretary', 'steward', 'admin'].includes(userRole);
-      if (!isPrivileged) {
-        const show = await ctx.db.query.shows.findFirst({
-          where: eq(shows.id, showId),
-          columns: { resultsPublishedAt: true },
-        });
-        if (!show?.resultsPublishedAt) return [];
-      }
 
-      return ctx.db.query.achievements.findMany({
+      const rows = await ctx.db.query.achievements.findMany({
         where: eq(achievements.showId, showId),
         with: {
           dog: {
@@ -749,6 +801,8 @@ export const stewardRouter = createTRPCRouter({
           },
         },
       });
+
+      return isPrivileged ? rows : rows.filter((a) => a.publishedAt !== null);
     }),
 
   // ── Public: live results for a show ─────────────────────
@@ -791,7 +845,7 @@ export const stewardRouter = createTRPCRouter({
                 },
                 with: {
                   dog: {
-                    columns: { id: true, registeredName: true, sex: true },
+                    columns: { id: true, registeredName: true, sex: true, dateOfBirth: true },
                     with: { breed: true },
                   },
                   exhibitor: { columns: { name: true } },
@@ -873,6 +927,7 @@ export const stewardRouter = createTRPCRouter({
               ? (ec.entry.juniorHandlerDetails?.handlerName ?? ec.entry.exhibitor?.name ?? 'Unknown Handler')
               : (ec.entry.dog?.registeredName ?? 'Unknown'),
             dogSex: ec.entry.dog?.sex ?? null,
+            dogDateOfBirth: ec.entry.dog?.dateOfBirth ?? null,
             exhibitorName: ec.entry.exhibitor?.name ?? '',
           }))
           // Sort numeric placements ascending (1st, 2nd, 3rd...), then

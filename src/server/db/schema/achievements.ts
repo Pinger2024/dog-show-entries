@@ -23,6 +23,11 @@ export const achievements = pgTable(
     date: date('date', { mode: 'string' }).notNull(),
     judgeId: uuid('judge_id'),
     details: jsonb('details'),
+    // Per-achievement publication (Amanda 2026-05-28). Stewards publish
+    // top awards as the day progresses — e.g. Dog CC + Reserve Dog CC +
+    // Best Puppy Dog after the male classes, then bitch awards after the
+    // bitch classes. Null = not yet visible to the public.
+    publishedAt: timestamp('published_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),

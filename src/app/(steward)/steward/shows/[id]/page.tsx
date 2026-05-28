@@ -257,6 +257,29 @@ function requiredSexForAward(type: AchievementType): 'dog' | 'bitch' | null {
   return null;
 }
 
+/** Awards that are restricted to dogs aged under 12 months on show day —
+ *  Amanda 2026-05-28: only puppy class winners should appear in the
+ *  Best Puppy * dropdowns. */
+const PUPPY_AWARDS: ReadonlySet<AchievementType> = new Set([
+  'best_puppy_in_breed',
+  'best_puppy_dog',
+  'best_puppy_bitch',
+  'best_puppy_in_show',
+]);
+
+/** Returns true if the dog is under 12 months on the show date.
+ *  Unknown DOB → false (better to hide than offer a non-puppy as a puppy). */
+function isPuppyOnShowDate(dob: string | null, showDate: string): boolean {
+  if (!dob) return false;
+  const dobDate = new Date(dob);
+  const show = new Date(showDate);
+  const months =
+    (show.getFullYear() - dobDate.getFullYear()) * 12 +
+    (show.getMonth() - dobDate.getMonth()) -
+    (show.getDate() < dobDate.getDate() ? 1 : 0);
+  return months < 12;
+}
+
 interface BestOfBreedSectionProps {
   showId: string;
   showDate: string;
@@ -270,6 +293,7 @@ interface BestOfBreedSectionProps {
           dogId: string | null;
           dogName: string;
           dogSex: string | null;
+          dogDateOfBirth: string | null;
           exhibitorName: string;
           catalogueNumber: string | null;
         }[];
@@ -280,6 +304,7 @@ interface BestOfBreedSectionProps {
     id: string;
     dogId: string;
     type: string;
+    publishedAt: Date | null;
     dog?: { id: string; registeredName: string; breed?: { name: string } | null } | null;
   }[];
 }
@@ -310,36 +335,76 @@ function BestOfBreedSection({
     onError: (err) => toast.error(err.message),
   });
 
+  const publishAchievement = trpc.steward.publishAchievement.useMutation({
+    onSuccess: () => {
+      utils.steward.getShowAchievements.invalidate({ showId });
+      toast.success('Award published — now live to the public');
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const unpublishAchievement = trpc.steward.unpublishAchievement.useMutation({
+    onSuccess: () => {
+      utils.steward.getShowAchievements.invalidate({ showId });
+      toast.success('Award hidden from the public');
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   // Build a list of 1st-placed dogs per breed from live results (class winners)
-  const classWinnersByBreed = new Map<string, { dogId: string; dogName: string; dogSex: string | null; exhibitorName: string; catalogueNumber: string | null }[]>();
+  type CandidateDog = { dogId: string; dogName: string; dogSex: string | null; dogDateOfBirth: string | null; exhibitorName: string; catalogueNumber: string | null };
+  const classWinnersByBreed = new Map<string, CandidateDog[]>();
+  // Reserve CC candidates: 1st AND 2nd-place dogs per breed. Per Amanda
+  // 2026-05-28, the judge often hands the Res CC to the dog that was
+  // 2nd in the CC winner's class — so we widen the Reserve pool to
+  // include 2nd-place dogs as well, not just class winners.
+  const reserveCandidatesByBreed = new Map<string, CandidateDog[]>();
 
   if (liveResults) {
     for (const bg of liveResults.breedGroups) {
-      const winners: typeof classWinnersByBreed extends Map<string, infer V> ? V : never = [];
+      const winners: CandidateDog[] = [];
+      const reservePool: CandidateDog[] = [];
+      const pushIfNew = (list: CandidateDog[], r: typeof bg.classes[number]['results'][number]) => {
+        if (!r.dogId || list.some((x) => x.dogId === r.dogId)) return;
+        list.push({
+          dogId: r.dogId,
+          dogName: r.dogName,
+          dogSex: r.dogSex ?? null,
+          dogDateOfBirth: r.dogDateOfBirth ?? null,
+          exhibitorName: r.exhibitorName,
+          catalogueNumber: r.catalogueNumber,
+        });
+      };
       for (const cls of bg.classes) {
         const firstPlaced = cls.results.find((r) => r.placement === 1);
-        if (firstPlaced?.dogId && !winners.some((w) => w.dogId === firstPlaced.dogId)) {
-          winners.push({
-            dogId: firstPlaced.dogId,
-            dogName: firstPlaced.dogName,
-            dogSex: firstPlaced.dogSex ?? null,
-            exhibitorName: firstPlaced.exhibitorName,
-            catalogueNumber: firstPlaced.catalogueNumber,
-          });
+        const secondPlaced = cls.results.find((r) => r.placement === 2);
+        if (firstPlaced) {
+          pushIfNew(winners, firstPlaced);
+          pushIfNew(reservePool, firstPlaced);
         }
+        if (secondPlaced) pushIfNew(reservePool, secondPlaced);
       }
       if (winners.length > 0) {
         classWinnersByBreed.set(bg.breedName, winners);
+        reserveCandidatesByBreed.set(bg.breedName, reservePool);
       }
     }
   }
 
+  /** Awards where the Reserve pool (1st + 2nd) applies instead of just class
+   *  winners — Reserve CCs typically include the 2nd-place dog from the CC
+   *  winner's class. */
+  const RESERVE_AWARDS: ReadonlySet<AchievementType> = new Set([
+    'reserve_dog_cc',
+    'reserve_bitch_cc',
+  ]);
+
   // All unique class winners across all breeds (for BIS selection)
-  const allWinners: { dogId: string; dogName: string; breedName: string }[] = [];
+  const allWinners: { dogId: string; dogName: string; dogDateOfBirth: string | null; breedName: string }[] = [];
   for (const [breedName, winners] of classWinnersByBreed) {
     for (const w of winners) {
       if (!allWinners.some((aw) => aw.dogId === w.dogId)) {
-        allWinners.push({ dogId: w.dogId, dogName: w.dogName, breedName });
+        allWinners.push({ dogId: w.dogId, dogName: w.dogName, dogDateOfBirth: w.dogDateOfBirth, breedName });
       }
     }
   }
@@ -375,6 +440,9 @@ function BestOfBreedSection({
             {breedName}
           </h3>
           {BOB_AWARDS.map((award) => {
+            const filtered = PUPPY_AWARDS.has(award.type)
+              ? winners.filter((w) => isPuppyOnShowDate(w.dogDateOfBirth, showDate))
+              : winners;
             const existing = existingAchievements.find(
               (a) => a.type === award.type && winners.some((w) => w.dogId === a.dogId)
             );
@@ -384,11 +452,12 @@ function BestOfBreedSection({
                 label={award.label}
                 type={award.type}
                 existingDogId={existing?.dogId}
-                candidates={winners}
-                showId={showId}
-                showDate={showDate}
+                isPublished={!!existing?.publishedAt}
+                candidates={filtered}
                 onRecord={(dogId, type) => recordAchievement.mutate({ showId, dogId, type, date: showDate })}
                 onRemove={(dogId, type) => removeAchievement.mutate({ showId, dogId, type })}
+                onPublish={(dogId, type) => publishAchievement.mutate({ showId, dogId, type })}
+                onUnpublish={(dogId, type) => unpublishAchievement.mutate({ showId, dogId, type })}
               />
             );
           })}
@@ -397,11 +466,19 @@ function BestOfBreedSection({
               <div className="mt-2 border-t pt-2" />
               {CHAMPIONSHIP_AWARDS.map((award) => {
                 const sexFilter = requiredSexForAward(award.type);
-                const filtered = sexFilter
-                  ? winners.filter((w) => w.dogSex === sexFilter)
+                const basePool = RESERVE_AWARDS.has(award.type)
+                  ? reserveCandidatesByBreed.get(breedName) ?? winners
                   : winners;
+                let filtered = sexFilter
+                  ? basePool.filter((w) => w.dogSex === sexFilter)
+                  : basePool;
+                if (PUPPY_AWARDS.has(award.type)) {
+                  filtered = filtered.filter((w) =>
+                    isPuppyOnShowDate(w.dogDateOfBirth, showDate),
+                  );
+                }
                 const existing = existingAchievements.find(
-                  (a) => a.type === award.type && winners.some((w) => w.dogId === a.dogId)
+                  (a) => a.type === award.type && basePool.some((w) => w.dogId === a.dogId)
                 );
                 return (
                   <AwardSelect
@@ -409,11 +486,12 @@ function BestOfBreedSection({
                     label={award.label}
                     type={award.type}
                     existingDogId={existing?.dogId}
+                    isPublished={!!existing?.publishedAt}
                     candidates={filtered}
-                    showId={showId}
-                    showDate={showDate}
                     onRecord={(dogId, type) => recordAchievement.mutate({ showId, dogId, type, date: showDate })}
                     onRemove={(dogId, type) => removeAchievement.mutate({ showId, dogId, type })}
+                    onPublish={(dogId, type) => publishAchievement.mutate({ showId, dogId, type })}
+                    onUnpublish={(dogId, type) => unpublishAchievement.mutate({ showId, dogId, type })}
                   />
                 );
               })}
@@ -435,22 +513,26 @@ function BestOfBreedSection({
             .filter((award) => award.type !== 'best_long_coat_in_show' || isChampionship)
             .map((award) => {
             const existing = existingAchievements.find((a) => a.type === award.type);
+            const pool = PUPPY_AWARDS.has(award.type)
+              ? allWinners.filter((w) => isPuppyOnShowDate(w.dogDateOfBirth, showDate))
+              : allWinners;
             return (
               <AwardSelect
                 key={award.type}
                 label={award.label}
                 type={award.type}
                 existingDogId={existing?.dogId}
-                candidates={allWinners.map((w) => ({
+                isPublished={!!existing?.publishedAt}
+                candidates={pool.map((w) => ({
                   dogId: w.dogId,
                   dogName: `${w.dogName} (${w.breedName})`,
                   catalogueNumber: null,
                   exhibitorName: '',
                 }))}
-                showId={showId}
-                showDate={showDate}
                 onRecord={(dogId, type) => recordAchievement.mutate({ showId, dogId, type, date: showDate })}
                 onRemove={(dogId, type) => removeAchievement.mutate({ showId, dogId, type })}
+                onPublish={(dogId, type) => publishAchievement.mutate({ showId, dogId, type })}
+                onUnpublish={(dogId, type) => unpublishAchievement.mutate({ showId, dogId, type })}
               />
             );
           })}
@@ -578,51 +660,83 @@ function AwardSelect({
   label,
   type,
   existingDogId,
+  isPublished,
   candidates,
-  showId,
-  showDate,
   onRecord,
   onRemove,
+  onPublish,
+  onUnpublish,
 }: {
   label: string;
   type: AchievementType;
   existingDogId?: string;
+  isPublished: boolean;
   candidates: { dogId: string; dogName: string; catalogueNumber: string | null; exhibitorName: string }[];
-  showId: string;
-  showDate: string;
   onRecord: (dogId: string, type: AchievementType) => void;
   onRemove: (dogId: string, type: AchievementType) => void;
+  onPublish: (dogId: string, type: AchievementType) => void;
+  onUnpublish: (dogId: string, type: AchievementType) => void;
 }) {
   return (
-    <div className="flex items-center gap-2 sm:gap-3">
-      <span className="text-xs sm:text-sm font-medium w-28 sm:w-44 shrink-0 truncate" title={label}>
+    <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+      <span
+        className="text-xs sm:text-sm font-medium sm:w-44 sm:shrink-0 sm:truncate"
+        title={label}
+      >
         {label}
       </span>
-      <Select
-        value={existingDogId ?? 'none'}
-        onValueChange={(dogId) => {
-          if (dogId === 'none') {
-            if (existingDogId) onRemove(existingDogId, type);
-          } else {
-            if (existingDogId && existingDogId !== dogId) {
-              onRemove(existingDogId, type);
+      <div className="flex flex-1 items-center gap-2">
+        <Select
+          value={existingDogId ?? 'none'}
+          onValueChange={(dogId) => {
+            if (dogId === 'none') {
+              if (existingDogId) onRemove(existingDogId, type);
+            } else {
+              if (existingDogId && existingDogId !== dogId) {
+                onRemove(existingDogId, type);
+              }
+              onRecord(dogId, type);
             }
-            onRecord(dogId, type);
-          }
-        }}
-      >
-        <SelectTrigger className="h-11 flex-1 text-xs sm:text-sm">
-          <SelectValue placeholder="Select winner..." />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="none">— None —</SelectItem>
-          {candidates.map((w) => (
-            <SelectItem key={w.dogId} value={w.dogId}>
-              {w.catalogueNumber ? `#${w.catalogueNumber} ` : ''}{w.dogName}
-            </SelectItem>
+          }}
+        >
+          <SelectTrigger className="h-11 flex-1 text-xs sm:text-sm">
+            <SelectValue placeholder="Select winner..." />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">— None —</SelectItem>
+            {candidates.map((w) => (
+              <SelectItem key={w.dogId} value={w.dogId}>
+                {w.catalogueNumber ? `#${w.catalogueNumber} ` : ''}{w.dogName}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {existingDogId &&
+          (isPublished ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-11 shrink-0 gap-1 border-green-300 bg-green-50 text-green-800 hover:bg-green-100"
+              onClick={() => onUnpublish(existingDogId, type)}
+              title="Hide this award from the public again"
+            >
+              <CheckCircle2 className="size-4" />
+              Live
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              className="h-11 shrink-0 gap-1 bg-green-700 hover:bg-green-800"
+              onClick={() => onPublish(existingDogId, type)}
+              title="Publish this award to the public results page"
+            >
+              <Send className="size-4" />
+              Publish
+            </Button>
           ))}
-        </SelectContent>
-      </Select>
+      </div>
     </div>
   );
 }
