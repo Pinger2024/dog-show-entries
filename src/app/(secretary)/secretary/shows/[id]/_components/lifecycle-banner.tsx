@@ -280,11 +280,33 @@ function EntriesOpenContent({
               </span>
             )}
           </div>
-          <Button size="sm" variant="outline" className="w-full sm:w-auto" asChild>
-            <Link href={`/secretary/shows/${show.id}/entries`}>
-              View Entries
-            </Link>
-          </Button>
+          {/* Two clear actions while entries are open: view the list, or
+              close entries early. The early-close button used to only appear
+              once the deadline had passed — Amanda 2026-05-28 needed to close
+              before the date without hunting for the status badge. */}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Button size="sm" variant="outline" className="w-full sm:w-auto" asChild>
+              <Link href={`/secretary/shows/${show.id}/entries`}>
+                View Entries
+              </Link>
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full sm:w-auto"
+              disabled={closeEntriesMutation.isPending}
+              onClick={() => closeEntriesMutation.mutate({ id: show.id, status: 'entries_closed' })}
+            >
+              {closeEntriesMutation.isPending ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Closing...
+                </>
+              ) : (
+                'Close entries now'
+              )}
+            </Button>
+          </div>
         </>
       )}
     </div>
