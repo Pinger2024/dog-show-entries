@@ -583,6 +583,55 @@ async function main() {
     fail('results-api', 'getLiveResults did not return svGrade');
   }
 
+  // ── 6c. SV TOP AWARDS — the only 4 at a regional (no BoB/CC/BIS).
+  //         Most Promising Young Dog/Bitch from Minor Puppy/Puppy/Junior
+  //         winners; Best Dog/Bitch from Yearling/Adult/Working winners.
+  const stripSv = (n: string) => n.replace(/^SV\s+/, '').trim();
+  const youngW: { dogId: string; sex: string | null }[] = [];
+  const adultW: { dogId: string; sex: string | null }[] = [];
+  for (const bg of live.breedGroups) {
+    for (const cls of bg.classes) {
+      const w = cls.results.find((r) => r.placement === 1);
+      if (!w?.dogId) continue;
+      const age = stripSv(cls.className);
+      const rec = { dogId: w.dogId, sex: w.dogSex };
+      if (['Minor Puppy', 'Puppy', 'Junior'].includes(age)) youngW.push(rec);
+      else if (['Yearling', 'Adult', 'Working'].includes(age)) adultW.push(rec);
+    }
+  }
+  const pickWinner = (pool: typeof youngW, sex: string) => pool.find((x) => x.sex === sex)?.dogId ?? null;
+  const topAwards: Array<[string, string | null]> = [
+    ['most_promising_young_dog', pickWinner(youngW, 'dog')],
+    ['most_promising_young_bitch', pickWinner(youngW, 'bitch')],
+    ['best_dog', pickWinner(adultW, 'dog')],
+    ['best_bitch', pickWinner(adultW, 'bitch')],
+  ];
+  let awardsRecorded = 0;
+  for (const [type, dogId] of topAwards) {
+    if (!dogId) continue;
+    await db.insert(s.achievements).values({
+      showId,
+      dogId,
+      type: type as never,
+      date: startDate,
+      publishedAt: new Date(),
+      recordedBy: MANDY_DEMO_USER_ID,
+    });
+    awardsRecorded++;
+  }
+  ok('awards', `${awardsRecorded}/4 SV top awards recorded + published (MPY Dog/Bitch, Best Dog/Bitch)`);
+
+  // Verify the public achievements query returns them (and only SV types).
+  const pubCaller = createCaller({ db, session: null, impersonating: null, callerIsAdmin: false });
+  const pubAchievements = await pubCaller.steward.getPublicShowAchievements({ showId });
+  const svTypes = new Set(['most_promising_young_dog', 'most_promising_young_bitch', 'best_dog', 'best_bitch']);
+  const publishedSv = pubAchievements.filter((a) => svTypes.has(a.type));
+  if (publishedSv.length === awardsRecorded && awardsRecorded > 0) {
+    ok('awards-api', `public results shows ${publishedSv.length} SV top awards (no BoB/CC/BIS)`);
+  } else {
+    fail('awards-api', `expected ${awardsRecorded} SV awards public, got ${publishedSv.length}`);
+  }
+
   const outDir = `/tmp/e2e-sv-${Date.now()}`;
   mkdirSync(outDir, { recursive: true });
   log(`  output → ${outDir}`);

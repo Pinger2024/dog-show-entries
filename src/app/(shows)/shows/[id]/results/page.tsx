@@ -155,12 +155,20 @@ export default function LiveResultsPage({
     'best_long_coat_dog', 'best_long_coat_bitch',
     'cc', 'reserve_cc',
   ];
-  const showAwards = (achievements ?? []).filter((a) =>
-    showLevelTypes.includes(a.type)
-  );
-  const breedAwards = (achievements ?? []).filter((a) =>
-    breedLevelTypes.includes(a.type)
-  );
+  // SV/WUSV regionals have only 4 top awards (no BoB/CC/BIS). Show those
+  // in their own block and suppress the RKC award groups (Amanda 2026-05-28).
+  const svAwardOrder = ['most_promising_young_dog', 'most_promising_young_bitch', 'best_dog', 'best_bitch'];
+  const svAwards = isWusv
+    ? svAwardOrder
+        .map((t) => (achievements ?? []).find((a) => a.type === t))
+        .filter((a): a is NonNullable<typeof a> => !!a)
+    : [];
+  const showAwards = isWusv
+    ? []
+    : (achievements ?? []).filter((a) => showLevelTypes.includes(a.type));
+  const breedAwards = isWusv
+    ? []
+    : (achievements ?? []).filter((a) => breedLevelTypes.includes(a.type));
   const breedAwardsByBreed = new Map<string, typeof breedAwards>();
   for (const a of breedAwards) {
     const breedName = a.dog?.breed?.name ?? 'Unknown';
@@ -281,6 +289,37 @@ export default function LiveResultsPage({
           </div>
         ) : (
           <div className="space-y-8">
+            {/* SV/WUSV regional top awards — the only 4 (no BoB/CC/BIS) */}
+            {svAwards.length > 0 && (
+              <div id="top-awards" className="rounded-lg border border-amber-200 bg-gradient-to-b from-amber-50/80 to-amber-50/30 p-4 sm:p-5">
+                <div className="mb-3 flex items-center gap-2">
+                  <Trophy className="size-5 text-amber-600" />
+                  <h2 className="font-serif text-lg font-semibold text-amber-900">
+                    Top Awards
+                  </h2>
+                </div>
+                <div className="space-y-2">
+                  {svAwards.map((a) => (
+                    <div key={a.id} className="flex flex-wrap items-center gap-1.5 sm:gap-3">
+                      <Badge className="w-auto sm:w-52 justify-center bg-amber-100 text-amber-800 border-amber-300 text-xs font-semibold whitespace-nowrap">
+                        {achievementLabels[a.type] ?? a.type}
+                      </Badge>
+                      {a.dog ? (
+                        <Link
+                          href={`/dog/${a.dogId}`}
+                          className="font-medium text-sm text-primary hover:underline"
+                        >
+                          {a.dog.registeredName}
+                        </Link>
+                      ) : (
+                        <span className="font-medium text-sm">Unknown dog</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Show-level awards (BIS/RBIS/BPS) */}
             {showAwards.length > 0 && (
               <div id="show-awards" className="rounded-lg border border-amber-200 bg-gradient-to-b from-amber-50/80 to-amber-50/30 p-4 sm:p-5">

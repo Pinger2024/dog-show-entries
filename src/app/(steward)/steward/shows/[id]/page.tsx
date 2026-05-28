@@ -204,6 +204,7 @@ export default function StewardShowPage({
           showId={showId}
           showDate={showData.startDate}
           showType={showData.showType}
+          showRuleset={(showData as { showRuleset?: string }).showRuleset}
           liveResults={liveResults}
           existingAchievements={existingAchievements ?? []}
         />
@@ -284,10 +285,12 @@ interface BestOfBreedSectionProps {
   showId: string;
   showDate: string;
   showType: string;
+  showRuleset?: string;
   liveResults?: {
     breedGroups: {
       breedName: string;
       classes: {
+        className: string;
         results: {
           placement: number | null;
           dogId: string | null;
@@ -313,10 +316,12 @@ function BestOfBreedSection({
   showId,
   showDate,
   showType,
+  showRuleset,
   liveResults,
   existingAchievements,
 }: BestOfBreedSectionProps) {
   const isChampionship = showType === 'championship';
+  const isWusv = showRuleset === 'wusv';
   const utils = trpc.useUtils();
 
   const recordAchievement = trpc.steward.recordAchievement.useMutation({
@@ -422,6 +427,87 @@ function BestOfBreedSection({
     } else {
       recordAchievement.mutate({ showId, dogId, type, date: showDate });
     }
+  }
+
+  // ── SV / WUSV regional top awards (Amanda 2026-05-28) ──────────────
+  // Regionals have NO Best of Breed / CCs / BIS — only four awards:
+  // Most Promising Young Dog/Bitch (from the young-class winners — Minor
+  // Puppy, Puppy, Junior; Baby Puppy is NOT in the Most Promising pool)
+  // and Best Dog/Bitch (from the Yearling, Adult, Working winners).
+  if (isWusv) {
+    const SV_YOUNG = new Set(['Minor Puppy', 'Puppy', 'Junior']);
+    const SV_ADULT = new Set(['Yearling', 'Adult', 'Working']);
+    const stripSv = (n: string) => n.replace(/^SV\s+/, '').trim();
+    const young: CandidateDog[] = [];
+    const adult: CandidateDog[] = [];
+    const addUnique = (list: CandidateDog[], r: CandidateDog) => {
+      if (!r.dogId || list.some((x) => x.dogId === r.dogId)) return;
+      list.push(r);
+    };
+    if (liveResults) {
+      for (const bg of liveResults.breedGroups) {
+        for (const cls of bg.classes) {
+          const w = cls.results.find((r) => r.placement === 1);
+          if (!w?.dogId) continue;
+          const cand: CandidateDog = {
+            dogId: w.dogId,
+            dogName: w.dogName,
+            dogSex: w.dogSex ?? null,
+            dogDateOfBirth: w.dogDateOfBirth ?? null,
+            exhibitorName: w.exhibitorName,
+            catalogueNumber: w.catalogueNumber,
+          };
+          const age = stripSv(cls.className);
+          if (SV_YOUNG.has(age)) addUnique(young, cand);
+          else if (SV_ADULT.has(age)) addUnique(adult, cand);
+        }
+      }
+    }
+
+    const SV_AWARDS: { type: AchievementType; label: string; pool: CandidateDog[]; sex: 'dog' | 'bitch' }[] = [
+      { type: 'most_promising_young_dog', label: 'Most Promising Young Dog', pool: young, sex: 'dog' },
+      { type: 'most_promising_young_bitch', label: 'Most Promising Young Bitch', pool: young, sex: 'bitch' },
+      { type: 'best_dog', label: 'Best Dog', pool: adult, sex: 'dog' },
+      { type: 'best_bitch', label: 'Best Bitch', pool: adult, sex: 'bitch' },
+    ];
+
+    if (young.length === 0 && adult.length === 0) return null;
+
+    return (
+      <div className="mt-6 sm:mt-8 space-y-4">
+        <div className="flex items-center gap-2">
+          <Trophy className="size-5 text-amber-500" />
+          <h2 className="text-sm sm:text-base font-semibold">Top Awards</h2>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Most Promising Young Dog &amp; Bitch are chosen from the Minor Puppy,
+          Puppy &amp; Junior class winners; Best Dog &amp; Bitch from the
+          Yearling, Adult &amp; Working winners.
+        </p>
+        <div className="rounded-lg border p-3 sm:p-4 space-y-3">
+          {SV_AWARDS.map((award) => {
+            const candidates = award.pool.filter((w) => w.dogSex === award.sex);
+            const existing = existingAchievements.find(
+              (a) => a.type === award.type && award.pool.some((w) => w.dogId === a.dogId),
+            );
+            return (
+              <AwardSelect
+                key={award.type}
+                label={award.label}
+                type={award.type}
+                existingDogId={existing?.dogId}
+                isPublished={!!existing?.publishedAt}
+                candidates={candidates}
+                onRecord={(dogId, type) => recordAchievement.mutate({ showId, dogId, type, date: showDate })}
+                onRemove={(dogId, type) => removeAchievement.mutate({ showId, dogId, type })}
+                onPublish={(dogId, type) => publishAchievement.mutate({ showId, dogId, type })}
+                onUnpublish={(dogId, type) => unpublishAchievement.mutate({ showId, dogId, type })}
+              />
+            );
+          })}
+        </div>
+      </div>
+    );
   }
 
   if (classWinnersByBreed.size === 0) return null;

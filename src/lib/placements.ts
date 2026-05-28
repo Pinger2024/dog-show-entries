@@ -49,6 +49,12 @@ export const ACHIEVEMENT_TYPES = [
   'best_long_coat_dog',
   'best_long_coat_bitch',
   'best_long_coat_in_show',
+  // SV/WUSV regional top awards (Amanda 2026-05-28). Regionals have NO
+  // Best of Breed / CCs / BIS — only these four.
+  'most_promising_young_dog',
+  'most_promising_young_bitch',
+  'best_dog',
+  'best_bitch',
 ] as const;
 
 export type AchievementType = typeof ACHIEVEMENT_TYPES[number];
@@ -143,6 +149,11 @@ export const achievementLabels: Record<string, string> = {
   best_long_coat_in_show: 'Best Long Coat in Show',
   cc: 'CC',
   reserve_cc: 'Reserve CC',
+  // SV/WUSV regional top awards
+  most_promising_young_dog: 'Most Promising Young Dog',
+  most_promising_young_bitch: 'Most Promising Young Bitch',
+  best_dog: 'Best Dog',
+  best_bitch: 'Best Bitch',
 };
 
 export const placementColors: Record<number, string> = {
