@@ -32,6 +32,7 @@ import {
   type DogEntryInput,
   type FeeContext,
 } from '@/lib/fee-calc';
+import { svEntryMissingRequirements, svEntryBlockedMessage } from '@/lib/sv-entry-validation';
 
 const cartEntrySchema = z.object({
   entryType: z.enum(['standard', 'junior_handler']).default('standard'),
@@ -159,9 +160,8 @@ export const ordersRouter = createTRPCRouter({
 
         // Breed validation for individual classes (all show types)
         // Ensure each dog is only entered in classes matching its breed, or AV/unassigned classes
-        // + (SV) enforce health data requirements for Yearling/Adult/Working
-        const SV_HEALTH_REQUIRED_CLASSES = new Set(['SV Yearling', 'Adult', 'Working']);
-
+        // + (SV) enforce regional entry requirements (reg# + microchip for
+        //   all dogs; health triad Junior+; working title for Working).
         for (const entryInput of input.entries) {
           if (entryInput.entryType !== 'standard' || !entryInput.dogId) continue;
           if (entryInput.classIds.length === 0) continue;
@@ -190,30 +190,26 @@ export const ordersRouter = createTRPCRouter({
             }
           }
 
-          // SV health gate — must run on the checkout path too (this is
-          // the path the exhibitor cart uses; the entries.create gate
-          // only catches the secretary-side single-dog flow). Amanda
-          // 2026-05-21: a dog was entered in Adult class on an SV show
-          // with no hip/elbow/DNA data because this gate was missing.
+          // SV regional entry requirements — must run on the checkout path
+          // too (the exhibitor cart path; the entries.create gate only
+          // catches the secretary single-dog flow). Single source of truth:
+          // svEntryMissingRequirements (Amanda 2026-05-28).
           if (show.showRuleset === 'wusv') {
-            const needsHealth = entryClasses.some(
-              (sc) => sc.classDefinition && SV_HEALTH_REQUIRED_CLASSES.has(sc.classDefinition.name),
-            );
-            if (needsHealth) {
-              const svProfile = await ctx.db.query.dogSvProfile.findFirst({
-                where: eq(dogSvProfile.dogId, dog.id),
+            const svProfile = await ctx.db.query.dogSvProfile.findFirst({
+              where: eq(dogSvProfile.dogId, dog.id),
+            });
+            const missing = svEntryMissingRequirements({
+              dog,
+              svProfile,
+              classNames: entryClasses
+                .map((sc) => sc.classDefinition?.name)
+                .filter((n): n is string => !!n),
+            });
+            if (missing.length > 0) {
+              throw new TRPCError({
+                code: 'BAD_REQUEST',
+                message: svEntryBlockedMessage(dog.registeredName, missing),
               });
-              const missing: string[] = [];
-              const isEmpty = (v: string | null | undefined) => !v || v === 'not_required';
-              if (isEmpty(svProfile?.hipGrade ?? null)) missing.push('hip score');
-              if (isEmpty(svProfile?.elbowGrade ?? null)) missing.push('elbow score');
-              if (!svProfile?.dna) missing.push('DNA recording');
-              if (missing.length > 0) {
-                throw new TRPCError({
-                  code: 'BAD_REQUEST',
-                  message: `${dog.registeredName} can't be entered in Yearling, Adult or Working classes without ${missing.join(', ')}. Add the missing data on the dog's profile (SV Health & Working Titles section) and try again.`,
-                });
-              }
             }
           }
         }
