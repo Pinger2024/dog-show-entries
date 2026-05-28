@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, isNull, isNotNull, asc, sql } from 'drizzle-orm';
+import { and, eq, isNull, isNotNull, asc, sql, inArray } from 'drizzle-orm';
 import { stewardProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import type { Database } from '@/server/db';
@@ -592,6 +592,43 @@ export const stewardRouter = createTRPCRouter({
         .where(eq(results.entryClassId, input.entryClassId));
 
       return { removed: true };
+    }),
+
+  // ── Bulk-set the SV grade for every recorded dog in a class ──────
+  // SV stewards often grade most of a class the same (e.g. all SG) then
+  // tweak the odd one (Amanda 2026-05-28). Sets svGrade on every result
+  // already recorded in the class; placements are left untouched.
+  setClassGrades: stewardProcedure
+    .input(
+      z.object({
+        showClassId: z.string().uuid(),
+        svGrade: z
+          .enum(['v', 'sg', 'g', 'a', 'm', 'u', 'vp', 'p', 'wv', 'disqualified'])
+          .nullable(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const sc = await ctx.db.query.showClasses.findFirst({
+        where: eq(showClasses.id, input.showClassId),
+        columns: { id: true, showId: true },
+      });
+      if (!sc) throw new TRPCError({ code: 'NOT_FOUND', message: 'Class not found' });
+      await verifyStewardAssignment(ctx.db, ctx.session.user.id, sc.showId);
+      await assertResultsNotLocked(ctx.db, sc.showId);
+
+      const ecRows = await ctx.db.query.entryClasses.findMany({
+        where: eq(entryClasses.showClassId, input.showClassId),
+        columns: { id: true },
+      });
+      const ecIds = ecRows.map((r) => r.id);
+      if (ecIds.length === 0) return { updated: 0 };
+
+      const updated = await ctx.db
+        .update(results)
+        .set({ svGrade: input.svGrade })
+        .where(inArray(results.entryClassId, ecIds))
+        .returning({ id: results.id });
+      return { updated: updated.length };
     }),
 
   // ── Mark entry absent/present ──────────────────────────

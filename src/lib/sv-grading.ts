@@ -94,18 +94,68 @@ export function allowedSvGradesForClass(
 }
 
 /**
- * The public-facing SV rating for a result: grade + rank-within-grade, e.g.
- * "V1", "SG2", "VP1". Falls back to the grade alone (no placement) or the
- * placement alone (no grade). Empty string when neither is set.
+ * The public-facing SV rating for a single result: grade + rank, e.g. "V1",
+ * "SG2", "VP1". Falls back to the grade alone (no placement) or the placement
+ * alone (no grade). Empty string when neither is set.
+ *
+ * NOTE: the `rank` passed here is the WITHIN-GRADE rank, not the overall class
+ * placement. Use {@link computeSvClassRatings} to derive within-grade ranks
+ * for a whole class — SV restarts the numbering for each grade (SG1, SG2,
+ * G1, G2…), so a single result's overall placement is the wrong number.
  */
 export function formatSvRating(
   svGrade: string | null | undefined,
-  placement: number | null | undefined,
+  rank: number | null | undefined,
 ): string {
   if (svGrade === 'disqualified') return 'Disqualified';
   const gradeUpper = svGrade ? svGrade.toUpperCase() : '';
-  if (gradeUpper && placement != null) return `${gradeUpper}${placement}`;
+  if (gradeUpper && rank != null) return `${gradeUpper}${rank}`;
   if (gradeUpper) return gradeUpper;
-  if (placement != null) return String(placement);
+  if (rank != null) return String(rank);
   return '';
+}
+
+/**
+ * Compute the SV rating (grade + within-grade rank) for every result in ONE
+ * class. SV ranks within each grade and restarts the count per grade, so a
+ * class graded SG,SG,G,G,A placed 1..5 reads SG1, SG2, G1, G2, A1.
+ *
+ * The steward records each dog's grade plus its overall placing (best first,
+ * as on any show); this groups by grade and numbers 1..n within each grade in
+ * placing order. Returns a Map keyed by entryClassId. Disqualified shows in
+ * full; an ungraded-but-placed dog falls back to its plain placement.
+ */
+export function computeSvClassRatings(
+  results: ReadonlyArray<{
+    entryClassId: string;
+    svGrade: string | null | undefined;
+    placement: number | null | undefined;
+  }>,
+): Map<string, string> {
+  const map = new Map<string, string>();
+
+  const byGrade = new Map<string, { entryClassId: string; placement: number | null | undefined }[]>();
+  for (const r of results) {
+    if (!r.svGrade || r.svGrade === 'disqualified') continue;
+    const list = byGrade.get(r.svGrade) ?? [];
+    list.push({ entryClassId: r.entryClassId, placement: r.placement });
+    byGrade.set(r.svGrade, list);
+  }
+
+  for (const [grade, list] of byGrade) {
+    list.sort((a, b) => (a.placement ?? 9999) - (b.placement ?? 9999));
+    list.forEach((r, i) => map.set(r.entryClassId, formatSvRating(grade, i + 1)));
+  }
+
+  // Disqualified + ungraded fallbacks.
+  for (const r of results) {
+    if (map.has(r.entryClassId)) continue;
+    if (r.svGrade === 'disqualified') {
+      map.set(r.entryClassId, 'Disqualified');
+    } else if (!r.svGrade && r.placement != null) {
+      map.set(r.entryClassId, String(r.placement));
+    }
+  }
+
+  return map;
 }

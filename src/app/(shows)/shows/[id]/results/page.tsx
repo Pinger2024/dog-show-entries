@@ -18,7 +18,7 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { getPlacementLabel, placementColors, achievementLabels } from '@/lib/placements';
-import { formatSvRating } from '@/lib/sv-grading';
+import { computeSvClassRatings } from '@/lib/sv-grading';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
@@ -424,7 +424,12 @@ export default function LiveResultsPage({
                     </div>
                   )}
                   <div className="space-y-4">
-                    {group.classes.map((cls) => (
+                    {group.classes.map((cls) => {
+                      // SV ratings restart per grade (SG1, SG2, G1, G2…) — so
+                      // compute the within-grade rank across the whole class
+                      // rather than per result (Amanda 2026-05-28).
+                      const svRatings = isWusv ? computeSvClassRatings(cls.results) : null;
+                      return (
                       <div
                         key={cls.classId}
                         id={`class-${cls.classId}`}
@@ -455,12 +460,12 @@ export default function LiveResultsPage({
                           {cls.results.map((result) => (
                             <div key={result.entryClassId}>
                               <div className="flex flex-wrap items-center gap-1.5 sm:gap-3 text-sm">
-                                {isWusv && (result.svGrade || result.placement) ? (
+                                {isWusv && svRatings?.get(result.entryClassId) ? (
                                   <Badge
                                     variant="outline"
                                     className={`w-auto sm:w-16 justify-center text-xs font-semibold whitespace-nowrap ${result.placement ? placementColors[result.placement] ?? '' : ''}`}
                                   >
-                                    {formatSvRating(result.svGrade, result.placement)}
+                                    {svRatings.get(result.entryClassId)}
                                   </Badge>
                                 ) : !isWusv && result.placement ? (
                                   <Badge
@@ -522,7 +527,8 @@ export default function LiveResultsPage({
                           ))}
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               );

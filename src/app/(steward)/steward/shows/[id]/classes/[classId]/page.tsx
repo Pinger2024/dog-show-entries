@@ -146,6 +146,14 @@ export default function StewardClassResultsPage({
     onError: (error) => toast.error(error.message),
   });
 
+  const setClassGrades = trpc.steward.setClassGrades.useMutation({
+    onSuccess: (res) => {
+      utils.steward.getClassEntries.invalidate({ showClassId: classId });
+      toast.success(`Graded ${res.updated} dog${res.updated === 1 ? '' : 's'}`);
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
 
   if (isLoading) {
@@ -275,6 +283,20 @@ export default function StewardClassResultsPage({
     });
   }
 
+  // Set the SV grade on a single (already-recorded) dog, preserving its
+  // placement/status/special award. Amanda 2026-05-28: grade sits beside the
+  // placement, set after the dog's been placed.
+  function setGrade(entry: (typeof entries)[number], grade: SvGradeValue | null) {
+    recordResult.mutate({
+      entryClassId: entry.entryClassId,
+      placement: entry.result?.placement ?? null,
+      placementStatus:
+        (entry.result?.placementStatus as 'withheld' | 'unplaced' | null | undefined) ?? null,
+      specialAward: entry.result?.specialAward ?? null,
+      svGrade: grade,
+    });
+  }
+
   return (
     <div>
       <Link
@@ -374,6 +396,26 @@ export default function StewardClassResultsPage({
             <div className="bg-green-800 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-white">
               Placements
             </div>
+            {/* SV: bulk-grade the whole class, then tweak the odd one
+                (Amanda 2026-05-28). */}
+            {isWusv && placedCount > 0 && (
+              <div className="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-3 py-2">
+                <span className="text-xs font-medium text-muted-foreground">Grade all as</span>
+                {svGradeOptions
+                  .filter((g) => g.value !== 'disqualified')
+                  .map((g) => (
+                    <button
+                      key={g.value}
+                      type="button"
+                      onClick={() => setClassGrades.mutate({ showClassId: classId, svGrade: g.value })}
+                      disabled={setClassGrades.isPending}
+                      className="inline-flex h-8 items-center rounded-full border border-green-300 bg-green-50 px-3 text-xs font-semibold text-green-800 hover:bg-green-100 disabled:opacity-50"
+                    >
+                      {g.value.toUpperCase()}
+                    </button>
+                  ))}
+              </div>
+            )}
             <div className="divide-y">
               {slots.map((n) => {
                 const placed = placedByValue.get(n);
@@ -419,6 +461,24 @@ export default function StewardClassResultsPage({
                         <p className="text-sm italic text-muted-foreground">—</p>
                       )}
                     </div>
+                    {placed && isWusv && (
+                      <Select
+                        value={placed.result?.svGrade ?? 'none'}
+                        onValueChange={(v) => setGrade(placed, v === 'none' ? null : (v as SvGradeValue))}
+                      >
+                        <SelectTrigger className="h-9 w-[92px] shrink-0 text-xs">
+                          <SelectValue placeholder="Grade" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">— Grade —</SelectItem>
+                          {svGradeOptions.map((g) => (
+                            <SelectItem key={g.value} value={g.value}>
+                              {g.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                     {placed && (
                       <Button
                         variant="ghost"
@@ -483,17 +543,6 @@ export default function StewardClassResultsPage({
                     onWithhold={() => setStatus(entry.entryClassId, 'withheld', entry.result?.specialAward ?? null)}
                     onUnplaced={() => setStatus(entry.entryClassId, 'unplaced', entry.result?.specialAward ?? null)}
                     onOpenSpecialAward={() => setSpecialAwardEntryId(entry.entryClassId)}
-                    isWusv={isWusv}
-                    svGradeOptions={svGradeOptions}
-                    onChangeGrade={(grade) => {
-                      recordResult.mutate({
-                        entryClassId: entry.entryClassId,
-                        placement: entry.result?.placement ?? null,
-                        placementStatus: (entry.result?.placementStatus as "withheld" | "unplaced" | null | undefined) ?? null,
-                        specialAward: entry.result?.specialAward ?? null,
-                        svGrade: grade,
-                      });
-                    }}
                   />
                 ))}
               </div>
@@ -759,9 +808,6 @@ function DogCard({
   onWithhold,
   onUnplaced,
   onOpenSpecialAward,
-  isWusv,
-  svGradeOptions,
-  onChangeGrade,
 }: {
   entry: DogCardEntry;
   canPlace: boolean;
@@ -770,9 +816,6 @@ function DogCard({
   onWithhold: () => void;
   onUnplaced: () => void;
   onOpenSpecialAward: () => void;
-  isWusv: boolean;
-  svGradeOptions: { value: SvGradeValue; label: string }[];
-  onChangeGrade: (grade: SvGradeValue | null) => void;
 }) {
   return (
     <div
@@ -802,29 +845,6 @@ function DogCard({
         )}
       </div>
       <div className="flex flex-col items-end gap-1 shrink-0">
-        {isWusv && (
-          <Select
-            value={entry.result?.svGrade ?? 'none'}
-            onValueChange={(v) =>
-              onChangeGrade(v === 'none' ? null : (v as SvGradeValue))
-            }
-          >
-            <SelectTrigger
-              className="h-9 w-[104px] text-xs"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <SelectValue placeholder="Grade" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">— Grade —</SelectItem>
-              {svGradeOptions.map((g) => (
-                <SelectItem key={g.value} value={g.value}>
-                  {g.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
         <div className="flex items-center gap-1.5">
           <button
             type="button"

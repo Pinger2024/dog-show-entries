@@ -33,7 +33,7 @@ import { execFileSync } from 'child_process';
 import { generateCataloguePdf, generateSchedulePdf } from '@/server/services/pdf-generation.js';
 import { padPdfToMultiple } from '@/lib/pdf-pad.js';
 import { createCaller } from '@/server/trpc/router.js';
-import { allowedSvGradesForClass, formatSvRating } from '@/lib/sv-grading.js';
+import { allowedSvGradesForClass } from '@/lib/sv-grading.js';
 
 // ── Demo-only safety check ────────────────────────────────
 const DEMO_URL_HINT = 'remi_demo';
@@ -534,11 +534,10 @@ async function main() {
   await assignCatalogueNumbers(showId);
 
   // ── 6b. RECORD + PUBLISH RESULTS so the public results page shows the
-  //         SV ratings (V1 / SG1 / VP1). Each class gets its top grade
-  //         (Working→V, Junior/Yearling/Adult→SG, puppies→VP) with rank by
-  //         catalogue order — enough to demonstrate the rating format.
+  //         SV ratings. Top grade goes to the first 2 placed, the next grade
+  //         to the rest, so each class demonstrates the within-grade reset
+  //         (e.g. SG1, SG2, G1, G2). Placement = catalogue order.
   let resultsRecorded = 0;
-  const sampleRatings: string[] = [];
   for (const sc of autoClasses) {
     const ecs = await db.query.entryClasses.findMany({
       where: eq(s.entryClasses.showClassId, sc.id),
@@ -550,26 +549,27 @@ async function main() {
       .filter((ec) => ec.entry.status === 'confirmed' && !ec.entry.deletedAt)
       .sort((a, b) => (Number(a.entry.catalogueNumber) || 0) - (Number(b.entry.catalogueNumber) || 0));
     if (confirmed.length === 0) continue;
-    const grade = allowedSvGradesForClass(sc.classDefinition.name).find(
+    const grades = allowedSvGradesForClass(sc.classDefinition.name).filter(
       (g) => g.value !== 'disqualified',
-    )?.value as string | undefined;
+    );
+    const topGrade = grades[0]?.value as string | undefined;
+    const secondGrade = (grades[1]?.value ?? grades[0]?.value) as string | undefined;
     for (let i = 0; i < confirmed.length; i++) {
       await db
         .insert(s.results)
         .values({
           entryClassId: confirmed[i]!.id,
           placement: i + 1,
-          svGrade: (grade ?? null) as never,
+          svGrade: ((i < 2 ? topGrade : secondGrade) ?? null) as never,
           publishedAt: new Date(),
           recordedBy: MANDY_DEMO_USER_ID,
         })
         .onConflictDoNothing();
       resultsRecorded++;
-      if (sampleRatings.length < 6) sampleRatings.push(formatSvRating(grade ?? null, i + 1));
     }
   }
   await db.update(s.shows).set({ status: 'in_progress' }).where(eq(s.shows.id, showId));
-  ok('results', `${resultsRecorded} results recorded + published — sample ratings: ${sampleRatings.join(', ')}`);
+  ok('results', `${resultsRecorded} results recorded + published (top grade ×2 then next grade — shows within-grade reset)`);
 
   // Verify the public results query returns the grade so the page can render it.
   const live = await secCaller.steward.getLiveResults({ showId });
