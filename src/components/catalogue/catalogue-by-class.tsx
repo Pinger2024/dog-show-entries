@@ -133,10 +133,15 @@ function renderSvEntry(
     <View key={rowKey} style={{ ...svEntry.row, flexDirection: 'row', alignItems: 'stretch' }} wrap={false}>
       {/* Left: all entry data lines */}
       <View style={{ flex: 1 }}>
-        {/* Line 1 — cat# · DOG NAME (bold) · KC reg · ID microchip (bold) */}
+        {/* Line 1 — cat# · DOG NAME (bold) · microchip (bold). The chip
+            number sits on the name line because WUSV/GSDL require every
+            exhibit's microchip published prominently (Amanda 2026-05-28). */}
         <View style={svEntry.line1}>
           <Text style={svEntry.catNumber}>{entry.catalogueNumber ?? '—'}</Text>
           <Text style={svEntry.dogName}>{uppercaseName(entry.dogName) || 'Unnamed'}</Text>
+          {entry.microchipNumber ? (
+            <Text style={svEntry.microchip}>· Chip {entry.microchipNumber}</Text>
+          ) : null}
         </View>
         <Text style={svEntry.meta}>
           {entry.kcRegNumber ? (
@@ -145,13 +150,7 @@ function renderSvEntry(
               {entry.kcRegNumber}
             </>
           ) : null}
-          {entry.kcRegNumber && entry.microchipNumber ? '   ·   ' : ''}
-          {entry.microchipNumber ? (
-            <>
-              <Text style={svEntry.metaLabel}>ID {entry.microchipNumber}</Text>
-            </>
-          ) : null}
-          {dob && (entry.kcRegNumber || entry.microchipNumber) ? '   ·   ' : ''}
+          {entry.kcRegNumber && dob ? '   ·   ' : ''}
           {dob ? <>DOB {dob}</> : null}
         </Text>
 

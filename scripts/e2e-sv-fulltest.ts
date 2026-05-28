@@ -315,6 +315,8 @@ async function main() {
         breederName: `${last} kennels`,
         colour: COLOURS[(i + d) % COLOURS.length],
         kcRegNumber: `SVE2E${Date.now().toString(36)}${i.toString(36)}${d}`,
+        // Every SV exhibit must have a published microchip (Amanda 2026-05-28).
+        microchipNumber: `956000${String(100000 + i * 10 + d).slice(-6)}`,
         ownerId: userId,
       });
       await db.insert(s.dogOwners).values({
