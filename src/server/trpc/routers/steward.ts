@@ -1031,6 +1031,7 @@ export const stewardRouter = createTRPCRouter({
           startDate: show.startDate,
           endDate: show.endDate,
           status: show.status,
+          showRuleset: show.showRuleset,
           organisation: show.organisation,
           venue: show.venue,
           resultsPublishedAt: show.resultsPublishedAt,
