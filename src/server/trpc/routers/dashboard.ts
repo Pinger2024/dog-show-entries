@@ -97,12 +97,15 @@ export const dashboardRouter = createTRPCRouter({
       // For recommendedShows
       recommendedShowRows,
     ] = await Promise.all([
-      // ── userEntries: all confirmed/pending entries with show + classes ──
+      // ── userEntries: confirmed entries with show + classes. Pending
+      //    (unpaid/abandoned-checkout) entries are excluded — an entry isn't
+      //    "booked in" until payment completes, so it shouldn't drive the
+      //    next-show card or deadline alerts (Amanda 2026-05-28). ──
       ctx.db.query.entries.findMany({
         where: and(
           eq(entries.exhibitorId, userId),
           isNull(entries.deletedAt),
-          inArray(entries.status, ['confirmed', 'pending'])
+          eq(entries.status, 'confirmed')
         ),
         with: {
           show: {

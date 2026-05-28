@@ -12,6 +12,8 @@ import {
   makeDog,
   makeEntry,
   makeEntryClass,
+  makeOrder,
+  makeSecretaryWithOrg,
 } from '../helpers/factories';
 
 describe('dogs.create', () => {
@@ -203,6 +205,81 @@ describe('entries.list', () => {
     await testDb.update(entries).set({ deletedAt: new Date() }).where(eq(entries.id, entry.id));
     const list = await createTestCaller(exhibitor).entries.list({});
     expect(list.items).toHaveLength(0);
+  });
+
+  // Amanda 2026-05-28: an abandoned checkout (pending entry on an unpaid
+  // order) must NOT appear as a real entry — it surfaces in `unfinished`
+  // so the page can show a "finish your entry" notice instead.
+  it('moves abandoned-checkout entries out of items and into unfinished', async () => {
+    const [exhibitor, org, breed] = await Promise.all([
+      makeUser({ role: 'exhibitor' }),
+      makeOrg(),
+      makeBreed(),
+    ]);
+    const show = await makeShow({ organisationId: org.id, breedId: breed.id, status: 'entries_open' });
+    const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+    const unpaidOrder = await makeOrder({
+      showId: show.id,
+      exhibitorId: exhibitor.id,
+      status: 'pending_payment',
+    });
+    await makeEntry({
+      showId: show.id,
+      dogId: dog.id,
+      exhibitorId: exhibitor.id,
+      orderId: unpaidOrder.id,
+      status: 'pending',
+    });
+
+    const list = await createTestCaller(exhibitor).entries.list({});
+    expect(list.items).toHaveLength(0);
+    expect(list.unfinished).toHaveLength(1);
+    expect(list.unfinished[0]?.dogName).toBe(dog.registeredName);
+    expect(list.unfinished[0]?.showId).toBe(show.id);
+  });
+
+  it('keeps confirmed entries in items even alongside an abandoned one', async () => {
+    const { exhibitor, show, dog } = await entryFixture(); // confirmed entry
+    const unpaidOrder = await makeOrder({
+      showId: show.id,
+      exhibitorId: exhibitor.id,
+      status: 'pending_payment',
+    });
+    const dog2 = await makeDog({ ownerId: exhibitor.id, breedId: dog.breedId });
+    await makeEntry({
+      showId: show.id,
+      dogId: dog2.id,
+      exhibitorId: exhibitor.id,
+      orderId: unpaidOrder.id,
+      status: 'pending',
+    });
+
+    const list = await createTestCaller(exhibitor).entries.list({});
+    expect(list.items).toHaveLength(1); // the confirmed one only
+    expect(list.items[0]?.status).toBe('confirmed');
+    expect(list.unfinished).toHaveLength(1);
+  });
+});
+
+describe('entries.getForShow — secretary list', () => {
+  it('excludes entries on unpaid (pending_payment) orders', async () => {
+    const { user: secretary, org } = await makeSecretaryWithOrg();
+    const breed = await makeBreed();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const show = await makeShow({ organisationId: org.id, breedId: breed.id, status: 'entries_open' });
+    const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+
+    // One paid+confirmed entry, one abandoned pending entry on an unpaid order.
+    const paidOrder = await makeOrder({ showId: show.id, exhibitorId: exhibitor.id, status: 'paid' });
+    await makeEntry({ showId: show.id, dogId: dog.id, exhibitorId: exhibitor.id, orderId: paidOrder.id, status: 'confirmed' });
+
+    const dog2 = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+    const unpaidOrder = await makeOrder({ showId: show.id, exhibitorId: exhibitor.id, status: 'pending_payment' });
+    await makeEntry({ showId: show.id, dogId: dog2.id, exhibitorId: exhibitor.id, orderId: unpaidOrder.id, status: 'pending' });
+
+    const res = await createTestCaller(secretary).entries.getForShow({ showId: show.id });
+    expect(res.items).toHaveLength(1);
+    expect(res.items[0]?.dogId).toBe(dog.id);
   });
 });
 

@@ -414,6 +414,9 @@ export const entriesRouter = createTRPCRouter({
               },
             },
           },
+          // Order status lets us separate abandoned checkouts (pending entry
+          // on an unpaid order) from real entries (Amanda 2026-05-28).
+          order: { columns: { id: true, status: true } },
         },
         orderBy: [desc(entries.createdAt)],
         limit: input.limit,
@@ -440,11 +443,31 @@ export const entriesRouter = createTRPCRouter({
 
       const total = Number(countResult[0]?.count ?? 0);
 
+      // An abandoned checkout leaves a 'pending' entry on an unpaid
+      // ('pending_payment'/'failed') order. Amanda 2026-05-28: these should
+      // NOT appear as real entries — surface them separately so the page can
+      // show a gentle "your entry isn't finished" notice with a link back to
+      // complete it, rather than a confusing pending row.
+      const isUnfinished = (item: (typeof items)[number]) =>
+        item.status === 'pending' &&
+        (item.order?.status === 'pending_payment' || item.order?.status === 'failed');
+
+      const withPhoto = items.map((item) => ({
+        ...item,
+        dogPhotoUrl: item.dogId ? photoMap.get(item.dogId) ?? null : null,
+      }));
+
       return {
-        items: items.map((item) => ({
-          ...item,
-          dogPhotoUrl: item.dogId ? photoMap.get(item.dogId) ?? null : null,
-        })),
+        items: withPhoto.filter((item) => !isUnfinished(item)),
+        unfinished: withPhoto
+          .filter(isUnfinished)
+          .map((item) => ({
+            id: item.id,
+            showId: item.showId,
+            showName: item.show?.name ?? 'this show',
+            showSlug: item.show?.slug ?? item.showId,
+            dogName: item.dog?.registeredName ?? 'your dog',
+          })),
         total,
         nextCursor:
           input.cursor + input.limit < total
@@ -533,23 +556,29 @@ export const entriesRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
-      // Entries on a fully-refunded order don't belong in the entries list
-      // — the exhibitor pulled out and got their money back. Their entry
-      // rows stay in the DB for audit; the Financial tab's refund history
-      // is where they surface.
-      const refundedOrderRows = await ctx.db
+      // Entries don't belong in the secretary's list when their order is:
+      //  - refunded  (exhibitor pulled out + got their money back), or
+      //  - unpaid    (pending_payment / failed — an abandoned checkout that
+      //               was never booked in; Amanda 2026-05-28).
+      // The rows stay in the DB for audit; the Financial tab surfaces refunds.
+      const excludedOrderRows = await ctx.db
         .select({ id: orders.id })
         .from(orders)
-        .where(and(eq(orders.showId, input.showId), eq(orders.status, 'refunded')));
-      const refundedOrderIds = refundedOrderRows.map((r) => r.id);
+        .where(
+          and(
+            eq(orders.showId, input.showId),
+            inArray(orders.status, ['refunded', 'pending_payment', 'failed']),
+          ),
+        );
+      const excludedOrderIds = excludedOrderRows.map((r) => r.id);
 
       const conditions = [
         eq(entries.showId, input.showId),
         isNull(entries.deletedAt),
       ];
 
-      if (refundedOrderIds.length > 0) {
-        conditions.push(notInArray(entries.orderId, refundedOrderIds));
+      if (excludedOrderIds.length > 0) {
+        conditions.push(notInArray(entries.orderId, excludedOrderIds));
       }
 
       if (input.status) {

@@ -90,6 +90,7 @@ export default function EntriesPage() {
   const [collapsedPast, setCollapsedPast] = useState(true);
 
   const allEntries = data?.items ?? [];
+  const unfinished = data?.unfinished ?? [];
 
   // Apply status filter
   const entries = statusFilter === 'all'
@@ -129,7 +130,7 @@ export default function EntriesPage() {
     );
   }
 
-  if (allEntries.length === 0) {
+  if (allEntries.length === 0 && unfinished.length === 0) {
     return (
       <div className="space-y-4">
         <PageHeader>
@@ -161,6 +162,43 @@ export default function EntriesPage() {
           </PageDescription>
         </div>
       </PageHeader>
+
+      {/* Unfinished checkout notice — an entry that was started but never
+          paid for. Shown as a gentle prompt, NOT a real entry row
+          (Amanda 2026-05-28). */}
+      {unfinished.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
+          <div className="flex items-start gap-3">
+            <CalendarDays className="mt-0.5 size-5 shrink-0 text-amber-600" />
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-amber-900">
+                {unfinished.length === 1 ? 'You have an entry to finish' : 'You have entries to finish'}
+              </p>
+              <p className="mt-1 text-sm text-amber-800">
+                {unfinished.length === 1
+                  ? "You started entering but didn't complete payment, so it's not booked in yet."
+                  : "You started these entries but didn't complete payment, so they're not booked in yet."}
+              </p>
+              <div className="mt-3 space-y-2">
+                {unfinished.map((u) => (
+                  <div
+                    key={u.id}
+                    className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground">{u.dogName}</p>
+                      <p className="truncate text-xs text-muted-foreground">{u.showName}</p>
+                    </div>
+                    <Button asChild size="sm" className="min-h-[2.75rem] shrink-0 bg-amber-600 hover:bg-amber-700">
+                      <Link href={`/shows/${u.showSlug}/enter`}>Finish entry</Link>
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Status filter pills */}
       <div className="flex flex-wrap gap-2">
