@@ -19,6 +19,11 @@ export type ClassBreakdownItem = {
   revenue: number;
 };
 
+/** Internal bucket — carries the canonical class order (show_classes.sortOrder)
+ *  so we can display the breakdown in class order (Amanda 2026-05-28). The
+ *  sortOrder is stripped from the public ClassBreakdownItem on return. */
+type OrderedItem = ClassBreakdownItem & { sortOrder: number };
+
 export type ClassTotals = { entries: number; revenue: number };
 
 export type ClassBreakdown = {
@@ -41,6 +46,8 @@ export type EntryForBreakdown = {
     showClass?: {
       sex?: 'dog' | 'bitch' | null;
       svCoatType?: 'stock' | 'long_stock' | null;
+      sortOrder?: number | null;
+      classNumber?: number | null;
       classDefinition?: {
         name?: string | null;
         type?: string | null;
@@ -57,22 +64,40 @@ const sumTotals = (items: ClassBreakdownItem[]): ClassTotals =>
     { entries: 0, revenue: 0 }
   );
 
-const sortByEntries = (a: ClassBreakdownItem, b: ClassBreakdownItem) =>
-  b.entries - a.entries;
+// Display in class order (Amanda 2026-05-28): lowest sortOrder first, which
+// matches the show's class numbering for both RKC and SV regionals. Ties
+// (e.g. a class with no sortOrder) fall back to most-entries-first then name.
+const sortByClassOrder = (a: OrderedItem, b: OrderedItem) => {
+  if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+  if (a.entries !== b.entries) return b.entries - a.entries;
+  return a.name.localeCompare(b.name);
+};
+
+/** Drop the internal sortOrder so the public items stay {name,entries,revenue}. */
+const strip = (items: OrderedItem[]): ClassBreakdownItem[] =>
+  items.map(({ name, entries, revenue }) => ({ name, entries, revenue }));
 
 export function computeClassBreakdown(
   entryReport: EntryForBreakdown[] | null | undefined
 ): ClassBreakdown {
-  const dogMap = new Map<string, ClassBreakdownItem>();
-  const bitchMap = new Map<string, ClassBreakdownItem>();
-  const jhMap = new Map<string, ClassBreakdownItem>();
-  const mixedMap = new Map<string, ClassBreakdownItem>();
-  const combinedMap = new Map<string, ClassBreakdownItem>();
+  const dogMap = new Map<string, OrderedItem>();
+  const bitchMap = new Map<string, OrderedItem>();
+  const jhMap = new Map<string, OrderedItem>();
+  const mixedMap = new Map<string, OrderedItem>();
+  const combinedMap = new Map<string, OrderedItem>();
 
-  const bumpBucket = (map: Map<string, ClassBreakdownItem>, name: string, fee: number) => {
-    const existing = map.get(name) ?? { name, entries: 0, revenue: 0 };
+  const bumpBucket = (
+    map: Map<string, OrderedItem>,
+    name: string,
+    fee: number,
+    sortOrder: number,
+  ) => {
+    const existing = map.get(name) ?? { name, entries: 0, revenue: 0, sortOrder };
     existing.entries += 1;
     existing.revenue += fee;
+    // Keep the lowest sortOrder seen for this bucket (a name+coat maps to one
+    // show_class per sex, so this is stable; min is just defensive).
+    if (sortOrder < existing.sortOrder) existing.sortOrder = sortOrder;
     map.set(name, existing);
   };
 
@@ -84,8 +109,10 @@ export function computeClassBreakdown(
       const classType = ec.showClass?.classDefinition?.type ?? null;
       const className = formatSvClassName(rawName, ec.showClass?.svCoatType);
       const fee = ec.fee;
+      // Default unknown sortOrder to a large number so it sinks to the end.
+      const sortOrder = ec.showClass?.sortOrder ?? 9999;
 
-      bumpBucket(combinedMap, className, fee);
+      bumpBucket(combinedMap, className, fee, sortOrder);
 
       const targetMap =
         classType === 'junior_handler'
@@ -96,15 +123,15 @@ export function computeClassBreakdown(
               ? bitchMap
               : mixedMap;
 
-      bumpBucket(targetMap, className, fee);
+      bumpBucket(targetMap, className, fee, sortOrder);
     }
   }
 
-  const dogs = Array.from(dogMap.values()).sort(sortByEntries);
-  const bitches = Array.from(bitchMap.values()).sort(sortByEntries);
-  const juniorHandlers = Array.from(jhMap.values()).sort(sortByEntries);
-  const mixedClasses = Array.from(mixedMap.values()).sort(sortByEntries);
-  const combined = Array.from(combinedMap.values()).sort(sortByEntries);
+  const dogs = strip(Array.from(dogMap.values()).sort(sortByClassOrder));
+  const bitches = strip(Array.from(bitchMap.values()).sort(sortByClassOrder));
+  const juniorHandlers = strip(Array.from(jhMap.values()).sort(sortByClassOrder));
+  const mixedClasses = strip(Array.from(mixedMap.values()).sort(sortByClassOrder));
+  const combined = strip(Array.from(combinedMap.values()).sort(sortByClassOrder));
 
   return {
     dogs,

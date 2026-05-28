@@ -11,6 +11,7 @@ const makeEntry = (
     sex: 'dog' | 'bitch' | null;
     type: string | null;
     fee: number;
+    sortOrder?: number;
   }>
 ): EntryForBreakdown => ({
   status,
@@ -18,6 +19,7 @@ const makeEntry = (
     fee: c.fee,
     showClass: {
       sex: c.sex,
+      sortOrder: c.sortOrder ?? null,
       classDefinition: { name: c.name, type: c.type },
     },
   })),
@@ -175,7 +177,7 @@ describe('computeClassBreakdown', () => {
     expect(subtotalRevenue).toBe(r.combinedTotals.revenue);
   });
 
-  it('sorts each bucket by entry count, descending', () => {
+  it('falls back to entry count (descending) when no class order is set', () => {
     const r = computeClassBreakdown([
       makeEntry('confirmed', [{ name: 'Limit', sex: 'bitch', type: 'age', fee: 1800 }]),
       makeEntry('confirmed', [{ name: 'Open', sex: 'bitch', type: 'age', fee: 1800 }]),
@@ -185,6 +187,22 @@ describe('computeClassBreakdown', () => {
       makeEntry('confirmed', [{ name: 'Junior', sex: 'bitch', type: 'age', fee: 1800 }]),
     ]);
     expect(r.bitches.map((c) => c.name)).toEqual(['Open', 'Junior', 'Limit']);
+  });
+
+  // Amanda 2026-05-28: the financial breakdown should read in class order
+  // (matching the show's class numbering), not by entry count.
+  it('sorts each bucket by class order (sortOrder) when set, regardless of entry count', () => {
+    const r = computeClassBreakdown([
+      // Open (sortOrder 9) has the MOST entries but should appear LAST
+      makeEntry('confirmed', [{ name: 'Open', sex: 'dog', type: 'age', fee: 1800, sortOrder: 9 }]),
+      makeEntry('confirmed', [{ name: 'Open', sex: 'dog', type: 'age', fee: 1800, sortOrder: 9 }]),
+      makeEntry('confirmed', [{ name: 'Open', sex: 'dog', type: 'age', fee: 1800, sortOrder: 9 }]),
+      // Minor Puppy (sortOrder 1) has the FEWEST but should appear FIRST
+      makeEntry('confirmed', [{ name: 'Minor Puppy', sex: 'dog', type: 'age', fee: 1800, sortOrder: 1 }]),
+      makeEntry('confirmed', [{ name: 'Junior', sex: 'dog', type: 'age', fee: 1800, sortOrder: 5 }]),
+      makeEntry('confirmed', [{ name: 'Junior', sex: 'dog', type: 'age', fee: 1800, sortOrder: 5 }]),
+    ]);
+    expect(r.dogs.map((c) => c.name)).toEqual(['Minor Puppy', 'Junior', 'Open']);
   });
 
   it('falls back to "Unknown" when class definition name is missing', () => {
