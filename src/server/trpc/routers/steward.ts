@@ -5,6 +5,7 @@ import { stewardProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import type { Database } from '@/server/db';
 import { ACHIEVEMENT_TYPES } from '@/lib/placements';
+import { isShowDayReached } from '@/lib/date-utils';
 import {
   shows,
   entries,
@@ -18,6 +19,7 @@ import {
   dogs,
   judges,
   judgeAssignments,
+  memberships,
 } from '@/server/db/schema';
 import { isUuid } from '@/lib/slugify';
 import { sendJudgeApprovalRequestEmail } from '@/server/services/email';
@@ -31,6 +33,29 @@ async function resolveShowId(db: Database, idOrSlug: string): Promise<string> {
   });
   if (!show) throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
   return show.id;
+}
+
+/**
+ * Exhibits are locked to the host club + admins until the morning of the show
+ * (Amanda 2026-05-28). Returns true if this user is allowed to see exhibits
+ * regardless of date — i.e. admin or an active member of the host org.
+ */
+async function callerCanBypassShowDayLock(
+  db: Database,
+  userId: string,
+  role: string,
+  organisationId: string,
+): Promise<boolean> {
+  if (role === 'admin') return true;
+  const membership = await db.query.memberships.findFirst({
+    where: and(
+      eq(memberships.userId, userId),
+      eq(memberships.organisationId, organisationId),
+      eq(memberships.status, 'active'),
+    ),
+    columns: { id: true },
+  });
+  return !!membership;
 }
 
 async function verifyStewardAssignment(
@@ -197,11 +222,50 @@ export const stewardRouter = createTRPCRouter({
         showClass.showId
       );
 
-      // Fetch show scope and ruleset for placement rules
+      // Fetch show scope and ruleset for placement rules, plus the bits we
+      // need for the show-day lock (Amanda 2026-05-28): startDate determines
+      // when exhibits unlock; organisationId determines who bypasses.
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, showClass.showId),
-        columns: { showScope: true, showRuleset: true },
+        columns: {
+          showScope: true,
+          showRuleset: true,
+          startDate: true,
+          organisationId: true,
+        },
       });
+
+      // Lock exhibitor identities until the morning of the show. Host-club
+      // secretaries and admins always bypass; stewards see the entry list
+      // for the first time when they arrive on the day.
+      if (show) {
+        const dayReached = isShowDayReached(show.startDate);
+        const canBypass = await callerCanBypassShowDayLock(
+          ctx.db,
+          ctx.session.user.id,
+          ctx.session.user.role,
+          show.organisationId,
+        );
+        if (!dayReached && !canBypass) {
+          return {
+            showClass: {
+              id: showClass.id,
+              showId: showClass.showId,
+              classDefinition: showClass.classDefinition,
+              breed: showClass.breed,
+              sex: showClass.sex,
+              showScope: show.showScope,
+              showRuleset: show.showRuleset,
+              isPublished: false,
+              hasUnpublishedChanges: false,
+            },
+            judgeName: null,
+            entries: [],
+            lockedUntilShowDay: true,
+            showStartDate: show.startDate,
+          };
+        }
+      }
 
       // Fetch judge for this class's breed to check breeder conflicts
       let judgeName: string | null = null;
@@ -256,6 +320,8 @@ export const stewardRouter = createTRPCRouter({
           hasUnpublishedChanges,
         },
         judgeName,
+        lockedUntilShowDay: false as const,
+        showStartDate: show?.startDate ?? null,
         entries: confirmed
           .sort((a, b) => {
             const aCat = Number(a.entry.catalogueNumber) || 9999;

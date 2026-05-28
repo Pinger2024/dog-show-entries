@@ -41,6 +41,15 @@ describe('end-to-end show day', () => {
       entryFee: 1000,
     });
 
+    // The journey simulates the morning of the show — pull the start date
+    // back to today so the show-day exhibits lock (Amanda 2026-05-28) is
+    // open by the time the steward fetches the class entry list.
+    const today = new Date().toISOString().slice(0, 10);
+    await testDb
+      .update(shows)
+      .set({ startDate: today, endDate: today })
+      .where(eq(shows.id, show.id));
+
     // The show is created in 'draft'; flip it to entries_open the way
     // the secretary UI does (status update outside this procedure).
     await setShowStatus(show.id, 'entries_open');

@@ -30,6 +30,7 @@ import {
 import { verifyShowAccess } from '../verify-show-access';
 import { isUuid, generateShowSlug } from '@/lib/slugify';
 import { hasUserPurchasedCatalogue, CATALOGUE_AVAILABLE_STATUSES, CATALOGUE_NAME_PATTERN } from '@/lib/catalogue-utils';
+import { isShowDayReached } from '@/lib/date-utils';
 import type { Database } from '@/server/db';
 
 /** Resolve a show slug to its UUID (passthrough if already UUID) */
@@ -1064,13 +1065,29 @@ export const showsRouter = createTRPCRouter({
         showSlug: show.slug,
         startDate: show.startDate,
         hasPurchased,
-        isAvailable: CATALOGUE_AVAILABLE_STATUSES.has(show.status),
+        // Catalogue PDFs only unlock for exhibitors on the morning of the
+        // show (Amanda 2026-05-28). Even after entries close, exhibitors
+        // shouldn't see the field of competitors before show day.
+        isAvailable:
+          CATALOGUE_AVAILABLE_STATUSES.has(show.status) &&
+          isShowDayReached(show.startDate),
       };
     }),
 
   getShowDogPhotos: publicProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
+      // Exhibit identities (dog names + breeds) are hidden from the public
+      // until the morning of the show — same fairness rule as the steward
+      // entry list (Amanda 2026-05-28).
+      const show = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+        columns: { startDate: true },
+      });
+      if (!show || !isShowDayReached(show.startDate)) {
+        return [];
+      }
+
       const photos = await ctx.db
         .select({
           dogId: dogs.id,

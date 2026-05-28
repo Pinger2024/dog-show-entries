@@ -91,6 +91,29 @@ export function handlerAgeYearsOnDate(handlerDob: string, showDate: string): num
 }
 
 /**
+ * Returns today's date in Europe/London as a YYYY-MM-DD string.
+ * Comparing this to `shows.startDate` (also YYYY-MM-DD) avoids every UTC/BST
+ * edge case that arises from constructing Date objects from date-only strings.
+ */
+export function todayInLondon(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/London',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
+/**
+ * True once it's the morning of the show (UK time) or later.
+ * Gates exhibit visibility for stewards and the public dog-photo feed —
+ * admins and host-club secretaries always bypass this check at the call site.
+ */
+export function isShowDayReached(startDate: string): boolean {
+  return todayInLondon() >= startDate;
+}
+
+/**
  * Formats a date as a human-friendly relative string.
  * - Today: "Today at 3:15 PM"
  * - Yesterday: "Yesterday"

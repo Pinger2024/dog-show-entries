@@ -51,6 +51,12 @@ export const orders = pgTable(
     // the exhibitor came in directly. Kept free-form on purpose so new share
     // channels don't need a schema change.
     referralSource: text('referral_source'),
+    // Show-morning "your catalogue is ready" notification (Amanda 2026-05-28).
+    // Stamped by the cron the first time it sends the email for this order
+    // so subsequent cron ticks don't double-send.
+    catalogueReadyEmailedAt: timestamp('catalogue_ready_emailed_at', {
+      withTimezone: true,
+    }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),

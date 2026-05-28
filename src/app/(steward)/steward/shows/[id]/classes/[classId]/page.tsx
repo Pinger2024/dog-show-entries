@@ -2,9 +2,11 @@
 
 import { use, useState } from 'react';
 import Link from 'next/link';
+import { format, parseISO } from 'date-fns';
 import {
   AlertTriangle,
   ArrowLeft,
+  CalendarClock,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -163,6 +165,36 @@ export default function StewardClassResultsPage({
   if (!data) {
     return (
       <div className="text-center text-muted-foreground">Class not found.</div>
+    );
+  }
+
+  if (data.lockedUntilShowDay) {
+    const showDayLabel = data.showStartDate
+      ? format(parseISO(data.showStartDate), 'EEEE d MMMM')
+      : 'the morning of the show';
+    return (
+      <div>
+        <Link
+          href={`/steward/shows/${showId}`}
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="size-4" />
+          Back to classes
+        </Link>
+        <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-5 text-amber-900 sm:p-6">
+          <div className="flex items-start gap-3">
+            <CalendarClock className="mt-0.5 size-5 shrink-0" />
+            <div>
+              <p className="font-semibold">Entries unlock on {showDayLabel}</p>
+              <p className="mt-1 text-sm text-amber-800">
+                To keep judging fair, exhibitors and dogs aren&apos;t shown to
+                stewards until the morning of the show. Come back then and
+                you&apos;ll see the full class list ready for placements.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
     );
   }
 

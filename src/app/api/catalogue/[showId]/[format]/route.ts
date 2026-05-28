@@ -16,6 +16,7 @@ import type { MarkedResult, MarkedAchievement } from '@/components/catalogue/cat
 import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, validateRasterLogoUrl, makePdfResponse } from '@/lib/pdf-utils';
+import { isShowDayReached } from '@/lib/date-utils';
 import { padPdfToMultiple } from '@/lib/pdf-pad';
 import { ensureCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
@@ -46,6 +47,20 @@ export async function GET(
 
   const authResult = await authenticatePdfRequest(show.organisationId, { showId, format });
   if (authResult instanceof NextResponse) return authResult;
+
+  // Catalogues for exhibitors are released on the morning of the show
+  // (Amanda 2026-05-28). Host-club secretaries and admins still get
+  // pre-show access for proofing and printing.
+  if (authResult.isExhibitorAccess && !isShowDayReached(show.startDate)) {
+    return NextResponse.json(
+      {
+        error: 'Catalogue not yet available',
+        message: 'Your catalogue will be ready on the morning of the show. We\'ll email you a link as soon as it\'s live.',
+        availableFrom: show.startDate,
+      },
+      { status: 403 },
+    );
+  }
 
   // Auto-assign catalogue numbers in class order if the show doesn't
   // have any yet. Amanda's UX ask 2026-04-17: she shouldn't have to

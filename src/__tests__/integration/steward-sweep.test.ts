@@ -30,10 +30,20 @@ async function showWithSteward() {
     makeOrg(),
     makeBreed(),
   ]);
+  // In-progress means show day has arrived — set startDate to a recent
+  // past date so the show-day exhibits lock (Amanda 2026-05-28) is open
+  // by the time the steward tries to view entries.
+  const past = (() => {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - 14);
+    return d.toISOString().slice(0, 10);
+  })();
   const show = await makeShow({
     organisationId: org.id,
     breedId: breed.id,
     status: 'in_progress',
+    startDate: past,
+    endDate: past,
   });
   const [, showClass, dog] = await Promise.all([
     makeStewardAssignment({ userId: steward.id, showId: show.id }),

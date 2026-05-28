@@ -234,7 +234,7 @@ export async function sendEntryConfirmationEmail(orderId: string) {
       <!-- Online Catalogue -->
       <div style="padding: 16px 24px; text-align: center; border-top: 1px solid #e5e5e5; background: #f0faf4;">
         <p style="margin: 0 0 8px; font-size: 13px; font-weight: 600; color: #2D5F3F;">Online Catalogue Purchased</p>
-        <p style="margin: 0 0 12px; font-size: 13px; color: #666;">Your catalogue will be available once entries close.</p>
+        <p style="margin: 0 0 12px; font-size: 13px; color: #666;">Your catalogue unlocks on the morning of the show — we&apos;ll email you the link first thing that day.</p>
         ${btn(`${APP_URL}/shows/${show.slug ?? show.id}/catalogue`, 'View Catalogue', '#2D5F3F')}
       </div>` : ''}
 
@@ -870,5 +870,77 @@ export async function sendJudgeApprovalRequestEmail(params: {
     throw new Error(`Failed to send approval email to ${judge.email}: ${result.error.message ?? 'unknown error'}`);
   }
   console.log(`[email] Judge approval request sent to ${judge.email}`, result);
+  return result;
+}
+
+/**
+ * Show-morning "your catalogue is ready" email. Fired by the cron on the
+ * morning of the show, once per (order) — never resends.
+ *
+ * Amanda's ask (2026-05-28): exhibitors who bought the catalogue shouldn't
+ * see the field of competitors before show day, but they shouldn't have to
+ * remember to come back and download it either — push them a link first
+ * thing in the morning.
+ */
+export async function sendCatalogueReadyEmail(orderId: string) {
+  const order = await db.query.orders.findFirst({
+    where: eq(orders.id, orderId),
+    with: {
+      exhibitor: { columns: { name: true, email: true } },
+      show: { columns: { id: true, name: true, slug: true, startDate: true } },
+    },
+  });
+
+  if (!order?.exhibitor.email || !order.show) return;
+
+  const { exhibitor, show } = order;
+  const showSlug = show.slug ?? show.id;
+  const catalogueUrl = `${APP_URL}/shows/${showSlug}/catalogue`;
+  const showDate = formatLongDate(show.startDate);
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; background-color: #f5f3ef; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <div style="max-width: 560px; margin: 0 auto; padding: 24px 16px;">
+    <div style="text-align: center; padding: 24px 0;">
+      <h1 style="margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 28px; color: #2D5F3F; letter-spacing: -0.5px;">Remi</h1>
+    </div>
+    <div style="background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="padding: 28px 24px; text-align: center;">
+        <p style="margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: #888;">${showDate}</p>
+        <h2 style="margin: 0 0 12px; font-family: Georgia, serif; font-size: 22px; color: #1a1a1a;">${show.name}</h2>
+        <p style="margin: 0 0 20px; font-size: 15px; color: #444; line-height: 1.5;">
+          Good morning${exhibitor.name ? `, ${exhibitor.name.split(' ')[0]}` : ''} — your catalogue is ready.
+        </p>
+        <div style="margin: 0 0 16px;">
+          ${btn(catalogueUrl, 'Open Your Catalogue')}
+        </div>
+        <p style="margin: 0; font-size: 13px; color: #888;">
+          Best of luck in the ring today!
+        </p>
+      </div>
+    </div>
+    <div style="text-align: center; padding: 24px 16px; font-size: 12px; color: #999;">
+      <p style="margin: 0;">Sent by <a href="${APP_URL}" style="color: #2D5F3F; text-decoration: none; font-weight: 600;">Remi</a>.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  const result = await resend.emails.send({
+    from: FROM,
+    to: exhibitor.email,
+    replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
+    subject: `Your catalogue is ready — ${show.name}`,
+    html,
+  });
+
+  if (result.error) {
+    console.error(`[email] Failed catalogue-ready email to ${exhibitor.email}:`, result.error);
+    throw new Error(result.error.message ?? 'send failed');
+  }
+  console.log(`[email] Catalogue-ready sent for order ${orderId} to ${exhibitor.email}`);
   return result;
 }

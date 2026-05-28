@@ -95,16 +95,16 @@ export default function CataloguePage() {
                 Catalogue Coming Soon
               </h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                Your online catalogue will be available once entries close
+                Your online catalogue unlocks on the morning of the show
                 {startDate && (
-                  <>, ahead of the show on{' '}
+                  <>{' '}—{' '}
                   <span className="font-medium text-foreground">
-                    {format(parseISO(startDate), 'dd MMMM yyyy')}
+                    {format(parseISO(startDate), 'EEEE d MMMM yyyy')}
                   </span></>
                 )}.
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
-                We&apos;ll include the link in your show reminder email too.
+                We&apos;ll email you a download link first thing that morning so it&apos;s ready before judging starts.
               </p>
             </div>
             <Button asChild variant="outline" className="min-h-[2.75rem]">
