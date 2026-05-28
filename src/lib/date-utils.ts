@@ -1,4 +1,4 @@
-import { format, parseISO, formatDistanceToNow, differenceInMonths, isToday, isYesterday } from 'date-fns';
+import { format, parseISO, formatDistanceToNow, differenceInMonths, isToday, isYesterday, addMonths } from 'date-fns';
 
 /** Parse a YYYY-MM-DD date string as local (not UTC) — avoids off-by-one from ISO parsing.
  *  Also accepts Date objects and ISO timestamp strings so it's safe to pass superjson-hydrated
@@ -72,6 +72,9 @@ export function penceToPoundsString(pence: number): string {
 /**
  * Returns true if ageMonths falls within the nullable [min, max) window
  * used by class definitions. Inclusive lower, exclusive upper.
+ *
+ * Prefer {@link isAgeEligibleOnShowDay} when you have the DOB and show
+ * date in hand — that variant is RKC-accurate on anniversary days.
  */
 export function isWithinAgeRange(
   ageMonths: number,
@@ -81,6 +84,29 @@ export function isWithinAgeRange(
   const aboveMin = minAgeMonths === null || ageMonths >= minAgeMonths;
   const belowMax = maxAgeMonths === null || ageMonths < maxAgeMonths;
   return aboveMin && belowMax;
+}
+
+/**
+ * RKC-accurate class-eligibility check. "Of six and not exceeding twelve
+ * calendar months" means the dog is in the window on or before her
+ * 12-month anniversary day — Amanda 2026-05-28: a dog whose first
+ * birthday IS the show day should still be eligible for Puppy.
+ *
+ * Integer `differenceInMonths` floors, so `ageMonths < 12` wrongly
+ * excludes the anniversary day and `ageMonths <= 12` wrongly INcludes
+ * the following 27 days. The right test is date-anchored.
+ */
+export function isAgeEligibleOnShowDay(
+  dob: string | Date,
+  showDate: string | Date,
+  minAgeMonths: number | null,
+  maxAgeMonths: number | null,
+): boolean {
+  const dobDate = typeof dob === 'string' ? parseLocalDate(dob) : dob;
+  const show = typeof showDate === 'string' ? parseLocalDate(showDate) : showDate;
+  if (minAgeMonths !== null && show < addMonths(dobDate, minAgeMonths)) return false;
+  if (maxAgeMonths !== null && show > addMonths(dobDate, maxAgeMonths)) return false;
+  return true;
 }
 
 /**

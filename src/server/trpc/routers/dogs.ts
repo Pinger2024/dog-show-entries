@@ -7,6 +7,7 @@ import { dogs, dogOwners, dogTitles, dogPhotos, users, entries, entryClasses, sh
 import { deleteFromR2 } from '@/server/services/storage';
 import { scrapeKcDog, searchKcDogs, fetchKcDogProfile } from '@/server/services/firecrawl';
 import { isCcType, isRccType } from '@/lib/placements';
+import { isAgeEligibleOnShowDay } from '@/lib/date-utils';
 
 /**
  * Recommend the best class for a dog based on age eligibility first,
@@ -20,6 +21,8 @@ function getClassRecommendation(
   availableClassNames?: string[],
   ageInfo?: {
     ageMonths: number;
+    dob: string;
+    showDate: string;
     availableAgeClasses: { name: string; minMonths: number | null; maxMonths: number | null }[];
   },
 ): {
@@ -29,11 +32,9 @@ function getClassRecommendation(
 } {
   // Check age classes first — if the dog qualifies for an age class, suggest it
   if (ageInfo) {
-    const eligibleAgeClasses = ageInfo.availableAgeClasses.filter((cls) => {
-      const aboveMin = cls.minMonths === null || ageInfo.ageMonths >= cls.minMonths;
-      const belowMax = cls.maxMonths === null || ageInfo.ageMonths < cls.maxMonths;
-      return aboveMin && belowMax;
-    });
+    const eligibleAgeClasses = ageInfo.availableAgeClasses.filter((cls) =>
+      isAgeEligibleOnShowDay(ageInfo.dob, ageInfo.showDate, cls.minMonths, cls.maxMonths),
+    );
 
     if (eligibleAgeClasses.length > 0) {
       // Suggest the most specific age class (smallest age range)
@@ -798,7 +799,7 @@ export const dogsRouter = createTRPCRouter({
 
       // Get achievement class names actually in this show's schedule
       let availableClassNames: string[] | undefined;
-      let ageInfo: { ageMonths: number; availableAgeClasses: { name: string; minMonths: number | null; maxMonths: number | null }[] } | undefined;
+      let ageInfo: { ageMonths: number; dob: string; showDate: string; availableAgeClasses: { name: string; minMonths: number | null; maxMonths: number | null }[] } | undefined;
 
       if (input.showId) {
         const showAchievementClasses = await ctx.db
@@ -851,6 +852,8 @@ export const dogsRouter = createTRPCRouter({
           if (showAgeClasses.length > 0) {
             ageInfo = {
               ageMonths,
+              dob: dog.dateOfBirth,
+              showDate: show.startDate,
               availableAgeClasses: showAgeClasses.map((c) => ({
                 name: c.name,
                 minMonths: c.minMonths,

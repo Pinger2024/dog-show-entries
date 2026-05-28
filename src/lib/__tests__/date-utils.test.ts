@@ -5,6 +5,7 @@ import {
   poundsToPence,
   penceToPounds,
   penceToPoundsString,
+  isAgeEligibleOnShowDay,
 } from '../date-utils';
 
 describe('formatCurrency', () => {
@@ -118,5 +119,37 @@ describe('formatDateRange', () => {
     expect(formatDateRange('2025-12-30', '2026-01-02')).toBe(
       '30 Dec 2025 – 2 Jan 2026'
     );
+  });
+});
+
+describe('isAgeEligibleOnShowDay', () => {
+  // RKC Puppy = "of six and not exceeding twelve calendar months". The
+  // tricky case Amanda flagged 2026-05-28: a dog whose 1st birthday IS
+  // the show day should still count as a puppy.
+  it('includes a dog whose 1st birthday lands on show day in Puppy (6–12)', () => {
+    expect(isAgeEligibleOnShowDay('2025-07-04', '2026-07-04', 6, 12)).toBe(true);
+  });
+
+  it('excludes a dog who is one day past her 1st birthday from Puppy', () => {
+    expect(isAgeEligibleOnShowDay('2025-07-04', '2026-07-05', 6, 12)).toBe(false);
+  });
+
+  it('includes a dog who hits 6 months exactly on show day in Puppy', () => {
+    expect(isAgeEligibleOnShowDay('2026-01-04', '2026-07-04', 6, 12)).toBe(true);
+  });
+
+  it('excludes a dog who is one day under 6 months from Puppy', () => {
+    expect(isAgeEligibleOnShowDay('2026-01-05', '2026-07-04', 6, 12)).toBe(false);
+  });
+
+  it('includes a 12-month-old in Junior (6–18) and Yearling (12–24)', () => {
+    expect(isAgeEligibleOnShowDay('2025-07-04', '2026-07-04', 6, 18)).toBe(true);
+    expect(isAgeEligibleOnShowDay('2025-07-04', '2026-07-04', 12, 24)).toBe(true);
+  });
+
+  it('treats null bounds as open-ended', () => {
+    expect(isAgeEligibleOnShowDay('2018-01-01', '2026-07-04', null, null)).toBe(true);
+    expect(isAgeEligibleOnShowDay('2018-01-01', '2026-07-04', 84, null)).toBe(true); // Veteran 7y+
+    expect(isAgeEligibleOnShowDay('2022-01-01', '2026-07-04', 84, null)).toBe(false);
   });
 });

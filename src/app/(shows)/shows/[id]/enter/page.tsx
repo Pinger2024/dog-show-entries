@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import { differenceInMonths, differenceInWeeks, format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
-import { isWithinAgeRange, handlerAgeYearsOnDate, formatCurrency } from '@/lib/date-utils';
+import { isWithinAgeRange, isAgeEligibleOnShowDay, handlerAgeYearsOnDate, formatCurrency } from '@/lib/date-utils';
 import { trpc } from '@/lib/trpc/client';
 import { formatDogName } from '@/lib/utils';
 import { readReferralSource } from '@/lib/referral-source';
@@ -460,16 +460,16 @@ export default function EnterShowPage() {
       .reduce((sum, sc) => sum + sc.entryFee, 0);
   }, [showClasses, selectedClassIds, show, isNfc, isJuniorHandler]);
 
-  // Age eligibility
+  // Age eligibility — uses date-anchored bounds so a dog whose 1st
+  // birthday IS the show day is still eligible for Puppy (Amanda
+  // 2026-05-28). Integer month math floors and would wrongly exclude
+  // the anniversary day or include the 27 days after it.
   function getAgeEligibility(minMonths: number | null, maxMonths: number | null) {
     if (!selectedDog?.dateOfBirth) return null;
-    const ageMonths = differenceInMonths(
-      show?.startDate ? new Date(show.startDate) : new Date(),
-      new Date(selectedDog.dateOfBirth)
-    );
-    const eligible =
-      (minMonths === null || ageMonths >= minMonths) &&
-      (maxMonths === null || ageMonths < maxMonths);
+    const showDay = show?.startDate ? new Date(show.startDate) : new Date();
+    const dob = new Date(selectedDog.dateOfBirth);
+    const ageMonths = differenceInMonths(showDay, dob);
+    const eligible = isAgeEligibleOnShowDay(dob, showDay, minMonths, maxMonths);
     return { ageMonths, eligible };
   }
 
