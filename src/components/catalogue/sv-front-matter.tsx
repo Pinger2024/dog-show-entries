@@ -21,6 +21,7 @@ import { Page, Text, View } from '@react-pdf/renderer';
 import { TonalWash } from '@/components/sv-pdf/cover-atoms';
 import { SV, ss, SV_FONTS } from '@/components/schedule/shared/sv-styles';
 import type { CatalogueShowInfo, ShowClassInfo } from './catalogue-types';
+import { SV_AGE_ORDER } from '@/lib/class-labels';
 
 const PAGE_STYLE = {
   backgroundColor: SV.paper,
@@ -168,7 +169,7 @@ function buildSvClassification(allShowClasses: ShowClassInfo[] | undefined): {
 } {
   if (!allShowClasses || allShowClasses.length === 0) return { breed: [], jh: [] };
 
-  const ORDER = ['Minor Puppy', 'Puppy', 'Junior', 'Yearling', 'Adult', 'Working'];
+  const ORDER = SV_AGE_ORDER;
   const stripPrefix = (name: string) => name.replace(/^SV\s+/, '');
 
   const buckets = new Map<
@@ -184,14 +185,21 @@ function buildSvClassification(allShowClasses: ShowClassInfo[] | undefined): {
       jhRows.push(sc);
       continue;
     }
-    if (display === 'Baby Puppy' || !sex) continue;
+    // Baby Puppy is now a numbered class (Amanda 2026-05-28). Only skip rows
+    // with no sex (defensive — JH already handled above).
+    if (!sex) continue;
     const key = `${display}|${sex}`;
     const b = buckets.get(key) ?? { name: display, sex, coats: new Set<'a' | 'b'>() };
-    // Coat letter inferred from classLabel suffix (e.g. "1a", "1b").
-    const label = sc.classLabel ?? '';
-    if (label.endsWith('a')) b.coats.add('a');
-    else if (label.endsWith('b')) b.coats.add('b');
-    else { b.coats.add('a'); b.coats.add('b'); }
+    // Coat letter from the row's svCoatType (single source) — stock='a',
+    // long_stock='b'. Fall back to the classLabel suffix for older callers.
+    if (sc.svCoatType === 'stock') b.coats.add('a');
+    else if (sc.svCoatType === 'long_stock') b.coats.add('b');
+    else {
+      const label = sc.classLabel ?? '';
+      if (label.endsWith('a')) b.coats.add('a');
+      else if (label.endsWith('b')) b.coats.add('b');
+      else { b.coats.add('a'); b.coats.add('b'); }
+    }
     buckets.set(key, b);
   }
 

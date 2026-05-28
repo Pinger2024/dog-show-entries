@@ -713,13 +713,15 @@ export const showsRouter = createTRPCRouter({
           orderBy: [asc(classDefinitions.sortOrder)],
         });
         const fee = firstEntryFee ?? entryFee ?? 0;
-        // Amanda's SV convention 2026-05-19: bitch classes first (Long Stock,
-        // then Stock), then dog classes (Long Stock, then Stock).
+        // Amanda's SV convention 2026-05-28: within each age, bitch classes
+        // first then dog; Standard (Stock = sub-letter 'a') before Long Stock
+        // ('b') so the stored classNumber order matches the a/b display order
+        // used by the schedule + catalogue.
         const COMBOS: Array<{ sex: 'bitch' | 'dog'; coat: 'stock' | 'long_stock' }> = [
-          { sex: 'bitch', coat: 'long_stock' },
           { sex: 'bitch', coat: 'stock' },
-          { sex: 'dog', coat: 'long_stock' },
+          { sex: 'bitch', coat: 'long_stock' },
           { sex: 'dog', coat: 'stock' },
+          { sex: 'dog', coat: 'long_stock' },
         ];
         const svValues: Array<{
           showId: string;

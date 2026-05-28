@@ -652,7 +652,7 @@ export function BestAwardsPage({ show }: FrontMatterProps) {
  * Branched off from the standard `CoverPage` rather than threaded
  * through it because the layouts are structurally different.
  */
-function SvCoverPage({ show, entryCount }: { show: CatalogueShowInfo; entryCount: number }) {
+function SvCoverPage({ show, classCount }: { show: CatalogueShowInfo; classCount: number }) {
   const affiliation = 'Under the banner of GSDL — British Regional Group';
   const dateDisplay = show.endDate
     ? `${formatCoverDate(show.date)} — ${formatCoverDate(show.endDate)}`
@@ -692,7 +692,7 @@ function SvCoverPage({ show, entryCount }: { show: CatalogueShowInfo; entryCount
         <View style={{ marginTop: '8mm', flexDirection: 'row', alignItems: 'flex-start' }}>
           <View style={{ flex: 1, paddingRight: '10mm' }}>
             <Text style={{ fontFamily: SV_FONTS.serif, fontStyle: 'italic', fontSize: 13, color: SV.ink3, marginBottom: 2 }}>
-              {entryCount} {entryCount === 1 ? 'entry' : 'entries'}
+              {classCount} {classCount === 1 ? 'class' : 'classes'}
             </Text>
             <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 48, lineHeight: 0.92, letterSpacing: -0.5, color: SV.ink }}>
               Official
@@ -773,9 +773,14 @@ function SvCoverPage({ show, entryCount }: { show: CatalogueShowInfo; entryCount
 export function CoverPage({ show }: FrontMatterProps) {
   // SV/WUSV regionals get their own cover treatment matching the schedule.
   if (show.showRuleset === 'wusv') {
-    // entryCount is not in CatalogueShowInfo — derive from totalClasses
-    // as a fallback. Real entry count plumbed in if needed later.
-    return <SvCoverPage show={show} entryCount={show.totalClasses ?? 0} />;
+    // Count the SV breed-coat classes actually present (each coat counts as a
+    // class on the cover, mirroring the schedule's coat-row count) — derive
+    // from the rows rather than the stored totalClasses so the two covers
+    // can't drift apart (Amanda 2026-05-28).
+    const svClassCount = (show.allShowClasses ?? []).filter(
+      (c) => c.svCoatType != null,
+    ).length;
+    return <SvCoverPage show={show} classCount={svClassCount || (show.totalClasses ?? 0)} />;
   }
 
   const showTypeLabel = show.showType ? SHOW_TYPE_LABELS[show.showType] : undefined;

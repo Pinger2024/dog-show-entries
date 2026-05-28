@@ -1,4 +1,5 @@
 import type { ScheduleClass } from './types';
+import { SV_AGE_ORDER } from '@/lib/class-labels';
 
 /**
  * SV / WUSV "Breed Classification" grouping helper.
@@ -18,15 +19,16 @@ import type { ScheduleClass } from './types';
  *      a  Standard Coat
  *      b  Long Coat
  *
- * Numbering rules (Amanda 2026-05-19, GSDL BRG reference):
- * - Excludes Baby Puppy from the numbered set (the GSDL example uses 1–12 =
- *   Minor Puppy → Working only).
+ * Numbering rules (Amanda 2026-05-28, GSDL BRG reference):
+ * - Baby Puppy is INCLUDED as the first numbered class(es) when the club runs
+ *   it; a club that doesn't run Baby Puppy simply has none and Minor Puppy
+ *   becomes class 1. (Earlier builds excluded Baby Puppy — Amanda corrected
+ *   this so the schedule and catalogue number identically.)
  * - Within each age, Bitch comes before Dog.
- * - Junior Handling is its own block (13 / 14), not part of the breed block.
+ * - Junior Handling is its own block, continuing after the breed block.
  * - Standard Coat (sv_coat_type='stock') is letter 'a'; Long Stock ('long_stock')
  *   is letter 'b'.
- * - Canonical age order: Minor Puppy, Puppy, Junior, Yearling, Adult, Working
- *   — driven by classDefinition sortOrder.
+ * - Canonical age order: SV_AGE_ORDER (shared with the catalogue + label map).
  */
 
 export interface SvCoatRow {
@@ -58,14 +60,7 @@ export interface SvClassificationGroups {
   totalCount: number;
 }
 
-const SV_BREED_ORDER = [
-  'Minor Puppy',
-  'Puppy',
-  'Junior',
-  'Yearling',
-  'Adult',
-  'Working',
-];
+const SV_BREED_ORDER = SV_AGE_ORDER;
 
 /** Tidy the class name for SV display: strip "SV " prefix (DB names are
  *  prefixed to disambiguate from the RKC age classes; the prefix isn't useful
@@ -90,14 +85,10 @@ function coatOf(c: ScheduleClass): 'stock' | 'long_stock' | null {
 }
 
 export function groupSvClasses(classes: readonly ScheduleClass[]): SvClassificationGroups {
-  // Filter to SV age classes only — excludes Baby Puppy by name (the GSDL
-  // spec excludes it from the numbered classification even when the club
-  // creates the class for other reasons).
+  // SV age classes — Baby Puppy is now included in the numbered set
+  // (Amanda 2026-05-28).
   const svAge = classes.filter(
-    (c) =>
-      isSvAge(c) &&
-      displayName(c.className) !== 'Baby Puppy' &&
-      (c.sex === 'dog' || c.sex === 'bitch'),
+    (c) => isSvAge(c) && (c.sex === 'dog' || c.sex === 'bitch'),
   );
 
   // Build a (displayName, sex) → [stock?, long_stock?] map.

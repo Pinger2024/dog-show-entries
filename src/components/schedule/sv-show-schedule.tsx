@@ -528,11 +528,28 @@ function SvClassificationPage({
   washes?: SvWashBuffers;
 }) {
   // Pair breed classes [Bitch, Dog] by age — grouping is already in canonical
-  // order (Minor Puppy → Working, bitch first).
+  // order (Baby Puppy → Working, bitch first).
   const pairs: SvNumberedClass[][] = [];
   for (let i = 0; i < breedClasses.length; i += 2) {
     pairs.push(breedClasses.slice(i, i + 2));
   }
+
+  // Most Promising Young Dog/Bitch is judged from the young-class winners
+  // (Minor Puppy → Junior — NOT Baby Puppy); Regional Sieger/Siegerin from
+  // the Adult + Working winners. Derive the class-number ranges from the
+  // actual numbering so the footer note can't drift when Baby Puppy is
+  // present/absent or the card changes (Amanda 2026-05-28).
+  const rangeFor = (names: string[]): string | null => {
+    const nums = breedClasses
+      .filter((c) => names.includes(c.name))
+      .map((c) => c.number);
+    if (nums.length === 0) return null;
+    const lo = Math.min(...nums);
+    const hi = Math.max(...nums);
+    return lo === hi ? `Cl. ${lo}` : `Cl. ${lo} – ${hi}`;
+  };
+  const youngRange = rangeFor(['Minor Puppy', 'Puppy', 'Junior']);
+  const siegerRange = rangeFor(['Adult', 'Working']);
 
   return (
     <Page size="A5" style={ss.page}>
@@ -651,8 +668,12 @@ function SvClassificationPage({
       <View style={{ marginTop: 8 }}>
         <View style={ss.ruleThin} />
         <Text style={[ss.displayIt, { fontSize: 9, color: SV.ink2, marginTop: 3 }]}>
-          Most Promising Young Dog / Bitch judged from winners of Cl. 1 – 6.
-          Regional Sieger &amp; Siegerin from winners of Cl. 9 – 12.
+          {youngRange
+            ? `Most Promising Young Dog / Bitch judged from winners of ${youngRange}. `
+            : ''}
+          {siegerRange
+            ? `Regional Sieger & Siegerin from winners of ${siegerRange}.`
+            : ''}
         </Text>
       </View>
 
