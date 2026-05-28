@@ -385,7 +385,10 @@ export const stewardRouter = createTRPCRouter({
         critiqueText: z.string().nullable().optional(),
         winnerPhotoUrl: z.string().nullable().optional(),
         winnerPhotoStorageKey: z.string().nullable().optional(),
-        svGrade: z.enum(['v', 'sg', 'g', 'a', 'u', 'disqualified']).nullable().optional(),
+        svGrade: z
+          .enum(['v', 'sg', 'g', 'a', 'm', 'u', 'vp', 'p', 'wv', 'disqualified'])
+          .nullable()
+          .optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -875,6 +878,7 @@ export const stewardRouter = createTRPCRouter({
               entryClassId: string;
               placement: number | null;
               placementStatus: 'withheld' | 'unplaced' | null;
+              svGrade: string | null;
               specialAward: string | null;
               critiqueText: string | null;
               winnerPhotoUrl: string | null;
@@ -918,6 +922,7 @@ export const stewardRouter = createTRPCRouter({
               ec.result!.placementStatus === 'withheld' || ec.result!.placementStatus === 'unplaced'
                 ? (ec.result!.placementStatus as 'withheld' | 'unplaced')
                 : null,
+            svGrade: ec.result!.svGrade ?? null,
             specialAward: ec.result!.specialAward,
             critiqueText: ec.result!.critiqueText,
             winnerPhotoUrl: ec.result!.winnerPhotoUrl,
@@ -971,6 +976,7 @@ export const stewardRouter = createTRPCRouter({
             startDate: show.startDate,
             endDate: show.endDate,
             status: show.status,
+            showRuleset: show.showRuleset,
             organisation: show.organisation,
             venue: show.venue,
             resultsPublishedAt: show.resultsPublishedAt,

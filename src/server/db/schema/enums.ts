@@ -352,6 +352,11 @@ export const wusvClubEnum = pgEnum('wusv_club', [
   'other',
 ]);
 
+// Order matches the live DB (original values + appended 2026-05-28 via
+// ALTER TYPE ADD VALUE) so drizzle-kit push sees no diff. Grade meaning:
+// V Excellent (Working only), SG Very Good, G Good, A Adequate, M Faulty,
+// U Insufficient; under-12 puppies use VP/P/WV. Per-class availability is
+// enforced in src/lib/sv-grading.ts (allowedSvGradesForClass).
 export const svGradeEnum = pgEnum('sv_grade', [
   'v',
   'sg',
@@ -359,4 +364,8 @@ export const svGradeEnum = pgEnum('sv_grade', [
   'a',
   'u',
   'disqualified',
+  'm',
+  'vp',
+  'p',
+  'wv',
 ]);

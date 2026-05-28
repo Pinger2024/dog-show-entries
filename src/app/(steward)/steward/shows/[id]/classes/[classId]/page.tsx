@@ -22,6 +22,7 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { SPECIAL_AWARDS } from '@/lib/placements';
+import { allowedSvGradesForClass } from '@/lib/sv-grading';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -69,14 +70,7 @@ function placementColour(n: number): { bg: string; ring: string } {
   }
 }
 
-const SV_GRADES = [
-  { value: 'v', label: 'V — Excellent' },
-  { value: 'sg', label: 'SG — Very Good' },
-  { value: 'g', label: 'G — Good' },
-  { value: 'a', label: 'A — Adequate' },
-  { value: 'u', label: 'U — Insufficient' },
-  { value: 'disqualified', label: 'Disqualified' },
-] as const;
+type SvGradeValue = 'v' | 'sg' | 'g' | 'a' | 'm' | 'u' | 'vp' | 'p' | 'wv' | 'disqualified';
 
 export default function StewardClassResultsPage({
   params,
@@ -201,6 +195,9 @@ export default function StewardClassResultsPage({
   const { showClass, entries, judgeName } = data;
   const isLocked = lockStatus?.locked ?? false;
   const isWusv = showClass.showRuleset === 'wusv';
+  // Grades the steward may award in THIS class (Amanda 2026-05-28): puppies
+  // get VP/P/WV, 12m+ get SG/G/A/M/U, Working also gets V.
+  const svGradeOptions = allowedSvGradesForClass(showClass.classDefinition?.name);
 
   const judgeBreederWarnings = judgeName
     ? entries.filter(
@@ -487,6 +484,7 @@ export default function StewardClassResultsPage({
                     onUnplaced={() => setStatus(entry.entryClassId, 'unplaced', entry.result?.specialAward ?? null)}
                     onOpenSpecialAward={() => setSpecialAwardEntryId(entry.entryClassId)}
                     isWusv={isWusv}
+                    svGradeOptions={svGradeOptions}
                     onChangeGrade={(grade) => {
                       recordResult.mutate({
                         entryClassId: entry.entryClassId,
@@ -749,7 +747,7 @@ interface DogCardEntry {
   absent: boolean;
   result: {
     specialAward: string | null;
-    svGrade?: 'v' | 'sg' | 'g' | 'a' | 'u' | 'disqualified' | null;
+    svGrade?: SvGradeValue | null;
   } | null;
 }
 
@@ -762,6 +760,7 @@ function DogCard({
   onUnplaced,
   onOpenSpecialAward,
   isWusv,
+  svGradeOptions,
   onChangeGrade,
 }: {
   entry: DogCardEntry;
@@ -772,7 +771,8 @@ function DogCard({
   onUnplaced: () => void;
   onOpenSpecialAward: () => void;
   isWusv: boolean;
-  onChangeGrade: (grade: 'v' | 'sg' | 'g' | 'a' | 'u' | 'disqualified' | null) => void;
+  svGradeOptions: { value: SvGradeValue; label: string }[];
+  onChangeGrade: (grade: SvGradeValue | null) => void;
 }) {
   return (
     <div
@@ -806,18 +806,18 @@ function DogCard({
           <Select
             value={entry.result?.svGrade ?? 'none'}
             onValueChange={(v) =>
-              onChangeGrade(v === 'none' ? null : (v as 'v' | 'sg' | 'g' | 'a' | 'u' | 'disqualified'))
+              onChangeGrade(v === 'none' ? null : (v as SvGradeValue))
             }
           >
             <SelectTrigger
-              className="h-9 w-[88px] text-xs"
+              className="h-9 w-[104px] text-xs"
               onClick={(e) => e.stopPropagation()}
             >
               <SelectValue placeholder="Grade" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="none">— Grade —</SelectItem>
-              {SV_GRADES.map((g) => (
+              {svGradeOptions.map((g) => (
                 <SelectItem key={g.value} value={g.value}>
                   {g.label}
                 </SelectItem>

@@ -18,6 +18,7 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { getPlacementLabel, placementColors, achievementLabels } from '@/lib/placements';
+import { formatSvRating } from '@/lib/sv-grading';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
@@ -141,6 +142,9 @@ export default function LiveResultsPage({
   const isCompleted = show.status === 'completed';
   const isPublished = !!show.resultsPublishedAt;
   const isUnpublished = 'unpublished' in data && data.unpublished;
+  // SV/WUSV regionals show a grade+rank rating (V1, SG2, VP1) instead of
+  // plain placements (Amanda 2026-05-28).
+  const isWusv = (show as { showRuleset?: string }).showRuleset === 'wusv';
 
   // Group achievements by type for display
   const showLevelTypes = ['best_in_show', 'reserve_best_in_show', 'best_puppy_in_show', 'best_long_coat_in_show'];
@@ -412,7 +416,14 @@ export default function LiveResultsPage({
                           {cls.results.map((result) => (
                             <div key={result.entryClassId}>
                               <div className="flex flex-wrap items-center gap-1.5 sm:gap-3 text-sm">
-                                {result.placement ? (
+                                {isWusv && (result.svGrade || result.placement) ? (
+                                  <Badge
+                                    variant="outline"
+                                    className={`w-auto sm:w-16 justify-center text-xs font-semibold whitespace-nowrap ${result.placement ? placementColors[result.placement] ?? '' : ''}`}
+                                  >
+                                    {formatSvRating(result.svGrade, result.placement)}
+                                  </Badge>
+                                ) : !isWusv && result.placement ? (
                                   <Badge
                                     variant="outline"
                                     className={`w-auto sm:w-16 justify-center text-xs font-semibold whitespace-nowrap ${placementColors[result.placement] ?? ''}`}

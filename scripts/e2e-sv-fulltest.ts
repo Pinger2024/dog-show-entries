@@ -33,6 +33,7 @@ import { execFileSync } from 'child_process';
 import { generateCataloguePdf, generateSchedulePdf } from '@/server/services/pdf-generation.js';
 import { padPdfToMultiple } from '@/lib/pdf-pad.js';
 import { createCaller } from '@/server/trpc/router.js';
+import { allowedSvGradesForClass, formatSvRating } from '@/lib/sv-grading.js';
 
 // ── Demo-only safety check ────────────────────────────────
 const DEMO_URL_HINT = 'remi_demo';
@@ -531,6 +532,56 @@ async function main() {
   ok('confirm', `${flipped.length} entries flipped to confirmed (simulates payment webhook)`);
 
   await assignCatalogueNumbers(showId);
+
+  // ── 6b. RECORD + PUBLISH RESULTS so the public results page shows the
+  //         SV ratings (V1 / SG1 / VP1). Each class gets its top grade
+  //         (Working→V, Junior/Yearling/Adult→SG, puppies→VP) with rank by
+  //         catalogue order — enough to demonstrate the rating format.
+  let resultsRecorded = 0;
+  const sampleRatings: string[] = [];
+  for (const sc of autoClasses) {
+    const ecs = await db.query.entryClasses.findMany({
+      where: eq(s.entryClasses.showClassId, sc.id),
+      with: {
+        entry: { columns: { id: true, status: true, deletedAt: true, catalogueNumber: true } },
+      },
+    });
+    const confirmed = ecs
+      .filter((ec) => ec.entry.status === 'confirmed' && !ec.entry.deletedAt)
+      .sort((a, b) => (Number(a.entry.catalogueNumber) || 0) - (Number(b.entry.catalogueNumber) || 0));
+    if (confirmed.length === 0) continue;
+    const grade = allowedSvGradesForClass(sc.classDefinition.name).find(
+      (g) => g.value !== 'disqualified',
+    )?.value as string | undefined;
+    for (let i = 0; i < confirmed.length; i++) {
+      await db
+        .insert(s.results)
+        .values({
+          entryClassId: confirmed[i]!.id,
+          placement: i + 1,
+          svGrade: (grade ?? null) as never,
+          publishedAt: new Date(),
+          recordedBy: MANDY_DEMO_USER_ID,
+        })
+        .onConflictDoNothing();
+      resultsRecorded++;
+      if (sampleRatings.length < 6) sampleRatings.push(formatSvRating(grade ?? null, i + 1));
+    }
+  }
+  await db.update(s.shows).set({ status: 'in_progress' }).where(eq(s.shows.id, showId));
+  ok('results', `${resultsRecorded} results recorded + published — sample ratings: ${sampleRatings.join(', ')}`);
+
+  // Verify the public results query returns the grade so the page can render it.
+  const live = await secCaller.steward.getLiveResults({ showId });
+  const anyGraded = live.breedGroups
+    .flatMap((g) => g.classes)
+    .flatMap((c) => c.results)
+    .some((r) => !!r.svGrade);
+  if (anyGraded) {
+    ok('results-api', 'getLiveResults returns svGrade for the public results page');
+  } else {
+    fail('results-api', 'getLiveResults did not return svGrade');
+  }
 
   const outDir = `/tmp/e2e-sv-${Date.now()}`;
   mkdirSync(outDir, { recursive: true });
