@@ -39,6 +39,12 @@ export function Footer() {
               Pricing
             </Link>
             <Link
+              href="/reviews"
+              className="text-sm sm:text-[0.9375rem] text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Reviews
+            </Link>
+            <Link
               href="/privacy"
               className="text-sm sm:text-[0.9375rem] text-muted-foreground transition-colors hover:text-foreground"
             >
