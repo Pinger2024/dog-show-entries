@@ -11,7 +11,6 @@ import {
   Dog,
   CalendarDays,
   Shield,
-  Zap,
   Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -84,17 +83,15 @@ async function getStats() {
   try {
     const { db } = await import('@/server/db');
     const { sql } = await import('drizzle-orm');
-    if (!db) return { shows: 0, breeds: 0, entries: 0 };
+    if (!db) return { shows: 0, breeds: 0 };
     const [showCount] = await db.execute(sql`SELECT count(*) as cnt FROM shows WHERE status NOT IN ('draft', 'cancelled')`);
     const [breedCount] = await db.execute(sql`SELECT count(*) as cnt FROM breeds`);
-    const [entryCount] = await db.execute(sql`SELECT count(*) as cnt FROM entries WHERE status = 'confirmed'`);
     return {
       shows: Number((showCount as Record<string, unknown>).cnt) || 0,
       breeds: Number((breedCount as Record<string, unknown>).cnt) || 0,
-      entries: Number((entryCount as Record<string, unknown>).cnt) || 0,
     };
   } catch {
-    return { shows: 0, breeds: 0, entries: 0 };
+    return { shows: 0, breeds: 0 };
   }
 }
 
@@ -191,11 +188,10 @@ export default async function HomePage() {
         {/* Trust bar */}
         <section className="border-y bg-card">
           <div className="mx-auto max-w-5xl px-3 py-8 sm:px-4 sm:py-10 lg:px-6">
-            <div className="grid grid-cols-3 gap-4 sm:gap-8">
+            <div className="grid grid-cols-2 gap-4 sm:gap-8">
               {[
                 { label: 'Shows Listed', value: liveStats.shows > 0 ? String(liveStats.shows) : '—', icon: CalendarDays },
                 { label: 'RKC Breeds', value: liveStats.breeds > 0 ? `${liveStats.breeds}+` : '—', icon: Dog },
-                { label: 'Entries Processed', value: liveStats.entries > 0 ? liveStats.entries.toLocaleString() : '—', icon: Zap },
               ].map((stat, i) => (
                 <AnimateIn key={stat.label} delay={i * 80} className="text-center">
                   <div className="mx-auto mb-2 sm:mb-3 flex size-8 sm:size-10 items-center justify-center rounded-full bg-primary/10">
