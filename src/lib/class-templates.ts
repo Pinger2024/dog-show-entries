@@ -145,6 +145,7 @@ export const CLASS_TEMPLATES: ClassTemplate[] = [
       'Minor Puppy',
       'Puppy',
       'Junior',
+      'Yearling',
       'Novice',
       'Undergraduate',
       'Post Graduate',
