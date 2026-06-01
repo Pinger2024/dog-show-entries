@@ -1020,6 +1020,34 @@ export function ShowPreviewClient() {
                     value={showAny.subsequentEntryFee ?? showAny.firstEntryFee}
                     note={showAny.subsequentEntryFee == null || showAny.subsequentEntryFee === showAny.firstEntryFee ? 'Same rate' : undefined}
                   />
+                  {/* Member/discount-group rates + multi-dog package — these
+                       appear on the schedule, so they must appear here too.
+                       Mirrors the SV branch above and the schedule's order. */}
+                  {(showAny.discountGroups ?? []).map((g) => (
+                    <FeeRow
+                      key={g.label}
+                      label={`${g.label} (first entry)`}
+                      sub="Reduced first-entry rate — claim at checkout"
+                      value={g.firstEntryFeePence}
+                    />
+                  ))}
+                  {showAny.multiDogThreshold != null && showAny.multiDogPackagePence != null && (
+                    <FeeRow
+                      label={`${showAny.multiDogThreshold}+ dog package`}
+                      sub={`Flat package price when entering ${showAny.multiDogThreshold} or more dogs`}
+                      value={showAny.multiDogPackagePence}
+                    />
+                  )}
+                  {(showAny.discountGroups ?? [])
+                    .filter((g) => g.multiDogPackagePence != null)
+                    .map((g) => (
+                      <FeeRow
+                        key={`${g.label}-pkg`}
+                        label={`${g.label} ${showAny.multiDogThreshold ?? 3}+ dog package`}
+                        sub="Members get a reduced package price"
+                        value={g.multiDogPackagePence!}
+                      />
+                    ))}
                   <FeeRow
                     label="NFC entries"
                     sub="Not for competition — socialise and support"
