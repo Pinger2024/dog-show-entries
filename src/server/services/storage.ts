@@ -26,9 +26,13 @@ const PUBLIC_URL = process.env.R2_PUBLIC_URL ?? '';
 
 const ALLOWED_MIME_TYPES: Record<string, { maxSizeBytes: number }> = {
   'application/pdf': { maxSizeBytes: 10 * 1024 * 1024 }, // 10 MB
-  'image/jpeg': { maxSizeBytes: 5 * 1024 * 1024 }, // 5 MB
-  'image/png': { maxSizeBytes: 5 * 1024 * 1024 },
-  'image/webp': { maxSizeBytes: 5 * 1024 * 1024 },
+  // 15 MB for photos — modern phone cameras routinely produce 6–12 MB JPEGs,
+  // and our users (often 60+) can't easily resize before uploading. The old
+  // 5 MB limit rejected ordinary dog photos (Mandy 2026-06-01). Follow-up:
+  // client-side downscale so size is never a concern.
+  'image/jpeg': { maxSizeBytes: 15 * 1024 * 1024 },
+  'image/png': { maxSizeBytes: 15 * 1024 * 1024 },
+  'image/webp': { maxSizeBytes: 15 * 1024 * 1024 },
   'image/svg+xml': { maxSizeBytes: 2 * 1024 * 1024 }, // 2 MB
 };
 
