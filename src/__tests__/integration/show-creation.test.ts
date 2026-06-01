@@ -69,11 +69,11 @@ describe('shows.create', () => {
     expect(cls.every((c) => c.sex === null)).toBe(true);
   });
 
-  it('separate_sex splits classes into dog+bitch but keeps junior_handler single', async () => {
+  it('separate_sex: breed classes split + numbered continuously; junior_handler stays single, unnumbered, at the JH fee', async () => {
     const { user, org, breed } = await makeSecretaryWithOrgAndBreed();
     const [puppy, jh] = await Promise.all([
       makeClassDef({ name: 'Puppy', type: 'age', sortOrder: 1 }),
-      makeClassDef({ name: 'JH 12-17', type: 'junior_handler', sortOrder: 1 }),
+      makeClassDef({ name: 'JH 12-17', type: 'junior_handler', sortOrder: 99 }),
     ]);
     const caller = createTestCaller(user);
 
@@ -88,6 +88,7 @@ describe('shows.create', () => {
       classSexArrangement: 'separate_sex',
       classDefinitionIds: [puppy.id, jh.id],
       entryFee: 500,
+      juniorHandlerFee: 0,
     });
 
     const cls = await testDb.query.showClasses.findMany({
@@ -96,9 +97,22 @@ describe('shows.create', () => {
     // Expect 3 rows: Puppy(dog), Puppy(bitch), JH (no sex)
     expect(cls).toHaveLength(3);
     expect(cls.map((c) => c.sex).sort()).toEqual(['bitch', 'dog', null].sort());
+
     const jhRows = cls.filter((c) => c.classDefinitionId === jh.id);
     expect(jhRows).toHaveLength(1);
     expect(jhRows[0]?.sex).toBeNull();
+    // Mandy 2026-06-01: JH sits outside the numbered breed sequence (no gaps,
+    // no manual "auto number" needed) and takes the show's JH fee, not the
+    // general entry fee.
+    expect(jhRows[0]?.classNumber).toBeNull();
+    expect(jhRows[0]?.entryFee).toBe(0);
+
+    // Breed classes: numbered 1,2 with no gaps, at the general entry fee.
+    const breedRows = cls.filter((c) => c.classDefinitionId === puppy.id);
+    expect(breedRows.every((c) => c.entryFee === 500)).toBe(true);
+    expect(
+      breedRows.map((c) => c.classNumber).sort((a, b) => (a ?? 0) - (b ?? 0)),
+    ).toEqual([1, 2]);
   });
 
   it('appends -2 to the slug when the same name is used twice', async () => {

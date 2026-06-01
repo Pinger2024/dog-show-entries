@@ -598,9 +598,27 @@ export const showsRouter = createTRPCRouter({
         const classDefTypeMap = new Map(classDefs.map((cd) => [cd.id, cd.type]));
 
         const isSeparateSex = showData.classSexArrangement === 'separate_sex';
-        const values: { showId: string; classDefinitionId: string; entryFee: number; sortOrder: number; sex?: 'dog' | 'bitch'; classNumber: number }[] = [];
+        const values: { showId: string; classDefinitionId: string; entryFee: number; sortOrder: number; sex?: 'dog' | 'bitch'; classNumber: number | null }[] = [];
         let sortOrder = 0;
+        // Junior Handler and Special Award Classes sit OUTSIDE the RKC-numbered
+        // breed-class sequence (they render as JHA/JHB or A/B/C), so they keep
+        // classNumber:null and don't consume a number — otherwise the breed
+        // numbering shows gaps and the secretary has to click "auto number"
+        // (Mandy 2026-06-01). JH classes also take the show's junior-handler
+        // fee, not the general entry fee. Mirrors autoAssignClassNumbers so the
+        // result is correct at creation without a manual renumber pass.
+        let classNumber = 0;
         const addedJhIds = new Set<string>();
+        const defInfo = new Map(classDefs.map((cd) => [cd.id, { type: cd.type, name: cd.name }]));
+        const isUnnumberedDef = (id: string) => {
+          const d = defInfo.get(id);
+          return (
+            d?.type === 'junior_handler' ||
+            (d?.type === 'special' && (d?.name?.startsWith('Special Award Class') ?? false))
+          );
+        };
+        const feeForDef = (id: string) =>
+          defInfo.get(id)?.type === 'junior_handler' ? (juniorHandlerFee ?? 0) : (entryFee ?? 0);
 
         if (isSeparateSex) {
           for (const sex of ['dog', 'bitch'] as const) {
@@ -613,19 +631,19 @@ export const showsRouter = createTRPCRouter({
                   values.push({
                     showId: show!.id,
                     classDefinitionId: classDefId,
-                    entryFee: entryFee ?? 0,
+                    entryFee: feeForDef(classDefId),
                     sortOrder: sortOrder++,
-                    classNumber: sortOrder,
+                    classNumber: null,
                   });
                 }
               } else {
                 values.push({
                   showId: show!.id,
                   classDefinitionId: classDefId,
-                  entryFee: entryFee ?? 0,
+                  entryFee: feeForDef(classDefId),
                   sortOrder: sortOrder++,
                   sex,
-                  classNumber: sortOrder,
+                  classNumber: isUnnumberedDef(classDefId) ? null : ++classNumber,
                 });
               }
             }
@@ -635,9 +653,9 @@ export const showsRouter = createTRPCRouter({
             values.push({
               showId: show!.id,
               classDefinitionId: classDefId,
-              entryFee: entryFee ?? 0,
+              entryFee: feeForDef(classDefId),
               sortOrder: sortOrder++,
-              classNumber: sortOrder,
+              classNumber: isUnnumberedDef(classDefId) ? null : ++classNumber,
             });
           }
         }

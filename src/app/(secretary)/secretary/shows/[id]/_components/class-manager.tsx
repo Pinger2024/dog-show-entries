@@ -623,15 +623,35 @@ export function ClassManager({ showId, showType, showScope, classes }: ClassMana
                                           </div>
 
                                           <div className="flex shrink-0 items-center gap-1">
-                                            <button
-                                              type="button"
-                                              onClick={() => startEditFee(sc.id, sc.entryFee)}
-                                              title="Click to edit this class's entry fee"
-                                              className="inline-flex items-center gap-1 rounded border border-dashed border-muted-foreground/30 px-2 py-1 text-sm font-semibold transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
-                                            >
-                                              {formatCurrency(sc.entryFee)}
-                                              <Pencil className="size-3 text-muted-foreground" />
-                                            </button>
+                                            {editingFees[sc.id] !== undefined ? (
+                                              <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                autoFocus
+                                                value={editingFees[sc.id]}
+                                                onChange={(e) =>
+                                                  setEditingFees((prev) => ({ ...prev, [sc.id]: e.target.value }))
+                                                }
+                                                onBlur={() => saveFee(sc.id)}
+                                                onKeyDown={(e) => {
+                                                  if (e.key === 'Enter') { e.preventDefault(); saveFee(sc.id); }
+                                                  else if (e.key === 'Escape') { e.preventDefault(); cancelEditFee(sc.id); }
+                                                }}
+                                                onClick={(e) => e.stopPropagation()}
+                                                aria-label="Entry fee in pounds"
+                                                className="w-20 rounded border border-primary px-2 py-1 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary/30"
+                                              />
+                                            ) : (
+                                              <button
+                                                type="button"
+                                                onClick={() => startEditFee(sc.id, sc.entryFee)}
+                                                title="Click to edit this class's entry fee"
+                                                className="inline-flex items-center gap-1 rounded border border-dashed border-muted-foreground/30 px-2 py-1 text-sm font-semibold transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
+                                              >
+                                                {formatCurrency(sc.entryFee)}
+                                                <Pencil className="size-3 text-muted-foreground" />
+                                              </button>
+                                            )}
                                             <Button
                                               size="icon"
                                               variant="ghost"
