@@ -518,16 +518,27 @@ export const dashboardRouter = createTRPCRouter({
       .slice(0, 5);
 
     // ── Build: judgeIntel ────────────────────────────────────────────
-    // Prioritise shows the user HASN'T entered, limit to 5
-    const judgeIntelAll = upcomingJudgeAssignments.map((row) => ({
-      showId: row.showId,
-      showName: row.showName,
-      showSlug: row.showSlug,
-      showDate: row.showDate,
-      judgeName: row.judgeName,
-      breedName: row.breedName,
-      alreadyEntered: enteredShowIds.has(row.showId),
-    }));
+    // Prioritise shows the user HASN'T entered, limit to 5.
+    // De-dupe by show + judge + breed: a judge with separate dog/bitch (or
+    // stale + current) assignments would otherwise appear multiple times for
+    // the same show — Amanda saw Hugh De Zutter listed twice (2026-06-01).
+    const seenJudgeIntel = new Set<string>();
+    const judgeIntelAll = upcomingJudgeAssignments
+      .map((row) => ({
+        showId: row.showId,
+        showName: row.showName,
+        showSlug: row.showSlug,
+        showDate: row.showDate,
+        judgeName: row.judgeName,
+        breedName: row.breedName,
+        alreadyEntered: enteredShowIds.has(row.showId),
+      }))
+      .filter((j) => {
+        const key = `${j.showId}|${j.judgeName}|${j.breedName}`;
+        if (seenJudgeIntel.has(key)) return false;
+        seenJudgeIntel.add(key);
+        return true;
+      });
     const judgeIntel = [
       ...judgeIntelAll.filter((j) => !j.alreadyEntered),
       ...judgeIntelAll.filter((j) => j.alreadyEntered),
