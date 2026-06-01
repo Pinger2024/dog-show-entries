@@ -35,6 +35,7 @@ import {
   getStripe,
 } from '@/server/services/stripe';
 import { svEntryMissingRequirements, svEntryBlockedMessage } from '@/lib/sv-entry-validation';
+import { hasJudgingConflict } from '@/lib/judge-exhibitor-conflict';
 
 export const entriesRouter = createTRPCRouter({
   create: protectedProcedure
@@ -239,7 +240,9 @@ export const entriesRouter = createTRPCRouter({
         }
       }
 
-      // Judge conflict check: exhibitors cannot exhibit at shows they are judging
+      // Judge conflict check: a judge can't exhibit in classes they judge.
+      // Junior Handling judges assess the handler, not the dog, so a JH-only
+      // judge IS allowed to enter (Amanda 2026-06-01). See hasJudgingConflict.
       const exhibitor = await ctx.db.query.users.findFirst({
         where: eq(users.id, ctx.session.user.id),
         columns: { name: true },
@@ -249,11 +252,7 @@ export const entriesRouter = createTRPCRouter({
           where: eq(judgeAssignments.showId, input.showId),
           with: { judge: { columns: { name: true } } },
         });
-        const exhibitorName = exhibitor.name.toLowerCase().trim();
-        const isJudge = assignedJudges.some(
-          (a) => a.judge?.name?.toLowerCase().trim() === exhibitorName
-        );
-        if (isJudge) {
+        if (hasJudgingConflict(assignedJudges, exhibitor.name)) {
           throw new TRPCError({
             code: 'BAD_REQUEST',
             message: 'You appear to be assigned as a judge at this show. Judges cannot exhibit dogs at shows they are judging.',

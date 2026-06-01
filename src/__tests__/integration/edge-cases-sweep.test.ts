@@ -82,6 +82,31 @@ describe('orders.checkout edge cases', () => {
     ).rejects.toThrow(/judge at this show/);
   });
 
+  // Amanda 2026-06-01: a Junior Handling judge assesses the handler, not the
+  // dog, so they may exhibit dogs in breed classes at the same show. The
+  // judge-conflict block must NOT fire for a JH-only assignment (breed null +
+  // sex null). Mirrors her real case: judging JH at her own South Western show.
+  it('allows entry when the matching judge is Junior-Handling-only', async () => {
+    const exhibitor = await makeUser({ role: 'exhibitor', name: 'Jo Handler' });
+    const org = await makeOrg();
+    const breed = await makeBreed();
+    const show = await makeShow({
+      organisationId: org.id, breedId: breed.id, status: 'entries_open', firstEntryFee: 500,
+    });
+    const showClass = await makeShowClass({ showId: show.id, breedId: breed.id });
+    const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+    // Same-named judge, but assigned ONLY as a Junior Handling judge — the
+    // JH shape is no breed + no sex (and not the Special Awards judge).
+    const judge = await makeJudge({ name: 'Jo Handler' });
+    await makeJudgeAssignment({ showId: show.id, judgeId: judge.id });
+
+    const res = await createTestCaller(exhibitor).orders.checkout({
+      showId: show.id,
+      entries: [{ entryType: 'standard', dogId: dog.id, classIds: [showClass.id], isNfc: false }],
+    });
+    expect(res.orderId).toBeTruthy();
+  });
+
   it('rejects checkout when caller does not own one of the dogs', async () => {
     const exhibitor = await makeUser({ role: 'exhibitor' });
     const otherUser = await makeUser({ role: 'exhibitor' });
