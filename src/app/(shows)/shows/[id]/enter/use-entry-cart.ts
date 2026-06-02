@@ -35,7 +35,7 @@ export type WizardStep =
   | 'payment'
   | 'confirmation';
 
-interface CartState {
+export interface CartState {
   entries: CartEntry[];
   sundryItems: CartSundryItem[];
   activeEntryId: string | null;
@@ -43,7 +43,7 @@ interface CartState {
   editingExisting: boolean;
 }
 
-type CartAction =
+export type CartAction =
   | { type: 'START_NEW_ENTRY'; skipToStep?: WizardStep; entryType?: EntryType }
   | { type: 'SET_ENTRY_TYPE'; entryType: EntryType }
   | { type: 'SET_DOG'; dogId: string; dogName: string; breedName: string }
@@ -57,15 +57,32 @@ type CartAction =
   | { type: 'CHECKOUT_SUCCESS' }
   | { type: 'RESET' };
 
-let nextId = 1;
-function generateId(): string {
-  return `cart-${nextId++}`;
+/**
+ * Generate a cart-entry ID that is guaranteed unique within the *current*
+ * cart by deriving it from the entries already present.
+ *
+ * This must NOT use a module-level counter. The cart persists to localStorage
+ * and is restored by loadSavedState, but a module reset (mobile Safari evicting
+ * a backgrounded tab, reopening the show, a hard reload) resets any module
+ * counter back to its start. A restored cart would then hold `cart-1` while the
+ * counter also handed out `cart-1` again — and the reducer's
+ * `entries.map(e => e.id === activeEntryId ? ... : e)` updates EVERY entry
+ * sharing that id, so SET_DOG/SET_CLASSES clobbered two cart rows at once. That
+ * silently saved two different dogs under one dog_id (Mandy, 2026-06-01).
+ * Deriving the next id from state is immune to module resets.
+ */
+function nextEntryId(entries: CartEntry[]): string {
+  const max = entries.reduce((m, e) => {
+    const match = /^cart-(\d+)$/.exec(e.id);
+    return match ? Math.max(m, Number(match[1])) : m;
+  }, 0);
+  return `cart-${max + 1}`;
 }
 
-function cartReducer(state: CartState, action: CartAction): CartState {
+export function cartReducer(state: CartState, action: CartAction): CartState {
   switch (action.type) {
     case 'START_NEW_ENTRY': {
-      const id = generateId();
+      const id = nextEntryId(state.entries);
       return {
         ...state,
         activeEntryId: id,
@@ -215,7 +232,7 @@ function cartReducer(state: CartState, action: CartAction): CartState {
   }
 }
 
-const initialState: CartState = {
+export const initialState: CartState = {
   entries: [],
   sundryItems: [],
   activeEntryId: null,
