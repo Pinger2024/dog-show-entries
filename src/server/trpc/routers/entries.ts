@@ -864,19 +864,10 @@ export const entriesRouter = createTRPCRouter({
           .where(eq(entries.id, input.id));
       };
 
-      // Audit log
-      await ctx.db.insert(entryAuditLog).values({
-        entryId: input.id,
-        action: 'classes_changed',
-        userId: ctx.session.user.id,
-        changes: {
-          oldClassIds,
-          newClassIds: input.classIds,
-          oldFee,
-          newFee,
-          feeDiff,
-        },
-      });
+      // NB: the audit-log entry is written where the change actually lands:
+      // immediately (else branch) for a downgrade/no-change, or by the Stripe
+      // webhook on payment success for a deferred upgrade. Writing it here would
+      // log a "classes_changed" that never happens if the top-up is abandoned.
 
       let paymentResult: { requiresPayment: boolean; clientSecret?: string } = {
         requiresPayment: false,
@@ -933,6 +924,21 @@ export const entriesRouter = createTRPCRouter({
       } else {
         // Downgrade or no change — safe to apply the class change immediately.
         await applyClassChange();
+
+        // Audit the change now that it has actually landed (an upgrade is
+        // audited by the webhook instead, on payment success).
+        await ctx.db.insert(entryAuditLog).values({
+          entryId: input.id,
+          action: 'classes_changed',
+          userId: ctx.session.user.id,
+          changes: {
+            oldClassIds,
+            newClassIds: input.classIds,
+            oldFee,
+            newFee,
+            feeDiff,
+          },
+        });
 
         if (feeDiff < 0) {
           // Refund the reduction via the shared helper so the original payment's

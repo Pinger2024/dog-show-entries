@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { and, eq, inArray, isNull, notInArray } from 'drizzle-orm';
 import { getStripe } from '@/server/services/stripe';
 import { db } from '@/server/db';
-import { entries, entryClasses, orders, payments, organisations, plans, users, printOrders, printOrderItems } from '@/server/db/schema';
+import { entries, entryClasses, entryAuditLog, orders, payments, organisations, plans, users, printOrders, printOrderItems } from '@/server/db/schema';
 import { sendEntryConfirmationEmail, sendSecretaryNotificationEmail, sendPrintOrderConfirmationEmail, sendPrintOrderAdminNotificationEmail } from '@/server/services/email';
 import { formatOrderRef } from '@/lib/print-products';
 import type Stripe from 'stripe';
@@ -138,31 +138,62 @@ export async function POST(request: NextRequest) {
 
       // Entry-edit UPGRADE ('adjustment'): the new classes + fee were deferred
       // until payment (so an abandoned top-up couldn't grant a free upgrade).
-      // Apply the staged change now. Idempotent — a replayed event re-applies
-      // the same delete+insert for the same result.
+      // Apply the staged change now — but ONLY while the adjustment payment is
+      // still 'pending'. The payment row is flipped to 'succeeded' a few lines
+      // down, so a replayed succeeded event (or a replay arriving AFTER the
+      // exhibitor has since downgraded) finds it non-pending and skips. Without
+      // this guard a replay would resurrect classes the exhibitor has dropped.
       if (
         paymentIntent.metadata.type === 'adjustment' &&
         entryId &&
         paymentIntent.metadata.pendingClassIds
       ) {
-        const pendingClassIds = paymentIntent.metadata.pendingClassIds.split(',').filter(Boolean);
-        const pendingPerClassFees = (paymentIntent.metadata.pendingPerClassFees ?? '')
-          .split(',')
-          .map((n) => Number(n) || 0);
-        const pendingFee = Number(paymentIntent.metadata.pendingFee ?? '0');
-        if (pendingClassIds.length > 0) {
-          await db.delete(entryClasses).where(eq(entryClasses.entryId, entryId));
-          await db.insert(entryClasses).values(
-            pendingClassIds.map((scId, i) => ({
-              entryId,
-              showClassId: scId,
-              fee: pendingPerClassFees[i] ?? 0,
-            }))
-          );
-          await db
-            .update(entries)
-            .set({ totalFee: pendingFee })
-            .where(eq(entries.id, entryId));
+        const adjPayment = await db.query.payments.findFirst({
+          where: eq(payments.stripePaymentId, paymentIntent.id),
+          columns: { status: true },
+        });
+        if (adjPayment?.status === 'pending') {
+          const pendingClassIds = paymentIntent.metadata.pendingClassIds.split(',').filter(Boolean);
+          const pendingPerClassFees = (paymentIntent.metadata.pendingPerClassFees ?? '')
+            .split(',')
+            .map((n) => Number(n) || 0);
+          const pendingFee = Number(paymentIntent.metadata.pendingFee ?? '0');
+          if (pendingClassIds.length > 0) {
+            const previousClasses = await db.query.entryClasses.findMany({
+              where: eq(entryClasses.entryId, entryId),
+              columns: { showClassId: true },
+            });
+            await db.delete(entryClasses).where(eq(entryClasses.entryId, entryId));
+            await db.insert(entryClasses).values(
+              pendingClassIds.map((scId, i) => ({
+                entryId,
+                showClassId: scId,
+                fee: pendingPerClassFees[i] ?? 0,
+              }))
+            );
+            await db
+              .update(entries)
+              .set({ totalFee: pendingFee })
+              .where(eq(entries.id, entryId));
+
+            // Audit the change at the moment it actually lands. The router
+            // defers the upgrade, so this is the only audit entry for it —
+            // attributed to the exhibitor who initiated the top-up.
+            const exhibitorId = paymentIntent.metadata.exhibitorId;
+            if (exhibitorId) {
+              await db.insert(entryAuditLog).values({
+                entryId,
+                action: 'classes_changed',
+                userId: exhibitorId,
+                changes: {
+                  oldClassIds: previousClasses.map((c) => c.showClassId),
+                  newClassIds: pendingClassIds,
+                  newFee: pendingFee,
+                  via: 'adjustment_payment',
+                },
+              });
+            }
+          }
         }
       }
 

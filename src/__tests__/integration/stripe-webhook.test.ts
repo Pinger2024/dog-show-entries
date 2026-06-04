@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { eq, inArray } from 'drizzle-orm';
 import * as stripeService from '@/server/services/stripe';
 import * as emailService from '@/server/services/email';
-import { entries, orders, payments, printOrders } from '@/server/db/schema';
+import { entries, entryClasses, entryAuditLog, orders, payments, printOrders } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
 import {
   makeUser,
@@ -12,9 +12,11 @@ import {
   makeShowClass,
   makeDog,
   makeEntry,
+  makeEntryClass,
   makeOrder,
   makePayment,
 } from '../helpers/factories';
+import { createTestCaller } from '../helpers/context';
 import { injectStripeEvent, buildStripeWebhookRequest } from '../helpers/stripe-event';
 import { POST as stripeWebhook } from '@/app/api/webhooks/stripe/route';
 
@@ -266,6 +268,126 @@ describe('POST /api/webhooks/stripe — payment_intent.payment_failed', () => {
     // Entries stay pending — the user can retry payment.
     const updatedEntry = await testDb.query.entries.findFirst({ where: eq(entries.id, entry.id) });
     expect(updatedEntry?.status).toBe('pending');
+  });
+});
+
+describe('POST /api/webhooks/stripe — entry-edit UPGRADE (deferred adjustment)', () => {
+  // The full deferred-upgrade journey: entries.update with a fee INCREASE no
+  // longer mutates the entry — it stages the new class list + fee in the
+  // PaymentIntent metadata and returns a clientSecret. ONLY when the adjustment
+  // payment succeeds does this webhook apply the staged change. This guards
+  // against an abandoned top-up granting a free class + overstating club revenue.
+  async function entryReadyToUpgrade() {
+    const [exhibitor, org, breed] = await Promise.all([
+      makeUser({ role: 'exhibitor' }),
+      makeOrg(),
+      makeBreed(),
+    ]);
+    const show = await makeShow({
+      organisationId: org.id,
+      breedId: breed.id,
+      status: 'entries_open',
+      firstEntryFee: 800,
+      subsequentEntryFee: 400,
+    });
+    const [c1, c2, dog] = await Promise.all([
+      makeShowClass({ showId: show.id, breedId: breed.id, entryFee: 800 }),
+      makeShowClass({ showId: show.id, breedId: breed.id, entryFee: 800 }),
+      makeDog({ ownerId: exhibitor.id, breedId: breed.id }),
+    ]);
+    const entry = await makeEntry({
+      showId: show.id, dogId: dog.id, exhibitorId: exhibitor.id, status: 'confirmed', totalFee: 800,
+    });
+    await makeEntryClass({ entryId: entry.id, showClassId: c1.id, fee: 800 });
+    return { exhibitor, show, c1, c2, entry };
+  }
+
+  it('applies the staged classes + fee only when the adjustment payment succeeds', async () => {
+    const { exhibitor, c1, c2, entry } = await entryReadyToUpgrade();
+    vi.mocked(stripeService.createPaymentIntent).mockClear();
+
+    // 1. Exhibitor adds a class — fee goes up, change is DEFERRED.
+    const res = await createTestCaller(exhibitor).entries.update({
+      id: entry.id, classIds: [c1.id, c2.id],
+    });
+    expect(res.feeDiff).toBe(400);
+    expect(res.requiresPayment).toBe(true);
+
+    // Entry untouched until payment lands.
+    const before = await testDb.query.entryClasses.findMany({ where: eq(entryClasses.entryId, entry.id) });
+    expect(before.map((r) => r.showClassId)).toEqual([c1.id]);
+
+    // The adjustment payment row was inserted 'pending' with the real PI id,
+    // and the staged change travels in the metadata the router passed to Stripe.
+    const adjPayment = await testDb.query.payments.findFirst({
+      where: eq(payments.entryId, entry.id),
+    });
+    expect(adjPayment?.status).toBe('pending');
+    const intentId = adjPayment!.stripePaymentId!;
+    const metadata = vi.mocked(stripeService.createPaymentIntent).mock.calls.at(-1)![1];
+    expect(metadata.type).toBe('adjustment');
+    expect(metadata.pendingClassIds).toBe([c1.id, c2.id].join(','));
+    expect(metadata.pendingFee).toBe('1200');
+
+    // 2. Stripe confirms the top-up — webhook applies the staged change.
+    injectStripeEvent({
+      type: 'payment_intent.succeeded',
+      data: { object: { id: intentId, metadata } },
+    });
+    const webhookRes = await stripeWebhook(buildStripeWebhookRequest() as never);
+    expect(webhookRes.status).toBe(200);
+
+    // 3. Entry now carries both classes and the upgraded fee.
+    const after = await testDb.query.entryClasses.findMany({ where: eq(entryClasses.entryId, entry.id) });
+    expect(after.map((r) => r.showClassId).sort()).toEqual([c1.id, c2.id].sort());
+    const updatedEntry = await testDb.query.entries.findFirst({ where: eq(entries.id, entry.id) });
+    expect(updatedEntry?.totalFee).toBe(1200);
+    const paidPayment = await testDb.query.payments.findFirst({
+      where: eq(payments.stripePaymentId, intentId),
+    });
+    expect(paidPayment?.status).toBe('succeeded');
+
+    // 4. The change is audited at the point it actually landed, attributed to
+    //    the exhibitor, flagged as applied via the adjustment payment.
+    const audit = await testDb.query.entryAuditLog.findMany({
+      where: eq(entryAuditLog.entryId, entry.id),
+    });
+    const applied = audit.filter((a) => (a.changes as { via?: string })?.via === 'adjustment_payment');
+    expect(applied).toHaveLength(1);
+    expect(applied[0]?.userId).toBe(exhibitor.id);
+  });
+
+  it('does not resurrect dropped classes when the original adjustment event is replayed after a later downgrade', async () => {
+    const { exhibitor, c1, c2, entry } = await entryReadyToUpgrade();
+    vi.mocked(stripeService.createPaymentIntent).mockClear();
+
+    // Upgrade to [c1, c2] and let it settle via the webhook.
+    await createTestCaller(exhibitor).entries.update({ id: entry.id, classIds: [c1.id, c2.id] });
+    const adjPayment = await testDb.query.payments.findFirst({ where: eq(payments.entryId, entry.id) });
+    const intentId = adjPayment!.stripePaymentId!;
+    const metadata = vi.mocked(stripeService.createPaymentIntent).mock.calls.at(-1)![1];
+    const event = { type: 'payment_intent.succeeded', data: { object: { id: intentId, metadata } } };
+    injectStripeEvent(event);
+    await stripeWebhook(buildStripeWebhookRequest() as never);
+
+    // Exhibitor later drops back to a single class. We simulate the resulting
+    // state directly (the real downgrade's Stripe refund is exercised
+    // elsewhere; injectStripeEvent has stubbed getStripe to a webhooks-only
+    // shim, so calling the refund path here would be testing the mock, not the
+    // guard). What matters for the guard is that the classes have since changed.
+    await testDb.delete(entryClasses).where(eq(entryClasses.showClassId, c2.id));
+    await testDb.update(entries).set({ totalFee: 800 }).where(eq(entries.id, entry.id));
+    const downgraded = await testDb.query.entryClasses.findMany({ where: eq(entryClasses.entryId, entry.id) });
+    expect(downgraded.map((r) => r.showClassId)).toEqual([c1.id]);
+
+    // Stripe redelivers the ORIGINAL upgrade's succeeded event. The pending-guard
+    // must stop it re-adding c2 (the adjustment payment is no longer 'pending').
+    injectStripeEvent(event);
+    const res = await stripeWebhook(buildStripeWebhookRequest() as never);
+    expect(res.status).toBe(200);
+
+    const final = await testDb.query.entryClasses.findMany({ where: eq(entryClasses.entryId, entry.id) });
+    expect(final.map((r) => r.showClassId)).toEqual([c1.id]);
   });
 });
 
