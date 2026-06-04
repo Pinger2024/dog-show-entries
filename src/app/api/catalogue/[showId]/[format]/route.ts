@@ -180,15 +180,24 @@ export async function GET(
     const sexKey = `${ja.judge.name}::${ja.sex ?? 'all'}`;
     if (!seenJudgeKeys.has(sexKey)) {
       seenJudgeKeys.add(sexKey);
-      const isJH = !ja.breed && ja.sex === null;
-      const prefix = isJH
-        ? 'Junior Handling'
-        : ja.sex === 'dog'
-        ? 'Dogs'
-        : ja.sex === 'bitch'
-        ? 'Bitches'
-        : null;
-      judgeDisplayList.push(prefix ? `${prefix} — ${ja.judge.name}` : ja.judge.name);
+      let label: string;
+      if (ja.isSpecialAwardsClassesJudge) {
+        // A SAC judge row is shape-identical to a JH row (no breed, sex null),
+        // so label it explicitly — otherwise the isJH heuristic below
+        // mislabels it 'Junior Handling' on the customer-facing catalogue.
+        label = `Special Awards Classes — ${ja.judge.name}`;
+      } else {
+        const isJH = !ja.breed && ja.sex === null;
+        const prefix = isJH
+          ? 'Junior Handling'
+          : ja.sex === 'dog'
+          ? 'Dogs'
+          : ja.sex === 'bitch'
+          ? 'Bitches'
+          : null;
+        label = prefix ? `${prefix} — ${ja.judge.name}` : ja.judge.name;
+      }
+      judgeDisplayList.push(label);
     }
     // Breed-keyed entries (multi-breed shows) and ring numbers.
     if (ja.breed?.name) {
@@ -333,11 +342,13 @@ export async function GET(
     venueAddress: show.venue?.address ?? undefined,
     organisation: show.organisation?.name,
     kcLicenceNo: show.kcLicenceNo,
+    showOpenTime: show.showOpenTime,
     startTime: show.startTime,
     logoUrl: safeLogoUrl ?? undefined,
     secretaryName: show.secretaryName ?? undefined,
     secretaryEmail: show.secretaryEmail ?? undefined,
     secretaryPhone: show.secretaryPhone ?? undefined,
+    secretaryAddress: show.secretaryAddress ?? undefined,
     onCallVet: show.onCallVet ?? undefined,
     wetWeatherAccommodation: scheduleData?.wetWeatherAccommodation === true ? true : scheduleData?.wetWeatherAccommodation === false ? false : undefined,
     judgedOnGroupSystem: scheduleData?.judgedOnGroupSystem === true ? true : undefined,
@@ -357,6 +368,7 @@ export async function GET(
     welcomeNote: scheduleData?.welcomeNote,
     outsideAttraction: scheduleData?.outsideAttraction === true ? true : undefined,
     showManager: scheduleData?.showManager,
+    firstAiders: scheduleData?.firstAiders,
     dockingStatement: getDockingStatementFromScheduleData(scheduleData),
 
     // Settings audit (backlog #85): the fields below were filled in via the

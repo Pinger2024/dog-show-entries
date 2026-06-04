@@ -1244,7 +1244,9 @@ export const dogsRouter = createTRPCRouter({
       await ctx.db
         .update(dogPhotos)
         .set({ isPrimary: true })
-        .where(eq(dogPhotos.id, input.photoId));
+        // Scope to the verified dog — ownership was checked on dogId, but the
+        // write must not touch a photo belonging to another dog.
+        .where(and(eq(dogPhotos.id, input.photoId), eq(dogPhotos.dogId, input.dogId)));
 
       return { success: true };
     }),
@@ -1264,7 +1266,7 @@ export const dogsRouter = createTRPCRouter({
       await ctx.db
         .update(dogPhotos)
         .set({ caption: input.caption })
-        .where(eq(dogPhotos.id, input.photoId));
+        .where(and(eq(dogPhotos.id, input.photoId), eq(dogPhotos.dogId, input.dogId)));
 
       return { success: true };
     }),
@@ -1286,7 +1288,7 @@ export const dogsRouter = createTRPCRouter({
       await ctx.db
         .update(dogPhotos)
         .set({ focalX: input.focalX, focalY: input.focalY, fitMode: input.fitMode })
-        .where(eq(dogPhotos.id, input.photoId));
+        .where(and(eq(dogPhotos.id, input.photoId), eq(dogPhotos.dogId, input.dogId)));
 
       return { success: true };
     }),

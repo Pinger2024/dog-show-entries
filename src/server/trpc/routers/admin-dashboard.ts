@@ -141,24 +141,27 @@ export const adminDashboardRouter = createTRPCRouter({
       // Revenue: this month
       ctx.db
         .select({
-          v: sql<number>`coalesce(sum(${payments.amount}), 0)::int`,
+          // Net revenue: include partially_refunded payments (a partial refund
+          // moves the row off 'succeeded') and subtract the refunded portion,
+          // else the full gross of a partially-refunded payment counts as £0.
+          v: sql<number>`coalesce(sum(${payments.amount} - coalesce(${payments.refundAmount}, 0)), 0)::int`,
         })
         .from(payments)
         .where(
           and(
-            eq(payments.status, 'succeeded'),
+            inArray(payments.status, ['succeeded', 'partially_refunded']),
             gte(payments.createdAt, thisMonthStart)
           )
         ),
       // Revenue: last month
       ctx.db
         .select({
-          v: sql<number>`coalesce(sum(${payments.amount}), 0)::int`,
+          v: sql<number>`coalesce(sum(${payments.amount} - coalesce(${payments.refundAmount}, 0)), 0)::int`,
         })
         .from(payments)
         .where(
           and(
-            eq(payments.status, 'succeeded'),
+            inArray(payments.status, ['succeeded', 'partially_refunded']),
             gte(payments.createdAt, lastMonthStart),
             lt(payments.createdAt, thisMonthStart)
           )
@@ -166,10 +169,10 @@ export const adminDashboardRouter = createTRPCRouter({
       // Revenue: total
       ctx.db
         .select({
-          v: sql<number>`coalesce(sum(${payments.amount}), 0)::int`,
+          v: sql<number>`coalesce(sum(${payments.amount} - coalesce(${payments.refundAmount}, 0)), 0)::int`,
         })
         .from(payments)
-        .where(eq(payments.status, 'succeeded')),
+        .where(inArray(payments.status, ['succeeded', 'partially_refunded'])),
 
       ctx.db
         .select({ v: sql<number>`count(*)::int` })
@@ -309,7 +312,9 @@ export const adminDashboardRouter = createTRPCRouter({
         .from(payments)
         .innerJoin(orders, eq(orders.id, payments.orderId))
         .innerJoin(users, eq(users.id, orders.exhibitorId))
-        .where(eq(payments.status, 'succeeded'))
+        // Include partially_refunded so a partial refund doesn't make the
+        // payment vanish from the recent-activity list.
+        .where(inArray(payments.status, ['succeeded', 'partially_refunded']))
         .orderBy(desc(payments.createdAt))
         .limit(8),
 
@@ -345,12 +350,12 @@ export const adminDashboardRouter = createTRPCRouter({
       ctx.db
         .select({
           date: sql<string>`to_char(${payments.createdAt}, 'YYYY-MM-DD')`,
-          amount: sql<number>`coalesce(sum(${payments.amount}), 0)::int`,
+          amount: sql<number>`coalesce(sum(${payments.amount} - coalesce(${payments.refundAmount}, 0)), 0)::int`,
         })
         .from(payments)
         .where(
           and(
-            eq(payments.status, 'succeeded'),
+            inArray(payments.status, ['succeeded', 'partially_refunded']),
             gte(payments.createdAt, thirtyDaysAgo)
           )
         )
@@ -559,13 +564,30 @@ export const adminDashboardRouter = createTRPCRouter({
     // The three queries are independent — fire them in parallel. Orgs
     // with neither money in either direction nor bank details on file
     // are noise for this view, so pull only the ones that qualify.
-    const [owedRows, paidRows, activeOrgs] = await Promise.all([
+    const [owedRows, refundedRows, paidRows, activeOrgs] = await Promise.all([
       ctx.db
         .select({
           organisationId: shows.organisationId,
           totalOwed: sql<number>`COALESCE(SUM(${orders.totalAmount}), 0)::int`,
         })
         .from(orders)
+        .innerJoin(shows, eq(orders.showId, shows.id))
+        .where(eq(orders.status, 'paid'))
+        .groupBy(shows.organisationId),
+      // Partial (per-entry) refunds leave the order in status='paid' and record
+      // the refunded amount only on the payment row, so the owed sum above
+      // overstates the club's share by exactly the refund — meaning we'd BACS
+      // the club too much and Remi (merchant of record) eats the difference.
+      // Net it off, mirroring show-metrics' clubReceivablePence. (NOTE:
+      // deducted_from_payout print orders are a SEPARATE netting gap owned by
+      // the print-package work — see memory project_print_shop_model.)
+      ctx.db
+        .select({
+          organisationId: shows.organisationId,
+          totalRefunded: sql<number>`COALESCE(SUM(${payments.refundAmount}), 0)::int`,
+        })
+        .from(payments)
+        .innerJoin(orders, eq(orders.id, payments.orderId))
         .innerJoin(shows, eq(orders.showId, shows.id))
         .where(eq(orders.status, 'paid'))
         .groupBy(shows.organisationId),
@@ -590,6 +612,7 @@ export const adminDashboardRouter = createTRPCRouter({
     ]);
 
     const owedMap = new Map(owedRows.map((r) => [r.organisationId, Number(r.totalOwed)]));
+    const refundedMap = new Map(refundedRows.map((r) => [r.organisationId, Number(r.totalRefunded)]));
     const paidMap = new Map(paidRows.map((r) => [r.organisationId, Number(r.totalPaid)]));
 
     // Union: orgs with bank details on file + any org with money in
@@ -620,7 +643,8 @@ export const adminDashboardRouter = createTRPCRouter({
 
     const allRelevantOrgs = [...activeOrgs, ...extraOrgs];
     const filtered = allRelevantOrgs.map((org) => {
-      const totalOwed = owedMap.get(org.id) ?? 0;
+      // Net the club's gross share down by any partial refunds on still-paid orders.
+      const totalOwed = (owedMap.get(org.id) ?? 0) - (refundedMap.get(org.id) ?? 0);
       const totalPaid = paidMap.get(org.id) ?? 0;
       return {
         ...org,

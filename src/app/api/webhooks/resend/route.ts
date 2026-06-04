@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await db
+    const inserted = await db
       .insert(feedback)
       .values({
         resendEmailId: data.email_id,
@@ -101,15 +101,21 @@ export async function POST(request: NextRequest) {
         htmlBody,
         inReplyToSubject,
       })
-      .onConflictDoNothing({ target: feedback.resendEmailId });
+      .onConflictDoNothing({ target: feedback.resendEmailId })
+      .returning({ id: feedback.id });
+
+    // Empty when a duplicate delivery hit the unique resendEmailId. The DB
+    // write is idempotent, so the notification must be too — otherwise a
+    // Svix redelivery sends a second 'new feedback' email for one message.
+    const isNewFeedback = inserted.length > 0;
 
     console.log(
-      `[resend-webhook] Feedback stored from ${fromEmail}: "${data.subject}"`
+      `[resend-webhook] Feedback ${isNewFeedback ? 'stored' : 'already stored (duplicate delivery)'} from ${fromEmail}: "${data.subject}"`
     );
 
-    // Notify Michael about new feedback
+    // Notify Michael about new feedback — only on a genuinely new row.
     const notifyEmail = process.env.FEEDBACK_NOTIFY_EMAIL;
-    if (notifyEmail) {
+    if (isNewFeedback && notifyEmail) {
       // Escape HTML to prevent XSS via malicious email sender names/subjects
       const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
       const displaySender = fromName ? `${esc(fromName)} &lt;${esc(fromEmail)}&gt;` : esc(fromEmail);

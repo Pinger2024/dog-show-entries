@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { orders, payouts } from '@/server/db/schema';
+import { orders, payouts, payments } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
 import { createTestCaller } from '../helpers/context';
 import {
@@ -100,6 +100,32 @@ describe('adminDashboard.listPayouts', () => {
     expect(row.totalOwedPence).toBe(5000);
     expect(row.totalPaidPence).toBe(3000);
     expect(row.outstandingPence).toBe(2000);
+  });
+
+  it('nets off partial refunds on still-paid orders from the club owed amount', async () => {
+    const caller = await adminCaller();
+    const breed = await makeBreed();
+    const exhibitor = await makeUser({ role: 'exhibitor' });
+    const org = await makeOrg({ name: 'Refund Club' });
+    const show = await makeShow({ organisationId: org.id, breedId: breed.id });
+    const order = await seedPaidOrder({ showId: show.id, exhibitorId: exhibitor.id, amount: 5000 });
+
+    // Simulate a per-entry partial refund: the order stays 'paid' and the
+    // refunded amount is recorded on the payment row. listPayouts must net this
+    // off — otherwise we'd BACS the club the full gross and Remi (merchant of
+    // record) eats the refund. Regression guard for the critical bug.
+    await testDb.insert(payments).values({
+      orderId: order.id,
+      amount: 5000,
+      status: 'partially_refunded',
+      refundAmount: 1500,
+      type: 'initial',
+    });
+
+    const result = await caller.adminDashboard.listPayouts();
+    const row = result.rows.find((r) => r.id === org.id)!;
+    expect(row.totalOwedPence).toBe(3500); // 5000 gross − 1500 refunded
+    expect(row.outstandingPence).toBe(3500);
   });
 });
 

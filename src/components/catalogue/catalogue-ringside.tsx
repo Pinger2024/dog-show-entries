@@ -300,12 +300,18 @@ function buildExhibitorIndex(entries: CatalogueEntry[]): ExhibitorInfo[] {
     if (!byExhibitor.has(key)) {
       byExhibitor.set(key, {
         name: heading,
-        address: entry.owners[0]?.address ?? null,
+        // Respect withhold-from-publication: this 'standard' catalogue is
+        // distributed to exhibitors, so a withheld owner's home address must
+        // never be printed in the exhibitor index.
+        address: entry.withholdFromPublication ? null : (entry.owners[0]?.address ?? null),
         sortKey,
         dogs: [],
       });
     }
     const ex = byExhibitor.get(key)!;
+    // If ANY entry for this owner is withheld, suppress the published address
+    // (the flag is per-entry but the address is shown once per owner).
+    if (entry.withholdFromPublication) ex.address = null;
 
     // Avoid duplicate dogs (multi-class entries)
     const catNo = entry.catalogueNumber ?? '';

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull, notInArray } from 'drizzle-orm';
 import { getStripe } from '@/server/services/stripe';
 import { db } from '@/server/db';
-import { entries, orders, payments, organisations, plans, users, printOrders, printOrderItems } from '@/server/db/schema';
+import { entries, entryClasses, orders, payments, organisations, plans, users, printOrders, printOrderItems } from '@/server/db/schema';
 import { sendEntryConfirmationEmail, sendSecretaryNotificationEmail, sendPrintOrderConfirmationEmail, sendPrintOrderAdminNotificationEmail } from '@/server/services/email';
 import { formatOrderRef } from '@/lib/print-products';
 import type Stripe from 'stripe';
@@ -85,33 +85,41 @@ export async function POST(request: NextRequest) {
       // first impression.
       let orderWasPreviouslyUnpaid = false;
 
-      // Order-level payment: confirm all entries in the order
+      // Order-level payment: confirm all entries in the order — but ONLY on a
+      // genuine transition from an unpaid state. A Stripe replay/redelivery of
+      // this event after the order reached a terminal state (paid / refunded /
+      // cancelled) must NOT regress it back to 'paid', re-confirm cancelled
+      // entries, or re-fire confirmation emails.
       if (orderId) {
         const existingOrder = await db.query.orders.findFirst({
           where: eq(orders.id, orderId),
           columns: { status: true },
         });
-        orderWasPreviouslyUnpaid = existingOrder?.status !== 'paid';
+        const terminalOrderStatuses = ['paid', 'refunded', 'cancelled'];
+        const canTransition = !terminalOrderStatuses.includes(existingOrder?.status ?? '');
+        orderWasPreviouslyUnpaid = canTransition;
 
-        const orderEntries = await db.query.entries.findMany({
-          where: and(
-            eq(entries.orderId, orderId),
-            isNull(entries.deletedAt)
-          ),
-        });
+        if (canTransition) {
+          const orderEntries = await db.query.entries.findMany({
+            where: and(
+              eq(entries.orderId, orderId),
+              isNull(entries.deletedAt)
+            ),
+          });
 
-        const toConfirm = orderEntries.filter(e => e.status !== 'confirmed').map(e => e.id);
-        if (toConfirm.length > 0) {
+          const toConfirm = orderEntries.filter(e => e.status !== 'confirmed').map(e => e.id);
+          if (toConfirm.length > 0) {
+            await db
+              .update(entries)
+              .set({ status: 'confirmed' })
+              .where(inArray(entries.id, toConfirm));
+          }
+
           await db
-            .update(entries)
-            .set({ status: 'confirmed' })
-            .where(inArray(entries.id, toConfirm));
+            .update(orders)
+            .set({ status: 'paid' })
+            .where(eq(orders.id, orderId));
         }
-
-        await db
-          .update(orders)
-          .set({ status: 'paid' })
-          .where(eq(orders.id, orderId));
       }
 
       // Legacy single-entry payment
@@ -128,11 +136,47 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Update payment record
+      // Entry-edit UPGRADE ('adjustment'): the new classes + fee were deferred
+      // until payment (so an abandoned top-up couldn't grant a free upgrade).
+      // Apply the staged change now. Idempotent — a replayed event re-applies
+      // the same delete+insert for the same result.
+      if (
+        paymentIntent.metadata.type === 'adjustment' &&
+        entryId &&
+        paymentIntent.metadata.pendingClassIds
+      ) {
+        const pendingClassIds = paymentIntent.metadata.pendingClassIds.split(',').filter(Boolean);
+        const pendingPerClassFees = (paymentIntent.metadata.pendingPerClassFees ?? '')
+          .split(',')
+          .map((n) => Number(n) || 0);
+        const pendingFee = Number(paymentIntent.metadata.pendingFee ?? '0');
+        if (pendingClassIds.length > 0) {
+          await db.delete(entryClasses).where(eq(entryClasses.entryId, entryId));
+          await db.insert(entryClasses).values(
+            pendingClassIds.map((scId, i) => ({
+              entryId,
+              showClassId: scId,
+              fee: pendingPerClassFees[i] ?? 0,
+            }))
+          );
+          await db
+            .update(entries)
+            .set({ totalFee: pendingFee })
+            .where(eq(entries.id, entryId));
+        }
+      }
+
+      // Update payment record — but never un-refund a payment on a replayed
+      // succeeded event (a refunded/partially_refunded row must stay so).
       await db
         .update(payments)
         .set({ status: 'succeeded' })
-        .where(eq(payments.stripePaymentId, paymentIntent.id));
+        .where(
+          and(
+            eq(payments.stripePaymentId, paymentIntent.id),
+            notInArray(payments.status, ['refunded', 'partially_refunded'])
+          )
+        );
 
       // Send confirmation email (non-blocking — don't fail the webhook).
       // Gated on first-time transition so Stripe retries don't duplicate.
@@ -152,29 +196,54 @@ export async function POST(request: NextRequest) {
       const paymentIntent = event.data.object as Stripe.PaymentIntent;
       const { orderId, printOrderId } = paymentIntent.metadata;
 
-      // Print order payment failed
+      // Print order payment failed — don't regress an order that already
+      // advanced past payment (a declined-then-retried payment reuses the same
+      // PI, so a late 'failed' delivery can arrive after success). Mirror the
+      // succeeded branch's guard.
       if (paymentIntent.metadata.type === 'print_order' && printOrderId) {
+        const existingPrint = await db.query.printOrders.findFirst({
+          where: eq(printOrders.id, printOrderId),
+          columns: { status: true },
+        });
+        const advanced = ['paid', 'submitted', 'in_production', 'dispatched', 'delivered'].includes(existingPrint?.status ?? '');
         await db
           .update(printOrders)
-          .set({
-            status: 'failed',
-            stripePaymentStatus: 'failed',
-          })
+          .set(
+            advanced
+              ? { stripePaymentStatus: 'failed' }
+              : { status: 'failed', stripePaymentStatus: 'failed' }
+          )
           .where(eq(printOrders.id, printOrderId));
         break;
       }
 
+      // A declined-then-retried PaymentIntent fires payment_failed THEN
+      // succeeded; a late/retried delivery of the failed event must not
+      // regress an order that already succeeded (or was refunded/cancelled).
       if (orderId) {
-        await db
-          .update(orders)
-          .set({ status: 'failed' })
-          .where(eq(orders.id, orderId));
+        const existingOrder = await db.query.orders.findFirst({
+          where: eq(orders.id, orderId),
+          columns: { status: true },
+        });
+        if (!['paid', 'refunded', 'cancelled'].includes(existingOrder?.status ?? '')) {
+          await db
+            .update(orders)
+            .set({ status: 'failed' })
+            .where(eq(orders.id, orderId));
+        }
       }
 
+      // Same guard on the payment row — never flip a succeeded/refunded payment
+      // back to 'failed'.
       await db
         .update(payments)
         .set({ status: 'failed' })
-        .where(eq(payments.stripePaymentId, paymentIntent.id));
+        .where(
+          and(
+            eq(payments.stripePaymentId, paymentIntent.id),
+            notInArray(payments.status, ['succeeded', 'partially_refunded', 'refunded'])
+          )
+        );
 
       break;
     }

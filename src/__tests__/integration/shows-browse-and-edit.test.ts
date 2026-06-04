@@ -141,11 +141,13 @@ describe('entries.update (class edit + fee diff)', () => {
     expect(res.requiresPayment).toBe(true);
     expect(res.clientSecret).toBeTruthy();
 
-    // entry_classes should now reflect the new set
+    // The class change is DEFERRED until the adjustment payment succeeds (the
+    // Stripe webhook applies it), so the entry still has only its original
+    // class — an abandoned top-up must not grant a free upgrade.
     const ecRows = await testDb.query.entryClasses.findMany({
       where: eq(entryClasses.entryId, entry.id),
     });
-    expect(ecRows.map((r) => r.showClassId).sort()).toEqual([c1.id, c2.id].sort());
+    expect(ecRows.map((r) => r.showClassId)).toEqual([c1.id]);
 
     // Adjustment payment row inserted. payment.amount is the GROSS charge
     // (diff subtotal + £1 + 1% platform fee) so it reconciles with Stripe.
@@ -185,7 +187,17 @@ describe('entries.update (class edit + fee diff)', () => {
       where: eq(payments.type, 'refund'),
     });
     expect(refundRow?.amount).toBe(400);
-    expect(refundRow?.status).toBe('succeeded');
+    // executeStripeRefund records the refund row as 'refunded' (not 'succeeded')
+    // and — crucially — increments the original payment's refundAmount, which
+    // the old ad-hoc path failed to do (the bug that enabled silent over-refund).
+    expect(refundRow?.status).toBe('refunded');
+    const allPayments = await testDb.query.payments.findMany({
+      where: eq(payments.entryId, entry.id),
+    });
+    const original = allPayments.find(
+      (p) => p.stripePaymentId === 'pi_test_original' && p.type !== 'refund',
+    );
+    expect(original?.refundAmount).toBe(400);
   });
 
   it('rejects update on a show that is no longer accepting entries', async () => {

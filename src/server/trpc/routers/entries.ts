@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, isNull, inArray, notInArray, asc, desc, sql } from 'drizzle-orm';
+import { and, or, eq, isNull, inArray, notInArray, asc, desc, sql } from 'drizzle-orm';
 import { differenceInMonths, differenceInWeeks } from 'date-fns';
 import {
   protectedProcedure,
@@ -32,8 +32,8 @@ import {
 import {
   createPaymentIntent,
   calculatePlatformFee,
-  getStripe,
 } from '@/server/services/stripe';
+import { executeStripeRefund } from '@/server/services/stripe-refunds';
 import { svEntryMissingRequirements, svEntryBlockedMessage } from '@/lib/sv-entry-validation';
 import { hasJudgingConflict } from '@/lib/judge-exhibitor-conflict';
 
@@ -505,15 +505,15 @@ export const entriesRouter = createTRPCRouter({
         });
       }
 
-      // Non-secretary users can only see their own entries
-      if (
-        entry.exhibitorId !== ctx.session.user.id &&
-        ctx.session.user.role !== 'secretary' &&
-        ctx.session.user.role !== 'admin'
-      ) {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'You do not have access to this entry',
+      // The owner can always see their own entry. Anyone else must have
+      // secretary access to THIS show's organisation — a global 'secretary'
+      // role is NOT enough (per-org access lives in the memberships table),
+      // else a secretary at one club could read another club's entered dogs
+      // (a pre-judging privacy risk). Mirrors getForShow's verifyShowAccess.
+      const isAdmin = ctx.session.user.role === 'admin';
+      if (entry.exhibitorId !== ctx.session.user.id && !isAdmin) {
+        await verifyShowAccess(ctx.db, ctx.session.user.id, entry.show.id, {
+          callerIsAdmin: isAdmin,
         });
       }
 
@@ -569,7 +569,15 @@ export const entriesRouter = createTRPCRouter({
       ];
 
       if (excludedOrderIds.length > 0) {
-        conditions.push(notInArray(entries.orderId, excludedOrderIds));
+        // NULL NOT IN (...) evaluates to NULL (not TRUE) in Postgres, so a bare
+        // notInArray silently drops every entry with a NULL order_id (NFC /
+        // pending / legacy rows) from BOTH the list and the count. Keep them.
+        conditions.push(
+          or(
+            isNull(entries.orderId),
+            notInArray(entries.orderId, excludedOrderIds),
+          )!,
+        );
       }
 
       if (input.status) {
@@ -809,8 +817,9 @@ export const entriesRouter = createTRPCRouter({
         perClassFees = myBreak.perClassFees;
 
         // Re-slot sibling fees only when an order exists — the multi-dog
-        // package may have shifted across rounding.
-        if (orderId) {
+        // package may have shifted across rounding. Skip for a deferred upgrade
+        // (newFee > oldFee): siblings must not move until the adjustment is paid.
+        if (orderId && newFee <= oldFee) {
           for (const sib of siblingEntries) {
             if (sib.id === input.id) continue;
             const sibBreak = result.perEntry.find((b) => b.key === sib.id);
@@ -832,24 +841,28 @@ export const entriesRouter = createTRPCRouter({
 
       const oldClassIds = entry.entryClasses.map((ec) => ec.showClassId);
 
-      // Delete old entry classes and insert new ones
-      await ctx.db
-        .delete(entryClasses)
-        .where(eq(entryClasses.entryId, input.id));
+      // Apply the new class list + fee. For an UPGRADE (feeDiff > 0) this is
+      // NOT called here — it's deferred until the adjustment payment succeeds
+      // (applied by the Stripe webhook), so an abandoned top-up can't leave the
+      // exhibitor with upgraded classes for free + overstated club revenue.
+      const applyClassChange = async () => {
+        await ctx.db
+          .delete(entryClasses)
+          .where(eq(entryClasses.entryId, input.id));
 
-      await ctx.db.insert(entryClasses).values(
-        newClasses.map((sc, idx) => ({
-          entryId: input.id,
-          showClassId: sc.id,
-          fee: perClassFees[idx] ?? sc.entryFee,
-        }))
-      );
+        await ctx.db.insert(entryClasses).values(
+          newClasses.map((sc, idx) => ({
+            entryId: input.id,
+            showClassId: sc.id,
+            fee: perClassFees[idx] ?? sc.entryFee,
+          }))
+        );
 
-      // Update entry total
-      await ctx.db
-        .update(entries)
-        .set({ totalFee: newFee })
-        .where(eq(entries.id, input.id));
+        await ctx.db
+          .update(entries)
+          .set({ totalFee: newFee })
+          .where(eq(entries.id, input.id));
+      };
 
       // Audit log
       await ctx.db.insert(entryAuditLog).values({
@@ -871,11 +884,26 @@ export const entriesRouter = createTRPCRouter({
 
       // Handle fee difference
       if (feeDiff > 0) {
-        // Additional payment needed. Platform-mode charge — money lands
-        // in Remi's balance, we include the diff in the next payout to
-        // the club.
+        // UPGRADE: additional payment needed. Platform-mode charge — money
+        // lands in Remi's balance, we include the diff in the next payout to
+        // the club. The new classes/fee are DEFERRED: they travel in the
+        // PaymentIntent metadata and are applied by the webhook on success, so
+        // an abandoned top-up leaves the entry exactly as it was (no free
+        // upgrade, no overstated club revenue).
         const platformFeePence = calculatePlatformFee(feeDiff);
         const grossAmount = feeDiff + platformFeePence;
+
+        // classIds + per-class fees travel in Stripe metadata (string values,
+        // 500-char limit). Realistic entries are a handful of classes; refuse
+        // the rare oversize case rather than truncate and corrupt the change.
+        const pendingClassIds = input.classIds.join(',');
+        const pendingPerClassFees = perClassFees.join(',');
+        if (pendingClassIds.length > 480 || pendingPerClassFees.length > 480) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Too many classes to adjust online — please contact the show secretary.',
+          });
+        }
 
         const pi = await createPaymentIntent(grossAmount, {
           entryId: input.id,
@@ -884,6 +912,9 @@ export const entriesRouter = createTRPCRouter({
           type: 'adjustment',
           platformFeePence: String(platformFeePence),
           subtotalPence: String(feeDiff),
+          pendingClassIds,
+          pendingPerClassFees,
+          pendingFee: String(newFee),
         });
 
         await ctx.db.insert(payments).values({
@@ -898,36 +929,39 @@ export const entriesRouter = createTRPCRouter({
           requiresPayment: true,
           clientSecret: pi.client_secret!,
         };
-      } else if (feeDiff < 0) {
-        // Refund needed — find the original successful payment
-        // Check entry-level payments first, then order-level payments
-        let originalPayment = entry.payments.find(
-          (p) => p.status === 'succeeded' && p.stripePaymentId
-        );
+        // NB: applyClassChange() intentionally NOT called — deferred to webhook.
+      } else {
+        // Downgrade or no change — safe to apply the class change immediately.
+        await applyClassChange();
 
-        if (!originalPayment && entry.orderId) {
-          originalPayment = await ctx.db.query.payments.findFirst({
-            where: and(
-              eq(payments.orderId, entry.orderId),
-              eq(payments.status, 'succeeded'),
-            ),
-          }) ?? undefined;
-        }
+        if (feeDiff < 0) {
+          // Refund the reduction via the shared helper so the original payment's
+          // refundAmount, the refund row's orderId, and the payment status are all
+          // updated consistently. The previous ad-hoc stripe.refunds.create +
+          // manual insert never incremented refundAmount and left orderId null,
+          // which silently desynced the books (enabling later over-refunds and
+          // club over-payouts via show-metrics skipping the orphan row).
+          let originalPayment = entry.payments.find(
+            (p) =>
+              (p.status === 'succeeded' || p.status === 'partially_refunded') &&
+              p.stripePaymentId
+          );
 
-        if (originalPayment?.stripePaymentId) {
-          const stripe = getStripe();
-          await stripe.refunds.create({
-            payment_intent: originalPayment.stripePaymentId,
-            amount: Math.abs(feeDiff),
-          });
+          if (!originalPayment && entry.orderId) {
+            originalPayment = await ctx.db.query.payments.findFirst({
+              where: and(
+                eq(payments.orderId, entry.orderId),
+                inArray(payments.status, ['succeeded', 'partially_refunded']),
+              ),
+            }) ?? undefined;
+          }
 
-          await ctx.db.insert(payments).values({
-            entryId: input.id,
-            stripePaymentId: originalPayment.stripePaymentId,
-            amount: Math.abs(feeDiff),
-            status: 'succeeded',
-            type: 'refund',
-          });
+          if (originalPayment?.stripePaymentId) {
+            await executeStripeRefund(ctx.db, originalPayment, {
+              amountPence: Math.abs(feeDiff),
+              entryId: input.id,
+            });
+          }
         }
       }
 

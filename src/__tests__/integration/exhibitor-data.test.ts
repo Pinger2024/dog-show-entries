@@ -14,6 +14,7 @@ import {
   makeEntryClass,
   makeOrder,
   makeSecretaryWithOrg,
+  makeMembership,
 } from '../helpers/factories';
 
 describe('dogs.create', () => {
@@ -297,9 +298,20 @@ describe('entries.getById', () => {
       .rejects.toThrow(/do not have access/);
   });
 
-  it('lets a secretary read any entry', async () => {
+  it('denies a secretary with no access to the show organisation (IDOR guard)', async () => {
+    // A global 'secretary' role is not enough — per-org access lives in
+    // memberships, so a secretary at another club must NOT read this club's
+    // entered-dog data (a pre-judging privacy risk).
     const { entry } = await entryFixture();
     const secretary = await makeUser({ role: 'secretary' });
+    await expect(createTestCaller(secretary).entries.getById({ id: entry.id }))
+      .rejects.toThrow(/access/i);
+  });
+
+  it('lets a secretary WITH access to the show organisation read the entry', async () => {
+    const { entry, org } = await entryFixture();
+    const secretary = await makeUser({ role: 'secretary' });
+    await makeMembership({ userId: secretary.id, organisationId: org.id });
     const fetched = await createTestCaller(secretary).entries.getById({ id: entry.id });
     expect(fetched.id).toBe(entry.id);
   });

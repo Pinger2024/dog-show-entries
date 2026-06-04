@@ -247,6 +247,16 @@ export const secretaryRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       const { userId, ...updates } = input;
+      // Cross-tenant write guard: the UI only ever edits the caller's OWN
+      // record. Without this, any user with the 'secretary' role could
+      // overwrite ANY user's name/phone/address/postcode by passing an
+      // arbitrary userId.
+      if (userId !== ctx.session.user.id) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'You can only update your own details.',
+        });
+      }
       const setData: Record<string, string | null> = {};
       if (updates.name !== undefined) setData.name = updates.name;
       if (updates.phone !== undefined) setData.phone = updates.phone;
@@ -2989,15 +2999,19 @@ export const secretaryRouter = createTRPCRouter({
       // payment.entryId is populated instead.
       const originalPayment = entry.orderId
         ? await ctx.db.query.payments.findFirst({
+            // succeeded AND partially_refunded both still have money to give
+            // back — a pure 'succeeded' filter breaks after a prior per-entry
+            // partial refund flips the row to 'partially_refunded' (matches
+            // refundOrder above). The maxRefundable guard prevents over-refund.
             where: and(
               eq(payments.orderId, entry.orderId),
-              eq(payments.status, 'succeeded'),
+              inArray(payments.status, ['succeeded', 'partially_refunded']),
             ),
           })
         : await ctx.db.query.payments.findFirst({
             where: and(
               eq(payments.entryId, input.entryId),
-              eq(payments.status, 'succeeded'),
+              inArray(payments.status, ['succeeded', 'partially_refunded']),
             ),
           });
 
