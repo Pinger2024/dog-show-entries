@@ -21,6 +21,7 @@ import { padPdfToMultiple } from '@/lib/pdf-pad';
 import { ensureCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
 import { buildClassLabelMap } from '@/lib/class-labels';
+import { redactWithheldOwnerAddresses } from '@/lib/catalogue-privacy';
 
 export async function GET(
   request: NextRequest,
@@ -400,7 +401,9 @@ export async function GET(
   if (wantsJson) {
     return NextResponse.json({
       show: showInfo,
-      entries: catalogueEntries,
+      // Suppress withheld owners' home addresses — this export is reachable
+      // with exhibitor-level access on show day. Mirrors the PDF render.
+      entries: redactWithheldOwnerAddresses(catalogueEntries),
       format,
       generatedAt: new Date().toISOString(),
     });
