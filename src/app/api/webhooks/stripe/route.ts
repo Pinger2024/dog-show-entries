@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { and, eq, inArray, isNull, notInArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull, notInArray, sql } from 'drizzle-orm';
 import { getStripe } from '@/server/services/stripe';
 import { db } from '@/server/db';
 import { entries, entryClasses, entryAuditLog, orders, payments, organisations, plans, users, printOrders, printOrderItems } from '@/server/db/schema';
@@ -175,6 +175,26 @@ export async function POST(request: NextRequest) {
               .update(entries)
               .set({ totalFee: pendingFee })
               .where(eq(entries.id, entryId));
+
+            // Keep the order total in step with the upgraded entry fee. The
+            // payout ledger (listPayouts) and show-metrics compute the club's
+            // payable from SUM(orders.totalAmount) on paid orders, so without
+            // this the top-up the exhibitor just paid would never reach the
+            // club (bug hunt #4). Inside the pending-guard, so a replayed
+            // succeeded event can't double-bump the order.
+            const adjFeeDiff = Number(paymentIntent.metadata.subtotalPence ?? '0');
+            if (adjFeeDiff > 0) {
+              const adjEntry = await db.query.entries.findFirst({
+                where: eq(entries.id, entryId),
+                columns: { orderId: true },
+              });
+              if (adjEntry?.orderId) {
+                await db
+                  .update(orders)
+                  .set({ totalAmount: sql`${orders.totalAmount} + ${adjFeeDiff}` })
+                  .where(eq(orders.id, adjEntry.orderId));
+              }
+            }
 
             // Audit the change at the moment it actually lands. The router
             // defers the upgrade, so this is the only audit entry for it —

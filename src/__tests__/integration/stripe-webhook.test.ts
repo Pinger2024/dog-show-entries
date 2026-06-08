@@ -295,15 +295,18 @@ describe('POST /api/webhooks/stripe — entry-edit UPGRADE (deferred adjustment)
       makeShowClass({ showId: show.id, breedId: breed.id, entryFee: 800 }),
       makeDog({ ownerId: exhibitor.id, breedId: breed.id }),
     ]);
+    const order = await makeOrder({
+      showId: show.id, exhibitorId: exhibitor.id, status: 'paid', totalAmount: 800,
+    });
     const entry = await makeEntry({
-      showId: show.id, dogId: dog.id, exhibitorId: exhibitor.id, status: 'confirmed', totalFee: 800,
+      showId: show.id, dogId: dog.id, exhibitorId: exhibitor.id, status: 'confirmed', totalFee: 800, orderId: order.id,
     });
     await makeEntryClass({ entryId: entry.id, showClassId: c1.id, fee: 800 });
-    return { exhibitor, show, c1, c2, entry };
+    return { exhibitor, show, c1, c2, entry, order };
   }
 
   it('applies the staged classes + fee only when the adjustment payment succeeds', async () => {
-    const { exhibitor, c1, c2, entry } = await entryReadyToUpgrade();
+    const { exhibitor, c1, c2, entry, order } = await entryReadyToUpgrade();
     vi.mocked(stripeService.createPaymentIntent).mockClear();
 
     // 1. Exhibitor adds a class — fee goes up, change is DEFERRED.
@@ -342,6 +345,11 @@ describe('POST /api/webhooks/stripe — entry-edit UPGRADE (deferred adjustment)
     expect(after.map((r) => r.showClassId).sort()).toEqual([c1.id, c2.id].sort());
     const updatedEntry = await testDb.query.entries.findFirst({ where: eq(entries.id, entry.id) });
     expect(updatedEntry?.totalFee).toBe(1200);
+    // The order total is bumped by the £4 top-up so the payout ledger
+    // (SUM(orders.totalAmount) on paid orders) pays the club the full amount
+    // the exhibitor was charged — bug hunt #4.
+    const updatedOrder = await testDb.query.orders.findFirst({ where: eq(orders.id, order.id) });
+    expect(updatedOrder?.totalAmount).toBe(1200);
     const paidPayment = await testDb.query.payments.findFirst({
       where: eq(payments.stripePaymentId, intentId),
     });
