@@ -3234,6 +3234,30 @@ export const secretaryRouter = createTRPCRouter({
         });
       }
 
+      // Reject if this dog is already entered in any of the selected classes on
+      // this show. The online checkout enforces this (orders.ts), but the manual
+      // path didn't — so a secretary could record the same dog in the same class
+      // twice, creating a duplicate catalogue row and double-counting the fee in
+      // club revenue. Mirror the checkout guard here.
+      const existingDogEntry = await ctx.db.query.entries.findFirst({
+        where: and(
+          eq(entries.dogId, input.dogId),
+          eq(entries.showId, input.showId),
+          isNull(entries.deletedAt),
+          eq(entries.status, 'confirmed')
+        ),
+        with: { entryClasses: { columns: { showClassId: true } } },
+      });
+      if (existingDogEntry) {
+        const alreadyEntered = new Set(existingDogEntry.entryClasses.map((ec) => ec.showClassId));
+        if (input.classIds.some((id) => alreadyEntered.has(id))) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `${dog.registeredName ?? 'This dog'} is already entered in one or more of those classes. Remove the existing entry first, or choose different classes.`,
+          });
+        }
+      }
+
       // Validate and price sundry items
       const sundryInputs = input.sundryItems ?? [];
       let selectedSundryItems: { id: string; name: string; priceInPence: number; quantity: number }[] = [];
@@ -3767,6 +3791,11 @@ export const secretaryRouter = createTRPCRouter({
       detected.entry_fees_set = show.firstEntryFee != null && show.firstEntryFee > 0;
       detected.entry_close_date_set = show.entryCloseDate != null;
       detected.secretary_details_set = !!(show.secretaryName && show.secretaryEmail);
+      // Post-show: the "Publish results" checklist item declares this autoDetectKey
+      // (default-checklist.ts) but it was never populated here, so it could never
+      // auto-tick. (The sibling 'judge_approvals_sent' key is still unwired — see
+      // SECRETARY_DASHBOARD_AUDIT.md; it needs the approval-state query.)
+      detected.results_published = !!show.resultsPublishedAt;
       // Sundry items — surfaced in the setup checklist because Amanda
       // kept missing the step on SV regional shows (2026-05-24). Counts
       // both enabled and disabled rows, so the secretary can explicitly
@@ -5645,6 +5674,21 @@ export const secretaryRouter = createTRPCRouter({
         columns: { id: true, organisationId: true },
       });
       if (!currentShow) return null;
+
+      // Verify the caller is an active member of THIS show's org before we use
+      // its organisationId to read a sibling show's schedule data — otherwise any
+      // secretary could pass another club's showId and read its guarantors (home
+      // addresses), prize money, sponsors and officers. Mirrors getScheduleData.
+      const membership = await ctx.db.query.memberships.findFirst({
+        where: and(
+          eq(memberships.userId, ctx.session.user.id),
+          eq(memberships.organisationId, currentShow.organisationId),
+          eq(memberships.status, 'active')
+        ),
+      });
+      if (!membership && !ctx.callerIsAdmin) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'You do not have access to this show' });
+      }
 
       // Find the most recent OTHER show from the same org that has schedule data
       const previous = await ctx.db.query.shows.findFirst({
