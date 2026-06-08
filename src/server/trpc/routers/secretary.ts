@@ -98,6 +98,22 @@ function statusFromEntries(orderEntries: ReadonlyArray<{ status: string }>): str
   return orderEntries[0]?.status ?? 'pending';
 }
 
+/**
+ * RKC show licences count only breed classes. Junior Handler classes (rendered
+ * JHA, JHB, …) and Special Award Classes (rendered A, B, C, …) sit outside the
+ * licensed count and must carry classNumber = null. Single source of truth for
+ * every class-numbering path (autoAssign / reorder / resort / bulkCreate) so
+ * they can't drift apart and start numbering JH/SAC classes (bug hunt #5).
+ */
+function isUnnumberedClassDef(
+  cd?: { type?: string | null; name?: string | null } | null
+): boolean {
+  return (
+    cd?.type === 'junior_handler' ||
+    (cd?.type === 'special' && (cd?.name?.startsWith('Special Award Class') ?? false))
+  );
+}
+
 export const secretaryRouter = createTRPCRouter({
   getDashboard: secretaryProcedure.query(async ({ ctx }) => {
     // Get organisations the user is a member of
@@ -1633,17 +1649,21 @@ export const secretaryRouter = createTRPCRouter({
       if (values.length > 0) {
         await ctx.db.insert(showClasses).values(values);
 
-        // Auto-number all classes for this show based on sort order
+        // Auto-number breed classes in sort order. Junior Handler + Special
+        // Award Classes stay unnumbered (classNumber=null) — they sit outside
+        // the RKC-licensed count and render as JHA/JHB and A/B/C (bug hunt #5).
         const allClasses = await ctx.db.query.showClasses.findMany({
           where: eq(showClasses.showId, input.showId),
-          columns: { id: true },
+          with: { classDefinition: true },
           orderBy: [asc(showClasses.sortOrder)],
         });
+        let numbered = 0;
         for (let i = 0; i < allClasses.length; i++) {
+          const classNumber = isUnnumberedClassDef(allClasses[i]!.classDefinition) ? null : ++numbered;
           await ctx.db
             .update(showClasses)
-            .set({ classNumber: i + 1 })
-            .where(eq(showClasses.id, allClasses[i].id));
+            .set({ classNumber })
+            .where(eq(showClasses.id, allClasses[i]!.id));
         }
       }
 
@@ -1758,19 +1778,30 @@ export const secretaryRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
+      // Load class types so Junior Handler + Special Award Classes stay
+      // UNnumbered (classNumber=null) — only RKC-licensed breed classes get a
+      // running number, matching autoAssignClassNumbers (bug hunt #5).
+      const classDefs = await ctx.db.query.showClasses.findMany({
+        where: and(inArray(showClasses.id, input.classIds), eq(showClasses.showId, input.showId)),
+        with: { classDefinition: true },
+      });
+      const defById = new Map(classDefs.map((c) => [c.id, c.classDefinition]));
+
       await ctx.db.transaction(async (tx) => {
+        let numbered = 0;
         await Promise.all(
-          input.classIds.map((id, i) =>
-            tx
+          input.classIds.map((id, i) => {
+            const classNumber = isUnnumberedClassDef(defById.get(id)) ? null : ++numbered;
+            return tx
               .update(showClasses)
-              .set({ sortOrder: i, classNumber: i + 1 })
+              .set({ sortOrder: i, classNumber })
               .where(
                 and(
                   eq(showClasses.id, id),
                   eq(showClasses.showId, input.showId)
                 )
-              )
-          )
+              );
+          })
         );
       });
       return { updated: input.classIds.length };
@@ -1866,9 +1897,7 @@ export const secretaryRouter = createTRPCRouter({
       // both with classNumber = null in the DB. Numbered sequence is
       // reserved for the RKC-licensed breed classes.
       const isUnnumbered = (cls: (typeof sorted)[number]) =>
-        cls.classDefinition?.type === 'junior_handler' ||
-        (cls.classDefinition?.type === 'special' &&
-          (cls.classDefinition?.name?.startsWith('Special Award Class') ?? false));
+        isUnnumberedClassDef(cls.classDefinition);
 
       let numbered = 0;
       let skipped = 0;
@@ -2018,11 +2047,15 @@ export const secretaryRouter = createTRPCRouter({
         return soA - soB;
       });
 
-      // 4. Update sortOrder and classNumber sequentially
+      // 4. Update sortOrder sequentially; number only RKC-licensed breed
+      // classes. Junior Handler + Special Award Classes stay unnumbered
+      // (classNumber=null) — they render as JHA/JHB and A/B/C (bug hunt #5).
+      let numbered = 0;
       for (let i = 0; i < sorted.length; i++) {
+        const classNumber = isUnnumberedClassDef(sorted[i]!.classDefinition) ? null : ++numbered;
         await ctx.db
           .update(showClasses)
-          .set({ sortOrder: i, classNumber: i + 1 })
+          .set({ sortOrder: i, classNumber })
           .where(eq(showClasses.id, sorted[i]!.id));
       }
 
