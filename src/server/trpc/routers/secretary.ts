@@ -7,6 +7,7 @@ import { verifyShowAccess } from '../verify-show-access';
 import { verifyOrgAccess } from '../verify-org-access';
 import { getBaseUrl } from '@/server/lib/utils';
 import { ACHIEVEMENT_TYPES } from '@/lib/placements';
+import { computeOrderFees, type FeeContext } from '@/lib/fee-calc';
 import {
   shows,
   entries,
@@ -3223,7 +3224,35 @@ export const secretaryRouter = createTRPCRouter({
         }));
       }
 
-      const classFee = selectedClasses.reduce((sum, sc) => sum + sc.entryFee, 0);
+      // Price through the SAME fee engine the online checkout uses, so a
+      // postal/cash entry costs exactly what the identical dog + classes would
+      // cost online: first-class fee + subsequent-class fee per extra class.
+      // Summing each class's entryFee (every class carries the first-class
+      // rate) previously charged the first-class fee for EVERY class, so a
+      // 3-class entry was billed 3× the first fee instead of first + 2×
+      // subsequent — overcharging the exhibitor and inflating club revenue
+      // reports (bug hunt #2). Legacy shows with no show-level fee keep the
+      // per-class fallback, matching orders.checkout.
+      const feeCtx: FeeContext = {
+        firstEntryFeePence: show.firstEntryFee,
+        subsequentEntryFeePence: show.subsequentEntryFee,
+        nfcEntryFeePence: show.nfcEntryFee,
+        juniorHandlerFeePence: show.juniorHandlerFee,
+        multiDogThreshold: show.multiDogThreshold,
+        multiDogPackagePence: show.multiDogPackagePence,
+        discountGroup: null,
+      };
+      const feeResult =
+        show.firstEntryFee == null
+          ? null
+          : computeOrderFees(
+              [{ key: 'manual', kind: input.isNfc ? 'nfc' : 'standard', classCount: selectedClasses.length }],
+              feeCtx,
+            );
+      const perClassFees = feeResult?.perEntry[0]?.perClassFees ?? null;
+      const classFee = feeResult
+        ? feeResult.total
+        : selectedClasses.reduce((sum, sc) => sum + sc.entryFee, 0);
       const sundryFee = selectedSundryItems.reduce((sum, s) => sum + s.priceInPence * s.quantity, 0);
       const totalAmount = classFee + sundryFee;
 
@@ -3285,10 +3314,10 @@ export const secretaryRouter = createTRPCRouter({
 
       // Create entry class records
       await ctx.db.insert(entryClasses).values(
-        selectedClasses.map((sc) => ({
+        selectedClasses.map((sc, i) => ({
           entryId: entry!.id,
           showClassId: sc.id,
-          fee: sc.entryFee,
+          fee: perClassFees ? (perClassFees[i] ?? 0) : sc.entryFee,
         }))
       );
 
