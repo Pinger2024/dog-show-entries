@@ -76,7 +76,11 @@ heavy-display): #8,#11,#12,#13,#16,#17,#19,#20,#21,#22,#26. Original detail in B
   - #21/#124 catalogue/bundled checkout deeper path
 - DONE when: chosen subset has passing tests; skipped ones logged with reason.
 
-## Phase 4 — Secretary dashboard full functional + UX audit  (status: PENDING — queued by Michael 2026-06-08)
+## Phase 4 — Secretary dashboard full functional + UX audit  (status: FUNCTIONAL PASS DONE 2026-06-08 — visual/375px half still pending Chrome MCP)
+- Done: workflow wku1a4nzw (48 agents) audited all 133 secretary procs + shows procs + 22 pages across 12 domains → adversarial verify. 20 confirmed, 16 refuted, 1 UX. Deliverable: SECRETARY_DASHBOARD_AUDIT.md.
+- Fixed 3 reachable/verified bugs → commit 801f0f0 (+5 tests, suite 802): getPreviousScheduleData cross-org leak (HIGH), createManualEntry dup guard (MED), results_published checklist key (LOW).
+- 17 documented for review (Settings cross-org save-corruption + 2 blank-number bugs ranked first; schema-push / product-judgment / hardening below them). ⚠️ HIGH cross-org PII leak — pinged Michael, recommend hotfix.
+- Remaining: visual/mobile sweep of every secretary screen (tagged "needs visual pass") once Chrome MCP is back.
 - Go through EVERY secretary function / page / route. For each: (a) does it work correctly? (b) is it as
   user-friendly as it could be for a non-technical 60+ user, mobile-first (CLAUDE.md philosophy)?
 - Method: hybrid — (1) fan-out code/functional audit of every `secretary.*` procedure + secretary page;
