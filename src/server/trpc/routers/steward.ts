@@ -92,6 +92,48 @@ async function assertResultsNotLocked(db: Database, showId: string) {
   }
 }
 
+/**
+ * Non-throwing privilege check for the PUBLIC results procedures (getLiveResults,
+ * getPublicShowAchievements). "Privileged" means the caller may see UNPUBLISHED
+ * results/achievements. It must be: an admin, a steward ASSIGNED to this show, or
+ * a secretary who is an active member of the show's org — NOT merely anyone
+ * holding the steward/secretary role globally. Otherwise a steward/secretary of
+ * club A could read club B's unpublished placements + BOB/BIS before they're
+ * published (a pre-judging confidentiality leak). Returns false rather than
+ * throwing, because these are public procedures: a logged-in steward viewing
+ * another club's PUBLIC results page must still see the published results, just
+ * not the unpublished ones.
+ */
+async function callerIsPrivilegedForShow(
+  db: Database,
+  userId: string | undefined,
+  role: string | undefined,
+  showId: string,
+  organisationId: string,
+): Promise<boolean> {
+  if (role === 'admin') return true;
+  if (!userId) return false;
+  if (role === 'steward') {
+    const assignment = await db.query.stewardAssignments.findFirst({
+      where: and(eq(stewardAssignments.userId, userId), eq(stewardAssignments.showId, showId)),
+      columns: { id: true },
+    });
+    return !!assignment;
+  }
+  if (role === 'secretary') {
+    const membership = await db.query.memberships.findFirst({
+      where: and(
+        eq(memberships.userId, userId),
+        eq(memberships.organisationId, organisationId),
+        eq(memberships.status, 'active'),
+      ),
+      columns: { id: true },
+    });
+    return !!membership;
+  }
+  return false;
+}
+
 export const stewardRouter = createTRPCRouter({
   // ── Steward's assigned shows ──────────────────────────────
   getMyShows: stewardProcedure.query(async ({ ctx }) => {
@@ -161,9 +203,12 @@ export const stewardRouter = createTRPCRouter({
         orderBy: [asc(showClasses.sortOrder)],
       });
 
-      // Filter to assigned breeds if applicable
+      // Filter to assigned breeds if applicable. Breed-null classes (Junior
+      // Handling, Stakes, any-breed special awards) belong to no single breed, so
+      // a breed-scoped steward must still see them — otherwise a steward assigned
+      // to a breed would never see the show's JH classes.
       const filtered = assignedBreedIds
-        ? classes.filter((sc) => sc.breedId && assignedBreedIds.includes(sc.breedId))
+        ? classes.filter((sc) => !sc.breedId || assignedBreedIds.includes(sc.breedId))
         : classes;
 
       return filtered.map((sc) => {
@@ -835,10 +880,19 @@ export const stewardRouter = createTRPCRouter({
 
       // Per-achievement publication (Amanda 2026-05-28): stewards release
       // top awards as the day progresses. Non-privileged callers only see
-      // achievements that have been explicitly published; secretaries /
-      // stewards / admins always see the full picture for editing.
-      const userRole = ctx.session?.user?.role;
-      const isPrivileged = userRole && ['secretary', 'steward', 'admin'].includes(userRole);
+      // achievements that have been explicitly published; admins, the show's
+      // own stewards, and its host-org secretaries see the full picture for
+      // editing — scoped to THIS show, not by global role (else a rival club's
+      // secretary/steward could read unpublished BOB/BIS before publication).
+      const achShow = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, showId),
+        columns: { organisationId: true },
+      });
+      const isPrivileged = achShow
+        ? await callerIsPrivilegedForShow(
+            ctx.db, ctx.session?.user?.id, ctx.session?.user?.role, showId, achShow.organisationId,
+          )
+        : false;
 
       const rows = await ctx.db.query.achievements.findMany({
         where: eq(achievements.showId, showId),
@@ -866,12 +920,17 @@ export const stewardRouter = createTRPCRouter({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Show not found' });
       }
 
-      // Check if caller is privileged (secretary/steward/admin)
-      const userRole = ctx.session?.user?.role;
-      const isPrivileged = userRole && ['secretary', 'steward', 'admin'].includes(userRole);
+      // Check if caller is privileged for THIS show (admin, an assigned steward,
+      // or the host-org secretary) — scoped, not by global role, so a rival
+      // club's steward/secretary can't read unpublished results before they're
+      // published. Non-privileged callers (incl. logged-in stewards of OTHER
+      // shows) see published results only, exactly like the public.
+      const isPrivileged = await callerIsPrivilegedForShow(
+        ctx.db, ctx.session?.user?.id, ctx.session?.user?.role, showId, show.organisationId,
+      );
 
       // Per-result publication: public users only see results with publishedAt set.
-      // Privileged users (secretary/steward/admin) see all results.
+      // Privileged users see all results.
 
       const classes = await ctx.db.query.showClasses.findMany({
         where: eq(showClasses.showId, showId),
@@ -956,6 +1015,10 @@ export const stewardRouter = createTRPCRouter({
               ec.result !== null &&
               ec.entry.status === 'confirmed' &&
               !ec.entry.deletedAt &&
+              // An absent dog is never placed — if a placement was recorded and
+              // then the dog marked absent, the stale result must not surface as
+              // a winner on public/live results.
+              !ec.entry.absent &&
               // Public users only see published results
               (isPrivileged || ec.result!.publishedAt !== null)
           )
@@ -1044,13 +1107,17 @@ export const stewardRouter = createTRPCRouter({
           resultsPublishedAt: show.resultsPublishedAt,
         },
         breedGroups: sortedGroups,
-        achievements: showAchievements.map((a) => ({
-          id: a.id,
-          type: a.type,
-          dogId: a.dogId,
-          dogName: a.dog?.registeredName ?? 'Unknown',
-          details: a.details as Record<string, unknown> | null,
-        })),
+        achievements: showAchievements
+          // Mirror getPublicShowAchievements: non-privileged callers only see
+          // achievements the steward has explicitly published.
+          .filter((a) => isPrivileged || a.publishedAt !== null)
+          .map((a) => ({
+            id: a.id,
+            type: a.type,
+            dogId: a.dogId,
+            dogName: a.dog?.registeredName ?? 'Unknown',
+            details: a.details as Record<string, unknown> | null,
+          })),
         unpublished: false as const,
       };
     }),
