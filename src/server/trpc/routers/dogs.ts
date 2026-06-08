@@ -362,6 +362,54 @@ export const dogsRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const { owners, ...dogData } = input;
 
+      // If this owner previously removed (soft-deleted) a dog with the same RKC
+      // registration number, restore that row instead of inserting — the unique
+      // kcRegNumber constraint would otherwise throw a raw 500 and the dog could
+      // never be re-added (bug hunt #23). A clash with an ACTIVE dog (or another
+      // owner's record) returns a friendly error rather than a 500.
+      if (dogData.kcRegNumber) {
+        const clash = await ctx.db.query.dogs.findFirst({
+          where: eq(dogs.kcRegNumber, dogData.kcRegNumber),
+        });
+        if (clash) {
+          if (clash.deletedAt && clash.ownerId === ctx.session.user.id) {
+            const [restored] = await ctx.db
+              .update(dogs)
+              .set({
+                ...dogData,
+                kcRegNumber: dogData.kcRegNumber,
+                sireName: dogData.sireName ?? null,
+                damName: dogData.damName ?? null,
+                breederName: dogData.breederName ?? null,
+                colour: dogData.colour ?? null,
+                deletedAt: null,
+                ownerId: ctx.session.user.id,
+              })
+              .where(eq(dogs.id, clash.id))
+              .returning();
+            await ctx.db.delete(dogOwners).where(eq(dogOwners.dogId, clash.id));
+            await ctx.db.insert(dogOwners).values(
+              owners.map((o, i) => ({
+                dogId: clash.id,
+                userId: i === 0 ? ctx.session.user.id : null,
+                ownerTitle: o.ownerTitle || null,
+                ownerName: o.ownerName,
+                ownerAddress: o.ownerAddress,
+                ownerEmail: o.ownerEmail,
+                ownerPhone: o.ownerPhone ?? null,
+                isPrimary: o.isPrimary || i === 0,
+                sortOrder: i,
+              }))
+            );
+            return restored!;
+          }
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'A dog with this Royal Kennel Club registration number is already registered.',
+          });
+        }
+      }
+
       const [dog] = await ctx.db
         .insert(dogs)
         .values({
