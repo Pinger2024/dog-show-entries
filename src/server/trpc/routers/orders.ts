@@ -570,25 +570,35 @@ export const ordersRouter = createTRPCRouter({
 
         const itemMap = new Map(availableItems.map((i) => [i.id, i]));
 
+        // Aggregate quantities per item before validating, so the per-order cap
+        // can't be bypassed by splitting a quantity across duplicate lines —
+        // e.g. two lines of 2 when maxPerOrder is 2 (bug hunt #27).
+        const qtyByItem = new Map<string, number>();
         for (const requested of input.sundryItems) {
-          const item = itemMap.get(requested.sundryItemId);
+          qtyByItem.set(
+            requested.sundryItemId,
+            (qtyByItem.get(requested.sundryItemId) ?? 0) + requested.quantity
+          );
+        }
+
+        for (const [sundryItemId, quantity] of qtyByItem) {
+          const item = itemMap.get(sundryItemId);
           if (!item) {
             throw new TRPCError({
               code: 'BAD_REQUEST',
-              message: `Sundry item not found or not available: ${requested.sundryItemId}`,
+              message: `Sundry item not found or not available: ${sundryItemId}`,
             });
           }
-          if (item.maxPerOrder != null && requested.quantity > item.maxPerOrder) {
+          if (item.maxPerOrder != null && quantity > item.maxPerOrder) {
             throw new TRPCError({
               code: 'BAD_REQUEST',
               message: `Maximum ${item.maxPerOrder} of "${item.name}" per order`,
             });
           }
-          const lineTotal = item.priceInPence * requested.quantity;
-          sundryTotal += lineTotal;
+          sundryTotal += item.priceInPence * quantity;
           validatedSundryItems.push({
             sundryItemId: item.id,
-            quantity: requested.quantity,
+            quantity,
             unitPrice: item.priceInPence,
           });
         }
