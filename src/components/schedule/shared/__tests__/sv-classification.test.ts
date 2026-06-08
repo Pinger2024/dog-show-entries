@@ -91,15 +91,15 @@ describe('groupSvClasses', () => {
     }
   });
 
-  it('excludes Baby Puppy from the numbered classification (GSDL spec)', () => {
+  it('includes Baby Puppy in the numbered classification (Amanda 2026-05 correction)', () => {
     const classes = [
       ...buildFullSvShow(),
       svClass({ className: 'Baby Puppy', sex: 'bitch', classType: 'sv_age', svCoatType: 'stock' }, 50),
       svClass({ className: 'Baby Puppy', sex: 'dog', classType: 'sv_age', svCoatType: 'long_stock' }, 51),
     ];
     const groups = groupSvClasses(classes);
-    expect(groups.breedClasses).toHaveLength(12);
-    expect(groups.breedClasses.map((b) => b.name)).not.toContain('Baby Puppy');
+    expect(groups.breedClasses).toHaveLength(14);
+    expect(groups.breedClasses.map((b) => b.name)).toContain('Baby Puppy');
   });
 
   it('appends Junior Handling classes numbered after the breed block', () => {

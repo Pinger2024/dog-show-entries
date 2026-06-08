@@ -18,25 +18,23 @@ import {
 } from '../helpers/factories';
 
 describe('dogs.create', () => {
-  it('creates a dog owned by the caller and a default primary owner row', async () => {
+  it('rejects creating a dog with no owners (owners are required)', async () => {
     const exhibitor = await makeUser({ role: 'exhibitor', name: 'Jane Owner', address: '1 High St' });
     const breed = await makeBreed();
     const caller = createTestCaller(exhibitor);
 
-    const dog = await caller.dogs.create({
-      registeredName: 'Rocky Of Hill',
-      breedId: breed.id,
-      sex: 'dog',
-      dateOfBirth: '2024-01-01',
-    });
-
-    expect(dog?.ownerId).toBe(exhibitor.id);
-    expect(dog?.registeredName).toBe('Rocky Of Hill');
-
-    const owners = await testDb.query.dogOwners.findMany({ where: eq(dogOwners.dogId, dog!.id) });
-    expect(owners).toHaveLength(1);
-    expect(owners[0]?.isPrimary).toBe(true);
-    expect(owners[0]?.ownerName).toBe('Jane Owner');
+    // The "default primary owner = caller" shortcut was removed when explicit
+    // owner details (name/address/email) became mandatory for RKC compound
+    // owner headings. The create form blocks submit unless an owner is added,
+    // so the procedure rejects an absent/empty owners array.
+    await expect(
+      caller.dogs.create({
+        registeredName: 'Rocky Of Hill',
+        breedId: breed.id,
+        sex: 'dog',
+        dateOfBirth: '2024-01-01',
+      })
+    ).rejects.toThrow();
   });
 
   it('accepts explicit owners and stores them in order with primary set', async () => {
