@@ -23,7 +23,7 @@ import {
 
 const CLUB_OPTIONS = [
   { value: 'gsdl', label: 'GSDL (GSD League of Great Britain)' },
-  { value: 'gsdl_brg', label: 'GSDL — British Ring Group' },
+  { value: 'gsdl_brg', label: 'GSDL — British Regional Group' },
   { value: 'bagsd', label: 'BAGSD (British Association for German Shepherd Dogs)' },
   { value: 'sv', label: 'SV (Germany)' },
   { value: 'other', label: 'Other' },
