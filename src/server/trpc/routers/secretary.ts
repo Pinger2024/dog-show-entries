@@ -5784,6 +5784,8 @@ export const secretaryRouter = createTRPCRouter({
   listSponsors: secretaryProcedure
     .input(z.object({ organisationId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
+      if (!ctx.callerIsAdmin)
+        await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
       return ctx.db.query.sponsors.findMany({
         where: and(
           eq(sponsors.organisationId, input.organisationId),
@@ -5811,6 +5813,8 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      if (!ctx.callerIsAdmin)
+        await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
       const [created] = await ctx.db
         .insert(sponsors)
         .values(input)
@@ -5837,6 +5841,13 @@ export const secretaryRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
+      const existing = await ctx.db.query.sponsors.findFirst({
+        where: eq(sponsors.id, id),
+        columns: { organisationId: true },
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Sponsor not found' });
+      if (!ctx.callerIsAdmin)
+        await verifyOrgAccess(ctx.db, ctx.session.user.id, existing.organisationId);
       const [updated] = await ctx.db
         .update(sponsors)
         .set(data)
@@ -5849,6 +5860,13 @@ export const secretaryRouter = createTRPCRouter({
   deleteSponsor: secretaryProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.sponsors.findFirst({
+        where: eq(sponsors.id, input.id),
+        columns: { organisationId: true },
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Sponsor not found' });
+      if (!ctx.callerIsAdmin)
+        await verifyOrgAccess(ctx.db, ctx.session.user.id, existing.organisationId);
       const [deleted] = await ctx.db
         .update(sponsors)
         .set({ deletedAt: new Date() })
@@ -5890,7 +5908,17 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      const show = await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      // The sponsor must belong to the same org as the show — otherwise a
+      // secretary could attach (and surface in their catalogue) a sponsor that
+      // belongs to a different club.
+      const sponsor = await ctx.db.query.sponsors.findFirst({
+        where: eq(sponsors.id, input.sponsorId),
+        columns: { organisationId: true },
+      });
+      if (!sponsor || sponsor.organisationId !== show.organisationId) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Sponsor not found' });
+      }
       const [created] = await ctx.db
         .insert(showSponsors)
         .values(input)
@@ -5914,6 +5942,12 @@ export const secretaryRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
+      const existing = await ctx.db.query.showSponsors.findFirst({
+        where: eq(showSponsors.id, id),
+        columns: { showId: true },
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Show sponsor not found' });
+      await verifyShowAccess(ctx.db, ctx.session.user.id, existing.showId, { callerIsAdmin: ctx.callerIsAdmin });
       const [updated] = await ctx.db
         .update(showSponsors)
         .set(data)
@@ -5926,6 +5960,12 @@ export const secretaryRouter = createTRPCRouter({
   removeShowSponsor: secretaryProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.showSponsors.findFirst({
+        where: eq(showSponsors.id, input.id),
+        columns: { showId: true },
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Show sponsor not found' });
+      await verifyShowAccess(ctx.db, ctx.session.user.id, existing.showId, { callerIsAdmin: ctx.callerIsAdmin });
       const [removed] = await ctx.db
         .delete(showSponsors)
         .where(eq(showSponsors.id, input.id))
@@ -5946,6 +5986,12 @@ export const secretaryRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const sc = await ctx.db.query.showClasses.findFirst({
+        where: eq(showClasses.id, input.showClassId),
+        columns: { showId: true },
+      });
+      if (!sc) throw new TRPCError({ code: 'NOT_FOUND', message: 'Class not found' });
+      await verifyShowAccess(ctx.db, ctx.session.user.id, sc.showId, { callerIsAdmin: ctx.callerIsAdmin });
       const [created] = await ctx.db
         .insert(classSponsorships)
         .values(input)
@@ -5956,6 +6002,16 @@ export const secretaryRouter = createTRPCRouter({
   removeClassSponsorship: secretaryProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.classSponsorships.findFirst({
+        where: eq(classSponsorships.id, input.id),
+        columns: { showClassId: true },
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Class sponsorship not found' });
+      const sc = await ctx.db.query.showClasses.findFirst({
+        where: eq(showClasses.id, existing.showClassId),
+        columns: { showId: true },
+      });
+      if (sc) await verifyShowAccess(ctx.db, ctx.session.user.id, sc.showId, { callerIsAdmin: ctx.callerIsAdmin });
       const [removed] = await ctx.db
         .delete(classSponsorships)
         .where(eq(classSponsorships.id, input.id))
@@ -5973,6 +6029,12 @@ export const secretaryRouter = createTRPCRouter({
       trophyName: z.string().max(255).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      const sc = await ctx.db.query.showClasses.findFirst({
+        where: eq(showClasses.id, input.showClassId),
+        columns: { showId: true },
+      });
+      if (!sc) throw new TRPCError({ code: 'NOT_FOUND', message: 'Class not found' });
+      await verifyShowAccess(ctx.db, ctx.session.user.id, sc.showId, { callerIsAdmin: ctx.callerIsAdmin });
       const [created] = await ctx.db
         .insert(classSponsorships)
         .values({
@@ -5995,6 +6057,16 @@ export const secretaryRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
+      const existing = await ctx.db.query.classSponsorships.findFirst({
+        where: eq(classSponsorships.id, id),
+        columns: { showClassId: true },
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Class sponsorship not found' });
+      const sc = await ctx.db.query.showClasses.findFirst({
+        where: eq(showClasses.id, existing.showClassId),
+        columns: { showId: true },
+      });
+      if (sc) await verifyShowAccess(ctx.db, ctx.session.user.id, sc.showId, { callerIsAdmin: ctx.callerIsAdmin });
       const updateData: Record<string, unknown> = {};
       if (data.sponsorName !== undefined) updateData.sponsorName = data.sponsorName.trim();
       if (data.sponsorAffix !== undefined) updateData.sponsorAffix = data.sponsorAffix?.trim() || null;
