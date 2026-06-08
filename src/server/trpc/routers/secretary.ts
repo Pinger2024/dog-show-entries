@@ -7104,6 +7104,25 @@ export const secretaryRouter = createTRPCRouter({
       });
       if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Discount group not found' });
       await verifyShowAccess(ctx.db, ctx.session.user.id, existing.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      // Refuse to delete a group that existing orders were priced under. The
+      // orders.discountGroupId FK is onDelete:'set null', so deleting it strips
+      // the member-rate reference from those orders — and a later entry edit
+      // would then re-price them at the STANDARD rate, turning a member's class
+      // REMOVAL into an "upgrade" that demands a new payment (bug hunt #10). The
+      // group must stay so its pricing can be reproduced when entries are edited.
+      const referencing = await ctx.db.query.orders.findFirst({
+        where: eq(orders.discountGroupId, input.id),
+        columns: { id: true },
+      });
+      if (referencing) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message:
+            "This discount group is used by existing entries and can't be deleted — members who entered under it must keep their pricing.",
+        });
+      }
+
       await ctx.db.delete(showDiscountGroups).where(eq(showDiscountGroups.id, input.id));
       return { deleted: true };
     }),
