@@ -12,6 +12,7 @@ import {
   dogOwners,
 } from '@/server/db/schema';
 import { getPlacementLabel, achievementLabels } from '@/lib/placements';
+import { buildResultsSubject } from '@/lib/results-subject';
 import { resend, FROM, APP_URL, btn } from './email';
 
 const placementColor: Record<number, string> = {
@@ -168,23 +169,9 @@ export async function sendExhibitorResultsEmails(showId: string) {
 </body>
 </html>`;
 
-    // Build a celebratory subject line based on best result
-    const allPlacements = exhibitor.entries.flatMap((e) =>
-      e.entryClasses.filter((ec) => ec.result?.placement).map((ec) => ec.result!.placement!)
-    );
-    const allAwards = exhibitor.entries.flatMap((e) =>
-      showAchievements.filter((a) => a.dogId === e.dogId).map((a) => achievementLabels[a.type] ?? a.type)
-    );
-    const bestDogName = exhibitor.entries[0]?.dog?.registeredName ?? '';
-
-    let subject: string;
-    if (allAwards.length > 0) {
-      subject = `${bestDogName} — ${allAwards[0]}! 🏆 ${show.name}`;
-    } else if (allPlacements.length > 0 && Math.min(...allPlacements) <= 3) {
-      subject = `${bestDogName} placed ${getPlacementLabel(Math.min(...allPlacements))}! 🏆 ${show.name}`;
-    } else {
-      subject = `Your Results — ${show.name}`;
-    }
+    // Build a celebratory subject line crediting the dog that achieved the
+    // best result (award, else best placement) — not just entries[0].
+    const subject = buildResultsSubject(exhibitor.entries, showAchievements, show.name);
 
     emailPayloads.push({
       from: FROM,
