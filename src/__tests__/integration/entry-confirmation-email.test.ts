@@ -53,9 +53,10 @@ describe('entry confirmation email payload (TESTING_MAP #126)', () => {
     await sendEntryConfirmationEmail(order.id);
 
     expect(resendMocks.send).toHaveBeenCalledTimes(1);
-    const payload = resendMocks.send.mock.calls[0]![0] as {
-      to: string; from: string; replyTo: string; subject: string; html: string;
-    };
+    const calls = resendMocks.send.mock.calls as unknown as Array<
+      [{ to: string; from: string; replyTo: string; subject: string; html: string }]
+    >;
+    const payload = calls[0]![0];
     expect(payload.to).toBe('jane.exhibitor@test.local');
     expect(payload.subject).toBe('Entry Confirmed — Clyde Valley Champ Show');
     expect(payload.from).toContain('noreply@'); // configured EMAIL_FROM sender

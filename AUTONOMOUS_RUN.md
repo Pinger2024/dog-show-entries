@@ -12,10 +12,22 @@ This file is the resume anchor (survives context compaction) AND Michael's repor
   `6aa1cd1` #10 discount-group delete · `d678d8f` #14+#15 steward lock/award · `fede3fe` #27 sundry cap ·
   `5d6c347` #24+#25 results-email dog · `cbada7a` #23 dog re-create. **11 documented** → `BUGHUNT_DEFERRED.md`.
 - **Phase 2 mobile sweep:** ⛔ BLOCKED — Chrome DevTools MCP server killed (my too-broad pkill). Needs restart.
-- **Phase 3 testing-map:** started — `e0fac7f` covers getSundryItemReport (#69). Suite now **797 green**.
-- **Phases 4/5 audits:** not started; visual parts need the Chrome MCP.
-- **⚠️ ACTION FOR MICHAEL:** the CRITICAL fix (`245e922`) is committed but NOT deployed — your call on the hotfix.
-  Nothing is pushed. To resume the visual phases: restart the chrome-devtools MCP, then say "continue".
+- **Phase 4 secretary audit (functional pass DONE):** 48-agent fan-out over all 133 secretary procs + 22 pages,
+  adversarially verified (16 false positives filtered). **3 fixed** `801f0f0` (HIGH cross-org schedule-data leak,
+  dup manual entry, results_published checklist). **17 documented** → `SECRETARY_DASHBOARD_AUDIT.md` (`dfb4bb0`).
+- **Phase 5 steward journey (functional pass DONE):** 18-agent journey walk (21 procs + 3 pages + shell).
+  **4 fixed** `13ce692` (absent-dog-as-winner HIGH, cross-club pre-judging leak, achievement wire over-fetch,
+  breed-null class visibility). **17 documented** (incl. placement collision + judge-approval lock) →
+  `STEWARD_JOURNEY_AUDIT.md` (`2010361`).
+- **Phase 3 testing-map:** `e0fac7f` #69 sundry report + `b475a35` #126 entry-confirmation email PAYLOAD
+  (via `vi.importActual`). Remaining gaps are browser/external-bound (Mixam pricing, Google OAuth, print PDF+R2)
+  or payload rows whose call-wiring is already covered. Suite now **809 green**.
+- **⚠️ ACTION FOR MICHAEL:** TWO live security fixes committed-not-deployed — `245e922` (CRITICAL cross-org
+  privilege esc., Phase 1) and `801f0f0` (HIGH cross-org schedule-data/PII leak, Phase 4). Your call on the hotfix.
+  Nothing is pushed; 7 audit fixes this continuation are test-first + suite-green. The process `.md` files
+  (AUTONOMOUS_RUN / BUGHUNT_* / *_AUDIT) should be stripped before any PR to main.
+- **Browser-free work is now exhausted.** To resume the visual phases (Phase 2 + the look-and-feel halves of
+  Phase 4/5): restart the chrome-devtools MCP, then say "continue".
 
 ## Spine / continuity
 - Driver: background tasks (tests/workflows) re-invoke me on completion; fallback `ScheduleWakeup` each idle turn.
