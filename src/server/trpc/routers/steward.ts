@@ -478,6 +478,7 @@ export const stewardRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       await verifyStewardAssignment(ctx.db, ctx.session.user.id, input.showId);
+      await assertResultsNotLocked(ctx.db, input.showId);
 
       const now = new Date();
       try {
@@ -511,6 +512,7 @@ export const stewardRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       await verifyStewardAssignment(ctx.db, ctx.session.user.id, input.showId);
+      await assertResultsNotLocked(ctx.db, input.showId);
 
       try {
         await ctx.db.execute(sql`
@@ -657,6 +659,7 @@ export const stewardRouter = createTRPCRouter({
       }
 
       await verifyStewardAssignment(ctx.db, ctx.session.user.id, entry.showId);
+      await assertResultsNotLocked(ctx.db, entry.showId);
 
       const [updated] = await ctx.db
         .update(entries)
@@ -716,13 +719,17 @@ export const stewardRouter = createTRPCRouter({
         }
       }
 
-      // Upsert: remove existing same type for this show + dog, then insert
+      // A show-level achievement (BIS, BOB, a CC, …) can be held by only ONE
+      // dog per show, so assigning it must remove any previous holder — not
+      // just a prior assignment to the SAME dog. Deleting by (show, dog, type)
+      // let two different dogs both hold e.g. Best in Show (bug hunt #14).
+      // (Multi-breed per-breed BOB/CC scoping is separate future work —
+      // achievements aren't breed-scoped yet; current shows are single-breed.)
       await ctx.db
         .delete(achievements)
         .where(
           and(
             eq(achievements.showId, input.showId),
-            eq(achievements.dogId, input.dogId),
             eq(achievements.type, input.type)
           )
         );
