@@ -10,6 +10,7 @@ import {
 } from '../procedures';
 import { invitations, users, organisations, memberships } from '@/server/db/schema';
 import { generateToken, getBaseUrl, assignRole } from '@/server/lib/utils';
+import { verifyOrgAccess } from '@/server/trpc/verify-org-access';
 
 const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
@@ -26,6 +27,15 @@ export const invitationsRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      // SECURITY: org-scoped invites must target an organisation the caller
+      // belongs to. `send` is role-gated only, so without this a secretary of
+      // one club could pass another club's organisationId and have assignRole()
+      // forge an active membership for themselves there — exposing that club's
+      // entries, exhibitor PII and payout bank details. Admins manage every org.
+      if (input.organisationId && ctx.session.user.role !== 'admin') {
+        await verifyOrgAccess(ctx.db, ctx.session.user.id, input.organisationId);
+      }
+
       const token = generateToken();
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 14);
