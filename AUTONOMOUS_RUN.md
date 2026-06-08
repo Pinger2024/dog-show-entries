@@ -93,7 +93,11 @@ heavy-display): #8,#11,#12,#13,#16,#17,#19,#20,#21,#22,#26. Original detail in B
   DOCUMENTED for Michael + Amanda to decide, NOT applied unsupervised (UX is their call per philosophy).
 - DONE when: every secretary function audited + documented.
 
-## Phase 5 — Steward journey walkthrough + UX audit  (status: PENDING — queued by Michael 2026-06-08)
+## Phase 5 — Steward journey walkthrough + UX audit  (status: FUNCTIONAL PASS DONE 2026-06-08 — on-the-day visual feel still pending Chrome MCP)
+- Done: workflow woc17eyaz (18 agents) walked the whole steward event-day journey (21 procs + 3 pages + shell) across 5 steps → adversarial verify. 11 functional/security confirmed, 10 UX/journey, 2 refuted. Deliverable: STEWARD_JOURNEY_AUDIT.md.
+- Fixed 4 reachable/verified bugs → commit 13ce692 (+5 tests, suite 807): absent dog showing as winner on public results (HIGH), cross-club pre-judging leak (MED/security), unpublished-achievement wire over-fetch (MED), breed-scoped steward losing JH/breed-null classes (MED).
+- Documented: placement collision (HIGH, needs (showClassId,placement) index) + judge-approved-edit lock & resubmit (HIGH/MED, state-machine care) ranked first; breed-scoping write-enforcement (latent/all-breed-adjacent); SV-grade + award-eligibility server validation; 10 UX/journey gaps led by the end-of-day dead-end + unsequenced publish/submit steps.
+- Remaining: on-the-day mobile feel (taps/375px/dead-end+checklist screens) once Chrome MCP is back.
 - Put myself in the shoes of a steward at an event; walk the WHOLE steward journey end to end; assess how
   the process actually functions for them on the day (ring management, marking, calling classes, etc.).
 - Method: drive the real app via Chrome DevTools as a steward (steward assignment + steward shell), plus
