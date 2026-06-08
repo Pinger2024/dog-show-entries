@@ -25,6 +25,7 @@ vi.mock('@/server/services/stripe', () => ({
       })),
     },
   })),
+  cancelPaymentIntent: vi.fn(async () => {}),
   createPaymentIntent: vi.fn(async (amount: number, metadata: Record<string, string>) => ({
     id: `pi_test_${Math.random().toString(36).slice(2, 10)}`,
     client_secret: `pi_test_${Math.random().toString(36).slice(2, 10)}_secret_x`,

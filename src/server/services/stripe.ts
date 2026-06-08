@@ -34,6 +34,20 @@ export async function createPaymentIntent(
 }
 
 /**
+ * Cancel an open PaymentIntent — used when abandoning a stale checkout so the
+ * customer can't still complete payment for an order we've already cancelled
+ * (bug hunt #3). Safe to call on an intent that is already succeeded/cancelled/
+ * expired: Stripe rejects those and we swallow the error (nothing to undo).
+ */
+export async function cancelPaymentIntent(paymentIntentId: string): Promise<void> {
+  try {
+    await getStripe().paymentIntents.cancel(paymentIntentId);
+  } catch (err) {
+    console.warn(`[stripe] could not cancel PaymentIntent ${paymentIntentId}:`, err);
+  }
+}
+
+/**
  * Remi's handling fee model — £1 flat + 1% of the order subtotal, applied
  * per order and paid by the exhibitor (visible line at checkout).
  *

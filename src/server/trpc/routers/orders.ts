@@ -25,6 +25,7 @@ import {
 } from '@/server/db/schema';
 import {
   createPaymentIntent,
+  cancelPaymentIntent,
   calculatePlatformFee,
 } from '@/server/services/stripe';
 import {
@@ -324,7 +325,7 @@ export const ordersRouter = createTRPCRouter({
           eq(orders.exhibitorId, ctx.session.user.id),
           inArray(orders.status, ['pending_payment', 'failed'])
         ),
-        columns: { id: true },
+        columns: { id: true, stripePaymentIntentId: true },
       });
 
       if (staleOrders.length > 0) {
@@ -345,6 +346,14 @@ export const ordersRouter = createTRPCRouter({
           .update(orders)
           .set({ status: 'cancelled' })
           .where(inArray(orders.id, staleOrderIds));
+        // Cancel the abandoned orders' open Stripe PaymentIntents so a checkout
+        // still open in another tab (or a delayed/async payment method) can't
+        // charge the customer for an order we've just cancelled (bug hunt #3).
+        for (const o of staleOrders) {
+          if (o.stripePaymentIntentId) {
+            await cancelPaymentIntent(o.stripePaymentIntentId);
+          }
+        }
       }
 
       // WUSV / regional rule (Amanda 2026-05-26): a dog can be entered
