@@ -365,6 +365,43 @@ describe('POST /api/webhooks/stripe — entry-edit UPGRADE (deferred adjustment)
     expect(applied[0]?.userId).toBe(exhibitor.id);
   });
 
+  it('applies the upgrade when a declined card is retried on the same PaymentIntent (bug #9)', async () => {
+    const { exhibitor, c1, c2, entry, order } = await entryReadyToUpgrade();
+    vi.mocked(stripeService.createPaymentIntent).mockClear();
+
+    await createTestCaller(exhibitor).entries.update({ id: entry.id, classIds: [c1.id, c2.id] });
+    const adjPayment = await testDb.query.payments.findFirst({ where: eq(payments.entryId, entry.id) });
+    const intentId = adjPayment!.stripePaymentId!;
+    const metadata = vi.mocked(stripeService.createPaymentIntent).mock.calls.at(-1)![1];
+
+    // 1. Card declined first — payment row flips to 'failed', upgrade NOT applied.
+    injectStripeEvent({
+      type: 'payment_intent.payment_failed',
+      data: { object: { id: intentId, metadata } },
+    });
+    await stripeWebhook(buildStripeWebhookRequest() as never);
+
+    const failedPay = await testDb.query.payments.findFirst({ where: eq(payments.stripePaymentId, intentId) });
+    expect(failedPay?.status).toBe('failed');
+    const stillOld = await testDb.query.entryClasses.findMany({ where: eq(entryClasses.entryId, entry.id) });
+    expect(stillOld.map((r) => r.showClassId)).toEqual([c1.id]); // not applied yet
+
+    // 2. Customer retries the SAME PaymentIntent and it succeeds — the upgrade
+    //    must now apply, even though the payment row was 'failed'.
+    injectStripeEvent({
+      type: 'payment_intent.succeeded',
+      data: { object: { id: intentId, metadata } },
+    });
+    await stripeWebhook(buildStripeWebhookRequest() as never);
+
+    const after = await testDb.query.entryClasses.findMany({ where: eq(entryClasses.entryId, entry.id) });
+    expect(after.map((r) => r.showClassId).sort()).toEqual([c1.id, c2.id].sort());
+    const updatedEntry = await testDb.query.entries.findFirst({ where: eq(entries.id, entry.id) });
+    expect(updatedEntry?.totalFee).toBe(1200);
+    const updatedOrder = await testDb.query.orders.findFirst({ where: eq(orders.id, order.id) });
+    expect(updatedOrder?.totalAmount).toBe(1200);
+  });
+
   it('does not resurrect dropped classes when the original adjustment event is replayed after a later downgrade', async () => {
     const { exhibitor, c1, c2, entry } = await entryReadyToUpgrade();
     vi.mocked(stripeService.createPaymentIntent).mockClear();

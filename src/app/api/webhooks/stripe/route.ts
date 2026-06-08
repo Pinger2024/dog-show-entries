@@ -152,7 +152,12 @@ export async function POST(request: NextRequest) {
           where: eq(payments.stripePaymentId, paymentIntent.id),
           columns: { status: true },
         });
-        if (adjPayment?.status === 'pending') {
+        // Apply while the adjustment payment is not yet succeeded — i.e.
+        // 'pending', or 'failed' from an earlier card decline that the customer
+        // then retried on the SAME PaymentIntent (bug hunt #9). Once 'succeeded'
+        // the change has already landed, so a replay correctly skips (and won't
+        // resurrect classes the exhibitor has since dropped).
+        if (adjPayment != null && adjPayment.status !== 'succeeded') {
           const pendingClassIds = paymentIntent.metadata.pendingClassIds.split(',').filter(Boolean);
           const pendingPerClassFees = (paymentIntent.metadata.pendingPerClassFees ?? '')
             .split(',')
