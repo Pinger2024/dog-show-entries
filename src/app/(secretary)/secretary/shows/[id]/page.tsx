@@ -67,6 +67,7 @@ import { PhaseActionPanel } from './_components/phase-action-panel';
 import { SetupWizard } from './_components/setup-wizard';
 import { ClassManager, BulkClassCreator, AddIndividualClass, VarietyClassQuickAdd } from './_components/class-manager';
 import { SundryItemManager } from './_components/sundry-item-manager';
+import { CloseDateField } from './_components/close-date-field';
 import { DiscountsSection } from './_components/discounts-section';
 
 export default function OverviewPage() {
@@ -909,36 +910,22 @@ function EditShowDetailsDialog({
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="edit-entry-close">Entry Close Date</Label>
-                <Input
+                <CloseDateField
                   id="edit-entry-close"
-                  type="datetime-local"
                   value={entryCloseDate}
-                  max={startDate ? `${startDate}T00:00` : undefined}
-                  onChange={(e) => {
-                    const newClose = e.target.value;
-                    if (newClose && startDate && new Date(newClose) >= new Date(startDate)) {
-                      toast.error('Entry close date must be before the show date');
-                      return;
-                    }
-                    setEntryCloseDate(newClose);
-                  }}
+                  onChange={setEntryCloseDate}
+                  disableBefore={new Date()}
+                  disableAfter={startDate ? new Date(startDate) : undefined}
                 />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="edit-postal-close">Postal Close Date</Label>
-                <Input
+                <CloseDateField
                   id="edit-postal-close"
-                  type="datetime-local"
                   value={postalCloseDate}
-                  max={startDate ? `${startDate}T00:00` : undefined}
-                  onChange={(e) => {
-                    const newClose = e.target.value;
-                    if (newClose && startDate && new Date(newClose) >= new Date(startDate)) {
-                      toast.error('Postal close date must be before the show date');
-                      return;
-                    }
-                    setPostalCloseDate(newClose);
-                  }}
+                  onChange={setPostalCloseDate}
+                  disableBefore={new Date()}
+                  disableAfter={startDate ? new Date(startDate) : undefined}
                 />
               </div>
             </div>

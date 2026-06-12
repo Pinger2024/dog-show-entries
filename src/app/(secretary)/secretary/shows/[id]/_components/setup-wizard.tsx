@@ -42,6 +42,7 @@ import { SectionHeading, InlineHelp } from './section-help';
 import { JudgesSection } from './judge-section';
 import { ScheduleSettingsForm } from './schedule-settings-form';
 import { SundryItemManager } from './sundry-item-manager';
+import { CloseDateField } from './close-date-field';
 
 type Show = NonNullable<RouterOutputs['shows']['getById']>;
 
@@ -823,17 +824,17 @@ function StepDetails({
             tip: 'You can extend a close date later if you need more entries. Just come back and change it.',
           }}
         />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3">
           <div className="space-y-1.5">
             <Label htmlFor="wiz-close-date" className="text-xs">
               Entry close date
             </Label>
-            <Input
+            <CloseDateField
               id="wiz-close-date"
-              type="datetime-local"
-              className="min-h-[2.75rem]"
               value={entryCloseDate}
-              onChange={(e) => setEntryCloseDate(e.target.value)}
+              onChange={setEntryCloseDate}
+              disableBefore={new Date()}
+              disableAfter={show.startDate ? new Date(show.startDate) : undefined}
             />
           </div>
           {show.acceptsPostalEntries && (
@@ -841,12 +842,12 @@ function StepDetails({
               <Label htmlFor="wiz-postal-close" className="text-xs">
                 Postal close date
               </Label>
-              <Input
+              <CloseDateField
                 id="wiz-postal-close"
-                type="datetime-local"
-                className="min-h-[2.75rem]"
                 value={postalCloseDate}
-                onChange={(e) => setPostalCloseDate(e.target.value)}
+                onChange={setPostalCloseDate}
+                disableBefore={new Date()}
+                disableAfter={show.startDate ? new Date(show.startDate) : undefined}
               />
             </div>
           )}
