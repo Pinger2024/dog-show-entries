@@ -40,7 +40,11 @@ type Section = {
 };
 
 const BASE_SECTIONS: Section[] = [
-  { path: '', label: 'Secretary Tools', icon: LayoutDashboard, exact: true },
+  // "Secretary Tools" was a meaningless label for the show overview — renamed
+  // to "Overview" (2026-06-12). Other relabels (Financial/Reports/Catalogue
+  // Settings) are a pending taxonomy decision with Mandy — left as-is here so
+  // we don't move furniture she's already learned.
+  { path: '', label: 'Overview', icon: LayoutDashboard, exact: true },
   { path: '/checklist', label: 'Show Checklist', icon: ListChecks, hasBadge: true },
   { path: '/schedule', label: 'Schedule', icon: CalendarDays },
   { path: '/entries', label: 'Entries', icon: Ticket },

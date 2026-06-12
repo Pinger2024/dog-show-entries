@@ -66,14 +66,22 @@ export default function SecretaryError({
         <main className="flex flex-1 items-center justify-center px-4">
           <div className="w-full max-w-md text-center">
             <div className="text-5xl font-bold text-muted-foreground/30">!</div>
-            <h1 className="mt-4 text-xl font-semibold">Something went wrong</h1>
+            <h1 className="mt-4 text-xl font-semibold">Something went wrong on our side</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              An unexpected error occurred. Try again, or go back to your shows.
+              This isn&rsquo;t anything you did. Your show information is safe.
+              Please try again, or head back to your shows.
             </p>
             {error.message && (
-              <p className="mt-4 break-all rounded bg-muted px-3 py-2 font-mono text-[0.6875rem] text-muted-foreground">
-                {error.message}
-              </p>
+              // Technical detail tucked away — a raw error message is alarming
+              // to a non-technical secretary, but support still needs it.
+              <details className="mt-4 text-left">
+                <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                  Show technical details
+                </summary>
+                <p className="mt-2 break-all rounded bg-muted px-3 py-2 font-mono text-[0.6875rem] text-muted-foreground">
+                  {error.message}
+                </p>
+              </details>
             )}
             <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
               <button

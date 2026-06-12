@@ -32,6 +32,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useShowId } from '../_lib/show-context';
 
@@ -69,6 +79,7 @@ export default function AdvertsPage() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Advert | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
 
   const refresh = () => utils.secretary.getCatalogueAdverts.invalidate({ showId });
 
@@ -97,13 +108,14 @@ export default function AdvertsPage() {
   };
 
   const onDelete = async (id: string) => {
-    if (!confirm('Delete this advert?')) return;
     try {
       await deleteMutation.mutateAsync({ id, showId });
       await refresh();
       toast.success('Advert deleted');
     } catch {
       toast.error('Failed to delete advert');
+    } finally {
+      setPendingDelete(null);
     }
   };
 
@@ -261,7 +273,7 @@ export default function AdvertsPage() {
                         size="sm"
                         variant="ghost"
                         className="size-8 p-0 text-destructive hover:text-destructive"
-                        onClick={() => onDelete(advert.id)}
+                        onClick={() => setPendingDelete(advert.id)}
                       >
                         <Trash2 className="size-4" />
                       </Button>
@@ -285,6 +297,30 @@ export default function AdvertsPage() {
         onSave={onSave}
         saving={upsertMutation.isPending}
       />
+
+      <AlertDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove this advert?</AlertDialogTitle>
+            <AlertDialogDescription>
+              It won&rsquo;t appear in your catalogue or schedule any more. You
+              can always add it back later.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep it</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => pendingDelete && onDelete(pendingDelete)}
+            >
+              Remove advert
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
