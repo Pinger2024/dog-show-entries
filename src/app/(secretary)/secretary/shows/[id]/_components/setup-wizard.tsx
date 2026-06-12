@@ -63,6 +63,51 @@ interface SetupWizardProps {
   show: Show;
 }
 
+/** Circular progress ring for the setup hero. */
+function ProgressRing({
+  pct,
+  done,
+  total,
+  allDone,
+}: {
+  pct: number;
+  done: number;
+  total: number;
+  allDone: boolean;
+}) {
+  const r = 26;
+  const circ = 2 * Math.PI * r;
+  const offset = circ * (1 - pct / 100);
+  return (
+    <div className="relative grid size-[68px] shrink-0 place-items-center">
+      <svg className="size-[68px] -rotate-90" viewBox="0 0 64 64">
+        <circle cx="32" cy="32" r={r} fill="none" stroke="currentColor" strokeWidth="5" className="text-primary/10" />
+        <circle
+          cx="32"
+          cy="32"
+          r={r}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="5"
+          strokeLinecap="round"
+          strokeDasharray={circ}
+          strokeDashoffset={offset}
+          className={cn('transition-all duration-700', allDone ? 'text-emerald-500' : 'text-primary')}
+        />
+      </svg>
+      <div className="absolute inset-0 grid place-items-center">
+        {allDone ? (
+          <Check className="size-6 text-emerald-500" />
+        ) : (
+          <span className="font-serif text-base font-semibold leading-none text-foreground">
+            {done}<span className="text-xs text-muted-foreground">/{total}</span>
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function SetupWizard({ showId, show }: SetupWizardProps) {
   // ── All hooks first (Rules of Hooks!) ──────────────
 
@@ -132,115 +177,93 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
     }
   }
 
+  const pct = Math.round((completedCount / STEPS.length) * 100);
+  const allDone = completedCount >= STEPS.length;
+
   return (
-    <div className="space-y-4">
-      {/* Intro banner — only shown when not all steps are complete */}
-      {completedCount < STEPS.length && (
-        <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
-          <p className="text-sm font-medium text-primary">
-            Let&apos;s get your show ready!
-          </p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Complete these {STEPS.length} steps to open entries. You can do them in any order.
-          </p>
-          <div className="mt-2">
-            <InlineHelp
-              label="New to this? Read the quick guide"
-              content={{
-                what: 'These steps cover everything we need before exhibitors can enter your show. Each one saves on its own and you can come back to any step at any time. When all five are done, you can open entries to the public.',
-                todo: [
-                  'Work through the steps in order if you like, or click any step to jump to it.',
-                  'Each step has its own Help button (the small question mark next to each section) if you get stuck.',
-                  'Nothing goes live until you press the green Open Entries button at the end.',
-                ],
-                benefit: 'Running a show used to mean a folder full of paper forms, a spreadsheet of entries, several trips to the printer, late nights with the calculator, and a cardboard box of cash on the day. With us, all of that is one online form, one button to open entries, and one click to print whatever you need. Your evenings are yours again.',
-                tip: 'You can leave this page and come back later. Your progress is saved automatically.',
-              }}
-            />
+    <div className="space-y-5">
+      {/* ── Progress hero ───────────────────────────────────────────
+          A designed, elevated surface — gradient depth, a progress ring,
+          confident copy — so the setup screen feels like a product, not a
+          form. */}
+      <div className="relative overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-primary/[0.07] via-card to-card p-5 shadow-[0_1px_0_rgba(255,255,255,0.6)_inset,0_18px_40px_-28px_rgba(20,60,40,0.45)] sm:p-6">
+        {/* soft decorative glow */}
+        <div className="pointer-events-none absolute -right-16 -top-20 size-56 rounded-full bg-primary/10 blur-3xl" />
+        <div className="relative flex items-center gap-4 sm:gap-5">
+          <ProgressRing pct={pct} done={completedCount} total={STEPS.length} allDone={allDone} />
+          <div className="min-w-0 flex-1">
+            <h2 className="font-serif text-xl font-semibold leading-tight text-foreground sm:text-2xl">
+              {allDone ? 'Your show is ready 🎉' : 'Let’s get your show ready'}
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {allDone
+                ? 'Everything’s done — open entries whenever you like.'
+                : `${STEPS.length - completedCount} ${STEPS.length - completedCount === 1 ? 'step' : 'steps'} to go before you can open entries. Do them in any order.`}
+            </p>
+            {!allDone && (
+              <div className="mt-2">
+                <InlineHelp
+                  label="New to this? Read the quick guide"
+                  content={{
+                    what: 'These steps cover everything we need before exhibitors can enter your show. Each one saves on its own and you can come back to any step at any time. When all five are done, you can open entries to the public.',
+                    todo: [
+                      'Work through the steps in order if you like, or click any step to jump to it.',
+                      'Each step has its own Help button (the small question mark next to each section) if you get stuck.',
+                      'Nothing goes live until you press the green Open Entries button at the end.',
+                    ],
+                    benefit: 'Running a show used to mean a folder full of paper forms, a spreadsheet of entries, several trips to the printer, late nights with the calculator, and a cardboard box of cash on the day. With us, all of that is one online form, one button to open entries, and one click to print whatever you need. Your evenings are yours again.',
+                    tip: 'You can leave this page and come back later. Your progress is saved automatically.',
+                  }}
+                />
+              </div>
+            )}
           </div>
         </div>
-      )}
 
-      {/* Mobile: text + progress bar */}
-      <div className="sm:hidden">
-        <div className="flex items-center justify-between text-sm">
-          <span className="font-medium">
-            Step {currentStepIndex + 1} of {STEPS.length}:{' '}
-            {STEPS[currentStepIndex].label}
-          </span>
-          <Badge variant="secondary" className="text-xs">
-            {completedCount}/{STEPS.length}
-          </Badge>
-        </div>
-        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+        {/* Step rail — clickable pills with a connecting track */}
+        <div className="relative mt-5">
+          {/* track */}
+          <div className="absolute left-0 right-0 top-4 h-0.5 bg-border/70" aria-hidden />
           <div
-            className="h-full rounded-full bg-primary transition-all duration-300"
-            style={{
-              width: `${((completedCount) / STEPS.length) * 100}%`,
-            }}
+            className="absolute left-0 top-4 h-0.5 bg-emerald-500 transition-all duration-500"
+            style={{ width: `${STEPS.length > 1 ? (completedCount / (STEPS.length - 1)) * 100 : 0}%`, maxWidth: '100%' }}
+            aria-hidden
           />
-        </div>
-      </div>
-
-      {/* Desktop: numbered circles connected by lines */}
-      <div className="hidden sm:block">
-        <div className="flex items-center justify-between">
-          {STEPS.map((step, i) => {
-            const isComplete = stepComplete(step.id);
-            const isCurrent = step.id === activeStep;
-
-            return (
-              <div key={step.id} className="flex flex-1 items-center">
-                {/* Circle + label */}
+          <div className="relative flex items-start justify-between">
+            {STEPS.map((step, i) => {
+              const isComplete = stepComplete(step.id);
+              const isCurrent = step.id === activeStep;
+              return (
                 <button
+                  key={step.id}
                   type="button"
                   onClick={() => setActiveStep(step.id)}
-                  className="flex flex-col items-center gap-1.5 min-h-[2.75rem]"
+                  className="group flex flex-1 flex-col items-center gap-1.5"
                 >
-                  <div
-                    className={cn(
-                      'flex size-8 items-center justify-center rounded-full text-xs font-semibold transition-colors',
-                      isComplete
-                        ? 'bg-emerald-500 text-white'
-                        : isCurrent
-                          ? 'ring-2 ring-primary bg-background text-primary'
-                          : 'bg-muted text-muted-foreground',
-                    )}
-                  >
-                    {isComplete ? (
-                      <Check className="size-4" />
-                    ) : (
-                      i + 1
-                    )}
-                  </div>
                   <span
                     className={cn(
-                      'text-[11px] font-medium leading-tight text-center',
-                      isCurrent
-                        ? 'text-primary'
-                        : isComplete
-                          ? 'text-muted-foreground'
-                          : 'text-muted-foreground/60',
+                      'flex size-8 items-center justify-center rounded-full text-xs font-semibold ring-4 ring-card transition-all',
+                      isComplete
+                        ? 'bg-emerald-500 text-white shadow-sm'
+                        : isCurrent
+                          ? 'bg-primary text-primary-foreground shadow-md shadow-primary/30 scale-110'
+                          : 'bg-muted text-muted-foreground group-hover:bg-muted-foreground/20',
+                    )}
+                  >
+                    {isComplete ? <Check className="size-4" /> : i + 1}
+                  </span>
+                  <span
+                    className={cn(
+                      'hidden text-[11px] font-medium leading-tight sm:block',
+                      isCurrent ? 'text-primary' : isComplete ? 'text-foreground/70' : 'text-muted-foreground/60',
                     )}
                   >
                     {step.shortLabel}
                   </span>
                 </button>
-
-                {/* Connecting line */}
-                {i < STEPS.length - 1 && (
-                  <div
-                    className={cn(
-                      'mx-2 h-0.5 flex-1',
-                      stepComplete(STEPS[i].id)
-                        ? 'bg-emerald-500'
-                        : 'bg-muted',
-                    )}
-                  />
-                )}
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -250,16 +273,24 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
         const isCurrent = step.id === activeStep;
 
         return (
-          <Card key={step.id} className="overflow-hidden">
+          <Card
+            key={step.id}
+            className={cn(
+              'overflow-hidden rounded-2xl border transition-all duration-300',
+              isCurrent
+                ? 'border-primary/30 shadow-[0_18px_40px_-30px_rgba(20,60,40,0.5)] ring-1 ring-primary/10'
+                : 'border-border/60 shadow-sm hover:border-border hover:shadow-md',
+            )}
+          >
             {/* Step header — always visible */}
             <button
               type="button"
               onClick={() => setActiveStep(step.id)}
               className={cn(
-                'flex w-full items-center gap-3 px-4 py-3 text-left transition-colors min-h-[2.75rem]',
+                'flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors min-h-[2.75rem]',
                 isCurrent
-                  ? 'bg-primary/[0.03]'
-                  : 'hover:bg-muted/50',
+                  ? 'bg-gradient-to-r from-primary/[0.06] to-transparent'
+                  : 'hover:bg-muted/40',
               )}
             >
               {/* Step number/check circle */}
