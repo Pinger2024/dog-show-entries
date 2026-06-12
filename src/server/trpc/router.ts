@@ -3,10 +3,8 @@ import { showsRouter } from './routers/shows';
 import { dogsRouter } from './routers/dogs';
 import { entriesRouter } from './routers/entries';
 import { usersRouter } from './routers/users';
-import { organisationsRouter } from './routers/organisations';
 import { breedsRouter } from './routers/breeds';
 import { secretaryRouter } from './routers/secretary';
-import { paymentsRouter } from './routers/payments';
 import { ordersRouter } from './routers/orders';
 import { devRouter } from './routers/dev';
 import { feedbackRouter } from './routers/feedback';
@@ -30,10 +28,8 @@ export const appRouter = createTRPCRouter({
   dogs: dogsRouter,
   entries: entriesRouter,
   users: usersRouter,
-  organisations: organisationsRouter,
   breeds: breedsRouter,
   secretary: secretaryRouter,
-  payments: paymentsRouter,
   orders: ordersRouter,
   dev: devRouter,
   feedback: feedbackRouter,

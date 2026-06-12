@@ -4,6 +4,7 @@ import { and, eq, isNull, inArray, desc, sql, asc } from 'drizzle-orm';
 import { differenceInMonths, differenceInWeeks } from 'date-fns';
 import { protectedProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
+import { publicOrgColumns } from '../public-org-columns';
 import {
   orders,
   entries,
@@ -800,7 +801,7 @@ export const ordersRouter = createTRPCRouter({
         with: {
           show: {
             with: {
-              organisation: true,
+              organisation: { columns: publicOrgColumns },
               venue: true,
             },
           },

@@ -81,6 +81,16 @@ const statusLabels: Record<string, string> = {
   cancelled: 'Cancelled',
 };
 
+/** Statuses the public list endpoint accepts — draft/cancelled shows are
+ *  never publicly listable, so they aren't offered as filters either. */
+const statusFilterOptions = [
+  'published',
+  'entries_open',
+  'entries_closed',
+  'in_progress',
+  'completed',
+] as const;
+
 const radiusOptions = [
   { value: 25, label: '25 miles' },
   { value: 50, label: '50 miles' },
@@ -438,14 +448,7 @@ export default function ShowsList() {
           : undefined,
       status:
         status !== 'all'
-          ? (status as
-              | 'draft'
-              | 'published'
-              | 'entries_open'
-              | 'entries_closed'
-              | 'in_progress'
-              | 'completed'
-              | 'cancelled')
+          ? (status as (typeof statusFilterOptions)[number])
           : undefined,
       search: debouncedSearch || undefined,
       breedId: breedId !== 'all' ? breedId : undefined,
@@ -600,9 +603,9 @@ export default function ShowsList() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Statuses</SelectItem>
-              {Object.entries(statusLabels).map(([value, label]) => (
+              {statusFilterOptions.map((value) => (
                 <SelectItem key={value} value={value}>
-                  {label}
+                  {statusLabels[value]}
                 </SelectItem>
               ))}
             </SelectContent>

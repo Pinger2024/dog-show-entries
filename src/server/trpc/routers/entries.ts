@@ -8,6 +8,7 @@ import {
 } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { verifyShowAccess } from '../verify-show-access';
+import { publicOrgColumns } from '../public-org-columns';
 import {
   entries,
   entryClasses,
@@ -387,7 +388,7 @@ export const entriesRouter = createTRPCRouter({
         with: {
           show: {
             with: {
-              organisation: true,
+              organisation: { columns: publicOrgColumns },
               venue: true,
             },
           },
@@ -475,7 +476,7 @@ export const entriesRouter = createTRPCRouter({
         with: {
           show: {
             with: {
-              organisation: true,
+              organisation: { columns: publicOrgColumns },
               venue: true,
             },
           },

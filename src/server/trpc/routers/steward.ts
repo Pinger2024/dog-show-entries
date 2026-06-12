@@ -22,6 +22,7 @@ import {
   memberships,
 } from '@/server/db/schema';
 import { isUuid } from '@/lib/slugify';
+import { publicOrgColumns } from '../public-org-columns';
 import { sendJudgeApprovalRequestEmail } from '@/server/services/email';
 
 /** Resolve a show slug or UUID to a UUID */
@@ -142,7 +143,7 @@ export const stewardRouter = createTRPCRouter({
       with: {
         show: {
           with: {
-            organisation: true,
+            organisation: { columns: publicOrgColumns },
             venue: true,
           },
         },
@@ -913,7 +914,7 @@ export const stewardRouter = createTRPCRouter({
       const showId = await resolveShowId(ctx.db, input.showId);
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, showId),
-        with: { organisation: true, venue: true },
+        with: { organisation: { columns: publicOrgColumns }, venue: true },
       });
 
       if (!show) {

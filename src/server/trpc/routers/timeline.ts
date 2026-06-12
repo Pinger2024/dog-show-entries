@@ -68,9 +68,13 @@ export const timelineRouter = createTRPCRouter({
         },
       });
 
-      // Only include entries that have at least one result
+      // Only include entries with at least one PUBLISHED result. This is a
+      // public surface: keyed-in-but-unreleased results must not appear
+      // before the secretary publishes them — same gate as getLiveResults.
       const showResults = dogEntries
-        .filter((e) => e.entryClasses.some((ec) => ec.result))
+        .filter((e) =>
+          e.entryClasses.some((ec) => ec.result && ec.result.publishedAt != null)
+        )
         .map((entry) => ({
           itemType: 'show_result' as const,
           id: `result-${entry.id}`,
@@ -83,7 +87,7 @@ export const timelineRouter = createTRPCRouter({
             showType: entry.show.showType,
           },
           classes: entry.entryClasses
-            .filter((ec) => ec.result)
+            .filter((ec) => ec.result && ec.result.publishedAt != null)
             .map((ec) => ({
               className: ec.showClass.classDefinition.name,
               classNumber: ec.showClass.classNumber,

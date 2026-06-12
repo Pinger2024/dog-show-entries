@@ -4,6 +4,7 @@ import { and, eq, isNull, gte, inArray, sql, desc } from 'drizzle-orm';
 import { Resend } from 'resend';
 import { protectedProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
+import { publicOrgColumns } from '../public-org-columns';
 import {
   users,
   entries,
@@ -256,7 +257,7 @@ export const usersRouter = createTRPCRouter({
       with: {
         show: {
           with: {
-            organisation: true,
+            organisation: { columns: publicOrgColumns },
           },
         },
         dog: {

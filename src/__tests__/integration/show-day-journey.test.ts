@@ -54,7 +54,7 @@ describe('end-to-end show day', () => {
     // the secretary UI does (status update outside this procedure).
     await setShowStatus(show.id, 'entries_open');
 
-    // ── 2. Exhibitor enters their dog and gets a payment intent ─────
+    // ── 2. Exhibitor enters their dog through the live checkout ─────
     const exhibitor = await makeUser({ role: 'exhibitor' });
     const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
     const exhibitorCaller = createTestCaller(exhibitor);
@@ -63,22 +63,23 @@ describe('end-to-end show day', () => {
     expect(showClasses).toHaveLength(1);
     const classId = showClasses[0]!.id;
 
-    const intent = await exhibitorCaller.payments.createIntent({
+    const checkout = await exhibitorCaller.orders.checkout({
       showId: show.id,
-      dogId: dog.id,
-      classIds: [classId],
+      entries: [{ entryType: 'standard', dogId: dog.id, classIds: [classId], isNfc: false }],
     });
-    expect(intent.amount).toBe(1000);
+    expect(checkout.totalAmount).toBe(1000);
+    expect(checkout.freeEntry).toBe(false);
 
-    let entry = await testDb.query.entries.findFirst({ where: eq(entries.id, intent.entryId) });
+    let entry = await testDb.query.entries.findFirst({ where: eq(entries.orderId, checkout.orderId) });
     expect(entry?.status).toBe('pending');
+    const entryId = entry!.id;
 
     // ── 3. Stripe webhook confirms the payment ─────────────────────
-    // Use the REAL stripe_payment_id that createIntent stored on the payment row,
+    // Use the REAL stripe_payment_id that checkout stored on the payment row,
     // otherwise the webhook's "update payments where stripe_payment_id = …" matches
     // zero rows and the payment-status side of the assertion silently passes.
     const pendingPayment = await testDb.query.payments.findFirst({
-      where: eq(payments.entryId, intent.entryId),
+      where: eq(payments.orderId, checkout.orderId),
     });
     expect(pendingPayment?.stripePaymentId).toBeTruthy();
 
@@ -87,7 +88,7 @@ describe('end-to-end show day', () => {
       data: {
         object: {
           id: pendingPayment!.stripePaymentId,
-          metadata: { entryId: intent.entryId },
+          metadata: { orderId: checkout.orderId },
         },
       },
     });
@@ -95,7 +96,7 @@ describe('end-to-end show day', () => {
     const webhookRes = await stripeWebhook(buildStripeWebhookRequest() as never);
     expect(webhookRes.status).toBe(200);
 
-    entry = await testDb.query.entries.findFirst({ where: eq(entries.id, intent.entryId) });
+    entry = await testDb.query.entries.findFirst({ where: eq(entries.id, entryId) });
     expect(entry?.status).toBe('confirmed');
     const settledPayment = await testDb.query.payments.findFirst({
       where: eq(payments.id, pendingPayment!.id),
@@ -182,10 +183,9 @@ describe('end-to-end show day', () => {
     const dog = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
     const exhibitorCaller = createTestCaller(exhibitor);
     const aClasses = await secretaryCaller.shows.getClasses({ showId: showA.id });
-    await exhibitorCaller.payments.createIntent({
+    await exhibitorCaller.orders.checkout({
       showId: showA.id,
-      dogId: dog.id,
-      classIds: [aClasses[0]!.id],
+      entries: [{ entryType: 'standard', dogId: dog.id, classIds: [aClasses[0]!.id], isNfc: false }],
     });
 
     const showBEntries = await testDb.query.entries.findMany({ where: eq(entries.showId, showB.id) });

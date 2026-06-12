@@ -7,7 +7,7 @@ import { dogs, dogOwners, dogTitles, dogPhotos, users, entries, entryClasses, sh
 import { deleteFromR2 } from '@/server/services/storage';
 import { scrapeKcDog, searchKcDogs, fetchKcDogProfile } from '@/server/services/firecrawl';
 import { isCcType, isRccType } from '@/lib/placements';
-import { isAgeEligibleOnShowDay } from '@/lib/date-utils';
+import { isAgeEligibleOnShowDay, isShowDayReached } from '@/lib/date-utils';
 
 /**
  * Recommend the best class for a dog based on age eligibility first,
@@ -152,21 +152,38 @@ export const dogsRouter = createTRPCRouter({
         },
       });
 
-      // Build show history grouped by show
-      const showHistory = dogEntries
+      // Pre-judging privacy: entered dogs must never be visible on a public
+      // surface before show day — a judge could look up which dogs are entered
+      // in their upcoming show. Only the dog's owners see future entries.
+      const viewerId = ctx.session?.user?.id;
+      const viewerIsOwner =
+        !!viewerId &&
+        (dog.ownerId === viewerId ||
+          dog.owners.some((o) => o.userId === viewerId));
+      const visibleEntries = viewerIsOwner
+        ? dogEntries
+        : dogEntries.filter((entry) => isShowDayReached(entry.show.startDate));
+
+      // Build show history grouped by show. Result details are gated on
+      // publication (results.publishedAt) — keyed-in-but-unreleased results
+      // must not appear here before the steward/secretary publishes them.
+      const showHistory = visibleEntries
         .map((entry) => ({
           showId: entry.show.id,
           showSlug: entry.show.slug,
           showName: entry.show.name,
           showDate: entry.show.startDate,
           showType: entry.show.showType,
-          classes: entry.entryClasses.map((ec) => ({
-            className: ec.showClass.classDefinition.name,
-            classNumber: ec.showClass.classNumber,
-            placement: ec.result?.placement ?? null,
-            specialAward: ec.result?.specialAward ?? null,
-            critiqueText: ec.result?.critiqueText ?? null,
-          })),
+          classes: entry.entryClasses.map((ec) => {
+            const published = viewerIsOwner || ec.result?.publishedAt != null;
+            return {
+              className: ec.showClass.classDefinition.name,
+              classNumber: ec.showClass.classNumber,
+              placement: published ? ec.result?.placement ?? null : null,
+              specialAward: published ? ec.result?.specialAward ?? null : null,
+              critiqueText: published ? ec.result?.critiqueText ?? null : null,
+            };
+          }),
         }))
         .sort((a, b) => b.showDate.localeCompare(a.showDate));
 
@@ -210,7 +227,11 @@ export const dogsRouter = createTRPCRouter({
           ],
         },
         titles: dog.titles,
-        achievements: dog.achievements,
+        // Same publication gate as results: achievements keyed in on show day
+        // stay hidden until published (owners see their own immediately).
+        achievements: viewerIsOwner
+          ? dog.achievements
+          : dog.achievements.filter((a) => a.publishedAt != null),
         showHistory,
         stats: {
           totalShows,

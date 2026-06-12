@@ -28,6 +28,7 @@ import {
   showDiscountGroups,
 } from '@/server/db/schema';
 import { verifyShowAccess } from '../verify-show-access';
+import { publicOrgColumns } from '../public-org-columns';
 import { isUuid, generateShowSlug } from '@/lib/slugify';
 import { hasUserPurchasedCatalogue, CATALOGUE_AVAILABLE_STATUSES, CATALOGUE_NAME_PATTERN } from '@/lib/catalogue-utils';
 import { isShowDayReached } from '@/lib/date-utils';
@@ -57,15 +58,16 @@ export const showsRouter = createTRPCRouter({
             'championship',
           ])
           .optional(),
+        // draft/cancelled deliberately absent: this is a public listing, and
+        // a club's unannounced draft shows (incl. secretary contact details)
+        // must never be enumerable by other clubs or the public.
         status: z
           .enum([
-            'draft',
             'published',
             'entries_open',
             'entries_closed',
             'in_progress',
             'completed',
-            'cancelled',
           ])
           .optional(),
         search: z.string().max(200).optional(),
@@ -196,7 +198,7 @@ export const showsRouter = createTRPCRouter({
       const items = await ctx.db.query.shows.findMany({
         where,
         with: {
-          organisation: true,
+          organisation: { columns: publicOrgColumns },
           venue: true,
         },
         orderBy: [asc(statusPriority), asc(dateSort)],
@@ -229,7 +231,7 @@ export const showsRouter = createTRPCRouter({
           ? eq(shows.id, input.id)
           : eq(shows.slug, input.id),
         with: {
-          organisation: true,
+          organisation: { columns: publicOrgColumns },
           venue: true,
           breed: true,
           discountGroups: true,
@@ -349,7 +351,7 @@ export const showsRouter = createTRPCRouter({
       const items = await ctx.db.query.shows.findMany({
         where,
         with: {
-          organisation: true,
+          organisation: { columns: publicOrgColumns },
           venue: true,
         },
         orderBy: [asc(shows.startDate)],
