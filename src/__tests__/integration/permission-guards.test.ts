@@ -131,3 +131,45 @@ describe('admin impersonation invariants', () => {
     expect(dashboard.organisations[0]?.id).toBe(org.id);
   });
 });
+
+describe('cross-club isolation (2026-06-12 review)', () => {
+  it("a secretary cannot read another club's show entry stats", async () => {
+    const { makeShow } = await import('../helpers/factories');
+    const { org: orgA } = await makeSecretaryWithOrg();
+    const showA = await makeShow({ organisationId: orgA.id, status: 'entries_open' });
+
+    const { user: rivalSecretary } = await makeSecretaryWithOrg();
+    await expect(
+      createTestCaller(rivalSecretary).secretary.getShowEntryStats({ showId: showA.id }),
+    ).rejects.toThrow();
+  });
+
+  it("a secretary cannot read another club's show phase context", async () => {
+    const { makeShow } = await import('../helpers/factories');
+    const { org: orgA } = await makeSecretaryWithOrg();
+    const showA = await makeShow({ organisationId: orgA.id, status: 'entries_open' });
+
+    const { user: rivalSecretary } = await makeSecretaryWithOrg();
+    await expect(
+      createTestCaller(rivalSecretary).secretary.getShowPhaseContext({ showId: showA.id }),
+    ).rejects.toThrow();
+  });
+
+  it("a secretary cannot edit a judge engaged by another club", async () => {
+    const { makeShow, makeJudge, makeJudgeAssignment } = await import('../helpers/factories');
+    // Club A engages the judge
+    const { org: orgA } = await makeSecretaryWithOrg();
+    const showA = await makeShow({ organisationId: orgA.id });
+    const judge = await makeJudge({ contactEmail: 'judge@example.com' });
+    await makeJudgeAssignment({ showId: showA.id, judgeId: judge.id });
+
+    // Club B's secretary tries to redirect the judge's email
+    const { user: rivalSecretary } = await makeSecretaryWithOrg();
+    await expect(
+      createTestCaller(rivalSecretary).secretary.updateJudge({
+        judgeId: judge.id,
+        contactEmail: 'intercepted@evil.example.com',
+      }),
+    ).rejects.toThrow(/another club/i);
+  });
+});

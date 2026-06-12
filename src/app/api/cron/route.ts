@@ -31,10 +31,16 @@ function londonHourMinute(): { hour: number; minute: number } {
  * Runs every 15 minutes in production.
  */
 export async function GET(request: Request) {
+  // Prefer the Authorization header — query-string secrets end up in access
+  // logs. The ?secret= form still works while the external scheduler config
+  // migrates; remove it once the cron job sends the header.
+  const headerSecret = request.headers
+    .get('authorization')
+    ?.replace(/^Bearer\s+/i, '');
   const { searchParams } = new URL(request.url);
-  const secret = searchParams.get('secret');
+  const secret = headerSecret ?? searchParams.get('secret');
 
-  if (secret !== process.env.CRON_SECRET) {
+  if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

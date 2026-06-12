@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { orders, payments } from '@/server/db/schema';
 import type { Database } from '@/server/db';
 import { getStripe } from './stripe';
@@ -36,14 +36,22 @@ export async function executeStripeRefund(
   }
   const alreadyRefunded = originalPayment.refundAmount ?? 0;
   const newRefundTotal = alreadyRefunded + opts.amountPence;
-  const fullyRefunded = newRefundTotal >= originalPayment.amount;
 
   const stripe = getStripe();
-  await stripe.refunds.create({
-    payment_intent: originalPayment.stripePaymentId,
-    amount: opts.amountPence,
-    ...(opts.reason ? { reason: 'requested_by_customer' as const } : {}),
-  });
+  await stripe.refunds.create(
+    {
+      payment_intent: originalPayment.stripePaymentId,
+      amount: opts.amountPence,
+      ...(opts.reason ? { reason: 'requested_by_customer' as const } : {}),
+    },
+    {
+      // If the request times out but actually landed at Stripe, a retry with
+      // the same key returns the original refund instead of refunding twice.
+      // Keyed on payment + running total so a *deliberate* second partial
+      // refund (different running total) still goes through.
+      idempotencyKey: `refund:${originalPayment.id}:${newRefundTotal}`,
+    }
+  );
 
   await db.insert(payments).values({
     entryId: opts.entryId ?? null,
@@ -54,12 +62,22 @@ export async function executeStripeRefund(
     type: 'refund',
   });
 
-  await db
+  // Atomic increment — two concurrent partial refunds must both land in the
+  // running total rather than the second overwriting the first's update.
+  const [updated] = await db
     .update(payments)
     .set({
-      refundAmount: newRefundTotal,
-      status: fullyRefunded ? 'refunded' : 'partially_refunded',
+      refundAmount: sql`COALESCE(${payments.refundAmount}, 0) + ${opts.amountPence}`,
     })
+    .where(eq(payments.id, originalPayment.id))
+    .returning({ refundAmount: payments.refundAmount });
+
+  const settledTotal = updated?.refundAmount ?? newRefundTotal;
+  const fullyRefunded = settledTotal >= originalPayment.amount;
+
+  await db
+    .update(payments)
+    .set({ status: fullyRefunded ? 'refunded' : 'partially_refunded' })
     .where(eq(payments.id, originalPayment.id));
 
   // Flip the order itself to 'refunded' once the payment is fully refunded,

@@ -2563,6 +2563,41 @@ export const secretaryRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       const { judgeId, ...updates } = input;
+
+      // Judges are a shared pool across clubs, and contract offers are
+      // emailed to judges.contactEmail — so a secretary at club A must not
+      // be able to redirect or break club B's judge correspondence. Writes
+      // are allowed while the judge is only engaged by the caller's own
+      // club(s) (or not engaged at all); once another club has assignments
+      // with this judge, edits need an admin.
+      if (!ctx.callerIsAdmin) {
+        const engagements = await ctx.db
+          .selectDistinct({ organisationId: shows.organisationId })
+          .from(judgeAssignments)
+          .innerJoin(shows, eq(judgeAssignments.showId, shows.id))
+          .where(eq(judgeAssignments.judgeId, judgeId));
+        if (engagements.length > 0) {
+          const callerOrgs = await ctx.db.query.memberships.findMany({
+            where: and(
+              eq(memberships.userId, ctx.session.user.id),
+              eq(memberships.status, 'active'),
+            ),
+            columns: { organisationId: true },
+          });
+          const callerOrgIds = new Set(callerOrgs.map((m) => m.organisationId));
+          const engagedElsewhere = engagements.some(
+            (e) => !callerOrgIds.has(e.organisationId),
+          );
+          if (engagedElsewhere) {
+            throw new TRPCError({
+              code: 'FORBIDDEN',
+              message:
+                "This judge is also engaged by another club, so their details are locked. Contact the Remi team if something needs correcting.",
+            });
+          }
+        }
+      }
+
       const setValues: Record<string, unknown> = {};
       if (updates.name !== undefined) setValues.name = updates.name;
       if (updates.kcNumber !== undefined) setValues.kcNumber = updates.kcNumber || null;
@@ -4033,6 +4068,9 @@ export const secretaryRouter = createTRPCRouter({
   getShowPhaseContext: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, {
+        callerIsAdmin: ctx.callerIsAdmin,
+      });
       const show = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
         columns: { status: true, resultsPublishedAt: true },
@@ -4328,13 +4366,16 @@ export const secretaryRouter = createTRPCRouter({
       const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
 
       try {
-        await resend.emails.send({
+        const result = await resend.emails.send({
           from: emailFrom,
           to: input.judgeEmail,
           replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
           subject: `Judging Offer — ${show.name}`,
           html,
         });
+        // Resend reports API-level rejections (suppressed address, bad
+        // recipient) in result.error without throwing — treat as a failure.
+        if (result.error) throw new Error(result.error.message ?? 'Resend rejected the email');
       } catch (error) {
         console.error('[email] Failed to send judge offer:', error);
         throw new TRPCError({
@@ -4628,13 +4669,14 @@ export const secretaryRouter = createTRPCRouter({
       const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
 
       try {
-        await resend.emails.send({
+        const result = await resend.emails.send({
           from: emailFrom,
           to: contract.judgeEmail,
           replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
           subject: `Appointment Confirmed — ${show.name}`,
           html,
         });
+        if (result.error) throw new Error(result.error.message ?? 'Resend rejected the email');
       } catch (error) {
         console.error('[email] Failed to send judge confirmation:', error);
         throw new TRPCError({
@@ -4977,7 +5019,7 @@ export const secretaryRouter = createTRPCRouter({
 
           const acceptUrl = `${baseUrl}/api/judge-contract/${contract!.offerToken}`;
 
-          await resend.emails.send({
+          const offerResult = await resend.emails.send({
             from: emailFrom,
             to: judge.contactEmail,
             replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
@@ -5010,6 +5052,7 @@ export const secretaryRouter = createTRPCRouter({
   </div>
 </div></body></html>`,
           });
+          if (offerResult.error) throw new Error(offerResult.error.message ?? 'Resend rejected the email');
           sent++;
         } catch (error) {
           console.error(`[bulk-offer] Failed for ${judge.name}:`, error);
@@ -5100,7 +5143,7 @@ export const secretaryRouter = createTRPCRouter({
             )
           );
 
-          await resend.emails.send({
+          const confirmResult = await resend.emails.send({
             from: emailFrom,
             to: contract.judgeEmail,
             replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
@@ -5130,6 +5173,7 @@ export const secretaryRouter = createTRPCRouter({
   </div>
 </div></body></html>`,
           });
+          if (confirmResult.error) throw new Error(confirmResult.error.message ?? 'Resend rejected the email');
           sent++;
         } catch (error) {
           console.error(`[bulk-confirm] Failed for ${contract.judgeName}:`, error);
@@ -5235,7 +5279,7 @@ export const secretaryRouter = createTRPCRouter({
       const resend = new Resend(process.env.RESEND_API_KEY);
       const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
 
-      await resend.emails.send({
+      const entryNumbersResult = await resend.emails.send({
         from: emailFrom,
         to: judge.contactEmail,
         replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
@@ -5263,6 +5307,14 @@ export const secretaryRouter = createTRPCRouter({
   </div>
 </div></body></html>`,
       });
+
+      if (entryNumbersResult.error) {
+        console.error('[email] Resend rejected entry-numbers email:', entryNumbersResult.error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `The email could not be delivered (${entryNumbersResult.error.message ?? 'provider error'}). Check the judge's email address and try again.`,
+        });
+      }
 
       // Auto-complete checklist item
       await ctx.db.update(showChecklistItems).set({
@@ -5327,7 +5379,7 @@ export const secretaryRouter = createTRPCRouter({
       const resend = new Resend(process.env.RESEND_API_KEY);
       const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
 
-      await resend.emails.send({
+      const thankYouResult = await resend.emails.send({
         from: emailFrom,
         to: judge.contactEmail,
         replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
@@ -5350,6 +5402,14 @@ export const secretaryRouter = createTRPCRouter({
   </div>
 </div></body></html>`,
       });
+
+      if (thankYouResult.error) {
+        console.error('[email] Resend rejected thank-you email:', thankYouResult.error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `The email could not be delivered (${thankYouResult.error.message ?? 'provider error'}). Check the judge's email address and try again.`,
+        });
+      }
 
       // Auto-complete checklist item
       await ctx.db.update(showChecklistItems).set({
@@ -5548,6 +5608,9 @@ export const secretaryRouter = createTRPCRouter({
   getShowEntryStats: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, {
+        callerIsAdmin: ctx.callerIsAdmin,
+      });
       const [metrics, exhibitorResult, latestEntry] = await Promise.all([
         computeShowMetrics(ctx.db, input.showId),
         // Unique exhibitors across alive, not-cancelled entries

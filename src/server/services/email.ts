@@ -279,6 +279,10 @@ export async function sendEntryConfirmationEmail(orderId: string) {
       html,
     });
 
+    if (result.error) {
+      console.error(`[email] Resend rejected confirmation for order ${orderRef} to ${exhibitor.email}:`, result.error);
+      return result;
+    }
     console.log(`[email] Confirmation sent for order ${orderRef} to ${exhibitor.email}`, result);
     return result;
   } catch (error) {
@@ -429,6 +433,10 @@ export async function sendSecretaryNotificationEmail(orderId: string) {
       subject: `New Entry — ${exhibitor?.name ?? 'Exhibitor'} → ${show.name}`,
       html,
     });
+    if (result.error) {
+      console.error(`[email] Resend rejected secretary notification to ${secretaryEmail}:`, result.error);
+      return result;
+    }
     console.log(`[email] Secretary notification sent to ${secretaryEmail}`, result);
     return result;
   } catch (error) {
@@ -551,6 +559,10 @@ export async function sendPrintOrderConfirmationEmail(printOrderId: string) {
       subject: `Print Order Confirmed — ${show.name} (${orderRef})`,
       html,
     });
+    if (result.error) {
+      console.error(`[email] Resend rejected print order confirmation for ${orderRef}:`, result.error);
+      return result;
+    }
     console.log(`[email] Print order confirmation sent for ${orderRef} to ${order.orderedBy.email}`, result);
     return result;
   } catch (error) {
@@ -663,6 +675,10 @@ export async function sendPrintOrderAdminNotificationEmail(printOrderId: string)
       subject: `Print Order Action Required — ${show.name} (${orderRef})${order.paymentMethod === PRINT_PAYMENT_METHODS.DEDUCTED_FROM_PAYOUT ? ' [Deducted from payout]' : ''}`,
       html,
     });
+    if (result.error) {
+      console.error(`[email] Resend rejected admin print notification for ${orderRef}:`, result.error);
+      return result;
+    }
     console.log(`[email] Admin print notification sent for ${orderRef}`, result);
     return result;
   } catch (error) {
@@ -770,6 +786,10 @@ export async function sendPrintOrderDispatchEmail(printOrderId: string) {
       subject: `Your Print Order Has Shipped! — ${show.name} (${orderRef})`,
       html,
     });
+    if (result.error) {
+      console.error(`[email] Resend rejected dispatch notification for ${orderRef}:`, result.error);
+      return result;
+    }
     console.log(`[email] Dispatch notification sent for ${orderRef} to ${order.orderedBy.email}`, result);
     return result;
   } catch (error) {
