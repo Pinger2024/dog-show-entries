@@ -245,7 +245,7 @@ export const PRINT_PRODUCTS: PrintProduct[] = [
   {
     documentType: 'ring_board',
     label: 'Ring Boards',
-    description: 'Posters — one per ring. Prepared and posted to you with your bundle.',
+    description: 'Posters — one per ring. Download and print at home.',
     tradeprintProductName: '',
     tradeprintProductId: '',
     defaultSpecs: {},
@@ -257,7 +257,7 @@ export const PRINT_PRODUCTS: PrintProduct[] = [
   {
     documentType: 'ring_numbers',
     label: 'Ring Numbers',
-    description: 'Numbered cards — one per dog. Prepared and posted to you with your bundle.',
+    description: 'Numbered cards — one per dog. Download and print at home.',
     tradeprintProductName: '',
     tradeprintProductId: '',
     defaultSpecs: {},

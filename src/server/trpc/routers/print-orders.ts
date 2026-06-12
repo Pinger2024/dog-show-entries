@@ -121,8 +121,6 @@ export const printOrdersRouter = createTRPCRouter({
       const totalAmount = option.pricePence + fee;
       const catalogueProduct = getProductByType('catalogue');
       const prizeCardsProduct = getProductByType('prize_cards');
-      const ringNumbersProduct = getProductByType('ring_numbers');
-      const ringBoardProduct = getProductByType('ring_board');
 
       const [order] = await ctx.db
         .insert(printOrders)
@@ -144,27 +142,6 @@ export const printOrdersRouter = createTRPCRouter({
         })
         .returning();
 
-      // Sundry items (prize cards, ring numbers, ring boards) are bundled into
-      // the package price (lineTotal 0) and are prepared + posted by Mandy, not
-      // sent to Mixam. Quantities come from each product's suggestQuantity so the
-      // admin pack-list shows the right numbers — the old code hardcoded
-      // prize_cards quantity:1 (= 4 cards for an entire show), which was a bug.
-      const sundryItem = (
-        product: ReturnType<typeof getProductByType>,
-        documentType: string,
-        fallbackLabel: string,
-      ) => ({
-        printOrderId: order.id,
-        documentType,
-        documentLabel: product?.label ?? fallbackLabel,
-        tradeprintProductId: product?.tradeprintProductId ?? '',
-        quantity: product ? product.suggestQuantity(stats) : 0,
-        printSpecs: product?.defaultSpecs ?? null,
-        unitTradeCost: 0,
-        unitSellingPrice: 0,
-        lineTotal: 0,
-      });
-
       await ctx.db.insert(printOrderItems).values([
         {
           printOrderId: order.id,
@@ -177,9 +154,17 @@ export const printOrdersRouter = createTRPCRouter({
           unitSellingPrice: Math.round(option.pricePence / input.catalogueQty),
           lineTotal: option.pricePence,
         },
-        sundryItem(prizeCardsProduct, 'prize_cards', 'Prize Cards'),
-        sundryItem(ringNumbersProduct, 'ring_numbers', 'Ring Numbers'),
-        sundryItem(ringBoardProduct, 'ring_board', 'Ring Boards'),
+        {
+          printOrderId: order.id,
+          documentType: 'prize_cards',
+          documentLabel: prizeCardsProduct?.label ?? 'Prize Cards',
+          tradeprintProductId: prizeCardsProduct?.tradeprintProductId ?? '',
+          quantity: 1,
+          printSpecs: prizeCardsProduct?.defaultSpecs ?? null,
+          unitTradeCost: 0,
+          unitSellingPrice: 0,
+          lineTotal: 0,
+        },
       ]);
 
       return { orderId: order.id };

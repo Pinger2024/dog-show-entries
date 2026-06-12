@@ -101,7 +101,6 @@ import { showChecklistItems } from './show-checklist';
 import { sundryItems } from './sundry-items';
 import { showSponsors } from './sponsors';
 import { showDiscountGroups } from './show-discount-groups';
-import { showBreeds } from './show-breeds';
 
 export const shows = pgTable(
   'shows',
@@ -194,5 +193,4 @@ export const showsRelations = relations(shows, ({ one, many }) => ({
   sundryItems: many(sundryItems),
   showSponsors: many(showSponsors),
   discountGroups: many(showDiscountGroups),
-  showBreeds: many(showBreeds),
 }));

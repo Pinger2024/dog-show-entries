@@ -907,25 +907,16 @@ export function CoverPage({ show }: FrontMatterProps) {
               <Text style={styles.coverDetailValue}>{j}</Text>
             </View>
           ))}
-          {/* Show Opens + Judging Starts share one row (two equal columns) to
-              save vertical space so the cover details don't spill onto a second
-              page (Amanda 2026-06-08). Each column is a self-contained
-              label+value flex group with an auto-width label so the longer
-              "Judging Starts" label doesn't wrap or overlap its value. */}
-          {(show.showOpenTime || show.startTime) && (
+          {show.showOpenTime && (
             <View style={styles.coverDetailRow}>
-              {show.showOpenTime && (
-                <View style={{ flexDirection: 'row', flex: 1, alignItems: 'baseline' }}>
-                  <Text style={[styles.coverDetailLabel, { width: 'auto', marginRight: 5 }]}>Show Opens</Text>
-                  <Text style={styles.coverDetailValue}>{formatTime(show.showOpenTime)}</Text>
-                </View>
-              )}
-              {show.startTime && (
-                <View style={{ flexDirection: 'row', flex: 1, alignItems: 'baseline' }}>
-                  <Text style={[styles.coverDetailLabel, { width: 'auto', marginRight: 5 }]}>Judging Starts</Text>
-                  <Text style={styles.coverDetailValue}>{formatTime(show.startTime)}</Text>
-                </View>
-              )}
+              <Text style={styles.coverDetailLabel}>Show Opens</Text>
+              <Text style={styles.coverDetailValue}>{formatTime(show.showOpenTime)}</Text>
+            </View>
+          )}
+          {show.startTime && (
+            <View style={styles.coverDetailRow}>
+              <Text style={styles.coverDetailLabel}>Judging Starts</Text>
+              <Text style={styles.coverDetailValue}>{formatTime(show.startTime)}</Text>
             </View>
           )}
           {show.kcLicenceNo && (
