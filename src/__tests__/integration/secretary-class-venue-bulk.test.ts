@@ -127,7 +127,8 @@ describe('secretary.bulkCreateClasses', () => {
     // per-class fee — so a fee set while adding JH classes must propagate to
     // the show field, or it silently does nothing.
     const { user, org } = await makeSecretaryWithOrg();
-    const show = await makeShow({ organisationId: org.id, juniorHandlerFee: 0 });
+    // New shows have null fees (the create flow doesn't set them).
+    const show = await makeShow({ organisationId: org.id });
     const jh = await makeClassDef({ name: 'JHA Handling', type: 'junior_handler', sortOrder: 1 });
 
     await createTestCaller(user).secretary.bulkCreateClasses({
@@ -139,6 +140,37 @@ describe('secretary.bulkCreateClasses', () => {
 
     const updated = await testDb.query.shows.findFirst({ where: eq(shows.id, show.id) });
     expect(updated?.juniorHandlerFee).toBe(100);
+  });
+
+  it('carries a breed per-class fee through to the show first-entry fee (Mandy 2026-06-12)', async () => {
+    // Standard breed entries are charged the show's firstEntryFee, not the
+    // per-class fee — so the fee she types while adding breed classes must
+    // propagate to the show field, the same way the JH fee does.
+    const { user, org } = await makeSecretaryWithOrg();
+    const breed = await makeBreed();
+    const show = await makeShow({ organisationId: org.id, breedId: breed.id, showScope: 'single_breed' });
+    const puppy = await makeClassDef({ name: 'Puppy', type: 'age', sortOrder: 1 });
+
+    await createTestCaller(user).secretary.bulkCreateClasses({
+      showId: show.id, breedIds: [breed.id], classDefinitionIds: [puppy.id], entryFee: 2000, // £20
+    });
+
+    const updated = await testDb.query.shows.findFirst({ where: eq(shows.id, show.id) });
+    expect(updated?.firstEntryFee).toBe(2000);
+  });
+
+  it('does not overwrite a first-entry fee already set on the Fees page', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const breed = await makeBreed();
+    const show = await makeShow({ organisationId: org.id, breedId: breed.id, showScope: 'single_breed', firstEntryFee: 1500 });
+    const puppy = await makeClassDef({ name: 'Puppy', type: 'age', sortOrder: 1 });
+
+    await createTestCaller(user).secretary.bulkCreateClasses({
+      showId: show.id, breedIds: [breed.id], classDefinitionIds: [puppy.id], entryFee: 2000,
+    });
+
+    const updated = await testDb.query.shows.findFirst({ where: eq(shows.id, show.id) });
+    expect(updated?.firstEntryFee).toBe(1500); // untouched
   });
 
   it('does not overwrite an existing juniorHandlerFee when handling classes are added at £0', async () => {
@@ -164,7 +196,7 @@ describe('secretary.bulkCreateClasses', () => {
     const { user, org } = await makeSecretaryWithOrg();
     const breed = await makeBreed();
     const show = await makeShow({
-      organisationId: org.id, breedId: breed.id, showScope: 'single_breed', juniorHandlerFee: 0,
+      organisationId: org.id, breedId: breed.id, showScope: 'single_breed',
     });
     const [puppy, jh] = await Promise.all([
       makeClassDef({ name: 'Puppy', type: 'age', sortOrder: 1 }),
@@ -184,6 +216,8 @@ describe('secretary.bulkCreateClasses', () => {
     const classes = await testDb.query.showClasses.findMany({ where: eq(showClasses.showId, show.id) });
     expect(classes).toHaveLength(3); // 1 breed × 2 sexes + 1 JH
     const updated = await testDb.query.shows.findFirst({ where: eq(shows.id, show.id) });
+    // Both fees flow onto the show: breed → firstEntryFee, JH → juniorHandlerFee.
+    expect(updated?.firstEntryFee).toBe(2500);
     expect(updated?.juniorHandlerFee).toBe(100);
   });
 

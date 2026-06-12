@@ -796,6 +796,16 @@ export function BulkClassCreator({ showId }: { showId: string }) {
     () => relevantTemplates.filter((t) => t.isHandling),
     [relevantTemplates],
   );
+  // The top template cards show breed sets only. Junior Handling is offered
+  // exclusively through the "Also include Junior Handling?" add-on below, so
+  // it isn't presented twice (Mandy 2026-06-12). Fall back to showing the
+  // handling templates only if there are no breed templates at all (a
+  // handling-only context), so they're never unreachable.
+  const breedTemplates = useMemo(
+    () => relevantTemplates.filter((t) => !t.isHandling),
+    [relevantTemplates],
+  );
+  const mainTemplates = breedTemplates.length > 0 ? breedTemplates : handlingTemplates;
 
   const matchedClassDefs = useMemo(() => {
     if (!template || !classDefs) return [];
@@ -930,7 +940,7 @@ export function BulkClassCreator({ showId }: { showId: string }) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {relevantTemplates.map((t) => (
+          {mainTemplates.map((t) => (
             <button
               key={t.id}
               type="button"

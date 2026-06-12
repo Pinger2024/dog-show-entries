@@ -1741,20 +1741,36 @@ export const secretaryRouter = createTRPCRouter({
             .where(eq(showClasses.id, allClasses[i]!.id));
         }
 
-        // Junior Handling entries are charged the show's flat
-        // `juniorHandlerFee` (fee-calc.ts), NOT the per-class fee — so when a
-        // secretary sets a fee while adding the JH classes, carry it through
-        // to the show field, otherwise her fee silently does nothing. Only
-        // when she actually entered a fee (>0), so the £0 default never wipes
-        // a JH fee she set elsewhere on the Fees & Setup page.
-        const isHandlingCreation =
-          input.breedIds.length === 0 &&
-          classDefRows.some((cd) => cd.type === 'junior_handler');
-        if (isHandlingCreation && input.entryFee > 0) {
-          await ctx.db
-            .update(shows)
-            .set({ juniorHandlerFee: input.entryFee })
-            .where(eq(shows.id, input.showId));
+        // Carry the fee she typed here through to the show's headline fee
+        // fields — because those, not the per-class showClass.entryFee, are
+        // what actually get charged (fee-calc.ts). Breed classes → the show's
+        // first-entry fee; Junior Handling → the flat juniorHandlerFee.
+        // Without this, a fee set while adding classes silently does nothing.
+        //
+        // Only pull through when she entered a fee (>0) AND the show's field
+        // is still unset — so we never overwrite a fee she deliberately set on
+        // the Fees & Setup page.
+        if (input.entryFee > 0) {
+          const isHandlingCreation =
+            input.breedIds.length === 0 &&
+            classDefRows.some((cd) => cd.type === 'junior_handler');
+          const currentShow = await ctx.db.query.shows.findFirst({
+            where: eq(shows.id, input.showId),
+            columns: { firstEntryFee: true, juniorHandlerFee: true },
+          });
+          if (isHandlingCreation) {
+            if (currentShow?.juniorHandlerFee == null) {
+              await ctx.db
+                .update(shows)
+                .set({ juniorHandlerFee: input.entryFee })
+                .where(eq(shows.id, input.showId));
+            }
+          } else if (currentShow?.firstEntryFee == null) {
+            await ctx.db
+              .update(shows)
+              .set({ firstEntryFee: input.entryFee })
+              .where(eq(shows.id, input.showId));
+          }
         }
       }
 
