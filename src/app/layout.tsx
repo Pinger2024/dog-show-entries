@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Suspense } from 'react';
-import { Inter } from 'next/font/google';
+import { Inter, Fraunces } from 'next/font/google';
 import { Toaster } from '@/components/ui/sonner';
 import { Providers } from '@/components/providers';
 import { ImpersonationBannerWrapper } from '@/components/layout/impersonation-banner-wrapper';
@@ -13,6 +13,17 @@ import './globals.css';
 const inter = Inter({
   variable: '--font-inter',
   subsets: ['latin'],
+});
+
+// Display serif for headings. The app already styles every heading with
+// `font-serif` (which mapped to Inter until now) — wiring up a real serif
+// fulfils the original design intent and lifts the whole product's feel.
+// `opsz` optical sizing makes large headings characterful, small ones calm.
+const fraunces = Fraunces({
+  variable: '--font-serif-display',
+  subsets: ['latin'],
+  display: 'swap',
+  axes: ['opsz', 'SOFT'],
 });
 
 
@@ -65,7 +76,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${inter.variable} antialiased`}
+        className={`${inter.variable} ${fraunces.variable} antialiased`}
       >
         <Providers>
           <Suspense fallback={null}>

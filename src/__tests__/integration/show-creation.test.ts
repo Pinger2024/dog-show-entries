@@ -37,6 +37,35 @@ describe('shows.create', () => {
     expect(dbShow?.breedId).toBe(breed.id);
   });
 
+  it('accepts the minimal three-question "front door" payload (no fees, classes, venue or secretary)', async () => {
+    // Guards the rebuilt show-creation flow: name + type + club + dates and
+    // nothing else. Everything deferred (fees, classes, venue, secretary,
+    // entry dates) is collected later by the Setup Wizard, so shows.create
+    // must stay happy with this bare payload. If someone makes one of those
+    // fields required again, this test fails before the UI breaks.
+    const { user, org, breed } = await makeSecretaryWithOrgAndBreed();
+    const caller = createTestCaller(user);
+
+    const created = await caller.shows.create({
+      name: 'Front Door Open Show 2030',
+      showType: 'open',
+      showScope: 'single_breed',
+      showRuleset: 'rkc',
+      breedId: breed.id,
+      organisationId: org.id,
+      startDate: '2030-06-01',
+      endDate: '2030-06-01',
+    });
+
+    expect(created.status).toBe('draft'); // lands in the Setup Wizard
+    const dbShow = await testDb.query.shows.findFirst({ where: eq(shows.id, created.id) });
+    expect(dbShow?.firstEntryFee ?? null).toBeNull(); // fees deferred
+    const seededClasses = await testDb.query.showClasses.findMany({
+      where: eq(showClasses.showId, created.id),
+    });
+    expect(seededClasses).toHaveLength(0); // classes deferred to the wizard
+  });
+
   it('seeds show classes from classDefinitionIds in canonical order (combined sex)', async () => {
     const { user, org, breed } = await makeSecretaryWithOrgAndBreed();
     // Insert class defs out of canonical order to prove the procedure sorts them.
