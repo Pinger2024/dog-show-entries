@@ -101,37 +101,6 @@ describe('users.hasPassword + setPassword + changePassword', () => {
   });
 });
 
-describe('users.getDashboard', () => {
-  it('returns dashboard counts for the caller (no entries → zeros, dogs counted)', async () => {
-    const user = await makeUser({ role: 'exhibitor' });
-    await makeDog({ ownerId: user.id });
-    await makeDog({ ownerId: user.id });
-    const dashboard = await createTestCaller(user).users.getDashboard();
-    expect(dashboard).toBeDefined();
-  });
-
-  it('counts upcoming entries for the caller', async () => {
-    const user = await makeUser({ role: 'exhibitor' });
-    const org = await makeOrg();
-    const breed = await makeBreed();
-    const dog = await makeDog({ ownerId: user.id, breedId: breed.id });
-    // Future show + entry
-    const show = await makeShow({
-      organisationId: org.id,
-      breedId: breed.id,
-      status: 'entries_open',
-      startDate: '2099-12-31',
-      endDate: '2099-12-31',
-    });
-    await makeEntry({
-      showId: show.id, dogId: dog.id, exhibitorId: user.id, status: 'confirmed',
-    });
-
-    const dashboard = await createTestCaller(user).users.getDashboard();
-    expect(dashboard).toBeDefined();
-    expect(typeof dashboard).toBe('object');
-  });
-});
 
 describe('feedback.submit (widget)', () => {
   it('inserts a widget feedback row for the caller', async () => {

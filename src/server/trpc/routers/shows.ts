@@ -24,7 +24,6 @@ import {
   classDefinitions,
   orders,
   orderSundryItems,
-  shareEvents,
   showDiscountGroups,
 } from '@/server/db/schema';
 import { verifyShowAccess } from '../verify-show-access';
@@ -332,48 +331,6 @@ export const showsRouter = createTRPCRouter({
         },
         orderBy: [asc(showClasses.sortOrder)],
       });
-    }),
-
-  upcoming: publicProcedure
-    .input(
-      z.object({
-        limit: z.number().min(1).max(50).default(10),
-        cursor: z.number().min(0).default(0),
-      })
-    )
-    .query(async ({ ctx, input }) => {
-      const today = new Date().toISOString().split('T')[0]!;
-      const where = and(
-        gte(shows.startDate, today),
-        inArray(shows.status, ['published', 'entries_open'])
-      );
-
-      const items = await ctx.db.query.shows.findMany({
-        where,
-        with: {
-          organisation: { columns: publicOrgColumns },
-          venue: true,
-        },
-        orderBy: [asc(shows.startDate)],
-        limit: input.limit,
-        offset: input.cursor,
-      });
-
-      const countResult = await ctx.db
-        .select({ count: sql<number>`count(*)` })
-        .from(shows)
-        .where(where);
-
-      const total = Number(countResult[0]?.count ?? 0);
-
-      return {
-        items,
-        total,
-        nextCursor:
-          input.cursor + input.limit < total
-            ? input.cursor + input.limit
-            : null,
-      };
     }),
 
   nearby: publicProcedure
@@ -945,69 +902,6 @@ export const showsRouter = createTRPCRouter({
       });
     }),
 
-  getPublicStats: publicProcedure
-    .input(z.object({ showId: z.string().uuid() }))
-    .query(async ({ ctx, input }) => {
-      const show = await ctx.db.query.shows.findFirst({
-        where: and(
-          eq(shows.id, input.showId),
-          inArray(shows.status, ['entries_open', 'entries_closed', 'in_progress', 'completed'])
-        ),
-        columns: {
-          id: true,
-          status: true,
-          startDate: true,
-          entryCloseDate: true,
-        },
-      });
-
-      if (!show) return null;
-
-      const stats = await ctx.db
-        .select({
-          totalDogs: sql<number>`count(distinct ${entries.dogId})`,
-          totalExhibitors: sql<number>`count(distinct ${entries.exhibitorId})`,
-        })
-        .from(entries)
-        .where(
-          and(
-            eq(entries.showId, input.showId),
-            eq(entries.status, 'confirmed'),
-            isNull(entries.deletedAt)
-          )
-        );
-
-      return {
-        totalDogs: Number(stats[0]?.totalDogs ?? 0),
-        totalExhibitors: Number(stats[0]?.totalExhibitors ?? 0),
-        entryCloseDate: show.entryCloseDate?.toISOString() ?? null,
-        startDate: show.startDate,
-        status: show.status,
-      };
-    }),
-
-  /**
-   * How many times this show has been shared in the last 7 days. Feeds the
-   * "Shared N times this week" social-proof chip on the show page.
-   * Returns 0 when there's nothing to brag about yet — the client chooses
-   * whether to show it.
-   */
-  getShareCount: publicProcedure
-    .input(z.object({ showId: z.string().uuid() }))
-    .query(async ({ ctx, input }) => {
-      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-      const rows = await ctx.db
-        .select({ n: sql<number>`count(*)` })
-        .from(shareEvents)
-        .where(
-          and(
-            eq(shareEvents.showId, input.showId),
-            gte(shareEvents.createdAt, sevenDaysAgo)
-          )
-        );
-      return { weekly: Number(rows[0]?.n ?? 0) };
-    }),
-
   getShowSponsors: publicProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
@@ -1033,35 +927,6 @@ export const showsRouter = createTRPCRouter({
         },
         orderBy: [asc(showSponsors.displayOrder)],
       });
-    }),
-
-  getBreedEntryStats: publicProcedure
-    .input(z.object({ showId: z.string().uuid() }))
-    .query(async ({ ctx, input }) => {
-      const results = await ctx.db
-        .select({
-          breedId: breeds.id,
-          breedName: breeds.name,
-          dogCount: sql<number>`count(distinct ${entries.dogId})`,
-        })
-        .from(entries)
-        .innerJoin(dogs, eq(entries.dogId, dogs.id))
-        .innerJoin(breeds, eq(dogs.breedId, breeds.id))
-        .where(
-          and(
-            eq(entries.showId, input.showId),
-            eq(entries.status, 'confirmed'),
-            isNull(entries.deletedAt)
-          )
-        )
-        .groupBy(breeds.id, breeds.name)
-        .orderBy(desc(sql`count(distinct ${entries.dogId})`));
-
-      return results.map((r) => ({
-        breedId: r.breedId,
-        breedName: r.breedName,
-        dogCount: Number(r.dogCount),
-      }));
     }),
 
   getCatalogueAccess: protectedProcedure

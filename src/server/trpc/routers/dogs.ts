@@ -573,107 +573,6 @@ export const dogsRouter = createTRPCRouter({
       return updated!;
     }),
 
-  // ── Owner management ─────────────────────────────────────
-
-  addOwner: protectedProcedure
-    .input(
-      z.object({
-        dogId: z.string().uuid(),
-        ownerTitle: z.string().optional(),
-        ownerName: z.string().min(1),
-        ownerAddress: z.string().min(1),
-        ownerEmail: z.string().email(),
-        ownerPhone: z.string().optional(),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      const dog = await ctx.db.query.dogs.findFirst({
-        where: and(eq(dogs.id, input.dogId), isNull(dogs.deletedAt)),
-        with: { owners: true },
-      });
-
-      if (!dog || dog.ownerId !== ctx.session.user.id) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
-      }
-
-      if (dog.owners.length >= 4) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'Maximum 4 owners per dog',
-        });
-      }
-
-      const [owner] = await ctx.db
-        .insert(dogOwners)
-        .values({
-          dogId: input.dogId,
-          ownerTitle: input.ownerTitle || null,
-          ownerName: input.ownerName,
-          ownerAddress: input.ownerAddress,
-          ownerEmail: input.ownerEmail,
-          ownerPhone: input.ownerPhone ?? null,
-          sortOrder: dog.owners.length,
-          isPrimary: false,
-        })
-        .returning();
-
-      return owner!;
-    }),
-
-  updateOwner: protectedProcedure
-    .input(
-      z.object({
-        id: z.string().uuid(),
-        ownerTitle: z.string().nullable().optional(),
-        ownerName: z.string().min(1).optional(),
-        ownerAddress: z.string().min(1).optional(),
-        ownerEmail: z.string().email().optional(),
-        ownerPhone: z.string().nullable().optional(),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      const owner = await ctx.db.query.dogOwners.findFirst({
-        where: eq(dogOwners.id, input.id),
-        with: { dog: true },
-      });
-
-      if (!owner || owner.dog.ownerId !== ctx.session.user.id) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
-      }
-
-      const { id, ...data } = input;
-      const [updated] = await ctx.db
-        .update(dogOwners)
-        .set(data)
-        .where(eq(dogOwners.id, id))
-        .returning();
-
-      return updated!;
-    }),
-
-  removeOwner: protectedProcedure
-    .input(z.object({ id: z.string().uuid() }))
-    .mutation(async ({ ctx, input }) => {
-      const owner = await ctx.db.query.dogOwners.findFirst({
-        where: eq(dogOwners.id, input.id),
-        with: { dog: { with: { owners: true } } },
-      });
-
-      if (!owner || owner.dog.ownerId !== ctx.session.user.id) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your dog' });
-      }
-
-      if (owner.isPrimary) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'Cannot remove the primary owner',
-        });
-      }
-
-      await ctx.db.delete(dogOwners).where(eq(dogOwners.id, input.id));
-      return { success: true };
-    }),
-
   // ── Title management ─────────────────────────────────────
 
   addTitle: protectedProcedure
@@ -1315,26 +1214,6 @@ export const dogsRouter = createTRPCRouter({
         .set({ isPrimary: true })
         // Scope to the verified dog — ownership was checked on dogId, but the
         // write must not touch a photo belonging to another dog.
-        .where(and(eq(dogPhotos.id, input.photoId), eq(dogPhotos.dogId, input.dogId)));
-
-      return { success: true };
-    }),
-
-  updatePhotoCaption: protectedProcedure
-    .input(z.object({
-      photoId: z.string().uuid(),
-      dogId: z.string().uuid(),
-      caption: z.string().max(200).nullable(),
-    }))
-    .mutation(async ({ ctx, input }) => {
-      const dog = await ctx.db.query.dogs.findFirst({
-        where: and(eq(dogs.id, input.dogId), eq(dogs.ownerId, ctx.session.user.id), isNull(dogs.deletedAt)),
-      });
-      if (!dog) throw new TRPCError({ code: 'NOT_FOUND', message: 'Dog not found' });
-
-      await ctx.db
-        .update(dogPhotos)
-        .set({ caption: input.caption })
         .where(and(eq(dogPhotos.id, input.photoId), eq(dogPhotos.dogId, input.dogId)));
 
       return { success: true };

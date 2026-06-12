@@ -1809,30 +1809,6 @@ export const secretaryRouter = createTRPCRouter({
 
   // ── Class number assignment ────────────────────────────
 
-  assignClassNumbers: secretaryProcedure
-    .input(
-      z.object({
-        showId: z.string().uuid(),
-        assignments: z.array(
-          z.object({
-            classId: z.string().uuid(),
-            classNumber: z.number().int().min(1),
-          })
-        ),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
-
-      for (const { classId, classNumber } of input.assignments) {
-        await ctx.db
-          .update(showClasses)
-          .set({ classNumber })
-          .where(and(eq(showClasses.id, classId), eq(showClasses.showId, input.showId)));
-      }
-      return { updated: input.assignments.length };
-    }),
-
   autoAssignClassNumbers: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
@@ -5495,28 +5471,6 @@ export const secretaryRouter = createTRPCRouter({
         .delete(sundryItems)
         .where(and(eq(sundryItems.id, input.id), eq(sundryItems.showId, input.showId)));
       return { softDeleted: false };
-    }),
-
-  reorderSundryItems: secretaryProcedure
-    .input(
-      z.object({
-        showId: z.string().uuid(),
-        itemIds: z.array(z.string().uuid()),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
-
-      await Promise.all(
-        input.itemIds.map((id, index) =>
-          ctx.db
-            .update(sundryItems)
-            .set({ sortOrder: index })
-            .where(and(eq(sundryItems.id, id), eq(sundryItems.showId, input.showId)))
-        )
-      );
-
-      return { reordered: true };
     }),
 
   bulkCreateSundryItems: secretaryProcedure

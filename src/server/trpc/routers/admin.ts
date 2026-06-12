@@ -62,22 +62,6 @@ export const adminRouter = createTRPCRouter({
       return { success: true };
     }),
 
-  reorderBreedGroups: adminProcedure
-    .input(z.object({
-      ids: z.array(z.string().uuid()),
-    }))
-    .mutation(async ({ ctx, input }) => {
-      await ctx.db.transaction(async (tx) => {
-        for (let i = 0; i < input.ids.length; i++) {
-          await tx
-            .update(breedGroups)
-            .set({ sortOrder: i })
-            .where(eq(breedGroups.id, input.ids[i]));
-        }
-      });
-      return { success: true };
-    }),
-
   // ── Breeds ────────────────────────────────────────────────
 
   listBreeds: adminProcedure
@@ -218,22 +202,6 @@ export const adminRouter = createTRPCRouter({
         });
       }
       await ctx.db.delete(classDefinitions).where(eq(classDefinitions.id, input.id));
-      return { success: true };
-    }),
-
-  reorderClassDefinitions: adminProcedure
-    .input(z.object({
-      ids: z.array(z.string().uuid()),
-    }))
-    .mutation(async ({ ctx, input }) => {
-      await ctx.db.transaction(async (tx) => {
-        for (let i = 0; i < input.ids.length; i++) {
-          await tx
-            .update(classDefinitions)
-            .set({ sortOrder: i })
-            .where(eq(classDefinitions.id, input.ids[i]));
-        }
-      });
       return { success: true };
     }),
 

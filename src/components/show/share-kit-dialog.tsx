@@ -2,8 +2,7 @@
 
 /**
  * Compact "Share" trigger that opens the full ShareKit in a Dialog.
- * Drop-in replacement for the old <ShowShareDropdown> in the sticky
- * action bar — same surface area on the page, much richer experience
+ * Lives in the sticky action bar — compact on the page, much richer experience
  * once tapped.
  */
 import { useState } from 'react';

@@ -1,15 +1,11 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, isNull, gte, inArray, sql, desc } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { Resend } from 'resend';
 import { protectedProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
-import { publicOrgColumns } from '../public-org-columns';
 import {
   users,
-  entries,
-  dogs,
-  shows,
   sessions,
   accounts,
   userSvProfile,
@@ -222,60 +218,6 @@ export const usersRouter = createTRPCRouter({
 
       return { success: true };
     }),
-
-  getDashboard: protectedProcedure.query(async ({ ctx }) => {
-    const today = new Date().toISOString().split('T')[0]!;
-
-    // Count of upcoming entries
-    const upcomingEntries = await ctx.db
-      .select({ count: sql<number>`count(*)` })
-      .from(entries)
-      .innerJoin(shows, eq(entries.showId, shows.id))
-      .where(
-        and(
-          eq(entries.exhibitorId, ctx.session.user.id),
-          isNull(entries.deletedAt),
-          inArray(entries.status, ['pending', 'confirmed']),
-          gte(shows.startDate, today)
-        )
-      );
-
-    // Count of active dogs
-    const totalDogs = await ctx.db
-      .select({ count: sql<number>`count(*)` })
-      .from(dogs)
-      .where(
-        and(eq(dogs.ownerId, ctx.session.user.id), isNull(dogs.deletedAt))
-      );
-
-    // Recent entries
-    const recentEntries = await ctx.db.query.entries.findMany({
-      where: and(
-        eq(entries.exhibitorId, ctx.session.user.id),
-        isNull(entries.deletedAt)
-      ),
-      with: {
-        show: {
-          with: {
-            organisation: { columns: publicOrgColumns },
-          },
-        },
-        dog: {
-          with: {
-            breed: true,
-          },
-        },
-      },
-      orderBy: [desc(entries.createdAt)],
-      limit: 5,
-    });
-
-    return {
-      upcomingEntriesCount: Number(upcomingEntries[0]?.count ?? 0),
-      totalDogsCount: Number(totalDogs[0]?.count ?? 0),
-      recentEntries,
-    };
-  }),
 
   // ── SV / WUSV membership profile ─────────────────────────
 

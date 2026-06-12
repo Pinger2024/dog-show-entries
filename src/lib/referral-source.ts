@@ -1,7 +1,7 @@
 /**
  * Referral-source attribution.
  *
- * Share URLs emitted by the ShowShareDropdown carry a ?src=<channel> query
+ * Share URLs emitted by the ShareKit carry a ?src=<channel> query
  * param (whatsapp / facebook / instagram). When an exhibitor lands on a
  * show page from one of those shares we stash the channel in sessionStorage
  * keyed by the show slug, then read it back at checkout time so it can be
