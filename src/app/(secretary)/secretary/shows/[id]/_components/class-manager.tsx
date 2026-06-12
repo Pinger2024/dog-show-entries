@@ -765,18 +765,37 @@ export function BulkClassCreator({ showId }: { showId: string }) {
     (breeds ?? []).find((b) => b.id === singleBreedId)?.name ??
     'your breed';
 
+  // Invalidate only — the toast + reset happen once in handleCreate, after
+  // the breed set AND any Junior Handling add-ons have all been created, so
+  // creating both in one go shows a single confirmation.
   const bulkMutation = trpc.secretary.bulkCreateClasses.useMutation({
-    onSuccess: (data) => {
-      toast.success(`Created ${data.created} classes`);
-      utils.shows.getById.invalidate({ id: showId });
-      setSelectedTemplate(null);
-      setSelectedBreedIds([]);
-      setSelectedClassDefIds([]);
-    },
+    onSuccess: () => utils.shows.getById.invalidate({ id: showId }),
     onError: () => toast.error('Failed to create classes'),
   });
 
+  // Optional Junior Handling add-ons selected alongside a breed template.
+  // Handling templates have no breed/sex/class config — just their own fee —
+  // so they slot in cleanly without touching the breed-class flow above.
+  // Map of handling-template id → fee string (presence = selected).
+  const [handlingAddOns, setHandlingAddOns] = useState<Record<string, string>>({});
+
   const template = CLASS_TEMPLATES.find((t) => t.id === selectedTemplate);
+
+  // Handling templates relevant to this show — offered as add-ons under a
+  // selected breed template (so "Championship + Junior Handling" is one go).
+  const relevantTemplates = useMemo(
+    () =>
+      getRelevantTemplates(
+        showData?.showType ?? undefined,
+        showData?.showScope ?? undefined,
+        (showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset,
+      ),
+    [showData],
+  );
+  const handlingTemplates = useMemo(
+    () => relevantTemplates.filter((t) => t.isHandling),
+    [relevantTemplates],
+  );
 
   const matchedClassDefs = useMemo(() => {
     if (!template || !classDefs) return [];
@@ -793,11 +812,17 @@ export function BulkClassCreator({ showId }: { showId: string }) {
     return groups;
   }, [breeds]);
 
-  const totalClasses = template?.isHandling
+  const addOnClassCount = Object.keys(handlingAddOns).reduce((sum, id) => {
+    const t = CLASS_TEMPLATES.find((tt) => tt.id === id);
+    return sum + (t?.classNames.length ?? 0);
+  }, 0);
+
+  const breedTemplateClasses = template?.isHandling
     ? selectedClassDefIds.length
     : selectedBreedIds.length *
       selectedClassDefIds.length *
       (splitBySex ? 2 : 1);
+  const totalClasses = breedTemplateClasses + addOnClassCount;
 
   // Auto-select matching class defs when template or classDefs changes
   // This fixes the race condition where clicking a template before
@@ -828,20 +853,71 @@ export function BulkClassCreator({ showId }: { showId: string }) {
     setSelectedTemplate(templateId);
     setSplitBySex(t?.splitBySex ?? false);
     setFeeInput(penceToPoundsString(t?.defaultFeePence ?? 500));
+    // Handling add-ons only make sense beneath a breed template.
+    if (t?.isHandling) setHandlingAddOns({});
   }
 
-  function handleCreate() {
+  function toggleAddOn(tplId: string, defaultFeePence: number) {
+    setHandlingAddOns((prev) => {
+      const next = { ...prev };
+      if (tplId in next) {
+        delete next[tplId];
+      } else {
+        next[tplId] = penceToPoundsString(defaultFeePence);
+      }
+      return next;
+    });
+  }
+
+  async function handleCreate() {
     if (!template || selectedClassDefIds.length === 0) return;
     if (!template.isHandling && selectedBreedIds.length === 0) return;
     const parsedPounds = parseFloat(feeInput);
     const fee = Number.isNaN(parsedPounds) ? template.defaultFeePence : poundsToPence(parsedPounds);
-    bulkMutation.mutate({
-      showId,
-      breedIds: template.isHandling ? [] : selectedBreedIds,
-      classDefinitionIds: selectedClassDefIds,
-      entryFee: fee,
-      splitBySex: template.isHandling ? false : splitBySex,
-    });
+
+    try {
+      // 1. The chosen template (breed classes, or handling if that's the
+      //    main pick).
+      let created = await bulkMutation.mutateAsync({
+        showId,
+        breedIds: template.isHandling ? [] : selectedBreedIds,
+        classDefinitionIds: selectedClassDefIds,
+        entryFee: fee,
+        splitBySex: template.isHandling ? false : splitBySex,
+      });
+      let total = created.created;
+
+      // 2. Any Junior Handling add-ons ticked alongside a breed template.
+      //    Each handling template is breed-agnostic with its own fee.
+      if (!template.isHandling) {
+        for (const [tplId, feeStr] of Object.entries(handlingAddOns)) {
+          const tpl = CLASS_TEMPLATES.find((t) => t.id === tplId);
+          if (!tpl || !classDefs) continue;
+          const defIds = classDefs
+            .filter((cd) => tpl.classNames.includes(cd.name))
+            .map((cd) => cd.id);
+          if (defIds.length === 0) continue;
+          const pounds = parseFloat(feeStr);
+          const addOnFee = Number.isNaN(pounds) ? tpl.defaultFeePence : poundsToPence(pounds);
+          created = await bulkMutation.mutateAsync({
+            showId,
+            breedIds: [],
+            classDefinitionIds: defIds,
+            entryFee: addOnFee,
+            splitBySex: false,
+          });
+          total += created.created;
+        }
+      }
+
+      toast.success(`Created ${total} classes`);
+      setSelectedTemplate(null);
+      setSelectedBreedIds([]);
+      setSelectedClassDefIds([]);
+      setHandlingAddOns({});
+    } catch {
+      // per-call onError already toasts the failure
+    }
   }
 
   return (
@@ -854,11 +930,7 @@ export function BulkClassCreator({ showId }: { showId: string }) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {getRelevantTemplates(
-            showData?.showType ?? undefined,
-            showData?.showScope ?? undefined,
-            (showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset,
-          ).map((t) => (
+          {relevantTemplates.map((t) => (
             <button
               key={t.id}
               type="button"
@@ -1051,6 +1123,56 @@ export function BulkClassCreator({ showId }: { showId: string }) {
                         </div>
                       </div>
                     ))}
+                </div>
+              </div>
+            )}
+
+            {/* Junior Handling add-ons — tick these to add handling classes
+                in the same go as the breed classes (Mandy 2026-06-12: a
+                Championship show often has Junior Handling alongside). Only
+                offered under a breed template; handling-as-main is unchanged. */}
+            {!template.isHandling && handlingTemplates.length > 0 && (
+              <div className="rounded-lg border border-dashed p-3">
+                <p className="text-sm font-medium">Also include Junior Handling?</p>
+                <p className="mb-2 text-xs text-muted-foreground">
+                  Optional — adds these handling classes alongside your breed
+                  classes. They&apos;re not breed-specific.
+                </p>
+                <div className="space-y-2">
+                  {handlingTemplates.map((t) => {
+                    const selected = t.id in handlingAddOns;
+                    return (
+                      <div key={t.id} className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <label className="flex flex-1 items-start gap-2 text-sm cursor-pointer">
+                          <Checkbox
+                            checked={selected}
+                            onCheckedChange={() => toggleAddOn(t.id, t.defaultFeePence)}
+                          />
+                          <span>
+                            <span className="font-medium">{t.name}</span>
+                            <span className="block text-xs text-muted-foreground">
+                              {t.classNames.length} classes
+                            </span>
+                          </span>
+                        </label>
+                        {selected && (
+                          <div className="flex items-center gap-1.5 sm:w-40">
+                            <span className="text-xs text-muted-foreground">Fee £</span>
+                            <Input
+                              type="number"
+                              min={0}
+                              step={0.01}
+                              value={handlingAddOns[t.id]}
+                              onChange={(e) =>
+                                setHandlingAddOns((prev) => ({ ...prev, [t.id]: e.target.value }))
+                              }
+                              className="h-9"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

@@ -157,6 +157,36 @@ describe('secretary.bulkCreateClasses', () => {
     expect(updated?.juniorHandlerFee).toBe(300); // untouched
   });
 
+  it('creating breed classes then a JH add-on yields both sets with the JH fee on the show (Mandy 2026-06-12)', async () => {
+    // Mirrors the "Championship + Junior Handling in one go" UI flow, which
+    // calls bulkCreateClasses once per template. Breed classes keep their own
+    // fee; the handling add-on's fee lands on the show's juniorHandlerFee.
+    const { user, org } = await makeSecretaryWithOrg();
+    const breed = await makeBreed();
+    const show = await makeShow({
+      organisationId: org.id, breedId: breed.id, showScope: 'single_breed', juniorHandlerFee: 0,
+    });
+    const [puppy, jh] = await Promise.all([
+      makeClassDef({ name: 'Puppy', type: 'age', sortOrder: 1 }),
+      makeClassDef({ name: 'JHA Handling', type: 'junior_handler', sortOrder: 1 }),
+    ]);
+    const caller = createTestCaller(user);
+
+    // 1. breed classes (split by sex) at £25
+    await caller.secretary.bulkCreateClasses({
+      showId: show.id, breedIds: [breed.id], classDefinitionIds: [puppy.id], entryFee: 2500, splitBySex: true,
+    });
+    // 2. JH add-on at £1
+    await caller.secretary.bulkCreateClasses({
+      showId: show.id, breedIds: [], classDefinitionIds: [jh.id], entryFee: 100,
+    });
+
+    const classes = await testDb.query.showClasses.findMany({ where: eq(showClasses.showId, show.id) });
+    expect(classes).toHaveLength(3); // 1 breed × 2 sexes + 1 JH
+    const updated = await testDb.query.shows.findFirst({ where: eq(shows.id, show.id) });
+    expect(updated?.juniorHandlerFee).toBe(100);
+  });
+
   it('rejects bulkCreateClasses on a show in another org', async () => {
     const { user } = await makeSecretaryWithOrg();
     const { org: otherOrg } = await makeSecretaryWithOrg();
