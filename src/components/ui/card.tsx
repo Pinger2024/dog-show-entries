@@ -7,7 +7,10 @@ function Card({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card"
       className={cn(
-        "bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm",
+        // Softer radius + a subtle layered shadow lifts every card off the
+        // page for a more modern feel. Components that need a different look
+        // (StatCard, the setup-wizard cards) override these via className.
+        "bg-card text-card-foreground flex flex-col gap-6 rounded-2xl border border-border/70 py-6 shadow-[0_1px_2px_-1px_rgba(20,40,30,0.05),0_10px_26px_-18px_rgba(20,40,30,0.22)]",
         className
       )}
       {...props}
