@@ -6,11 +6,13 @@ import { useSession } from 'next-auth/react';
 import {
   ArrowLeft,
   Ban,
+  ChevronDown,
   ClipboardList,
   Clock,
   Database,
   Loader2,
   PoundSterling,
+  Settings2,
   Trash2,
   Users,
 } from 'lucide-react';
@@ -19,11 +21,13 @@ import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from '@/components/ui/select';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   Dialog,
   DialogContent,
@@ -208,22 +212,42 @@ export default function ShowManagementLayout({
             <Badge variant={showStatus.variant} className="shrink-0">
               {showStatus.label}
             </Badge>
+            {/* Everything that changes or cancels the show lives behind one
+                quiet "Manage" menu — the rare, scary controls (especially
+                Cancel) no longer shout from the top of the page. */}
             {show.status !== 'cancelled' && show.status !== 'completed' && (
-              <Select value="" onValueChange={handleStatusChange}>
-                <SelectTrigger
-                  aria-label="Change show status"
-                  className="h-7 w-auto shrink-0 gap-1 rounded-full border-border/70 px-2.5 text-xs font-medium text-muted-foreground hover:text-foreground focus:ring-1"
-                >
-                  Change
-                </SelectTrigger>
-                <SelectContent align="start">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-label="Manage show"
+                    className="h-7 shrink-0 gap-1 rounded-full px-2.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+                  >
+                    <Settings2 className="size-3.5" />
+                    Manage
+                    <ChevronDown className="size-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-52">
+                  <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                    Change show status
+                  </DropdownMenuLabel>
                   {SELECTABLE_STATUSES.filter((s) => s.value !== show.status).map((s) => (
-                    <SelectItem key={s.value} value={s.value}>
+                    <DropdownMenuItem key={s.value} onSelect={() => handleStatusChange(s.value)}>
                       {s.label}
-                    </SelectItem>
+                    </DropdownMenuItem>
                   ))}
-                </SelectContent>
-              </Select>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onSelect={() => setShowCancelDialog(true)}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <Ban className="size-3.5" />
+                    Cancel show
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -231,18 +255,6 @@ export default function ShowManagementLayout({
             {show.venue && ` — ${show.venue.name}`}
           </p>
         </div>
-        {/* Cancel show — only when show is still active (not already cancelled/completed) */}
-        {show.status !== 'cancelled' && show.status !== 'completed' && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
-            onClick={() => setShowCancelDialog(true)}
-          >
-            <Ban className="size-3.5" />
-            Cancel Show
-          </Button>
-        )}
       </div>
 
       {/* Cancel show confirmation */}
@@ -295,20 +307,22 @@ export default function ShowManagementLayout({
       {/* Admin test data tools — only visible to admins */}
       {isAdmin && (
         <>
-          <div className="flex flex-col gap-2 rounded-lg border border-dashed border-orange-300 bg-orange-50 p-3 dark:border-orange-700 dark:bg-orange-950/30 sm:flex-row sm:items-center">
-            <div className="flex items-center gap-2">
-              <Database className="size-4 text-orange-600 dark:text-orange-400 shrink-0" />
-              <span className="text-xs font-medium text-orange-700 dark:text-orange-300">Admin Tools</span>
-            </div>
+          {/* Admin-only dev tooling — collapsed by default so it doesn't
+              clutter the real workspace. */}
+          <details className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/20 px-3 py-2 text-muted-foreground [&_summary::-webkit-details-marker]:hidden">
+            <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-medium">
+              <Database className="size-3.5 shrink-0" />
+              Admin tools
+              {(populateMutation.isPending || clearMutation.isPending) && (
+                <Loader2 className="size-3.5 animate-spin" />
+              )}
+            </summary>
             {(populateMutation.isPending || clearMutation.isPending) ? (
-              <div className="flex items-center gap-2 sm:ml-auto">
-                <Loader2 className="size-4 animate-spin text-orange-600" />
-                <span className="text-xs text-orange-700 dark:text-orange-300">
-                  {populateMutation.isPending ? 'Generating test data... this takes about a minute' : 'Clearing data...'}
-                </span>
-              </div>
+              <p className="mt-2 text-xs">
+                {populateMutation.isPending ? 'Generating test data… this takes about a minute' : 'Clearing data…'}
+              </p>
             ) : (
-              <div className="flex gap-2 sm:ml-auto">
+              <div className="mt-2 flex gap-2">
                 <Button
                   size="sm"
                   variant="outline"
@@ -329,7 +343,7 @@ export default function ShowManagementLayout({
                 </Button>
               </div>
             )}
-          </div>
+          </details>
 
           <Dialog
             open={showTestDataDialog}
