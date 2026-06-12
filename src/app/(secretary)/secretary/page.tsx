@@ -15,9 +15,6 @@ import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -99,11 +96,11 @@ export default function SecretaryDashboardPage() {
       {/* Header */}
       <PageHeader>
         <div>
-          <PageTitle>Secretary Dashboard</PageTitle>
-          <PageDescription>Manage your shows, entries, and organisation details.</PageDescription>
+          <PageTitle>Your shows</PageTitle>
+          <PageDescription>Everything you&rsquo;re running, in one place.</PageDescription>
         </div>
         <PageActions>
-          <Button asChild>
+          <Button asChild className="rounded-full shadow-sm shadow-primary/20">
             <Link href="/secretary/shows/new">
               <Plus className="size-4" />
               Create Show
@@ -114,9 +111,14 @@ export default function SecretaryDashboardPage() {
 
       {/* Stats — scoped to active shows */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-4">
-        <StatCard label="Active Shows" value={activeShowsCount} icon={CalendarDays} />
-        <StatCard label="Total Entries" value={totalEntries} icon={Ticket} />
-        <StatCard label="Active Revenue" value={formatCurrency(activeRevenue)} icon={PoundSterling} />
+        <StatCard label="Active shows" value={activeShowsCount} icon={CalendarDays} />
+        <StatCard label="Entries so far" value={totalEntries} icon={Ticket} />
+        <StatCard
+          label="Raised for clubs"
+          value={formatCurrency(activeRevenue)}
+          icon={PoundSterling}
+          iconColor={{ bg: 'bg-emerald-100 dark:bg-emerald-900/30', fg: 'text-emerald-600 dark:text-emerald-400' }}
+        />
       </div>
 
       {/* Shows list with tabs */}
@@ -140,36 +142,16 @@ export default function SecretaryDashboardPage() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="active">
-          <Card>
-            <CardHeader>
-              <CardTitle>Active Shows</CardTitle>
-              <CardDescription>
-                Shows that are in progress, accepting entries, or being prepared
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ShowList shows={activeShows} emptyMessage="No active shows" />
-            </CardContent>
-          </Card>
+        <TabsContent value="active" className="mt-4">
+          <ShowList shows={activeShows} emptyMessage="No active shows" />
         </TabsContent>
 
-        <TabsContent value="past">
-          <Card>
-            <CardHeader>
-              <CardTitle>Past & Cancelled Shows</CardTitle>
-              <CardDescription>
-                Completed and cancelled shows
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {pastShows.length === 0 ? (
-                <EmptyState icon={Archive} title="No past shows" description="Completed and cancelled shows will appear here." />
-              ) : (
-                <ShowList shows={pastShows} emptyMessage="No past shows" />
-              )}
-            </CardContent>
-          </Card>
+        <TabsContent value="past" className="mt-4">
+          {pastShows.length === 0 ? (
+            <EmptyState icon={Archive} title="No past shows" description="Completed and cancelled shows will appear here." />
+          ) : (
+            <ShowList shows={pastShows} emptyMessage="No past shows" />
+          )}
         </TabsContent>
       </Tabs>
     </div>
@@ -224,11 +206,11 @@ function ShowList({
           <Link
             key={show.id}
             href={`/secretary/shows/${show.slug ?? show.id}`}
-            className="flex items-center justify-between rounded-lg border p-3 transition-colors hover:bg-muted/50 sm:p-4"
+            className="group flex items-center justify-between rounded-2xl border border-border/60 bg-card p-3.5 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-border hover:shadow-[0_18px_36px_-28px_rgba(20,60,40,0.5)] sm:p-4"
           >
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <p className="truncate font-medium">{displayShowTitle(show.name, show.organisation?.name)}</p>
+                <p className="truncate font-serif text-base font-semibold">{displayShowTitle(show.name, show.organisation?.name)}</p>
                 <Badge variant={status.variant}>{status.label}</Badge>
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-muted-foreground">
@@ -262,7 +244,7 @@ function ShowList({
                 </div>
               )}
             </div>
-            <ArrowRight className="ml-4 size-4 shrink-0 text-muted-foreground" />
+            <ArrowRight className="ml-4 size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
           </Link>
         );
       })}

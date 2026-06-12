@@ -41,7 +41,8 @@ function StatCard({
   return (
     <Card
       className={cn(
-        'transition-all hover:shadow-md hover:shadow-primary/5',
+        'rounded-2xl border-border/60 shadow-[0_1px_0_rgba(255,255,255,0.5)_inset,0_12px_30px_-26px_rgba(20,60,40,0.4)]',
+        'transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_1px_0_rgba(255,255,255,0.5)_inset,0_22px_40px_-26px_rgba(20,60,40,0.5)]',
         className
       )}
       {...props}
@@ -53,7 +54,7 @@ function StatCard({
         {Icon && (
           <div
             className={cn(
-              'flex size-8 items-center justify-center rounded-lg sm:size-9',
+              'flex size-8 items-center justify-center rounded-xl ring-1 ring-inset ring-black/[0.04] sm:size-9',
               bg
             )}
           >
@@ -62,7 +63,7 @@ function StatCard({
         )}
       </CardHeader>
       <CardContent className="px-3 pb-3 pt-0 sm:px-4 sm:pb-4">
-        <p className="text-2xl font-bold sm:text-3xl">{value}</p>
+        <p className="font-serif text-2xl font-semibold tracking-tight sm:text-3xl">{value}</p>
         {subtext && (
           <div className="mt-1 text-xs text-muted-foreground">{subtext}</div>
         )}
