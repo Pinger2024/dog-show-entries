@@ -23,7 +23,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from '@/components/ui/select';
 import {
   Dialog,
@@ -49,6 +48,18 @@ import { ShowSectionNav } from './_components/show-section-nav';
 import { LifecycleBanner } from './_components/lifecycle-banner';
 import { EditShowNameDialog } from './_components/edit-show-name-dialog';
 import { formatRelativeTime, formatCompactRevenue } from './_lib/show-utils';
+
+// Lifecycle statuses offered in the "Change" menu, in natural order.
+// `cancelled` is deliberately absent — cancelling is a separate, clearly
+// destructive action with its own button and confirmation.
+const SELECTABLE_STATUSES = [
+  { value: 'draft', label: 'Draft' },
+  { value: 'published', label: 'Published' },
+  { value: 'entries_open', label: 'Entries Open' },
+  { value: 'entries_closed', label: 'Entries Closed' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'completed', label: 'Completed' },
+] as const;
 
 export default function ShowManagementLayout({
   children,
@@ -122,11 +133,23 @@ export default function ShowManagementLayout({
     variant: 'outline' as const,
   };
 
-  const riskyTransitions: Record<string, string> = {
+  // Every status change is now confirmed with a plain-English consequence —
+  // there are no silent transitions. The "backward" moves (back to draft,
+  // re-closing entries) are the ones that used to be a one-tap landmine, so
+  // they spell out exactly what exhibitors will see.
+  const transitionConsequences: Record<string, string> = {
+    draft:
+      'This hides the show from the public again and stops accepting entries. Anyone who already entered keeps their place, but no one new can find or enter the show until you publish it again.',
+    published:
+      "This makes the show's page visible to the public so people can see it's coming — but entries are not open yet.",
     entries_open:
-      'This will open entries to the public. Make sure all classes and pricing are set up correctly before proceeding.',
+      'This opens entries to the public. Make sure your classes and fees are set up first.',
+    entries_closed:
+      "This stops new entries. Everyone who's already entered keeps their place — you just won't take any more.",
+    in_progress:
+      "This marks the show as running. It's usually set automatically on the morning of the show, but you can set it yourself.",
     completed:
-      'This will mark the show as completed. This should only be done after the event has finished.',
+      'This marks the show as finished. Only do this once the event is over — it closes off the show.',
   };
 
   async function applyStatusChange(newStatus: string) {
@@ -158,11 +181,8 @@ export default function ShowManagementLayout({
 
   function handleStatusChange(newStatus: string) {
     if (!show || newStatus === show.status) return;
-    if (riskyTransitions[newStatus]) {
-      setPendingStatus(newStatus);
-    } else {
-      applyStatusChange(newStatus);
-    }
+    // Always confirm — no status change happens on a single tap anymore.
+    setPendingStatus(newStatus);
   }
 
   return (
@@ -180,30 +200,31 @@ export default function ShowManagementLayout({
               {show.name}
             </h1>
             <EditShowNameDialog showId={show.id} currentName={show.name} />
-            {/* Status — the badge is now a clickable dropdown so the
-                secretary can jump between draft / entries open / closed /
-                cancelled etc. without waiting for the auto-transition.
-                Amanda 2026-05-22 reported the free-form switcher had gone
-                missing; restored. */}
-            <Select value={show.status} onValueChange={handleStatusChange}>
-              <SelectTrigger
-                aria-label="Change show status"
-                className="h-auto shrink-0 gap-1 border-none bg-transparent p-0 shadow-none focus:ring-0 focus:ring-offset-0"
-              >
-                <Badge variant={showStatus.variant} className="shrink-0 cursor-pointer hover:opacity-80">
-                  {showStatus.label}
-                </Badge>
-              </SelectTrigger>
-              <SelectContent align="end">
-                <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="published">Published</SelectItem>
-                <SelectItem value="entries_open">Entries Open</SelectItem>
-                <SelectItem value="entries_closed">Entries Closed</SelectItem>
-                <SelectItem value="in_progress">In Progress</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="cancelled">Cancelled</SelectItem>
-              </SelectContent>
-            </Select>
+            {/* Status is a READ-ONLY badge — a mistap can no longer flip a
+                live show. Changing it is a deliberate, separate action
+                ("Change") that always confirms with a plain-English
+                consequence. The free-form switcher Amanda asked for
+                (2026-05-22) is preserved — just made safe. */}
+            <Badge variant={showStatus.variant} className="shrink-0">
+              {showStatus.label}
+            </Badge>
+            {show.status !== 'cancelled' && show.status !== 'completed' && (
+              <Select value="" onValueChange={handleStatusChange}>
+                <SelectTrigger
+                  aria-label="Change show status"
+                  className="h-7 w-auto shrink-0 gap-1 rounded-full border-border/70 px-2.5 text-xs font-medium text-muted-foreground hover:text-foreground focus:ring-1"
+                >
+                  Change
+                </SelectTrigger>
+                <SelectContent align="start">
+                  {SELECTABLE_STATUSES.filter((s) => s.value !== show.status).map((s) => (
+                    <SelectItem key={s.value} value={s.value}>
+                      {s.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
             {show.organisation?.name}
@@ -253,7 +274,7 @@ export default function ShowManagementLayout({
         showId={show.id}
         onCancel={() => setPendingStatus(null)}
         onConfirm={(status) => applyStatusChange(status)}
-        riskyTransitions={riskyTransitions}
+        transitionConsequences={transitionConsequences}
       />
 
       {/* Lifecycle Banner */}
@@ -472,13 +493,13 @@ function StatusChangeDialog({
   showId,
   onCancel,
   onConfirm,
-  riskyTransitions,
+  transitionConsequences,
 }: {
   pendingStatus: string | null;
   showId: string;
   onCancel: () => void;
   onConfirm: (status: string) => void;
-  riskyTransitions: Record<string, string>;
+  transitionConsequences: Record<string, string>;
 }) {
   const isEntriesOpen = pendingStatus === 'entries_open';
 
@@ -507,7 +528,7 @@ function StatusChangeDialog({
           <DialogDescription>
             {isEntriesOpen && !canOpen && !blockersLoading
               ? 'Some items need to be completed before you can open entries.'
-              : riskyTransitions[pendingStatus ?? '']}
+              : transitionConsequences[pendingStatus ?? '']}
           </DialogDescription>
         </DialogHeader>
 

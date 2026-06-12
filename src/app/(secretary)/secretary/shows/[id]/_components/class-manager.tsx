@@ -754,6 +754,17 @@ export function BulkClassCreator({ showId }: { showId: string }) {
   const { data: classDefs } = trpc.secretary.listClassDefinitions.useQuery();
   const utils = trpc.useUtils();
 
+  // A single-breed club only ever runs its one breed — so we never show the
+  // 226-breed picker, and we certainly never pre-tick all of them (that was
+  // the "4,972 classes" trap). We just use the show's breed.
+  const isSingleBreed =
+    showData?.showScope === 'single_breed' && !!showData?.breedId;
+  const singleBreedId = isSingleBreed ? showData!.breedId! : null;
+  const singleBreedName =
+    (showData as { breed?: { name?: string } } | undefined)?.breed?.name ??
+    (breeds ?? []).find((b) => b.id === singleBreedId)?.name ??
+    'your breed';
+
   const bulkMutation = trpc.secretary.bulkCreateClasses.useMutation({
     onSuccess: (data) => {
       toast.success(`Created ${data.created} classes`);
@@ -799,11 +810,18 @@ export function BulkClassCreator({ showId }: { showId: string }) {
         .map((cd) => cd.id);
       setSelectedClassDefIds(ids);
     }
-    // For non-handling templates, pre-select all breeds
-    if (template && !template.isHandling && breeds) {
-      setSelectedBreedIds(breeds.map((b) => b.id));
+    // Breed pre-selection on template change:
+    //  • single-breed show → just the club's one breed
+    //  • all-breed show   → NONE (a deliberate choice; never auto-tick all
+    //    226 breeds, which silently builds thousands of classes)
+    if (template && !template.isHandling) {
+      if (singleBreedId) {
+        setSelectedBreedIds([singleBreedId]);
+      } else {
+        setSelectedBreedIds([]);
+      }
     }
-  }, [template, classDefs, breeds]);
+  }, [template, classDefs, singleBreedId]);
 
   function handleSelectTemplate(templateId: string) {
     const t = CLASS_TEMPLATES.find((t) => t.id === templateId);
@@ -931,10 +949,25 @@ export function BulkClassCreator({ showId }: { showId: string }) {
                   Handling classes are not breed-specific and are not split by sex.
                 </p>
               </div>
+            ) : isSingleBreed ? (
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <p className="text-sm">
+                  Classes for{' '}
+                  <span className="font-semibold text-foreground">
+                    {singleBreedName}
+                  </span>
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Your club runs one breed, so we&apos;ll add these classes for{' '}
+                  {singleBreedName} — no need to pick from a list.
+                </p>
+              </div>
             ) : (
               <div>
                 <p className="mb-2 text-xs text-muted-foreground">
-                  Select the breeds for your show, or use &quot;Select All&quot; for an all-breed show.
+                  Pick the breeds for your show. Tick a group heading to select
+                  the whole group, or use &quot;Select All&quot; for a full
+                  all-breed show.
                 </p>
                 <div className="flex items-center justify-between">
                   <Label className="text-sm font-medium">
