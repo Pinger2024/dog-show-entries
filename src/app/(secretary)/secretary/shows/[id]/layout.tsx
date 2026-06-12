@@ -277,12 +277,20 @@ export default function ShowManagementLayout({
         transitionConsequences={transitionConsequences}
       />
 
-      {/* Lifecycle Banner */}
-      <LifecycleBanner
-        show={show}
-        entryStats={entryStats}
-        onOpenEntries={() => handleStatusChange('entries_open')}
-      />
+      {/* Lifecycle Banner — only once the show is live. During setup
+          (draft/published) the Setup Wizard on the overview page is the
+          single source of "what's left to do", so showing the banner's
+          duplicate blocker-list + Open Entries button here as well gave the
+          secretary two competing to-do lists on one screen (2026-06-12).
+          The banner's real value — entry countdowns, overdue warnings,
+          show-day actions — all belongs to the live phases. */}
+      {show.status !== 'draft' && show.status !== 'published' && (
+        <LifecycleBanner
+          show={show}
+          entryStats={entryStats}
+          onOpenEntries={() => handleStatusChange('entries_open')}
+        />
+      )}
 
       {/* Admin test data tools — only visible to admins */}
       {isAdmin && (
