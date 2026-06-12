@@ -253,3 +253,39 @@ describe('onboarding flow', () => {
     expect(refreshed?.onboardingCompletedAt).toBeInstanceOf(Date);
   });
 });
+
+describe('secretary.registerOrganisation (add another club)', () => {
+  it('lets an existing secretary register an additional club + membership, role unchanged', async () => {
+    const { user, org: firstOrg } = await makeSecretaryWithOrg();
+
+    const newOrg = await createTestCaller(user).secretary.registerOrganisation({
+      organisationName: 'Second GSD Club',
+      clubType: 'single_breed',
+      showRuleset: 'rkc',
+      contactEmail: 'sec@secondclub.test',
+    });
+
+    expect(newOrg.name).toBe('Second GSD Club');
+    // membership created for the caller on the new org
+    const m = await testDb.query.memberships.findFirst({
+      where: and(eq(memberships.userId, user.id), eq(memberships.organisationId, newOrg.id)),
+    });
+    expect(m?.status).toBe('active');
+    // original club membership still there → secretary now runs two
+    const all = await testDb.query.memberships.findMany({ where: eq(memberships.userId, user.id) });
+    expect(all.map((x) => x.organisationId).sort()).toEqual([firstOrg.id, newOrg.id].sort());
+    // role preserved
+    const refreshed = await testDb.query.users.findFirst({ where: eq(users.id, user.id) });
+    expect(refreshed?.role).toBe('secretary');
+  });
+
+  it('does NOT downgrade an admin who registers a club', async () => {
+    const admin = await makeUser({ role: 'admin' });
+    await createTestCaller(admin).secretary.registerOrganisation({
+      organisationName: 'Admin-run Club',
+      clubType: 'multi_breed',
+    });
+    const refreshed = await testDb.query.users.findFirst({ where: eq(users.id, admin.id) });
+    expect(refreshed?.role).toBe('admin'); // not downgraded to secretary
+  });
+});

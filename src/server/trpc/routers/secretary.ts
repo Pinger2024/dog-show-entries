@@ -230,6 +230,51 @@ export const secretaryRouter = createTRPCRouter({
     };
   }),
 
+  /**
+   * Register an ADDITIONAL club for a secretary who already runs one.
+   * The original /apply flow is exhibitor-only (first-club onboarding), so
+   * a secretary running two or three clubs had no way to add the others.
+   * This creates the org + an active membership for the caller — and
+   * crucially does NOT touch their role (assignRole would downgrade an
+   * admin to secretary).
+   */
+  registerOrganisation: secretaryProcedure
+    .input(
+      z.object({
+        organisationName: z.string().min(1, 'Club name is required').max(255),
+        clubType: z.enum(['single_breed', 'multi_breed']),
+        showRuleset: z.enum(['rkc', 'wusv']).default('rkc'),
+        breedId: z.string().uuid().optional(),
+        kcRegNumber: z.string().max(50).optional(),
+        contactEmail: z.string().email().optional().or(z.literal('')),
+        contactPhone: z.string().max(50).optional(),
+        website: z.string().max(255).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const [org] = await ctx.db
+        .insert(organisations)
+        .values({
+          name: input.organisationName.trim(),
+          type: input.clubType,
+          showRuleset: input.showRuleset,
+          breedId: input.clubType === 'single_breed' ? input.breedId ?? null : null,
+          kcRegNumber: input.kcRegNumber || null,
+          contactEmail: input.contactEmail || null,
+          contactPhone: input.contactPhone || null,
+          website: input.website || null,
+        })
+        .returning();
+
+      await ctx.db.insert(memberships).values({
+        userId: ctx.session.user.id,
+        organisationId: org!.id,
+        status: 'active',
+      });
+
+      return org!;
+    }),
+
   getOrganisation: secretaryProcedure
     .input(z.object({ organisationId: z.string().uuid().optional() }).optional())
     .query(async ({ ctx, input }) => {

@@ -98,7 +98,7 @@ const emptyForm: PersonFormData = {
 };
 
 export default function MyClubPage() {
-  const { activeOrgId } = useActiveOrganisation();
+  const { activeOrgId, setActiveOrgId } = useActiveOrganisation();
   const { data: org, isLoading: orgLoading } = trpc.secretary.getOrganisation.useQuery(
     { organisationId: activeOrgId ?? undefined },
     { enabled: activeOrgId !== null }
@@ -109,6 +109,7 @@ export default function MyClubPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState<PersonFormData>(emptyForm);
+  const [registerOpen, setRegisterOpen] = useState(false);
 
   const { data: people, isLoading: peopleLoading } = trpc.secretary.listOrgPeople.useQuery(
     { organisationId: org?.id ?? '' },
@@ -240,14 +241,37 @@ export default function MyClubPage() {
   return (
     <div className="space-y-4 sm:space-y-6 pb-16 md:pb-0">
       {/* Header */}
-      <div>
-        <h1 className="font-serif text-lg font-bold tracking-tight sm:text-2xl">
-          My Club
-        </h1>
-        <p className="mt-0.5 text-sm text-muted-foreground">
-          Manage your club details, officials, and committee members
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="font-serif text-lg font-bold tracking-tight sm:text-2xl">
+            My Club
+          </h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Manage your club details, officials, and committee members
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="shrink-0 rounded-full"
+          onClick={() => setRegisterOpen(true)}
+        >
+          <Plus className="size-4" />
+          <span className="hidden sm:inline">Add another club</span>
+          <span className="sm:hidden">Add club</span>
+        </Button>
       </div>
+
+      <RegisterClubDialog
+        open={registerOpen}
+        onOpenChange={setRegisterOpen}
+        onRegistered={(newOrg) => {
+          setActiveOrgId(newOrg.id);
+          utils.secretary.getOrganisation.invalidate();
+          utils.secretary.getDashboard.invalidate();
+          toast.success(`${newOrg.name} registered — you're now managing it`);
+        }}
+      />
 
       {/* Section 1: Club Details */}
       <Card>
@@ -674,5 +698,151 @@ function ShowRulesetCard({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+/* ── Register another club ───────────────────────────────────────────
+   For a secretary who already runs a club and wants to add another. The
+   /apply flow is first-club-only and exhibitor-gated, so this is the only
+   way a multi-club secretary can register the rest. Kept deliberately
+   short — name, kind, and (if single-breed) which breed. */
+function RegisterClubDialog({
+  open,
+  onOpenChange,
+  onRegistered,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onRegistered: (org: { id: string; name: string }) => void;
+}) {
+  const [name, setName] = useState('');
+  const [clubType, setClubType] = useState<'single_breed' | 'multi_breed'>('single_breed');
+  const [breedId, setBreedId] = useState<string>('');
+  const [contactEmail, setContactEmail] = useState('');
+
+  const { data: breeds } = trpc.breeds.list.useQuery(undefined, { enabled: open });
+  const register = trpc.secretary.registerOrganisation.useMutation();
+
+  function reset() {
+    setName('');
+    setClubType('single_breed');
+    setBreedId('');
+    setContactEmail('');
+  }
+
+  const canSubmit =
+    name.trim().length > 0 && (clubType !== 'single_breed' || !!breedId);
+
+  async function handleSubmit() {
+    if (!canSubmit) return;
+    try {
+      const org = await register.mutateAsync({
+        organisationName: name.trim(),
+        clubType,
+        breedId: clubType === 'single_breed' ? breedId : undefined,
+        contactEmail: contactEmail.trim() || undefined,
+      });
+      onRegistered(org);
+      reset();
+      onOpenChange(false);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "We couldn't register the club just yet",
+      );
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="font-serif text-xl">Register another club</DialogTitle>
+          <DialogDescription>
+            Run more than one club? Add it here and you&rsquo;ll be able to switch
+            between them whenever you like.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-1">
+          <div className="space-y-1.5">
+            <Label htmlFor="reg-club-name">Club name</Label>
+            <Input
+              id="reg-club-name"
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Clyde Valley GSD Club"
+              className="min-h-[2.75rem]"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>What kind of club is it?</Label>
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                { value: 'single_breed', label: 'One breed', hint: 'e.g. a GSD club' },
+                { value: 'multi_breed', label: 'All breeds', hint: 'a general club' },
+              ] as const).map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setClubType(opt.value)}
+                  className={
+                    'rounded-xl border-2 px-3 py-2.5 text-left transition-all min-h-[2.75rem] ' +
+                    (clubType === opt.value
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border hover:border-primary/40')
+                  }
+                >
+                  <span className="block text-sm font-medium">{opt.label}</span>
+                  <span className="block text-xs text-muted-foreground">{opt.hint}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {clubType === 'single_breed' && (
+            <div className="space-y-1.5">
+              <Label htmlFor="reg-breed">Which breed?</Label>
+              <Select value={breedId} onValueChange={setBreedId}>
+                <SelectTrigger id="reg-breed" className="min-h-[2.75rem]">
+                  <SelectValue placeholder="Choose a breed" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(breeds ?? []).map((b) => (
+                    <SelectItem key={b.id} value={b.id}>
+                      {b.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <Label htmlFor="reg-email">Club contact email <span className="font-normal text-muted-foreground">(optional)</span></Label>
+            <Input
+              id="reg-email"
+              type="email"
+              value={contactEmail}
+              onChange={(e) => setContactEmail(e.target.value)}
+              placeholder="secretary@yourclub.co.uk"
+              className="min-h-[2.75rem]"
+            />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={handleSubmit} disabled={!canSubmit || register.isPending}>
+            {register.isPending ? (
+              <><Loader2 className="size-4 animate-spin" /> Registering…</>
+            ) : (
+              <><Plus className="size-4" /> Register club</>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
