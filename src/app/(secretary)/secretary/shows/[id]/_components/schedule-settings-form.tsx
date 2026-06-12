@@ -796,11 +796,27 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
 
       {/* Save bar */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end pb-4">
-        {lastAutoSavedAt && (
-          <p className="text-xs text-muted-foreground sm:mr-auto">
-            Auto-saved at {lastAutoSavedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+        {/* Live autosave reassurance — this persona worries their work will
+            vanish, so we tell them plainly and continuously that it's safe. */}
+        {(autoSaveStatus === 'saving' || autoSaveStatus === 'pending') ? (
+          <p className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground sm:mr-auto">
+            <Loader2 className="size-3.5 animate-spin" />
+            Saving…
           </p>
-        )}
+        ) : autoSaveStatus === 'error' ? (
+          <p className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-600 sm:mr-auto">
+            <AlertTriangle className="size-3.5" />
+            Couldn&rsquo;t save — check your connection
+          </p>
+        ) : lastAutoSavedAt ? (
+          <p className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400 sm:mr-auto">
+            <Check className="size-3.5" />
+            All changes saved
+            <span className="font-normal text-emerald-700/70 dark:text-emerald-400/70">
+              · {lastAutoSavedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </p>
+        ) : null}
         <Button variant="outline" asChild className="w-full sm:w-auto min-h-[2.75rem]">
           <a href={`/api/schedule/${showId}`} target="_blank" rel="noopener noreferrer">
             <ExternalLink className="size-4" />

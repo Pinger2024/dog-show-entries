@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   ArrowLeftRight,
   ArrowRight,
@@ -9,6 +9,7 @@ import {
   Loader2,
   Plus,
   Search,
+  Share2,
   Ticket,
   X,
 } from 'lucide-react';
@@ -64,6 +65,28 @@ export default function EntriesPage() {
   const { data: entriesData, isLoading: entriesLoading } = trpc.entries.getForShow.useQuery({ showId, limit: 500 });
   const entries = entriesData?.items ?? [];
   const total = entriesData?.total ?? 0;
+
+  // First-entry celebration — entries arriving is the most emotional moment
+  // of a secretary's show, and it used to pass in silence. The first time she
+  // opens this page and there's at least one live entry, fire a little
+  // confetti. Gated in localStorage so it happens once per show, not every
+  // visit.
+  const confirmedCount = entries.filter(
+    (e) => e.status !== 'withdrawn' && e.status !== 'cancelled',
+  ).length;
+  useEffect(() => {
+    if (confirmedCount < 1 || typeof window === 'undefined') return;
+    const key = `remi-first-entry-celebrated-${showId}`;
+    if (localStorage.getItem(key)) return;
+    localStorage.setItem(key, '1');
+    import('@/lib/confetti').then(({ fireDogConfetti }) => fireDogConfetti());
+    toast.success(
+      confirmedCount === 1
+        ? 'Your first entry is in! 🎉'
+        : `You've got entries — ${confirmedCount} so far! 🎉`,
+      { description: 'They tend to pour in as the closing date nears.' },
+    );
+  }, [confirmedCount, showId]);
 
   const [search, setSearch] = useState('');
   // Default to "active" — withdrawn/cancelled entries are noise on the
@@ -224,15 +247,45 @@ export default function EntriesPage() {
               <p className="text-sm text-muted-foreground">Loading entries...</p>
             </div>
           ) : filtered.length === 0 ? (
-            <EmptyState
-              icon={Ticket}
-              title="No entries found"
-              description={
-                search || statusFilter !== 'all'
-                  ? 'Try adjusting your search or filter.'
-                  : 'No one has entered this show yet.'
-              }
-            />
+            // Only the "adjust your search" message when entries DO exist but
+            // are hidden by the current search/filter. When there are genuinely
+            // no entries on the show yet, show the warm reassurance below.
+            entries.length > 0 ? (
+              <EmptyState
+                icon={Ticket}
+                title="No entries found"
+                description="Try adjusting your search or filter."
+              />
+            ) : (
+              // The single most anxious moment for a secretary — an empty
+              // entries list. So we reassure (it's normal, entries come late)
+              // and give her something to DO (share the show) rather than
+              // leaving her staring at a blank table.
+              <div className="rounded-2xl border border-primary/15 bg-gradient-to-br from-primary/[0.06] via-card to-card px-5 py-8 text-center shadow-sm">
+                <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-primary/10 text-primary">
+                  <Ticket className="size-6" />
+                </div>
+                <h3 className="mt-3 font-serif text-lg font-semibold">No entries yet — and that&rsquo;s completely normal</h3>
+                <p className="mx-auto mt-1.5 max-w-md text-sm text-muted-foreground">
+                  Most entries land in the last week or two before closing. In the
+                  meantime, the more people who see your show, the better — share
+                  your show page wherever your exhibitors gather.
+                </p>
+                <Button
+                  className="mt-4 rounded-full"
+                  onClick={() => {
+                    const url = `${window.location.origin}/shows/${showData?.slug ?? showId}`;
+                    navigator.clipboard?.writeText(url).then(
+                      () => toast.success('Show link copied — paste it into Facebook, WhatsApp or an email'),
+                      () => toast.error('Couldn’t copy — you can find the link on your show page'),
+                    );
+                  }}
+                >
+                  <Share2 className="size-4" />
+                  Copy your show link
+                </Button>
+              </div>
+            )
           ) : (
             <>
               {/* Mobile card view */}
