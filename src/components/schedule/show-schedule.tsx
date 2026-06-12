@@ -113,6 +113,7 @@ export function ShowSchedule({
   const mixedBottomClasses = mixedClasses.filter((c) => c.classType === 'junior_handler');
   const sacClasses = deduplicatedClasses.filter(isSac);
   const sacJudges = judges.filter((j) => j.role === 'Special Awards Classes');
+  const jhJudges = judges.filter((j) => j.role === 'Junior Handling');
 
   const footerRender = ({ pageNumber, totalPages }: { pageNumber: number; totalPages: number }) =>
     `${show.name}  ·  Schedule  ·  Page ${pageNumber} of ${totalPages}`;
@@ -1059,7 +1060,10 @@ export function ShowSchedule({
         {judges.filter((j) => j.role !== 'Special Awards Classes').length > 0 && (
           <View style={{ marginBottom: 10 }}>
             {judges
-              .filter((j) => j.role !== 'Special Awards Classes')
+              // Junior Handling and Special Awards Classes judges have their
+              // own dedicated sections below — keep them out of the main
+              // breed-classification judge list.
+              .filter((j) => j.role !== 'Special Awards Classes' && j.role !== 'Junior Handling')
               .map((judge, i) => (
                 <Text key={i} style={{ fontFamily: 'Inter', fontSize: 9, fontWeight: 'bold', textAlign: 'center', color: C.textDark, marginBottom: 2 }}>
                   {judge.displayLabel ?? judge.name}
@@ -1118,6 +1122,14 @@ export function ShowSchedule({
           <View style={{ marginTop: 8 }}>
             <View style={s.twoColMixedHeader}>
               <Text style={s.twoColHeaderText}>Junior Handling</Text>
+            </View>
+            {/* Judge line — mirrors the Special Award Classes section so the
+                Junior Handling judge isn't left blank (Mandy 2026-06-12).
+                Shows "TBC" until a JH judge is appointed. */}
+            <View style={{ marginTop: 6, marginBottom: 4 }}>
+              <Text style={{ fontFamily: 'Inter', fontSize: 9, fontWeight: 'bold', textAlign: 'center', color: C.textDark }}>
+                Judge: {jhJudges.length > 0 ? jhJudges.map((j) => j.name).join(' / ') : 'TBC'}
+              </Text>
             </View>
             {mixedBottomClasses.map((cls, i) => (
               <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>

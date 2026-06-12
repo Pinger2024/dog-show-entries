@@ -1695,6 +1695,22 @@ export const secretaryRouter = createTRPCRouter({
             .set({ classNumber })
             .where(eq(showClasses.id, allClasses[i]!.id));
         }
+
+        // Junior Handling entries are charged the show's flat
+        // `juniorHandlerFee` (fee-calc.ts), NOT the per-class fee — so when a
+        // secretary sets a fee while adding the JH classes, carry it through
+        // to the show field, otherwise her fee silently does nothing. Only
+        // when she actually entered a fee (>0), so the £0 default never wipes
+        // a JH fee she set elsewhere on the Fees & Setup page.
+        const isHandlingCreation =
+          input.breedIds.length === 0 &&
+          classDefRows.some((cd) => cd.type === 'junior_handler');
+        if (isHandlingCreation && input.entryFee > 0) {
+          await ctx.db
+            .update(shows)
+            .set({ juniorHandlerFee: input.entryFee })
+            .where(eq(shows.id, input.showId));
+        }
       }
 
       return { created: values.length };

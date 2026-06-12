@@ -578,6 +578,10 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
       name: j.name,
       breeds: breedArr,
       sex: j.sexes.size === 1 ? (Array.from(j.sexes)[0] as 'dog' | 'bitch') : null,
+      // role MUST be set so the schedule can route this judge to the right
+      // section — a Junior Handling judge belongs in the JH block, not the
+      // breed-classification list (mirrors how SAC judges are handled).
+      role: role ?? undefined,
       displayLabel: role ? `${role} — ${namePart}` : namePart,
     };
   });

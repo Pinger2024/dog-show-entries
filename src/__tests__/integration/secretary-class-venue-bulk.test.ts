@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { showClasses } from '@/server/db/schema';
+import { showClasses, shows } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
 import { createTestCaller } from '../helpers/context';
 import {
@@ -120,6 +120,41 @@ describe('secretary.bulkCreateClasses', () => {
     const cls = await testDb.query.showClasses.findMany({ where: eq(showClasses.showId, show.id) });
     expect(cls[0]?.breedId).toBeNull();
     expect(cls[0]?.isBreedSpecific).toBe(false);
+  });
+
+  it('carries a Junior Handling per-class fee through to the show juniorHandlerFee (Mandy 2026-06-12)', async () => {
+    // JH entries are charged the show's flat juniorHandlerFee, not the
+    // per-class fee — so a fee set while adding JH classes must propagate to
+    // the show field, or it silently does nothing.
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id, juniorHandlerFee: 0 });
+    const jh = await makeClassDef({ name: 'JHA Handling', type: 'junior_handler', sortOrder: 1 });
+
+    await createTestCaller(user).secretary.bulkCreateClasses({
+      showId: show.id,
+      breedIds: [],
+      classDefinitionIds: [jh.id],
+      entryFee: 100, // £1
+    });
+
+    const updated = await testDb.query.shows.findFirst({ where: eq(shows.id, show.id) });
+    expect(updated?.juniorHandlerFee).toBe(100);
+  });
+
+  it('does not overwrite an existing juniorHandlerFee when handling classes are added at £0', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id, juniorHandlerFee: 300 });
+    const jh = await makeClassDef({ name: 'YKC Handling', type: 'junior_handler', sortOrder: 1 });
+
+    await createTestCaller(user).secretary.bulkCreateClasses({
+      showId: show.id,
+      breedIds: [],
+      classDefinitionIds: [jh.id],
+      entryFee: 0,
+    });
+
+    const updated = await testDb.query.shows.findFirst({ where: eq(shows.id, show.id) });
+    expect(updated?.juniorHandlerFee).toBe(300); // untouched
   });
 
   it('rejects bulkCreateClasses on a show in another org', async () => {
