@@ -7,7 +7,7 @@ import { dogs, dogOwners, dogTitles, dogPhotos, users, entries, entryClasses, sh
 import { deleteFromR2 } from '@/server/services/storage';
 import { scrapeKcDog, searchKcDogs, fetchKcDogProfile } from '@/server/services/firecrawl';
 import { isCcType, isRccType } from '@/lib/placements';
-import { isAgeEligibleOnShowDay, isShowDayReached } from '@/lib/date-utils';
+import { isAgeEligibleOnShowDay, todayInLondon } from '@/lib/date-utils';
 
 /**
  * Recommend the best class for a dog based on age eligibility first,
@@ -160,9 +160,10 @@ export const dogsRouter = createTRPCRouter({
         !!viewerId &&
         (dog.ownerId === viewerId ||
           dog.owners.some((o) => o.userId === viewerId));
+      const today = todayInLondon();
       const visibleEntries = viewerIsOwner
         ? dogEntries
-        : dogEntries.filter((entry) => isShowDayReached(entry.show.startDate));
+        : dogEntries.filter((entry) => entry.show.startDate <= today);
 
       // Build show history grouped by show. Result details are gated on
       // publication (results.publishedAt) — keyed-in-but-unreleased results
@@ -175,13 +176,14 @@ export const dogsRouter = createTRPCRouter({
           showDate: entry.show.startDate,
           showType: entry.show.showType,
           classes: entry.entryClasses.map((ec) => {
-            const published = viewerIsOwner || ec.result?.publishedAt != null;
+            const result =
+              viewerIsOwner || ec.result?.publishedAt != null ? ec.result : null;
             return {
               className: ec.showClass.classDefinition.name,
               classNumber: ec.showClass.classNumber,
-              placement: published ? ec.result?.placement ?? null : null,
-              specialAward: published ? ec.result?.specialAward ?? null : null,
-              critiqueText: published ? ec.result?.critiqueText ?? null : null,
+              placement: result?.placement ?? null,
+              specialAward: result?.specialAward ?? null,
+              critiqueText: result?.critiqueText ?? null,
             };
           }),
         }))

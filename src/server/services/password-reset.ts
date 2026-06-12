@@ -60,7 +60,7 @@ export async function requestPasswordReset(email: string) {
 
   const resetUrl = `${APP_URL}/reset-password?token=${token}`;
 
-  await resend.emails.send({
+  const result = await resend.emails.send({
     from: FROM,
     to: user.email,
     replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
@@ -127,6 +127,13 @@ export async function requestPasswordReset(email: string) {
 </body>
 </html>`,
   });
+  // The public forgot-password flow must answer identically whether or not
+  // the account exists (anti-enumeration), so a Resend rejection can't be
+  // surfaced to the caller — but it MUST be loud in the logs: a suppressed
+  // address here means the user can never reset their password.
+  if (result.error) {
+    console.error(`[password-reset] Resend rejected reset email to ${user.email}:`, result.error);
+  }
 }
 
 /**

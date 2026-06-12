@@ -42,6 +42,14 @@ let counter = 0;
 const seq = () => ++counter;
 const shortId = (len = 8) => randomUUID().slice(0, len);
 
+/** YYYY-MM-DD string `days` from today (negative = past). Several test
+ *  files need a relative show date; use this instead of a local copy. */
+export function dateStr(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 export async function makeUser(opts: Partial<typeof users.$inferInsert> = {}) {
   const n = seq();
   const [row] = await testDb

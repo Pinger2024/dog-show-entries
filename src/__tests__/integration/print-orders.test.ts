@@ -72,7 +72,9 @@ describe('printOrders.createPackageOrder', () => {
     const items = await testDb.query.printOrderItems.findMany({
       where: eq(printOrderItems.printOrderId, orderId),
     });
-    expect(items).toHaveLength(2);
+    // catalogue (sent to Mixam) + 3 sundries (prize cards, ring numbers, ring
+    // boards) that Mandy prepares and posts. Judges books are wired in a later step.
+    expect(items).toHaveLength(4);
 
     const catalogue = items.find((i) => i.documentType === 'catalogue');
     expect(catalogue?.quantity).toBe(50);
@@ -81,6 +83,17 @@ describe('printOrders.createPackageOrder', () => {
     const prizeCards = items.find((i) => i.documentType === 'prize_cards');
     expect(prizeCards?.lineTotal).toBe(0);
     expect(prizeCards?.unitSellingPrice).toBe(0);
+    // Regression guard: prize_cards must NOT be hardcoded to quantity 1 (which
+    // ordered 4 cards for an entire show). Empty show → suggestQuantity = max(25, classes) = 25.
+    expect(prizeCards?.quantity).toBe(25);
+
+    // Sundries are bundled into the package (lineTotal 0) with guidance quantities.
+    const ringNumbers = items.find((i) => i.documentType === 'ring_numbers');
+    expect(ringNumbers?.quantity).toBe(0); // no confirmed entries on a fresh show
+    expect(ringNumbers?.lineTotal).toBe(0);
+    const ringBoards = items.find((i) => i.documentType === 'ring_board');
+    expect(ringBoards?.quantity).toBe(1); // max(ringCount, 1)
+    expect(ringBoards?.lineTotal).toBe(0);
   });
 
   it('rejects an invalid catalogueQty not in the tier options', async () => {
@@ -107,7 +120,7 @@ describe('printOrders.getById / listByShow', () => {
 
     const order = await caller.printOrders.getById({ orderId });
     expect(order.id).toBe(orderId);
-    expect(order.items).toHaveLength(2);
+    expect(order.items).toHaveLength(4);
     expect(order.orderedBy?.id).toBe(user.id);
   });
 

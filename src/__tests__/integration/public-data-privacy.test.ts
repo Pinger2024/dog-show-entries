@@ -13,6 +13,7 @@ import {
   makeEntryClass,
   makeShowClass,
   makeResult,
+  dateStr,
 } from '../helpers/factories';
 
 /**
@@ -29,18 +30,8 @@ import {
  */
 
 const anon = () => createTestCaller(null);
-
-function futureDate(daysAhead: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + daysAhead);
-  return d.toISOString().slice(0, 10);
-}
-
-function pastDate(daysAgo: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - daysAgo);
-  return d.toISOString().slice(0, 10);
-}
+const futureDate = (daysAhead: number) => dateStr(daysAhead);
+const pastDate = (daysAgo: number) => dateStr(-daysAgo);
 
 describe('public payloads never include club bank details', () => {
   it('shows.getById returns the organisation without payout or Stripe fields', async () => {

@@ -110,7 +110,7 @@ export const secretaryApplicationsRouter = createTRPCRouter({
               .filter((e): e is string => !!e);
             if (adminEmails.length === 0) return;
 
-            resend.emails.send({
+            return resend.emails.send({
               from: 'Remi <noreply@remishowmanager.co.uk>',
               to: adminEmails,
               replyTo: 'feedback@remishowmanager.co.uk',
@@ -129,6 +129,8 @@ export const secretaryApplicationsRouter = createTRPCRouter({
                   <p style="color: #6b7280; font-size: 14px;">Their account has been automatically set up — no action required.</p>
                 </div>
               `,
+            }).then((r) => {
+              if (r.error) console.error('[secretary-applications] admin notification rejected by Resend:', r.error);
             }).catch((err) => {
               console.error('[secretary-applications] failed to send admin notification:', err);
             });
@@ -281,11 +283,12 @@ export const secretaryApplicationsRouter = createTRPCRouter({
           });
         }
 
-        // Send approval email (fire-and-forget)
+        // Send approval email — it carries the activation link, so the
+        // admin must know if it can't be delivered.
         if (resend) {
           const acceptUrl = `${getBaseUrl()}/invite/${token}`;
 
-          resend.emails.send({
+          const approvalResult = await resend.emails.send({
             from: 'Remi <noreply@remishowmanager.co.uk>',
             to: [application.contactEmail],
             replyTo: 'feedback@remishowmanager.co.uk',
@@ -307,9 +310,17 @@ export const secretaryApplicationsRouter = createTRPCRouter({
                 </p>
               </div>
             `,
-          }).catch((err) => {
-            console.error('[secretary-applications] failed to send approval email:', err);
-          });
+          }).catch((err: unknown) => ({
+            data: null,
+            error: { message: err instanceof Error ? err.message : String(err) },
+          }));
+          if (approvalResult.error) {
+            console.error('[secretary-applications] approval email failed:', approvalResult.error);
+            throw new TRPCError({
+              code: 'INTERNAL_SERVER_ERROR',
+              message: `The application was approved, but the email with their activation link could not be delivered (${approvalResult.error.message ?? 'provider error'}). Check the address and approve again, or send the link manually.`,
+            });
+          }
         }
 
         return { success: true, action: 'approved' as const };
@@ -336,9 +347,9 @@ export const secretaryApplicationsRouter = createTRPCRouter({
           });
         }
 
-        // Send rejection email (fire-and-forget)
+        // Send rejection email
         if (resend) {
-          resend.emails.send({
+          const rejectionResult = await resend.emails.send({
             from: 'Remi <noreply@remishowmanager.co.uk>',
             to: [application.contactEmail],
             replyTo: 'feedback@remishowmanager.co.uk',
@@ -356,9 +367,17 @@ export const secretaryApplicationsRouter = createTRPCRouter({
                 </p>
               </div>
             `,
-          }).catch((err) => {
-            console.error('[secretary-applications] failed to send rejection email:', err);
-          });
+          }).catch((err: unknown) => ({
+            data: null,
+            error: { message: err instanceof Error ? err.message : String(err) },
+          }));
+          if (rejectionResult.error) {
+            console.error('[secretary-applications] rejection email failed:', rejectionResult.error);
+            throw new TRPCError({
+              code: 'INTERNAL_SERVER_ERROR',
+              message: `The application was rejected, but the notification email could not be delivered (${rejectionResult.error.message ?? 'provider error'}). The applicant has NOT been told — contact them directly.`,
+            });
+          }
         }
 
         return { success: true, action: 'rejected' as const };

@@ -62,23 +62,20 @@ export async function executeStripeRefund(
     type: 'refund',
   });
 
-  // Atomic increment — two concurrent partial refunds must both land in the
-  // running total rather than the second overwriting the first's update.
+  // One atomic statement for both the running total and the status —
+  // SET expressions all read the pre-update row, so two concurrent partial
+  // refunds each land in the total, and neither can clobber the other's
+  // status (a split increment-then-set-status pair could interleave).
   const [updated] = await db
     .update(payments)
     .set({
       refundAmount: sql`COALESCE(${payments.refundAmount}, 0) + ${opts.amountPence}`,
+      status: sql`(CASE WHEN COALESCE(${payments.refundAmount}, 0) + ${opts.amountPence} >= ${originalPayment.amount} THEN 'refunded' ELSE 'partially_refunded' END)::payment_status`,
     })
     .where(eq(payments.id, originalPayment.id))
     .returning({ refundAmount: payments.refundAmount });
 
-  const settledTotal = updated?.refundAmount ?? newRefundTotal;
-  const fullyRefunded = settledTotal >= originalPayment.amount;
-
-  await db
-    .update(payments)
-    .set({ status: fullyRefunded ? 'refunded' : 'partially_refunded' })
-    .where(eq(payments.id, originalPayment.id));
+  const fullyRefunded = (updated?.refundAmount ?? newRefundTotal) >= originalPayment.amount;
 
   // Flip the order itself to 'refunded' once the payment is fully refunded,
   // so every downstream count (catalogues to print, entries to include, club

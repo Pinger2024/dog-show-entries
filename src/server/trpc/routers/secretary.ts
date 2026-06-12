@@ -4,6 +4,7 @@ import { and, eq, sql, isNull, isNotNull, inArray, asc, desc, ilike } from 'driz
 import { secretaryProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { verifyShowAccess } from '../verify-show-access';
+import type { Database } from '@/server/db';
 import { verifyOrgAccess } from '../verify-org-access';
 import { getBaseUrl } from '@/server/lib/utils';
 import { ACHIEVEMENT_TYPES } from '@/lib/placements';
@@ -62,6 +63,35 @@ import {
   computeShowsMetrics,
   getPaidOrderIdsForShow,
 } from '@/server/services/show-metrics';
+
+/**
+ * True if this judge has assignments with any organisation outside the
+ * caller's own active memberships. Judges are a shared pool and contract
+ * offers are emailed to judges.contactEmail — a secretary at club A must
+ * not be able to redirect or break club B's judge correspondence, on ANY
+ * write path that touches judge contact details.
+ */
+async function judgeEngagedOutsideCallerOrgs(
+  db: Database,
+  userId: string,
+  judgeId: string,
+): Promise<boolean> {
+  const engagements = await db
+    .selectDistinct({ organisationId: shows.organisationId })
+    .from(judgeAssignments)
+    .innerJoin(shows, eq(judgeAssignments.showId, shows.id))
+    .where(eq(judgeAssignments.judgeId, judgeId));
+  if (engagements.length === 0) return false;
+  const callerOrgs = await db.query.memberships.findMany({
+    where: and(
+      eq(memberships.userId, userId),
+      eq(memberships.status, 'active'),
+    ),
+    columns: { organisationId: true },
+  });
+  const callerOrgIds = new Set(callerOrgs.map((m) => m.organisationId));
+  return engagements.some((e) => !callerOrgIds.has(e.organisationId));
+}
 
 /** Build human-readable breed text for judge offer emails.
  *  When assignments have breedId=null, falls back to showBreedNames, then showName. */
@@ -2564,38 +2594,18 @@ export const secretaryRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const { judgeId, ...updates } = input;
 
-      // Judges are a shared pool across clubs, and contract offers are
-      // emailed to judges.contactEmail — so a secretary at club A must not
-      // be able to redirect or break club B's judge correspondence. Writes
-      // are allowed while the judge is only engaged by the caller's own
-      // club(s) (or not engaged at all); once another club has assignments
-      // with this judge, edits need an admin.
-      if (!ctx.callerIsAdmin) {
-        const engagements = await ctx.db
-          .selectDistinct({ organisationId: shows.organisationId })
-          .from(judgeAssignments)
-          .innerJoin(shows, eq(judgeAssignments.showId, shows.id))
-          .where(eq(judgeAssignments.judgeId, judgeId));
-        if (engagements.length > 0) {
-          const callerOrgs = await ctx.db.query.memberships.findMany({
-            where: and(
-              eq(memberships.userId, ctx.session.user.id),
-              eq(memberships.status, 'active'),
-            ),
-            columns: { organisationId: true },
-          });
-          const callerOrgIds = new Set(callerOrgs.map((m) => m.organisationId));
-          const engagedElsewhere = engagements.some(
-            (e) => !callerOrgIds.has(e.organisationId),
-          );
-          if (engagedElsewhere) {
-            throw new TRPCError({
-              code: 'FORBIDDEN',
-              message:
-                "This judge is also engaged by another club, so their details are locked. Contact the Remi team if something needs correcting.",
-            });
-          }
-        }
+      // Writes are allowed while the judge is only engaged by the caller's
+      // own club(s) (or not engaged at all); once another club has
+      // assignments with this judge, edits need an admin.
+      if (
+        !ctx.callerIsAdmin &&
+        (await judgeEngagedOutsideCallerOrgs(ctx.db, ctx.session.user.id, judgeId))
+      ) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message:
+            "This judge is also engaged by another club, so their details are locked. Contact the Remi team if something needs correcting.",
+        });
       }
 
       const setValues: Record<string, unknown> = {};
@@ -2705,13 +2715,23 @@ export const secretaryRouter = createTRPCRouter({
         }).returning();
         judge = created!;
       } else {
-        // Update email/phone/affix if provided (judge already exists, may have new info)
-        await ctx.db.update(judges).set({
-          contactEmail: input.contactEmail,
-          contactPhone: input.contactPhone ?? judge.contactPhone,
-          kcJudgeId: input.kcJudgeId ?? judge.kcJudgeId,
-          kennelClubAffix: input.kennelClubAffix ?? judge.kennelClubAffix,
-        }).where(eq(judges.id, judge.id));
+        // Update email/phone/affix if provided (judge already exists, may
+        // have new info) — but NOT when the judge is engaged by another
+        // club. Without this check, "adding" a judge by their semi-public
+        // KC number would silently overwrite the contact email a rival
+        // club's contract offers are sent to — the same hole updateJudge
+        // guards. The assignment below still proceeds either way.
+        const locked =
+          !ctx.callerIsAdmin &&
+          (await judgeEngagedOutsideCallerOrgs(ctx.db, ctx.session.user.id, judge.id));
+        if (!locked) {
+          await ctx.db.update(judges).set({
+            contactEmail: input.contactEmail,
+            contactPhone: input.contactPhone ?? judge.contactPhone,
+            kcJudgeId: input.kcJudgeId ?? judge.kcJudgeId,
+            kennelClubAffix: input.kennelClubAffix ?? judge.kennelClubAffix,
+          }).where(eq(judges.id, judge.id));
+        }
       }
 
       // Create assignments (skip duplicates via onConflictDoNothing)

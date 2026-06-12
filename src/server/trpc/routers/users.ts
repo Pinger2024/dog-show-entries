@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { Resend } from 'resend';
 import { protectedProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';

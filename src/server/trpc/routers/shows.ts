@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, gte, lte, sql, desc, asc, isNull, or, inArray, isNotNull, exists, ilike, count } from 'drizzle-orm';
+import { and, eq, gte, lte, sql, asc, isNull, or, inArray, isNotNull, exists, ilike, count } from 'drizzle-orm';
 import {
   publicProcedure,
   protectedProcedure,
@@ -31,6 +31,7 @@ import { publicOrgColumns } from '../public-org-columns';
 import { isUuid, generateShowSlug } from '@/lib/slugify';
 import { hasUserPurchasedCatalogue, CATALOGUE_AVAILABLE_STATUSES, CATALOGUE_NAME_PATTERN } from '@/lib/catalogue-utils';
 import { isShowDayReached } from '@/lib/date-utils';
+import { PUBLIC_SHOW_STATUSES } from '@/lib/public-show-statuses';
 import type { Database } from '@/server/db';
 
 /** Resolve a show slug to its UUID (passthrough if already UUID) */
@@ -57,18 +58,8 @@ export const showsRouter = createTRPCRouter({
             'championship',
           ])
           .optional(),
-        // draft/cancelled deliberately absent: this is a public listing, and
-        // a club's unannounced draft shows (incl. secretary contact details)
-        // must never be enumerable by other clubs or the public.
-        status: z
-          .enum([
-            'published',
-            'entries_open',
-            'entries_closed',
-            'in_progress',
-            'completed',
-          ])
-          .optional(),
+        // draft/cancelled deliberately absent — see PUBLIC_SHOW_STATUSES.
+        status: z.enum(PUBLIC_SHOW_STATUSES).optional(),
         search: z.string().max(200).optional(),
         breedId: z.string().uuid().optional(),
         breedIds: z.array(z.string().uuid()).max(20).optional(),

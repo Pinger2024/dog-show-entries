@@ -4,14 +4,7 @@ import { hash } from 'bcryptjs';
 import { users, feedback } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
 import { createTestCaller } from '../helpers/context';
-import {
-  makeUser,
-  makeOrg,
-  makeBreed,
-  makeShow,
-  makeDog,
-  makeEntry,
-} from '../helpers/factories';
+import { makeUser } from '../helpers/factories';
 
 describe('users.updateProfile', () => {
   it('updates name + address + postcode + phone + kcAccountNo', async () => {
@@ -100,7 +93,6 @@ describe('users.hasPassword + setPassword + changePassword', () => {
     ).rejects.toThrow(/No password set/);
   });
 });
-
 
 describe('feedback.submit (widget)', () => {
   it('inserts a widget feedback row for the caller', async () => {

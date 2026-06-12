@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sendWeeklyReport } from '@/lib/gsc-weekly-report';
+import { requireCronSecret } from '@/server/lib/cron-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,18 +13,8 @@ export const dynamic = 'force-dynamic';
  *   curl "https://remishowmanager.co.uk/api/cron/weekly-seo-report?secret=$CRON_SECRET"
  */
 export async function GET(request: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) {
-    return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 });
-  }
-
-  const authHeader = request.headers.get('authorization') || '';
-  const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-  const querySecret = request.nextUrl.searchParams.get('secret') || '';
-
-  if (bearer !== secret && querySecret !== secret) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const denied = requireCronSecret(request);
+  if (denied) return denied;
 
   try {
     const result = await sendWeeklyReport();

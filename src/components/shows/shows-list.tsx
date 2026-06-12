@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { format, differenceInDays } from 'date-fns';
 import { formatDateRange, formatCurrency } from '@/lib/date-utils';
+import { PUBLIC_SHOW_STATUSES } from '@/lib/public-show-statuses';
 import { showTypeLabels } from '@/lib/show-types';
 import {
   CalendarDays,
@@ -81,15 +82,7 @@ const statusLabels: Record<string, string> = {
   cancelled: 'Cancelled',
 };
 
-/** Statuses the public list endpoint accepts — draft/cancelled shows are
- *  never publicly listable, so they aren't offered as filters either. */
-const statusFilterOptions = [
-  'published',
-  'entries_open',
-  'entries_closed',
-  'in_progress',
-  'completed',
-] as const;
+
 
 const radiusOptions = [
   { value: 25, label: '25 miles' },
@@ -448,7 +441,7 @@ export default function ShowsList() {
           : undefined,
       status:
         status !== 'all'
-          ? (status as (typeof statusFilterOptions)[number])
+          ? (status as (typeof PUBLIC_SHOW_STATUSES)[number])
           : undefined,
       search: debouncedSearch || undefined,
       breedId: breedId !== 'all' ? breedId : undefined,
@@ -603,7 +596,7 @@ export default function ShowsList() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Statuses</SelectItem>
-              {statusFilterOptions.map((value) => (
+              {PUBLIC_SHOW_STATUSES.map((value) => (
                 <SelectItem key={value} value={value}>
                   {statusLabels[value]}
                 </SelectItem>

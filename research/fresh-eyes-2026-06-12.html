@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Remi — Fresh Eyes · A review for Michael &amp; Mandy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Source+Serif+4:ital,opsz,wght@0,8..60,300..700;1,8..60,300..700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cream:#F7F4ED;
+    --paper:#FFFEFA;
+    --ink:#22302A;
+    --ink-soft:#4D5B53;
+    --green:#2D5F3F;
+    --green-deep:#1E4630;
+    --green-wash:#E7EEE7;
+    --rosette-red:#B5402E;
+    --rosette-blue:#2E5377;
+    --rosette-gold:#C99B3F;
+    --rosette-green:#3E7D5A;
+    --hairline:#D8D2C4;
+    --max:46rem;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+  body{
+    background:var(--cream);
+    color:var(--ink);
+    font-family:'Source Serif 4',Georgia,serif;
+    font-size:1.1875rem; /* 19px — GOV.UK reading size */
+    line-height:1.65;
+    -webkit-font-smoothing:antialiased;
+    position:relative;
+  }
+  /* paper grain */
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.35;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.55 0 0 0 0 0.52 0 0 0 0 0.45 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  main{position:relative;z-index:1}
+  h1,h2,h3,.display{font-family:'Fraunces',Georgia,serif;font-weight:560;letter-spacing:-.01em}
+  a{color:var(--green);text-decoration-color:rgba(45,95,63,.35);text-underline-offset:3px}
+  a:hover{text-decoration-color:var(--green)}
+
+  /* ── masthead ─────────────────────────── */
+  .masthead{
+    background:var(--green-deep);
+    color:#F2EFE6;
+    padding:4.5rem 1.5rem 4rem;
+    text-align:center;
+    position:relative;overflow:hidden;
+  }
+  .masthead::after{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(120% 80% at 50% -10%, rgba(255,255,255,.08), transparent 60%);
+  }
+  .masthead .kicker{
+    font-family:'Fraunces',serif;font-size:.85rem;letter-spacing:.32em;
+    text-transform:uppercase;color:#BFD3C2;margin-bottom:1.6rem;
+  }
+  .masthead h1{
+    font-size:clamp(2.6rem,7.5vw,4.6rem);
+    font-weight:480;line-height:1.04;font-variation-settings:'opsz' 100;
+  }
+  .masthead h1 em{font-style:italic;font-weight:430;color:#D9C98F}
+  .masthead .standfirst{
+    max-width:34rem;margin:1.8rem auto 0;font-size:1.05rem;line-height:1.6;color:#CDD9CC;
+  }
+  .masthead .meta{
+    margin-top:2.4rem;font-size:.85rem;letter-spacing:.18em;text-transform:uppercase;color:#9FB7A2;
+  }
+  .rosette-rule{display:flex;justify-content:center;gap:.55rem;margin-top:2.2rem}
+  .rosette-rule span{width:.55rem;height:.55rem;border-radius:50%;}
+  .rosette-rule span:nth-child(1){background:var(--rosette-red)}
+  .rosette-rule span:nth-child(2){background:var(--rosette-blue)}
+  .rosette-rule span:nth-child(3){background:var(--rosette-gold)}
+  .rosette-rule span:nth-child(4){background:#8FBC9F}
+  .rosette-rule span:nth-child(5){background:#E8E3D5}
+
+  /* ── jump nav ─────────────────────────── */
+  .jump{
+    position:sticky;top:0;z-index:40;background:rgba(247,244,237,.92);
+    backdrop-filter:blur(8px);border-bottom:1px solid var(--hairline);
+  }
+  .jump ul{
+    display:flex;gap:.25rem;list-style:none;overflow-x:auto;
+    padding:.55rem 1rem;max-width:64rem;margin:0 auto;
+    -webkit-overflow-scrolling:touch;scrollbar-width:none;
+  }
+  .jump ul::-webkit-scrollbar{display:none}
+  .jump a{
+    display:block;white-space:nowrap;padding:.5rem .85rem;border-radius:999px;
+    font-family:'Fraunces',serif;font-size:.86rem;color:var(--ink-soft);
+    text-decoration:none;min-height:2.2rem;
+  }
+  .jump a:hover{background:var(--green-wash);color:var(--green-deep)}
+
+  /* ── sections ─────────────────────────── */
+  section{padding:4.2rem 1.5rem;border-bottom:1px solid var(--hairline)}
+  .inner{max-width:var(--max);margin:0 auto}
+  .wide{max-width:62rem;margin:0 auto}
+  .sec-no{
+    font-family:'Fraunces',serif;font-size:.82rem;letter-spacing:.3em;text-transform:uppercase;
+    color:var(--rosette-red);margin-bottom:1rem;
+  }
+  section h2{font-size:clamp(1.9rem,4.5vw,2.7rem);line-height:1.12;margin-bottom:1.4rem;color:var(--green-deep)}
+  section h3{font-size:1.32rem;margin:2.2rem 0 .7rem;color:var(--green-deep)}
+  p{margin-bottom:1.05rem;color:var(--ink)}
+  p.soft, li.soft{color:var(--ink-soft)}
+  .lede{font-size:1.32rem;line-height:1.55;font-family:'Fraunces',serif;font-weight:430}
+
+  /* verdict pull quote */
+  .verdict{
+    margin:2.4rem 0;padding:2rem 1.6rem;background:var(--paper);
+    border-left:5px solid var(--rosette-red);border-radius:0 14px 14px 0;
+    box-shadow:0 1px 0 var(--hairline), 0 10px 30px -22px rgba(34,48,42,.45);
+  }
+  .verdict p{
+    font-family:'Fraunces',serif;font-size:clamp(1.25rem,3vw,1.55rem);
+    line-height:1.45;font-weight:480;margin:0;color:var(--ink);
+  }
+  .verdict footer{margin-top:.9rem;font-size:.92rem;color:var(--ink-soft)}
+
+  /* cards */
+  .cards{display:grid;grid-template-columns:1fr;gap:1rem;margin-top:1.8rem}
+  @media(min-width:680px){.cards{grid-template-columns:1fr 1fr}}
+  .card{
+    background:var(--paper);border:1px solid var(--hairline);border-radius:14px;
+    padding:1.4rem 1.4rem 1.25rem;
+    box-shadow:0 10px 30px -26px rgba(34,48,42,.5);
+  }
+  .card h4{font-family:'Fraunces',serif;font-size:1.12rem;margin-bottom:.45rem;color:var(--green-deep)}
+  .card p{font-size:1rem;line-height:1.55;margin:0;color:var(--ink-soft)}
+
+  /* the big five — rosette numbered */
+  .fix{display:flex;gap:1.1rem;margin-top:2rem;align-items:flex-start}
+  .fix .badge{
+    flex:0 0 auto;width:3rem;height:3rem;border-radius:50%;
+    display:grid;place-items:center;color:#fff;
+    font-family:'Fraunces',serif;font-weight:600;font-size:1.25rem;
+    box-shadow:inset 0 0 0 3px rgba(255,255,255,.4), 0 6px 14px -8px rgba(0,0,0,.5);
+    position:relative;
+  }
+  .fix .badge::after{ /* rosette tails */
+    content:"";position:absolute;bottom:-9px;left:50%;transform:translateX(-50%);
+    border:6px solid transparent;border-top:9px solid currentColor;opacity:.55;
+  }
+  .fix:nth-of-type(1) .badge{background:var(--rosette-red);color:var(--rosette-red)}
+  .fix:nth-of-type(2) .badge{background:var(--rosette-blue);color:var(--rosette-blue)}
+  .fix:nth-of-type(3) .badge{background:var(--rosette-gold);color:var(--rosette-gold)}
+  .fix:nth-of-type(4) .badge{background:var(--rosette-green);color:var(--rosette-green)}
+  .fix:nth-of-type(5) .badge{background:var(--green-deep);color:var(--green-deep)}
+  .fix .badge b{color:#fff;font-weight:600}
+  .fix h3{margin:.1rem 0 .5rem}
+  .fix p{font-size:1.04rem}
+  .fix .now{font-size:.95rem;color:var(--ink-soft)}
+  .fix .now b{color:var(--rosette-red);font-weight:600}
+
+  /* stats band */
+  .stats{
+    display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin:2.2rem 0;
+  }
+  @media(min-width:680px){.stats{grid-template-columns:repeat(4,1fr)}}
+  .stat{
+    background:var(--green-deep);color:#EAF0E7;border-radius:14px;
+    padding:1.3rem 1.1rem;text-align:center;
+  }
+  .stat .n{font-family:'Fraunces',serif;font-size:2.3rem;font-weight:560;line-height:1;color:#fff}
+  .stat .l{font-size:.85rem;line-height:1.4;margin-top:.5rem;color:#BCD0BD}
+
+  /* checklist-style lists */
+  ul.ticks{list-style:none;margin:1.2rem 0}
+  ul.ticks li{
+    padding:.55rem 0 .55rem 2.2rem;position:relative;font-size:1.05rem;
+    border-bottom:1px dashed var(--hairline);
+  }
+  ul.ticks li:last-child{border-bottom:0}
+  ul.ticks li::before{
+    content:"✓";position:absolute;left:.2rem;top:.5rem;
+    color:var(--green);font-weight:700;
+  }
+  ul.ticks.todo li::before{content:"→";color:var(--rosette-red)}
+  ul.ticks li b{color:var(--green-deep)}
+
+  /* before/after copy table */
+  .copy-swap{width:100%;border-collapse:collapse;margin:1.4rem 0;background:var(--paper);border-radius:12px;overflow:hidden;border:1px solid var(--hairline)}
+  .copy-swap th{font-family:'Fraunces',serif;font-size:.85rem;letter-spacing:.12em;text-transform:uppercase;padding:.7rem .9rem;text-align:left;background:var(--green-wash);color:var(--green-deep)}
+  .copy-swap td{padding:.65rem .9rem;font-size:.98rem;border-top:1px solid var(--hairline);vertical-align:top}
+  .copy-swap td:first-child{color:var(--rosette-red);text-decoration:line-through;text-decoration-color:rgba(181,64,46,.45)}
+  .copy-swap td:last-child{color:var(--green-deep);font-weight:560}
+
+  /* engine room */
+  .engine{background:var(--ink);color:#E7E4DA;border-bottom:0}
+  .engine .sec-no{color:var(--rosette-gold)}
+  .engine h2{color:#fff}
+  .engine h3{color:#D9C98F}
+  .engine p{color:#C9C6BA}
+  .engine .card{background:#2B3933;border-color:#3D4C44;box-shadow:none}
+  .engine .card h4{color:#fff}
+  .engine .card p{color:#AEB8AC}
+  .engine ul.ticks li{border-color:#3D4C44;color:#C9C6BA}
+  .engine ul.ticks li b{color:#fff}
+  .shipped{
+    display:inline-block;background:var(--rosette-green);color:#fff;border-radius:999px;
+    font-family:'Fraunces',serif;font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;
+    padding:.3rem .8rem;margin-bottom:1.1rem;
+  }
+
+  /* timeline */
+  .phase{display:flex;gap:1.1rem;margin-top:1.8rem}
+  .phase .when{
+    flex:0 0 6.4rem;font-family:'Fraunces',serif;font-size:.9rem;color:var(--rosette-red);
+    text-transform:uppercase;letter-spacing:.08em;padding-top:.25rem;
+  }
+  .phase .what h3{margin:0 0 .4rem}
+  .phase .what p{font-size:1.02rem;color:var(--ink-soft)}
+
+  /* footer */
+  .colophon{
+    background:var(--green-deep);color:#9FB7A2;text-align:center;
+    padding:3rem 1.5rem;font-size:.95rem;
+  }
+  .colophon .paw{font-size:1.4rem;margin-bottom:.8rem}
+  .colophon b{color:#E8E3D5;font-weight:560}
+
+  /* reveal on scroll */
+  .reveal{opacity:0;transform:translateY(14px);transition:opacity .6s ease,transform .6s ease}
+  .reveal.in{opacity:1;transform:none}
+  @media (prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}}
+
+  ::selection{background:#D9C98F;color:var(--ink)}
+</style>
+</head>
+<body>
+<main>
+
+<header class="masthead">
+  <p class="kicker">Remi · A Fresh-Eyes Review</p>
+  <h1>The show is wonderful.<br><em>Now fix the front door.</em></h1>
+  <p class="standfirst">An honest, outside-in look at Remi — the product, the secretary experience, and the engine underneath — with a plan for becoming the platform UK dog show people can't imagine living without.</p>
+  <p class="meta">12 June 2026 · For Michael &amp; Mandy · By Claude</p>
+  <div class="rosette-rule" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+</header>
+
+<nav class="jump" aria-label="Sections">
+  <ul>
+    <li><a href="#verdict">Verdict</a></li>
+    <li><a href="#strengths">What's world-class</a></li>
+    <li><a href="#bigfive">The Big Five</a></li>
+    <li><a href="#certainty">Certainty</a></li>
+    <li><a href="#facebook">The Facebook play</a></li>
+    <li><a href="#moments">Moments</a></li>
+    <li><a href="#build">Build next</a></li>
+    <li><a href="#engine">Engine room</a></li>
+    <li><a href="#plan">90-day plan</a></li>
+  </ul>
+</nav>
+
+<!-- ════════ VERDICT ════════ -->
+<section id="verdict">
+  <div class="inner reveal">
+    <p class="sec-no">Class 1 · The Verdict</p>
+    <h2>Would Remi blow away a Fosse Data user today?</h2>
+    <p class="lede">Yes — once she gets through the front door. And that qualifier is the whole review.</p>
+    <p>Fosse and Higham are static websites attached to paper forms, cheques and emailed PDFs. Remi's phase-aware show hub, self-completing RKC checklist, live entry countdowns, auto-numbered catalogues and in-app print ordering aren't an improvement on that world — they're a different category, and they genuinely work on a phone, which <em>nothing else in this market does</em>.</p>
+    <p>But the two screens where a brand-new secretary forms her first impression — the show-creation form and the show section menu — still speak developer rather than dog show. The product's soul ("guide, don't overwhelm") is fully realised in its help text and only half-realised in its structure.</p>
+    <div class="verdict">
+      <p>"Today, Remi would blow away Mandy — and merely impress, then slightly frighten, her less-confident peers. Fix five things at the front door and it blows everyone away."</p>
+      <footer>— the one-sentence summary of a full UX audit of every secretary screen</footer>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ STRENGTHS ════════ -->
+<section id="strengths">
+  <div class="wide reveal">
+    <p class="sec-no">Class 2 · Already World-Class</p>
+    <h2>Protect these at all costs</h2>
+    <p class="lede" style="max-width:42rem">Fresh eyes don't just find problems. Five things in Remi are genuinely best-in-class — not "good for a small team", best-in-class full stop.</p>
+    <div class="cards">
+      <div class="card"><h4>🧭 The phase-aware show hub</h4><p>The show page reshapes itself around setup → entries open → show day → results, with countdowns, overdue nudges and one big phase-appropriate action. On show-day morning it becomes a single giant "Record Results" button. This is the strongest idea in the product.</p></div>
+      <div class="card"><h4>✅ The self-completing checklist</h4><p>An auto-seeded RKC checklist that detects completed work and ticks itself, with "Auto" badges — software that feels like a helpful assistant. No competitor has anything within a mile of this.</p></div>
+      <div class="card"><h4>💬 The warmest copy in the industry</h4><p>"No more bags of cash for catalogue sales… your evenings are yours again." The help-text voice is perfect for this audience — it just needs promoting from behind tiny Help buttons onto the screens themselves.</p></div>
+      <div class="card"><h4>📄 The document engine</h4><p>Fourteen print-quality artifacts — catalogues in five formats, schedules, prize cards, judges' books, ring boards — generated from live data. With Doxzoo fulfilment landing, this becomes a money-printing moat.</p></div>
+      <div class="card"><h4>🧪 The testing culture</h4><p>675 integration tests covering every journey, "every bug becomes a test first". This is why the platform survives rapid iteration. Most startups ten times Remi's size don't have this.</p></div>
+      <div class="card"><h4>📱 Hard-won mobile lessons</h4><p>The PDF viewer that doesn't strand iPhone users, the bottom-sheet section picker, card views instead of squashed tables — there's real evidence of watching a real secretary's thumbs. Keep doing exactly that.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ BIG FIVE ════════ -->
+<section id="bigfive">
+  <div class="inner reveal">
+    <p class="sec-no">Class 3 · The Big Five</p>
+    <h2>Five fixes at the front door</h2>
+    <p class="lede">Ranked by impact. Everything else in this report matters less than these.</p>
+
+    <div class="fix">
+      <div class="badge"><b>1</b></div>
+      <div>
+        <h3>Make creating a show three questions</h3>
+        <p class="now">Now: up to <b>15 visible controls</b> on step one — including "Show Scope", "Show Ruleset" and "Class Structure", taxonomy questions a first-time secretary can't confidently answer (and which her club profile already knows).</p>
+        <p>Ask what it's called, what kind of show, and when. Create the show, fire the confetti, and land her in the Setup Wizard — which already collects everything else, with far better help text. The wizard is the good cop; let it do the interview. The current flow makes her answer everything twice.</p>
+      </div>
+    </div>
+
+    <div class="fix">
+      <div class="badge"><b>2</b></div>
+      <div>
+        <h3>Defuse the status badge</h3>
+        <p class="now">Now: the little status chip in every show header is secretly a <b>7-option dropdown</b>, and only 2 of the 7 transitions ask "are you sure?". One mistap flips a live show back to Draft, silently. A permanent "Cancel Show" button sits beside it.</p>
+        <p>Status should be a read-only badge. Changing it belongs to the big guided buttons the phase panel already has ("Open entries", "Close entries", "Publish results") — with a confirm step and an undo. Power for Mandy; no landmine for everyone else.</p>
+      </div>
+    </div>
+
+    <div class="fix">
+      <div class="badge"><b>3</b></div>
+      <div>
+        <h3>One answer to "am I ready?"</h3>
+        <p class="now">Now: a draft show renders <b>three different readiness systems at once</b> (setup wizard, action panel, lifecycle banner), each with its own progress bar and its own "Open Entries" button — plus a fourth on the checklist page. They can't disagree, but she doesn't know that.</p>
+        <p>Pick one spine — the checklist is the natural one — and make the others views of it. One percentage, one "what's next", one place the Open Entries button lives.</p>
+      </div>
+    </div>
+
+    <div class="fix">
+      <div class="badge"><b>4</b></div>
+      <div>
+        <h3>Seven doors, not fourteen</h3>
+        <p class="now">Now: the show menu has <b>14 sections</b>. "Catalogue" and "Catalogue Settings" are siblings. Money lives in both "Financial" and "Reports". The overview is labelled "Secretary Tools", which means nothing.</p>
+        <p>Merge to roughly seven: Overview · Checklist · Schedule &amp; Classes · Entries · Money · Catalogue · People &amp; Sponsors, with Print Shop appearing when it matters. Fourteen doors is fourteen chances to feel lost; every door removed is confidence gained.</p>
+      </div>
+    </div>
+
+    <div class="fix">
+      <div class="badge"><b>5</b></div>
+      <div>
+        <h3>A plain-English pass on the critical path</h3>
+        <p class="now">Now: the make-or-break screens say "Show Scope", "Ruleset", "Subsequent", "NFC", "Schäferhund-Verein", and the error boundary prints raw <b>TypeError</b> messages at a woman who will conclude the problem is her.</p>
+        <p>Write every label to a reading age of nine (GOV.UK's standard — their research shows even experts prefer it). Errors follow one formula: <em>what happened → it's not your fault → exactly what to do next</em>. The team already writes this way in help text; promote that voice to the labels and errors.</p>
+      </div>
+    </div>
+
+    <table class="copy-swap">
+      <thead><tr><th>Today it says</th><th>It should say</th></tr></thead>
+      <tbody>
+        <tr><td>Show Scope: single_breed</td><td>Which breeds? Just ours / All breeds</td></tr>
+        <tr><td>Subsequent Entry Fee</td><td>Each extra class (same dog)</td></tr>
+        <tr><td>Missing: Show Type, Show Scope</td><td>Nearly there — two questions left, highlighted below</td></tr>
+        <tr><td>TypeError: Cannot read properties…</td><td>Something went wrong on our side — your work is saved. Try again in a moment.</td></tr>
+        <tr><td>No one has entered this show yet.</td><td>No entries yet — that's normal. Most arrive in the final 10 days. Here's your share link →</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ════════ CERTAINTY ════════ -->
+<section id="certainty">
+  <div class="inner reveal">
+    <p class="sec-no">Class 4 · The Brand Move</p>
+    <h2>Make <em style="color:var(--rosette-red)">certainty</em> Remi's signature</h2>
+    <p class="lede">The research all points one direction. Your users don't need fewer features — they need oversized targets, one stable path, plain words, and relentless confirmation that it worked.</p>
+
+    <div class="stats">
+      <div class="stat"><div class="n">43%</div><div class="l">slower at web tasks (users 65+, Nielsen Norman Group)</div></div>
+      <div class="stat"><div class="n">90%</div><div class="l">of seniors blame <em>themselves</em> when software fails</div></div>
+      <div class="stat"><div class="n">95%</div><div class="l">are methodical — half keep a <em>written list of steps</em></div></div>
+      <div class="stat"><div class="n">20yrs</div><div class="l">of Fosse exhibitors asking "did my entry go through?"</div></div>
+    </div>
+
+    <p>That last number is the opportunity. Champdogs forum threads going back years show the same wound: entries failing at payment, no on-screen confirmation, fear of double charges, folk remedies like "restart your PC and type the address from scratch". Fosse never fixed it. So own it:</p>
+
+    <ul class="ticks todo">
+      <li><b>"Check your answers" before money moves.</b> The GOV.UK pattern: one calm page summarising everything in plain English, a Change link per row, then one big button. Anxious users <em>read</em> confirmations — this single pattern is why government services work for this audience.</li>
+      <li><b>Over-confirm on every channel.</b> Full-screen confirmation page (never a toast), an email that reads like a person wrote it, and a permanent green "Entered ✓" badge in My Entries. Make "did it work?" a question no Remi user has ever needed to ask — then say so on the marketing site: <em>"You will never wonder if your entry went through."</em></li>
+      <li><b>Accept any format.</b> Postcodes lowercase, phone numbers with spaces, KC numbers with or without dashes. Normalise quietly; never reject a human for formatting. Rigid validation is NN/g's #1 senior frustration.</li>
+      <li><b>Keep the furniture still.</b> Half of older users keep written step lists; every navigation reshuffle invalidates their notes. Treat menu changes like breaking API changes — evolve screens in place. (When Fosse relaunched their site, their own users revolted on the forums.)</li>
+      <li><b>Honour your own 44px rule.</b> The audit found the most-tapped controls are the smallest: checklist status toggles at 36px, "Fix" chips at 28px, quick links at 32px. Below 44px, error rates roughly triple for this audience — and add breathing room between destructive and safe actions.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ════════ FACEBOOK ════════ -->
+<section id="facebook">
+  <div class="inner reveal">
+    <p class="sec-no">Class 5 · Where The Users Live</p>
+    <h2>Kill the PDF. Win Facebook.</h2>
+    <p class="lede">Secretaries promote shows by posting PDF schedules into Facebook groups. The replacement isn't a better PDF — it's a show page whose link looks <em>irresistible</em> in a Facebook feed.</p>
+    <p>Ofcom's research says older users aren't gullible online — they're <em>cautious</em>. They click links vouched for by people and clubs they trust, with previews that prove what's behind them. An anonymous <code style="font-family:inherit;font-style:italic">schedule_final_v3.pdf</code> proves nothing; a rich preview carrying the club's own crest proves everything before anyone clicks.</p>
+    <ul class="ticks todo">
+      <li><b>Auto-generate a poster-quality share card for every show</b> — 1200×630, club crest and colours, show name, date, venue, "Entries close 14 June". You already have the HTML→Chrome render pipeline; this is the same trick. Re-render and force Facebook's re-scrape whenever the show is edited, or the old preview haunts every share.</li>
+      <li><b>One-tap share at the publish moment.</b> When she publishes, hand her a ready-made Facebook post — image, pre-written plain-English text, link — one tap. Don't make her compose anything. Her existing habit becomes Remi's best acquisition channel.</li>
+      <li><b>Publish class entry counts — numbers, never names.</b> The equestrian platforms proved visible class counts drive entries ("it tells you how many in classes" is the #1 praise for Showing Scene). Counts preserve the pre-judging privacy rule; dogs and owners stay hidden until show day.</li>
+      <li><b>The club's identity leads; Remi is quiet infrastructure.</b> Older users trust the club they know. The page hero, the share card, the email sender-name — club first, Remi underneath. (This also matches Mandy's marketing guidance.)</li>
+      <li><b>Readable web address.</b> <em>remishowmanager.co.uk/shows/clyde-valley-gsd-open-2026</em> is itself a trust signal for a scam-wary audience. Already mostly there — protect it.</li>
+    </ul>
+    <p class="soft">The schedule stays downloadable as a PDF for the print-and-post traditionalists — but the page is the product, readable on a 375px screen inside Facebook's own browser, no login wall.</p>
+  </div>
+</section>
+
+<!-- ════════ MOMENTS ════════ -->
+<section id="moments">
+  <div class="inner reveal">
+    <p class="sec-no">Class 6 · Moments That Matter</p>
+    <h2>Celebrate the right things</h2>
+    <p class="lede">Remi already does confetti on show creation. But the most emotional moments in a secretary's year currently pass in silence.</p>
+    <ul class="ticks todo">
+      <li><b>The first entry.</b> The single most anxious-then-joyful moment of her show. Today: nothing. It deserves a notification — <em>"Your first entry just arrived: Mrs Carter with Ch. Moonwind Apollo."</em> Highest emotional return of anything in this report, and it's a day's work.</li>
+      <li><b>Entries closing.</b> Today: a toast. It should be a wrap-up screen: <em>"87 dogs, 142 class entries, £1,204 for the club. Here's what happens next."</em></li>
+      <li><b>A judge says yes.</b> Today: a green line in the checklist. It's an event in her world — tell her properly.</li>
+      <li><b>Show-day morning.</b> A 7am briefing, ready when she wakes: dogs entered, judges, ring open time, the absentee-marking link.</li>
+      <li><b>After the show.</b> A recap with a shareable results graphic and an honest stat: <em>"Remi saved you roughly nine hours of paperwork this show."</em> That recap is what she shows the committee — and the other clubs.</li>
+      <li><b>Checklist hits 100%.</b> The number ticks over silently today. Fire the dog confetti: <em>"Your show is fully prepared. Enjoy the day."</em></li>
+      <li><b>Quiet reassurance, always.</b> The schedule form autosaves invisibly; for this audience, an always-visible "All changes saved ✓" is not a detail — it's the difference between confidence and re-typing everything into Word "just in case".</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ════════ BUILD NEXT ════════ -->
+<section id="build">
+  <div class="wide reveal">
+    <p class="sec-no">Class 7 · Worth Building</p>
+    <h2>The gaps that matter</h2>
+    <p class="lede" style="max-width:42rem">From a full inventory of every feature in the codebase — what's missing that a world-class UK show platform would have.</p>
+    <div class="cards">
+      <div class="card"><h4>📅 Closing-date alerts</h4><p>Email (and later WhatsApp) reminders: "Entries for shows you follow close this week." Aggregator sites exist <em>purely</em> because the incumbents don't do this. It's an acquisition loop disguised as a feature.</p></div>
+      <div class="card"><h4>📋 Copy last year's show</h4><p>Canva's founding insight: never show a blank canvas. A returning club should start from last year's show — classes, judges structure, fees — and edit. Templates make non-designers feel capable; same trick for secretaries.</p></div>
+      <div class="card"><h4>🏆 Best in Show cascade</h4><p>Group → BIS progression with automatic eligibility is the heart of the all-breed plan already on file — it's also the showpiece demo that wins all-breed societies. The steward flow has the bones; finish it.</p></div>
+      <div class="card"><h4>🔁 Transfers &amp; waiting lists</h4><p>Entries close, life happens. Self-service class transfers and a waitlist for capped shows remove the two most common "email the secretary" chores left.</p></div>
+      <div class="card"><h4>🧾 A proper receipts page</h4><p>Exhibitors get a confirmation email and then… nothing to point at. Order history with re-downloadable receipts builds the money-trust this audience needs. (The API surface for it already exists and is tested.)</p></div>
+      <div class="card"><h4>⚖️ Closing-night confidence</h4><p>Organisers in adjacent markets explicitly ask whether entry systems "crash when everyone logs on at closing". Load-test the closing-night spike, then say so publicly: <em>"Built for closing night."</em></p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ ENGINE ROOM ════════ -->
+<section id="engine" class="engine">
+  <div class="inner reveal">
+    <p class="sec-no">Class 8 · The Engine Room</p>
+    <h2>The code review — done, not just described</h2>
+    <p class="lede" style="color:#E7E4DA">Michael asked for the cleanup to happen autonomously, so it did — today, in four deployed commits, with the full suite green after each.</p>
+
+    <span class="shipped">✓ Shipped to production · 12 June 2026</span>
+
+    <h3>Security — found, verified, fixed, deployed</h3>
+    <ul class="ticks">
+      <li><b>Club bank details were publicly readable.</b> Every public show payload embedded the club's full record — including sort code and account number — and one public endpoint served it directly. Any visitor with browser dev-tools could read every active club's bank details. Now allowlisted to safe fields everywhere. <em>This was the most serious finding; it's closed and live.</em></li>
+      <li><b>Draft shows were enumerable by anyone</b> — including secretary home addresses and phone numbers, before a show was announced. Closed.</li>
+      <li><b>Public dog profiles revealed upcoming entries</b> — a judge could see which dogs are entered in their own upcoming show (the exact pre-judging risk Remi's rules exist to prevent), plus unpublished results and critiques. Now owners-only until show day; results appear only once published.</li>
+      <li><b>A forgotten legacy payment endpoint</b> skipped all entry validation and created entries the club would never have been paid for. Deleted.</li>
+      <li><b>Cross-club gaps:</b> any secretary could read a rival show's revenue stats, and edit any judge's contact email (intercepting another club's contract offers). Both locked down, with new regression tests.</li>
+      <li><b>Refund safety:</b> a timed-out-then-retried refund could pay out twice; concurrent refunds could under-record. Both fixed with idempotency keys and atomic updates.</li>
+      <li><b>Silent email failures:</b> ~20 places ignored the email provider's rejection response — a judge offer could "send" to a dead address while the checklist ticked itself complete. All secretary-initiated sends now surface failures honestly.</li>
+    </ul>
+
+    <h3>Dead weight removed</h3>
+    <div class="cards">
+      <div class="card"><h4>−4,400 lines</h4><p>Dead components and endpoints deleted — including a 1,462-line abandoned copy of the public show page, two superseded routers, and 17 orphaned API procedures. Every deletion verified zero-callers first.</p></div>
+      <div class="card"><h4>137 scripts archived</h4><p>One-off probes, data fixes and experiments swept out of scripts/ into an archive folder, with a README documenting the ~15 scripts that actually matter.</p></div>
+      <div class="card"><h4>5 dependencies dropped</h4><p>Packages with zero imports removed from the build. Smaller installs, fewer security advisories, faster deploys.</p></div>
+      <div class="card"><h4>1 landmine defused</h4><p>Three database enums were never exported to the migration tool — the next schema push to production would have failed mid-flight. Found because it broke the test database; fixed for good.</p></div>
+    </div>
+
+    <h3>Still on the list (deliberately deferred)</h3>
+    <ul class="ticks todo">
+      <li>Database constraints (a missing foreign key on the money-reconciliation column, three missing uniqueness rules) — needs a coordinated schema push, parked until the working tree's pending changes ship.</li>
+      <li>Splitting the 7,200-line secretary router into domains — the access-control gaps above hid in there <em>because</em> it's too big to review.</li>
+      <li>One shared money-formatter (37 hand-rolled pence conversions across 12 files) and one shared date-formatter (76 raw conversions, including one that can shift a dog's age-eligibility by a day at midnight UTC).</li>
+      <li>Full technical detail, file-by-file, lives in <b>research/code-review-2026-06-12.md</b> in the repo.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ════════ PLAN ════════ -->
+<section id="plan">
+  <div class="inner reveal">
+    <p class="sec-no">Class 9 · Order of Attack</p>
+    <h2>Ninety days to "best in class"</h2>
+
+    <div class="phase">
+      <div class="when">Weeks<br>1–2</div>
+      <div class="what">
+        <h3>Quick wins, visible immediately</h3>
+        <p>Defuse the status badge · 44px touch-target pass · rewrite errors and empty states to the "not your fault" formula · "All changes saved ✓" · the first-entry celebration. Nothing here needs design debate; it's all execution.</p>
+      </div>
+    </div>
+    <div class="phase">
+      <div class="when">Weeks<br>3–6</div>
+      <div class="what">
+        <h3>The front door</h3>
+        <p>Three-question show creation feeding the Setup Wizard · one readiness spine · seven doors instead of fourteen · plain-English pass on the critical path · "Check your answers" before publish and before payment. This is the stretch that converts the hesitant majority, not just the brave early adopters.</p>
+      </div>
+    </div>
+    <div class="phase">
+      <div class="when">Weeks<br>7–12</div>
+      <div class="what">
+        <h3>The growth engine</h3>
+        <p>Auto-generated Facebook share cards + one-tap share at publish · public class counts · closing-date alerts · the post-show recap secretaries will show their committees · "copy last year's show". Meanwhile the engine room work (router split, shared formatters, schema constraints) runs in the background.</p>
+      </div>
+    </div>
+
+    <p style="margin-top:2.4rem" class="soft">One discipline ties it together: <b style="color:var(--green-deep)">once the front door is rebuilt, stop moving the furniture.</b> This audience rewards stability like no other — the platform that never surprises them is the platform they tell their friends about. And in this world, the friends all run clubs too.</p>
+  </div>
+</section>
+
+</main>
+
+<footer class="colophon">
+  <div class="paw">🐾</div>
+  <p><b>Remi — Fresh Eyes</b> · prepared 12 June 2026 by Claude for Michael &amp; Mandy</p>
+  <p style="margin-top:.5rem">Sources: full-codebase audit (648 tests green) · screen-by-screen UX review · NN/g seniors research · GOV.UK Design System · Ofcom Adults' Media Use 2025 · Champdogs forum archaeology · Fosse, Higham &amp; equestrian-platform teardowns</p>
+</footer>
+
+<script>
+  const io = new IntersectionObserver((entries)=>{
+    for (const e of entries) if (e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); }
+  },{threshold:.08});
+  document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+</script>
+</body>
+</html>

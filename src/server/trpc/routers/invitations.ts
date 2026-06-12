@@ -77,7 +77,7 @@ export const invitationsRouter = createTRPCRouter({
         if (resend) {
           const dashboardUrl = `${getBaseUrl()}/dashboard`;
 
-          await resend.emails.send({
+          const upgradeResult = await resend.emails.send({
             from: 'Remi <noreply@remishowmanager.co.uk>',
             to: [input.email],
             replyTo: 'feedback@remishowmanager.co.uk',
@@ -100,6 +100,13 @@ export const invitationsRouter = createTRPCRouter({
               </div>
             `,
           });
+          if (upgradeResult.error) {
+            console.error('[invitations] Resend rejected role-upgrade email:', upgradeResult.error);
+            throw new TRPCError({
+              code: 'INTERNAL_SERVER_ERROR',
+              message: `The role was upgraded, but the notification email could not be delivered (${upgradeResult.error.message ?? 'provider error'}). Check the address and let them know directly.`,
+            });
+          }
         }
 
         return invitation!;
@@ -123,7 +130,7 @@ export const invitationsRouter = createTRPCRouter({
       if (resend) {
         const acceptUrl = `${getBaseUrl()}/invite/${token}`;
 
-        await resend.emails.send({
+        const inviteResult = await resend.emails.send({
           from: 'Remi <noreply@remishowmanager.co.uk>',
           to: [input.email],
           replyTo: 'feedback@remishowmanager.co.uk',
@@ -146,6 +153,13 @@ export const invitationsRouter = createTRPCRouter({
             </div>
           `,
         });
+        if (inviteResult.error) {
+          console.error('[invitations] Resend rejected invite email:', inviteResult.error);
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: `The invitation was created, but the email could not be delivered (${inviteResult.error.message ?? 'provider error'}). Check the address and resend it.`,
+          });
+        }
       }
 
       return invitation!;
