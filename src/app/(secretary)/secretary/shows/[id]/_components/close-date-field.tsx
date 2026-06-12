@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { format, parse, isValid } from 'date-fns';
+import { format, parse, isValid, subWeeks, isSameDay } from 'date-fns';
 import { CalendarDays } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -73,7 +73,43 @@ export function CloseDateField({
     TIME_OPTIONS.find((t) => t.value === time)?.label ??
     format(parse(time, 'HH:mm', new Date()), 'h:mm a');
 
+  // Quick presets relative to the show date — most clubs close entries a set
+  // number of weeks before the show, so one tap beats hunting on the calendar.
+  // The calendar is still there for anything bespoke. (Mandy 2026-06-12.)
+  const showDate = disableAfter;
+  const presets = showDate
+    ? [2, 3, 4].map((weeks) => ({
+        weeks,
+        date: subWeeks(showDate, weeks),
+      })).filter((p) => !disableBefore || p.date >= disableBefore)
+    : [];
+
   return (
+    <div className="space-y-2">
+      {presets.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          <span className="self-center text-xs text-muted-foreground">Quick:</span>
+          {presets.map((p) => {
+            const active = date && isSameDay(date, p.date);
+            return (
+              <button
+                key={p.weeks}
+                type="button"
+                onClick={() => onChange(buildValue(p.date, time))}
+                className={cn(
+                  'rounded-full border px-3 py-1 text-xs font-medium transition-colors min-h-[2rem]',
+                  active
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground',
+                )}
+              >
+                {p.weeks} weeks before
+              </button>
+            );
+          })}
+        </div>
+      )}
+
     <div className="flex flex-col gap-2 sm:flex-row">
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
@@ -125,6 +161,7 @@ export function CloseDateField({
           ))}
         </SelectContent>
       </Select>
+      </div>
     </div>
   );
 }
