@@ -2,6 +2,7 @@
 
 import { use, useState } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import {
   ArrowLeft,
@@ -83,6 +84,13 @@ export default function ShowManagementLayout({
 
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === 'admin';
+
+  // While a show is still being set up, every section is a detour off the
+  // Setup Wizard (which lives on the overview page). usePathname lets us tell
+  // when we're on one of those detours so we can offer a clear way back.
+  const pathname = usePathname();
+  const basePath = `/secretary/shows/${id}`;
+  const isOverview = pathname === basePath || pathname === `${basePath}/`;
 
   const updateMutation = trpc.shows.update.useMutation();
   const populateMutation = trpc.dev.populateShowTestData.useMutation();
@@ -495,6 +503,23 @@ export default function ShowManagementLayout({
             <p className="text-[11px] text-muted-foreground">most recent</p>
           </div>
         </div>
+      )}
+
+      {/* Setup-mode wayfinding. During setup (draft/published) the 5-step
+          Setup Wizard on the overview page is "the show setup". Every other
+          section — Sponsors, People, Adverts, Schedule… — is a detour, and
+          without a clear return path secretaries get stranded (Mandy
+          2026-06-13: "assigning a sponsor, I can't easily get back to the
+          show setup"). This bar is the one consistent way back, on every
+          section, and disappears once the show goes live. */}
+      {(show.status === 'draft' || show.status === 'published') && !isOverview && (
+        <Link
+          href={basePath}
+          className="flex items-center gap-2.5 rounded-xl border border-primary/20 bg-primary/5 px-4 text-sm font-semibold text-primary transition-colors hover:bg-primary/10 min-h-[2.75rem]"
+        >
+          <ArrowLeft className="size-4 shrink-0" />
+          Back to setup steps
+        </Link>
       )}
 
       {/* Section navigation + content */}
