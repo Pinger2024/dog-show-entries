@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { eq, asc } from 'drizzle-orm';
-import { shows, showClasses, organisations, venues, rings } from '@/server/db/schema';
+import { shows, showClasses, organisations, venues, rings, users } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
 import { createTestCaller } from '../helpers/context';
 import {
@@ -64,6 +64,62 @@ describe('shows.create', () => {
       where: eq(showClasses.showId, created.id),
     });
     expect(seededClasses).toHaveLength(0); // classes deferred to the wizard
+  });
+
+  it('pre-fills secretary contact details from the account holder, and lets explicit values override', async () => {
+    // Mandy 2026-06-13: the secretary details should populate from whoever set
+    // up the account — they're nearly always the secretary — while staying
+    // editable so the role can be handed to someone else.
+    const { user, org, breed } = await makeSecretaryWithOrgAndBreed();
+    await testDb
+      .update(users)
+      .set({
+        name: 'Mandy Secretary',
+        phone: '07700 900123',
+        address: '1 Kennel Lane, Lowestoft',
+        postcode: 'NR32 1AB',
+      })
+      .where(eq(users.id, user.id));
+    const caller = createTestCaller(user);
+
+    const created = await caller.shows.create({
+      name: 'Prefill Secretary Show 2030',
+      showType: 'open',
+      showScope: 'single_breed',
+      organisationId: org.id,
+      breedId: breed.id,
+      startDate: '2030-06-01',
+      endDate: '2030-06-01',
+    });
+
+    const dbShow = await testDb.query.shows.findFirst({ where: eq(shows.id, created.id) });
+    expect(dbShow?.secretaryUserId).toBe(user.id);
+    expect(dbShow?.secretaryName).toBe('Mandy Secretary');
+    expect(dbShow?.secretaryEmail).toBe(user.email);
+    expect(dbShow?.secretaryPhone).toBe('07700 900123');
+    // address + postcode are combined into the single secretaryAddress field.
+    expect(dbShow?.secretaryAddress).toBe('1 Kennel Lane, Lowestoft, NR32 1AB');
+
+    // Explicit secretary details win; unspecified fields still fall back to the creator.
+    await testDb
+      .update(organisations)
+      .set({ subscriptionStatus: 'active' })
+      .where(eq(organisations.id, org.id));
+    const reassigned = await caller.shows.create({
+      name: 'Reassigned Secretary Show 2030',
+      showType: 'open',
+      showScope: 'single_breed',
+      organisationId: org.id,
+      breedId: breed.id,
+      startDate: '2030-07-01',
+      endDate: '2030-07-01',
+      secretaryName: 'Someone Else',
+      secretaryEmail: 'someone.else@club.co.uk',
+    });
+    const dbReassigned = await testDb.query.shows.findFirst({ where: eq(shows.id, reassigned.id) });
+    expect(dbReassigned?.secretaryName).toBe('Someone Else');
+    expect(dbReassigned?.secretaryEmail).toBe('someone.else@club.co.uk');
+    expect(dbReassigned?.secretaryPhone).toBe('07700 900123');
   });
 
   it('seeds show classes from classDefinitionIds in canonical order (combined sex)', async () => {

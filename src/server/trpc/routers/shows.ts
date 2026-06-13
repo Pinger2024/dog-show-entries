@@ -14,6 +14,7 @@ import {
   organisations,
   sundryItems,
   memberships,
+  users,
   entries,
   entryClasses,
   results,
@@ -514,6 +515,20 @@ export const showsRouter = createTRPCRouter({
         slug = `${baseSlug}-${suffix++}`;
       }
 
+      // Pre-fill the secretary contact details from the account holder who
+      // creates the show — they're almost always the secretary. Every field
+      // stays editable in the setup wizard, so it can be reassigned to someone
+      // else when the secretary is a different person (Mandy, 2026-06-13).
+      const creator = await ctx.db.query.users.findFirst({
+        where: eq(users.id, ctx.session.user.id),
+        columns: { name: true, email: true, phone: true, address: true, postcode: true },
+      });
+      const creatorAddress =
+        [creator?.address, creator?.postcode]
+          .map((part) => part?.trim())
+          .filter(Boolean)
+          .join(', ') || null;
+
       const [show] = await ctx.db
         .insert(shows)
         .values({
@@ -533,6 +548,12 @@ export const showsRouter = createTRPCRouter({
           subsequentEntryFee: subsequentEntryFee ?? null,
           nfcEntryFee: nfcEntryFee ?? null,
           juniorHandlerFee: juniorHandlerFee ?? null,
+          // Default secretary details to the creator's account; explicit values win.
+          secretaryUserId: showData.secretaryUserId ?? ctx.session.user.id,
+          secretaryName: showData.secretaryName ?? (creator?.name || null),
+          secretaryEmail: showData.secretaryEmail ?? (creator?.email || null),
+          secretaryPhone: showData.secretaryPhone ?? (creator?.phone || null),
+          secretaryAddress: showData.secretaryAddress ?? creatorAddress,
         })
         .returning();
 
