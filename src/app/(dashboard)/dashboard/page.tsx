@@ -81,7 +81,18 @@ export default function DashboardPage() {
         <>
           {/* ─── Hero: Next Show or Find Shows CTA ─── */}
           {data.nextShow ? (
-            <NextShowHero show={data.nextShow} firstName={firstName} />
+            <>
+              <NextShowHero show={data.nextShow} firstName={firstName} />
+              {/* Even with an entry already in, exhibitors need an obvious way to
+                  browse other shows and read their (public) schedules — there was
+                  no browse affordance in this state at all (Mandy 2026-06-13). */}
+              <Button asChild variant="outline" className="w-full min-h-[2.75rem] gap-2">
+                <Link href="/browse">
+                  <Search className="size-4" />
+                  View all shows
+                </Link>
+              </Button>
+            </>
           ) : (
             <FindShowsHero firstName={firstName} hasRecommended={hasRecommendedShows} />
           )}
@@ -305,7 +316,7 @@ function EmptyDashboard() {
             <Button variant="outline" size="lg" className="min-h-[2.75rem] gap-2 rounded-xl border-amber-300 bg-white/60 text-amber-900 hover:bg-white/80" asChild>
               <Link href="/browse">
                 <CalendarDays className="size-4" />
-                Browse Shows
+                View all shows
               </Link>
             </Button>
           </div>
@@ -456,7 +467,7 @@ function FindShowsHero({ firstName, hasRecommended }: { firstName: string; hasRe
         >
           <Link href="/browse">
             <Search className="size-4" />
-            Browse Shows
+            View all shows
           </Link>
         </Button>
       </div>

@@ -877,9 +877,14 @@ export function ShowPreviewClient() {
 
           <div className="ml-auto flex items-center gap-1">
             <Button variant="outline" size="sm" className="h-9 gap-1.5" asChild>
-              <a href={`/api/schedule/${show.id}`} target="_blank" rel="noopener">
+              <a
+                href={`/api/schedule/${show.id}`}
+                target="_blank"
+                rel="noopener"
+                aria-label="View the show schedule (PDF) — no account needed"
+              >
                 <FileText className="size-4" />
-                <span className="hidden sm:inline">Schedule</span>
+                <span className="hidden sm:inline">View schedule</span>
               </a>
             </Button>
             <Button variant="outline" size="sm" className="h-9 gap-1.5" asChild>
@@ -913,6 +918,29 @@ export function ShowPreviewClient() {
           </div>
         </div>
       </div>
+
+      {/* Reassurance strip — the schedule is public, but the page never said so,
+          and exhibitors were phoning to ask "do I need to log in to see the
+          schedule?" (Mandy 2026-06-13). This sits right where the Enter/Schedule
+          buttons are — the moment the wrong mental model forms — and gives a
+          plainly-labelled, no-login schedule link. flex-wrap + max-w-6xl keep it
+          safe at 390px. */}
+      {show.status !== 'cancelled' && (
+        <div className="border-b bg-stone-50/80">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-2 gap-y-1 px-4 py-2.5 text-center text-xs text-stone-600 sm:px-6 lg:px-8">
+            <FileText className="size-3.5 shrink-0 text-stone-500" />
+            <span>You don&apos;t need an account to read the schedule — only to enter.</span>
+            <a
+              href={`/api/schedule/${show.id}`}
+              target="_blank"
+              rel="noopener"
+              className="font-semibold text-primary underline-offset-2 hover:underline"
+            >
+              View the schedule (PDF) →
+            </a>
+          </div>
+        </div>
+      )}
 
       {/* ──────────────────────────── Meet the Judges ────────────────────── */}
       {judges.length > 0 && (
@@ -1148,12 +1176,16 @@ export function ShowPreviewClient() {
                 </div>
               ))}
             </div>
-            <p className="mt-4 text-center text-xs italic text-stone-500">
-              Full class list available in the{' '}
-              <a href={`/api/schedule/${show.id}`} target="_blank" rel="noopener" className="font-semibold text-primary hover:underline">
-                schedule PDF
+            <p className="mt-4 text-center text-sm text-stone-600">
+              No account needed — anyone can read the full schedule.{' '}
+              <a
+                href={`/api/schedule/${show.id}`}
+                target="_blank"
+                rel="noopener"
+                className="inline-flex min-h-[2.75rem] items-center font-semibold text-primary underline-offset-2 hover:underline"
+              >
+                View the schedule (PDF) →
               </a>
-              .
             </p>
           </div>
         </section>
