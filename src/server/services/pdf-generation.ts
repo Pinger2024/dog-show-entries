@@ -20,7 +20,7 @@ import type { CatalogueEntry, CatalogueShowInfo } from '@/components/catalogue/c
 import { PrizeCards } from '@/components/prize-cards/prize-cards';
 import type { PrizeCardShowInfo, PrizeCardClass } from '@/components/prize-cards/prize-cards';
 import { pickScheduleComponent } from '@/components/schedule';
-import type { ScheduleShowInfo, ScheduleClass, ScheduleJudge, ScheduleSponsor, SchedulePanelJudge } from '@/components/schedule';
+import type { ScheduleShowInfo, ScheduleClass, ScheduleSponsor, SchedulePanelJudge } from '@/components/schedule';
 import { RingBoard } from '@/components/ring-board/ring-board';
 import type { RingBoardShowInfo, RingBoardRing } from '@/components/ring-board/ring-board';
 import { RingNumbers as RingNumbersComponent } from '@/components/ring-numbers/ring-numbers';
@@ -29,6 +29,7 @@ import React from 'react';
 import { uploadToR2, getPublicUrl } from '@/server/services/storage';
 import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
 import { buildClassLabelMap, isSpecialAwardClass } from '@/lib/class-labels';
+import { buildScheduleJudges } from '@/lib/schedule-judges';
 
 // ── Catalogue PDF ──
 
@@ -503,6 +504,10 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     breeds: Set<string>;
     sexes: Set<string>;
     hasNullSexAssignment: boolean;
+    // True when the judge has a no-breed AND no-sex assignment — the signature
+    // of a Junior Handling assignment (JH classes FK to neither). Distinct from
+    // hasNullSexAssignment, which a "both sexes of a breed" assignment also sets.
+    hasJhAssignment: boolean;
     subjectToRkcApproval: boolean;
   }>();
   const specialAwardsJudges: Array<{ name: string; subjectToRkcApproval: boolean }> = [];
@@ -515,11 +520,13 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     }
     if (ja.judgeRoleId) continue;
     const key = ja.judge.id;
+    const isJhAssignment = !ja.breed?.name && !ja.sex;
     const existing = judgeEntries.get(key);
     if (existing) {
       if (ja.breed?.name) existing.breeds.add(ja.breed.name);
       if (ja.sex) existing.sexes.add(ja.sex);
       else existing.hasNullSexAssignment = true;
+      if (isJhAssignment) existing.hasJhAssignment = true;
       // Any single assignment being subject-to-approval flags the whole judge entry.
       if (subjectToRkcApproval) existing.subjectToRkcApproval = true;
     } else {
@@ -528,6 +535,7 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
         breeds: new Set(ja.breed?.name ? [ja.breed.name] : []),
         sexes: new Set(ja.sex ? [ja.sex] : []),
         hasNullSexAssignment: !ja.sex,
+        hasJhAssignment: isJhAssignment,
         subjectToRkcApproval,
       });
     }
@@ -553,54 +561,16 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
       };
     });
 
-  const approvalSuffix = (subjectToRkcApproval: boolean) =>
-    subjectToRkcApproval ? ' (subject to RKC approval)' : '';
-
-  // Detect Junior Handling: a judge whose only assignments have no
-  // breed/sex set — JH classes don't FK to a breed and don't carry a sex.
+  // JH classes don't FK to a breed and don't carry a sex.
   const hasJuniorHandlerClasses = showClasses.some((sc) => sc.classDefinition?.type === 'junior_handler');
 
-  const judges: ScheduleJudge[] = [...judgeEntries.values()].map((j) => {
-    const breedArr = Array.from(j.breeds);
-    const isJH = breedArr.length === 0 && j.sexes.size === 0 && j.hasNullSexAssignment && hasJuniorHandlerClasses;
-    const role = isJH
-      ? 'Junior Handling'
-      : j.sexes.has('dog') && j.sexes.has('bitch')
-        ? 'Dogs & Bitches'
-        : j.sexes.has('dog')
-          ? 'Dogs'
-          : j.sexes.has('bitch')
-            ? 'Bitches'
-            : null;
-    const suffix = approvalSuffix(j.subjectToRkcApproval);
-    const namePart = `${j.name}${suffix}`;
-    return {
-      name: j.name,
-      breeds: breedArr,
-      sex: j.sexes.size === 1 ? (Array.from(j.sexes)[0] as 'dog' | 'bitch') : null,
-      // role MUST be set so the schedule can route this judge to the right
-      // section — a Junior Handling judge belongs in the JH block, not the
-      // breed-classification list (mirrors how SAC judges are handled).
-      role: role ?? undefined,
-      displayLabel: role ? `${role} — ${namePart}` : namePart,
-    };
-  });
-
-  // Append Special Awards Classes judges with the explicit role label.
-  // Format mirrors the other judges (Amanda 2026-05-27):
-  // "Special Awards Classes — <name>". The role field is what the
-  // schedule component filters on to surface the SAC judge inside the
-  // SAC section, so it MUST be set — without it the dedicated SAC
-  // block silently rendered with no judge line (Amanda spotted it).
-  for (const sac of specialAwardsJudges) {
-    judges.push({
-      name: sac.name,
-      breeds: [],
-      sex: null,
-      role: 'Special Awards Classes',
-      displayLabel: `Special Awards Classes — ${sac.name}${approvalSuffix(sac.subjectToRkcApproval)}`,
-    });
-  }
+  // Pure, unit-tested resolution of aggregated assignments → ScheduleJudge[]
+  // with the role labels the schedule filters on.
+  const judges = buildScheduleJudges(
+    judgeEntries.values(),
+    specialAwardsJudges,
+    hasJuniorHandlerClasses,
+  );
 
   const classLabelMap = buildClassLabelMap(showClasses);
   const classes: ScheduleClass[] = showClasses.map((sc) => ({
