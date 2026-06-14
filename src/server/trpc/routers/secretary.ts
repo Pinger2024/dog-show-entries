@@ -54,6 +54,7 @@ import { penceToPoundsString } from '@/lib/date-utils';
 import { Resend } from 'resend';
 import { searchKcJudges, fetchKcJudgeProfile } from '@/server/services/kc-judges';
 import { ensureCatalogueNumbers } from '@/server/services/catalogue-numbering';
+import { resolveVenueId } from '@/server/services/venues';
 import { generateJudgeContractPdf } from '@/server/services/judge-contract-pdf';
 import { normaliseOfficers } from '@/components/schedule/shared/officers';
 import { CATALOGUE_NAME_PATTERN, isCatalogueItem } from '@/lib/catalogue-utils';
@@ -3918,6 +3919,16 @@ export const secretaryRouter = createTRPCRouter({
       const isWusvShow = (show as { showRuleset?: 'rkc' | 'wusv' }).showRuleset === 'wusv';
       detected.guarantors_added = isWusvShow || guarantors.length >= minGuarantors;
 
+      // Schedule step is "complete" when the show has a venue AND its show-day
+      // times are set — the where and when of the schedule. (Previously the
+      // wizard ticked this the instant any schedule field autosaved, because it
+      // only checked scheduleData != null — Mandy 2026-06-14.) Guarantors/
+      // officers have their own separate gates, so we don't double-require them
+      // here, which keeps the tick from getting stuck red on a usable schedule.
+      detected.schedule_complete = !!(
+        show.venueId && show.showOpenTime && show.startTime
+      );
+
       // Championship shows: check Open + Limit for each sex per breed
       if (show.showType === 'championship' && Number(classCount?.count) > 0) {
         const showClassRows = await ctx.db.query.showClasses.findMany({
@@ -5838,6 +5849,15 @@ export const secretaryRouter = createTRPCRouter({
         showOpenTime: z.string().optional(),
         judgingStartTime: z.string().optional(),
         onCallVet: z.string().optional(),
+        // Venue (name/address/postcode) — resolved to shows.venueId server-side,
+        // NOT stored in scheduleData JSONB. A blank name leaves the venue alone.
+        venue: z
+          .object({
+            name: z.string().optional(),
+            address: z.string().optional(),
+            postcode: z.string().optional(),
+          })
+          .optional(),
         scheduleData: z.object({
           country: z.enum(['england', 'wales', 'scotland', 'northern_ireland']).optional(),
           publicAdmission: z.boolean().optional(),
@@ -5923,7 +5943,7 @@ export const secretaryRouter = createTRPCRouter({
       // null — but omission means "leave alone", not "erase".
       const currentShow = await ctx.db.query.shows.findFirst({
         where: eq(shows.id, input.showId),
-        columns: { scheduleData: true, organisationId: true },
+        columns: { scheduleData: true, organisationId: true, venueId: true },
       });
       const existingScheduleData = (currentShow?.scheduleData ?? {}) as Record<string, unknown>;
       // Trim + dedupe officers so a trailing-space typo can't render
@@ -5937,6 +5957,20 @@ export const secretaryRouter = createTRPCRouter({
       if (input.showOpenTime !== undefined) showUpdates.showOpenTime = input.showOpenTime || null;
       if (input.judgingStartTime !== undefined) showUpdates.startTime = input.judgingStartTime || null;
       if (input.onCallVet !== undefined) showUpdates.onCallVet = input.onCallVet || null;
+
+      // Resolve the venue (name/address/postcode) to a venueId and link it on
+      // the SAME update, via the shared helper the beacon route also uses. A
+      // blank name returns undefined → leaves the existing venue untouched.
+      if (input.venue && currentShow) {
+        const resolvedVenueId = await resolveVenueId(ctx.db, {
+          orgId: currentShow.organisationId,
+          currentVenueId: currentShow.venueId,
+          name: input.venue.name,
+          address: input.venue.address,
+          postcode: input.venue.postcode,
+        });
+        if (resolvedVenueId) showUpdates.venueId = resolvedVenueId;
+      }
 
       await ctx.db
         .update(shows)

@@ -135,14 +135,17 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
             autoDetect.secretary_details_set === true
           );
         case 'schedule':
-          return show.scheduleData != null;
+          // Server-computed: venue set + show-day times set. (Was
+          // `show.scheduleData != null`, which ticked the instant any field
+          // autosaved — Mandy 2026-06-14.)
+          return autoDetect.schedule_complete === true;
         case 'open':
           return false; // This step is "done" when entries are opened
         default:
           return false;
       }
     },
-    [autoDetect, show.scheduleData],
+    [autoDetect],
   );
 
   // Auto-open first incomplete step on mount

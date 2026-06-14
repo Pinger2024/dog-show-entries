@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { auth } from '@/lib/auth';
 import { POST as autosavePOST } from '@/app/api/schedule-autosave/[showId]/route';
-import { shows } from '@/server/db/schema';
+import { shows, venues } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
 import { makeSecretaryWithOrg, makeShow } from '../helpers/factories';
 import type { ScheduleData } from '@/server/db/schema/shows';
@@ -168,5 +168,53 @@ describe('POST /api/schedule-autosave/[showId] — wipe protection', () => {
     const dbShow = await testDb.query.shows.findFirst({ where: eq(shows.id, show.id) });
     expect(dbShow?.scheduleData?.showManager).toBe('Someone Different');
     expect(dbShow?.scheduleData?.officers).toHaveLength(1);
+  });
+});
+
+describe('POST /api/schedule-autosave/[showId] — venue parity', () => {
+  it('resolves a venue group to a linked venueId (so typing a venue then navigating away persists)', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id });
+    mockAuthedAs(user);
+
+    // No postcode → no geocode network call.
+    const res = await autosavePOST(
+      beaconRequest(show.id, {
+        venue: { name: 'Hamilton Town Hall', address: '1 Townhead Street' },
+      }) as never,
+      params(show.id),
+    );
+    expect(res.status).toBe(200);
+
+    const row = await testDb.query.shows.findFirst({ where: eq(shows.id, show.id) });
+    expect(row?.venueId).toBeTruthy();
+    const linked = await testDb.query.venues.findFirst({ where: eq(venues.id, row!.venueId!) });
+    expect(linked?.name).toBe('Hamilton Town Hall');
+    expect(linked?.organisationId).toBe(org.id);
+  });
+
+  it('leaves the venue alone on a blank name — no unlink, no duplicate', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id });
+    mockAuthedAs(user);
+
+    // Link a venue first.
+    await autosavePOST(
+      beaconRequest(show.id, { venue: { name: 'Hamilton Town Hall' } }) as never,
+      params(show.id),
+    );
+    const linked = await testDb.query.shows.findFirst({ where: eq(shows.id, show.id) });
+    const venueId = linked?.venueId;
+    expect(venueId).toBeTruthy();
+
+    // A blank-name beacon must not change anything.
+    await autosavePOST(
+      beaconRequest(show.id, { venue: { name: '   ' } }) as never,
+      params(show.id),
+    );
+    const after = await testDb.query.shows.findFirst({ where: eq(shows.id, show.id) });
+    expect(after?.venueId).toBe(venueId);
+    const orgVenues = await testDb.select().from(venues).where(eq(venues.organisationId, org.id));
+    expect(orgVenues).toHaveLength(1);
   });
 });

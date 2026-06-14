@@ -22,6 +22,7 @@ import { auth } from '@/lib/auth';
 import { db } from '@/server/db';
 import { shows, memberships } from '@/server/db/schema';
 import { and } from 'drizzle-orm';
+import { resolveVenueId } from '@/server/services/venues';
 
 export async function POST(
   req: NextRequest,
@@ -36,7 +37,7 @@ export async function POST(
 
   const show = await db.query.shows.findFirst({
     where: eq(shows.id, showId),
-    columns: { id: true, organisationId: true, scheduleData: true },
+    columns: { id: true, organisationId: true, scheduleData: true, venueId: true },
   });
   if (!show) return NextResponse.json({ error: 'not found' }, { status: 404 });
 
@@ -61,6 +62,7 @@ export async function POST(
     judgingStartTime?: string;
     onCallVet?: string;
     scheduleData?: Record<string, unknown>;
+    venue?: { name?: string; address?: string; postcode?: string };
   };
   try {
     body = await req.json();
@@ -104,6 +106,19 @@ export async function POST(
   if (body.showOpenTime !== undefined) updates.showOpenTime = body.showOpenTime || null;
   if (body.judgingStartTime !== undefined) updates.startTime = body.judgingStartTime || null;
   if (body.onCallVet !== undefined) updates.onCallVet = body.onCallVet || null;
+
+  // Venue parity with secretary.updateScheduleData via the shared helper, so
+  // typing a venue then navigating away still links it. Blank name = no-op.
+  if (body.venue) {
+    const resolvedVenueId = await resolveVenueId(db, {
+      orgId: show.organisationId,
+      currentVenueId: show.venueId,
+      name: body.venue.name,
+      address: body.venue.address,
+      postcode: body.venue.postcode,
+    });
+    if (resolvedVenueId) updates.venueId = resolvedVenueId;
+  }
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ ok: true, noop: true });

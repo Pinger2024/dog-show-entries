@@ -207,6 +207,9 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
   const [officers, setOfficers] = useState<OfficerWithGuarantor[]>([]);
   const [awardsDescription, setAwardsDescription] = useState('');
   const [prizeMoney, setPrizeMoney] = useState('');
+  const [venueName, setVenueName] = useState('');
+  const [venueAddress, setVenueAddress] = useState('');
+  const [venuePostcode, setVenuePostcode] = useState('');
   const [directions, setDirections] = useState('');
   const [catering, setCatering] = useState('');
   const [futureShowDates, setFutureShowDates] = useState('');
@@ -243,6 +246,11 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     setShowOpenTime(showData?.showOpenTime ?? previousData?.showOpenTime ?? '');
     setJudgingStartTime(showData?.startTime ?? previousData?.startTime ?? '');
     setOnCallVet(showData?.onCallVet ?? previousData?.onCallVet ?? '');
+    // Venue (name/address/postcode) lives on the venues table via
+    // shows.venueId, not in scheduleData. getById includes the linked venue.
+    setVenueName(showData?.venue?.name ?? '');
+    setVenueAddress(showData?.venue?.address ?? '');
+    setVenuePostcode(showData?.venue?.postcode ?? '');
     setWhat3words(sd?.what3words ?? '');
     setShowManager(sd?.showManager ?? '');
 
@@ -315,6 +323,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     showOpenTime: string | undefined;
     judgingStartTime: string | undefined;
     onCallVet: string | undefined;
+    venue: { name?: string; address?: string; postcode?: string };
     scheduleData: ScheduleData;
   } | null>(null);
   // Track the last guarantor count we invalidated blockers for.
@@ -367,6 +376,11 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       showOpenTime: showOpenTime || undefined,
       judgingStartTime: judgingStartTime || undefined,
       onCallVet: onCallVet || undefined,
+      venue: {
+        name: venueName.trim() || undefined,
+        address: venueAddress.trim() || undefined,
+        postcode: venuePostcode.trim() || undefined,
+      },
       scheduleData: data,
     };
     if (!hasLoaded) return;
@@ -413,7 +427,8 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
   }, [
     hasLoaded, country, publicAdmission, wetWeather, isBenched, benchingRemovalTime,
     acceptsNfc, judgedOnGroupSystem, latestArrivalTime, showOpenTime, judgingStartTime,
-    onCallVet, what3words, showManager, officers, firstAiders, awardsDescription, prizeMoney,
+    onCallVet, venueName, venueAddress, venuePostcode,
+    what3words, showManager, officers, firstAiders, awardsDescription, prizeMoney,
     directions, catering, futureShowDates, additionalNotes, welcomeNote,
     outsideAttraction, hasBestVeteranInShow, bestVeteranInShowEligibility, customStatements,
   ]);
@@ -464,10 +479,10 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
     const showday = !!(showOpenTime && judgingStartTime);
     const people = !!(showManager && officerCount > 0);
     const awards = !!awardsDescription;
-    const venue = !!(directions || what3words || catering);
+    const venue = !!(venueName.trim() || directions || what3words || catering);
     const regulations = !!country;
     return { showday, people, awards, venue, regulations };
-  }, [hasBeenSaved, showOpenTime, judgingStartTime, showManager, officerCount, awardsDescription, directions, what3words, catering, country]);
+  }, [hasBeenSaved, showOpenTime, judgingStartTime, showManager, officerCount, awardsDescription, venueName, directions, what3words, catering, country]);
 
   // Build the payload from current form state. Extracted so
   // both the explicit "Save Settings" button and the silent
@@ -515,13 +530,19 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       showOpenTime: showOpenTime || undefined,
       judgingStartTime: judgingStartTime || undefined,
       onCallVet: onCallVet || undefined,
+      venue: {
+        name: venueName.trim() || undefined,
+        address: venueAddress.trim() || undefined,
+        postcode: venuePostcode.trim() || undefined,
+      },
       scheduleData: data,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     effectiveExisting, country, publicAdmission, wetWeather, isBenched,
     benchingRemovalTime, acceptsNfc, judgedOnGroupSystem, latestArrivalTime,
-    showOpenTime, judgingStartTime, onCallVet, what3words, showManager,
+    showOpenTime, judgingStartTime, onCallVet, venueName, venueAddress, venuePostcode,
+    what3words, showManager,
     officers, firstAiders, awardsDescription, prizeMoney, directions, catering,
     futureShowDates, additionalNotes, welcomeNote, outsideAttraction,
     hasBestVeteranInShow, bestVeteranInShowEligibility,
@@ -538,12 +559,13 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       await updateMutation.mutateAsync(payload);
       utils.secretary.getScheduleData.invalidate({ showId });
       utils.shows.getById.invalidate({ id: showId });
+      // Section-close is a deliberate, infrequent save point — refresh the
+      // readiness views unconditionally so the wizard's Schedule tick (which
+      // depends on venue + times, not just guarantor count) stays accurate.
       const newGuarantorCount = payload.scheduleData.guarantors?.length ?? 0;
-      if (prevGuarantorCountRef.current !== newGuarantorCount) {
-        prevGuarantorCountRef.current = newGuarantorCount;
-        utils.secretary.getPhaseBlockers.invalidate({ showId });
-        utils.secretary.getChecklistAutoDetect.invalidate({ showId });
-      }
+      prevGuarantorCountRef.current = newGuarantorCount;
+      utils.secretary.getPhaseBlockers.invalidate({ showId });
+      utils.secretary.getChecklistAutoDetect.invalidate({ showId });
     } catch {
       // swallow — user sees the in-form autosave indicator; a real
       // failure will also surface on the explicit Save Settings click
@@ -567,6 +589,8 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       await Promise.all([
         utils.secretary.getScheduleData.invalidate({ showId }),
         utils.shows.getById.invalidate({ id: showId }),
+        utils.secretary.getChecklistAutoDetect.invalidate({ showId }),
+        utils.secretary.getPhaseBlockers.invalidate({ showId }),
         orgId ? utils.secretary.listOrgPeople.invalidate({ organisationId: orgId }) : Promise.resolve(),
       ]);
       toast.success('Schedule settings saved');
@@ -767,6 +791,9 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
                   )}
                   {section.id === 'venue' && (
                     <VenueSection
+                      venueName={venueName} setVenueName={setVenueName}
+                      venueAddress={venueAddress} setVenueAddress={setVenueAddress}
+                      venuePostcode={venuePostcode} setVenuePostcode={setVenuePostcode}
                       directions={directions} setDirections={setDirections}
                       what3words={what3words} setWhat3words={setWhat3words}
                       catering={catering} setCatering={setCatering}
@@ -1325,11 +1352,15 @@ function AwardsSection({
 // ── Venue & Info Section ─────────────────────────────
 
 function VenueSection({
+  venueName, setVenueName, venueAddress, setVenueAddress, venuePostcode, setVenuePostcode,
   directions, setDirections, what3words, setWhat3words,
   catering, setCatering, futureShowDates, setFutureShowDates,
   additionalNotes, setAdditionalNotes,
   outsideAttraction, setOutsideAttraction,
 }: {
+  venueName: string; setVenueName: (v: string) => void;
+  venueAddress: string; setVenueAddress: (v: string) => void;
+  venuePostcode: string; setVenuePostcode: (v: string) => void;
   directions: string; setDirections: (v: string) => void;
   what3words: string; setWhat3words: (v: string) => void;
   catering: string; setCatering: (v: string) => void;
@@ -1339,6 +1370,26 @@ function VenueSection({
 }) {
   return (
     <div className="space-y-4">
+      {/* The venue itself (name + address) — links the show to a venue
+          record. The fields below are the extra "how to find it" details. */}
+      <div className="space-y-3 rounded-lg border border-primary/15 bg-primary/[0.03] p-3">
+        <p className="text-sm font-semibold">Where is your show?</p>
+        <div className="space-y-1.5">
+          <Label htmlFor="venueName" className="text-xs">Venue name</Label>
+          <Input id="venueName" value={venueName} onChange={(e) => setVenueName(e.target.value)} placeholder="e.g. Strathclyde Country Park Pavilion" className="min-h-[2.75rem]" />
+        </div>
+        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="venueAddress" className="text-xs">Address</Label>
+            <Input id="venueAddress" value={venueAddress} onChange={(e) => setVenueAddress(e.target.value)} placeholder="Street and town" className="min-h-[2.75rem]" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="venuePostcode" className="text-xs">Postcode</Label>
+            <Input id="venuePostcode" value={venuePostcode} onChange={(e) => setVenuePostcode(e.target.value)} placeholder="e.g. ML1 3RT" className="min-h-[2.75rem]" />
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">This is the address exhibitors will see — we&apos;ll add it to the map too.</p>
+      </div>
       <div className="space-y-1.5">
         <Label htmlFor="directions" className="text-xs">Directions to Venue</Label>
         <Textarea id="directions" value={directions} onChange={(e) => setDirections(e.target.value)} placeholder="Directions, parking information, etc." rows={2} />
