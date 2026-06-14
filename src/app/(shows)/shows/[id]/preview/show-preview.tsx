@@ -21,6 +21,13 @@ import {
   Share2,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
+import {
+  buildClassLabelMap,
+  getClassLabel,
+  svDisplayAge,
+  isSpecialAwardClass,
+  isJuniorHandler,
+} from '@/lib/class-labels';
 import { Button } from '@/components/ui/button';
 import { displayShowTypeLabel } from '@/lib/show-types';
 import { formatCurrency } from '@/lib/date-utils';
@@ -28,6 +35,42 @@ import { ShareKitDialog } from '@/components/show/share-kit-dialog';
 import { ShareKitCard } from '@/components/show/share-kit';
 import { cn } from '@/lib/utils';
 import { captureReferralSource } from '@/lib/referral-source';
+
+type PreviewShowClass = {
+  id: string;
+  classNumber: number | null;
+  sortOrder?: number | null;
+  sex?: string | null;
+  svCoatType?: 'stock' | 'long_stock' | null;
+  classDefinition?: { type?: string | null; name?: string | null } | null;
+};
+
+/** Human-readable class name for the public classification list, matching the
+ *  schedule/catalogue conventions: Special Award → "Special Award X",
+ *  SV age classes → age + sex + coat, RKC → name + Dog/Bitch, JH → its name. */
+function formatPublicClassName(sc: PreviewShowClass): string {
+  const cd = sc.classDefinition;
+  const sexLabel = sc.sex === 'dog' ? 'Dog' : sc.sex === 'bitch' ? 'Bitch' : '';
+  if (isSpecialAwardClass(sc)) {
+    const base = (cd?.name ?? '').replace(/^Special Award Class\s*-\s*/, 'Special Award ');
+    return sc.sex == null ? `${base} Dog or Bitch` : `${base} ${sexLabel}`.trim();
+  }
+  if (cd?.type === 'sv_age' || sc.svCoatType) {
+    const age = svDisplayAge(cd?.name);
+    const coat = sc.svCoatType === 'stock'
+      ? ' · Stock Coat'
+      : sc.svCoatType === 'long_stock'
+        ? ' · Long Stock Coat'
+        : '';
+    return `${age}${sexLabel ? ` ${sexLabel}` : ''}${coat}`;
+  }
+  if (isJuniorHandler(sc)) {
+    // The label already carries "JHA"/"JHB" — strip any duplicate prefix from
+    // the name so the chip doesn't read "JHA JHA Handling (6-11)".
+    return (cd?.name ?? 'Junior Handling').replace(/^JH[A-Z]\s+/i, '');
+  }
+  return `${cd?.name ?? 'Class'}${sexLabel ? ` ${sexLabel}` : ''}`;
+}
 
 /* ─── Decorative components ─────────────────────── */
 
@@ -417,19 +460,29 @@ export function ShowPreviewClient() {
 
   /* ─── Breed aggregation ─── */
   const breedGroups = useMemo(() => {
-    if (!show) return [] as { breed: string; classes: number; isJH: boolean; judgeName?: string }[];
+    type Group = {
+      breed: string;
+      classes: number;
+      classList: { id: string; label: string; name: string }[];
+      isJH: boolean;
+      isSac: boolean;
+      judgeName?: string;
+    };
+    if (!show) return [] as Group[];
 
-    const m = new Map<string, { classes: number; isJH: boolean; isSac: boolean; judgeName?: string }>();
-    for (const sc of (show.showClasses ?? [])) {
-      const scAny = sc as { breed?: { name?: string } | null; classDefinition?: { type?: string; name?: string } };
-      const isJH = scAny.classDefinition?.type === 'junior_handler';
-      // SAC classes have classDefinition.type === 'special' and a name
-      // starting "Special Award Class". Surface them as their own bucket
-      // on "Classes on Offer" so they don't disappear inside the main
-      // breed count (Amanda 2026-05-27).
-      const isSac = scAny.classDefinition?.type === 'special'
-        && (scAny.classDefinition.name?.startsWith('Special Award Class') ?? false);
-      const breedName = scAny.breed?.name;
+    const allClasses = (show.showClasses ?? []) as PreviewShowClass[];
+    // Single source of truth for the per-class label (RKC number, SV 1a/1b,
+    // JHA, SAC letter) — shared with the schedule + catalogue.
+    const labelMap = buildClassLabelMap(allClasses);
+
+    const m = new Map<string, { rows: PreviewShowClass[]; isJH: boolean; isSac: boolean; judgeName?: string }>();
+    for (const sc of allClasses) {
+      const breedName = (sc as { breed?: { name?: string } | null }).breed?.name;
+      const isJH = sc.classDefinition?.type === 'junior_handler';
+      // SAC classes have classDefinition.type === 'special' + a "Special Award
+      // Class" name — bucketed separately so they don't vanish into the main
+      // count (Amanda 2026-05-27).
+      const isSac = isSpecialAwardClass(sc);
       let groupName: string;
       if (isJH) groupName = 'Junior Handling';
       else if (isSac) groupName = 'Special Award Classes';
@@ -437,9 +490,8 @@ export function ShowPreviewClient() {
       else if (singleBreedName) groupName = singleBreedName;
       else groupName = 'Breed Classes';
 
-      if (!m.has(groupName)) m.set(groupName, { classes: 0, isJH, isSac });
-      const entry = m.get(groupName)!;
-      entry.classes += 1;
+      if (!m.has(groupName)) m.set(groupName, { rows: [], isJH, isSac });
+      m.get(groupName)!.rows.push(sc);
     }
 
     // Attach judges: use the pre-aggregated `judges` list with its resolved roles
@@ -461,9 +513,36 @@ export function ShowPreviewClient() {
 
     // Sort: main breed(s) first, then Special Awards, then Junior Handling.
     return Array.from(m.entries())
-      .map(([breed, v]) => ({ breed, ...v }))
+      .map(([breed, v]): Group => ({
+        breed,
+        classes: v.rows.length,
+        // The full classification, in canonical order, ready to render on-page.
+        // Sort by the label's number then letter (so SV reads 1a, 1b, 2a, 2b
+        // like the schedule does — not by raw sortOrder); fall back to sortOrder
+        // for labels with no number (JH "JHA", SAC "A").
+        classList: [...v.rows]
+          .map((sc) => ({
+            id: sc.id,
+            label: getClassLabel(sc, labelMap),
+            name: formatPublicClassName(sc),
+            sortOrder: sc.sortOrder ?? 0,
+          }))
+          .sort((a, b) => {
+            const pa = a.label.match(/^(\d+)([a-z]?)$/i);
+            const pb = b.label.match(/^(\d+)([a-z]?)$/i);
+            if (pa && pb) {
+              const diff = Number(pa[1]) - Number(pb[1]);
+              return diff !== 0 ? diff : (pa[2] || '').localeCompare(pb[2] || '');
+            }
+            return a.sortOrder - b.sortOrder;
+          })
+          .map(({ id, label, name }) => ({ id, label, name })),
+        isJH: v.isJH,
+        isSac: v.isSac,
+        judgeName: v.judgeName,
+      }))
       .sort((a, b) => {
-        const rank = (g: typeof a) => (g.isJH ? 2 : g.isSac ? 1 : 0);
+        const rank = (g: Group) => (g.isJH ? 2 : g.isSac ? 1 : 0);
         const ra = rank(a);
         const rb = rank(b);
         if (ra !== rb) return ra - rb;
@@ -876,7 +955,7 @@ export function ShowPreviewClient() {
           )}
 
           <div className="ml-auto flex items-center gap-1">
-            <Button variant="outline" size="sm" className="h-9 gap-1.5" asChild>
+            <Button variant="outline" size="sm" className="h-9 shrink-0 gap-1.5" asChild>
               <a
                 href={`/api/schedule/${show.id}`}
                 target="_blank"
@@ -884,7 +963,10 @@ export function ShowPreviewClient() {
                 aria-label="View the show schedule (PDF) — no account needed"
               >
                 <FileText className="size-4" />
-                <span className="hidden sm:inline">View schedule</span>
+                {/* Always show the word — the icon alone wasn't obvious enough
+                    (Mandy 2026-06-14: "not everyone will know the sign means
+                    schedule"). */}
+                <span>Schedule</span>
               </a>
             </Button>
             <Button variant="outline" size="sm" className="h-9 gap-1.5" asChild>
@@ -1162,22 +1244,37 @@ export function ShowPreviewClient() {
               if (breedCount <= 1) return 'Classes on Offer';
               return `${breedCount} Breeds`;
             })()} />
-            <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {breedGroups.map(({ breed, classes, judgeName }) => (
+            <div className="mt-8 grid gap-4 lg:grid-cols-2">
+              {breedGroups.map(({ breed, classes, classList, judgeName }) => (
                 <div
                   key={breed}
-                  className="rounded-xl border border-stone-200 bg-white px-4 py-3"
+                  className="rounded-2xl border border-stone-200 bg-white p-4 sm:p-5"
                 >
-                  <p className="truncate font-serif font-semibold text-stone-900">{breed}</p>
-                  <p className="text-xs text-stone-500">
-                    {classes} {classes === 1 ? 'class' : 'classes'}
-                    {judgeName ? ` · ${judgeName}` : ''}
-                  </p>
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                    <p className="font-serif text-lg font-semibold text-stone-900">{breed}</p>
+                    <p className="text-xs text-stone-500">
+                      {classes} {classes === 1 ? 'class' : 'classes'}
+                      {judgeName ? ` · ${judgeName}` : ''}
+                    </p>
+                  </div>
+                  {/* The full classification on the page — so exhibitors don't
+                      have to open the PDF to see the classes (Mandy 2026-06-14). */}
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {classList.map((c) => (
+                      <span
+                        key={c.id}
+                        className="inline-flex items-center gap-1 rounded-md bg-stone-100 px-2 py-1 text-xs text-stone-700"
+                      >
+                        {c.label && <span className="font-semibold text-amber-700">{c.label}</span>}
+                        <span>{c.name}</span>
+                      </span>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
-            <p className="mt-4 text-center text-sm text-stone-600">
-              No account needed — anyone can read the full schedule.{' '}
+            <p className="mt-6 text-center text-sm text-stone-600">
+              Prefer the full document?{' '}
               <a
                 href={`/api/schedule/${show.id}`}
                 target="_blank"
