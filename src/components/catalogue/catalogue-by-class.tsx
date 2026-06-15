@@ -96,6 +96,83 @@ const svEntry = {
   } as const,
 };
 
+// Per-class placings + grading block, written at the FOOT of each class
+// (Mandy 2026-06-14 — moved off the right of each dog to match the RKC
+// catalogue, and made dynamic to the class size). SV judges place AND
+// grade every exhibit, so each slot carries a write-in for the dog and a
+// short grade box. Three slots per row keeps the footprint tight.
+const svPlacings = {
+  wrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 5,
+    paddingTop: 4,
+    borderTopWidth: 0.5,
+    borderTopColor: SV.rule,
+  } as const,
+  cell: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    width: '33%',
+    paddingRight: 6,
+    marginBottom: 3,
+  } as const,
+  ordinal: {
+    fontFamily: SV_FONTS.sans,
+    fontSize: 6.5,
+    fontWeight: 'bold' as const,
+    color: SV.accent,
+    width: 20,
+  } as const,
+  writeIn: {
+    fontFamily: SV_FONTS.serif,
+    fontStyle: 'italic' as const,
+    fontSize: 8,
+    color: SV.ink3,
+    flex: 1,
+  } as const,
+  gradeLabel: {
+    fontFamily: SV_FONTS.sans,
+    fontSize: 5.5,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.4,
+    fontWeight: 'bold' as const,
+    color: SV.ink3,
+    paddingLeft: 2,
+  } as const,
+  gradeWriteIn: {
+    fontFamily: SV_FONTS.serif,
+    fontStyle: 'italic' as const,
+    fontSize: 8,
+    color: SV.ink3,
+    width: 16,
+    paddingLeft: 2,
+  } as const,
+};
+
+/** "1st", "2nd", "3rd", "4th"… proper English ordinal for a placing slot. */
+function ordinalLabel(n: number): string {
+  const suffixes = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return `${n}${suffixes[(v - 20) % 10] ?? suffixes[v] ?? suffixes[0]}`;
+}
+
+/** The dynamic SV placings + grading block for a class of `count` dogs. */
+function renderSvPlacings(count: number): React.ReactElement {
+  return (
+    <View style={svPlacings.wrap} wrap={false}>
+      {Array.from({ length: count }, (_, i) => i + 1).map((n) => (
+        <View key={n} style={svPlacings.cell}>
+          <Text style={svPlacings.ordinal}>{ordinalLabel(n)}</Text>
+          <Text style={svPlacings.writeIn}>………</Text>
+          <Text style={svPlacings.gradeLabel}>Gr</Text>
+          <Text style={svPlacings.gradeWriteIn}>…</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 function renderSvEntry(
   entry: CatalogueEntry,
   rowKey: string,
@@ -129,146 +206,84 @@ function renderSvEntry(
     ? { town: 'address withheld', postcode: '' }
     : splitTownPostcode(entry.owners[0]?.address);
 
+  // Vitals — Reg · DOB · Hips · Elbows · Titles all on ONE line now that
+  // the Place/Grade write-in has moved to the foot of the class
+  // (Mandy 2026-06-14 — fewer lines per dog, smaller catalogue pages).
+  // Hips/Elbows always show (formatHealthSide returns "Not yet required").
+  const vitals: Array<{ label: string; value: string }> = [];
+  if (entry.kcRegNumber) vitals.push({ label: 'Reg', value: entry.kcRegNumber });
+  if (dob) vitals.push({ label: 'DOB', value: dob });
+  vitals.push({ label: 'Hips', value: hip });
+  vitals.push({ label: 'Elbows', value: elbow });
+  if (titlesStr) vitals.push({ label: 'Titles', value: titlesStr });
+
   return (
-    <View key={rowKey} style={{ ...svEntry.row, flexDirection: 'row', alignItems: 'stretch' }} wrap={false}>
-      {/* Left: all entry data lines */}
-      <View style={{ flex: 1 }}>
-        {/* Line 1 — cat# · DOG NAME (bold) · microchip (bold). The chip
-            number sits on the name line because WUSV/GSDL require every
-            exhibit's microchip published prominently (Amanda 2026-05-28). */}
-        <View style={svEntry.line1}>
-          <Text style={svEntry.catNumber}>{entry.catalogueNumber ?? '—'}</Text>
-          <Text style={svEntry.dogName}>{uppercaseName(entry.dogName) || 'Unnamed'}</Text>
-          {entry.microchipNumber ? (
-            <Text style={svEntry.microchip}>· Chip {entry.microchipNumber}</Text>
-          ) : null}
-        </View>
-        <Text style={svEntry.meta}>
-          {entry.kcRegNumber ? (
-            <>
-              <Text style={svEntry.metaLabel}>Reg </Text>
-              {entry.kcRegNumber}
-            </>
-          ) : null}
-          {entry.kcRegNumber && dob ? '   ·   ' : ''}
-          {dob ? <>DOB {dob}</> : null}
-        </Text>
-
-        {/* Line 2 — Hip · Elbow · Titles */}
-        <Text style={svEntry.meta}>
-          <Text style={svEntry.metaLabel}>Hips </Text>
-          {hip}
-          {'   ·   '}
-          <Text style={svEntry.metaLabel}>Elbows </Text>
-          {elbow}
-          {titlesStr ? (
-            <>
-              {'   ·   '}
-              <Text style={svEntry.metaLabel}>Titles </Text>
-              {titlesStr}
-            </>
-          ) : null}
-        </Text>
-
-        {/* Line 3 — Sire · Dam */}
-        {(entry.sire || entry.dam) && (
-          <Text style={svEntry.pedigree}>
-            {entry.sire ? (
-              <>
-                <Text style={svEntry.metaLabel}>Sire </Text>
-                {entry.sire}
-              </>
-            ) : null}
-            {entry.sire && entry.dam ? '    ·    ' : ''}
-            {entry.dam ? (
-              <>
-                <Text style={svEntry.metaLabel}>Dam </Text>
-                {entry.dam}
-              </>
-            ) : null}
-          </Text>
-        )}
-
-        {/* Line 4 — Breeder + Owner on one line, separated by a centred dot
-            (Amanda 2026-05-23 — saves a row per entry, page is denser). */}
-        {(breederParts.length > 0 || ownersHeading) && (
-          <Text style={svEntry.meta}>
-            {breederParts.length > 0 && (
-              <>
-                <Text style={svEntry.metaLabel}>Breeder </Text>
-                {breederParts.join(', ')}
-              </>
-            )}
-            {breederParts.length > 0 && ownersHeading ? '    ·    ' : ''}
-            {ownersHeading && (
-              <>
-                <Text style={svEntry.metaLabel}>
-                  Owner{entry.owners.length > 1 ? 's' : ''}{' '}
-                </Text>
-                {ownersHeading}
-                {primaryOwnerAddr.town || primaryOwnerAddr.postcode
-                  ? `, ${[primaryOwnerAddr.town, primaryOwnerAddr.postcode].filter(Boolean).join(', ')}`
-                  : ''}
-              </>
-            )}
-          </Text>
-        )}
+    <View key={rowKey} style={svEntry.row} wrap={false}>
+      {/* Line 1 — cat# · DOG NAME (bold) · microchip (bold). The chip
+          number sits on the name line because WUSV/GSDL require every
+          exhibit's microchip published prominently (Amanda 2026-05-28). */}
+      <View style={svEntry.line1}>
+        <Text style={svEntry.catNumber}>{entry.catalogueNumber ?? '—'}</Text>
+        <Text style={svEntry.dogName}>{uppercaseName(entry.dogName) || 'Unnamed'}</Text>
+        {entry.microchipNumber ? (
+          <Text style={svEntry.microchip}>· Chip {entry.microchipNumber}</Text>
+        ) : null}
       </View>
 
-      {/* Right: per-entry Place + Grade write-in columns. SV judges
-          award a placement AND a grading to every dog in the class
-          (Amanda 2026-05-23). Side columns keep the layout dense and
-          let the judge or steward write straight next to the dog.
-          2026-05-26: shrunk from 90pt → 56pt — still wide enough for
-          VP1 / SG1 grading codes, gives entry text more horizontal
-          space and shortens the per-page footprint. */}
-      <View
-        style={{
-          width: 56,
-          paddingLeft: 6,
-          borderLeftWidth: 0.5,
-          borderLeftColor: SV.rule,
-          justifyContent: 'center',
-          gap: 4,
-        }}
-      >
-        <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-          <Text
-            style={{
-              fontFamily: SV_FONTS.sans,
-              fontSize: 6,
-              textTransform: 'uppercase',
-              letterSpacing: 0.6,
-              color: SV.ink3,
-              fontWeight: 'bold',
-              width: 20,
-            }}
-          >
-            Place
+      {/* Line 2 — vitals: Reg · DOB · Hips · Elbows · Titles */}
+      <Text style={svEntry.meta}>
+        {vitals.map((v, i) => (
+          <Text key={i}>
+            {i > 0 ? '   ·   ' : ''}
+            <Text style={svEntry.metaLabel}>{v.label} </Text>
+            {v.value}
           </Text>
-          <Text style={{ fontFamily: SV_FONTS.serif, fontStyle: 'italic', fontSize: 8, color: SV.ink2, flex: 1 }}>
-            ……
-          </Text>
-        </View>
-        <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-          <Text
-            style={{
-              fontFamily: SV_FONTS.sans,
-              fontSize: 6,
-              textTransform: 'uppercase',
-              letterSpacing: 0.6,
-              color: SV.ink3,
-              fontWeight: 'bold',
-              width: 20,
-            }}
-          >
-            Grade
-          </Text>
-          <Text style={{ fontFamily: SV_FONTS.serif, fontStyle: 'italic', fontSize: 8, color: SV.ink2, flex: 1 }}>
-            ……
-          </Text>
-        </View>
-      </View>
+        ))}
+      </Text>
+
+      {/* Line 3 — Sire · Dam */}
+      {(entry.sire || entry.dam) && (
+        <Text style={svEntry.pedigree}>
+          {entry.sire ? (
+            <>
+              <Text style={svEntry.metaLabel}>Sire </Text>
+              {entry.sire}
+            </>
+          ) : null}
+          {entry.sire && entry.dam ? '    ·    ' : ''}
+          {entry.dam ? (
+            <>
+              <Text style={svEntry.metaLabel}>Dam </Text>
+              {entry.dam}
+            </>
+          ) : null}
+        </Text>
+      )}
+
+      {/* Line 4 — Breeder + Owner on one line, separated by a centred dot
+          (Amanda 2026-05-23 — saves a row per entry, page is denser). */}
+      {(breederParts.length > 0 || ownersHeading) && (
+        <Text style={svEntry.meta}>
+          {breederParts.length > 0 && (
+            <>
+              <Text style={svEntry.metaLabel}>Breeder </Text>
+              {breederParts.join(', ')}
+            </>
+          )}
+          {breederParts.length > 0 && ownersHeading ? '    ·    ' : ''}
+          {ownersHeading && (
+            <>
+              <Text style={svEntry.metaLabel}>
+                Owner{entry.owners.length > 1 ? 's' : ''}{' '}
+              </Text>
+              {ownersHeading}
+              {primaryOwnerAddr.town || primaryOwnerAddr.postcode
+                ? `, ${[primaryOwnerAddr.town, primaryOwnerAddr.postcode].filter(Boolean).join(', ')}`
+                : ''}
+            </>
+          )}
+        </Text>
+      )}
     </View>
   );
 }
@@ -688,9 +703,11 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
 
             {/* Placements write-in row.
                 • RKC: 1st / 2nd / 3rd / Res / VHC (Amanda 2026-05-14).
-                • SV/WUSV: 1st / 2nd / 3rd + a separate Grading line
-                  (Amanda 2026-05-22 — SV judges award placements AND
-                  grade each exhibit against the breed standard). */}
+                • SV/WUSV: a placing + grade slot per dog in the class,
+                  dynamic to the class size, written at the FOOT of the
+                  class like the RKC shows (Mandy 2026-06-14 — moved off
+                  the right of each dog; SV judges place AND grade every
+                  exhibit). */}
             {sorted.length > 0 && !isSvShow && (
               <View style={styles.placementsRow} wrap={false}>
                 <Text style={styles.placementsCell}>1st .....</Text>
@@ -700,9 +717,7 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
                 <Text style={styles.placementsCell}>VHC .....</Text>
               </View>
             )}
-            {/* Per-class Results/Grading stub removed 2026-05-23 — each
-                entry now carries its own Place + Grade write-in columns
-                on the right (SV judges grade every dog in the class). */}
+            {sorted.length > 0 && isSvShow && renderSvPlacings(sorted.length)}
 
           </View>
         );
