@@ -134,6 +134,11 @@ export function JudgesSection({ showId }: { showId: string }) {
   const { data: showRings } = trpc.secretary.getShowRings.useQuery({ showId });
   const { data: contracts } = trpc.secretary.getJudgeContracts.useQuery({ showId });
   const { data: showData } = trpc.shows.getById.useQuery({ id: showId });
+  // SV/WUSV regional shows aren't run under RKC rules, so the RKC-specific bits
+  // (the "subject to RKC approval" flag, the RKC contract-process framing) don't
+  // apply and are hidden for them (Mandy 2026-06-15).
+  const isWusv =
+    (showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset === 'wusv';
 
   // For single-breed shows, derive the breed from the show's classes
   const singleBreedId = useMemo(() => {
@@ -522,7 +527,9 @@ export function JudgesSection({ showId }: { showId: string }) {
         <CardHeader>
           <CardTitle>Current Assignments ({uniqueJudges.length})</CardTitle>
           <CardDescription>
-            Manage judge assignments and track the three-stage RKC contract process.
+            {isWusv
+              ? 'Manage judge assignments and judging invitations.'
+              : 'Manage judge assignments and track the three-stage RKC contract process.'}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -604,29 +611,31 @@ export function JudgesSection({ showId }: { showId: string }) {
                             Download signed contract (PDF)
                           </a>
                         )}
-                        <label
-                          htmlFor={`rkc-approval-${j.judgeId}`}
-                          className="mt-3 flex min-h-[2.75rem] cursor-pointer items-center gap-2.5 rounded-md border border-dashed border-muted-foreground/30 px-3 py-2 text-sm transition-colors hover:bg-muted/40"
-                        >
-                          <Checkbox
-                            id={`rkc-approval-${j.judgeId}`}
-                            checked={j.subjectToRkcApproval}
-                            disabled={setRkcApprovalMutation.isPending}
-                            onCheckedChange={(checked) => {
-                              setRkcApprovalMutation.mutate({
-                                showId,
-                                judgeId: j.judgeId,
-                                subjectToRkcApproval: checked === true,
-                              });
-                            }}
-                          />
-                          <span className="flex-1">
-                            <span className="font-medium">Subject to RKC approval</span>
-                            <span className="ml-1 text-xs text-muted-foreground">
-                              — adds the note after the judge&apos;s name on the schedule
+                        {!isWusv && (
+                          <label
+                            htmlFor={`rkc-approval-${j.judgeId}`}
+                            className="mt-3 flex min-h-[2.75rem] cursor-pointer items-center gap-2.5 rounded-md border border-dashed border-muted-foreground/30 px-3 py-2 text-sm transition-colors hover:bg-muted/40"
+                          >
+                            <Checkbox
+                              id={`rkc-approval-${j.judgeId}`}
+                              checked={j.subjectToRkcApproval}
+                              disabled={setRkcApprovalMutation.isPending}
+                              onCheckedChange={(checked) => {
+                                setRkcApprovalMutation.mutate({
+                                  showId,
+                                  judgeId: j.judgeId,
+                                  subjectToRkcApproval: checked === true,
+                                });
+                              }}
+                            />
+                            <span className="flex-1">
+                              <span className="font-medium">Subject to RKC approval</span>
+                              <span className="ml-1 text-xs text-muted-foreground">
+                                — adds the note after the judge&apos;s name on the schedule
+                              </span>
                             </span>
-                          </span>
-                        </label>
+                          </label>
+                        )}
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
                         {!contract && (
@@ -827,7 +836,9 @@ export function JudgesSection({ showId }: { showId: string }) {
           <DialogHeader>
             <DialogTitle>Send Judging Offer</DialogTitle>
             <DialogDescription>
-              Stage 1 of the RKC three-part contract process. Review the email preview below.
+              {isWusv
+                ? 'Send the judging invitation. Review the email preview below.'
+                : 'Stage 1 of the RKC three-part contract process. Review the email preview below.'}
             </DialogDescription>
           </DialogHeader>
 

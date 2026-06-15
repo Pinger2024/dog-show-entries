@@ -180,6 +180,10 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
 
   // Club people for roster picker
   const orgId = showData?.organisationId;
+  // SV/WUSV regional shows don't run under RKC rules — their schedule carries
+  // its own (SV) statements, not the RKC ones (Mandy 2026-06-15).
+  const isWusv =
+    (showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset === 'wusv';
   const { data: clubPeople } = trpc.secretary.listOrgPeople.useQuery(
     { organisationId: orgId ?? '' },
     { enabled: !!orgId }
@@ -645,7 +649,9 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
           <h2 className="text-lg font-bold tracking-tight">Schedule Settings</h2>
           <p className="text-sm text-muted-foreground">
             Configure your show schedule PDF.
-            <span className="hidden sm:inline"> Mandatory RKC statements are auto-included.</span>
+            {!isWusv && (
+              <span className="hidden sm:inline"> Mandatory RKC statements are auto-included.</span>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -670,7 +676,9 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
             'Share the PDF link on social media or send it by email so exhibitors can read it.',
           ],
           benefit: 'No more sending Word files to the printer and waiting days for a proof. No more marking up paper copies in red pen. No more posting schedules out at your own cost. You type the details once and a polished PDF is ready to download or share in seconds. Spot a typo a week later? Fix it and the PDF updates the moment you save.',
-          tip: 'The mandatory RKC statements (declarations, rules, regulations) are added automatically. You only need to fill in the parts specific to your show.',
+          tip: isWusv
+            ? 'The required schedule statements are added automatically. You only need to fill in the parts specific to your show.'
+            : 'The mandatory RKC statements (declarations, rules, regulations) are added automatically. You only need to fill in the parts specific to your show.',
         }}
       />
 
@@ -812,6 +820,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
                       acceptsNfc={acceptsNfc} setAcceptsNfc={setAcceptsNfc}
                       judgedOnGroupSystem={judgedOnGroupSystem} setJudgedOnGroupSystem={setJudgedOnGroupSystem}
                       customStatements={customStatements} setCustomStatements={setCustomStatements}
+                      isWusvShow={isWusv}
                     />
                   )}
                 </div>
@@ -1432,7 +1441,7 @@ function RegulationsSection({
   wetWeather, setWetWeather, isBenched, setIsBenched,
   benchingRemovalTime, setBenchingRemovalTime,
   acceptsNfc, setAcceptsNfc, judgedOnGroupSystem, setJudgedOnGroupSystem,
-  customStatements, setCustomStatements,
+  customStatements, setCustomStatements, isWusvShow,
 }: {
   country: string; setCountry: (v: string) => void;
   publicAdmission: boolean; setPublicAdmission: (v: boolean) => void;
@@ -1442,11 +1451,14 @@ function RegulationsSection({
   acceptsNfc: boolean; setAcceptsNfc: (v: boolean) => void;
   judgedOnGroupSystem: boolean; setJudgedOnGroupSystem: (v: boolean) => void;
   customStatements: string[]; setCustomStatements: (v: string[]) => void;
+  isWusvShow: boolean;
 }) {
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground">
-        Mandatory RKC statements are auto-included. These settings control show-specific regulations.
+        {isWusvShow
+          ? 'These settings control show-specific regulations for your schedule.'
+          : 'Mandatory RKC statements are auto-included. These settings control show-specific regulations.'}
       </p>
 
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
