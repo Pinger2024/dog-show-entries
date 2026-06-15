@@ -184,6 +184,13 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
   // its own (SV) statements, not the RKC ones (Mandy 2026-06-15).
   const isWusv =
     (showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset === 'wusv';
+  // The whole Regulations section (country/docking, NFC, group system, benching
+  // — all RKC concepts) doesn't apply to regional shows, and the SV schedule
+  // doesn't read any of it, so hide that section entirely for them (Mandy
+  // 2026-06-15).
+  const visibleSections = isWusv
+    ? SECTIONS.filter((s) => s.id !== 'regulations')
+    : SECTIONS;
   const { data: clubPeople } = trpc.secretary.listOrgPeople.useQuery(
     { organisationId: orgId ?? '' },
     { enabled: !!orgId }
@@ -694,7 +701,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
 
       {/* Sections */}
       <div className="space-y-2">
-        {SECTIONS.map((section) => {
+        {visibleSections.map((section) => {
           const isEditing = editingSection === section.id;
           const isComplete = sectionStatus[section.id];
           const Icon = section.icon;
