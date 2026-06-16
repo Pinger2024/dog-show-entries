@@ -14,7 +14,7 @@ interface Props {
   entries: CatalogueEntry[];
 }
 
-// Ultra-dense "Judging Catalogue" format optimised for print cost:
+// Ultra-dense "Steward's Condensed Catalogue" format optimised for print cost:
 // - Tight margins, small fonts, two-column entry layout
 // - Class header strip (green, minimal), write-in placement slots
 // - Minimal front matter (one cover page with show + judges + class legend)
@@ -305,12 +305,12 @@ export function CatalogueJudging({ show, entries }: Props) {
   }));
 
   const footerText =
-    `${show.name}  ·  Judging Catalogue  ·  ${show.date}`;
+    `${show.name}  ·  Steward's Condensed Catalogue  ·  ${show.date}`;
   const footerRender = ({ pageNumber, totalPages }: { pageNumber: number; totalPages: number }) =>
     `${footerText}  ·  Page ${pageNumber} of ${totalPages}`;
 
   return (
-    <Document title={`Judging Catalogue — ${show.name}`} author="Remi Show Manager">
+    <Document title={`Steward's Condensed Catalogue — ${show.name}`} author="Remi Show Manager">
       {/* ── COVER PAGE ──
           NOTE: leave wrap at default (true). wrap={false} on a
           <Page> with short content shrinks the page to fit, which
@@ -319,7 +319,7 @@ export function CatalogueJudging({ show, entries }: Props) {
         {show.logoUrl && <Image src={show.logoUrl} style={s.coverLogo} />}
         {show.organisation && <Text style={s.coverOrg}>{show.organisation}</Text>}
         <Text style={s.coverTitle}>{show.name}</Text>
-        <Text style={s.coverSubtitle}>Judging Catalogue</Text>
+        <Text style={s.coverSubtitle}>Steward's Condensed Catalogue</Text>
         <View style={s.coverDetails}>
           <Text style={s.coverDetail}>{show.date}</Text>
           {show.venue && <Text style={s.coverDetail}>·  {show.venue}</Text>}

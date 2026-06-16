@@ -300,10 +300,10 @@ export default function DocumentsPage() {
           description: 'Entries grouped by class number',
         },
         {
-          label: 'Judging Catalogue',
+          label: "Steward's Condensed Catalogue",
           href: `/api/catalogue/${showId}/judging`,
           icon: <Gavel className="size-4" />,
-          description: 'Condensed two-column format with write-in placements — minimises print cost',
+          description: 'Condensed two-column format with write-in placements for the ring steward — minimises print cost',
         },
         {
           label: 'Absentee List',
