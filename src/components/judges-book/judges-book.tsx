@@ -181,16 +181,25 @@ const s = StyleSheet.create({
   placementColumnLast: {
     flex: 1,
   },
+  // Fixed-height header band so a label that wraps to two lines (e.g. "✂ Tear
+  // off — Awards Board") doesn't push that column's placement rows out of line
+  // with the other two columns (Mandy 2026-06-16). All three headers are now
+  // the same height and the text is vertically centred within.
+  copyLabelBox: {
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 3,
+    backgroundColor: '#fafafa',
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#ccc',
+  },
   copyLabel: {
     fontSize: 7,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
     color: '#666',
     textAlign: 'center',
-    paddingVertical: 3,
-    backgroundColor: '#fafafa',
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#ccc',
   },
   columnClassHeader: {
     borderBottomWidth: 1,
@@ -350,7 +359,7 @@ function BestAwardsColumn({
 }) {
   return (
     <View style={isLast ? s.placementColumnLast : s.placementColumn}>
-      <Text style={s.copyLabel}>{copyLabel}</Text>
+      <View style={s.copyLabelBox}><Text style={s.copyLabel}>{copyLabel}</Text></View>
       <View style={bestAwardsStyles.columnHeader}>
         <Text style={bestAwardsStyles.columnHeaderLabel}>Sign-off</Text>
         <Text style={bestAwardsStyles.columnHeaderTitle}>Best Awards</Text>
@@ -386,7 +395,7 @@ function ColumnHeader({ classLabel, className, sexLabel, breedName }: ColumnHead
 function PlacementColumn(props: ColumnHeaderProps & { isLast?: boolean; copyLabel: string }) {
   return (
     <View style={props.isLast ? s.placementColumnLast : s.placementColumn}>
-      <Text style={s.copyLabel}>{props.copyLabel}</Text>
+      <View style={s.copyLabelBox}><Text style={s.copyLabel}>{props.copyLabel}</Text></View>
       <ColumnHeader {...props} />
 
       {PLACEMENTS.map((place) => (
