@@ -2,7 +2,7 @@ import { Document, Page, View, Text, Image } from '@react-pdf/renderer';
 import { styles } from './catalogue-styles';
 import { CatalogueHeader } from './catalogue-header';
 import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
-import { formatDobKC, formatPedigreeKC, formatOwnerKC, formatRkcOwnerHeading, uppercaseName, buildSponsorLines } from './catalogue-utils';
+import { formatDobKC, titleCase, formatOwnerKC, formatRkcOwnerHeading, uppercaseName, buildSponsorLines } from './catalogue-utils';
 import { CoverPage, FrontMatterPage, TrophiesPage, ExhibitorIndexPage } from './catalogue-front-matter';
 import {
   SvAcknowledgementsPage,
@@ -531,17 +531,20 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
               </View>
             );
           }
-          const pedigree = formatPedigreeKC(entry.sire, entry.dam);
+          // Pedigree as "Sire: <sire>  Dam: <dam>" (Mandy 2026-06-16, replacing
+          // the older "By <sire> ex <dam>" / interim "S: x D:" form). titleCase
+          // normalises whatever casing the exhibitor typed in.
+          const pedigree = (entry.sire || entry.dam)
+            ? `Sire: ${entry.sire ? titleCase(entry.sire) : '—'}  Dam: ${entry.dam ? titleCase(entry.dam) : '—'}`
+            : null;
+          // Registration number and colour are intentionally omitted from the
+          // RKC by-class catalogue entry line (Amanda 2026-06-08). (SV/WUSV
+          // catalogues keep them — see renderSvEntry, which is a separate path.)
           const metaParts = [
-            entry.kcRegNumber,
-            // SV regional catalogues print the microchip / ID alongside
-            // the KC reg number (Amanda 2026-05-22).
-            isSvShow && entry.microchipNumber ? `ID ${entry.microchipNumber}` : null,
             entry.dateOfBirth ? `DOB ${formatDobKC(entry.dateOfBirth)}` : null,
-            entry.colour,
             entry.sex === 'dog' ? 'Dog' : entry.sex === 'bitch' ? 'Bitch' : null,
             pedigree,
-            entry.breeder ? `br ${entry.breeder}` : null,
+            entry.breeder ? `br ${titleCase(entry.breeder)}` : null,
           ].filter(Boolean);
           return (
             <View key={rowKey} style={styles.entryRowWrap} wrap={false}>

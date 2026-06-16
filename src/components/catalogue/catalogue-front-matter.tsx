@@ -474,6 +474,31 @@ function hasBestAwards(show: CatalogueShowInfo): boolean {
   return hasExplicitAwards || hasSponsors;
 }
 
+// Canonical Best Awards order (Mandy 2026-06-16): Best in Show, then dog/bitch
+// and their reserves, puppies, puppy-in-show, veteran, long coat. Names are
+// normalised (case-insensitive, "Reserve"→"Res") so config-order variants still
+// sort correctly; anything unrecognised keeps its place at the end.
+const BEST_AWARD_ORDER = [
+  'best in show',
+  'best dog',
+  'res best dog',
+  'best bitch',
+  'res best bitch',
+  'best puppy dog',
+  'best puppy bitch',
+  'best puppy in show',
+  'best veteran',
+  'best veteran in show',
+  'best long coat in show',
+  'best long coat',
+];
+const canonicaliseAward = (s: string) =>
+  s.toLowerCase().trim().replace(/\breserve\b/g, 'res').replace(/\s+/g, ' ');
+const bestAwardSortIndex = (s: string) => {
+  const i = BEST_AWARD_ORDER.indexOf(canonicaliseAward(s));
+  return i === -1 ? BEST_AWARD_ORDER.length : i;
+};
+
 export function BestAwardsContent({ show, compact }: FrontMatterProps & { compact?: boolean }) {
   // Only render configured awards — no default-list fallback. If the
   // secretary didn't add any, the section shouldn't exist (see
@@ -495,7 +520,8 @@ export function BestAwardsContent({ show, compact }: FrontMatterProps & { compac
   const extraSponsorAwards = awardSponsors
     .filter((s) => !bestAwardKeys.has(normaliseAward(s.award)))
     .map((s) => s.award);
-  const allAwards = Array.from(new Set([...bestAwards, ...extraSponsorAwards]));
+  const allAwards = Array.from(new Set([...bestAwards, ...extraSponsorAwards]))
+    .sort((a, b) => bestAwardSortIndex(a) - bestAwardSortIndex(b));
 
   // Trophy/Sponsor columns are pure clutter when no sponsor has been
   // assigned to any award — the rows just fill with em-dashes. Amanda's
@@ -907,16 +933,25 @@ export function CoverPage({ show }: FrontMatterProps) {
               <Text style={styles.coverDetailValue}>{j}</Text>
             </View>
           ))}
-          {show.showOpenTime && (
+          {/* Show Opens + Judging Starts share one row (two equal columns) to
+              save vertical space so the cover details don't spill onto a second
+              page (Amanda 2026-06-08). Each column is a self-contained
+              label+value flex group with an auto-width label so the longer
+              "Judging Starts" label doesn't wrap or overlap its value. */}
+          {(show.showOpenTime || show.startTime) && (
             <View style={styles.coverDetailRow}>
-              <Text style={styles.coverDetailLabel}>Show Opens</Text>
-              <Text style={styles.coverDetailValue}>{formatTime(show.showOpenTime)}</Text>
-            </View>
-          )}
-          {show.startTime && (
-            <View style={styles.coverDetailRow}>
-              <Text style={styles.coverDetailLabel}>Judging Starts</Text>
-              <Text style={styles.coverDetailValue}>{formatTime(show.startTime)}</Text>
+              {show.showOpenTime && (
+                <View style={{ flexDirection: 'row', flex: 1, alignItems: 'baseline' }}>
+                  <Text style={[styles.coverDetailLabel, { width: 'auto', marginRight: 5 }]}>Show Opens</Text>
+                  <Text style={styles.coverDetailValue}>{formatTime(show.showOpenTime)}</Text>
+                </View>
+              )}
+              {show.startTime && (
+                <View style={{ flexDirection: 'row', flex: 1, alignItems: 'baseline' }}>
+                  <Text style={[styles.coverDetailLabel, { width: 'auto', marginRight: 5 }]}>Judging Starts</Text>
+                  <Text style={styles.coverDetailValue}>{formatTime(show.startTime)}</Text>
+                </View>
+              )}
             </View>
           )}
           {show.kcLicenceNo && (
