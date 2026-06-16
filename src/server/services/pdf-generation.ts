@@ -121,24 +121,53 @@ export async function generateCataloguePdf(
       judgeRingNumbers[ja.breed.name] = String(ja.ring.number);
     }
   }
-  // Build sex-annotated display labels for catalogue front matter
-  const seenJudgeKeys = new Set<string>();
+  // Sex-annotated display labels for catalogue front matter — built via the
+  // SAME pure resolver the schedule uses (buildScheduleJudges), so a judge who
+  // does both sexes shows ONCE as "Dogs & Bitches — <name>" rather than three
+  // lines (Dogs, Bitches, and a bare name from the breed-level row). Mandy
+  // 2026-06-16.
+  const catJudgeEntries = new Map<string, {
+    name: string;
+    breeds: Set<string>;
+    sexes: Set<string>;
+    hasNullSexAssignment: boolean;
+    hasJhAssignment: boolean;
+    subjectToRkcApproval: boolean;
+  }>();
+  const catSpecialAwardsJudges: Array<{ name: string; subjectToRkcApproval: boolean }> = [];
   for (const ja of judgeAssignmentRows) {
-    if (!ja.judge?.name) continue;
+    if (!ja.judge?.id || !ja.judge?.name) continue;
+    const subjectToRkcApproval = (ja as { subjectToRkcApproval?: boolean }).subjectToRkcApproval === true;
     if (ja.isSpecialAwardsClassesJudge) {
-      // Lunchtime SAC judges. Amanda 2026-05-27: format as
-      // "Special Awards Classes — <name>" to mirror the other judges
-      // ("Dogs & Bitches — <name>", "Junior Handling — <name>") rather
-      // than the reversed name-first layout we'd been rendering.
-      judgeDisplayList.push(`Special Awards Classes — ${ja.judge.name}`);
+      catSpecialAwardsJudges.push({ name: ja.judge.name, subjectToRkcApproval });
       continue;
     }
-    const key = `${ja.judge.name}::${ja.sex ?? 'all'}`;
-    if (seenJudgeKeys.has(key)) continue;
-    seenJudgeKeys.add(key);
-    const isJH = !ja.breed && ja.sex === null;
-    const prefix = isJH ? 'Junior Handling' : ja.sex === 'dog' ? 'Dogs' : ja.sex === 'bitch' ? 'Bitches' : null;
-    judgeDisplayList.push(prefix ? `${prefix} — ${ja.judge.name}` : ja.judge.name);
+    if ((ja as { judgeRoleId?: string | null }).judgeRoleId) continue; // panel judges handled elsewhere
+    const key = ja.judge.id;
+    const isJhAssignment = !ja.breed?.name && !ja.sex;
+    const existing = catJudgeEntries.get(key);
+    if (existing) {
+      if (ja.breed?.name) existing.breeds.add(ja.breed.name);
+      if (ja.sex) existing.sexes.add(ja.sex);
+      else existing.hasNullSexAssignment = true;
+      if (isJhAssignment) existing.hasJhAssignment = true;
+      if (subjectToRkcApproval) existing.subjectToRkcApproval = true;
+    } else {
+      catJudgeEntries.set(key, {
+        name: ja.judge.name,
+        breeds: new Set(ja.breed?.name ? [ja.breed.name] : []),
+        sexes: new Set(ja.sex ? [ja.sex] : []),
+        hasNullSexAssignment: !ja.sex,
+        hasJhAssignment: isJhAssignment,
+        subjectToRkcApproval,
+      });
+    }
+  }
+  const catHasJuniorHandlerClasses = showClassRows.some(
+    (sc) => sc.classDefinition?.type === 'junior_handler',
+  );
+  for (const j of buildScheduleJudges(catJudgeEntries.values(), catSpecialAwardsJudges, catHasJuniorHandlerClasses)) {
+    if (j.displayLabel) judgeDisplayList.push(j.displayLabel);
   }
 
   const classLabelMap = buildClassLabelMap(showClassRows);
@@ -185,16 +214,24 @@ export async function generateCataloguePdf(
   }));
 
   const seenDefIds = new Set<string>();
-  const classDefinitions: { name: string; description: string | null }[] = [];
+  const classDefList: { name: string; description: string | null; isJh: boolean }[] = [];
   for (const sc of showClassRows) {
     if (sc.classDefinition && !seenDefIds.has(sc.classDefinition.id)) {
       seenDefIds.add(sc.classDefinition.id);
-      classDefinitions.push({
+      classDefList.push({
         name: sc.classDefinition.name,
         description: sc.classDefinition.description,
+        isJh: sc.classDefinition.type === 'junior_handler',
       });
     }
   }
+  // Junior Handling definitions always list AFTER the breed classes (including
+  // Veteran) — Mandy 2026-06-16. Stable sort keeps the existing order within
+  // each group, just floats the JH ones to the end.
+  const classDefinitions = classDefList
+    .map((d, i) => ({ d, i }))
+    .sort((a, b) => (a.d.isJh === b.d.isJh ? a.i - b.i : a.d.isJh ? 1 : -1))
+    .map(({ d }) => ({ name: d.name, description: d.description }));
 
   // The ringside-based "standard" format uses plain formatting; only the
   // Crufts-style by-breed layout (for all-breed shows under "by-class")
