@@ -14,7 +14,7 @@ interface Props {
   entries: CatalogueEntry[];
 }
 
-// Ultra-dense "Judging Catalogue" format optimised for print cost:
+// Ultra-dense "Stewards' Catalogue" format optimised for print cost:
 // - Tight margins, small fonts, two-column entry layout
 // - Class header strip (green, minimal), write-in placement slots
 // - Minimal front matter (one cover page with show + judges + class legend)
@@ -191,13 +191,15 @@ const s = StyleSheet.create({
     textDecoration: 'line-through',
     color: C.textLight,
   },
-  // Placement write-in slots
+  // Placement write-in slots — generous height so stewards have real room to
+  // write the placing in the ring (Mandy 2026-06-17: the old lines were too
+  // cramped). Taller write line + more padding above/below the row.
   placementRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 4,
-    paddingTop: 2,
-    paddingBottom: 3,
+    paddingTop: 5,
+    paddingBottom: 8,
     borderBottomWidth: 0.5,
     borderBottomColor: C.ruleLight,
   },
@@ -209,16 +211,16 @@ const s = StyleSheet.create({
   },
   placementLabel: {
     fontFamily: 'Inter',
-    fontSize: 6,
+    fontSize: 7,
     fontWeight: 'bold',
     color: C.textMedium,
-    marginRight: 2,
+    marginRight: 3,
   },
   placementLine: {
     flex: 1,
     borderBottomWidth: 0.5,
     borderBottomColor: C.textDark,
-    height: 8,
+    height: 20,
   },
   emptyClass: {
     fontFamily: 'Inter',
@@ -305,12 +307,12 @@ export function CatalogueJudging({ show, entries }: Props) {
   }));
 
   const footerText =
-    `${show.name}  ·  Judging Catalogue  ·  ${show.date}`;
+    `${show.name}  ·  Stewards' Catalogue  ·  ${show.date}`;
   const footerRender = ({ pageNumber, totalPages }: { pageNumber: number; totalPages: number }) =>
     `${footerText}  ·  Page ${pageNumber} of ${totalPages}`;
 
   return (
-    <Document title={`Judging Catalogue — ${show.name}`} author="Remi Show Manager">
+    <Document title={`Stewards' Catalogue — ${show.name}`} author="Remi Show Manager">
       {/* ── COVER PAGE ──
           NOTE: leave wrap at default (true). wrap={false} on a
           <Page> with short content shrinks the page to fit, which
@@ -319,7 +321,7 @@ export function CatalogueJudging({ show, entries }: Props) {
         {show.logoUrl && <Image src={show.logoUrl} style={s.coverLogo} />}
         {show.organisation && <Text style={s.coverOrg}>{show.organisation}</Text>}
         <Text style={s.coverTitle}>{show.name}</Text>
-        <Text style={s.coverSubtitle}>Judging Catalogue</Text>
+        <Text style={s.coverSubtitle}>Stewards' Catalogue</Text>
         <View style={s.coverDetails}>
           <Text style={s.coverDetail}>{show.date}</Text>
           {show.venue && <Text style={s.coverDetail}>·  {show.venue}</Text>}
