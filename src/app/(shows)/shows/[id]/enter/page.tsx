@@ -56,12 +56,12 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { StripeProvider } from '@/components/providers/stripe-provider';
+import { StripeProvider, stripePromise } from '@/components/providers/stripe-provider';
 import { PaymentForm } from './payment-form';
 import { cn } from '@/lib/utils';
 import { isGsdOnlyClass, isGsdBreed } from '@/lib/class-templates';
 import { isCatalogueItem } from '@/lib/catalogue-utils';
-import { useEntryCart, type WizardStep } from './use-entry-cart';
+import { useEntryCart, getPaymentKey, type WizardStep } from './use-entry-cart';
 
 const STEPS: { key: WizardStep; label: string; icon: React.ElementType }[] = [
   { key: 'entry_type', label: 'Type', icon: PawPrint },
@@ -80,23 +80,50 @@ const EMPTY_GROUPED_CLASSES = {
   sv_age: [] as never[],
 };
 
+// Everything the payment screen needs to render itself again after a reload
+// (mobile Safari evicting a backgrounded tab mid-3DS). Persisted to localStorage
+// under getPaymentKey when we enter the payment step; reusing the same
+// PaymentIntent on restore means a card can never be charged twice.
+interface PaymentSnapshot {
+  clientSecret: string;
+  orderId: string | null;
+  paymentAmount: number;
+  subtotalAmount: number;
+  platformFeePence: number;
+}
+
+function loadPaymentSnapshot(showId: string): PaymentSnapshot | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(getPaymentKey(showId));
+    return raw ? (JSON.parse(raw) as PaymentSnapshot) : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function EnterShowPage() {
   const params = useParams();
   const idOrSlug = params.id as string;
 
   const cart = useEntryCart(idOrSlug);
+  // Rehydrate the payment screen after a payment-step reload. loadSavedState
+  // keeps step:'payment' when this snapshot exists, so seeding these from it
+  // means the card form, amount and fee breakdown all come back intact and the
+  // exhibitor carries straight on with the same PaymentIntent.
+  const [initialPayment] = useState(() => loadPaymentSnapshot(idOrSlug));
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
   const [isNfc, setIsNfc] = useState(false);
   const [healthDeclared, setHealthDeclared] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [withholdFromPublication, setWithholdFromPublication] = useState(false);
-  const [clientSecret, setClientSecret] = useState<string | null>(null);
-  const [orderId, setOrderId] = useState<string | null>(null);
-  const [paymentAmount, setPaymentAmount] = useState(0);
+  const [clientSecret, setClientSecret] = useState<string | null>(initialPayment?.clientSecret ?? null);
+  const [orderId, setOrderId] = useState<string | null>(initialPayment?.orderId ?? null);
+  const [paymentAmount, setPaymentAmount] = useState(initialPayment?.paymentAmount ?? 0);
   // Subtotal and handling-fee breakdown — the club gets subtotalAmount,
   // Remi gets platformFeePence, exhibitor pays the sum (paymentAmount).
-  const [subtotalAmount, setSubtotalAmount] = useState(0);
-  const [platformFeePence, setPlatformFeePence] = useState(0);
+  const [subtotalAmount, setSubtotalAmount] = useState(initialPayment?.subtotalAmount ?? 0);
+  const [platformFeePence, setPlatformFeePence] = useState(initialPayment?.platformFeePence ?? 0);
   const [shareCopied, setShareCopied] = useState(false);
   // Discount group declaration (e.g. "I am a Member") at checkout.
   // Stored as the group id or null. Sent to the server with the order
@@ -142,6 +169,41 @@ export default function EnterShowPage() {
       window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
     }
   }, []);
+
+  // Recover from a payment-step reload. If mobile Safari evicted the tab during
+  // a 3-D Secure challenge, loadSavedState has already restored us — to the
+  // payment screen (snapshot present) or cart review — instead of bouncing to
+  // "add a dog". But the payment may actually have gone through in that lost
+  // moment, so ask Stripe for the authoritative status of the saved
+  // PaymentIntent: if it already succeeded (or is processing), jump straight to
+  // confirmation. Otherwise leave them where they are to carry on / retry.
+  useEffect(() => {
+    if (cart.entries.length === 0) return;
+    const snap = loadPaymentSnapshot(idOrSlug);
+    if (!snap) return;
+    let cancelled = false;
+    stripePromise
+      .then(async (stripe) => {
+        if (!stripe || cancelled) return;
+        const { paymentIntent } = await stripe.retrievePaymentIntent(snap.clientSecret);
+        if (cancelled || !paymentIntent) return;
+        if (paymentIntent.status === 'succeeded' || paymentIntent.status === 'processing') {
+          try { localStorage.removeItem(getPaymentKey(idOrSlug)); } catch { /* private mode */ }
+          cart.checkoutSuccess();
+        }
+      })
+      .catch(() => { /* offline / Stripe unavailable — leave them as restored */ });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Clear the persisted payment snapshot whenever we reach confirmation, by any
+  // path (normal success, Stripe redirect return, or the recovery effect above).
+  useEffect(() => {
+    if (cart.step === 'confirmation') {
+      try { localStorage.removeItem(getPaymentKey(idOrSlug)); } catch { /* private mode */ }
+    }
+  }, [cart.step, idOrSlug]);
 
   // Fetch data
   const utils = trpc.useUtils();
@@ -578,6 +640,18 @@ export default function EnterShowPage() {
       setSubtotalAmount(paid.totalAmount);
       setPlatformFeePence(paid.platformFeePence);
       setPaymentAmount(paid.grossAmount);
+      // Snapshot everything the payment screen shows, so a reload mid-3DS
+      // restores the exact screen and reuses the SAME PaymentIntent (no second
+      // charge) instead of bouncing the exhibitor (see loadPaymentSnapshot).
+      try {
+        localStorage.setItem(getPaymentKey(idOrSlug), JSON.stringify({
+          clientSecret: result.clientSecret,
+          orderId: result.orderId,
+          paymentAmount: paid.grossAmount,
+          subtotalAmount: paid.totalAmount,
+          platformFeePence: paid.platformFeePence,
+        } satisfies PaymentSnapshot));
+      } catch { /* private mode */ }
       cart.setStep('payment');
     } catch {
       // Error is handled by tRPC
@@ -585,6 +659,7 @@ export default function EnterShowPage() {
   }
 
   function handlePaymentSuccess() {
+    try { localStorage.removeItem(getPaymentKey(idOrSlug)); } catch { /* private mode */ }
     cart.checkoutSuccess();
   }
 
@@ -1858,6 +1933,7 @@ export default function EnterShowPage() {
                   onBack={() => {
                     cart.setStep('cart_review');
                     setClientSecret(null);
+                    try { localStorage.removeItem(getPaymentKey(idOrSlug)); } catch { /* private mode */ }
                   }}
                 />
               </StripeProvider>
