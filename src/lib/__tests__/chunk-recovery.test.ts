@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   AUTO_RELOAD_CAP,
   AUTO_RELOAD_COUNT_KEY,
@@ -84,4 +86,27 @@ describe('isChunkError', () => {
     expect(isChunkError('Rendered more hooks than during the previous render')).toBe(false);
     expect(isChunkError('')).toBe(false);
   });
+});
+
+// error.tsx and global-error.tsx INLINE the cap (they must not import shared
+// chunks that could be stale after a deploy), so the cap value + counter key are
+// hand-duplicated. If they drift from the lib, the boundaries silently cap at a
+// different number — or, if the key drifts, the counter splits and the cap stops
+// working — on the least-observable error path. This source-scan keeps the
+// mirrors honest (same pattern as mobile-overflow.test.ts), without a runtime
+// import into the boundaries.
+describe('auto-reload cap constants stay in sync across the inlined error boundaries', () => {
+  const boundaries = ['src/app/error.tsx', 'src/app/global-error.tsx'];
+
+  for (const rel of boundaries) {
+    it(`${rel} inlines the same AUTO_RELOAD_CAP and AUTO_RELOAD_COUNT_KEY as the lib`, () => {
+      const src = readFileSync(join(process.cwd(), rel), 'utf8');
+      const keyMatch = src.match(/AUTO_RELOAD_COUNT_KEY\s*=\s*'([^']+)'/);
+      const capMatch = src.match(/AUTO_RELOAD_CAP\s*=\s*(\d+)/);
+      expect(keyMatch, `${rel} must declare AUTO_RELOAD_COUNT_KEY`).not.toBeNull();
+      expect(capMatch, `${rel} must declare AUTO_RELOAD_CAP`).not.toBeNull();
+      expect(keyMatch![1]).toBe(AUTO_RELOAD_COUNT_KEY);
+      expect(Number(capMatch![1])).toBe(AUTO_RELOAD_CAP);
+    });
+  }
 });
