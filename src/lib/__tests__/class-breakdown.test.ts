@@ -25,6 +25,15 @@ const makeEntry = (
   })),
 });
 
+// NFC ("Not For Competition") entries carry no judged class — just the
+// entry-level fee and the isNfc flag.
+const makeNfc = (totalFee: number, status: EntryForBreakdown['status'] = 'confirmed'): EntryForBreakdown => ({
+  status,
+  isNfc: true,
+  totalFee,
+  entryClasses: [],
+});
+
 describe('computeClassBreakdown', () => {
   it('returns all-zero totals on empty input', () => {
     const r = computeClassBreakdown([]);
@@ -150,7 +159,7 @@ describe('computeClassBreakdown', () => {
   });
 
   it('invariant: subtotals always sum to combined total', () => {
-    // Mixed scenario covering every bucket
+    // Mixed scenario covering every bucket, including NFC
     const r = computeClassBreakdown([
       makeEntry('confirmed', [{ name: 'Open', sex: 'dog', type: 'age', fee: 2000 }]),
       makeEntry('confirmed', [{ name: 'Open', sex: 'bitch', type: 'age', fee: 2000 }]),
@@ -159,6 +168,7 @@ describe('computeClassBreakdown', () => {
       makeEntry('confirmed', [
         { name: 'JHB Handling (6-11)', sex: null, type: 'junior_handler', fee: 0 },
       ]),
+      makeNfc(0),
       makeEntry('cancelled', [{ name: 'Open', sex: 'dog', type: 'age', fee: 2000 }]),
     ]);
 
@@ -166,12 +176,14 @@ describe('computeClassBreakdown', () => {
       r.dogTotals.entries +
       r.bitchTotals.entries +
       r.juniorHandlerTotals.entries +
-      r.mixedClassesTotals.entries;
+      r.mixedClassesTotals.entries +
+      r.notForCompetitionTotals.entries;
     const subtotalRevenue =
       r.dogTotals.revenue +
       r.bitchTotals.revenue +
       r.juniorHandlerTotals.revenue +
-      r.mixedClassesTotals.revenue;
+      r.mixedClassesTotals.revenue +
+      r.notForCompetitionTotals.revenue;
 
     expect(subtotalEntries).toBe(r.combinedTotals.entries);
     expect(subtotalRevenue).toBe(r.combinedTotals.revenue);
@@ -225,5 +237,60 @@ describe('computeClassBreakdown', () => {
       makeEntry('pending', [{ name: 'Yearling', sex: 'dog', type: 'age', fee: 1800 }]),
     ]);
     expect(r.dogs).toEqual([{ name: 'Yearling', entries: 1, revenue: 1800 }]);
+  });
+
+  // NFC entries are in the catalogue but in no judged class. Before this, they
+  // carried no entryClasses so they vanished from the breakdown — the per-class
+  // total read short of the catalogue count (Mandy, BAGSD 2026-06-17: 73 in the
+  // catalogue but "70" on Entries by Class — the 2 missing were NFC).
+  describe('Not For Competition bucket', () => {
+    it('counts an NFC entry in its own bucket and the grand total, not in a sex bucket', () => {
+      const r = computeClassBreakdown([makeNfc(0)]);
+      expect(r.notForCompetition).toEqual([{ name: 'Not For Competition', entries: 1, revenue: 0 }]);
+      expect(r.notForCompetitionTotals).toEqual({ entries: 1, revenue: 0 });
+      expect(r.dogs).toEqual([]);
+      expect(r.bitches).toEqual([]);
+      expect(r.juniorHandlers).toEqual([]);
+      expect(r.mixedClasses).toEqual([]);
+      // Crucially the grand total includes it, so it ties to the catalogue.
+      expect(r.combinedTotals.entries).toBe(1);
+    });
+
+    it('aggregates multiple NFC entries into one line and sums their fees', () => {
+      const r = computeClassBreakdown([makeNfc(0), makeNfc(500), makeNfc(0)]);
+      expect(r.notForCompetition).toEqual([{ name: 'Not For Competition', entries: 3, revenue: 500 }]);
+    });
+
+    it('reconciles to the catalogue: competing classes + NFC = grand total', () => {
+      // 3 competing entries (2 bitches + 1 dog) + 2 NFC = catalogue of 5.
+      const r = computeClassBreakdown([
+        makeEntry('confirmed', [{ name: 'Minor Puppy', sex: 'bitch', type: 'age', fee: 1800 }]),
+        makeEntry('confirmed', [{ name: 'Limit', sex: 'bitch', type: 'age', fee: 1800 }]),
+        makeEntry('confirmed', [{ name: 'Open', sex: 'dog', type: 'age', fee: 1800 }]),
+        makeNfc(0),
+        makeNfc(0),
+      ]);
+      expect(r.dogTotals.entries).toBe(1);
+      expect(r.bitchTotals.entries).toBe(2);
+      expect(r.notForCompetitionTotals.entries).toBe(2);
+      expect(r.combinedTotals.entries).toBe(5); // ties to the catalogue count
+    });
+
+    it('an isNfc entry never lands in a class bucket even if classes are present', () => {
+      // Defensive: isNfc takes precedence; any stray entryClasses are ignored
+      // so an NFC dog can't double-count into a sex bucket.
+      const r = computeClassBreakdown([
+        { status: 'confirmed', isNfc: true, totalFee: 0,
+          entryClasses: [{ fee: 1800, showClass: { sex: 'dog', classDefinition: { name: 'Open', type: 'age' } } }] },
+      ]);
+      expect(r.dogs).toEqual([]);
+      expect(r.notForCompetitionTotals.entries).toBe(1);
+      expect(r.combinedTotals.entries).toBe(1);
+    });
+
+    it('excludes cancelled/withdrawn NFC entries', () => {
+      const r = computeClassBreakdown([makeNfc(0, 'cancelled'), makeNfc(0, 'withdrawn'), makeNfc(0)]);
+      expect(r.notForCompetitionTotals.entries).toBe(1);
+    });
   });
 });

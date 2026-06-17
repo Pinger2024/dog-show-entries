@@ -915,6 +915,41 @@ export const secretaryRouter = createTRPCRouter({
       });
     }),
 
+  // Entry set for the Financial page's "Entries by Class" card. Unlike
+  // getEntryReport (paid-via-Remi only), this counts the TRUE ring numbers:
+  // every confirmed catalogue entry regardless of how it was paid — including
+  // entries a secretary added that were settled directly to the club (no Remi
+  // order) — plus NFC entries. Same entry set the catalogue + its headline
+  // count use (status='confirmed', not deleted; NOT scoped to paid orders), so
+  // the per-class total reconciles to the catalogue. (Mandy, BAGSD 2026-06-17.)
+  // The money tables on the Financial page stay on getEntryReport.
+  getClassBreakdownReport: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      return ctx.db.query.entries.findMany({
+        where: and(
+          eq(entries.showId, input.showId),
+          eq(entries.status, 'confirmed'),
+          isNull(entries.deletedAt)
+        ),
+        columns: { id: true, status: true, isNfc: true, totalFee: true },
+        with: {
+          entryClasses: {
+            columns: { fee: true },
+            with: {
+              showClass: {
+                columns: { sex: true, svCoatType: true, sortOrder: true, classNumber: true },
+                with: { classDefinition: { columns: { name: true, type: true } } },
+              },
+            },
+          },
+        },
+        orderBy: [asc(entries.entryDate)],
+      });
+    }),
+
   getPaymentReport: secretaryProcedure
     .input(z.object({ showId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
