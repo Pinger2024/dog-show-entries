@@ -244,19 +244,43 @@ function getStorageKey(showId: string) {
   return `remi-entry-cart-${showId}`;
 }
 
-function loadSavedState(showId: string): CartState {
+export function loadSavedState(showId: string): CartState {
   if (typeof window === 'undefined') return initialState;
+
+  // Are we returning from a Stripe redirect (3-D Secure / bank authentication)?
+  // Stripe appends `redirect_status` + `payment_intent_client_secret` to the
+  // return_url (this enter page). The old code unconditionally reset a
+  // step:'payment' cart to initialState below, which the page's auto-start
+  // effect then turned into the "add a dog" step — so any exhibitor whose bank
+  // enforces 3DS got bounced out of checkout and could never pay (Mandy
+  // 2026-06-17, April Shaikh). Most £18 cards skip 3DS via the low-value SCA
+  // exemption, which is why it slipped through. On a SUCCESSFUL return we show
+  // the confirmation (the webhook confirms the order server-side); on a FAILED
+  // one we keep their cart so they can retry — but we NEVER drop them to the
+  // add-a-dog step.
+  const params = new URLSearchParams(window.location.search);
+  const returningFromStripe = params.has('payment_intent_client_secret');
+  const redirectStatus = params.get('redirect_status');
+
   try {
     const saved = localStorage.getItem(getStorageKey(showId));
-    if (!saved) return initialState;
-    const parsed = JSON.parse(saved) as CartState;
-    if (parsed.step === 'confirmation' || parsed.step === 'payment') return initialState;
-
-    // Discard entries that were never committed (dog picked but no classes/NFC selected).
-    // Navigating away mid-wizard should not trap the user in a partial state on return.
-    const completeEntries = parsed.entries.filter(
+    const parsed = saved ? (JSON.parse(saved) as CartState) : null;
+    const completeEntries = (parsed?.entries ?? []).filter(
       (e) => e.classIds.length > 0 || e.isNfc
     );
+
+    if (returningFromStripe) {
+      if (!parsed || completeEntries.length === 0) return initialState;
+      const step: WizardStep =
+        redirectStatus === 'succeeded' ? 'confirmation' : 'cart_review';
+      if (step === 'confirmation') localStorage.removeItem(getStorageKey(showId));
+      return { ...parsed, entries: completeEntries, step, activeEntryId: null, editingExisting: false };
+    }
+
+    if (!parsed) return initialState;
+    // Not a redirect return: a stale payment/confirmation step is discarded as
+    // before (avoids trapping the user on a half-finished payment step).
+    if (parsed.step === 'confirmation' || parsed.step === 'payment') return initialState;
     if (completeEntries.length === 0) return initialState;
 
     return {
