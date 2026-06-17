@@ -127,6 +127,22 @@ export default function EnterShowPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // After a Stripe redirect (3-D Secure / bank auth) the return URL carries
+  // payment_intent / redirect_status params. loadSavedState has already used
+  // them to restore the cart at the confirmation (or review) step; strip them
+  // from the URL now so a refresh doesn't re-run the redirect handling against
+  // an already-cleared cart and bounce the user (Mandy 2026-06-17).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('payment_intent_client_secret') || params.has('redirect_status')) {
+      for (const k of ['payment_intent', 'payment_intent_client_secret', 'redirect_status', 'source_type']) {
+        params.delete(k);
+      }
+      const qs = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
+    }
+  }, []);
+
   // Fetch data
   const utils = trpc.useUtils();
   const { data: show, isLoading: showLoading } = trpc.shows.getById.useQuery(
