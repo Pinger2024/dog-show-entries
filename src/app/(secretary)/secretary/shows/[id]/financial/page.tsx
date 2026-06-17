@@ -47,6 +47,10 @@ export default function FinancialPage() {
   const { data: show } = trpc.shows.getById.useQuery({ id: showId });
   const { data: stats } = trpc.secretary.getShowStats.useQuery({ showId });
   const { data: entryReport } = trpc.secretary.getEntryReport.useQuery({ showId });
+  // The "Entries by Class" card counts true ring numbers from the full
+  // catalogue set (all confirmed entries, incl. those paid directly to the
+  // club + NFC), not just paid-via-Remi entries. See getClassBreakdownReport.
+  const { data: classEntryReport } = trpc.secretary.getClassBreakdownReport.useQuery({ showId });
   const { data: catalogueOrders } = trpc.secretary.getCatalogueOrders.useQuery({ showId });
   const { data: sundryReport } = trpc.secretary.getSundryItemReport.useQuery({ showId });
   const { data: refundableOrders } = trpc.secretary.getRefundableOrders.useQuery({ showId });
@@ -63,6 +67,7 @@ export default function FinancialPage() {
     utils.secretary.getShowStats.invalidate({ showId });
     utils.secretary.getRefundableOrders.invalidate({ showId });
     utils.secretary.getEntryReport.invalidate({ showId });
+    utils.secretary.getClassBreakdownReport.invalidate({ showId });
     utils.secretary.getShowEntryStats.invalidate({ showId });
     utils.secretary.getCatalogueOrders.invalidate({ showId });
   };
@@ -122,8 +127,8 @@ export default function FinancialPage() {
   // Team, Stakes). The four buckets are exhaustive so subtotals always
   // sum to the grand total. See src/lib/class-breakdown.ts.
   const classBreakdown = useMemo(
-    () => computeClassBreakdown(entryReport),
-    [entryReport]
+    () => computeClassBreakdown(classEntryReport),
+    [classEntryReport]
   );
 
   // Per-breed breakdown with nested classes (for all-breed shows)
@@ -227,7 +232,9 @@ export default function FinancialPage() {
           <CardHeader>
             <CardTitle>Entries by Class</CardTitle>
             <CardDescription>
-              Number of entries and revenue per class, broken down by sex
+              Every entry in the catalogue, by class — including any paid
+              directly to the club and Not For Competition. The total ties to
+              your catalogue count.
             </CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto">
@@ -328,9 +335,21 @@ export default function FinancialPage() {
                     </TableRow>
                   </>
                 )}
+                {/* Not For Competition — in the catalogue but not in any judged
+                    class, so shown as its own line to keep the total tied to the
+                    catalogue (Mandy 2026-06-17). */}
+                {classBreakdown.notForCompetition.length > 0 && (
+                  <TableRow className="bg-primary/10 font-semibold">
+                    <TableCell className="font-bold uppercase tracking-wider text-xs">
+                      Not For Competition
+                    </TableCell>
+                    <TableCell className="text-right">{classBreakdown.notForCompetitionTotals.entries}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(classBreakdown.notForCompetitionTotals.revenue)}</TableCell>
+                  </TableRow>
+                )}
                 {/* Grand total */}
                 <TableRow className="font-bold border-t-2">
-                  <TableCell>Total (class entries)</TableCell>
+                  <TableCell>Total (catalogue entries)</TableCell>
                   <TableCell className="text-right">{classBreakdown.combinedTotals.entries}</TableCell>
                   <TableCell className="text-right">{formatCurrency(classBreakdown.combinedTotals.revenue)}</TableCell>
                 </TableRow>

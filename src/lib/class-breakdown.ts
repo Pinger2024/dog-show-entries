@@ -11,6 +11,20 @@
  * combined grand total but vanish from the per-sex subtotals,
  * leaving secretaries with subtotals that didn't add up to the
  * displayed grand total.
+ *
+ * A fifth bucket — "Not For Competition" — counts NFC entries.
+ * These have no judged class (no entry_classes rows at all), so
+ * without a dedicated bucket they vanished from the breakdown
+ * entirely: a show with 73 catalogue entries (2 of them NFC) read
+ * "70" here, which never tied up to the catalogue. NFC entries are
+ * counted once each from the entry itself, with the entry's own fee
+ * as revenue. (Mandy, BAGSD 2026-06-17.)
+ *
+ * The breakdown is fed the full catalogue entry set — every
+ * confirmed, non-deleted entry regardless of how it was paid — so
+ * the class counts are the true ring numbers, including entries a
+ * secretary added that were paid directly to the club rather than
+ * through Remi.
  */
 
 export type ClassBreakdownItem = {
@@ -31,16 +45,24 @@ export type ClassBreakdown = {
   bitches: ClassBreakdownItem[];
   juniorHandlers: ClassBreakdownItem[];
   mixedClasses: ClassBreakdownItem[];
+  notForCompetition: ClassBreakdownItem[];
   combined: ClassBreakdownItem[];
   dogTotals: ClassTotals;
   bitchTotals: ClassTotals;
   juniorHandlerTotals: ClassTotals;
   mixedClassesTotals: ClassTotals;
+  notForCompetitionTotals: ClassTotals;
   combinedTotals: ClassTotals;
 };
 
 export type EntryForBreakdown = {
   status: 'pending' | 'confirmed' | 'withdrawn' | 'transferred' | 'cancelled';
+  /** NFC ("Not For Competition") entries have no judged class, so they carry no
+   *  entryClasses. They're counted in their own bucket from the entry itself. */
+  isNfc?: boolean;
+  /** Entry-level fee — used as the NFC bucket's revenue (NFC entries have no
+   *  per-class fee rows). Competing entries take revenue from entryClasses. */
+  totalFee?: number;
   entryClasses?: Array<{
     fee: number;
     showClass?: {
@@ -77,6 +99,11 @@ const sortByClassOrder = (a: OrderedItem, b: OrderedItem) => {
 const strip = (items: OrderedItem[]): ClassBreakdownItem[] =>
   items.map(({ name, entries, revenue }) => ({ name, entries, revenue }));
 
+// NFC entries have no class to key on, so they share one synthetic bucket.
+// A large sortOrder sinks the bucket below every real class in the combined map.
+const NFC_BUCKET_NAME = 'Not For Competition';
+const NFC_SORT_ORDER = 100_000;
+
 export function computeClassBreakdown(
   entryReport: EntryForBreakdown[] | null | undefined
 ): ClassBreakdown {
@@ -84,6 +111,7 @@ export function computeClassBreakdown(
   const bitchMap = new Map<string, OrderedItem>();
   const jhMap = new Map<string, OrderedItem>();
   const mixedMap = new Map<string, OrderedItem>();
+  const nfcMap = new Map<string, OrderedItem>();
   const combinedMap = new Map<string, OrderedItem>();
 
   const bumpBucket = (
@@ -103,6 +131,20 @@ export function computeClassBreakdown(
 
   for (const entry of entryReport ?? []) {
     if (entry.status === 'cancelled' || entry.status === 'withdrawn') continue;
+
+    // NFC ("Not For Competition") entries are in the catalogue but not entered
+    // in any judged class, so they carry no entryClasses and would otherwise
+    // vanish from the breakdown — leaving the on-screen total short of the
+    // catalogue count (Mandy, BAGSD 2026-06-17). Count each once in its own
+    // bucket and in the grand total; revenue is the entry-level fee (NFC is
+    // typically £0).
+    if (entry.isNfc) {
+      const nfcFee = entry.totalFee ?? 0;
+      bumpBucket(combinedMap, NFC_BUCKET_NAME, nfcFee, NFC_SORT_ORDER);
+      bumpBucket(nfcMap, NFC_BUCKET_NAME, nfcFee, NFC_SORT_ORDER);
+      continue;
+    }
+
     for (const ec of entry.entryClasses ?? []) {
       const rawName = ec.showClass?.classDefinition?.name ?? 'Unknown';
       const sex = ec.showClass?.sex ?? null;
@@ -131,6 +173,7 @@ export function computeClassBreakdown(
   const bitches = strip(Array.from(bitchMap.values()).sort(sortByClassOrder));
   const juniorHandlers = strip(Array.from(jhMap.values()).sort(sortByClassOrder));
   const mixedClasses = strip(Array.from(mixedMap.values()).sort(sortByClassOrder));
+  const notForCompetition = strip(Array.from(nfcMap.values()).sort(sortByClassOrder));
   const combined = strip(Array.from(combinedMap.values()).sort(sortByClassOrder));
 
   return {
@@ -138,11 +181,13 @@ export function computeClassBreakdown(
     bitches,
     juniorHandlers,
     mixedClasses,
+    notForCompetition,
     combined,
     dogTotals: sumTotals(dogs),
     bitchTotals: sumTotals(bitches),
     juniorHandlerTotals: sumTotals(juniorHandlers),
     mixedClassesTotals: sumTotals(mixedClasses),
+    notForCompetitionTotals: sumTotals(notForCompetition),
     combinedTotals: sumTotals(combined),
   };
 }
