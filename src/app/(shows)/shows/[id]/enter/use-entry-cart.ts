@@ -280,6 +280,9 @@ export function restoreActionForStatus(
 ): RestorePaymentAction {
   if (status === 'succeeded' || status === 'processing') return 'confirmation';
   if (!status || status === 'canceled') return 'review';
+  // requires_payment_method / requires_action / requires_confirmation — and any
+  // unrecognized status — default to 'stay' (assumed still payable). Keeping a
+  // possibly-live PI on screen is safer than discarding it.
   return 'stay';
 }
 

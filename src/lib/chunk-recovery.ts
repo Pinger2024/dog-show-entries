@@ -58,10 +58,11 @@ export function canAutoReload(): boolean {
   return autoReloadCount() < AUTO_RELOAD_CAP;
 }
 
-/** Clear the reload counter once a page has mounted cleanly — recovery worked. */
+/** Clear the reload counter once a page has mounted cleanly — recovery worked.
+ *  Reads first so the common no-recovery startup path does no localStorage write. */
 export function resetAutoReloads() {
   try {
-    localStorage.removeItem(AUTO_RELOAD_COUNT_KEY);
+    if (autoReloadCount() > 0) localStorage.removeItem(AUTO_RELOAD_COUNT_KEY);
   } catch {
     // private mode — nothing to clear
   }
