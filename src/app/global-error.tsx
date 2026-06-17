@@ -10,6 +10,22 @@ import { useEffect, useState } from 'react';
 
 const RELOAD_GUARD_KEY = 'remi-global-error-reload';
 
+// Hard lifetime cap on AUTOMATIC recovery reloads — kept in sync (by value, not
+// import) with src/lib/chunk-recovery.ts and error.tsx. global-error.tsx renders
+// OUTSIDE the root layout with zero external imports, so the cap is inlined.
+// Once exceeded we stop auto-reloading so recovery can never become an
+// iOS-Safari "A problem repeatedly occurred" storm.
+const AUTO_RELOAD_COUNT_KEY = 'remi-auto-reloads-total';
+const AUTO_RELOAD_CAP = 2;
+
+function canAutoReload(): boolean {
+  try {
+    return (Number(localStorage.getItem(AUTO_RELOAD_COUNT_KEY) || '0') || 0) < AUTO_RELOAD_CAP;
+  } catch {
+    return true;
+  }
+}
+
 function isChunkError(msg: string): boolean {
   return (
     msg.includes('ChunkLoadError') ||
@@ -33,7 +49,19 @@ async function clearCachesAndReload() {
   } catch {
     // Best-effort — proceed to reload even if cleanup fails
   }
-  window.location.reload();
+  try {
+    const n = Number(localStorage.getItem(AUTO_RELOAD_COUNT_KEY) || '0') || 0;
+    localStorage.setItem(AUTO_RELOAD_COUNT_KEY, String(n + 1));
+  } catch {
+    // private mode — the one-shot guard still bounds us
+  }
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set('_r', Date.now().toString());
+    window.location.replace(url.toString());
+  } catch {
+    window.location.reload();
+  }
 }
 
 // ─── Component ───────────────────────────────────────────────────
@@ -65,7 +93,7 @@ export default function GlobalError({
       // Best-effort reporting
     }
 
-    if (isChunkError(error.message || '')) {
+    if (isChunkError(error.message || '') && canAutoReload()) {
       if (!sessionStorage.getItem(RELOAD_GUARD_KEY)) {
         sessionStorage.setItem(RELOAD_GUARD_KEY, '1');
         setAutoRecovering(true);
@@ -78,7 +106,8 @@ export default function GlobalError({
     // https://github.com/facebook/react/issues/33580
     if (
       (error.message?.includes('#310') || error.message?.includes('Rendered more hooks than')) &&
-      !sessionStorage.getItem('remi-react-310-retry')
+      !sessionStorage.getItem('remi-react-310-retry') &&
+      canAutoReload()
     ) {
       sessionStorage.setItem('remi-react-310-retry', '1');
       reset();
