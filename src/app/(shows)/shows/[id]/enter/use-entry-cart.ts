@@ -244,6 +244,17 @@ function getStorageKey(showId: string) {
   return `remi-entry-cart-${showId}`;
 }
 
+/**
+ * localStorage key holding the in-flight payment snapshot (the Stripe
+ * PaymentIntent client secret + the amounts the payment screen shows) while an
+ * exhibitor is on the payment step. It lets a payment-step reload restore the
+ * exact screen and reuse the SAME PaymentIntent — so a card can never be charged
+ * twice — rather than dropping them a step back to start a fresh payment.
+ */
+export function getPaymentKey(showId: string) {
+  return `remi-entry-pay-${showId}`;
+}
+
 export function loadSavedState(showId: string): CartState {
   if (typeof window === 'undefined') return initialState;
 
@@ -278,15 +289,30 @@ export function loadSavedState(showId: string): CartState {
     }
 
     if (!parsed) return initialState;
-    // Not a redirect return: a stale payment/confirmation step is discarded as
-    // before (avoids trapping the user on a half-finished payment step).
-    if (parsed.step === 'confirmation' || parsed.step === 'payment') return initialState;
+    // A stale 'confirmation' step means they already finished — start fresh.
+    if (parsed.step === 'confirmation') return initialState;
     if (completeEntries.length === 0) return initialState;
 
+    // A 'payment' step reloaded WITHOUT Stripe redirect params is the real-world
+    // bounce: mobile Safari evicts the backgrounded tab during a 3-D Secure
+    // challenge and reloads it with a bare URL. The old code reset the cart and
+    // the page's auto-start effect dumped the exhibitor on the "add a dog" step
+    // — any 3DS-card user could never pay (Mandy 2026-06-17, April Shaikh; same
+    // on her iPad AND iPhone 14). We put them back exactly where they were: if
+    // we still hold the payment snapshot (PaymentIntent + amounts, persisted on
+    // entering payment) the page rehydrates and we restore the PAYMENT screen so
+    // they carry straight on; otherwise we fall back to cart review so they can
+    // re-enter payment safely. Either way the page's retrievePaymentIntent check
+    // promotes them to confirmation if that payment had in fact already
+    // succeeded — and because the restored screen reuses the SAME PaymentIntent,
+    // a card can never be charged twice.
+    const hasPaymentSnapshot = !!localStorage.getItem(getPaymentKey(showId));
+    const step: WizardStep =
+      parsed.step === 'payment' && hasPaymentSnapshot ? 'payment' : 'cart_review';
     return {
       ...parsed,
       entries: completeEntries,
-      step: 'cart_review',
+      step,
       activeEntryId: null,
       editingExisting: false,
     };
