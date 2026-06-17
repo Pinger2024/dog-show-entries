@@ -61,7 +61,7 @@ import { PaymentForm } from './payment-form';
 import { cn } from '@/lib/utils';
 import { isGsdOnlyClass, isGsdBreed } from '@/lib/class-templates';
 import { isCatalogueItem } from '@/lib/catalogue-utils';
-import { useEntryCart, getPaymentKey, type WizardStep } from './use-entry-cart';
+import { useEntryCart, getPaymentKey, restoreActionForStatus, type WizardStep } from './use-entry-cart';
 
 const STEPS: { key: WizardStep; label: string; icon: React.ElementType }[] = [
   { key: 'entry_type', label: 'Type', icon: PawPrint },
@@ -186,11 +186,20 @@ export default function EnterShowPage() {
       .then(async (stripe) => {
         if (!stripe || cancelled) return;
         const { paymentIntent } = await stripe.retrievePaymentIntent(snap.clientSecret);
-        if (cancelled || !paymentIntent) return;
-        if (paymentIntent.status === 'succeeded' || paymentIntent.status === 'processing') {
+        if (cancelled) return;
+        // restoreActionForStatus encodes the succeeded/processing → confirmation,
+        // canceled/dead → drop the stale snapshot & fall back to review, and
+        // still-payable → stay decision (see use-entry-cart.ts; regression-
+        // tested for the canceled-PI crash loop, April/BAGSD 2026-06-17).
+        const action = restoreActionForStatus(paymentIntent?.status);
+        if (action === 'confirmation') {
           try { localStorage.removeItem(getPaymentKey(idOrSlug)); } catch { /* private mode */ }
           cart.checkoutSuccess();
+        } else if (action === 'review') {
+          try { localStorage.removeItem(getPaymentKey(idOrSlug)); } catch { /* private mode */ }
+          cart.setStep('cart_review');
         }
+        // action === 'stay' → leave them on the restored payment screen.
       })
       .catch(() => { /* offline / Stripe unavailable — leave them as restored */ });
     return () => { cancelled = true; };

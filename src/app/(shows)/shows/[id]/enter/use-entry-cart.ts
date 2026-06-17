@@ -255,6 +255,34 @@ export function getPaymentKey(showId: string) {
   return `remi-entry-pay-${showId}`;
 }
 
+export type RestorePaymentAction = 'confirmation' | 'review' | 'stay';
+
+/**
+ * Decide what to do when a payment-step reload restores a saved payment
+ * snapshot and we then ask Stripe for the authoritative status of that
+ * snapshot's PaymentIntent.
+ *
+ * - succeeded / processing → the charge landed in the lost moment; jump to
+ *   confirmation (the webhook confirms the order server-side).
+ * - canceled, or NO PaymentIntent retrievable → the snapshot is DEAD. Restoring
+ *   the payment screen on a canceled PI mounts an inert Stripe PaymentElement
+ *   the exhibitor can never complete, and a payment screen that keeps coming
+ *   back broken is what trips iOS Safari's "A problem repeatedly occurred"
+ *   watchdog. Send them back to cart review so re-entering payment mints a FRESH
+ *   PaymentIntent. (April Shaikh, BAGSD 2026-06-17 — 19 abandoned attempts left
+ *   a canceled-PI snapshot that looped the crash.)
+ * - anything still payable (requires_payment_method / requires_action /
+ *   requires_confirmation) → stay on the restored payment screen and carry on
+ *   with the same PaymentIntent.
+ */
+export function restoreActionForStatus(
+  status: string | null | undefined
+): RestorePaymentAction {
+  if (status === 'succeeded' || status === 'processing') return 'confirmation';
+  if (!status || status === 'canceled') return 'review';
+  return 'stay';
+}
+
 export function loadSavedState(showId: string): CartState {
   if (typeof window === 'undefined') return initialState;
 

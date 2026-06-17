@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { loadSavedState, getPaymentKey, type CartState } from './use-entry-cart';
+import { loadSavedState, getPaymentKey, restoreActionForStatus, type CartState } from './use-entry-cart';
 
 const KEY = 'remi-entry-cart-SHOW';
 const PAY_KEY = getPaymentKey('SHOW');
@@ -92,5 +92,40 @@ describe('loadSavedState — payment-step reload WITHOUT Stripe params (mobile S
     const s = loadSavedState('SHOW');
     expect(s.step).toBe('entry_type');
     expect(s.entries).toHaveLength(0);
+  });
+});
+
+// THE bug behind April Shaikh's "A problem repeatedly occurred" crash loop
+// (BAGSD, 2026-06-17). loadSavedState restores the payment screen from a saved
+// snapshot, then the page asks Stripe for the snapshot PaymentIntent's status.
+// April had made 19 abandoned attempts; each newer order CANCELLED the previous
+// PaymentIntent, so her saved snapshot pointed at a CANCELED PI. The old restore
+// effect only handled succeeded/processing and otherwise LEFT HER ON 'payment' —
+// re-mounting an inert Stripe PaymentElement on a dead PI every visit, the
+// degraded payment screen that tripped Safari's crash watchdog. The fix: a
+// canceled (or unretrievable) PI must drop the stale snapshot and fall back to
+// cart review so re-entering payment mints a fresh PaymentIntent.
+describe('restoreActionForStatus — canceled-PI crash loop (April/BAGSD)', () => {
+  it('CANCELED PaymentIntent → review (NOT stay on the dead payment screen)', () => {
+    // The reproduction: the old code had no canceled branch, so a canceled PI
+    // kept step:'payment' and re-mounted a broken PaymentElement → crash loop.
+    expect(restoreActionForStatus('canceled')).toBe('review');
+    expect(restoreActionForStatus('canceled')).not.toBe('stay');
+  });
+
+  it('no PaymentIntent retrievable (null/undefined) → review, never a broken payment screen', () => {
+    expect(restoreActionForStatus(undefined)).toBe('review');
+    expect(restoreActionForStatus(null)).toBe('review');
+  });
+
+  it('already paid in the lost moment → confirmation (succeeded / processing)', () => {
+    expect(restoreActionForStatus('succeeded')).toBe('confirmation');
+    expect(restoreActionForStatus('processing')).toBe('confirmation');
+  });
+
+  it('still-payable PI → stay on the restored payment screen (same PI, no double charge)', () => {
+    expect(restoreActionForStatus('requires_payment_method')).toBe('stay');
+    expect(restoreActionForStatus('requires_action')).toBe('stay');
+    expect(restoreActionForStatus('requires_confirmation')).toBe('stay');
   });
 });
