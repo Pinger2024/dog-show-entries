@@ -235,8 +235,12 @@ export const styles = StyleSheet.create({
   placementsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingTop: 3,
-    paddingBottom: 4,
+    // Clear gap between the last dog in the class and the placings line so
+    // the judge has room to write, and the line reads as a separate block
+    // rather than crowding the final entry (Mandy 2026-06-19).
+    marginTop: 14,
+    paddingTop: 5,
+    paddingBottom: 5,
     paddingLeft: 6,
     paddingRight: 6,
   },
