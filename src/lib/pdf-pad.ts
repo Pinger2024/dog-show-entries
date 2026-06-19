@@ -1,6 +1,50 @@
-import { PDFDocument, StandardFonts, rgb, type PDFPage } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, type PDFPage, PDFName, PDFDict } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
 import { readFileSync } from 'fs';
 import path from 'path';
+
+// The base-14 standard fonts. react-pdf leaves an UNUSED Helvetica /
+// Helvetica-Oblique in the catalogue pages' Resources (invisible, but print
+// preflight — Tradeprint/Mixam — rejects any unembedded font). The catalogue
+// itself draws nothing in base-14, so removing these refs is safe and leaves
+// the embedded Inter/Libre/Times subsets untouched (BAGSD 2026-06-19).
+const BASE14_FONTS = new Set([
+  'Helvetica', 'Helvetica-Bold', 'Helvetica-Oblique', 'Helvetica-BoldOblique',
+  'Courier', 'Courier-Bold', 'Courier-Oblique', 'Courier-BoldOblique',
+  'Times-Roman', 'Times-Bold', 'Times-Italic', 'Times-BoldItalic',
+  'Symbol', 'ZapfDingbats',
+]);
+
+/** Remove unembedded base-14 font references from pages [start, end). */
+function stripBase14Fonts(doc: PDFDocument, start: number, end: number): void {
+  const pages = doc.getPages();
+  for (let i = start; i < end; i++) {
+    const resources = pages[i]?.node.Resources();
+    const fontDict = resources?.lookupMaybe(PDFName.of('Font'), PDFDict);
+    if (!fontDict) continue;
+    for (const [key] of fontDict.entries()) {
+      const fontObj = fontDict.lookupMaybe(key, PDFDict);
+      const baseFont = fontObj?.get(PDFName.of('BaseFont'));
+      const name = baseFont ? baseFont.toString().replace(/^\//, '') : '';
+      if (BASE14_FONTS.has(name)) fontDict.delete(key);
+    }
+  }
+}
+
+// Inter TTFs for the padding pages — embedded (subsetted) so the booklet has NO
+// unembedded fonts. Replaces StandardFonts.Helvetica, which is base-14.
+let interRegularBytes: Uint8Array | null = null;
+let interSemiBoldBytes: Uint8Array | null = null;
+function loadInter(): { regular: Uint8Array; semibold: Uint8Array } | null {
+  try {
+    const dir = path.join(process.cwd(), 'public', 'fonts');
+    interRegularBytes ??= readFileSync(path.join(dir, 'inter-regular.ttf'));
+    interSemiBoldBytes ??= readFileSync(path.join(dir, 'inter-semibold.ttf'));
+    return { regular: interRegularBytes, semibold: interSemiBoldBytes };
+  } catch {
+    return null;
+  }
+}
 
 // Remi green — matching the catalogue section-band colour so the
 // padded pages don't look like foreign insertions.
@@ -132,7 +176,14 @@ export async function padPdfToMultiple(
   modulus = 4,
 ): Promise<Uint8Array> {
   const doc = await PDFDocument.load(input);
+  doc.registerFontkit(fontkit);
   const currentPages = doc.getPageCount();
+
+  // Strip the unembedded base-14 phantom font react-pdf leaves in the rendered
+  // catalogue pages' Resources, so the booklet passes print preflight. The
+  // Notes/back-cover pages added below embed Inter, so they stay clean.
+  stripBase14Fonts(doc, 0, currentPages);
+
   const target = Math.ceil(currentPages / modulus) * modulus;
   const pagesToAdd = target - currentPages;
 
@@ -143,8 +194,15 @@ export async function padPdfToMultiple(
   const lastPage = doc.getPage(currentPages - 1);
   const { width, height } = lastPage.getSize();
 
-  const titleFont = await doc.embedFont(StandardFonts.HelveticaBold);
-  const footerFont = await doc.embedFont(StandardFonts.Helvetica);
+  // Embed Inter (subsetted) for the padding pages so nothing is base-14
+  // Helvetica. Falls back to the standard font only if the TTFs are missing.
+  const inter = loadInter();
+  const titleFont = inter
+    ? await doc.embedFont(inter.semibold)
+    : await doc.embedFont(StandardFonts.HelveticaBold);
+  const footerFont = inter
+    ? await doc.embedFont(inter.regular)
+    : await doc.embedFont(StandardFonts.Helvetica);
 
   for (let i = 0; i < pagesToAdd; i++) {
     const page = doc.addPage([width, height]);
