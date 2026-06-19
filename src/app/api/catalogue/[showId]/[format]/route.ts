@@ -156,6 +156,12 @@ export async function GET(
     }),
   ]);
 
+  // Plain donors thanked in the catalogue (name + optional affix, no amount).
+  const showDonationRows = await db.query.showDonations.findMany({
+    where: eq(schema.showDonations.showId, showId),
+    orderBy: [asc(schema.showDonations.displayOrder), asc(schema.showDonations.createdAt)],
+  });
+
   const judgesByBreedName: Record<string, string> = {};
   const judgeBios: Record<string, string> = {};
   const judgePhotos: Record<string, string> = {};
@@ -305,6 +311,7 @@ export async function GET(
     })),
     status: entry.status,
     entryType: entry.entryType,
+    isNfc: entry.isNfc,
     jhHandlerName: entry.juniorHandlerDetails?.handlerName ?? undefined,
     withholdFromPublication: entry.withholdFromPublication,
   }));
@@ -365,6 +372,9 @@ export async function GET(
     skipTrophiesPage: classSponsorships.length > 0,
     customStatements: scheduleData?.customStatements,
     showSponsors: showSponsorInfos.length > 0 ? showSponsorInfos : undefined,
+    donations: showDonationRows.length > 0
+      ? showDonationRows.map((d) => ({ name: d.donorName, affix: d.affix }))
+      : undefined,
     allShowClasses: allShowClasses.length > 0 ? allShowClasses : undefined,
     welcomeNote: scheduleData?.welcomeNote,
     outsideAttraction: scheduleData?.outsideAttraction === true ? true : undefined,

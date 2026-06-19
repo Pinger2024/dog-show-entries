@@ -2,7 +2,8 @@ import type { ReactNode } from 'react';
 import { Page, View, Text, Image } from '@react-pdf/renderer';
 import { styles, C } from './catalogue-styles';
 import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
-import { ownerHeading } from './catalogue-utils';
+import { ownerHeading, uppercaseName, formatOwnerKC } from './catalogue-utils';
+import { buildBestAwards } from '@/lib/best-awards';
 import { MastheadBand, TonalWash, ClubCrestSlot } from '@/components/sv-pdf/cover-atoms';
 import { ss, SV, SV_FONTS } from '@/components/schedule/shared/sv-styles';
 
@@ -530,28 +531,13 @@ export function BestAwardsContent({ show, compact }: FrontMatterProps & { compac
   // "award + winner line" list.
   const hasAnySponsor = awardSponsors.length > 0;
 
-  const introText = (
-    <Text
-      style={{
-        fontFamily: 'Times',
-        fontSize: 8,
-        fontStyle: 'italic',
-        color: C.textMedium,
-        marginBottom: 8,
-      }}
-    >
-      Awarded at the discretion of the judges. Winners may be filled in
-      ringside.
-    </Text>
-  );
-
   const headerRow = hasAnySponsor ? (
     <View style={bestAwardsStyles.tableHeaderRow}>
       <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.awardCol }}>
         Award
       </Text>
       <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.trophyCol }}>
-        Trophy
+        Prize
       </Text>
       <Text style={{ ...bestAwardsStyles.headerLabel, ...bestAwardsStyles.sponsorCol }}>
         Sponsor
@@ -642,8 +628,7 @@ export function BestAwardsContent({ show, compact }: FrontMatterProps & { compac
           the banner never sits alone at the foot of a page. Remaining
           rows flow normally after that block. */}
       <View wrap={false}>
-        <SectionBand title="Best Awards" />
-        {introText}
+        <SectionBand title="Sponsors" />
         {headerRow}
         {allAwards.length > 0 && renderRow(allAwards[0], 0)}
       </View>
@@ -1613,9 +1598,16 @@ interface TrophiesPageProps {
   sponsorships: ClassSponsorshipInfo[];
 }
 
-/** Trophies & Sponsorships front-matter page — compact table layout */
+/** Trophies & Sponsorships front-matter page — compact table layout, plus a
+ *  "With thanks for their kind donations" list for plain donors (Mandy
+ *  2026-06-17). Renders if there are sponsorships OR donations. */
 export function TrophiesPage({ show, sponsorships }: TrophiesPageProps) {
-  if (sponsorships.length === 0) return null;
+  const donations = show.donations ?? [];
+  // The sponsorship TABLE is suppressed when sponsorships are shown inline with
+  // the classes (skipTrophiesPage). Donations are independent of that — they
+  // still get their "With Thanks" list whether or not the table renders.
+  const showTrophyTable = sponsorships.length > 0 && !show.skipTrophiesPage;
+  if (!showTrophyTable && donations.length === 0) return null;
 
   // Sort: numbered classes by classNumber, JH/unnumbered by classLabel, else name.
   const sorted = [...sponsorships].sort((a, b) => {
@@ -1628,69 +1620,220 @@ export function TrophiesPage({ show, sponsorships }: TrophiesPageProps) {
 
   return (
     <Page size="A5" style={styles.frontMatterPage} wrap>
-      <SectionBand title="Trophies & Sponsorships" />
+      {showTrophyTable && (
+        <>
+          <SectionBand title="Trophies & Sponsorships" />
 
-      {/* Table header */}
-      <View style={{
-        flexDirection: 'row',
-        borderBottomWidth: 1.5,
-        borderBottomColor: C.primary,
-        paddingBottom: 3,
-        marginBottom: 4,
-      }}>
-        <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '30%', color: C.textDark }}>Class</Text>
-        <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '35%', color: C.textDark }}>Trophy / Sponsor</Text>
-        <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '35%', color: C.textDark }}>Prize</Text>
-      </View>
-
-      {sorted.map((sp, idx) => {
-        const label = sp.classLabel ?? (sp.classNumber != null ? String(sp.classNumber) : '');
-        const classHeading = label
-          ? `${label}. ${sp.className}`
-          : sp.className;
-
-        // Build trophy + sponsor combined text
-        const trophySponsorParts: string[] = [];
-        if (sp.trophyName) {
-          let part = sp.trophyName;
-          if (sp.trophyDonor) part += ` (${sp.trophyDonor})`;
-          trophySponsorParts.push(part);
-        }
-        if (sp.sponsorName) {
-          let part = `Sponsored by ${sp.sponsorName}`;
-          if (sp.sponsorAffix) part += ` (${sp.sponsorAffix})`;
-          trophySponsorParts.push(part);
-        }
-
-        return (
-          <View
-            key={`${label}-${sp.className}-${idx}`}
-            wrap={false}
-            style={{
-              flexDirection: 'row',
-              paddingVertical: 2.5,
-              borderBottomWidth: 0.5,
-              borderBottomColor: C.ruleLight,
-            }}
-          >
-            <Text style={{ fontFamily: 'Inter', fontSize: 7, fontWeight: 'bold', width: '30%', color: C.textDark }}>
-              {classHeading}
-            </Text>
-            <Text style={{ fontFamily: 'Times', fontSize: 6.5, fontStyle: 'italic', width: '35%', color: C.textMedium }}>
-              {trophySponsorParts.join('\n') || '—'}
-            </Text>
-            <Text style={{ fontFamily: 'Inter', fontSize: 6.5, width: '35%', color: C.textMedium }}>
-              {sp.prizeDescription || '—'}
-            </Text>
+          {/* Table header */}
+          <View style={{
+            flexDirection: 'row',
+            borderBottomWidth: 1.5,
+            borderBottomColor: C.primary,
+            paddingBottom: 3,
+            marginBottom: 4,
+          }}>
+            <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '30%', color: C.textDark }}>Class</Text>
+            <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '35%', color: C.textDark }}>Trophy / Sponsor</Text>
+            <Text style={{ fontFamily: 'Inter', fontSize: 6.5, fontWeight: 'bold', width: '35%', color: C.textDark }}>Prize</Text>
           </View>
-        );
-      })}
+
+          {sorted.map((sp, idx) => {
+            const label = sp.classLabel ?? (sp.classNumber != null ? String(sp.classNumber) : '');
+            const classHeading = label
+              ? `${label}. ${sp.className}`
+              : sp.className;
+
+            // Build trophy + sponsor combined text
+            const trophySponsorParts: string[] = [];
+            if (sp.trophyName) {
+              let part = sp.trophyName;
+              if (sp.trophyDonor) part += ` (${sp.trophyDonor})`;
+              trophySponsorParts.push(part);
+            }
+            if (sp.sponsorName) {
+              let part = `Sponsored by ${sp.sponsorName}`;
+              if (sp.sponsorAffix) part += ` (${sp.sponsorAffix})`;
+              trophySponsorParts.push(part);
+            }
+
+            return (
+              <View
+                key={`${label}-${sp.className}-${idx}`}
+                wrap={false}
+                style={{
+                  flexDirection: 'row',
+                  paddingVertical: 2.5,
+                  borderBottomWidth: 0.5,
+                  borderBottomColor: C.ruleLight,
+                }}
+              >
+                <Text style={{ fontFamily: 'Inter', fontSize: 7, fontWeight: 'bold', width: '30%', color: C.textDark }}>
+                  {classHeading}
+                </Text>
+                <Text style={{ fontFamily: 'Times', fontSize: 6.5, fontStyle: 'italic', width: '35%', color: C.textMedium }}>
+                  {trophySponsorParts.join('\n') || '—'}
+                </Text>
+                <Text style={{ fontFamily: 'Inter', fontSize: 6.5, width: '35%', color: C.textMedium }}>
+                  {sp.prizeDescription || '—'}
+                </Text>
+              </View>
+            );
+          })}
+        </>
+      )}
+
+      {/* With Thanks — plain donors (name + optional affix, no amount). */}
+      {donations.length > 0 && (
+        <View style={{ marginTop: sponsorships.length > 0 ? 14 : 0 }} wrap={false}>
+          <SectionBand title="With Thanks" />
+          <Text style={{ fontFamily: 'Inter', fontSize: 8, color: C.textMedium, marginBottom: 5 }}>
+            With thanks to the following for their kind donations:
+          </Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+            {donations.map((d, i) => (
+              <Text
+                key={`donation-${i}`}
+                style={{ width: '50%', fontFamily: 'Inter', fontSize: 8, color: C.textDark, marginBottom: 2.5, paddingRight: 6 }}
+              >
+                {d.name}{d.affix ? ` (${d.affix})` : ''}
+              </Text>
+            ))}
+          </View>
+        </View>
+      )}
 
       <Text
         style={styles.footer}
         render={({ pageNumber, totalPages }) =>
           `Page ${pageNumber} of ${totalPages}  ·  Generated by Remi`
         }
+        fixed
+      />
+    </Page>
+  );
+}
+
+// ── Not For Competition Page (Mandy 2026-06-17) ─────────────────
+//
+// NFC entries are exhibited but don't compete for placings, so they carry
+// no classes — which means the by-class grouping drops them entirely and
+// they vanish from the catalogue despite holding a catalogue number. Mandy:
+// "not for competition is not showing in the catalogue." This page lists
+// every NFC dog (cat number, breed, owner) in its own back-of-book section,
+// mirroring the per-entry layout used on the class pages. Returns null when
+// the show has no NFC entries, so ordinary catalogues gain nothing.
+
+export function NotForCompetitionPage({
+  show,
+  entries,
+}: {
+  show: CatalogueShowInfo;
+  entries: CatalogueEntry[];
+}) {
+  void show; // reserved for future per-show copy; keeps the call signature uniform
+  const nfc = entries
+    .filter((e) => e.isNfc)
+    .sort((a, b) =>
+      (a.catalogueNumber ?? '').localeCompare(b.catalogueNumber ?? '', undefined, { numeric: true }),
+    );
+  if (nfc.length === 0) return null;
+
+  return (
+    <Page size="A5" style={styles.frontMatterPage} wrap>
+      <SectionBand title="Not For Competition" />
+      <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 8, color: C.textMedium, marginBottom: 8 }}>
+        The following dogs are exhibited Not For Competition.
+      </Text>
+      {nfc.map((entry, idx) => {
+        const meta = [
+          entry.breed,
+          entry.sex === 'dog' ? 'Dog' : entry.sex === 'bitch' ? 'Bitch' : null,
+        ].filter(Boolean);
+        return (
+          <View
+            key={idx}
+            wrap={false}
+            style={{ marginBottom: 4, paddingBottom: 3, borderBottomWidth: 0.5, borderBottomColor: C.ruleLight }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+              <Text style={styles.catalogueNumber}>{entry.catalogueNumber ?? '—'}</Text>
+              <Text style={styles.dogName}>{uppercaseName(entry.dogName) || 'Unnamed'}</Text>
+            </View>
+            {meta.length > 0 && (
+              <Text style={styles.entryDetail}>{meta.join('  ·  ')}</Text>
+            )}
+            {entry.owners.length > 0 && (
+              <Text style={styles.entryDetail}>
+                <Text style={styles.entryDetailLabel}>
+                  Owner{entry.owners.length > 1 ? 's' : ''}:{' '}
+                </Text>
+                {formatOwnerKC(entry.owners, entry.exhibitorId, entry.withholdFromPublication)}
+              </Text>
+            )}
+          </View>
+        );
+      })}
+      <Text
+        style={styles.footer}
+        render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}  ·  Generated by Remi`}
+        fixed
+      />
+    </Page>
+  );
+}
+
+// ── Principal Awards write-in page (Mandy 2026-06-17) ───────────
+//
+// Back-of-book results page. Once every class is judged the principal
+// awards (Best of Breed, Challenge Certificates, Best Puppy in Show, …) are
+// decided; this gives the secretary/steward a clean write-in line per award
+// right after the classes. The list is show-type aware (championship shows
+// list CCs + Reserve CCs) and is drawn from lib/best-awards — the same
+// source the judges' book uses, so the two never drift. Any custom awards
+// the secretary added are appended.
+
+const bestsWriteInStyles = {
+  row: {
+    flexDirection: 'row' as const,
+    alignItems: 'flex-end' as const,
+    marginBottom: 13,
+  },
+  award: {
+    fontFamily: 'Inter',
+    fontSize: 9.5,
+    fontWeight: 'bold' as const,
+    color: C.textDark,
+    width: '45%',
+    paddingRight: 8,
+  } as const,
+  line: {
+    flex: 1,
+    borderBottomWidth: 0.75,
+    borderBottomColor: C.textLight,
+    borderBottomStyle: 'dotted' as const,
+    height: 12,
+  } as const,
+};
+
+export function BestsWriteInPage({ show }: FrontMatterProps) {
+  const awards = buildBestAwards(show.showType, show.bestAwards ?? []);
+  if (awards.length === 0) return null;
+
+  return (
+    <Page size="A5" style={styles.frontMatterPage} wrap>
+      <SectionBand title="Principal Awards" />
+      <Text style={{ fontFamily: 'Times', fontStyle: 'italic', fontSize: 8, color: C.textMedium, marginBottom: 12 }}>
+        To be completed as the principal awards are decided.
+      </Text>
+      {awards.map((award, i) => (
+        <View key={i} style={bestsWriteInStyles.row} wrap={false}>
+          <Text style={bestsWriteInStyles.award}>{award}</Text>
+          <View style={bestsWriteInStyles.line} />
+        </View>
+      ))}
+      <Text
+        style={styles.footer}
+        render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}  ·  Generated by Remi`}
         fixed
       />
     </Page>

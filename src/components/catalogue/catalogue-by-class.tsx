@@ -3,7 +3,7 @@ import { styles } from './catalogue-styles';
 import { CatalogueHeader } from './catalogue-header';
 import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
 import { formatDobKC, titleCase, formatOwnerKC, formatRkcOwnerHeading, uppercaseName, buildSponsorLines } from './catalogue-utils';
-import { CoverPage, FrontMatterPage, TrophiesPage, ExhibitorIndexPage } from './catalogue-front-matter';
+import { CoverPage, FrontMatterPage, TrophiesPage, ExhibitorIndexPage, BestsWriteInPage, NotForCompetitionPage } from './catalogue-front-matter';
 import {
   SvAcknowledgementsPage,
   SvClassificationPage,
@@ -458,7 +458,7 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
       ) : (
         <>
           <FrontMatterPage show={show} compact={compact} />
-          {!show.skipTrophiesPage && !compact && (
+          {!compact && ((show.classSponsorships?.length ?? 0) > 0 || (show.donations?.length ?? 0) > 0) && (
             <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />
           )}
         </>
@@ -735,10 +735,13 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
       </Page>
       ))}
 
-      {/* Back matter: exhibitor index — moved to the end per backlog #93.
-          Skipped for SV catalogues to keep the document on the SV
-          palette; owner contact details are already on every entry's
-          line 5 (Michael 2026-05-23). */}
+      {/* Back matter. SV catalogues keep their own structure (owner +
+          results details already live on each SV entry line), so the RKC
+          back-of-book pages are skipped for them. Order: principal-awards
+          write-in (results, straight after the last class) → Not For
+          Competition list → exhibitor index. */}
+      {!isSvShow && <BestsWriteInPage show={show} />}
+      {!isSvShow && <NotForCompetitionPage show={show} entries={entries} />}
       {!isSvShow && (
         <ExhibitorIndexPage show={show} entries={entries} compact={compact} />
       )}

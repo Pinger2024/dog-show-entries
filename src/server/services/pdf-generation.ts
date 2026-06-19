@@ -29,6 +29,7 @@ import React from 'react';
 import { uploadToR2, getPublicUrl } from '@/server/services/storage';
 import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
 import { buildClassLabelMap, isSpecialAwardClass } from '@/lib/class-labels';
+import { buildScheduleJudges } from '@/lib/schedule-judges';
 
 // ── Catalogue PDF ──
 
@@ -101,6 +102,12 @@ export async function generateCataloguePdf(
       orderBy: [asc(schema.catalogueAdverts.sortOrder)],
     }),
   ]);
+
+  // Plain donors thanked in the catalogue (name + optional affix, no amount).
+  const showDonationRows = await db.query.showDonations.findMany({
+    where: eq(schema.showDonations.showId, showId),
+    orderBy: [asc(schema.showDonations.displayOrder), asc(schema.showDonations.createdAt)],
+  });
 
   const judgesByBreedName: Record<string, string> = {};
   const judgeBios: Record<string, string> = {};
@@ -291,6 +298,7 @@ export async function generateCataloguePdf(
     })),
     status: entry.status,
     entryType: entry.entryType,
+    isNfc: entry.isNfc,
     withholdFromPublication: entry.withholdFromPublication,
   }));
 
@@ -329,6 +337,9 @@ export async function generateCataloguePdf(
     classSponsorships: classSponsorshipInfos.length > 0 ? classSponsorshipInfos : undefined,
     skipTrophiesPage: classSponsorshipInfos.length > 0,
     showSponsors: showSponsorInfos.length > 0 ? showSponsorInfos : undefined,
+    donations: showDonationRows.length > 0
+      ? showDonationRows.map((d) => ({ name: d.donorName, affix: d.affix }))
+      : undefined,
     allShowClasses: allShowClasses.length > 0 ? allShowClasses : undefined,
     customStatements: scheduleData?.customStatements,
     dockingStatement: getDockingStatementFromScheduleData(scheduleData),

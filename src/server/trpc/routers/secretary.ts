@@ -43,6 +43,7 @@ import {
   breedGroups,
   catalogueAdverts,
   showDiscountGroups,
+  showDonations,
 } from '@/server/db/schema';
 import {
   DEFAULT_CHECKLIST_ITEMS,
@@ -7240,6 +7241,83 @@ export const secretaryRouter = createTRPCRouter({
       }
 
       await ctx.db.delete(showDiscountGroups).where(eq(showDiscountGroups.id, input.id));
+      return { deleted: true };
+    }),
+
+  // ── Donations (acknowledgment-only) ───────────────────────
+  // Mandy 2026-06-17: a place to record folk who gave a donation rather than
+  // sponsoring a class — a name + optional kennel affix, NO amount — thanked in
+  // the catalogue. Distinct from class/show sponsors (prizes/trophies) and from
+  // exhibitor checkout donations (sundry items).
+  listShowDonations: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      return ctx.db.query.showDonations.findMany({
+        where: eq(showDonations.showId, input.showId),
+        orderBy: [asc(showDonations.displayOrder), asc(showDonations.createdAt)],
+      });
+    }),
+
+  createShowDonation: secretaryProcedure
+    .input(z.object({
+      showId: z.string().uuid(),
+      donorName: z.string().trim().min(1).max(120),
+      affix: z.string().trim().max(120).nullable().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      const [maxOrder] = await ctx.db
+        .select({ max: sql<number>`COALESCE(MAX(display_order), -1)` })
+        .from(showDonations)
+        .where(eq(showDonations.showId, input.showId));
+      const [created] = await ctx.db
+        .insert(showDonations)
+        .values({
+          showId: input.showId,
+          donorName: input.donorName,
+          affix: input.affix?.trim() ? input.affix.trim() : null,
+          displayOrder: (maxOrder?.max ?? -1) + 1,
+        })
+        .returning();
+      return created!;
+    }),
+
+  updateShowDonation: secretaryProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      donorName: z.string().trim().min(1).max(120).optional(),
+      affix: z.string().trim().max(120).nullable().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.showDonations.findFirst({
+        where: eq(showDonations.id, input.id),
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Donation not found' });
+      await verifyShowAccess(ctx.db, ctx.session.user.id, existing.showId, { callerIsAdmin: ctx.callerIsAdmin });
+
+      const updates: Record<string, unknown> = {};
+      if (input.donorName !== undefined) updates.donorName = input.donorName;
+      if (input.affix !== undefined) updates.affix = input.affix?.trim() ? input.affix.trim() : null;
+      if (Object.keys(updates).length === 0) return existing;
+
+      const [updated] = await ctx.db
+        .update(showDonations)
+        .set(updates)
+        .where(eq(showDonations.id, input.id))
+        .returning();
+      return updated!;
+    }),
+
+  deleteShowDonation: secretaryProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.showDonations.findFirst({
+        where: eq(showDonations.id, input.id),
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Donation not found' });
+      await verifyShowAccess(ctx.db, ctx.session.user.id, existing.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      await ctx.db.delete(showDonations).where(eq(showDonations.id, input.id));
       return { deleted: true };
     }),
 });

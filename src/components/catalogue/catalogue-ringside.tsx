@@ -521,8 +521,8 @@ export function CatalogueRingside({ show, entries, compact }: Props) {
           a problem. */}
       <CoverPage show={show} />
       <AdvertPages adverts={show.adverts} position="inside_front" />
-      {!show.skipTrophiesPage && show.classSponsorships && show.classSponsorships.length > 0 && (
-        <TrophiesPage show={show} sponsorships={show.classSponsorships} />
+      {((show.classSponsorships?.length ?? 0) > 0 || (show.donations?.length ?? 0) > 0) && (
+        <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />
       )}
       <Page size="A5" style={s.page} wrap>
         <FrontMatterContent show={show} compact={compact} />
