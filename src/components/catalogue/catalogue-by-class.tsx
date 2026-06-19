@@ -432,21 +432,31 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
   // bump the per-page node count and trigger the react-pdf
   // `-9.979e+21` crash when chunks get too big (Amanda 2026-05-24, after
   // uploading banners to several classes on the Midland show).
-  const PAGE_ENTRY_THRESHOLD = isSvShow ? 50 : 80;
+  // Weight each class by its entries PLUS its sponsor rows — the crash above
+  // scales with entries + sponsors, not entries alone (see the data points), so
+  // counting sponsors lets sponsor-light shows pack into ONE chunk (no wasted
+  // page at the boundary) while sponsor-heavy ones still break early. RKC bumped
+  // 80 → 95: BAGSD (~87 entries / 5 sponsors = 92) now renders in a single chunk
+  // — Veteran no longer strands a near-empty page before Junior Handling
+  // (Michael/Mandy 2026-06-19). SV stays 50 (banner Image nodes are heavier).
+  const PAGE_ENTRY_THRESHOLD = isSvShow ? 50 : 95;
   const classChunks: string[][] = [];
   let currentChunk: string[] = [];
   let currentCount = 0;
   for (const classKey of classKeys) {
-    const entryCount = grouped[classKey].entries.length;
+    const g = grouped[classKey];
+    const weight =
+      g.entries.length +
+      (g.classLabel ? sponsorsByClassLabel.get(g.classLabel)?.length ?? 0 : 0);
     // Start a new chunk if adding this class would exceed the threshold
     // (but always put at least one class per chunk, even if it's large)
-    if (currentChunk.length > 0 && currentCount + entryCount > PAGE_ENTRY_THRESHOLD) {
+    if (currentChunk.length > 0 && currentCount + weight > PAGE_ENTRY_THRESHOLD) {
       classChunks.push(currentChunk);
       currentChunk = [];
       currentCount = 0;
     }
     currentChunk.push(classKey);
-    currentCount += entryCount;
+    currentCount += weight;
   }
   if (currentChunk.length > 0) classChunks.push(currentChunk);
 
