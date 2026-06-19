@@ -594,7 +594,7 @@ function AddEntryDialog({
   const [selectedDogBreedName, setSelectedDogBreedName] = useState<string | null>(null);
   const [exhibitorEmail, setExhibitorEmail] = useState('');
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
-  const [paymentMethod, setPaymentMethod] = useState<string>('postal');
+  const [paymentMethod, setPaymentMethod] = useState<string>('bank_transfer');
   const [isNfc, setIsNfc] = useState(false);
   const [sundryQuantities, setSundryQuantities] = useState<Record<string, number>>({});
 
@@ -892,9 +892,9 @@ function AddEntryDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
                   <SelectItem value="postal">Postal (cheque)</SelectItem>
                   <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
                   <SelectItem value="online">Online (already paid)</SelectItem>
                 </SelectContent>
               </Select>

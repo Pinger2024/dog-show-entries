@@ -3214,7 +3214,7 @@ export const secretaryRouter = createTRPCRouter({
         exhibitorEmail: z.string().email(),
         handlerName: z.string().optional(),
         isNfc: z.boolean().default(false),
-        paymentMethod: z.enum(['postal', 'cash', 'bank_transfer', 'online']).default('postal'),
+        paymentMethod: z.enum(['postal', 'cash', 'bank_transfer', 'online']).default('bank_transfer'),
         sundryItems: z
           .array(z.object({ sundryItemId: z.string().uuid(), quantity: z.number().int().min(1) }))
           .optional(),
