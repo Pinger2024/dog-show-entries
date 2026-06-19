@@ -45,14 +45,38 @@ export const DEFAULT_BEST_AWARDS: Record<string, string[]> = {
  * (case-insensitive dedupe). Falls back to a single "Best in Show" for unknown
  * show types so the list is never empty.
  */
+/**
+ * A "Best Dog/Bitch" award is the same prize as the Challenge Certificate for
+ * that sex — at a championship show the CC winner IS the best of that sex. So
+ * when a CC is offered, the "Best …" form is redundant and must be dropped, or
+ * the awards list shows both (Mandy 2026-06-19: "for a champ show you'd just
+ * have Dog Challenge Certificate; for an open show you'd only have Best Dog").
+ * Open shows have no CCs, so the "Best …" forms survive.
+ */
+const CC_SUPERSEDES: Record<string, string> = {
+  'best dog': 'dog challenge certificate',
+  'best bitch': 'bitch challenge certificate',
+  'res best dog': 'reserve dog challenge certificate',
+  'reserve best dog': 'reserve dog challenge certificate',
+  'res best bitch': 'reserve bitch challenge certificate',
+  'reserve best bitch': 'reserve bitch challenge certificate',
+};
+
 export function buildBestAwards(
   showType: string | null | undefined,
   customAwards: string[] = [],
 ): string[] {
   const defaults = DEFAULT_BEST_AWARDS[showType ?? ''] ?? ['Best in Show'];
-  const defaultsLower = new Set(defaults.map((a) => a.toLowerCase().trim()));
-  return [
-    ...defaults,
-    ...customAwards.filter((a) => !defaultsLower.has(a.toLowerCase().trim())),
-  ];
+  const canon = (a: string) => a.toLowerCase().trim();
+  const present = new Set(defaults.map(canon));
+  const result = [...defaults];
+  for (const award of customAwards) {
+    const key = canon(award);
+    if (present.has(key)) continue; // already listed
+    const supersededBy = CC_SUPERSEDES[key];
+    if (supersededBy && present.has(supersededBy)) continue; // CC covers it
+    present.add(key);
+    result.push(award);
+  }
+  return result;
 }
