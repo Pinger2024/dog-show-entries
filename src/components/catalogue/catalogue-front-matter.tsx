@@ -349,8 +349,11 @@ export function FrontMatterContent({ show, compact }: FrontMatterProps & { compa
         </View>
       )}
 
+      {/* Sponsors get a page of their own (Mandy 2026-06-19) — `break` starts
+          the section on a fresh page so it never splits with a single award
+          (e.g. Best in Show) stranded at the foot of the preceding section. */}
       {hasBestAwards(show) && (
-        <View style={{ marginTop: SECTION_GAP }} minPresenceAhead={compact ? 80 : 160}>
+        <View break>
           <BestAwardsContent show={show} compact={compact} />
         </View>
       )}
