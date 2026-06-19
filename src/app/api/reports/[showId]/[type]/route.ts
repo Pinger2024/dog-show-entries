@@ -92,7 +92,6 @@ export async function GET(
           itemName: schema.sundryItems.name,
           quantity: schema.orderSundryItems.quantity,
           exhibitorName: schema.users.name,
-          exhibitorEmail: schema.users.email,
         })
         .from(schema.orderSundryItems)
         .innerJoin(schema.sundryItems, eq(schema.orderSundryItems.sundryItemId, schema.sundryItems.id))
@@ -104,7 +103,6 @@ export async function GET(
           name: o.exhibitorName ?? '—',
           type: o.itemName.toLowerCase().includes('print') ? 'Printed' : 'Online',
           quantity: o.quantity,
-          email: o.exhibitorEmail ?? null,
         });
       }
     }
