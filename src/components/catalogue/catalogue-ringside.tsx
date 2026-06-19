@@ -12,6 +12,8 @@ import {
   displayEntryName,
   buildSponsorLines,
   ownerHeading,
+  isJuniorHandlingClass,
+  formatPedigreeSireDam,
 } from './catalogue-utils';
 import type { ClassGroup } from './catalogue-utils';
 import {
@@ -152,32 +154,6 @@ const s = StyleSheet.create({
     borderBottomWidth: 0.5,
     borderBottomColor: C.textDark,
     height: 10,
-  },
-  // Best of Sex / Best in Show write-in areas
-  bestAwardRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    paddingHorizontal: 8,
-    paddingVertical: 1.5,
-  },
-  bestAwardLabel: {
-    fontFamily: 'LibreBaskerville',
-    fontSize: 9,
-    fontWeight: 'bold',
-    color: C.textDark,
-    marginRight: 4,
-  },
-  bestAwardLine: {
-    flex: 1,
-    borderBottomWidth: 0.5,
-    borderBottomColor: C.textDark,
-    height: 12,
-  },
-  bestAwardSection: {
-    marginTop: 4,
-    paddingTop: 2,
-    borderTopWidth: 0.5,
-    borderTopColor: C.primary,
   },
   // Exhibitor index styles. Owner names ship Title Case rather than the
   // RKC-traditional UPPERCASE — Amanda's call (2026-05-22). The
@@ -448,7 +424,7 @@ export function CatalogueRingside({ show, entries, compact }: Props) {
   const bitchClasses: ClassGroup[] = [];
   const jhClasses: ClassGroup[] = [];
   for (const cls of allClasses) {
-    const isJh = cls.sex == null && /handling|handler/i.test(cls.className);
+    const isJh = isJuniorHandlingClass(cls.className, cls.sex);
     if (isJh) {
       jhClasses.push(cls);
     } else if (cls.sex === 'dog') {
@@ -622,7 +598,7 @@ export function CatalogueRingside({ show, entries, compact }: Props) {
 
       {/* Not For Competition — NFC dogs carry no class so they'd otherwise
           fall out of the sections entirely (Michael 2026-06-19). */}
-      <NotForCompetitionPage show={show} entries={entries} />
+      <NotForCompetitionPage entries={entries} />
 
 
       {/* Exhibitor Index — full details like the GSD Scotland PDF.
@@ -679,9 +655,7 @@ export function CatalogueRingside({ show, entries, compact }: Props) {
                 // (Michael 2026-06-19): DOB · Dog/Bitch · Sire: … Dam: … ·
                 // br Breeder, all title-cased. Replaces the older
                 // "By X ex Y" / "D"/"B" form.
-                const pedigree = (dog.sire || dog.dam)
-                  ? `Sire: ${dog.sire ? titleCase(dog.sire) : '—'}  Dam: ${dog.dam ? titleCase(dog.dam) : '—'}`
-                  : null;
+                const pedigree = formatPedigreeSireDam(dog.sire, dog.dam);
                 const dobStr = dog.dateOfBirth
                   ? formatDobKC(dog.dateOfBirth)
                   : '';

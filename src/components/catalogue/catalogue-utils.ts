@@ -131,6 +131,34 @@ export function formatPedigreeKC(
 }
 
 /**
+ * Pedigree in the "Sire: … Dam: …" form Mandy chose (2026-06-16), title-cased,
+ * with an em-dash where a parent is unknown. Shared by the By-Class and
+ * Standard catalogues so the two can't drift on pedigree wording (Michael
+ * 2026-06-19). (catalogue-by-breed / catalogue-marked still use the older
+ * formatPedigreeKC "By X ex Y" form.)
+ */
+export function formatPedigreeSireDam(
+  sire: string | null | undefined,
+  dam: string | null | undefined,
+): string | null {
+  if (!sire && !dam) return null;
+  return `Sire: ${sire ? titleCase(sire) : '—'}  Dam: ${dam ? titleCase(dam) : '—'}`;
+}
+
+/**
+ * Junior Handling class detection for catalogue layout. A JH class has no sex
+ * (JH classes FK to neither breed nor sex) and a name that reads "handling/
+ * handler". Single source of truth so the By-Class body float and the Standard
+ * section split agree (Michael 2026-06-19).
+ */
+export function isJuniorHandlingClass(
+  className: string | null | undefined,
+  sex: string | null | undefined,
+): boolean {
+  return sex == null && /handling|handler/i.test(className ?? '');
+}
+
+/**
  * Format owner names + address for RKC catalogue (UPPER CASE name).
  * Per RKC regulations, when an owner is also the exhibitor the address
  * is replaced with "Exh." (short for "Exhibitor").

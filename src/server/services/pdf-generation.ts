@@ -28,8 +28,8 @@ import type { RingNumberShowInfo, RingNumberFormat } from '@/components/ring-num
 import React from 'react';
 import { uploadToR2, getPublicUrl } from '@/server/services/storage';
 import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
-import { buildClassLabelMap, isSpecialAwardClass } from '@/lib/class-labels';
-import { buildScheduleJudges } from '@/lib/schedule-judges';
+import { buildClassLabelMap, isSpecialAwardClass, buildCatalogueClassDefinitions } from '@/lib/class-labels';
+import { buildScheduleJudges, aggregateJudgeAssignments } from '@/lib/schedule-judges';
 
 // ── Catalogue PDF ──
 
@@ -113,7 +113,6 @@ export async function generateCataloguePdf(
   const judgeBios: Record<string, string> = {};
   const judgePhotos: Record<string, string> = {};
   const judgeRingNumbers: Record<string, string> = {};
-  const judgeDisplayList: string[] = []; // Sex-annotated: "Dogs — Mr A Winfrow"
   for (const ja of judgeAssignmentRows) {
     if (ja.breed?.name && ja.judge?.name) {
       judgesByBreedName[ja.breed.name] = ja.judge.name;
@@ -128,54 +127,21 @@ export async function generateCataloguePdf(
       judgeRingNumbers[ja.breed.name] = String(ja.ring.number);
     }
   }
-  // Sex-annotated display labels for catalogue front matter — built via the
-  // SAME pure resolver the schedule uses (buildScheduleJudges), so a judge who
-  // does both sexes shows ONCE as "Dogs & Bitches — <name>" rather than three
-  // lines (Dogs, Bitches, and a bare name from the breed-level row). Mandy
-  // 2026-06-16.
-  const catJudgeEntries = new Map<string, {
-    name: string;
-    breeds: Set<string>;
-    sexes: Set<string>;
-    hasNullSexAssignment: boolean;
-    hasJhAssignment: boolean;
-    subjectToRkcApproval: boolean;
-  }>();
-  const catSpecialAwardsJudges: Array<{ name: string; subjectToRkcApproval: boolean }> = [];
-  for (const ja of judgeAssignmentRows) {
-    if (!ja.judge?.id || !ja.judge?.name) continue;
-    const subjectToRkcApproval = (ja as { subjectToRkcApproval?: boolean }).subjectToRkcApproval === true;
-    if (ja.isSpecialAwardsClassesJudge) {
-      catSpecialAwardsJudges.push({ name: ja.judge.name, subjectToRkcApproval });
-      continue;
-    }
-    if ((ja as { judgeRoleId?: string | null }).judgeRoleId) continue; // panel judges handled elsewhere
-    const key = ja.judge.id;
-    const isJhAssignment = !ja.breed?.name && !ja.sex;
-    const existing = catJudgeEntries.get(key);
-    if (existing) {
-      if (ja.breed?.name) existing.breeds.add(ja.breed.name);
-      if (ja.sex) existing.sexes.add(ja.sex);
-      else existing.hasNullSexAssignment = true;
-      if (isJhAssignment) existing.hasJhAssignment = true;
-      if (subjectToRkcApproval) existing.subjectToRkcApproval = true;
-    } else {
-      catJudgeEntries.set(key, {
-        name: ja.judge.name,
-        breeds: new Set(ja.breed?.name ? [ja.breed.name] : []),
-        sexes: new Set(ja.sex ? [ja.sex] : []),
-        hasNullSexAssignment: !ja.sex,
-        hasJhAssignment: isJhAssignment,
-        subjectToRkcApproval,
-      });
-    }
-  }
+  // Sex-annotated display labels — the SAME aggregator + resolver the catalogue
+  // HTTP route and the schedule use, so a judge doing both sexes shows ONCE as
+  // "Dogs & Bitches — <name>" everywhere (Mandy 2026-06-16; shared 2026-06-19).
+  const { entries: catJudgeEntries, specialAwardsJudges: catSpecialAwardsJudges } =
+    aggregateJudgeAssignments(judgeAssignmentRows);
   const catHasJuniorHandlerClasses = showClassRows.some(
     (sc) => sc.classDefinition?.type === 'junior_handler',
   );
-  for (const j of buildScheduleJudges(catJudgeEntries.values(), catSpecialAwardsJudges, catHasJuniorHandlerClasses)) {
-    if (j.displayLabel) judgeDisplayList.push(j.displayLabel);
-  }
+  const judgeDisplayList = buildScheduleJudges(
+    catJudgeEntries.values(),
+    catSpecialAwardsJudges,
+    catHasJuniorHandlerClasses,
+  )
+    .map((j) => j.displayLabel)
+    .filter((label): label is string => !!label);
 
   const classLabelMap = buildClassLabelMap(showClassRows);
 
@@ -220,25 +186,9 @@ export async function generateCataloguePdf(
     svCoatType: (sc as { svCoatType?: 'stock' | 'long_stock' | null }).svCoatType ?? null,
   }));
 
-  const seenDefIds = new Set<string>();
-  const classDefList: { name: string; description: string | null; isJh: boolean }[] = [];
-  for (const sc of showClassRows) {
-    if (sc.classDefinition && !seenDefIds.has(sc.classDefinition.id)) {
-      seenDefIds.add(sc.classDefinition.id);
-      classDefList.push({
-        name: sc.classDefinition.name,
-        description: sc.classDefinition.description,
-        isJh: sc.classDefinition.type === 'junior_handler',
-      });
-    }
-  }
-  // Junior Handling definitions always list AFTER the breed classes (including
-  // Veteran) — Mandy 2026-06-16. Stable sort keeps the existing order within
-  // each group, just floats the JH ones to the end.
-  const classDefinitions = classDefList
-    .map((d, i) => ({ d, i }))
-    .sort((a, b) => (a.d.isJh === b.d.isJh ? a.i - b.i : a.d.isJh ? 1 : -1))
-    .map(({ d }) => ({ name: d.name, description: d.description }));
+  // Definitions of Classes — deduped, Junior Handling floated to the END (after
+  // Veteran). Shared with the HTTP route so the page can't drift between them.
+  const classDefinitions = buildCatalogueClassDefinitions(showClassRows);
 
   // The ringside-based "standard" format uses plain formatting; only the
   // Crufts-style by-breed layout (for all-breed shows under "by-class")

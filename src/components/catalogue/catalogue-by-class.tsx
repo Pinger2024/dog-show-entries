@@ -2,7 +2,7 @@ import { Document, Page, View, Text, Image } from '@react-pdf/renderer';
 import { styles } from './catalogue-styles';
 import { CatalogueHeader } from './catalogue-header';
 import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
-import { formatDobKC, titleCase, formatOwnerKC, formatRkcOwnerHeading, uppercaseName, buildSponsorLines } from './catalogue-utils';
+import { formatDobKC, titleCase, formatOwnerKC, formatRkcOwnerHeading, uppercaseName, buildSponsorLines, isJuniorHandlingClass, formatPedigreeSireDam } from './catalogue-utils';
 import { CoverPage, FrontMatterPage, TrophiesPage, ExhibitorIndexPage, BestsWriteInPage, NotForCompetitionPage } from './catalogue-front-matter';
 import {
   SvAcknowledgementsPage,
@@ -387,17 +387,18 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
   // by classLabel, then sortOrder, then alphabetically for stability.
   // Junior Handling is a separate competition and always sits at the very end
   // of the class body — after every breed class, Veteran included — to match
-  // the Standard catalogue (which lists JH as its own section). Detected the
-  // same way the Standard does: a no-sex class whose name reads "handling/
-  // handler". The demo show happened to schedule JHA mid-list; this keeps the
-  // breed classes in their scheduled order and just floats JH last (Michael
-  // 2026-06-19). No-op for shows that already schedule JH last (e.g. BAGSD).
-  const isJhGroup = (key: string) =>
-    grouped[key].sex == null && /handling|handler/i.test(grouped[key].className ?? '');
+  // the Standard catalogue (which lists JH as its own section). Uses the shared
+  // isJuniorHandlingClass predicate so the two catalogues agree. The demo show
+  // happened to schedule JHA mid-list; this keeps the breed classes in their
+  // scheduled order and just floats JH last (Michael 2026-06-19). No-op for
+  // shows that already schedule JH last (e.g. BAGSD). Flag precomputed once per
+  // class rather than re-deriving inside the O(n log n) comparator.
+  const jhFlag: Record<string, 0 | 1> = {};
+  for (const key of Object.keys(grouped)) {
+    jhFlag[key] = isJuniorHandlingClass(grouped[key].className, grouped[key].sex) ? 1 : 0;
+  }
   const classKeys = Object.keys(grouped).sort((a, b) => {
-    const aJh = isJhGroup(a) ? 1 : 0;
-    const bJh = isJhGroup(b) ? 1 : 0;
-    if (aJh !== bJh) return aJh - bJh;
+    if (jhFlag[a] !== jhFlag[b]) return jhFlag[a] - jhFlag[b];
     const aNum = grouped[a].classNumber;
     const bNum = grouped[b].classNumber;
     if (aNum != null && bNum != null) return aNum - bNum;
@@ -544,12 +545,9 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
               </View>
             );
           }
-          // Pedigree as "Sire: <sire>  Dam: <dam>" (Mandy 2026-06-16, replacing
-          // the older "By <sire> ex <dam>" / interim "S: x D:" form). titleCase
-          // normalises whatever casing the exhibitor typed in.
-          const pedigree = (entry.sire || entry.dam)
-            ? `Sire: ${entry.sire ? titleCase(entry.sire) : '—'}  Dam: ${entry.dam ? titleCase(entry.dam) : '—'}`
-            : null;
+          // Pedigree as "Sire: <sire>  Dam: <dam>" (Mandy 2026-06-16) — shared
+          // with the Standard catalogue so the two can't drift on wording.
+          const pedigree = formatPedigreeSireDam(entry.sire, entry.dam);
           // Registration number and colour are intentionally omitted from the
           // RKC by-class catalogue entry line (Amanda 2026-06-08). (SV/WUSV
           // catalogues keep them — see renderSvEntry, which is a separate path.)
@@ -755,7 +753,7 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
           write-in (results, straight after the last class) → Not For
           Competition list → exhibitor index. */}
       {!isSvShow && <BestsWriteInPage show={show} />}
-      {!isSvShow && <NotForCompetitionPage show={show} entries={entries} />}
+      {!isSvShow && <NotForCompetitionPage entries={entries} />}
       {!isSvShow && (
         <ExhibitorIndexPage show={show} entries={entries} compact={compact} />
       )}

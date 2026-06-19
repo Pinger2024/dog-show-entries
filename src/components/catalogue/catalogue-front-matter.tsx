@@ -1724,13 +1724,10 @@ export function TrophiesPage({ show, sponsorships }: TrophiesPageProps) {
 // the show has no NFC entries, so ordinary catalogues gain nothing.
 
 export function NotForCompetitionPage({
-  show,
   entries,
 }: {
-  show: CatalogueShowInfo;
   entries: CatalogueEntry[];
 }) {
-  void show; // reserved for future per-show copy; keeps the call signature uniform
   const nfc = entries
     .filter((e) => e.isNfc)
     .sort((a, b) =>

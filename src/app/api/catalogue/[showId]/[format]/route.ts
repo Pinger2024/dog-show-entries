@@ -20,8 +20,8 @@ import { isShowDayReached } from '@/lib/date-utils';
 import { padPdfToMultiple } from '@/lib/pdf-pad';
 import { ensureCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
-import { buildClassLabelMap } from '@/lib/class-labels';
-import { buildScheduleJudges, type JudgeAggregate } from '@/lib/schedule-judges';
+import { buildClassLabelMap, buildCatalogueClassDefinitions } from '@/lib/class-labels';
+import { buildScheduleJudges, aggregateJudgeAssignments } from '@/lib/schedule-judges';
 import { redactWithheldOwnerAddresses } from '@/lib/catalogue-privacy';
 
 export async function GET(
@@ -172,85 +172,37 @@ export async function GET(
   // would skip them entirely and the catalogue wouldn't show any judges
   // page at all. Collect bios/photos/labels for ALL named judges so the
   // single-breed branch of JudgesListPage can render them.
-  // Judge display labels — built via the SAME pure resolver the schedule and
-  // the print pipeline use (buildScheduleJudges), so a judge doing dogs AND
-  // bitches shows ONCE as "Dogs & Bitches — Name" rather than two lines, and a
-  // judge doing breed + Junior Handling gets a separate "Junior Handling" line
-  // (Michael 2026-06-19 — route.ts had drifted from pdf-generation.ts here).
-  const judgeDisplayList: string[] = [];
-  const catJudgeEntries = new Map<string, JudgeAggregate>();
-  const catSpecialAwardsJudges: Array<{ name: string; subjectToRkcApproval: boolean }> = [];
+  // Bios, photos and breed-keyed ring numbers for the judges page — keyed by
+  // judge name so a judge doing both sexes doesn't double-render.
   for (const ja of judgeAssignmentRows) {
     if (!ja.judge?.name) continue;
-    // Bios, photos and breed-keyed entries — keyed by judge name so the same
-    // judge assigned to both sexes doesn't double-render.
-    if (ja.judge.bio && !judgeBios[ja.judge.name]) {
-      judgeBios[ja.judge.name] = ja.judge.bio;
-    }
-    if (ja.judge.photoUrl && !judgePhotos[ja.judge.name]) {
-      judgePhotos[ja.judge.name] = ja.judge.photoUrl;
-    }
+    if (ja.judge.bio && !judgeBios[ja.judge.name]) judgeBios[ja.judge.name] = ja.judge.bio;
+    if (ja.judge.photoUrl && !judgePhotos[ja.judge.name]) judgePhotos[ja.judge.name] = ja.judge.photoUrl;
     if (ja.breed?.name) {
       judgesByBreedName[ja.breed.name] = ja.judge.name;
-      if (ja.ring?.number) {
-        judgeRingNumbers[ja.breed.name] = String(ja.ring.number);
-      }
-    }
-    // Aggregate assignments per judge for buildScheduleJudges.
-    if (!ja.judge.id) continue;
-    const subjectToRkcApproval = (ja as { subjectToRkcApproval?: boolean }).subjectToRkcApproval === true;
-    if (ja.isSpecialAwardsClassesJudge) {
-      catSpecialAwardsJudges.push({ name: ja.judge.name, subjectToRkcApproval });
-      continue;
-    }
-    if ((ja as { judgeRoleId?: string | null }).judgeRoleId) continue; // panel judges handled elsewhere
-    const key = ja.judge.id;
-    const isJhAssignment = !ja.breed?.name && !ja.sex;
-    const existing = catJudgeEntries.get(key);
-    if (existing) {
-      if (ja.breed?.name) existing.breeds.add(ja.breed.name);
-      if (ja.sex) existing.sexes.add(ja.sex);
-      else existing.hasNullSexAssignment = true;
-      if (isJhAssignment) existing.hasJhAssignment = true;
-      if (subjectToRkcApproval) existing.subjectToRkcApproval = true;
-    } else {
-      catJudgeEntries.set(key, {
-        name: ja.judge.name,
-        breeds: new Set(ja.breed?.name ? [ja.breed.name] : []),
-        sexes: new Set(ja.sex ? [ja.sex] : []),
-        hasNullSexAssignment: !ja.sex,
-        hasJhAssignment: isJhAssignment,
-        subjectToRkcApproval,
-      });
+      if (ja.ring?.number) judgeRingNumbers[ja.breed.name] = String(ja.ring.number);
     }
   }
+
+  // Sex-annotated judge labels — the SAME aggregator + resolver the print
+  // pipeline and the schedule use, so a judge doing dogs AND bitches reads
+  // "Dogs & Bitches — Name" on one line everywhere (Michael 2026-06-19).
+  const { entries: catJudgeEntries, specialAwardsJudges: catSpecialAwardsJudges } =
+    aggregateJudgeAssignments(judgeAssignmentRows);
   const catHasJuniorHandlerClasses = showClassRows.some(
     (sc) => sc.classDefinition?.type === 'junior_handler',
   );
-  for (const j of buildScheduleJudges(catJudgeEntries.values(), catSpecialAwardsJudges, catHasJuniorHandlerClasses)) {
-    if (j.displayLabel) judgeDisplayList.push(j.displayLabel);
-  }
+  const judgeDisplayList = buildScheduleJudges(
+    catJudgeEntries.values(),
+    catSpecialAwardsJudges,
+    catHasJuniorHandlerClasses,
+  )
+    .map((j) => j.displayLabel)
+    .filter((label): label is string => !!label);
 
-  // Class definitions for front matter — Junior Handling floats to the END
-  // (after Veteran), matching the print pipeline and the schedule (Michael
-  // 2026-06-19 — route.ts was listing them in raw sort order, putting JHA
-  // above Veteran on the customer catalogue's Definitions page).
-  const seenDefIds = new Set<string>();
-  const classDefList: { name: string; description: string | null; isJh: boolean }[] = [];
-  for (const sc of showClassRows) {
-    if (sc.classDefinition && !seenDefIds.has(sc.classDefinition.id)) {
-      seenDefIds.add(sc.classDefinition.id);
-      classDefList.push({
-        name: sc.classDefinition.name,
-        description: sc.classDefinition.description,
-        isJh: sc.classDefinition.type === 'junior_handler',
-      });
-    }
-  }
-  const classDefinitions = classDefList
-    .map((d, i) => ({ d, i }))
-    .sort((a, b) => (a.d.isJh === b.d.isJh ? a.i - b.i : a.d.isJh ? 1 : -1))
-    .map(({ d }) => ({ name: d.name, description: d.description }));
+  // Definitions of Classes — deduped, Junior Handling floated to the END (after
+  // Veteran). Shared with the print pipeline so the page can't drift.
+  const classDefinitions = buildCatalogueClassDefinitions(showClassRows);
 
   const classLabelMap = buildClassLabelMap(showClassRows);
 

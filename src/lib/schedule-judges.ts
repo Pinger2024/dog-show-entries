@@ -16,6 +16,64 @@ export interface JudgeAggregate {
 const approvalSuffix = (subjectToRkcApproval: boolean) =>
   subjectToRkcApproval ? ' (subject to RKC approval)' : '';
 
+/** Minimal shape of a judge-assignment row that {@link aggregateJudgeAssignments}
+ *  reads. The catalogue and schedule DB queries each return a wider row; this
+ *  captures only the fields the aggregation needs. */
+export interface JudgeAssignmentRow {
+  judge?: { id?: string | null; name?: string | null } | null;
+  breed?: { name?: string | null } | null;
+  sex?: string | null;
+  isSpecialAwardsClassesJudge?: boolean | null;
+  subjectToRkcApproval?: boolean | null;
+  judgeRoleId?: string | null;
+}
+
+/**
+ * Aggregate raw judge-assignment rows into the per-judge map + Special Awards
+ * list that {@link buildScheduleJudges} consumes. This is the INPUT half of the
+ * judge pipeline; pairing it with buildScheduleJudges keeps the catalogue's two
+ * render paths (HTTP route + print pipeline) — and the schedule — in lockstep
+ * instead of each re-implementing the same loop (Michael 2026-06-19).
+ */
+export function aggregateJudgeAssignments(
+  rows: Iterable<JudgeAssignmentRow>,
+): {
+  entries: Map<string, JudgeAggregate>;
+  specialAwardsJudges: Array<{ name: string; subjectToRkcApproval: boolean }>;
+} {
+  const entries = new Map<string, JudgeAggregate>();
+  const specialAwardsJudges: Array<{ name: string; subjectToRkcApproval: boolean }> = [];
+  for (const ja of rows) {
+    if (!ja.judge?.id || !ja.judge?.name) continue;
+    const subjectToRkcApproval = ja.subjectToRkcApproval === true;
+    if (ja.isSpecialAwardsClassesJudge) {
+      specialAwardsJudges.push({ name: ja.judge.name, subjectToRkcApproval });
+      continue;
+    }
+    if (ja.judgeRoleId) continue; // panel judges handled elsewhere
+    const key = ja.judge.id;
+    const isJhAssignment = !ja.breed?.name && !ja.sex;
+    const existing = entries.get(key);
+    if (existing) {
+      if (ja.breed?.name) existing.breeds.add(ja.breed.name);
+      if (ja.sex) existing.sexes.add(ja.sex);
+      else existing.hasNullSexAssignment = true;
+      if (isJhAssignment) existing.hasJhAssignment = true;
+      if (subjectToRkcApproval) existing.subjectToRkcApproval = true;
+    } else {
+      entries.set(key, {
+        name: ja.judge.name,
+        breeds: new Set(ja.breed?.name ? [ja.breed.name] : []),
+        sexes: new Set(ja.sex ? [ja.sex] : []),
+        hasNullSexAssignment: !ja.sex,
+        hasJhAssignment: isJhAssignment,
+        subjectToRkcApproval,
+      });
+    }
+  }
+  return { entries, specialAwardsJudges };
+}
+
 /**
  * Resolve aggregated judge assignments into the schedule's `ScheduleJudge`
  * list, with the `role` string the schedule/catalogue components filter on to
