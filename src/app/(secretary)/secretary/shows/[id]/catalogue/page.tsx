@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   BarChart3,
+  BookMarked,
   BookOpen,
   CheckSquare,
   ClipboardList,
@@ -169,8 +170,13 @@ export default function CataloguePage() {
           />
           <PdfViewerButton
             icon={<ListOrdered className="size-4" />}
-            label="Catalogue Order"
+            label="Exhibitor List"
             url={`/api/reports/${showId}/catalogue-order`}
+          />
+          <PdfViewerButton
+            icon={<BookMarked className="size-4" />}
+            label="Pre-booked Catalogues"
+            url={`/api/reports/${showId}/catalogue-orders`}
           />
           <PdfViewerButton
             icon={<BarChart3 className="size-4" />}
