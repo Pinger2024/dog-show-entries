@@ -442,7 +442,7 @@ export function JudgesBook({
 
   return (
     <Document
-      title={`Judge's Book — ${show.name}`}
+      title={`Judge's Book — ${show.name}${show.judgeName ? ` (${show.judgeName})` : ''}`}
       author="Remi Show Manager"
     >
       {classes.map((cls, classIdx) => {

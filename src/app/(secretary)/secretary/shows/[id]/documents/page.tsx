@@ -271,6 +271,26 @@ export default function DocumentsPage() {
     trpc.secretary.getCatalogueData.useQuery({ showId });
   const { data: stats } =
     trpc.secretary.getShowStats.useQuery({ showId });
+  const { data: showJudges } =
+    trpc.secretary.getShowJudges.useQuery({ showId });
+
+  // Distinct judges (by id) so a multi-judge show can offer a separate Judge's
+  // Book per judge — e.g. the breed judge's book and the Junior Handling
+  // judge's book printed separately (Mandy 2026-06-19).
+  const distinctJudges = (() => {
+    // NB: `Map` is a Lucide icon import in this file, so use a plain object.
+    const seen: Record<string, boolean> = {};
+    const out: { id: string; name: string }[] = [];
+    for (const ja of showJudges ?? []) {
+      const jid = ja.judge?.id;
+      const jname = ja.judge?.name;
+      if (jid && jname && !seen[jid]) {
+        seen[jid] = true;
+        out.push({ id: jid, name: jname });
+      }
+    }
+    return out;
+  })();
 
   const entries = catalogueData?.entries ?? [];
   const hasNumbers = entries.some((e) => e.catalogueNumber);
@@ -327,13 +347,24 @@ export default function DocumentsPage() {
   const showDayDocuments: DocumentLink[] = [
     ...(hasNumbers
       ? [
-          {
-            label: "Judge's Book",
-            href: `/api/judges-book/${showId}`,
-            icon: <ClipboardList className="size-4" />,
-            description:
-              'One page per class with exhibit numbers, placement columns, and signature area',
-          },
+          // One Judge's Book per judge when a show has more than one (each book
+          // holds only that judge's classes), otherwise a single book.
+          ...(distinctJudges.length > 1
+            ? distinctJudges.map((j) => ({
+                label: `Judge's Book — ${j.name}`,
+                href: `/api/judges-book/${showId}?judge=${j.id}`,
+                icon: <ClipboardList className="size-4" />,
+                description: `${j.name}'s classes only — one page per class with exhibit numbers, placement columns, and signature area`,
+              }))
+            : [
+                {
+                  label: "Judge's Book",
+                  href: `/api/judges-book/${showId}`,
+                  icon: <ClipboardList className="size-4" />,
+                  description:
+                    'One page per class with exhibit numbers, placement columns, and signature area',
+                },
+              ]),
           {
             label: 'Ring Numbers (A4 Grid)',
             href: `/api/ring-numbers/${showId}`,
