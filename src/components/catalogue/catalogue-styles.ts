@@ -5,12 +5,19 @@ import { StyleSheet, Font } from '@react-pdf/renderer';
 // Register the same fonts as the schedule for visual consistency
 const fontsDir = path.join(process.cwd(), 'public', 'fonts');
 
+// Register EVERY weight/style combination each family is used in (including
+// bold+italic, e.g. the sex headings) — when a combo has no registered face,
+// react-pdf silently falls back to the base-14 Helvetica, which is NOT embedded
+// and gets rejected by print preflight (Tradeprint, BAGSD 2026-06-19). Faces we
+// don't have a dedicated file for are mapped to the closest available TTF so the
+// glyphs are always embedded.
 Font.register({
   family: 'Times',
   fonts: [
     { src: path.join(fontsDir, 'times-new-roman.ttf') },
     { src: path.join(fontsDir, 'times-new-roman-bold.ttf'), fontWeight: 'bold' },
     { src: path.join(fontsDir, 'times-new-roman-italic.ttf'), fontStyle: 'italic' },
+    { src: path.join(fontsDir, 'times-new-roman-italic.ttf'), fontWeight: 'bold', fontStyle: 'italic' },
   ],
 });
 
@@ -19,6 +26,8 @@ Font.register({
   fonts: [
     { src: path.join(fontsDir, 'libre-baskerville-regular.ttf') },
     { src: path.join(fontsDir, 'libre-baskerville-bold.ttf'), fontWeight: 'bold' },
+    { src: path.join(fontsDir, 'libre-baskerville-regular.ttf'), fontStyle: 'italic' },
+    { src: path.join(fontsDir, 'libre-baskerville-bold.ttf'), fontWeight: 'bold', fontStyle: 'italic' },
   ],
 });
 
@@ -28,6 +37,7 @@ Font.register({
     { src: path.join(fontsDir, 'inter-regular.ttf') },
     { src: path.join(fontsDir, 'inter-regular.ttf'), fontStyle: 'italic' },
     { src: path.join(fontsDir, 'inter-semibold.ttf'), fontWeight: 'bold' },
+    { src: path.join(fontsDir, 'inter-semibold.ttf'), fontWeight: 'bold', fontStyle: 'italic' },
   ],
 });
 
@@ -290,6 +300,11 @@ export const styles = StyleSheet.create({
   },
 
   // ── Footer ───────────────────────────────────
+  // NOTE: no top border here. A border on a `fixed` + position:absolute footer
+  // makes react-pdf overflow the stroke's Y coordinate across wrapped pages
+  // (it grew to ±10^15), which renders as a stray near-vertical green streak
+  // down the page (Mandy/Michael 2026-06-19, BAGSD By-Class). Keep the footer
+  // border-free; the page-number text alone is enough.
   footer: {
     position: 'absolute',
     bottom: 12,
@@ -299,8 +314,6 @@ export const styles = StyleSheet.create({
     fontFamily: 'Inter',
     fontSize: 6,
     color: C.textLight,
-    borderTopWidth: 0.75,
-    borderTopColor: C.primary,
     paddingTop: 4,
   },
   pageNumber: {

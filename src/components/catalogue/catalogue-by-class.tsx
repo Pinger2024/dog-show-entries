@@ -685,9 +685,11 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
                 <View
                   style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', ...styles.groupHeading }}
                 >
-                  <Text>{classLabel ? `Class ${classLabel}: ${className}` : className}</Text>
+                  <Text style={{ fontFamily: 'Inter', fontSize: 9, fontWeight: 'bold', color: '#fff', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                    {classLabel ? `Class ${classLabel}: ${className}` : className}
+                  </Text>
                   {sex && (
-                    <Text style={{ fontSize: 9, fontStyle: 'italic', color: '#fff' }}>
+                    <Text style={{ fontFamily: 'Inter', fontSize: 9, fontStyle: 'italic', color: '#fff' }}>
                       ({sex === 'dog' ? 'Dogs' : sex === 'bitch' ? 'Bitches' : 'Open'})
                     </Text>
                   )}

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
+  BarChart3,
   BookOpen,
   CheckSquare,
   ClipboardList,
@@ -10,6 +11,7 @@ import {
   Hash,
   Info,
   List,
+  ListOrdered,
   Lock,
   LockOpen,
   Save,
@@ -164,6 +166,16 @@ export default function CataloguePage() {
             icon={<ClipboardList className="size-4" />}
             label="Judge's Book"
             url={`/api/judges-book/${showId}`}
+          />
+          <PdfViewerButton
+            icon={<ListOrdered className="size-4" />}
+            label="Catalogue Order"
+            url={`/api/reports/${showId}/catalogue-order`}
+          />
+          <PdfViewerButton
+            icon={<BarChart3 className="size-4" />}
+            label="Class Breakdown"
+            url={`/api/reports/${showId}/class-breakdown`}
           />
         </div>
       )}
