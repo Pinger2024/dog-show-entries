@@ -383,8 +383,14 @@ export function CatalogueJudging({ show, entries }: Props) {
           judging catalogue is dense enough that even 200+ entries fit
           comfortably within safe node counts. ── */}
       <Page size="A5" style={s.page} wrap>
-        {activeSections.map((section) => (
-          <View key={`section-${section.key}`}>
+        {activeSections.map((section, sectionIdx) => (
+          // Junior Handling starts on a fresh page so its band isn't stranded
+          // at the foot of the last Bitches page (Mandy/Michael 2026-06-19).
+          // Guard on sectionIdx so a JH-only show doesn't open with a blank page.
+          <View
+            key={`section-${section.key}`}
+            break={section.key === 'jh' && sectionIdx > 0}
+          >
             <Text style={s.sexBand} minPresenceAhead={80}>
               {section.label}
             </Text>
