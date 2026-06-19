@@ -54,7 +54,7 @@ import { executeStripeRefund } from '@/server/services/stripe-refunds';
 import { penceToPoundsString } from '@/lib/date-utils';
 import { Resend } from 'resend';
 import { searchKcJudges, fetchKcJudgeProfile } from '@/server/services/kc-judges';
-import { ensureCatalogueNumbers } from '@/server/services/catalogue-numbering';
+import { ensureCatalogueNumbers, resortCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { generateJudgeContractPdf } from '@/server/services/judge-contract-pdf';
 import { normaliseOfficers } from '@/components/schedule/shared/officers';
 import { CATALOGUE_NAME_PATTERN, isCatalogueItem } from '@/lib/catalogue-utils';
@@ -681,70 +681,39 @@ export const secretaryRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
 
-      // Fetch all confirmed entries with breed + class info for ordering
-      const confirmedEntries = await ctx.db.query.entries.findMany({
-        where: and(
-          eq(entries.showId, input.showId),
-          eq(entries.status, 'confirmed'),
-          isNull(entries.deletedAt)
-        ),
-        with: {
-          dog: {
-            with: {
-              breed: { with: { group: true } },
-            },
-          },
-          entryClasses: {
-            with: {
-              showClass: true,
-            },
-          },
-        },
-        orderBy: [asc(entries.entryDate)],
-      });
+      // Full class-first re-sort (breed → Junior Handlers → NFC). Shared with
+      // the auto-resort that runs on every provisional add/remove so the button
+      // and the automatic path can never disagree.
+      return resortCatalogueNumbers(ctx.db, input.showId);
+    }),
 
-      // Sort by: lowest class number → group → breed → sex → entry date
-      // This ensures catalogue numbers follow class order in the catalogue
-      const sorted = [...confirmedEntries].sort((a, b) => {
-        // First: sort by the entry's lowest class number
-        const aMinClass = Math.min(
-          ...a.entryClasses.map((ec) => ec.showClass?.classNumber ?? ec.showClass?.sortOrder ?? 999)
-        );
-        const bMinClass = Math.min(
-          ...b.entryClasses.map((ec) => ec.showClass?.classNumber ?? ec.showClass?.sortOrder ?? 999)
-        );
-        if (aMinClass !== bMinClass) return aMinClass - bMinClass;
+  // Lock catalogue numbers for printing. After this, late entries append at the
+  // end instead of re-sorting, so a printed catalogue's numbers never shift.
+  lockCatalogueNumbers: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      // Make sure numbers exist + are in order before we freeze them.
+      await ensureCatalogueNumbers(ctx.db, input.showId);
+      await ctx.db
+        .update(shows)
+        .set({ catalogueNumbersLockedAt: new Date(), updatedAt: new Date() })
+        .where(eq(shows.id, input.showId));
+      return { locked: true };
+    }),
 
-        // Then: group → breed → sex → entry date (as before)
-        const aGroup = a.dog?.breed?.group?.sortOrder ?? 99;
-        const bGroup = b.dog?.breed?.group?.sortOrder ?? 99;
-        if (aGroup !== bGroup) return aGroup - bGroup;
-
-        const aBreed = a.dog?.breed?.name ?? '';
-        const bBreed = b.dog?.breed?.name ?? '';
-        if (aBreed !== bBreed) return aBreed.localeCompare(bBreed);
-
-        const sexOrder = { dog: 0, bitch: 1 };
-        const aSex = a.dog?.sex ? sexOrder[a.dog.sex] : 2;
-        const bSex = b.dog?.sex ? sexOrder[b.dog.sex] : 2;
-        if (aSex !== bSex) return aSex - bSex;
-
-        return new Date(a.entryDate).getTime() - new Date(b.entryDate).getTime();
-      });
-
-      // Assign sequential catalogue numbers
-      if (sorted.length > 0) {
-        await ctx.db.transaction(async (tx) => {
-          for (let i = 0; i < sorted.length; i++) {
-            await tx
-              .update(entries)
-              .set({ catalogueNumber: String(i + 1), updatedAt: new Date() })
-              .where(eq(entries.id, sorted[i].id));
-          }
-        });
-      }
-
-      return { assigned: sorted.length };
+  // Unlock catalogue numbers and re-sort, so any entries that were appended
+  // while locked drop back into their class order.
+  unlockCatalogueNumbers: secretaryProcedure
+    .input(z.object({ showId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await verifyShowAccess(ctx.db, ctx.session.user.id, input.showId, { callerIsAdmin: ctx.callerIsAdmin });
+      await ctx.db
+        .update(shows)
+        .set({ catalogueNumbersLockedAt: null, updatedAt: new Date() })
+        .where(eq(shows.id, input.showId));
+      await resortCatalogueNumbers(ctx.db, input.showId);
+      return { locked: false };
     }),
 
   // ── Catalogue data ─────────────────────────────────────────
@@ -3391,21 +3360,19 @@ export const secretaryRouter = createTRPCRouter({
         })
         .returning();
 
-      // If the show already has catalogue numbers assigned to earlier
-      // entries, slot this new entry in at the next available number so
-      // Amanda doesn't have to remember to re-run the "Assign catalogue
-      // numbers" action every time she adds a late entry. This uses
-      // append-mode (max+1) so existing numbers stay stable — secretary
-      // can still run a full class-first re-sort explicitly if desired.
-      const existingNumbered = await ctx.db.query.entries.findFirst({
-        where: and(
-          eq(entries.showId, input.showId),
-          eq(entries.status, 'confirmed'),
-          isNotNull(entries.catalogueNumber),
-        ),
+      // Catalogue number for this late entry. While numbers are still
+      // PROVISIONAL (the show hasn't been locked for printing), we leave the
+      // number null here and re-sort the whole show after the classes are
+      // attached, so the new entry slots into its class. Once the secretary has
+      // LOCKED numbers for printing, append at max+1 so the printed catalogue's
+      // existing numbers never shift.
+      const showForNumbering = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, input.showId),
+        columns: { catalogueNumbersLockedAt: true },
       });
+      const numbersLocked = Boolean(showForNumbering?.catalogueNumbersLockedAt);
       let nextCatalogueNumber: string | null = null;
-      if (existingNumbered) {
+      if (numbersLocked) {
         const allNumbered = await ctx.db.query.entries.findMany({
           where: and(
             eq(entries.showId, input.showId),
@@ -3444,6 +3411,13 @@ export const secretaryRouter = createTRPCRouter({
           fee: perClassFees ? (perClassFees[i] ?? 0) : sc.entryFee,
         }))
       );
+
+      // Provisional numbers re-sort the whole show now that this entry's classes
+      // exist, so it lands in its class (and Junior Handlers / NFC stay grouped
+      // at the end) rather than tacked on. Locked shows keep the append above.
+      if (!numbersLocked) {
+        await resortCatalogueNumbers(ctx.db, input.showId);
+      }
 
       // Create sundry item records
       if (selectedSundryItems.length > 0) {

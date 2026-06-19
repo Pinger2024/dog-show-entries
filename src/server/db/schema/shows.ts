@@ -152,6 +152,10 @@ export const shows = pgTable(
       .notNull(),
     resultsPublishedAt: timestamp('results_published_at', { withTimezone: true }),
     resultsLockedAt: timestamp('results_locked_at', { withTimezone: true }),
+    // Set when the secretary locks catalogue numbers for printing (or a print
+    // order is placed). While null, numbers are provisional and re-sort on every
+    // entry add/remove; once set, late entries append at the end instead.
+    catalogueNumbersLockedAt: timestamp('catalogue_numbers_locked_at', { withTimezone: true }),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()
       .notNull()
