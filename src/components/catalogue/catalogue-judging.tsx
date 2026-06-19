@@ -108,18 +108,22 @@ const s = StyleSheet.create({
     color: C.textDark,
     marginBottom: 1.5,
   },
-  // Class legend (two columns of classNo + name)
+  // Class legend — two real columns read top-to-bottom (column-major), so the
+  // numbers run 1,2,3… down the left then continue down the right rather than
+  // odds-left / evens-right (Mandy 2026-06-19: "all over the place").
   legendRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+  },
+  legendCol: {
+    width: '50%',
+    flexDirection: 'column',
+    paddingRight: 4,
   },
   legendItem: {
-    width: '50%',
     fontFamily: 'Inter',
     fontSize: 7,
     color: C.textDark,
     marginBottom: 1,
-    paddingRight: 4,
   },
   // Sex band — full-width divider before each sex section
   sexBand: {
@@ -340,21 +344,30 @@ export function CatalogueJudging({ show, entries }: Props) {
           </View>
         )}
 
-        {/* Class Legend — compact two-column list */}
-        {legend.length > 0 && (
-          <View>
-            <Text style={s.sectionTitle}>Classes</Text>
-            <View style={s.legendRow}>
-              {legend.map((c, i) => (
-                <Text key={i} style={s.legendItem}>
-                  {c.label ? `${c.label}. ` : ''}
-                  {c.name}
-                  {c.sex ? ` (${c.sex === 'dog' ? 'D' : 'B'})` : ''}
-                </Text>
-              ))}
+        {/* Class Legend — column-major two columns (down the left, then down
+            the right) so the class numbers read in order. */}
+        {legend.length > 0 && (() => {
+          const mid = Math.ceil(legend.length / 2);
+          const columns = [legend.slice(0, mid), legend.slice(mid)];
+          return (
+            <View>
+              <Text style={s.sectionTitle}>Classes</Text>
+              <View style={s.legendRow}>
+                {columns.map((col, ci) => (
+                  <View key={ci} style={s.legendCol}>
+                    {col.map((c, i) => (
+                      <Text key={i} style={s.legendItem}>
+                        {c.label ? `${c.label}. ` : ''}
+                        {c.name}
+                        {c.sex ? ` (${c.sex === 'dog' ? 'D' : 'B'})` : ''}
+                      </Text>
+                    ))}
+                  </View>
+                ))}
+              </View>
             </View>
-          </View>
-        )}
+          );
+        })()}
 
         <Text
           style={s.footer}
