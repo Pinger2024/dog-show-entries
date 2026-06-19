@@ -10,6 +10,8 @@ import {
   Hash,
   Info,
   List,
+  Lock,
+  LockOpen,
   Save,
   Users,
 } from 'lucide-react';
@@ -56,11 +58,27 @@ export default function CataloguePage() {
     onError: () => toast.error('Failed to assign catalogue numbers'),
   });
 
+  const lockMutation = trpc.secretary.lockCatalogueNumbers.useMutation({
+    onSuccess: () => {
+      utils.secretary.getCatalogueData.invalidate({ showId });
+      toast.success('Catalogue numbers locked for printing');
+    },
+    onError: () => toast.error('Could not lock catalogue numbers'),
+  });
+  const unlockMutation = trpc.secretary.unlockCatalogueNumbers.useMutation({
+    onSuccess: () => {
+      utils.secretary.getCatalogueData.invalidate({ showId });
+      toast.success('Numbers unlocked and put back in order');
+    },
+    onError: () => toast.error('Could not unlock catalogue numbers'),
+  });
+
   const entries = catalogueData?.entries ?? [];
   const hasNumbers = entries.some((e) => e.catalogueNumber);
   const resultsFinalised = Boolean(catalogueData?.show?.resultsPublishedAt);
   const entriesStillOpen = catalogueData?.show?.status === 'entries_open';
   const entryCloseDate = catalogueData?.show?.entryCloseDate;
+  const numbersLocked = Boolean(catalogueData?.show?.catalogueNumbersLockedAt);
 
   // Auto-assign catalogue numbers the first time a secretary lands on the
   // page with confirmed entries but no numbers yet. There is no manual
@@ -149,6 +167,56 @@ export default function CataloguePage() {
           />
         </div>
       )}
+
+      {/* Catalogue numbers — provisional (auto-resort on every add) vs locked
+          for printing (late entries append so printed numbers never shift). */}
+      {hasNumbers &&
+        (numbersLocked ? (
+          <div className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+            <div className="flex items-start gap-3">
+              <Lock className="size-5 shrink-0" />
+              <div className="space-y-0.5">
+                <p className="font-medium">Numbers are locked for printing</p>
+                <p className="text-amber-800/80 dark:text-amber-300/80">
+                  New entries are added at the end, so the numbers on your
+                  printed catalogue stay correct.
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              className="min-h-[2.75rem] shrink-0"
+              onClick={() => unlockMutation.mutate({ showId })}
+              disabled={unlockMutation.isPending}
+            >
+              <LockOpen className="size-4" />
+              Unlock &amp; re-sort
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3 rounded-lg border bg-muted/40 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <Info className="size-5 shrink-0 text-muted-foreground" />
+              <div className="space-y-0.5">
+                <p className="font-medium">Numbers update automatically</p>
+                <p className="text-muted-foreground">
+                  As you add entries they slot into the right place. When
+                  you&apos;re ready to print, lock the numbers so they stop
+                  changing.
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              className="min-h-[2.75rem] shrink-0"
+              onClick={() => lockMutation.mutate({ showId })}
+              disabled={lockMutation.isPending}
+            >
+              <Lock className="size-4" />
+              Lock for printing
+            </Button>
+          </div>
+        ))}
 
       {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-3">

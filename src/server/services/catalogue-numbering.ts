@@ -1,26 +1,24 @@
 /**
- * Auto-assign catalogue numbers to a show's confirmed entries in
- * class-first order, if (and only if) no numbers have been assigned
- * yet.
+ * Catalogue number assignment for a show's confirmed entries.
  *
- * Amanda's UX spec 2026-04-17: she shouldn't have to click an "Assign
- * numbers" button before downloading a catalogue — the numbers should
- * just be there, in class order, automatically, across every
- * catalogue format (standard, by-class, judging, marked, absentees,
- * judges' book, prize cards, ring numbers).
+ * Two phases, gated by `shows.catalogueNumbersLockedAt`:
  *
- * Invariant this helper maintains:
- *   If ANY confirmed entry has a catalogueNumber already, DO NOTHING —
- *   later entries are handled by the append-mode logic in the
- *   secretary.addEntry mutation (so existing numbers never shift out
- *   from under a printed catalogue).
+ *   PROVISIONAL (lockedAt = null) — numbers are kept in full class order. Every
+ *   add/remove re-sorts the whole show (`resortCatalogueNumbers`) so late
+ *   entries slot into their class instead of piling up at the end.
  *
- *   If NO confirmed entry has a catalogueNumber, run the full
- *   class-first sort (lowest class number → group → breed → sex →
- *   entry date) and assign 1..N.
+ *   LOCKED (lockedAt set) — the secretary has locked the numbers for printing.
+ *   Existing numbers never shift; new entries append at max+1 (handled by the
+ *   entry-creation mutations). The catalogue render path is a strict no-op.
  *
- * Safe to call on every catalogue render — it's a single indexed query
- * in the common case where numbers already exist.
+ * Ordering (single source of truth — `sortForCatalogue`): entries are grouped
+ * into three tiers so Junior Handlers and Not-For-Competition dogs never
+ * scatter into the breed classes —
+ *   tier 0  breed-competing  → by min breed class number, then group/breed/sex/date
+ *   tier 1  Junior Handlers  → by JH class sort order, then date
+ *   tier 2  NFC / no class    → last, by date
+ * JH classes carry no classNumber and NFC entries carry no classes, so a flat
+ * `classNumber ?? sortOrder` sort used to interleave them (BAGSD 2026-06-19).
  */
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import type { db as dbType } from '@/server/db';
@@ -28,10 +26,115 @@ import * as schema from '@/server/db/schema';
 
 type Db = NonNullable<typeof dbType>;
 
+type NumberingClass = {
+  classNumber: number | null;
+  sortOrder: number | null;
+  classDefinition: { type: string | null } | null;
+} | null;
+
+export type NumberingEntry = {
+  id: string;
+  isNfc: boolean | null;
+  entryDate: Date | string;
+  dog: {
+    sex: string | null;
+    breed: { name: string | null; group: { sortOrder: number | null } | null } | null;
+  } | null;
+  entryClasses: { showClass: NumberingClass }[];
+};
+
+const BIG = 1_000_000_000;
+const SEX_ORDER: Record<string, number> = { dog: 0, bitch: 1 };
+
+/** Tier (breed→JH→NFC) + the in-tier class key used to order an entry. */
+function catalogueTier(e: NumberingEntry): { tier: number; classKey: number } {
+  const classes = e.entryClasses
+    .map((ec) => ec.showClass)
+    .filter((c): c is NonNullable<NumberingClass> => c != null);
+  const jh = classes.filter((c) => c.classDefinition?.type === 'junior_handler');
+  const breed = classes.filter((c) => c.classDefinition?.type !== 'junior_handler');
+
+  // NFC dogs (and any entry with no classes) sit at the very end.
+  if (e.isNfc || classes.length === 0) return { tier: 2, classKey: 0 };
+  // Breed classes win the tier even if an entry somehow also holds a JH class.
+  if (breed.length > 0) {
+    return { tier: 0, classKey: Math.min(...breed.map((c) => c.classNumber ?? c.sortOrder ?? BIG)) };
+  }
+  // Pure Junior Handler entries (no dog) — ordered by their class sort order.
+  return { tier: 1, classKey: Math.min(...jh.map((c) => c.sortOrder ?? BIG)) };
+}
+
+/** The canonical catalogue order. Stable, pure — reused by every numbering path. */
+export function sortForCatalogue<T extends NumberingEntry>(entries: T[]): T[] {
+  return [...entries].sort((a, b) => {
+    const ka = catalogueTier(a);
+    const kb = catalogueTier(b);
+    if (ka.tier !== kb.tier) return ka.tier - kb.tier;
+    if (ka.classKey !== kb.classKey) return ka.classKey - kb.classKey;
+
+    const ag = a.dog?.breed?.group?.sortOrder ?? 99;
+    const bg = b.dog?.breed?.group?.sortOrder ?? 99;
+    if (ag !== bg) return ag - bg;
+
+    const ab = a.dog?.breed?.name ?? '';
+    const bb = b.dog?.breed?.name ?? '';
+    if (ab !== bb) return ab.localeCompare(bb);
+
+    const as = a.dog?.sex ? SEX_ORDER[a.dog.sex] ?? 2 : 2;
+    const bs = b.dog?.sex ? SEX_ORDER[b.dog.sex] ?? 2 : 2;
+    if (as !== bs) return as - bs;
+
+    return new Date(a.entryDate).getTime() - new Date(b.entryDate).getTime();
+  });
+}
+
+const NUMBERING_WITH = {
+  dog: { with: { breed: { with: { group: true } } } },
+  entryClasses: { with: { showClass: { with: { classDefinition: true } } } },
+} as const;
+
+async function fetchConfirmed(db: Db, showId: string) {
+  return db.query.entries.findMany({
+    where: and(
+      eq(schema.entries.showId, showId),
+      eq(schema.entries.status, 'confirmed'),
+      isNull(schema.entries.deletedAt),
+    ),
+    with: NUMBERING_WITH,
+    orderBy: [asc(schema.entries.entryDate)],
+  });
+}
+
+async function writeSequential(db: Db, ordered: { id: string }[]) {
+  await db.transaction(async (tx) => {
+    for (let i = 0; i < ordered.length; i++) {
+      await tx
+        .update(schema.entries)
+        .set({ catalogueNumber: String(i + 1), updatedAt: new Date() })
+        .where(eq(schema.entries.id, ordered[i].id));
+    }
+  });
+}
+
+/**
+ * Full re-sort: renumber every confirmed entry 1..N in catalogue order. Safe to
+ * call while numbers are PROVISIONAL (show not locked). Callers that must not
+ * shift a locked catalogue should check `shows.catalogueNumbersLockedAt` first.
+ */
+export async function resortCatalogueNumbers(db: Db, showId: string): Promise<{ assigned: number }> {
+  const confirmed = await fetchConfirmed(db, showId);
+  if (confirmed.length === 0) return { assigned: 0 };
+  const ordered = sortForCatalogue(confirmed as unknown as NumberingEntry[]);
+  await writeSequential(db, ordered);
+  return { assigned: ordered.length };
+}
+
+/**
+ * Assign catalogue numbers the first time — no-op if ANY confirmed entry already
+ * has a number, so the render path never shifts numbers out from under a
+ * secretary who is mid-print. Called on every catalogue/judges-book render.
+ */
 export async function ensureCatalogueNumbers(db: Db, showId: string): Promise<{ assigned: number }> {
-  // Early exit if ANY entry already has a number — append-mode on new
-  // entries keeps things in sync from there, and a secretary-triggered
-  // re-sort is still available via the assignCatalogueNumbers mutation.
   const alreadyNumbered = await db.query.entries.findFirst({
     where: and(
       eq(schema.entries.showId, showId),
@@ -43,55 +146,5 @@ export async function ensureCatalogueNumbers(db: Db, showId: string): Promise<{ 
   if (alreadyNumbered?.catalogueNumber != null) {
     return { assigned: 0 };
   }
-
-  const confirmed = await db.query.entries.findMany({
-    where: and(
-      eq(schema.entries.showId, showId),
-      eq(schema.entries.status, 'confirmed'),
-      isNull(schema.entries.deletedAt),
-    ),
-    with: {
-      dog: { with: { breed: { with: { group: true } } } },
-      entryClasses: { with: { showClass: true } },
-    },
-    orderBy: [asc(schema.entries.entryDate)],
-  });
-
-  if (confirmed.length === 0) return { assigned: 0 };
-
-  const sorted = [...confirmed].sort((a, b) => {
-    const aMin = Math.min(
-      ...a.entryClasses.map((ec) => ec.showClass?.classNumber ?? ec.showClass?.sortOrder ?? 999),
-    );
-    const bMin = Math.min(
-      ...b.entryClasses.map((ec) => ec.showClass?.classNumber ?? ec.showClass?.sortOrder ?? 999),
-    );
-    if (aMin !== bMin) return aMin - bMin;
-
-    const aGroup = a.dog?.breed?.group?.sortOrder ?? 99;
-    const bGroup = b.dog?.breed?.group?.sortOrder ?? 99;
-    if (aGroup !== bGroup) return aGroup - bGroup;
-
-    const aBreed = a.dog?.breed?.name ?? '';
-    const bBreed = b.dog?.breed?.name ?? '';
-    if (aBreed !== bBreed) return aBreed.localeCompare(bBreed);
-
-    const sexOrder: Record<string, number> = { dog: 0, bitch: 1 };
-    const aSex = a.dog?.sex ? sexOrder[a.dog.sex] ?? 2 : 2;
-    const bSex = b.dog?.sex ? sexOrder[b.dog.sex] ?? 2 : 2;
-    if (aSex !== bSex) return aSex - bSex;
-
-    return new Date(a.entryDate).getTime() - new Date(b.entryDate).getTime();
-  });
-
-  await db.transaction(async (tx) => {
-    for (let i = 0; i < sorted.length; i++) {
-      await tx
-        .update(schema.entries)
-        .set({ catalogueNumber: String(i + 1), updatedAt: new Date() })
-        .where(eq(schema.entries.id, sorted[i].id));
-    }
-  });
-
-  return { assigned: sorted.length };
+  return resortCatalogueNumbers(db, showId);
 }
