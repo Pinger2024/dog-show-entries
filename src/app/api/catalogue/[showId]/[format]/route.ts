@@ -21,6 +21,7 @@ import { padPdfToMultiple } from '@/lib/pdf-pad';
 import { ensureCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
 import { buildClassLabelMap } from '@/lib/class-labels';
+import { buildScheduleJudges, type JudgeAggregate } from '@/lib/schedule-judges';
 import { redactWithheldOwnerAddresses } from '@/lib/catalogue-privacy';
 
 export async function GET(
@@ -156,6 +157,12 @@ export async function GET(
     }),
   ]);
 
+  // Plain donors thanked in the catalogue (name + optional affix, no amount).
+  const showDonationRows = await db.query.showDonations.findMany({
+    where: eq(schema.showDonations.showId, showId),
+    orderBy: [asc(schema.showDonations.displayOrder), asc(schema.showDonations.createdAt)],
+  });
+
   const judgesByBreedName: Record<string, string> = {};
   const judgeBios: Record<string, string> = {};
   const judgePhotos: Record<string, string> = {};
@@ -165,62 +172,85 @@ export async function GET(
   // would skip them entirely and the catalogue wouldn't show any judges
   // page at all. Collect bios/photos/labels for ALL named judges so the
   // single-breed branch of JudgesListPage can render them.
-  const seenJudgeKeys = new Set<string>();
+  // Judge display labels — built via the SAME pure resolver the schedule and
+  // the print pipeline use (buildScheduleJudges), so a judge doing dogs AND
+  // bitches shows ONCE as "Dogs & Bitches — Name" rather than two lines, and a
+  // judge doing breed + Junior Handling gets a separate "Junior Handling" line
+  // (Michael 2026-06-19 — route.ts had drifted from pdf-generation.ts here).
   const judgeDisplayList: string[] = [];
+  const catJudgeEntries = new Map<string, JudgeAggregate>();
+  const catSpecialAwardsJudges: Array<{ name: string; subjectToRkcApproval: boolean }> = [];
   for (const ja of judgeAssignmentRows) {
     if (!ja.judge?.name) continue;
-    // Bios and photos always — keyed by judge name so the same judge
-    // assigned to both dogs and bitches doesn't double-render.
+    // Bios, photos and breed-keyed entries — keyed by judge name so the same
+    // judge assigned to both sexes doesn't double-render.
     if (ja.judge.bio && !judgeBios[ja.judge.name]) {
       judgeBios[ja.judge.name] = ja.judge.bio;
     }
     if (ja.judge.photoUrl && !judgePhotos[ja.judge.name]) {
       judgePhotos[ja.judge.name] = ja.judge.photoUrl;
     }
-    // Build the sex-annotated display label, deduped by name+sex.
-    const sexKey = `${ja.judge.name}::${ja.sex ?? 'all'}`;
-    if (!seenJudgeKeys.has(sexKey)) {
-      seenJudgeKeys.add(sexKey);
-      let label: string;
-      if (ja.isSpecialAwardsClassesJudge) {
-        // A SAC judge row is shape-identical to a JH row (no breed, sex null),
-        // so label it explicitly — otherwise the isJH heuristic below
-        // mislabels it 'Junior Handling' on the customer-facing catalogue.
-        label = `Special Awards Classes — ${ja.judge.name}`;
-      } else {
-        const isJH = !ja.breed && ja.sex === null;
-        const prefix = isJH
-          ? 'Junior Handling'
-          : ja.sex === 'dog'
-          ? 'Dogs'
-          : ja.sex === 'bitch'
-          ? 'Bitches'
-          : null;
-        label = prefix ? `${prefix} — ${ja.judge.name}` : ja.judge.name;
-      }
-      judgeDisplayList.push(label);
-    }
-    // Breed-keyed entries (multi-breed shows) and ring numbers.
     if (ja.breed?.name) {
       judgesByBreedName[ja.breed.name] = ja.judge.name;
       if (ja.ring?.number) {
         judgeRingNumbers[ja.breed.name] = String(ja.ring.number);
       }
     }
-  }
-
-  // Deduplicate class definitions for front matter
-  const seenDefIds = new Set<string>();
-  const classDefinitions: { name: string; description: string | null }[] = [];
-  for (const sc of showClassRows) {
-    if (sc.classDefinition && !seenDefIds.has(sc.classDefinition.id)) {
-      seenDefIds.add(sc.classDefinition.id);
-      classDefinitions.push({
-        name: sc.classDefinition.name,
-        description: sc.classDefinition.description,
+    // Aggregate assignments per judge for buildScheduleJudges.
+    if (!ja.judge.id) continue;
+    const subjectToRkcApproval = (ja as { subjectToRkcApproval?: boolean }).subjectToRkcApproval === true;
+    if (ja.isSpecialAwardsClassesJudge) {
+      catSpecialAwardsJudges.push({ name: ja.judge.name, subjectToRkcApproval });
+      continue;
+    }
+    if ((ja as { judgeRoleId?: string | null }).judgeRoleId) continue; // panel judges handled elsewhere
+    const key = ja.judge.id;
+    const isJhAssignment = !ja.breed?.name && !ja.sex;
+    const existing = catJudgeEntries.get(key);
+    if (existing) {
+      if (ja.breed?.name) existing.breeds.add(ja.breed.name);
+      if (ja.sex) existing.sexes.add(ja.sex);
+      else existing.hasNullSexAssignment = true;
+      if (isJhAssignment) existing.hasJhAssignment = true;
+      if (subjectToRkcApproval) existing.subjectToRkcApproval = true;
+    } else {
+      catJudgeEntries.set(key, {
+        name: ja.judge.name,
+        breeds: new Set(ja.breed?.name ? [ja.breed.name] : []),
+        sexes: new Set(ja.sex ? [ja.sex] : []),
+        hasNullSexAssignment: !ja.sex,
+        hasJhAssignment: isJhAssignment,
+        subjectToRkcApproval,
       });
     }
   }
+  const catHasJuniorHandlerClasses = showClassRows.some(
+    (sc) => sc.classDefinition?.type === 'junior_handler',
+  );
+  for (const j of buildScheduleJudges(catJudgeEntries.values(), catSpecialAwardsJudges, catHasJuniorHandlerClasses)) {
+    if (j.displayLabel) judgeDisplayList.push(j.displayLabel);
+  }
+
+  // Class definitions for front matter — Junior Handling floats to the END
+  // (after Veteran), matching the print pipeline and the schedule (Michael
+  // 2026-06-19 — route.ts was listing them in raw sort order, putting JHA
+  // above Veteran on the customer catalogue's Definitions page).
+  const seenDefIds = new Set<string>();
+  const classDefList: { name: string; description: string | null; isJh: boolean }[] = [];
+  for (const sc of showClassRows) {
+    if (sc.classDefinition && !seenDefIds.has(sc.classDefinition.id)) {
+      seenDefIds.add(sc.classDefinition.id);
+      classDefList.push({
+        name: sc.classDefinition.name,
+        description: sc.classDefinition.description,
+        isJh: sc.classDefinition.type === 'junior_handler',
+      });
+    }
+  }
+  const classDefinitions = classDefList
+    .map((d, i) => ({ d, i }))
+    .sort((a, b) => (a.d.isJh === b.d.isJh ? a.i - b.i : a.d.isJh ? 1 : -1))
+    .map(({ d }) => ({ name: d.name, description: d.description }));
 
   const classLabelMap = buildClassLabelMap(showClassRows);
 
@@ -305,6 +335,7 @@ export async function GET(
     })),
     status: entry.status,
     entryType: entry.entryType,
+    isNfc: entry.isNfc,
     jhHandlerName: entry.juniorHandlerDetails?.handlerName ?? undefined,
     withholdFromPublication: entry.withholdFromPublication,
   }));
@@ -365,6 +396,9 @@ export async function GET(
     skipTrophiesPage: classSponsorships.length > 0,
     customStatements: scheduleData?.customStatements,
     showSponsors: showSponsorInfos.length > 0 ? showSponsorInfos : undefined,
+    donations: showDonationRows.length > 0
+      ? showDonationRows.map((d) => ({ name: d.donorName, affix: d.affix }))
+      : undefined,
     allShowClasses: allShowClasses.length > 0 ? allShowClasses : undefined,
     welcomeNote: scheduleData?.welcomeNote,
     outsideAttraction: scheduleData?.outsideAttraction === true ? true : undefined,

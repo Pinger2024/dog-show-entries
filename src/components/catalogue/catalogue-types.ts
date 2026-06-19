@@ -70,6 +70,11 @@ export interface CatalogueEntry {
   }[];
   status: string;
   entryType: string;
+  /** Not-For-Competition entry — exhibited but not competing for placings.
+   *  NFC entries carry no classes, so they fall out of the by-class grouping
+   *  entirely; the catalogue lists them in their own "Not For Competition"
+   *  section instead (Mandy 2026-06-17). */
+  isNfc?: boolean;
   /** RKC F(1).11.b.(6)/(8) — when true, owner name and address are withheld from the catalogue */
   withholdFromPublication?: boolean;
 }
@@ -156,6 +161,9 @@ export interface CatalogueShowInfo {
   customStatements?: string[];
   /** Show-level sponsors for the cover/front matter */
   showSponsors?: ShowSponsorInfo[];
+  /** Plain donors — name + optional kennel affix, no amount — thanked in the
+   *  catalogue under "With thanks for their kind donations" (Mandy 2026-06-17). */
+  donations?: { name: string; affix?: string | null }[];
   /** All show classes (for rendering empty classes) */
   allShowClasses?: ShowClassInfo[];
   /** Secretary's welcome note to exhibitors — shown in catalogue front matter */

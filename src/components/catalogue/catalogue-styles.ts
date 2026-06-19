@@ -235,8 +235,12 @@ export const styles = StyleSheet.create({
   placementsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingTop: 3,
-    paddingBottom: 4,
+    // Clear gap between the last dog in the class and the placings line so
+    // the judge has room to write, and the line reads as a separate block
+    // rather than crowding the final entry (Mandy 2026-06-19).
+    marginTop: 14,
+    paddingTop: 5,
+    paddingBottom: 5,
     paddingLeft: 6,
     paddingRight: 6,
   },
@@ -245,6 +249,27 @@ export const styles = StyleSheet.create({
     fontSize: 7,
     color: C.textDark,
     flex: 1,
+  },
+  // Write-in placement slot — a bold label followed by a ruled line (matching
+  // the Standard/Ringside catalogue, which Mandy prefers over trailing dots).
+  placementSlot: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    flex: 1,
+    marginRight: 6,
+  },
+  placementSlotLabel: {
+    fontFamily: 'Inter',
+    fontSize: 7,
+    fontWeight: 'bold',
+    color: C.textMedium,
+    marginRight: 3,
+  },
+  placementSlotLine: {
+    flex: 1,
+    borderBottomWidth: 0.5,
+    borderBottomColor: C.textDark,
+    height: 10,
   },
 
   // ── Absentee table ───────────────────────────

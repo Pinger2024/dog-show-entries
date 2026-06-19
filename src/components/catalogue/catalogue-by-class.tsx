@@ -3,7 +3,7 @@ import { styles } from './catalogue-styles';
 import { CatalogueHeader } from './catalogue-header';
 import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
 import { formatDobKC, titleCase, formatOwnerKC, formatRkcOwnerHeading, uppercaseName, buildSponsorLines } from './catalogue-utils';
-import { CoverPage, FrontMatterPage, TrophiesPage, ExhibitorIndexPage } from './catalogue-front-matter';
+import { CoverPage, FrontMatterPage, TrophiesPage, ExhibitorIndexPage, BestsWriteInPage, NotForCompetitionPage } from './catalogue-front-matter';
 import {
   SvAcknowledgementsPage,
   SvClassificationPage,
@@ -105,8 +105,8 @@ const svPlacings = {
   wrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginTop: 5,
-    paddingTop: 4,
+    marginTop: 9,
+    paddingTop: 7,
     borderTopWidth: 0.5,
     borderTopColor: SV.rule,
   } as const,
@@ -115,7 +115,8 @@ const svPlacings = {
     alignItems: 'baseline',
     width: '33%',
     paddingRight: 6,
-    marginBottom: 3,
+    // Roomier rows — the write-in slots were cramped (Michael 2026-06-19).
+    marginBottom: 9,
   } as const,
   ordinal: {
     fontFamily: SV_FONTS.sans,
@@ -384,7 +385,19 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
 
   // Sort: numbered classes first (by classNumber), then unnumbered (JH etc)
   // by classLabel, then sortOrder, then alphabetically for stability.
+  // Junior Handling is a separate competition and always sits at the very end
+  // of the class body — after every breed class, Veteran included — to match
+  // the Standard catalogue (which lists JH as its own section). Detected the
+  // same way the Standard does: a no-sex class whose name reads "handling/
+  // handler". The demo show happened to schedule JHA mid-list; this keeps the
+  // breed classes in their scheduled order and just floats JH last (Michael
+  // 2026-06-19). No-op for shows that already schedule JH last (e.g. BAGSD).
+  const isJhGroup = (key: string) =>
+    grouped[key].sex == null && /handling|handler/i.test(grouped[key].className ?? '');
   const classKeys = Object.keys(grouped).sort((a, b) => {
+    const aJh = isJhGroup(a) ? 1 : 0;
+    const bJh = isJhGroup(b) ? 1 : 0;
+    if (aJh !== bJh) return aJh - bJh;
     const aNum = grouped[a].classNumber;
     const bNum = grouped[b].classNumber;
     if (aNum != null && bNum != null) return aNum - bNum;
@@ -458,7 +471,7 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
       ) : (
         <>
           <FrontMatterPage show={show} compact={compact} />
-          {!show.skipTrophiesPage && !compact && (
+          {!compact && ((show.classSponsorships?.length ?? 0) > 0 || (show.donations?.length ?? 0) > 0) && (
             <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />
           )}
         </>
@@ -713,11 +726,12 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
                   exhibit). */}
             {sorted.length > 0 && !isSvShow && (
               <View style={styles.placementsRow} wrap={false}>
-                <Text style={styles.placementsCell}>1st .....</Text>
-                <Text style={styles.placementsCell}>2nd .....</Text>
-                <Text style={styles.placementsCell}>3rd .....</Text>
-                <Text style={styles.placementsCell}>Res .....</Text>
-                <Text style={styles.placementsCell}>VHC .....</Text>
+                {['1st', '2nd', '3rd', 'Res', 'VHC'].map((lbl) => (
+                  <View key={lbl} style={styles.placementSlot}>
+                    <Text style={styles.placementSlotLabel}>{lbl}</Text>
+                    <View style={styles.placementSlotLine} />
+                  </View>
+                ))}
               </View>
             )}
             {sorted.length > 0 && isSvShow && renderSvPlacings(sorted.length)}
@@ -735,10 +749,13 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
       </Page>
       ))}
 
-      {/* Back matter: exhibitor index — moved to the end per backlog #93.
-          Skipped for SV catalogues to keep the document on the SV
-          palette; owner contact details are already on every entry's
-          line 5 (Michael 2026-05-23). */}
+      {/* Back matter. SV catalogues keep their own structure (owner +
+          results details already live on each SV entry line), so the RKC
+          back-of-book pages are skipped for them. Order: principal-awards
+          write-in (results, straight after the last class) → Not For
+          Competition list → exhibitor index. */}
+      {!isSvShow && <BestsWriteInPage show={show} />}
+      {!isSvShow && <NotForCompetitionPage show={show} entries={entries} />}
       {!isSvShow && (
         <ExhibitorIndexPage show={show} entries={entries} compact={compact} />
       )}

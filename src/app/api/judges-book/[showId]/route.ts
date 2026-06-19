@@ -9,6 +9,7 @@ import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, makePdfResponse } from '@/lib/pdf-utils';
 import { ensureCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { buildClassLabelMap } from '@/lib/class-labels';
+import { buildBestAwards } from '@/lib/best-awards';
 
 export type JudgesBookClass = {
   classLabel: string;
@@ -124,51 +125,12 @@ export async function GET(
     };
   });
 
-  // Default Best Awards set per show type. Championship shows get CCs +
-  // Reserve CCs + Best Puppies. Smaller show types get a tighter list.
-  // Whatever the secretary has added to scheduleData.bestAwards is
-  // unioned on top (order: defaults first, then custom additions).
-  const DEFAULT_BEST_AWARDS: Record<string, string[]> = {
-    championship: [
-      'Best of Breed',
-      'Dog Challenge Certificate',
-      'Reserve Dog Challenge Certificate',
-      'Bitch Challenge Certificate',
-      'Reserve Bitch Challenge Certificate',
-      'Best Puppy Dog',
-      'Best Puppy Bitch',
-      'Best Puppy in Show',
-    ],
-    premier_open: [
-      'Best of Breed',
-      'Best Dog',
-      'Best Bitch',
-      'Best Puppy Dog',
-      'Best Puppy Bitch',
-      'Best Puppy in Show',
-    ],
-    open: [
-      'Best of Breed',
-      'Best Dog',
-      'Best Bitch',
-      'Best Puppy in Show',
-      'Best Veteran in Show',
-    ],
-    limited: ['Best of Breed', 'Best Dog', 'Best Bitch', 'Best Puppy in Show'],
-    primary: ['Best in Show'],
-    companion: ['Best in Show'],
-  };
-
+  // Default Best Awards per show type (championship → CCs + Best Puppies,
+  // etc.), unioned with whatever the secretary added to scheduleData.bestAwards.
+  // Shared with the catalogue's back-of-book write-in page via lib/best-awards.
   const scheduleData = (show.scheduleData ?? {}) as { bestAwards?: string[] };
   const customAwards = Array.isArray(scheduleData.bestAwards) ? scheduleData.bestAwards : [];
-  const defaults = DEFAULT_BEST_AWARDS[show.showType] ?? ['Best in Show'];
-  // Union with order preserved: defaults first, then any custom awards that
-  // aren't already in the default list (case-insensitive dedupe).
-  const defaultsLower = new Set(defaults.map((a) => a.toLowerCase().trim()));
-  const bestAwards = [
-    ...defaults,
-    ...customAwards.filter((a) => !defaultsLower.has(a.toLowerCase().trim())),
-  ];
+  const bestAwards = buildBestAwards(show.showType, customAwards);
 
   const showInfo: JudgesBookShowInfo = {
     name: show.name,

@@ -6,13 +6,11 @@ import type { CatalogueEntry, CatalogueShowInfo } from './catalogue-types';
 import {
   uppercaseName,
   formatDobKC,
-  formatPedigreeKC,
+  titleCase,
   groupByClass,
   sortEntries,
   displayEntryName,
   buildSponsorLines,
-  pickDefaultBestAwards,
-  splitBestAwardsBySex,
   ownerHeading,
 } from './catalogue-utils';
 import type { ClassGroup } from './catalogue-utils';
@@ -21,6 +19,8 @@ import {
   FrontMatterContent,
   TrophiesPage,
   JurisdictionBlock,
+  NotForCompetitionPage,
+  BestsWriteInPage,
 } from './catalogue-front-matter';
 import type { ClassSponsorshipInfo } from './catalogue-types';
 
@@ -126,8 +126,11 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 6,
-    paddingTop: 2,
-    paddingBottom: 3,
+    // Match the By-Class gap so the line reads as a separate write-in block
+    // rather than crowding the last entry (Michael 2026-06-19).
+    marginTop: 14,
+    paddingTop: 5,
+    paddingBottom: 5,
     borderBottomWidth: 0.5,
     borderBottomColor: C.ruleLight,
   },
@@ -462,42 +465,9 @@ export function CatalogueRingside({ show, entries, compact }: Props) {
   if (bitchClasses.length > 0) sections.push({ key: 'bitch', label: 'Bitch', classes: bitchClasses });
   if (jhClasses.length > 0) sections.push({ key: 'jh', label: 'Junior Handling', classes: jhClasses });
 
-  // Best-of awards — derived from `show.bestAwards` (or smart defaults
-  // based on show scope/type) and split by sex section. Single source of
-  // truth with the BestAwardsPage summary, so the inline awards at the
-  // end of dog/bitch sections always agree with the summary list.
-  // We also detect long-coat awards (GSD shows specifically) and add
-  // them on top of the configured list.
-  const hasLongcoat = entries.some((e) =>
-    e.classes.some((c) => /long\s*coat/i.test(c.name ?? '')),
-  );
-  const configuredAwards = show.bestAwards && show.bestAwards.length > 0
-    ? show.bestAwards
-    : pickDefaultBestAwards(show);
-  // Auto-augment with long-coat awards if the show has long-coat classes
-  // and the configured list doesn't already include them.
-  const longCoatExtras = hasLongcoat
-    ? [
-        'Best Long Coat Dog',
-        'Best Long Coat Bitch',
-        'Best Long Coat Puppy',
-        'Best Long Coat in Show',
-      ].filter((lc) =>
-        !configuredAwards.some((a) => a.toLowerCase().trim() === lc.toLowerCase().trim()),
-      )
-    : [];
-  const allBestAwards = [...configuredAwards, ...longCoatExtras];
-  const splitAwards = splitBestAwardsBySex(allBestAwards);
-  const bestAwards: Record<string, string[]> = {
-    dog: splitAwards.dog,
-    bitch: splitAwards.bitch,
-  };
-  // Shared awards (Best of Breed, Best in Show, Best Long Coat in Show,
-  // etc.) go on the dedicated Best in Show page after both sexes are
-  // judged.
-  const bisAwards = splitAwards.shared.length > 0
-    ? splitAwards.shared
-    : ['Best in Show'];
+  // Best Awards now render via the shared BestsWriteInPage (same as the
+  // By-Class catalogue), so the old inline split-by-sex computation has been
+  // removed (Michael 2026-06-19).
 
   // Build exhibitor index. No longer chunked — react-pdf wraps
   // the single <Page> naturally so content flows continuously
@@ -521,8 +491,8 @@ export function CatalogueRingside({ show, entries, compact }: Props) {
           a problem. */}
       <CoverPage show={show} />
       <AdvertPages adverts={show.adverts} position="inside_front" />
-      {!show.skipTrophiesPage && show.classSponsorships && show.classSponsorships.length > 0 && (
-        <TrophiesPage show={show} sponsorships={show.classSponsorships} />
+      {((show.classSponsorships?.length ?? 0) > 0 || (show.donations?.length ?? 0) > 0) && (
+        <TrophiesPage show={show} sponsorships={show.classSponsorships ?? []} />
       )}
       <Page size="A5" style={s.page} wrap>
         <FrontMatterContent show={show} compact={compact} />
@@ -640,52 +610,19 @@ export function CatalogueRingside({ show, entries, compact }: Props) {
               );
             })}
 
-              {/* Best Awards table only after the LAST section */}
-              {isLastSection && (() => {
-                const allBests = [
-                  ...(bestAwards.dog ?? []),
-                  ...(bestAwards.bitch ?? []),
-                  ...bisAwards,
-                ];
-                if (allBests.length === 0) return null;
-                return (
-                  <View
-                    wrap={false}
-                    style={{
-                      marginTop: 10,
-                      borderWidth: 1.5,
-                      borderColor: C.primary,
-                      padding: '8 12',
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontFamily: 'LibreBaskerville',
-                        fontSize: 12,
-                        fontWeight: 'bold',
-                        textAlign: 'center',
-                        textTransform: 'uppercase',
-                        color: C.textDark,
-                        marginBottom: 6,
-                        letterSpacing: 1.5,
-                      }}
-                    >
-                      Best Awards
-                    </Text>
-                    {allBests.map((award) => (
-                      <View key={award} style={{ ...s.bestAwardRow, paddingVertical: 2.5 }}>
-                        <Text style={s.bestAwardLabel}>{award}</Text>
-                        <View style={s.bestAwardLine} />
-                      </View>
-                    ))}
-                  </View>
-                );
-              })()}
             </Fragment>
           );
         })}
         <Text style={s.footer} render={footerRender} fixed />
       </Page>
+
+      {/* Best Awards write-in page — the SAME component the By-Class catalogue
+          uses, so both formats read identically (Michael 2026-06-19). */}
+      <BestsWriteInPage show={show} />
+
+      {/* Not For Competition — NFC dogs carry no class so they'd otherwise
+          fall out of the sections entirely (Michael 2026-06-19). */}
+      <NotForCompetitionPage show={show} entries={entries} />
 
 
       {/* Exhibitor Index — full details like the GSD Scotland PDF.
@@ -738,23 +675,21 @@ export function CatalogueRingside({ show, entries, compact }: Props) {
               {/* Each dog */}
               {ex.dogs.map((dog, dogIdx) => {
                 const isJH = dog.entryType === 'junior_handler';
-                const pedigree = formatPedigreeKC(dog.sire, dog.dam);
-                const sexLabel =
-                  dog.sex === 'dog' ? 'D' : dog.sex === 'bitch' ? 'B' : '';
+                // Detail line — matched to the By-Class catalogue per dog
+                // (Michael 2026-06-19): DOB · Dog/Bitch · Sire: … Dam: … ·
+                // br Breeder, all title-cased. Replaces the older
+                // "By X ex Y" / "D"/"B" form.
+                const pedigree = (dog.sire || dog.dam)
+                  ? `Sire: ${dog.sire ? titleCase(dog.sire) : '—'}  Dam: ${dog.dam ? titleCase(dog.dam) : '—'}`
+                  : null;
                 const dobStr = dog.dateOfBirth
                   ? formatDobKC(dog.dateOfBirth)
                   : '';
-
-                // Detail line: sex, DOB, breeding
                 const detailParts = [
-                  sexLabel,
-                  dobStr,
-                  pedigree
-                    ? `br ${dog.breeder ?? 'unknown'}`
-                    : dog.breeder
-                      ? `br ${dog.breeder}`
-                      : null,
+                  dobStr ? `DOB ${dobStr}` : null,
+                  dog.sex === 'dog' ? 'Dog' : dog.sex === 'bitch' ? 'Bitch' : null,
                   pedigree,
+                  dog.breeder ? `br ${titleCase(dog.breeder)}` : null,
                 ].filter(Boolean);
 
                 if (compact) {
