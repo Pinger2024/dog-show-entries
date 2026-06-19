@@ -250,6 +250,27 @@ export const styles = StyleSheet.create({
     color: C.textDark,
     flex: 1,
   },
+  // Write-in placement slot — a bold label followed by a ruled line (matching
+  // the Standard/Ringside catalogue, which Mandy prefers over trailing dots).
+  placementSlot: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    flex: 1,
+    marginRight: 6,
+  },
+  placementSlotLabel: {
+    fontFamily: 'Inter',
+    fontSize: 7,
+    fontWeight: 'bold',
+    color: C.textMedium,
+    marginRight: 3,
+  },
+  placementSlotLine: {
+    flex: 1,
+    borderBottomWidth: 0.5,
+    borderBottomColor: C.textDark,
+    height: 10,
+  },
 
   // ── Absentee table ───────────────────────────
   absenteeRow: {

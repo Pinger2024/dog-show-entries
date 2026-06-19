@@ -20,7 +20,8 @@ import { isShowDayReached } from '@/lib/date-utils';
 import { padPdfToMultiple } from '@/lib/pdf-pad';
 import { ensureCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
-import { buildClassLabelMap } from '@/lib/class-labels';
+import { buildClassLabelMap, buildCatalogueClassDefinitions } from '@/lib/class-labels';
+import { buildScheduleJudges, aggregateJudgeAssignments } from '@/lib/schedule-judges';
 import { redactWithheldOwnerAddresses } from '@/lib/catalogue-privacy';
 
 export async function GET(
@@ -171,62 +172,37 @@ export async function GET(
   // would skip them entirely and the catalogue wouldn't show any judges
   // page at all. Collect bios/photos/labels for ALL named judges so the
   // single-breed branch of JudgesListPage can render them.
-  const seenJudgeKeys = new Set<string>();
-  const judgeDisplayList: string[] = [];
+  // Bios, photos and breed-keyed ring numbers for the judges page — keyed by
+  // judge name so a judge doing both sexes doesn't double-render.
   for (const ja of judgeAssignmentRows) {
     if (!ja.judge?.name) continue;
-    // Bios and photos always — keyed by judge name so the same judge
-    // assigned to both dogs and bitches doesn't double-render.
-    if (ja.judge.bio && !judgeBios[ja.judge.name]) {
-      judgeBios[ja.judge.name] = ja.judge.bio;
-    }
-    if (ja.judge.photoUrl && !judgePhotos[ja.judge.name]) {
-      judgePhotos[ja.judge.name] = ja.judge.photoUrl;
-    }
-    // Build the sex-annotated display label, deduped by name+sex.
-    const sexKey = `${ja.judge.name}::${ja.sex ?? 'all'}`;
-    if (!seenJudgeKeys.has(sexKey)) {
-      seenJudgeKeys.add(sexKey);
-      let label: string;
-      if (ja.isSpecialAwardsClassesJudge) {
-        // A SAC judge row is shape-identical to a JH row (no breed, sex null),
-        // so label it explicitly — otherwise the isJH heuristic below
-        // mislabels it 'Junior Handling' on the customer-facing catalogue.
-        label = `Special Awards Classes — ${ja.judge.name}`;
-      } else {
-        const isJH = !ja.breed && ja.sex === null;
-        const prefix = isJH
-          ? 'Junior Handling'
-          : ja.sex === 'dog'
-          ? 'Dogs'
-          : ja.sex === 'bitch'
-          ? 'Bitches'
-          : null;
-        label = prefix ? `${prefix} — ${ja.judge.name}` : ja.judge.name;
-      }
-      judgeDisplayList.push(label);
-    }
-    // Breed-keyed entries (multi-breed shows) and ring numbers.
+    if (ja.judge.bio && !judgeBios[ja.judge.name]) judgeBios[ja.judge.name] = ja.judge.bio;
+    if (ja.judge.photoUrl && !judgePhotos[ja.judge.name]) judgePhotos[ja.judge.name] = ja.judge.photoUrl;
     if (ja.breed?.name) {
       judgesByBreedName[ja.breed.name] = ja.judge.name;
-      if (ja.ring?.number) {
-        judgeRingNumbers[ja.breed.name] = String(ja.ring.number);
-      }
+      if (ja.ring?.number) judgeRingNumbers[ja.breed.name] = String(ja.ring.number);
     }
   }
 
-  // Deduplicate class definitions for front matter
-  const seenDefIds = new Set<string>();
-  const classDefinitions: { name: string; description: string | null }[] = [];
-  for (const sc of showClassRows) {
-    if (sc.classDefinition && !seenDefIds.has(sc.classDefinition.id)) {
-      seenDefIds.add(sc.classDefinition.id);
-      classDefinitions.push({
-        name: sc.classDefinition.name,
-        description: sc.classDefinition.description,
-      });
-    }
-  }
+  // Sex-annotated judge labels — the SAME aggregator + resolver the print
+  // pipeline and the schedule use, so a judge doing dogs AND bitches reads
+  // "Dogs & Bitches — Name" on one line everywhere (Michael 2026-06-19).
+  const { entries: catJudgeEntries, specialAwardsJudges: catSpecialAwardsJudges } =
+    aggregateJudgeAssignments(judgeAssignmentRows);
+  const catHasJuniorHandlerClasses = showClassRows.some(
+    (sc) => sc.classDefinition?.type === 'junior_handler',
+  );
+  const judgeDisplayList = buildScheduleJudges(
+    catJudgeEntries.values(),
+    catSpecialAwardsJudges,
+    catHasJuniorHandlerClasses,
+  )
+    .map((j) => j.displayLabel)
+    .filter((label): label is string => !!label);
+
+  // Definitions of Classes — deduped, Junior Handling floated to the END (after
+  // Veteran). Shared with the print pipeline so the page can't drift.
+  const classDefinitions = buildCatalogueClassDefinitions(showClassRows);
 
   const classLabelMap = buildClassLabelMap(showClassRows);
 

@@ -184,6 +184,42 @@ export function buildClassLabelMap(classes: ClassLike[]): Map<string, string> {
 }
 
 /**
+ * Build the deduplicated Definitions-of-Classes list for the catalogue front
+ * matter, with Junior Handling floated to the END (after Veteran) — Mandy
+ * 2026-06-16. Shared by both catalogue render paths (HTTP route + print
+ * pipeline) so the Definitions page can't drift between them (Michael
+ * 2026-06-19). Stable: keeps insertion order within each group.
+ */
+export function buildCatalogueClassDefinitions(
+  classes: Iterable<{
+    classDefinition?: {
+      id?: string | null;
+      name?: string | null;
+      description?: string | null;
+      type?: string | null;
+    } | null;
+  }>,
+): { name: string; description: string | null }[] {
+  const seen = new Set<string>();
+  const defs: { name: string; description: string | null; isJh: boolean }[] = [];
+  for (const sc of classes) {
+    const cd = sc.classDefinition;
+    if (cd?.id && !seen.has(cd.id)) {
+      seen.add(cd.id);
+      defs.push({
+        name: cd.name ?? '',
+        description: cd.description ?? null,
+        isJh: cd.type === 'junior_handler',
+      });
+    }
+  }
+  return defs
+    .map((d, i) => ({ d, i }))
+    .sort((a, b) => (a.d.isJh === b.d.isJh ? a.i - b.i : a.d.isJh ? 1 : -1))
+    .map(({ d }) => ({ name: d.name, description: d.description }));
+}
+
+/**
  * Pull the label for a single class out of a pre-computed map, falling
  * back to the raw `classNumber` when no map entry exists (e.g. a class
  * the map doesn't know about, or a context that didn't build a map).

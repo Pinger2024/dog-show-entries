@@ -2,7 +2,7 @@ import { Document, Page, View, Text, Image } from '@react-pdf/renderer';
 import { styles } from './catalogue-styles';
 import { CatalogueHeader } from './catalogue-header';
 import type { CatalogueEntry, CatalogueShowInfo, ClassSponsorshipInfo } from './catalogue-types';
-import { formatDobKC, titleCase, formatOwnerKC, formatRkcOwnerHeading, uppercaseName, buildSponsorLines } from './catalogue-utils';
+import { formatDobKC, titleCase, formatOwnerKC, formatRkcOwnerHeading, uppercaseName, buildSponsorLines, isJuniorHandlingClass, formatPedigreeSireDam } from './catalogue-utils';
 import { CoverPage, FrontMatterPage, TrophiesPage, ExhibitorIndexPage, BestsWriteInPage, NotForCompetitionPage } from './catalogue-front-matter';
 import {
   SvAcknowledgementsPage,
@@ -105,8 +105,8 @@ const svPlacings = {
   wrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginTop: 5,
-    paddingTop: 4,
+    marginTop: 9,
+    paddingTop: 7,
     borderTopWidth: 0.5,
     borderTopColor: SV.rule,
   } as const,
@@ -115,7 +115,8 @@ const svPlacings = {
     alignItems: 'baseline',
     width: '33%',
     paddingRight: 6,
-    marginBottom: 3,
+    // Roomier rows — the write-in slots were cramped (Michael 2026-06-19).
+    marginBottom: 9,
   } as const,
   ordinal: {
     fontFamily: SV_FONTS.sans,
@@ -384,7 +385,20 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
 
   // Sort: numbered classes first (by classNumber), then unnumbered (JH etc)
   // by classLabel, then sortOrder, then alphabetically for stability.
+  // Junior Handling is a separate competition and always sits at the very end
+  // of the class body — after every breed class, Veteran included — to match
+  // the Standard catalogue (which lists JH as its own section). Uses the shared
+  // isJuniorHandlingClass predicate so the two catalogues agree. The demo show
+  // happened to schedule JHA mid-list; this keeps the breed classes in their
+  // scheduled order and just floats JH last (Michael 2026-06-19). No-op for
+  // shows that already schedule JH last (e.g. BAGSD). Flag precomputed once per
+  // class rather than re-deriving inside the O(n log n) comparator.
+  const jhFlag: Record<string, 0 | 1> = {};
+  for (const key of Object.keys(grouped)) {
+    jhFlag[key] = isJuniorHandlingClass(grouped[key].className, grouped[key].sex) ? 1 : 0;
+  }
   const classKeys = Object.keys(grouped).sort((a, b) => {
+    if (jhFlag[a] !== jhFlag[b]) return jhFlag[a] - jhFlag[b];
     const aNum = grouped[a].classNumber;
     const bNum = grouped[b].classNumber;
     if (aNum != null && bNum != null) return aNum - bNum;
@@ -531,12 +545,9 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
               </View>
             );
           }
-          // Pedigree as "Sire: <sire>  Dam: <dam>" (Mandy 2026-06-16, replacing
-          // the older "By <sire> ex <dam>" / interim "S: x D:" form). titleCase
-          // normalises whatever casing the exhibitor typed in.
-          const pedigree = (entry.sire || entry.dam)
-            ? `Sire: ${entry.sire ? titleCase(entry.sire) : '—'}  Dam: ${entry.dam ? titleCase(entry.dam) : '—'}`
-            : null;
+          // Pedigree as "Sire: <sire>  Dam: <dam>" (Mandy 2026-06-16) — shared
+          // with the Standard catalogue so the two can't drift on wording.
+          const pedigree = formatPedigreeSireDam(entry.sire, entry.dam);
           // Registration number and colour are intentionally omitted from the
           // RKC by-class catalogue entry line (Amanda 2026-06-08). (SV/WUSV
           // catalogues keep them — see renderSvEntry, which is a separate path.)
@@ -713,11 +724,12 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
                   exhibit). */}
             {sorted.length > 0 && !isSvShow && (
               <View style={styles.placementsRow} wrap={false}>
-                <Text style={styles.placementsCell}>1st .....</Text>
-                <Text style={styles.placementsCell}>2nd .....</Text>
-                <Text style={styles.placementsCell}>3rd .....</Text>
-                <Text style={styles.placementsCell}>Res .....</Text>
-                <Text style={styles.placementsCell}>VHC .....</Text>
+                {['1st', '2nd', '3rd', 'Res', 'VHC'].map((lbl) => (
+                  <View key={lbl} style={styles.placementSlot}>
+                    <Text style={styles.placementSlotLabel}>{lbl}</Text>
+                    <View style={styles.placementSlotLine} />
+                  </View>
+                ))}
               </View>
             )}
             {sorted.length > 0 && isSvShow && renderSvPlacings(sorted.length)}
@@ -741,7 +753,7 @@ export function CatalogueByClass({ show, entries, compact }: Props) {
           write-in (results, straight after the last class) → Not For
           Competition list → exhibitor index. */}
       {!isSvShow && <BestsWriteInPage show={show} />}
-      {!isSvShow && <NotForCompetitionPage show={show} entries={entries} />}
+      {!isSvShow && <NotForCompetitionPage entries={entries} />}
       {!isSvShow && (
         <ExhibitorIndexPage show={show} entries={entries} compact={compact} />
       )}
