@@ -183,10 +183,50 @@ export function CatalogueOrderReport({
   return (
     <ReportShell
       info={info}
-      title="Catalogue Order"
+      title="Exhibitor List"
       columns={columns}
       rows={body}
       total={{ label: `${rows.length} entries`, value: '' }}
+    />
+  );
+}
+
+export type PrebookedCatalogueRow = {
+  name: string;
+  type: 'Printed' | 'Online';
+  quantity: number;
+  email: string | null;
+};
+
+export function PrebookedCataloguesReport({
+  info,
+  rows,
+}: {
+  info: ShowReportInfo;
+  rows: PrebookedCatalogueRow[];
+}) {
+  const columns: ReportColumn[] = [
+    { header: 'No.', width: 7, align: 'right' },
+    { header: 'Exhibitor', width: 33 },
+    { header: 'Type', width: 15 },
+    { header: 'Copies', width: 12, align: 'right' },
+    { header: 'Email', width: 33 },
+  ];
+  // Printed first (the club prints these), then online, each alphabetical.
+  const ordered = [...rows].sort(
+    (a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'Printed' ? -1 : 1),
+  );
+  const body = ordered.map((r, i) => [String(i + 1), r.name, r.type, String(r.quantity), r.email ?? '']);
+  const printedCopies = rows.filter((r) => r.type === 'Printed').reduce((s, r) => s + r.quantity, 0);
+  const onlineCount = rows.filter((r) => r.type === 'Online').length;
+
+  return (
+    <ReportShell
+      info={info}
+      title="Pre-booked Catalogues"
+      columns={columns}
+      rows={body}
+      total={{ label: `${rows.length} orders`, value: `${printedCopies} printed · ${onlineCount} online` }}
     />
   );
 }

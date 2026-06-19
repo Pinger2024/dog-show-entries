@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/server/db';
-import { eq, asc } from 'drizzle-orm';
+import { eq, asc, and, ilike, inArray } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
 import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
 import React from 'react';
@@ -9,15 +9,18 @@ import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, makePdfResponse } from '@/lib/pdf-utils';
 import { ensureCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { buildClassLabelMap } from '@/lib/class-labels';
+import { CATALOGUE_NAME_PATTERN } from '@/lib/catalogue-utils';
 import {
   CatalogueOrderReport,
   ClassBreakdownReport,
+  PrebookedCataloguesReport,
   type ShowReportInfo,
   type CatalogueOrderRow,
   type ClassBreakdownRow,
+  type PrebookedCatalogueRow,
 } from '@/components/reports/show-report-pdf';
 
-const TYPES = ['catalogue-order', 'class-breakdown'] as const;
+const TYPES = ['catalogue-order', 'class-breakdown', 'catalogue-orders'] as const;
 type ReportType = (typeof TYPES)[number];
 
 export async function GET(
@@ -26,7 +29,7 @@ export async function GET(
 ) {
   const { showId, type } = await params;
   if (!TYPES.includes(type as ReportType)) {
-    return NextResponse.json({ error: 'Unknown report. Use catalogue-order or class-breakdown.' }, { status: 400 });
+    return NextResponse.json({ error: 'Unknown report. Use catalogue-order, class-breakdown or catalogue-orders.' }, { status: 400 });
   }
   if (!db) {
     return NextResponse.json({ error: 'Database not available' }, { status: 500 });
@@ -74,7 +77,40 @@ export async function GET(
   let element: React.ReactElement;
   let filenameSuffix: string;
 
-  if (type === 'catalogue-order') {
+  if (type === 'catalogue-orders') {
+    // Pre-booked catalogues: who has actually ordered/paid for a catalogue
+    // (printed or online), so the club knows how many to print + who to email.
+    const catalogueItems = await db
+      .select({ id: schema.sundryItems.id, name: schema.sundryItems.name })
+      .from(schema.sundryItems)
+      .where(and(eq(schema.sundryItems.showId, showId), ilike(schema.sundryItems.name, CATALOGUE_NAME_PATTERN)));
+    const rows: PrebookedCatalogueRow[] = [];
+    if (catalogueItems.length > 0) {
+      const ids = catalogueItems.map((i) => i.id);
+      const cats = await db
+        .select({
+          itemName: schema.sundryItems.name,
+          quantity: schema.orderSundryItems.quantity,
+          exhibitorName: schema.users.name,
+          exhibitorEmail: schema.users.email,
+        })
+        .from(schema.orderSundryItems)
+        .innerJoin(schema.sundryItems, eq(schema.orderSundryItems.sundryItemId, schema.sundryItems.id))
+        .innerJoin(schema.orders, eq(schema.orderSundryItems.orderId, schema.orders.id))
+        .innerJoin(schema.users, eq(schema.orders.exhibitorId, schema.users.id))
+        .where(and(inArray(schema.orderSundryItems.sundryItemId, ids), eq(schema.orders.status, 'paid')));
+      for (const o of cats) {
+        rows.push({
+          name: o.exhibitorName ?? '—',
+          type: o.itemName.toLowerCase().includes('print') ? 'Printed' : 'Online',
+          quantity: o.quantity,
+          email: o.exhibitorEmail ?? null,
+        });
+      }
+    }
+    element = React.createElement(PrebookedCataloguesReport, { info, rows });
+    filenameSuffix = 'Pre-booked-Catalogues';
+  } else if (type === 'catalogue-order') {
     const showBreed = show.showScope !== 'single_breed';
     const rows: CatalogueOrderRow[] = confirmed
       .slice()
@@ -98,7 +134,7 @@ export async function GET(
         };
       });
     element = React.createElement(CatalogueOrderReport, { info, rows, showBreed });
-    filenameSuffix = 'Catalogue-Order';
+    filenameSuffix = 'Exhibitor-List';
   } else {
     // class-breakdown: one row per class, in schedule order, with its count.
     const counts = new Map<string, number>();
