@@ -32,6 +32,8 @@ export type JudgesBookShowInfo = {
   showType: string;
   date: string;
   organisation: string | null;
+  /** Club/show logo for the front cover (club branding). */
+  logoUrl?: string | null;
   /** When this is a per-judge book, the judge it's for (shown on the cover). */
   judgeName?: string | null;
   /** Show-level best awards (BOB, CCs, Best Puppy in Show, etc.) that get
@@ -178,6 +180,7 @@ export async function GET(
     showType: show.showType,
     date: show.startDate,
     organisation: show.organisation?.name ?? null,
+    logoUrl: show.organisation?.logoUrl ?? null,
     bestAwards: hasBreedClasses ? bestAwards : [],
     judgeName: filterJudgeName,
   };
