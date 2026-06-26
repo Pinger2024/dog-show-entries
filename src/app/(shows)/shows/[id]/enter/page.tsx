@@ -1585,12 +1585,14 @@ export default function EnterShowPage() {
           {/* Add another */}
           {addDogsButtons}
 
-          {/* Sundry items (catalogues, memberships, donations, etc.) — shown BEFORE total */}
+          {/* Sundry items (catalogues, memberships, donations, etc.) — shown BEFORE total.
+              Wrapped in an accent panel so the add-ons (esp. the catalogue) aren't
+              missed in the entry flow (Mandy/Michael, 2026-06-25). */}
           {sundryItemsData && sundryItemsData.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold">Add-ons</h3>
-              <p className="text-xs text-muted-foreground">
-                Optional extras available for this show — catalogues, memberships, and more.
+            <div className="space-y-3 rounded-xl border-2 border-primary/40 bg-primary/5 p-4 shadow-sm">
+              <h3 className="text-base font-bold text-foreground">Add to your entry</h3>
+              <p className="-mt-1 text-xs text-muted-foreground">
+                Optional extras for this show — don&apos;t forget to pre-order your catalogue. You won&apos;t be able to add these after you&apos;ve paid.
               </p>
               {sundryItemsData.map((item) => {
                 const inCart = cart.sundryItems.find((s) => s.sundryItemId === item.id);
@@ -2135,59 +2137,98 @@ export default function EnterShowPage() {
             );
           })()}
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-            <Button asChild>
-              <Link href="/entries">View My Entries</Link>
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                cart.reset();
-                setHealthDeclared(false);
-                setTermsAccepted(false);
-                setClientSecret(null);
-                setOrderId(null);
-                cart.startNewEntry();
-              }}
-            >
-              Enter More Dogs
+          {/* Clear next-steps so exhibitors don't feel stranded after paying
+              (Michael, 2026-06-25). */}
+          <div className="mx-auto w-full max-w-md space-y-3 pt-2">
+            <p className="text-sm font-semibold">What would you like to do next?</p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+              <Button size="lg" className="min-h-[2.75rem]" asChild>
+                <Link href="/entries">View my entries</Link>
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                className="min-h-[2.75rem]"
+                onClick={() => {
+                  cart.reset();
+                  setHealthDeclared(false);
+                  setTermsAccepted(false);
+                  setClientSecret(null);
+                  setOrderId(null);
+                  cart.startNewEntry();
+                }}
+              >
+                Enter another dog
+              </Button>
+            </div>
+            <Button variant="ghost" size="sm" className="text-muted-foreground" asChild>
+              <Link href={`/shows/${show?.slug ?? idOrSlug}`}>Back to the show page</Link>
             </Button>
           </div>
 
-          {/* Catalogue purchase note */}
-          {cart.sundryItems.some((s) => isCatalogueItem(s.name)) && (
-            <Card className="mx-auto w-full max-w-md border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-900/20">
-              <CardContent className="py-4 text-center">
-                <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
-                  Online Catalogue Purchased
-                </p>
-                <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
-                  Your catalogue will be available at{' '}
-                  <Link
-                    href={`/shows/${show?.slug ?? idOrSlug}/catalogue`}
-                    className="underline font-medium"
-                  >
-                    this link
-                  </Link>{' '}
-                  once entries close.
-                </p>
-              </CardContent>
-            </Card>
-          )}
+          {/* Catalogue note + "what happens next" — adapt to whether a PRINTED
+              (collect on the day) or ONLINE catalogue was bought, and to which
+              add-ons were purchased (Michael, 2026-06-25). */}
+          {(() => {
+            const catalogueItems = cart.sundryItems.filter((s) => isCatalogueItem(s.name));
+            const hasCatalogue = catalogueItems.length > 0;
+            const catalogueIsOnline =
+              hasCatalogue &&
+              catalogueItems.some((s) => {
+                const full = sundryItemsData?.find((d) => d.id === s.sundryItemId);
+                return /\b(online|digital|pdf|download|e-?catalogue)\b/i.test(
+                  `${s.name} ${full?.description ?? ''}`
+                );
+              });
+            return (
+              <>
+                {hasCatalogue && (
+                  <Card className="mx-auto w-full max-w-md border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-900/20">
+                    <CardContent className="py-4 text-center">
+                      <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+                        {catalogueIsOnline ? 'Online catalogue purchased' : 'Catalogue pre-ordered'}
+                      </p>
+                      <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
+                        {catalogueIsOnline ? (
+                          <>
+                            Your catalogue will be available at{' '}
+                            <Link
+                              href={`/shows/${show?.slug ?? idOrSlug}/catalogue`}
+                              className="font-medium underline"
+                            >
+                              this link
+                            </Link>{' '}
+                            once entries close.
+                          </>
+                        ) : (
+                          <>Collect your printed catalogue from the secretary&apos;s table on the day.</>
+                        )}
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
 
-          <Accordion type="single" collapsible className="mx-auto w-full max-w-md text-left">
-            <AccordionItem value="what-next">
-              <AccordionTrigger className="justify-center gap-2 text-sm font-medium text-muted-foreground">
-                <Info className="size-4 shrink-0" />
-                What happens next?
-              </AccordionTrigger>
-              <AccordionContent className="space-y-2 text-sm text-muted-foreground">
-                <p>You&apos;ll receive a confirmation email shortly with your entry details.</p>
-                <p>Ring numbers and catalogue details will be emailed to you before the show.</p>
-                <p>Bring your entry confirmation on show day.</p>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
+                <Accordion type="single" collapsible className="mx-auto w-full max-w-md text-left">
+                  <AccordionItem value="what-next">
+                    <AccordionTrigger className="justify-center gap-2 text-sm font-medium text-muted-foreground">
+                      <Info className="size-4 shrink-0" />
+                      What happens next?
+                    </AccordionTrigger>
+                    <AccordionContent className="space-y-2 text-sm text-muted-foreground">
+                      <p>You&apos;ll receive a confirmation email shortly with your entry details.</p>
+                      {hasCatalogue &&
+                        (catalogueIsOnline ? (
+                          <p>Your online catalogue link will be emailed once entries close.</p>
+                        ) : (
+                          <p>Collect your printed catalogue at the show on the day.</p>
+                        ))}
+                      <p>Bring your entry confirmation on show day.</p>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+              </>
+            );
+          })()}
         </div>
       )}
     </div>

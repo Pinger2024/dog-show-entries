@@ -434,6 +434,25 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
         toast.error('Please add at least one owner');
         return;
       }
+      // Pedigree (sire + dam + breeder) is mandatory — a catalogue can't be
+      // produced with this missing (Michael 2026-06-25; breeder added 2026-06-26).
+      let pedigreeMissing = false;
+      if (!data.sireName || !data.sireName.trim()) {
+        form.setError('sireName', { type: 'manual', message: "The sire's name is required" });
+        pedigreeMissing = true;
+      }
+      if (!data.damName || !data.damName.trim()) {
+        form.setError('damName', { type: 'manual', message: "The dam's name is required" });
+        pedigreeMissing = true;
+      }
+      if (!data.breederName || !data.breederName.trim()) {
+        form.setError('breederName', { type: 'manual', message: "The breeder's name is required" });
+        pedigreeMissing = true;
+      }
+      if (pedigreeMissing) {
+        toast.error('Please add the sire, dam and breeder — they appear in the catalogue');
+        return;
+      }
       createDog.mutate(data);
     } else if (dogId) {
       const { owners: _owners, ...dogFields } = data;
