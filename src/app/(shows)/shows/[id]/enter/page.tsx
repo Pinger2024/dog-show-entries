@@ -1321,7 +1321,7 @@ export default function EnterShowPage() {
                     size="sm"
                     className="mt-2 h-9 border-amber-400 bg-white text-amber-900 hover:bg-amber-100"
                   >
-                    <Link href={`/dogs/${cart.activeEntry.dogId}/edit`}>
+                    <Link href={`/dogs/${cart.activeEntry.dogId}/edit?returnTo=${encodeURIComponent(`/shows/${idOrSlug}/enter`)}`}>
                       Complete {cart.activeEntry.dogName ?? 'this dog'}&apos;s profile
                     </Link>
                   </Button>

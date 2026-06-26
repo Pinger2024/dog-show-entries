@@ -125,9 +125,14 @@ interface DogFormProps {
    *  German-Shepherd-specific data together as one visual block). Only
    *  rendered when the selected breed matches German Shepherd. */
   svSection?: React.ReactNode;
+  /** Where to go after a successful save. Used when the exhibitor came from an
+   *  entry to fill in mandatory info — send them straight back to that show's
+   *  entry instead of the dog profile (Mandy 2026-06-26). Internal paths only. */
+  returnTo?: string;
 }
 
-export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps) {
+export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: DogFormProps) {
+  const safeReturnTo = returnTo && returnTo.startsWith('/shows/') ? returnTo : null;
   const router = useRouter();
   const [breedOpen, setBreedOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -167,9 +172,11 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
       utils.dogs.list.invalidate();
       if (dogId) utils.dogs.getById.invalidate({ id: dogId });
       toast.success('Dog updated successfully!', {
-        description: 'Your changes have been saved.',
+        description: safeReturnTo
+          ? 'Taking you back to your entry…'
+          : 'Your changes have been saved.',
       });
-      router.push(`/dogs/${dogId}`);
+      router.push(safeReturnTo ?? `/dogs/${dogId}`);
     },
     onError: (error) => {
       toast.error('Something went wrong', {
