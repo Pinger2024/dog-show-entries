@@ -155,6 +155,23 @@ export default function EnterShowPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Safety net (Mandy 2026-06-26): if we ever land on a per-entry step with no
+  // active entry — a stale/cleared activeEntryId after navigation, a removed
+  // entry, or a dev hot-reload mid-flow — recover to the type chooser with a
+  // fresh entry. Without this the page renders the wrong branch ("Choose
+  // classes for the handler") with EVERY class, because no selected dog means
+  // no sex/coat filter.
+  useEffect(() => {
+    const needsActiveEntry =
+      cart.step === 'select_dog' ||
+      cart.step === 'select_classes' ||
+      cart.step === 'junior_handler';
+    if (needsActiveEntry && !cart.activeEntry) {
+      cart.startNewEntry();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cart.step, cart.activeEntry]);
+
   // After a Stripe redirect (3-D Secure / bank auth) the return URL carries
   // payment_intent / redirect_status params. loadSavedState has already used
   // them to restore the cart at the confirmation (or review) step; strip them
