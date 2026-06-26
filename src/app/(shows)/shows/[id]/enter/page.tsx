@@ -33,6 +33,7 @@ import {
 import { differenceInMonths, differenceInWeeks, format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { isWithinAgeRange, isAgeEligibleOnShowDay, handlerAgeYearsOnDate, formatCurrency } from '@/lib/date-utils';
+import { svWorkingClassAllowed, svMissingRequirements, hasWorkingTitle } from '@/lib/sv-entry-readiness';
 import { trpc } from '@/lib/trpc/client';
 import { formatDogName } from '@/lib/utils';
 import { readReferralSource } from '@/lib/referral-source';
@@ -444,14 +445,23 @@ export default function EnterShowPage() {
     const byCanonicalOrder = (a: (typeof eligible)[0], b: (typeof eligible)[0]) =>
       (a.classDefinition.sortOrder ?? 0) - (b.classDefinition.sortOrder ?? 0);
 
+    // SV: the Working class (Gebrauchshundklasse) is only for dogs with a
+    // working title — an adult without one enters Adult instead (Mandy
+    // 2026-06-26). Hide it so the exhibitor can't pick a class they aren't
+    // eligible for.
+    const dogHasWorkingTitle = hasWorkingTitle(selectedDogSvProfile?.workingTitle);
+
     return {
       age: eligible.filter((sc) => sc.classDefinition.type === 'age').sort(byCanonicalOrder),
       achievement: eligible.filter((sc) => sc.classDefinition.type === 'achievement').sort(byCanonicalOrder),
       special: eligible.filter((sc) => sc.classDefinition.type === 'special').sort(byCanonicalOrder),
       junior_handler: eligible.filter((sc) => sc.classDefinition.type === 'junior_handler').sort(byCanonicalOrder),
-      sv_age: eligible.filter((sc) => sc.classDefinition.type === 'sv_age').sort(byCanonicalOrder),
+      sv_age: eligible
+        .filter((sc) => sc.classDefinition.type === 'sv_age')
+        .filter((sc) => svWorkingClassAllowed(sc.classDefinition.name, dogHasWorkingTitle))
+        .sort(byCanonicalOrder),
     };
-  }, [showClasses, selectedDogSex, selectedDog?.breed?.name, selectedDog?.coatType]);
+  }, [showClasses, selectedDogSex, selectedDog?.breed?.name, selectedDog?.coatType, selectedDogSvProfile?.workingTitle]);
 
   // Filter classes by entry type (and by handler age for JH entries)
   const availableClasses = useMemo(() => {
@@ -1214,16 +1224,34 @@ export default function EnterShowPage() {
           show?.showRuleset === 'wusv' &&
           cart.activeEntry?.entryType === 'standard' &&
           selectedSvHealthClasses.length > 0;
-        const svHealthMissing: string[] = (() => {
-          if (!svHealthRequired) return [];
-          const profile = selectedDogSvProfile;
-          const missing: string[] = [];
-          const isEmpty = (v: string | null | undefined) => !v || v === 'not_required';
-          if (isEmpty(profile?.hipGrade ?? null)) missing.push('hip score');
-          if (isEmpty(profile?.elbowGrade ?? null)) missing.push('elbow score');
-          if (!profile?.dna) missing.push('DNA recording');
-          return missing;
-        })();
+        // One consolidated SV readiness check (Mandy 2026-06-26): coat type +
+        // health gathered into a SINGLE list, surfaced as one warning that
+        // blocks the entry until everything for the dog's age/class is complete
+        // — no more separate warnings the exhibitor has to scroll between.
+        const svStandard =
+          show?.showRuleset === 'wusv' && cart.activeEntry?.entryType === 'standard';
+        const svMissing =
+          svStandard && !isNfc
+            ? svMissingRequirements({
+                coatType: selectedDog?.coatType,
+                healthRequired: svHealthRequired,
+                profile: selectedDogSvProfile,
+                pedigree: selectedDog
+                  ? {
+                      sireName: selectedDog.sireName,
+                      sireRegistrationNumber: selectedDog.sireRegistrationNumber,
+                      damName: selectedDog.damName,
+                      damRegistrationNumber: selectedDog.damRegistrationNumber,
+                      breederName: selectedDog.breederName,
+                      breederCity: selectedDog.breederCity,
+                      breederPostcode: selectedDog.breederPostcode,
+                    }
+                  : undefined,
+              })
+            : [];
+        const svNoWorkingTitle =
+          svStandard && !hasWorkingTitle(selectedDogSvProfile?.workingTitle);
+        const svBlocked = svMissing.length > 0;
 
         return (
         <div className="space-y-6">
@@ -1249,22 +1277,26 @@ export default function EnterShowPage() {
             </div>
           )}
 
-          {svHealthMissing.length > 0 && (
+          {/* One consolidated SV readiness warning (Mandy 2026-06-26): coat
+              type + health tests in a single block at the top, with the entry
+              blocked until they're done — replaces the separate coat and health
+              warnings that used to sit in different places on the page. */}
+          {svStandard && svMissing.length > 0 && (
             <div className="flex gap-3 rounded-lg border border-amber-400 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950">
               <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
               <div className="text-sm text-amber-900 dark:text-amber-100">
                 <p className="font-medium">
-                  Health data required for{' '}
-                  {selectedSvHealthClasses
-                    .map((sc) => sc.classDefinition!.name)
-                    .join(', ')}
+                  {selectedDog?.registeredName ?? 'This dog'} isn&apos;t ready to enter yet
                 </p>
                 <p className="mt-0.5 text-xs">
-                  SV/WUSV rules require this dog to have a recorded{' '}
-                  <strong>{svHealthMissing.join(', ')}</strong> before it can be
-                  entered into these classes. Add the details on the dog&apos;s
-                  profile, then come back to complete your entry.
+                  SV/WUSV rules need the following recorded on this dog&apos;s
+                  profile before it can be entered:
                 </p>
+                <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs">
+                  {svMissing.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
                 {cart.activeEntry?.dogId && (
                   <Button
                     asChild
@@ -1273,7 +1305,7 @@ export default function EnterShowPage() {
                     className="mt-2 h-9 border-amber-400 bg-white text-amber-900 hover:bg-amber-100"
                   >
                     <Link href={`/dogs/${cart.activeEntry.dogId}/edit`}>
-                      Add health data to {cart.activeEntry.dogName ?? 'this dog'}
+                      Complete {cart.activeEntry.dogName ?? 'this dog'}&apos;s profile
                     </Link>
                   </Button>
                 )}
@@ -1304,16 +1336,16 @@ export default function EnterShowPage() {
                   )}
                   {groupedClasses.sv_age.length > 0 && (
                     <>
-                      {/* SV shows: warn when the dog has no coat type set
-                          on its profile — without it we can't auto-filter
-                          to the correct Standard/Long Coat class and the
-                          exhibitor sees the list duplicated. Amanda
-                          2026-05-20. */}
-                      {show?.showRuleset === 'wusv' && !selectedDog?.coatType && (
-                        <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
-                          <Info className="mt-0.5 size-4 shrink-0 text-amber-600" />
-                          <p className="text-sm text-amber-800 dark:text-amber-200">
-                            <span className="font-medium">{selectedDog?.registeredName ?? 'This dog'}</span> doesn&apos;t have a coat type set on the profile yet. Both Standard Coat and Long Coat classes are showing — pick the correct one, or set the coat type on the dog&apos;s profile so we can filter automatically.
+                      {/* Coat type now lives in the consolidated readiness
+                          warning at the top. Here we only explain the absent
+                          Working class for a dog with no working title (it's
+                          filtered out of the list above). Mandy 2026-06-26. */}
+                      {svNoWorkingTitle && (
+                        <div className="flex gap-3 rounded-lg border bg-muted/40 p-3">
+                          <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                          <p className="text-xs text-muted-foreground">
+                            The <span className="font-medium">Working</span> class isn&apos;t shown — it needs a working title recorded on{' '}
+                            <span className="font-medium">{selectedDog?.registeredName ?? 'this dog'}</span>&apos;s profile. Without one, this dog enters the Adult class.
                           </p>
                         </div>
                       )}
@@ -1453,7 +1485,7 @@ export default function EnterShowPage() {
                   disabled={
                     (selectedClassIds.length === 0 && !isNfc) ||
                     (dogUnder6Months && !isNfc) ||
-                    svHealthMissing.length > 0
+                    svBlocked
                   }
                 >
                   {cart.editingExisting ? 'Update' : 'Add to Cart'}
