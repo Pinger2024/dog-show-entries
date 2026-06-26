@@ -20,6 +20,7 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import type { AchievementType } from '@/lib/placements';
+import { resolveTopAwards, buildPlacementIndex, eligibleCandidates } from '@/lib/top-awards';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -205,6 +206,10 @@ export default function StewardShowPage({
           showDate={showData.startDate}
           showType={showData.showType}
           showRuleset={(showData as { showRuleset?: string }).showRuleset}
+          customAwards={
+            (showData as { scheduleData?: { bestAwards?: string[] } | null })
+              .scheduleData?.bestAwards ?? []
+          }
           liveResults={liveResults}
           existingAchievements={existingAchievements ?? []}
         />
@@ -286,6 +291,7 @@ interface BestOfBreedSectionProps {
   showDate: string;
   showType: string;
   showRuleset?: string;
+  customAwards?: string[];
   liveResults?: {
     breedGroups: {
       breedName: string;
@@ -317,6 +323,7 @@ function BestOfBreedSection({
   showDate,
   showType,
   showRuleset,
+  customAwards,
   liveResults,
   existingAchievements,
 }: BestOfBreedSectionProps) {
@@ -511,6 +518,67 @@ function BestOfBreedSection({
   }
 
   if (classWinnersByBreed.size === 0) return null;
+
+  // ── Single-breed RKC shows: config-driven Top Awards (#98) ──────────
+  // The hard-coded BoB/CC/BIS arrays don't fit clubs (like BAGSD) that award
+  // Best Dog/Bitch + reserves instead of CCs, and the show-level block used to
+  // be hidden for single-breed shows. Drive the recordable awards off the show's
+  // OWN configured Best Awards list so it always matches what the show actually
+  // gives — and flows to the results page + public + dog profiles.
+  if (!isWusv && classWinnersByBreed.size === 1) {
+    const topAwards = resolveTopAwards(showType, customAwards);
+    if (topAwards.length === 0) return null;
+
+    // Eligibility (#98 — the RKC "beaten" rule) runs through the shared engine
+    // in lib/top-awards so the steward and secretary surfaces provably agree.
+    type Cand = { dogId: string; dogName: string; sex: string | null; exhibitorName: string; catalogueNumber: string | null };
+    const dogInfo = new Map<string, Cand>();
+    for (const cls of liveResults?.breedGroups[0]?.classes ?? []) {
+      for (const r of cls.results) {
+        if (!r.dogId || r.placement == null || dogInfo.has(r.dogId)) continue;
+        dogInfo.set(r.dogId, {
+          dogId: r.dogId, dogName: r.dogName, sex: r.dogSex ?? null,
+          exhibitorName: r.exhibitorName, catalogueNumber: r.catalogueNumber,
+        });
+      }
+    }
+    const placedDogs = Array.from(dogInfo.values());
+    const index = buildPlacementIndex(
+      (liveResults?.breedGroups[0]?.classes ?? []).map((cls) => ({
+        key: cls.className,
+        className: cls.className,
+        results: cls.results,
+      })),
+    );
+    return (
+      <div className="mt-6 sm:mt-8 space-y-4">
+        <div className="flex items-center gap-2">
+          <Trophy className="size-5 text-amber-500" />
+          <h2 className="text-sm sm:text-base font-semibold">Top Awards</h2>
+        </div>
+        <div className="rounded-lg border p-3 sm:p-4 space-y-3">
+          {topAwards.map((award) => {
+            const candidates = eligibleCandidates(award, placedDogs, index);
+            const existing = existingAchievements.find((a) => a.type === award.type);
+            return (
+              <AwardSelect
+                key={award.type}
+                label={award.name}
+                type={award.type}
+                existingDogId={existing?.dogId}
+                isPublished={!!existing?.publishedAt}
+                candidates={candidates}
+                onRecord={(dogId, type) => recordAchievement.mutate({ showId, dogId, type, date: showDate })}
+                onRemove={(dogId, type) => removeAchievement.mutate({ showId, dogId, type })}
+                onPublish={(dogId, type) => publishAchievement.mutate({ showId, dogId, type })}
+                onUnpublish={(dogId, type) => unpublishAchievement.mutate({ showId, dogId, type })}
+              />
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mt-6 sm:mt-8 space-y-6">

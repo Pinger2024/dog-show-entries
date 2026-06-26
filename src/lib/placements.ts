@@ -55,6 +55,10 @@ export const ACHIEVEMENT_TYPES = [
   'most_promising_young_bitch',
   'best_dog',
   'best_bitch',
+  // Reserve Best Dog/Bitch — non-CC shows (and some breed clubs like BAGSD)
+  // award "Best Dog/Bitch" + a reserve instead of CCs. Appended 2026-06-26.
+  'reserve_best_dog',
+  'reserve_best_bitch',
 ] as const;
 
 export type AchievementType = typeof ACHIEVEMENT_TYPES[number];
@@ -154,6 +158,8 @@ export const achievementLabels: Record<string, string> = {
   most_promising_young_bitch: 'Most Promising Young Bitch',
   best_dog: 'Best Dog',
   best_bitch: 'Best Bitch',
+  reserve_best_dog: 'Reserve Best Dog',
+  reserve_best_bitch: 'Reserve Best Bitch',
 };
 
 export const placementColors: Record<number, string> = {

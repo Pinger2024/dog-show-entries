@@ -28,6 +28,7 @@ import {
   achievementLabels,
   type AchievementType,
 } from '@/lib/placements';
+import { resolveTopAwards, buildPlacementIndex, eligibleCandidates } from '@/lib/top-awards';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -246,6 +247,7 @@ function BestAwardsSection({
   showId,
   showDate,
   showType,
+  customAwards,
   confirmedDogs,
   existingAchievements,
   classResults,
@@ -253,6 +255,7 @@ function BestAwardsSection({
   showId: string;
   showDate: string;
   showType: string;
+  customAwards?: string[];
   classResults?: { breedName: string; classes: { className: string; sex: string | null; results: { dogId: string | null; placement: number | null }[] }[] }[];
   confirmedDogs: {
     dogId: string;
@@ -362,6 +365,55 @@ function BestAwardsSection({
 
       {expanded && (
         <div className="space-y-4 border-t border-amber-200 p-3 sm:p-4">
+          {/* Single-breed shows (#98): drive the recordable Top Awards off the
+              show's OWN configured Best Awards list — matches what the show
+              actually gives (BAGSD: Best Dog/Bitch + reserves + Best Puppy in
+              Show + Best Long Coat in Show, not CCs). */}
+          {breedNames.length === 1 && (() => {
+            const topAwards = resolveTopAwards(showType, customAwards);
+            if (topAwards.length === 0) return null;
+
+            // Eligibility (#98 — the RKC "beaten" rule) runs through the shared
+            // engine in lib/top-awards so this page and the steward ringside page
+            // provably agree. A dog is eligible unless an in-category rival (same
+            // sex / age band) beat it in a shared class; reserve awards keep the
+            // runners-up. A puppy 4th in Junior behind ADULTS stays eligible
+            // (adults aren't puppies); two puppies who each beat the other across
+            // Minor Puppy/Puppy are both out (neither is unbeaten by a puppy).
+            const index = buildPlacementIndex(
+              (classResults ?? []).flatMap((g) =>
+                g.classes.map((c) => ({
+                  key: `${g.breedName}|${c.className}`,
+                  className: c.className,
+                  results: c.results,
+                })),
+              ),
+            );
+
+            return (
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-amber-700">
+                  Top Awards
+                </h4>
+                {topAwards.map((award) => {
+                  const candidates = eligibleCandidates(award, confirmedDogs, index);
+                  return (
+                    <AwardRow
+                      key={award.type}
+                      label={award.name}
+                      type={award.type}
+                      existing={getExisting(award.type)}
+                      candidates={candidates}
+                      isPending={isPending}
+                      onSelect={(dogId) => handleAwardChange(award.type, dogId)}
+                    />
+                  );
+                })}
+              </div>
+            );
+          })()}
+          {breedNames.length > 1 && (
+          <>
           {/* Show-level awards — candidates cascade from breed-level achievements */}
           <div className="space-y-2">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-amber-700">
@@ -447,6 +499,8 @@ function BestAwardsSection({
               </div>
             );
           })}
+          </>
+          )}
         </div>
       )}
     </div>
@@ -606,10 +660,11 @@ export default function SecretaryResultsPage() {
   const total = summary?.totalClasses ?? 0;
   const progress = total > 0 ? Math.round((judged / total) * 100) : 0;
 
-  const showLevelTypes = ['best_in_show', 'reserve_best_in_show', 'best_puppy_in_show', 'best_long_coat_in_show'];
+  const showLevelTypes = ['best_in_show', 'reserve_best_in_show', 'best_puppy_in_show', 'best_veteran_in_show', 'reserve_best_veteran_in_show', 'best_long_coat_in_show'];
   const breedLevelTypes = [
     'best_of_breed', 'best_puppy_in_breed', 'best_veteran_in_breed',
     'dog_cc', 'reserve_dog_cc', 'bitch_cc', 'reserve_bitch_cc',
+    'best_dog', 'best_bitch', 'reserve_best_dog', 'reserve_best_bitch',
     'best_puppy_dog', 'best_puppy_bitch',
     'best_long_coat_dog', 'best_long_coat_bitch',
     'cc', 'reserve_cc',
@@ -830,6 +885,10 @@ export default function SecretaryResultsPage() {
           showId={showId}
           showDate={showData.startDate}
           showType={showData.showType}
+          customAwards={
+            (showData as { scheduleData?: { bestAwards?: string[] } | null })
+              .scheduleData?.bestAwards ?? []
+          }
           confirmedDogs={confirmedDogs}
           existingAchievements={secAchievements ?? []}
           classResults={breedGroups}
