@@ -27,6 +27,54 @@ import { createPaymentIntent } from '@/server/services/stripe';
 import { generateAndUploadForPrint } from '@/server/services/pdf-generation';
 import { computeShowMetrics } from '@/server/services/show-metrics';
 
+type OrderItemForProof = {
+  id: string;
+  documentType: Parameters<typeof generateAndUploadForPrint>[1];
+  documentFormat: string | null;
+  documentLabel: string;
+};
+
+/**
+ * Generate + upload a proof PDF for each order item before taking payment.
+ *
+ * The catalogue is the core printed product, so a generation failure there is
+ * fatal — we don't want to charge for an order we can't fulfil. The bundled
+ * sundries (prize cards, ring numbers, ring boards) are prepared by hand at
+ * fulfilment and may not be generatable yet — e.g. ring numbers need catalogue
+ * numbers, which aren't assigned until the show is numbered — so those are
+ * deferred rather than blocking payment. A deferred item keeps its place on the
+ * order (and the pack list) but with no proof PDF yet — fine for today's manual
+ * fulfilment (the admin order email flags it as pending and the asset is produced
+ * at fulfilment). NOTE: nothing re-runs generation automatically once the order
+ * is paid, so a deferred PDF must be produced out-of-band (regenerate path = TODO).
+ */
+async function generateOrderItemProofs(showId: string, items: OrderItemForProof[]) {
+  const results = await Promise.all(
+    items.map(async (item) => {
+      try {
+        const { storageKey, publicUrl } = await generateAndUploadForPrint(
+          showId,
+          item.documentType,
+          item.documentFormat ?? undefined,
+        );
+        return { itemId: item.id, storageKey, publicUrl };
+      } catch (err) {
+        console.error(`[print-orders] PDF generation failed for ${item.documentType}:`, err);
+        if (item.documentType === 'catalogue') {
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: `Failed to generate ${item.documentLabel} PDF`,
+          });
+        }
+        return null;
+      }
+    }),
+  );
+  return results.filter(
+    (r): r is { itemId: string; storageKey: string; publicUrl: string } => r !== null,
+  );
+}
+
 // ── Tradeprint status mapping ──
 
 type PrintOrderStatus = 'submitted' | 'in_production' | 'dispatched' | 'delivered';
@@ -121,6 +169,8 @@ export const printOrdersRouter = createTRPCRouter({
       const totalAmount = option.pricePence + fee;
       const catalogueProduct = getProductByType('catalogue');
       const prizeCardsProduct = getProductByType('prize_cards');
+      const ringNumbersProduct = getProductByType('ring_numbers');
+      const ringBoardProduct = getProductByType('ring_board');
 
       const [order] = await ctx.db
         .insert(printOrders)
@@ -142,6 +192,27 @@ export const printOrdersRouter = createTRPCRouter({
         })
         .returning();
 
+      // Sundry items (prize cards, ring numbers, ring boards) are bundled into
+      // the package price (lineTotal 0) and are prepared + posted by Mandy, not
+      // sent to Mixam. Quantities come from each product's suggestQuantity so the
+      // admin pack-list shows the right numbers — the old code hardcoded
+      // prize_cards quantity:1 (= 4 cards for an entire show), which was a bug.
+      const sundryItem = (
+        product: ReturnType<typeof getProductByType>,
+        documentType: string,
+        fallbackLabel: string,
+      ) => ({
+        printOrderId: order.id,
+        documentType,
+        documentLabel: product?.label ?? fallbackLabel,
+        tradeprintProductId: product?.tradeprintProductId ?? '',
+        quantity: product ? product.suggestQuantity(stats) : 0,
+        printSpecs: product?.defaultSpecs ?? null,
+        unitTradeCost: 0,
+        unitSellingPrice: 0,
+        lineTotal: 0,
+      });
+
       await ctx.db.insert(printOrderItems).values([
         {
           printOrderId: order.id,
@@ -154,17 +225,9 @@ export const printOrdersRouter = createTRPCRouter({
           unitSellingPrice: Math.round(option.pricePence / input.catalogueQty),
           lineTotal: option.pricePence,
         },
-        {
-          printOrderId: order.id,
-          documentType: 'prize_cards',
-          documentLabel: prizeCardsProduct?.label ?? 'Prize Cards',
-          tradeprintProductId: prizeCardsProduct?.tradeprintProductId ?? '',
-          quantity: 1,
-          printSpecs: prizeCardsProduct?.defaultSpecs ?? null,
-          unitTradeCost: 0,
-          unitSellingPrice: 0,
-          lineTotal: 0,
-        },
+        sundryItem(prizeCardsProduct, 'prize_cards', 'Prize Cards'),
+        sundryItem(ringNumbersProduct, 'ring_numbers', 'Ring Numbers'),
+        sundryItem(ringBoardProduct, 'ring_board', 'Ring Boards'),
       ]);
 
       return { orderId: order.id };
@@ -192,25 +255,8 @@ export const printOrdersRouter = createTRPCRouter({
         });
       }
 
-      // Generate all PDFs in parallel and upload to R2
-      const pdfResults = await Promise.all(
-        order.items.map(async (item) => {
-          try {
-            const { storageKey, publicUrl } = await generateAndUploadForPrint(
-              order.showId,
-              item.documentType,
-              item.documentFormat ?? undefined
-            );
-            return { itemId: item.id, storageKey, publicUrl };
-          } catch (err) {
-            console.error(`[print-orders] PDF generation failed for ${item.documentType}:`, err);
-            throw new TRPCError({
-              code: 'INTERNAL_SERVER_ERROR',
-              message: `Failed to generate ${item.documentLabel} PDF`,
-            });
-          }
-        })
-      );
+      // Generate proof PDFs for each item (catalogue fatal, sundries deferred).
+      const pdfResults = await generateOrderItemProofs(order.showId, order.items);
 
       await Promise.all(
         pdfResults.map((r) =>
@@ -344,25 +390,8 @@ export const printOrdersRouter = createTRPCRouter({
         });
       }
 
-      // Generate PDFs and upload to R2
-      const pdfResults = await Promise.all(
-        order.items.map(async (item) => {
-          try {
-            const { storageKey, publicUrl } = await generateAndUploadForPrint(
-              order.showId,
-              item.documentType,
-              item.documentFormat ?? undefined
-            );
-            return { itemId: item.id, storageKey, publicUrl };
-          } catch (err) {
-            console.error(`[deduction] PDF generation failed for ${item.documentType}:`, err);
-            throw new TRPCError({
-              code: 'INTERNAL_SERVER_ERROR',
-              message: `Failed to generate ${item.documentLabel} PDF`,
-            });
-          }
-        })
-      );
+      // Generate proof PDFs for each item (catalogue fatal, sundries deferred).
+      const pdfResults = await generateOrderItemProofs(order.showId, order.items);
 
       await Promise.all(
         pdfResults.map((r) =>

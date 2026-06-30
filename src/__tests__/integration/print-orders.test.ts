@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { printOrders, printOrderItems } from '@/server/db/schema';
 import { testDb } from '../helpers/db';
@@ -72,7 +72,9 @@ describe('printOrders.createPackageOrder', () => {
     const items = await testDb.query.printOrderItems.findMany({
       where: eq(printOrderItems.printOrderId, orderId),
     });
-    expect(items).toHaveLength(2);
+    // catalogue (sent to Mixam) + 3 sundries (prize cards, ring numbers, ring
+    // boards) that Mandy prepares and posts. Judges books are wired in a later step.
+    expect(items).toHaveLength(4);
 
     const catalogue = items.find((i) => i.documentType === 'catalogue');
     expect(catalogue?.quantity).toBe(50);
@@ -81,6 +83,17 @@ describe('printOrders.createPackageOrder', () => {
     const prizeCards = items.find((i) => i.documentType === 'prize_cards');
     expect(prizeCards?.lineTotal).toBe(0);
     expect(prizeCards?.unitSellingPrice).toBe(0);
+    // Regression guard: prize_cards must NOT be hardcoded to quantity 1 (which
+    // ordered 4 cards for an entire show). Empty show → suggestQuantity = max(25, classes) = 25.
+    expect(prizeCards?.quantity).toBe(25);
+
+    // Sundries are bundled into the package (lineTotal 0) with guidance quantities.
+    const ringNumbers = items.find((i) => i.documentType === 'ring_numbers');
+    expect(ringNumbers?.quantity).toBe(0); // no confirmed entries on a fresh show
+    expect(ringNumbers?.lineTotal).toBe(0);
+    const ringBoards = items.find((i) => i.documentType === 'ring_board');
+    expect(ringBoards?.quantity).toBe(1); // max(ringCount, 1)
+    expect(ringBoards?.lineTotal).toBe(0);
   });
 
   it('rejects an invalid catalogueQty not in the tier options', async () => {
@@ -107,7 +120,7 @@ describe('printOrders.getById / listByShow', () => {
 
     const order = await caller.printOrders.getById({ orderId });
     expect(order.id).toBe(orderId);
-    expect(order.items).toHaveLength(2);
+    expect(order.items).toHaveLength(4);
     expect(order.orderedBy?.id).toBe(user.id);
   });
 
@@ -236,5 +249,83 @@ describe('printOrders.completeByDeduction', () => {
         orderId: '00000000-0000-0000-0000-000000000000',
       }),
     ).rejects.toThrow(/Order not found/);
+  });
+});
+
+describe('printOrders payment — un-generatable sundries defer instead of failing', () => {
+  // Regression: a package order now bundles ring numbers + ring boards. Ring
+  // numbers can't be generated until the show is numbered, so on an un-numbered
+  // show generateRingNumbersPdf throws — which used to 500 the whole payment.
+  // Both payment paths must now defer that single item and still take payment.
+  // The file-level mock makes every PDF succeed; restore it after each test.
+  const setGen = async (
+    impl: (showId: string, documentType: string) => Promise<{ storageKey: string; publicUrl: string }>,
+  ) => {
+    const { generateAndUploadForPrint } = await import('@/server/services/pdf-generation');
+    vi.mocked(generateAndUploadForPrint).mockImplementation(impl);
+  };
+  const okFor = (documentType: string) => ({
+    storageKey: `test/${documentType}.pdf`,
+    publicUrl: `https://cdn.example.com/test/${documentType}.pdf`,
+  });
+
+  afterEach(async () => {
+    await setGen(async () => ({
+      storageKey: 'test/key.pdf',
+      publicUrl: 'https://cdn.example.com/test/key.pdf',
+    }));
+  });
+
+  it('initiatePayment defers ring numbers (no catalogue numbers yet) and still returns a client secret', async () => {
+    const { show, caller } = await makePackageOrderSetup();
+    const { orderId } = await caller.printOrders.createPackageOrder(packageOrderInput(show.id));
+    await setGen(async (_showId, documentType) => {
+      if (documentType === 'ring_numbers') {
+        throw new Error('No catalogue numbers found — assign catalogue numbers before generating ring numbers');
+      }
+      return okFor(documentType);
+    });
+
+    await expect(caller.printOrders.initiatePayment({ orderId })).resolves.toMatchObject({
+      clientSecret: expect.any(String),
+    });
+
+    const items = await testDb.query.printOrderItems.findMany({
+      where: eq(printOrderItems.printOrderId, orderId),
+    });
+    // ring numbers deferred — no PDF yet, but still on the order / pack list
+    expect(items.find((i) => i.documentType === 'ring_numbers')?.pdfStorageKey).toBeNull();
+    // the catalogue and the other sundries still get their proof
+    expect(items.find((i) => i.documentType === 'catalogue')?.pdfStorageKey).toBe('test/catalogue.pdf');
+    expect(items.find((i) => i.documentType === 'prize_cards')?.pdfStorageKey).toBe('test/prize_cards.pdf');
+  });
+
+  it('completeByDeduction defers an un-generatable sundry rather than failing the order', async () => {
+    const { show, caller } = await makePackageOrderSetup();
+    const { orderId } = await caller.printOrders.createPackageOrder(packageOrderInput(show.id));
+    await testDb.update(printOrders).set({ totalAmount: 0 }).where(eq(printOrders.id, orderId));
+    await setGen(async (_showId, documentType) => {
+      if (documentType === 'ring_numbers') throw new Error('No catalogue numbers found');
+      return okFor(documentType);
+    });
+
+    const result = await caller.printOrders.completeByDeduction({ orderId });
+    expect(result.success).toBe(true);
+
+    const items = await testDb.query.printOrderItems.findMany({
+      where: eq(printOrderItems.printOrderId, orderId),
+    });
+    expect(items.find((i) => i.documentType === 'ring_numbers')?.pdfStorageKey).toBeNull();
+    expect(items.find((i) => i.documentType === 'catalogue')?.pdfStorageKey).toBe('test/catalogue.pdf');
+  });
+
+  it('initiatePayment still fails loudly when the catalogue itself cannot be generated', async () => {
+    const { show, caller } = await makePackageOrderSetup();
+    const { orderId } = await caller.printOrders.createPackageOrder(packageOrderInput(show.id));
+    await setGen(async (_showId, documentType) => {
+      if (documentType === 'catalogue') throw new Error('catalogue render failed');
+      return okFor(documentType);
+    });
+    await expect(caller.printOrders.initiatePayment({ orderId })).rejects.toThrow(/Failed to generate/);
   });
 });
