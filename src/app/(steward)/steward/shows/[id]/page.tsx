@@ -1,6 +1,6 @@
 'use client';
 
-import { use } from 'react';
+import { use, useState } from 'react';
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import {
@@ -31,6 +31,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 export default function StewardShowPage({
   params,
@@ -244,6 +251,7 @@ export default function StewardShowPage({
           showId={showId}
           judges={judgeApprovals}
           isLocked={lockStatus?.locked ?? false}
+          hasAnyResults={judged > 0}
         />
       )}
     </div>
@@ -757,6 +765,7 @@ function JudgeApprovalSection({
   showId,
   judges,
   isLocked,
+  hasAnyResults,
 }: {
   showId: string;
   judges: {
@@ -770,13 +779,19 @@ function JudgeApprovalSection({
     approvalNote: string | null;
   }[];
   isLocked: boolean;
+  hasAnyResults: boolean;
 }) {
   const utils = trpc.useUtils();
+  // Which judge we're about to email — drives the confirm dialog. Emailing a
+  // judge is irreversible-ish (they get a "please confirm" mail), so it gets the
+  // same "are you sure?" treatment publishing a class does.
+  const [confirmJudge, setConfirmJudge] = useState<{ judgeId: string; judgeName: string } | null>(null);
 
   const submitApproval = trpc.steward.submitForJudgeApproval.useMutation({
     onSuccess: () => {
       utils.steward.getJudgeApprovalStatus.invalidate({ showId });
       toast.success('Approval request sent to judge');
+      setConfirmJudge(null);
     },
     onError: (err) => toast.error(err.message),
   });
@@ -833,25 +848,32 @@ function JudgeApprovalSection({
                 No email on file — ask the secretary to add one.
               </p>
             ) : !judge.approvalStatus ? (
-              <Button
-                size="sm"
-                className="h-9 w-full bg-blue-600 hover:bg-blue-700 sm:w-auto"
-                disabled={submitApproval.isPending || isLocked}
-                onClick={() =>
-                  submitApproval.mutate({ showId, judgeId: judge.judgeId })
-                }
-              >
-                <Send className="mr-1 size-3" />
-                Submit for Approval
-              </Button>
+              <>
+                <Button
+                  size="sm"
+                  className="h-9 w-full bg-blue-600 hover:bg-blue-700 sm:w-auto"
+                  disabled={submitApproval.isPending || isLocked || !hasAnyResults}
+                  onClick={() =>
+                    setConfirmJudge({ judgeId: judge.judgeId, judgeName: judge.judgeName })
+                  }
+                >
+                  <Send className="mr-1 size-3" />
+                  Submit for Approval
+                </Button>
+                {!hasAnyResults && (
+                  <p className="text-xs text-muted-foreground">
+                    Available once you&apos;ve recorded results.
+                  </p>
+                )}
+              </>
             ) : judge.approvalStatus === 'declined' ? (
               <Button
                 variant="outline"
                 size="sm"
                 className="h-9 w-full sm:w-auto"
-                disabled={submitApproval.isPending}
+                disabled={submitApproval.isPending || isLocked}
                 onClick={() =>
-                  submitApproval.mutate({ showId, judgeId: judge.judgeId })
+                  setConfirmJudge({ judgeId: judge.judgeId, judgeName: judge.judgeName })
                 }
               >
                 <Send className="mr-1 size-3" />
@@ -861,6 +883,34 @@ function JudgeApprovalSection({
           </div>
         ))}
       </div>
+
+      {/* Confirm before emailing the judge — mirrors the publish confirmation. */}
+      <Dialog open={confirmJudge != null} onOpenChange={(open) => !open && setConfirmJudge(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send results to {confirmJudge?.judgeName} for approval?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This emails {confirmJudge?.judgeName} asking them to confirm the
+            results you&apos;ve recorded. Ready?
+          </p>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button variant="outline" className="h-11" onClick={() => setConfirmJudge(null)}>
+              Cancel
+            </Button>
+            <Button
+              className="h-11 bg-blue-600 hover:bg-blue-700"
+              disabled={submitApproval.isPending}
+              onClick={() =>
+                confirmJudge && submitApproval.mutate({ showId, judgeId: confirmJudge.judgeId })
+              }
+            >
+              <Send className="mr-1 size-4" />
+              Yes, send
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
