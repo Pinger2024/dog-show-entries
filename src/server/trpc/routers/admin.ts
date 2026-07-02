@@ -5,6 +5,7 @@ import { adminProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { breeds, breedGroups, classDefinitions, showClasses, shows } from '@/server/db/schema';
 import { computeShowsMetrics } from '@/server/services/show-metrics';
+import { publicOrgColumns } from '../public-org-columns';
 
 export const adminRouter = createTRPCRouter({
   // ── Breed Groups ──────────────────────────────────────────
@@ -252,7 +253,7 @@ export const adminRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const allShows = await ctx.db.query.shows.findMany({
         where: input?.status ? eq(shows.status, input.status) : undefined,
-        with: { organisation: true, venue: true },
+        with: { organisation: { columns: publicOrgColumns }, venue: true },
         orderBy: [desc(shows.startDate)],
       });
 

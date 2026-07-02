@@ -85,6 +85,13 @@ export default function StewardShowPage({
   const total = summary?.totalClasses ?? classes.length;
   const progress = total > 0 ? Math.round((judged / total) * 100) : 0;
 
+  // Public-visibility counts, from the per-class flags getShowClasses returns.
+  // A judged class isn't public until the steward taps Publish — surface how
+  // many are still waiting so nothing quietly stays hidden from exhibitors.
+  const liveCount = classes.filter((c) => c.isPublished).length;
+  const judgedCount = classes.filter((c) => c.hasResults).length;
+  const notLiveCount = Math.max(0, judgedCount - liveCount);
+
   // Group by breed
   const breedMap = new Map<
     string,
@@ -118,15 +125,25 @@ export default function StewardShowPage({
           <span className="text-muted-foreground">{progress}%</span>
         </div>
         <Progress value={progress} className="mt-2 h-2" />
+        {judgedCount > 0 && (
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            {judgedCount} judged · {liveCount} live to public
+            {notLiveCount > 0 && (
+              <span className="text-amber-600"> · {notLiveCount} not yet live</span>
+            )}
+          </p>
+        )}
       </div>
 
       {/* Classes grouped by breed */}
       <div className="mt-4 sm:mt-6 space-y-4 sm:space-y-6">
         {breeds.map(([breedName, breedClasses]) => (
           <div key={breedName}>
-            <h2 className="mb-2 text-xs sm:text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              {breedName}
-            </h2>
+            {breeds.length > 1 && (
+              <h2 className="mb-2 text-xs sm:text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                {breedName}
+              </h2>
+            )}
             <div className="space-y-1">
               {breedClasses.map((sc) => (
                 <Link
@@ -160,6 +177,11 @@ export default function StewardShowPage({
                       {sc.isPublished && (
                         <Badge className="bg-green-600 text-white text-[10px] uppercase tracking-wider">
                           Live
+                        </Badge>
+                      )}
+                      {sc.hasResults && !sc.isPublished && (
+                        <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700 text-[10px] uppercase tracking-wider">
+                          Not published
                         </Badge>
                       )}
                       {sc.hasUnpublishedChanges && (
@@ -206,6 +228,7 @@ export default function StewardShowPage({
           showDate={showData.startDate}
           showType={showData.showType}
           showRuleset={(showData as { showRuleset?: string }).showRuleset}
+          showScope={(showData as { showScope?: string }).showScope}
           customAwards={
             (showData as { scheduleData?: { bestAwards?: string[] } | null })
               .scheduleData?.bestAwards ?? []
@@ -291,6 +314,7 @@ interface BestOfBreedSectionProps {
   showDate: string;
   showType: string;
   showRuleset?: string;
+  showScope?: string;
   customAwards?: string[];
   liveResults?: {
     breedGroups: {
@@ -323,6 +347,7 @@ function BestOfBreedSection({
   showDate,
   showType,
   showRuleset,
+  showScope,
   customAwards,
   liveResults,
   existingAchievements,
@@ -525,15 +550,35 @@ function BestOfBreedSection({
   // be hidden for single-breed shows. Drive the recordable awards off the show's
   // OWN configured Best Awards list so it always matches what the show actually
   // gives — and flows to the results page + public + dog profiles.
-  if (!isWusv && classWinnersByBreed.size === 1) {
+  // Single-breed shows drive Top Awards off the show's OWN configured list.
+  // Gate on the show SCOPE, not the live class-winner breed count: on BAGSD the
+  // Veteran class carries a breed id while the other 20 are breed-null, so the
+  // moment Veteran gets a 1st the winner-breed count hit 2 and the old
+  // `size === 1` gate flipped the UI to the hard-coded multi-breed CC screen
+  // mid-show (C1). Fall back to the winner count only when scope is absent.
+  const isSingleBreedShow =
+    showScope != null ? showScope === 'single_breed' : classWinnersByBreed.size === 1;
+  if (!isWusv && isSingleBreedShow) {
     const topAwards = resolveTopAwards(showType, customAwards);
     if (topAwards.length === 0) return null;
 
     // Eligibility (#98 — the RKC "beaten" rule) runs through the shared engine
     // in lib/top-awards so the steward and secretary surfaces provably agree.
+    // Scan EVERY breed group's classes, not just breedGroups[0] — otherwise a
+    // breed-tagged class (e.g. BAGSD's Veteran, which sorts after "Any Breed")
+    // is invisible to the pool and Best Veteran can never be filled. Keys are
+    // qualified by breed group so identically-named classes across groups aren't
+    // conflated by the beaten-rule matcher.
     type Cand = { dogId: string; dogName: string; sex: string | null; exhibitorName: string; catalogueNumber: string | null };
+    const allClasses = (liveResults?.breedGroups ?? []).flatMap((bg) =>
+      bg.classes.map((cls) => ({
+        key: `${bg.breedName}:::${cls.className}`,
+        className: cls.className,
+        results: cls.results,
+      })),
+    );
     const dogInfo = new Map<string, Cand>();
-    for (const cls of liveResults?.breedGroups[0]?.classes ?? []) {
+    for (const cls of allClasses) {
       for (const r of cls.results) {
         if (!r.dogId || r.placement == null || dogInfo.has(r.dogId)) continue;
         dogInfo.set(r.dogId, {
@@ -543,23 +588,34 @@ function BestOfBreedSection({
       }
     }
     const placedDogs = Array.from(dogInfo.values());
-    const index = buildPlacementIndex(
-      (liveResults?.breedGroups[0]?.classes ?? []).map((cls) => ({
-        key: cls.className,
-        className: cls.className,
-        results: cls.results,
-      })),
-    );
+    const index = buildPlacementIndex(allClasses);
     return (
       <div className="mt-6 sm:mt-8 space-y-4">
         <div className="flex items-center gap-2">
           <Trophy className="size-5 text-amber-500" />
           <h2 className="text-sm sm:text-base font-semibold">Top Awards</h2>
         </div>
+        <p className="text-xs text-muted-foreground">
+          At the end of judging, the judge announces these awards. Pick each winner
+          here, then tap Publish to make it public. Only dogs that weren&apos;t beaten
+          in their classes appear in each list.
+        </p>
         <div className="rounded-lg border p-3 sm:p-4 space-y-3">
           {topAwards.map((award) => {
             const candidates = eligibleCandidates(award, placedDogs, index);
             const existing = existingAchievements.find((a) => a.type === award.type);
+            if (candidates.length === 0 && !existing) {
+              return (
+                <div key={award.type} className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+                  <span className="text-xs sm:text-sm font-medium sm:w-44 sm:shrink-0 sm:truncate" title={award.name}>
+                    {award.name}
+                  </span>
+                  <p className="flex-1 text-xs italic text-muted-foreground">
+                    No eligible dogs yet — winners appear here as classes are judged.
+                  </p>
+                </div>
+              );
+            }
             return (
               <AwardSelect
                 key={award.type}

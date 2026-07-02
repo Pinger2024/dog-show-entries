@@ -267,7 +267,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
           </div>
           <div className="flex items-center gap-1.5">
             {(user.role === 'secretary' || user.role === 'admin' || user.role === 'steward') && (
-              <RoleSwitcherCompact activeView="exhibitor" showSteward={user.role === 'steward' || user.role === 'secretary' || user.role === 'admin'} />
+              <RoleSwitcherCompact activeView="exhibitor" showSteward={user.role === 'steward' || user.role === 'secretary' || user.role === 'admin'} preferRole={user.role} />
             )}
             <Button variant="ghost" size="sm" className="size-11" asChild>
               <Link href="/settings" aria-label="Settings">

@@ -6401,6 +6401,18 @@ export const secretaryRouter = createTRPCRouter({
         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to publish results. Please try again.' });
       }
 
+      // Sweep any Top Award achievements (Best Dog/Bitch, Best Puppy, etc.) live
+      // too. The steward records these on the show page and publishes each one
+      // individually — but if one is forgotten, this end-of-day publish is the
+      // backstop. Without it, resultsLockedAt (set just above) blocks the
+      // steward's publishAchievement, so a missed award would stay invisible to
+      // the public forever.
+      const sweptAwards = await ctx.db
+        .update(achievements)
+        .set({ publishedAt: now })
+        .where(and(eq(achievements.showId, input.showId), isNull(achievements.publishedAt)))
+        .returning({ id: achievements.id });
+
       // Fire downstream notifications async (Phase 4)
       if (input.sendNotifications) {
         const { sendExhibitorResultsEmails, sendFollowerResultsNotifications, createResultsMilestonePosts } = await import('@/server/services/results-notifications');
@@ -6412,7 +6424,7 @@ export const secretaryRouter = createTRPCRouter({
         ]);
       }
 
-      return { published: true, publishedAt: now };
+      return { published: true, publishedAt: now, awardsSwept: sweptAwards.length };
     }),
 
   unpublishResults: secretaryProcedure
