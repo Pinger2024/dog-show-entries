@@ -539,6 +539,25 @@ export const stewardRouter = createTRPCRouter({
         })
         .returning();
 
+      // Auto-start the show. The first placing recorded on show day flips an
+      // entries_closed show to in_progress, so a remote secretary never has to
+      // remember to "start" it — and the end-of-day Publish Results (which needs
+      // in_progress) just works. The steward fairness lock already blocks
+      // recording before show day, but we guard on BOTH the date and the status
+      // so this is the only transition ever made: entries_closed → in_progress,
+      // never backwards, and draft/completed/cancelled are left untouched. The
+      // status condition in the WHERE keeps it idempotent and race-safe.
+      const showForStart = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, ec.showClass.showId),
+        columns: { status: true, startDate: true },
+      });
+      if (showForStart?.status === 'entries_closed' && isShowDayReached(showForStart.startDate)) {
+        await ctx.db
+          .update(shows)
+          .set({ status: 'in_progress' })
+          .where(and(eq(shows.id, ec.showClass.showId), eq(shows.status, 'entries_closed')));
+      }
+
       return result!;
     }),
 
