@@ -195,3 +195,90 @@ describe('eligibleCandidates — the RKC beaten rule', () => {
     expect(out).toEqual(['b1', 'd1']);
   });
 });
+
+// Adversarial cases drawn from Mandy's 2026-07-02 demo run-through of the real
+// BAGSD award list — the exact things a steward will hit on the day.
+describe('eligibleCandidates — real-show scenarios (Mandy 2026-07-02)', () => {
+  it('Best Dog: a class winner beaten in a SECOND class is dropped ("why only 3?")', () => {
+    // Mirrors the demo: Open winner also ran Long Coat Open and came 9th; the
+    // Long Coat Open winner also ran Open and came 6th — they beat each other, so
+    // BOTH are out. Only the dog that won its one-and-only class survives.
+    const index = buildPlacementIndex([
+      cls('Open Dog', [['blackDiamond', 1], ['ruby', 6]]),
+      cls('Special Long Coat Open Dog', [['ruby', 1], ['blackDiamond', 9]]),
+      cls('Minor Puppy Dog', [['dragon', 1]]),
+    ]);
+    const dogs = [dog('blackDiamond', 'dog'), dog('ruby', 'dog'), dog('dragon', 'dog')];
+    const out = eligibleCandidates(award('best_dog'), dogs, index).map((d) => d.dogId).sort();
+    expect(out).toEqual(['dragon']);
+  });
+
+  it('an unbeaten dog stays eligible however many classes it entered (positive control)', () => {
+    const index = buildPlacementIndex([
+      cls('Open Dog', [['champ', 1], ['a', 2]]),
+      cls('Limit Dog', [['champ', 1], ['b', 2]]),
+      cls('Post Graduate Dog', [['champ', 1], ['c', 2]]),
+    ]);
+    const dogs = ['champ', 'a', 'b', 'c'].map((id) => dog(id, 'dog'));
+    const out = eligibleCandidates(award('best_dog'), dogs, index).map((d) => d.dogId);
+    expect(out).toEqual(['champ']);
+  });
+
+  it('Best Puppy Dog INCLUDES the Long Coat Puppy class when scheduled (Mandy: GSD coat varieties)', () => {
+    const index = buildPlacementIndex([
+      cls('Special Long Coat Puppy Dog', [['lcPup', 1]]),
+      cls('Minor Puppy Dog', [['scPup', 1]]),
+    ]);
+    const dogs = [dog('lcPup', 'dog'), dog('scPup', 'dog')];
+    const out = eligibleCandidates(award('best_puppy_dog'), dogs, index).map((d) => d.dogId).sort();
+    // Long Coat Puppy is a "puppy" class, so its winner is eligible for Best Puppy Dog.
+    expect(out).toEqual(['lcPup', 'scPup']);
+  });
+
+  it('Best Puppy Dog: a Long Coat Puppy winner beaten in another puppy class drops off', () => {
+    // Springfield Highland Gold: won Long Coat Puppy but 4th in Minor Puppy & Puppy.
+    const index = buildPlacementIndex([
+      cls('Special Long Coat Puppy Dog', [['highlandGold', 1]]),
+      cls('Minor Puppy Dog', [['dragon', 1], ['highlandGold', 4]]),
+      cls('Puppy Dog', [['sapphire', 1], ['highlandGold', 4]]),
+    ]);
+    const dogs = [dog('highlandGold', 'dog'), dog('dragon', 'dog'), dog('sapphire', 'dog')];
+    const out = eligibleCandidates(award('best_puppy_dog'), dogs, index).map((d) => d.dogId).sort();
+    expect(out).toEqual(['dragon', 'sapphire']);
+  });
+
+  it('Best Veteran draws only from the Veteran class, minus the beaten runner-up (C1)', () => {
+    const index = buildPlacementIndex([
+      cls('Veteran Dog', [['vet1', 1], ['vet2', 2]]),
+      cls('Open Dog', [['open1', 1]]),
+    ]);
+    const dogs = [dog('vet1', 'dog'), dog('vet2', 'dog'), dog('open1', 'dog')];
+    const out = eligibleCandidates(award('best_veteran_in_show'), dogs, index).map((d) => d.dogId);
+    // open1 is unbeaten but not a veteran → excluded; vet2 was beaten by vet1 → excluded.
+    expect(out).toEqual(['vet1']);
+  });
+
+  it('Best Veteran fills from a breed-qualified Veteran class across groups (C1 all-groups scan)', () => {
+    // The page flattens every breed group's classes with breed-qualified keys; the
+    // Veteran dog from a non-first group must reach the pool and not be conflated
+    // with an identically-named class in another group.
+    const index = buildPlacementIndex([
+      { key: 'Any Breed:::Open', className: 'Open', results: [{ dogId: 'openWin', placement: 1 }] },
+      { key: 'German Shepherd Dog:::Veteran', className: 'Veteran', results: [{ dogId: 'gsdVet', placement: 1 }] },
+    ]);
+    const dogs = [dog('openWin', 'dog'), dog('gsdVet', 'dog')];
+    const out = eligibleCandidates(award('best_veteran_in_show'), dogs, index).map((d) => d.dogId);
+    expect(out).toEqual(['gsdVet']);
+  });
+
+  it('Best Puppy in Show spans both sexes but only puppies, minus beaten', () => {
+    const index = buildPlacementIndex([
+      cls('Minor Puppy Dog', [['pupDog', 1]]),
+      cls('Minor Puppy Bitch', [['pupBitch', 1]]),
+      cls('Open Dog', [['adult', 1]]),
+    ]);
+    const dogs = [dog('pupDog', 'dog'), dog('pupBitch', 'bitch'), dog('adult', 'dog')];
+    const out = eligibleCandidates(award('best_puppy_in_show'), dogs, index).map((d) => d.dogId).sort();
+    expect(out).toEqual(['pupBitch', 'pupDog']);
+  });
+});
