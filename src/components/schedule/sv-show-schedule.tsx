@@ -490,7 +490,8 @@ function SvOverview({ show, washes }: { show: ScheduleShowInfo; washes?: SvWashB
             </View>
           ))}
           <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 7.5, color: SV.ink3, marginTop: 4, fontStyle: 'italic' }}>
-            Trophies for 1st · Medals 1st–3rd · GSDL-BRG Grading Cards for all classes.
+            {show.scheduleData?.awardsDescription?.trim() ||
+              'Trophies for 1st · Medals 1st–3rd · GSDL-BRG Grading Cards for all classes.'}
           </Text>
         </View>
 
