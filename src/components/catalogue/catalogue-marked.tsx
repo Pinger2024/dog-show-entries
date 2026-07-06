@@ -289,6 +289,30 @@ const ACHIEVEMENT_LABELS: Record<string, string> = {
  * Reserve CC winners, so the RKC copy names them as such (Mandy 2026-07-05).
  * Non-championship shows keep the plain "Best Dog" / "Best Bitch" wording.
  */
+/**
+ * Canonical order for the Awards Summary page, per Mandy (2026-07-06): the
+ * show-level awards read Best in Show → Best Puppy in Show → Best Long Coat in
+ * Show; the breed/sex awards read Dog CC → Dog Reserve CC → Best Puppy Dog →
+ * Bitch CC → Bitch Reserve CC → Best Puppy Bitch → Best Veteran in Show (last).
+ * Lower number = higher up. Unknown types fall to the end.
+ */
+export const AWARD_ORDER: Record<string, number> = {
+  best_in_show: 1,
+  reserve_best_in_show: 2,
+  best_puppy_in_show: 3,
+  best_long_coat_in_show: 4,
+  best_dog: 10,
+  reserve_best_dog: 11,
+  best_puppy_dog: 12,
+  best_bitch: 13,
+  reserve_best_bitch: 14,
+  best_puppy_bitch: 15,
+  best_veteran_in_breed: 16,
+  reserve_best_veteran_in_breed: 17,
+  best_veteran_in_show: 20,
+  reserve_best_veteran_in_show: 21,
+};
+
 function achievementLabel(type: string, isChampionship: boolean): string {
   if (isChampionship) {
     switch (type) {
@@ -393,6 +417,33 @@ function sortByCatNo(entries: CatalogueEntry[]) {
   );
 }
 
+/**
+ * All of a breed's class buckets, flattened and ordered exactly the way the
+ * printed catalogue numbers them: numbered classes first by classNumber (so a
+ * sex-neutral Veteran = class 1 leads), then unnumbered classes (Junior
+ * Handling etc.) by label/sortOrder. Mirrors catalogue-by-class so the marked
+ * catalogue reads in the same order rather than bucketing sex-neutral classes
+ * into a block after the dogs (Mandy 2026-07-06).
+ */
+export function orderedClasses(breedBucket: BreedBucket): ClassBucket[] {
+  const all: ClassBucket[] = [];
+  for (const sex of Object.keys(breedBucket.sexes)) {
+    all.push(...breedBucket.sexes[sex]);
+  }
+  return all.sort((a, b) => {
+    if (a.classNumber != null && b.classNumber != null) return a.classNumber - b.classNumber;
+    if (a.classNumber != null) return -1;
+    if (b.classNumber != null) return 1;
+    if (a.classLabel && b.classLabel) return a.classLabel.localeCompare(b.classLabel);
+    return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+  });
+}
+
+/** Normalise a class bucket's raw sex to the render key. */
+function normSex(sex: string | null | undefined): 'dog' | 'bitch' | 'unknown' {
+  return sex === 'dog' ? 'dog' : sex === 'bitch' ? 'bitch' : 'unknown';
+}
+
 function classHeadingLabel(bucket: ClassBucket, sex: string) {
   const parts: string[] = [];
   if (bucket.classLabel) {
@@ -420,45 +471,36 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
     groupName: string;
     breedName: string;
     judge: string | undefined;
-    breedBucket: BreedBucket;
-    sexLabel?: string;
+    classes: ClassBucket[];
   }[] = [];
-
-  function countBreedEntries(bucket: BreedBucket): number {
-    let total = 0;
-    for (const sex of ['dog', 'unknown', 'bitch']) {
-      for (const classBucket of bucket.sexes[sex] ?? []) {
-        total += classBucket.entries.length;
-      }
-    }
-    return total;
-  }
 
   for (const [groupName, { breeds }] of sortedGroups) {
     for (const [breedName, breedBucket] of [...breeds.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-      const totalEntries = countBreedEntries(breedBucket);
       const judge = show.judgesByBreedName?.[breedName];
+      // Classes in catalogue order (Veteran = 1 first, JH last), NOT bucketed by
+      // sex — so a sex-neutral class keeps its numbered position (Mandy 2026-07-06).
+      const ordered = orderedClasses(breedBucket).filter((cb) => cb.entries.length > 0);
+      if (!ordered.length) continue;
+      const totalEntries = ordered.reduce((sum, cb) => sum + cb.entries.length, 0);
 
       if (totalEntries > PAGE_ENTRY_THRESHOLD) {
-        for (const sex of ['dog', 'unknown', 'bitch']) {
-          const classBuckets = breedBucket.sexes[sex];
-          if (!classBuckets?.length) continue;
-          const hasAnyEntries = classBuckets.some((cb) => cb.entries.length > 0);
-          if (!hasAnyEntries) continue;
-          const sexBucket: BreedBucket = {
-            ...breedBucket,
-            sexes: { [sex]: classBuckets },
-          };
-          breedPages.push({
-            groupName,
-            breedName,
-            judge,
-            breedBucket: sexBucket,
-            sexLabel: sex === 'dog' ? 'Dogs' : sex === 'bitch' ? 'Bitches' : undefined,
-          });
+        // Split into pages of <= threshold entries (whole classes) to dodge the
+        // @react-pdf coordinate-overflow crash on very long single pages, while
+        // keeping the classes in catalogue order across pages.
+        let chunk: ClassBucket[] = [];
+        let chunkCount = 0;
+        for (const cb of ordered) {
+          if (chunk.length && chunkCount + cb.entries.length > PAGE_ENTRY_THRESHOLD) {
+            breedPages.push({ groupName, breedName, judge, classes: chunk });
+            chunk = [];
+            chunkCount = 0;
+          }
+          chunk.push(cb);
+          chunkCount += cb.entries.length;
         }
+        if (chunk.length) breedPages.push({ groupName, breedName, judge, classes: chunk });
       } else {
-        breedPages.push({ groupName, breedName, judge, breedBucket });
+        breedPages.push({ groupName, breedName, judge, classes: ordered });
       }
     }
   }
@@ -466,19 +508,15 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
   // Pre-compute first-appearance tracking
   const firstSeenClass = new Map<string, string>();
   const firstAppearanceBucket = new Map<string, ClassBucket>();
-  for (const { breedBucket } of breedPages) {
-    for (const sex of ['dog', 'unknown', 'bitch']) {
-      const classBuckets = breedBucket.sexes[sex];
-      if (!classBuckets?.length) continue;
-      for (const bucket of classBuckets) {
-        bucket.entries = sortByCatNo(bucket.entries);
-        for (const entry of bucket.entries) {
-          const catNo = entry.catalogueNumber;
-          if (!catNo) continue;
-          if (!firstSeenClass.has(catNo)) {
-            firstSeenClass.set(catNo, bucket.classLabel ? `class ${bucket.classLabel}` : bucket.className);
-            firstAppearanceBucket.set(catNo, bucket);
-          }
+  for (const { classes } of breedPages) {
+    for (const bucket of classes) {
+      bucket.entries = sortByCatNo(bucket.entries);
+      for (const entry of bucket.entries) {
+        const catNo = entry.catalogueNumber;
+        if (!catNo) continue;
+        if (!firstSeenClass.has(catNo)) {
+          firstSeenClass.set(catNo, bucket.classLabel ? `class ${bucket.classLabel}` : bucket.className);
+          firstAppearanceBucket.set(catNo, bucket);
         }
       }
     }
@@ -488,8 +526,13 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
   const showLevelTypes = new Set([
     'best_in_show', 'reserve_best_in_show', 'best_puppy_in_show', 'best_long_coat_in_show',
   ]);
-  const showAwards = achievements.filter((a) => showLevelTypes.has(a.type));
-  const breedAwards = achievements.filter((a) => !showLevelTypes.has(a.type));
+  const awardRank = (t: string) => AWARD_ORDER[t] ?? 999;
+  const showAwards = achievements
+    .filter((a) => showLevelTypes.has(a.type))
+    .sort((a, b) => awardRank(a.type) - awardRank(b.type));
+  const breedAwards = achievements
+    .filter((a) => !showLevelTypes.has(a.type))
+    .sort((a, b) => awardRank(a.type) - awardRank(b.type));
 
   // RKC F(1).11.b(6) exhibitor index policy — see catalogue-standard.tsx.
   const isChampionship = show.showType === 'championship';
@@ -553,8 +596,12 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
       )}
 
       {/* One <Page> per breed with result annotations */}
-      {breedPages.map(({ groupName, breedName, judge, breedBucket, sexLabel }, pageIdx) => (
-        <Fragment key={`${groupName}-${breedName}-${sexLabel ?? 'all'}-${pageIdx}`}>
+      {breedPages.map(({ groupName, breedName, judge, classes }, pageIdx) => {
+        // "Dogs"/"Bitches" headings print on the first class of each sex run; a
+        // sex-neutral class (Veteran, JH) prints none. Reset per page.
+        let prevSex: 'dog' | 'bitch' | 'unknown' | null = null;
+        return (
+        <Fragment key={`${groupName}-${breedName}-${pageIdx}`}>
           {renderBreedIndex(breedName)}
           <Page size="A5" style={styles.page} wrap>
           <Text style={markedStyles.watermark}>MARKED CATALOGUE</Text>
@@ -564,22 +611,21 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
             <Text style={styles.judgeLabel}>Judge: {judge}</Text>
           )}
 
-          {['dog', 'unknown', 'bitch']
-            .filter((sex) => breedBucket.sexes[sex]?.length)
-            .map((sex) => (
-              <View key={sex}>
-                {sex !== 'unknown' && (
-                  <Text style={styles.sexHeading} minPresenceAhead={60}>
-                    {sex === 'dog' ? 'Dogs' : 'Bitches'}
-                  </Text>
-                )}
-
-                {breedBucket.sexes[sex].map((bucket) => {
+          {classes.map((bucket) => {
+                  const sex = normSex(bucket.sex);
+                  const showSexHeading =
+                    (sex === 'dog' || sex === 'bitch') && sex !== prevSex;
+                  prevSex = sex;
                   // Small classes stay atomic — never orphan the heading.
                   const keepTogether = bucket.entries.length <= 8;
                   const placings = classPlacings(bucket, results);
                   return (
                   <View key={`${bucket.classLabel}-${bucket.className}`} wrap={!keepTogether}>
+                    {showSexHeading && (
+                      <Text style={styles.sexHeading} minPresenceAhead={60}>
+                        {sex === 'dog' ? 'Dogs' : 'Bitches'}
+                      </Text>
+                    )}
                     <Text style={styles.classHeadingInBreed} minPresenceAhead={60}>
                       {classHeadingLabel(bucket, sex)}
                     </Text>
@@ -764,8 +810,6 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                   </View>
                   );
                 })}
-              </View>
-            ))}
 
             <Text
               style={styles.footer}
@@ -776,7 +820,8 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
             />
           </Page>
         </Fragment>
-      ))}
+        );
+      })}
 
       {/* Back matter: exhibitor index — moved to the end per backlog #93.
           Single-page version is for single-breed championship shows. The
