@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/server/db';
-import { and, eq, isNull, asc, or, inArray, sql } from 'drizzle-orm';
+import { and, eq, ne, isNull, asc, inArray, sql } from 'drizzle-orm';
 import { getPaidOrderIdsForShow } from '@/server/services/show-metrics';
 import * as schema from '@/server/db/schema';
 import { formatDogName, formatDogNameForCatalogue } from '@/lib/utils';
@@ -103,13 +103,13 @@ export async function GET(
         format === 'absentees'
           ? paidOrderIds && paidOrderIds.length > 0
             ? and(
-                // Absentees only exist on paid orders. Withdrawn entries from
-                // abandoned checkouts never made the catalogue.
+                // Absentees = dogs entered but absent on the day. A withdrawal
+                // isn't an absence, and Junior Handling entries are excluded
+                // from the list (Mandy 2026-07-06). Only on paid orders.
                 inArray(schema.entries.orderId, paidOrderIds),
-                or(
-                  eq(schema.entries.status, 'withdrawn'),
-                  and(eq(schema.entries.status, 'confirmed'), eq(schema.entries.absent, true))
-                )
+                eq(schema.entries.status, 'confirmed'),
+                eq(schema.entries.absent, true),
+                ne(schema.entries.entryType, 'junior_handler')
               )
             : sql`false`
           : eq(schema.entries.status, 'confirmed'),

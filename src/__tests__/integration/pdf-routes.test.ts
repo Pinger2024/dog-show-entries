@@ -45,7 +45,12 @@ import {
   makeSecretaryWithOrg,
   makeShow,
   makeUser,
+  makeDog,
+  makeEntry,
 } from '../helpers/factories';
+import { testDb } from '../helpers/db';
+import { entries as entriesTable } from '@/server/db/schema';
+import { eq } from 'drizzle-orm';
 
 beforeEach(() => {
   vi.mocked(auth).mockReset();
@@ -175,5 +180,34 @@ describe('GET /api/absentee-report/[showId]', () => {
     authedAs(stranger);
     const res = await absenteeReportGET(req(show.id), params(show.id));
     expect(res.status).toBe(403);
+  });
+
+  // Mandy 2026-07-06: withdrawn entries aren't absentees, and Junior Handling
+  // entries don't belong on the absentee report — only absent dogs.
+  it('lists absent dogs only — excludes withdrawn and Junior Handling', async () => {
+    const { user, org } = await makeSecretaryWithOrg();
+    const show = await makeShow({ organisationId: org.id });
+    const dogA = await makeDog({ ownerId: user.id, registeredName: 'Absent Dog' });
+    const dogB = await makeDog({ ownerId: user.id, registeredName: 'Withdrawn Dog' });
+    const dogC = await makeDog({ ownerId: user.id, registeredName: 'JH Dog' });
+
+    // (a) confirmed + absent dog → SHOULD appear
+    const absent = await makeEntry({ showId: show.id, dogId: dogA.id, exhibitorId: user.id, status: 'confirmed' });
+    await testDb.update(entriesTable).set({ absent: true, catalogueNumber: '5' }).where(eq(entriesTable.id, absent.id));
+    // (b) withdrawn → should NOT appear
+    await makeEntry({ showId: show.id, dogId: dogB.id, exhibitorId: user.id, status: 'withdrawn' });
+    // (c) confirmed + absent Junior Handling → should NOT appear
+    const jh = await makeEntry({ showId: show.id, dogId: dogC.id, exhibitorId: user.id, status: 'confirmed' });
+    await testDb.update(entriesTable).set({ absent: true, entryType: 'junior_handler', catalogueNumber: '85' }).where(eq(entriesTable.id, jh.id));
+
+    authedAs(user);
+    const jsonReq = new NextRequest(`http://localhost/api/x/${show.id}?format=json`);
+    const res = await absenteeReportGET(jsonReq, params(show.id));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.totalAbsentees).toBe(1);
+    expect(body.absentees[0].catalogueNumber).toBe('5');
+    expect(body.absentees.some((a: { status: string }) => a.status === 'Withdrawn')).toBe(false);
+    expect(body.absentees.some((a: { catalogueNumber: string }) => a.catalogueNumber === '85')).toBe(false);
   });
 });

@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/server/db';
-import { and, eq, isNull, asc } from 'drizzle-orm';
+import { and, eq, ne, isNull, asc } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest } from '@/lib/pdf-utils';
 
 /**
- * Absentee Report API — generates a CSV of all entries marked absent.
+ * Absentee Report API — generates a CSV of dogs that were entered but absent
+ * on the day (confirmed entries with absent=true). Withdrawn entries are NOT
+ * absentees (they pulled out before the show) and Junior Handling entries are
+ * excluded — this report is dogs only (Mandy 2026-07-06).
  * Columns: Catalogue Number, Dog Name, Breed, Sex, Classes, Owner, Exhibitor
  * Sorted by catalogue number.
  *
@@ -37,12 +40,16 @@ export async function GET(
   const authResult = await authenticatePdfRequest(show.organisationId);
   if (authResult instanceof NextResponse) return authResult;
 
-  // Fetch all confirmed entries that are marked absent
-  const entries = await db.query.entries.findMany({
+  // Dogs that were entered but absent on the day: confirmed + absent, excluding
+  // Junior Handling entries (they carry no dog and aren't a dog absence for the
+  // report). Withdrawn entries are deliberately NOT included — a withdrawal
+  // isn't an absence (Mandy 2026-07-06).
+  const allAbsentees = await db.query.entries.findMany({
     where: and(
       eq(schema.entries.showId, showId),
       eq(schema.entries.status, 'confirmed'),
       eq(schema.entries.absent, true),
+      ne(schema.entries.entryType, 'junior_handler'),
       isNull(schema.entries.deletedAt)
     ),
     with: {
@@ -59,32 +66,6 @@ export async function GET(
     },
     orderBy: [asc(schema.entries.catalogueNumber)],
   });
-
-  // Also include withdrawn entries (status = 'withdrawn') as absentees
-  const withdrawnEntries = await db.query.entries.findMany({
-    where: and(
-      eq(schema.entries.showId, showId),
-      eq(schema.entries.status, 'withdrawn'),
-      isNull(schema.entries.deletedAt)
-    ),
-    with: {
-      dog: {
-        with: {
-          breed: true,
-          owners: { orderBy: [asc(schema.dogOwners.sortOrder)] },
-        },
-      },
-      exhibitor: true,
-      entryClasses: {
-        with: { showClass: { with: { classDefinition: true } } },
-      },
-    },
-    orderBy: [asc(schema.entries.catalogueNumber)],
-  });
-
-  const allAbsentees = [...entries, ...withdrawnEntries].sort((a, b) =>
-    (a.catalogueNumber ?? '').localeCompare(b.catalogueNumber ?? '', undefined, { numeric: true })
-  );
 
   const outputFormat = request.nextUrl.searchParams.get('format') ?? 'csv';
 
