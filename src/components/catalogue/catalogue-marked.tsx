@@ -86,6 +86,38 @@ function getResultMarker(result: MarkedResult | undefined): string | null {
   return null;
 }
 
+/**
+ * The ordered placings for one class, ready for the per-class PLACINGS block
+ * (Mandy 2026-07-05). Numeric placings (1st–VHC) come first in order, then any
+ * Withheld / Unplaced markers. Each carries its catalogue number and whether
+ * it's 1st (rendered in red).
+ */
+function classPlacings(
+  bucket: ClassBucket,
+  results: Map<string, MarkedResult>,
+): { marker: string; catNo: string; isFirst: boolean }[] {
+  const rows: { order: number; marker: string; catNo: string; isFirst: boolean }[] = [];
+  const seen = new Set<string>();
+  for (const entry of bucket.entries) {
+    const catNo = entry.catalogueNumber ?? '';
+    if (!catNo || !bucket.showClassId) continue;
+    const key = `${catNo}-${bucket.showClassId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const result = results.get(key);
+    const marker = getResultMarker(result);
+    if (!marker) continue;
+    rows.push({
+      order: result?.placement ?? 100,
+      marker,
+      catNo,
+      isFirst: result?.placement === 1,
+    });
+  }
+  rows.sort((a, b) => a.order - b.order);
+  return rows.map(({ marker, catNo, isFirst }) => ({ marker, catNo, isFirst }));
+}
+
 // ── Marked-specific styles ───────────────────────────────────
 
 const markedStyles = StyleSheet.create({
@@ -107,6 +139,7 @@ const markedStyles = StyleSheet.create({
   // Amanda's spec 2026-05-14. Red matches the placement number colour
   // used elsewhere on this catalogue so the eye can scan winners fast.
   specialAwardBadge: {
+    fontFamily: 'Inter',
     fontSize: 6.5,
     fontWeight: 'bold',
     color: '#b91c1c',
@@ -114,6 +147,7 @@ const markedStyles = StyleSheet.create({
     marginBottom: 0.5,
   },
   achievementsSectionTitle: {
+    fontFamily: 'Inter',
     fontSize: 11,
     fontWeight: 'bold',
     textTransform: 'uppercase',
@@ -131,6 +165,7 @@ const markedStyles = StyleSheet.create({
     borderBottomColor: '#ddd',
   },
   achievementType: {
+    fontFamily: 'Inter',
     fontSize: 7.5,
     fontWeight: 'bold',
     width: '40%',
@@ -138,17 +173,20 @@ const markedStyles = StyleSheet.create({
     color: '#b91c1c',
   },
   achievementDog: {
+    fontFamily: 'Inter',
     fontSize: 7.5,
     fontWeight: 'bold',
     width: '35%',
     color: '#b91c1c',
   },
   achievementBreed: {
+    fontFamily: 'Inter',
     fontSize: 7.5,
     color: '#b91c1c',
     width: '25%',
   },
   watermark: {
+    fontFamily: 'Inter',
     fontSize: 8,
     fontWeight: 'bold',
     color: '#b91c1c',
@@ -156,6 +194,59 @@ const markedStyles = StyleSheet.create({
     marginBottom: 4,
     letterSpacing: 1,
     textTransform: 'uppercase',
+  },
+  // "ABS" printed under the catalogue number in bold black for absentees
+  // (Mandy 2026-07-05 — replaces the old inline grey "Abs." after the name).
+  absentByNumber: {
+    fontFamily: 'Inter',
+    fontSize: 6.5,
+    fontWeight: 'bold',
+    color: '#000',
+    marginTop: 0.5,
+  },
+  // Per-class placings summary block (Mandy 2026-07-05 approved mockup):
+  // a green "PLACINGS" header over a bordered row of "1st 6  2nd 8 …",
+  // catalogue numbers pulled from the recorded results. 1st place in red.
+  placingsBlock: {
+    marginTop: 3,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#166534',
+    borderRadius: 4,
+  },
+  placingsHeader: {
+    backgroundColor: '#166534',
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderTopLeftRadius: 3,
+    borderTopRightRadius: 3,
+  },
+  placingsHeaderText: {
+    fontFamily: 'Inter',
+    fontSize: 6.5,
+    fontWeight: 'bold',
+    color: '#fff',
+    letterSpacing: 0.8,
+  },
+  placingsBody: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+  },
+  placing: {
+    fontFamily: 'Inter',
+    fontSize: 8,
+    fontWeight: 'bold',
+    color: '#000',
+    marginRight: 14,
+  },
+  placingFirst: {
+    fontFamily: 'Inter',
+    fontSize: 8,
+    fontWeight: 'bold',
+    color: '#b91c1c',
+    marginRight: 14,
   },
 });
 
@@ -169,6 +260,17 @@ const ACHIEVEMENT_LABELS: Record<string, string> = {
   best_of_breed: 'Best of Breed',
   best_puppy_in_breed: 'Best Puppy in Breed',
   best_veteran_in_breed: 'Best Veteran in Breed',
+  // The Best Dog / Best Bitch awards ARE stored as best_dog / best_bitch /
+  // reserve_best_dog / reserve_best_bitch (see lib/top-awards.ts) — the map
+  // previously only had the dog_cc / bitch_cc variants, so these fell through
+  // and printed the raw enum key on the RKC copy (Mandy 2026-07-05).
+  best_dog: 'Best Dog',
+  best_bitch: 'Best Bitch',
+  reserve_best_dog: 'Reserve Best Dog',
+  reserve_best_bitch: 'Reserve Best Bitch',
+  best_veteran_in_show: 'Best Veteran in Show',
+  reserve_best_veteran_in_show: 'Reserve Best Veteran in Show',
+  best_veteran_in_group: 'Best Veteran in Group',
   dog_cc: 'Dog CC',
   reserve_dog_cc: 'Reserve Dog CC',
   bitch_cc: 'Bitch CC',
@@ -180,6 +282,28 @@ const ACHIEVEMENT_LABELS: Record<string, string> = {
   cc: 'CC',
   reserve_cc: 'Reserve CC',
 };
+
+/**
+ * The label for an award on the marked catalogue. At CHAMPIONSHIP shows the
+ * Best Dog / Best Bitch (and their reserves) ARE the Challenge Certificate and
+ * Reserve CC winners, so the RKC copy names them as such (Mandy 2026-07-05).
+ * Non-championship shows keep the plain "Best Dog" / "Best Bitch" wording.
+ */
+function achievementLabel(type: string, isChampionship: boolean): string {
+  if (isChampionship) {
+    switch (type) {
+      case 'best_dog':
+        return 'Dog Challenge Certificate';
+      case 'best_bitch':
+        return 'Bitch Challenge Certificate';
+      case 'reserve_best_dog':
+        return 'Dog Reserve Challenge Certificate';
+      case 'reserve_best_bitch':
+        return 'Bitch Reserve Challenge Certificate';
+    }
+  }
+  return ACHIEVEMENT_LABELS[type] ?? type;
+}
 
 // ── RKC layout grouping (same as catalogue-standard) ─────────
 
@@ -394,7 +518,7 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
               {showAwards.map((a, i) => (
                 <View key={i} style={markedStyles.achievementRow}>
                   <Text style={markedStyles.achievementType}>
-                    {ACHIEVEMENT_LABELS[a.type] ?? a.type}
+                    {achievementLabel(a.type, isChampionship)}
                   </Text>
                   <Text style={markedStyles.achievementDog}>{a.dogName}</Text>
                   <Text style={markedStyles.achievementBreed}>{a.breedName ?? ''}</Text>
@@ -409,7 +533,7 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
               {breedAwards.map((a, i) => (
                 <View key={i} style={markedStyles.achievementRow}>
                   <Text style={markedStyles.achievementType}>
-                    {ACHIEVEMENT_LABELS[a.type] ?? a.type}
+                    {achievementLabel(a.type, isChampionship)}
                   </Text>
                   <Text style={markedStyles.achievementDog}>{a.dogName}</Text>
                   <Text style={markedStyles.achievementBreed}>{a.breedName ?? ''}</Text>
@@ -453,6 +577,7 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                 {breedBucket.sexes[sex].map((bucket) => {
                   // Small classes stay atomic — never orphan the heading.
                   const keepTogether = bucket.entries.length <= 8;
+                  const placings = classPlacings(bucket, results);
                   return (
                   <View key={`${bucket.classLabel}-${bucket.className}`} wrap={!keepTogether}>
                     <Text style={styles.classHeadingInBreed} minPresenceAhead={60}>
@@ -483,24 +608,21 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                             style={{ ...styles.entryRowWrap, paddingLeft: 6 }}
                             wrap={false}
                           >
-                            <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                              <Text style={styles.catalogueNumber}>
-                                {catNo || '\u2014'}
-                              </Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                              <View style={{ width: 22 }}>
+                                <Text style={styles.catalogueNumber}>
+                                  {catNo || '\u2014'}
+                                </Text>
+                                {isAbsent && (
+                                  <Text style={markedStyles.absentByNumber}>ABS</Text>
+                                )}
+                              </View>
                               <Text style={styles.dogName}>
                                 {displayName}
                               </Text>
                               <Text style={styles.seeClassRef}>
                                 {'  '}[see {firstClass}]
                               </Text>
-                              {isAbsent && (
-                                <Text style={markedStyles.absentBadge}> Abs.</Text>
-                              )}
-                              {getResultMarker(result) && (
-                                <Text style={markedStyles.placementBadge}>
-                                  {' '}{getResultMarker(result)}
-                                </Text>
-                              )}
                             </View>
                           </View>
                         );
@@ -561,21 +683,18 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                           style={styles.entryRowWrap}
                           wrap={false}
                         >
-                          <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                            <Text style={styles.catalogueNumber}>
-                              {catNo || '\u2014'}
-                            </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                            <View style={{ width: 22 }}>
+                              <Text style={styles.catalogueNumber}>
+                                {catNo || '\u2014'}
+                              </Text>
+                              {isAbsent && (
+                                <Text style={markedStyles.absentByNumber}>ABS</Text>
+                              )}
+                            </View>
                             <Text style={styles.dogName}>
                               {displayName}
                             </Text>
-                            {isAbsent && (
-                              <Text style={markedStyles.absentBadge}> Abs.</Text>
-                            )}
-                            {getResultMarker(result) && (
-                              <Text style={markedStyles.placementBadge}>
-                                {' '}{getResultMarker(result)}
-                              </Text>
-                            )}
                           </View>
 
                           <Text style={styles.entryDetail}>
@@ -625,6 +744,23 @@ export function CatalogueMarked({ show, entries, results, absentees, achievement
                         </View>
                       );
                     })}
+                    {placings.length > 0 && (
+                      <View style={markedStyles.placingsBlock} wrap={false}>
+                        <View style={markedStyles.placingsHeader}>
+                          <Text style={markedStyles.placingsHeaderText}>PLACINGS</Text>
+                        </View>
+                        <View style={markedStyles.placingsBody}>
+                          {placings.map((p, i) => (
+                            <Text
+                              key={i}
+                              style={p.isFirst ? markedStyles.placingFirst : markedStyles.placing}
+                            >
+                              {p.marker} {p.catNo}
+                            </Text>
+                          ))}
+                        </View>
+                      </View>
+                    )}
                   </View>
                   );
                 })}
