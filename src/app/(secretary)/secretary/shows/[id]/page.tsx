@@ -68,6 +68,8 @@ import { SetupWizard } from './_components/setup-wizard';
 import { ClassManager, BulkClassCreator, AddIndividualClass, VarietyClassQuickAdd } from './_components/class-manager';
 import { SundryItemManager } from './_components/sundry-item-manager';
 import { DiscountsSection } from './_components/discounts-section';
+import { RegionalFeesEditor, type RegionalFeePayload } from './_components/regional-fees-editor';
+import type { RegionalFeeConfig } from '@/server/db/schema/shows';
 
 export default function OverviewPage() {
   const showId = useShowId();
@@ -457,11 +459,15 @@ function EditShowDetailsDialog({
     juniorHandlerFee: number | null;
     multiDogThreshold: number | null;
     multiDogPackagePence: number | null;
+    regionalFeeConfig: RegionalFeeConfig | null;
   };
   showId: string;
 }) {
   const [open, setOpen] = useState(false);
   const isWusv = show.showRuleset === 'wusv';
+  // Embedded RegionalFeesEditor reports its config here so the dialog's single
+  // Save persists fees alongside everything else (no two-save-button trap).
+  const [regionalPayload, setRegionalPayload] = useState<RegionalFeePayload | null>(null);
   const [name, setName] = useState(show.name);
   const [showType, setShowType] = useState(show.showType);
   const [showScope, setShowScope] = useState(show.showScope);
@@ -556,12 +562,18 @@ function EditShowDetailsDialog({
       kcLicenceNo: kcLicenceNo || null,
       description: description || null,
       bannerImageUrl: bannerImageUrl || null,
-      firstEntryFee: firstEntryFee ? poundsToPence(Number(firstEntryFee)) : null,
-      subsequentEntryFee: subsequentEntryFee ? poundsToPence(Number(subsequentEntryFee)) : null,
-      nfcEntryFee: nfcEntryFee ? poundsToPence(Number(nfcEntryFee)) : null,
-      juniorHandlerFee: juniorHandlerFee ? poundsToPence(Number(juniorHandlerFee)) : null,
-      multiDogThreshold: multiDog.threshold ? Number(multiDog.threshold) : null,
-      multiDogPackagePence: multiDog.packagePence ? poundsToPence(Number(multiDog.packagePence)) : null,
+      // Regional (SV/WUSV) shows price via regionalFeeConfig (reported up by the
+      // embedded RegionalFeesEditor); their RKC fee fields are left untouched
+      // (undefined) so the single Save never clobbers the regional config.
+      firstEntryFee: isWusv ? undefined : firstEntryFee ? poundsToPence(Number(firstEntryFee)) : null,
+      subsequentEntryFee: isWusv ? undefined : subsequentEntryFee ? poundsToPence(Number(subsequentEntryFee)) : null,
+      nfcEntryFee: isWusv ? undefined : nfcEntryFee ? poundsToPence(Number(nfcEntryFee)) : null,
+      juniorHandlerFee: isWusv
+        ? regionalPayload?.juniorHandlerFeePence ?? undefined
+        : juniorHandlerFee ? poundsToPence(Number(juniorHandlerFee)) : null,
+      regionalFeeConfig: isWusv ? regionalPayload?.config ?? undefined : undefined,
+      multiDogThreshold: isWusv ? undefined : multiDog.threshold ? Number(multiDog.threshold) : null,
+      multiDogPackagePence: isWusv ? undefined : multiDog.packagePence ? poundsToPence(Number(multiDog.packagePence)) : null,
       startTime: startTime || null,
     });
   }
@@ -942,6 +954,15 @@ function EditShowDetailsDialog({
                 />
               </div>
             </div>
+            {isWusv ? (
+              <RegionalFeesEditor
+                showId={showId}
+                config={show.regionalFeeConfig}
+                juniorHandlerFeePence={show.juniorHandlerFee}
+                onChange={setRegionalPayload}
+              />
+            ) : (
+              <>
             {/* Entry Fees */}
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
@@ -1015,6 +1036,8 @@ function EditShowDetailsDialog({
               multiDog={multiDog}
               onMultiDogChange={setMultiDog}
             />
+              </>
+            )}
 
             <div className="space-y-1.5">
               <Label htmlFor="edit-kc">RKC Licence Number</Label>

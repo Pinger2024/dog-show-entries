@@ -1,4 +1,4 @@
-import type { ScheduleData } from '@/server/db/schema/shows';
+import type { ScheduleData, RegionalFeeConfig } from '@/server/db/schema/shows';
 
 /**
  * Types shared by both the single-breed and multi-breed schedule renderers.
@@ -30,6 +30,9 @@ export interface ScheduleShowInfo {
   juniorHandlerFee: number | null;
   multiDogThreshold: number | null;
   multiDogPackagePence: number | null;
+  /** Regional (SV/WUSV) tiered per-dog fee config — the schedule's Fees box
+   *  renders this instead of the RKC first/subsequent model when set. */
+  regionalFeeConfig?: RegionalFeeConfig | null;
   /** Per-show named discount tiers (Members, Pensioners, etc.). Each row
    *  carries its first-class fee and optional multi-dog package price. */
   discountGroups: Array<{

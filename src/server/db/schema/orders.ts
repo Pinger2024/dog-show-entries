@@ -1,4 +1,5 @@
 import {
+  boolean,
   index,
   integer,
   pgTable,
@@ -45,6 +46,21 @@ export const orders = pgTable(
     // because the formula could change and historical orders need their
     // original fee preserved.
     platformFeePence: integer('platform_fee_pence').notNull().default(0),
+    // Discretionary donation collected at checkout (pence), part of totalAmount.
+    // Regional shows can offer this; the club receives it (Mandy 2026-07-05).
+    donationPence: integer('donation_pence').notNull().default(0),
+    // Kennel affix the donor wants thanked in the catalogue (optional). Captured
+    // now; the catalogue "thanks" rendering is a later pass.
+    donationAffix: text('donation_affix'),
+    // Regional (SV/WUSV) checkout declarations — self-declared, taken on trust.
+    // regionalMembership = the membership label the exhibitor ticked (unlocks the
+    // member rate), regionalMembershipNumber = the number they gave (not
+    // validated). regionalFirstTimeExhibitor = they claimed the first-time rate.
+    regionalMembership: text('regional_membership'),
+    regionalMembershipNumber: text('regional_membership_number'),
+    regionalFirstTimeExhibitor: boolean('regional_first_time_exhibitor')
+      .notNull()
+      .default(false),
     stripePaymentIntentId: text('stripe_payment_intent_id'),
     // Attribution: which channel drove this entry? Populated from the ?src=
     // query param on the share URL (whatsapp/facebook/instagram/…). Null when

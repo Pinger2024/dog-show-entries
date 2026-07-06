@@ -38,6 +38,7 @@ import {
 import type { RouterOutputs } from '@/server/trpc/router';
 import { ClassManager, BulkClassCreator } from './class-manager';
 import { DiscountsSection } from './discounts-section';
+import { RegionalFeesEditor, type RegionalFeePayload } from './regional-fees-editor';
 import { SectionHeading, InlineHelp } from './section-help';
 import { JudgesSection } from './judge-section';
 import { ScheduleSettingsForm } from './schedule-settings-form';
@@ -650,6 +651,10 @@ function StepDetails({
     show.secretaryAddress ?? '',
   );
   const [kcLicenceNo, setKcLicenceNo] = useState(show.kcLicenceNo ?? '');
+  const isWusv = show.showRuleset === 'wusv';
+  // Embedded RegionalFeesEditor reports its config here so this step's single
+  // Save persists fees alongside the close dates (no two-save-button trap).
+  const [regionalPayload, setRegionalPayload] = useState<RegionalFeePayload | null>(null);
 
   const utils = trpc.useUtils();
   const updateMutation = trpc.shows.update.useMutation({
@@ -678,14 +683,21 @@ function StepDetails({
 
     updateMutation.mutate({
       id: showId,
-      firstEntryFee: firstEntryFee ? poundsToPence(Number(firstEntryFee)) : null,
-      subsequentEntryFee: subsequentEntryFee
+      // Regional (SV/WUSV) shows price via regionalFeeConfig (reported up by the
+      // embedded RegionalFeesEditor); their RKC fee fields stay untouched.
+      firstEntryFee: isWusv ? undefined : firstEntryFee ? poundsToPence(Number(firstEntryFee)) : null,
+      subsequentEntryFee: isWusv
+        ? undefined
+        : subsequentEntryFee
         ? poundsToPence(Number(subsequentEntryFee))
         : null,
-      nfcEntryFee: nfcEntryFee ? poundsToPence(Number(nfcEntryFee)) : null,
-      juniorHandlerFee: juniorHandlerFee ? poundsToPence(Number(juniorHandlerFee)) : null,
-      multiDogThreshold: multiDog.threshold ? Number(multiDog.threshold) : null,
-      multiDogPackagePence: multiDog.packagePence ? poundsToPence(Number(multiDog.packagePence)) : null,
+      nfcEntryFee: isWusv ? undefined : nfcEntryFee ? poundsToPence(Number(nfcEntryFee)) : null,
+      juniorHandlerFee: isWusv
+        ? regionalPayload?.juniorHandlerFeePence ?? undefined
+        : juniorHandlerFee ? poundsToPence(Number(juniorHandlerFee)) : null,
+      regionalFeeConfig: isWusv ? regionalPayload?.config ?? undefined : undefined,
+      multiDogThreshold: isWusv ? undefined : multiDog.threshold ? Number(multiDog.threshold) : null,
+      multiDogPackagePence: isWusv ? undefined : multiDog.packagePence ? poundsToPence(Number(multiDog.packagePence)) : null,
       entryCloseDate: entryCloseDate
         ? new Date(entryCloseDate).toISOString()
         : null,
@@ -718,6 +730,15 @@ function StepDetails({
             tip: 'You can leave any of these blank if you do not offer that type of entry. Just set what applies to your show.',
           }}
         />
+        {isWusv ? (
+          <RegionalFeesEditor
+            showId={showId}
+            config={show.regionalFeeConfig}
+            juniorHandlerFeePence={show.juniorHandlerFee}
+            onChange={setRegionalPayload}
+          />
+        ) : (
+          <>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="wiz-first-fee" className="text-xs">
@@ -806,6 +827,8 @@ function StepDetails({
           multiDog={multiDog}
           onMultiDogChange={setMultiDog}
         />
+          </>
+        )}
       </div>
 
       {/* Close Dates */}

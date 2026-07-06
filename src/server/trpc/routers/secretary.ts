@@ -3828,8 +3828,14 @@ export const secretaryRouter = createTRPCRouter({
         detected.judge_offers_sent = false;
       }
 
-      // Additional auto-detect keys for lifecycle gates
-      detected.entry_fees_set = show.firstEntryFee != null && show.firstEntryFee > 0;
+      // Additional auto-detect keys for lifecycle gates. Regional (SV/WUSV)
+      // shows price via regionalFeeConfig, not firstEntryFee — count either
+      // (Mandy 2026-07-05: regional fees set but checklist said "not set").
+      const regionalFeesSet = !!(
+        (show as { regionalFeeConfig?: { tiers?: unknown[] } | null }).regionalFeeConfig?.tiers?.length
+      );
+      detected.entry_fees_set =
+        regionalFeesSet || (show.firstEntryFee != null && show.firstEntryFee > 0);
       detected.entry_close_date_set = show.entryCloseDate != null;
       detected.secretary_details_set = !!(show.secretaryName && show.secretaryEmail);
       // Post-show: the "Publish results" checklist item declares this autoDetectKey
@@ -3937,7 +3943,12 @@ export const secretaryRouter = createTRPCRouter({
           actionPath: '/people', severity: 'required',
         });
       }
-      if (!show.firstEntryFee || show.firstEntryFee <= 0) {
+      // Regional (SV/WUSV) shows price via regionalFeeConfig, not firstEntryFee
+      // — treat either as "fees set" (Mandy 2026-07-05).
+      const regionalFeesSet = !!(
+        (show as { regionalFeeConfig?: { tiers?: unknown[] } | null }).regionalFeeConfig?.tiers?.length
+      );
+      if (!regionalFeesSet && (!show.firstEntryFee || show.firstEntryFee <= 0)) {
         openEntriesBlockers.push({
           key: 'no_entry_fees', label: 'Entry fees not set',
           detail: 'Click Edit on the main show page to set entry fees',

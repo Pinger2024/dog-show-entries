@@ -38,6 +38,11 @@ import { trpc } from '@/lib/trpc/client';
 import { formatDogName } from '@/lib/utils';
 import { readReferralSource } from '@/lib/referral-source';
 import { computeOrderFees, type DogEntryInput, type FeeContext } from '@/lib/fee-calc';
+import {
+  computeRegionalOrderFees,
+  type RegionalDogEntryInput,
+  type RegionalFeeContext,
+} from '@/lib/regional-fee-calc';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -131,6 +136,15 @@ export default function EnterShowPage() {
   // so the fee-calc service can apply the group's first-class rate
   // and (if set) member-specific multi-dog package price.
   const [discountGroupId, setDiscountGroupId] = useState<string | null>(null);
+  // Regional (SV/WUSV) checkout declarations — self-declared, on trust. Kept as
+  // transient page state (not persisted with the cart) so a reload just resets
+  // them to the standard rate rather than risking a stale membership sticking to
+  // a different exhibitor.
+  const [regionalMembership, setRegionalMembership] = useState<string | null>(null);
+  const [regionalMembershipNumber, setRegionalMembershipNumber] = useState('');
+  const [regionalFirstTime, setRegionalFirstTime] = useState(false);
+  const [donationPounds, setDonationPounds] = useState('');
+  const [donationAffix, setDonationAffix] = useState('');
 
   // JH form state
   const [jhName, setJhName] = useState('');
@@ -335,10 +349,59 @@ export default function EnterShowPage() {
     { enabled: !!showId && cart.step === 'cart_review' }
   );
 
+  // Regional (SV/WUSV) shows price on a tiered per-dog scale + member column
+  // (project_regional_fee_structure). Null on RKC shows / regionals with no fee
+  // config yet, which fall back to the standard fee model.
+  const regionalCfg =
+    show?.showRuleset === 'wusv' ? show.regionalFeeConfig ?? null : null;
+  const regionalMemberships = regionalCfg?.memberships ?? [
+    { label: 'BRG/League member', requiresNumber: true },
+  ];
+  const donationPence = regionalCfg?.donationsEnabled
+    ? Math.round((parseFloat(donationPounds) || 0) * 100)
+    : 0;
+  // A membership that asks for a number must have one before checkout —
+  // Mandy 2026-07-05 (still taken on trust, just not left blank).
+  const selectedMembership = regionalMembership
+    ? regionalMemberships.find((m) => m.label === regionalMembership)
+    : undefined;
+  const membershipNumberMissing =
+    !!selectedMembership?.requiresNumber && !regionalMembershipNumber.trim();
+
   // Live fee preview — mirrors server-side computation so the exhibitor sees
   // the right total before paying. The server recomputes authoritatively at
   // checkout, so this is purely informational; mismatch would be caught there.
   const feePreview = useMemo(() => {
+    // Regional tiered pricing — per distinct dog, with the member/first-time
+    // switches. JH entries don't consume a dog position.
+    if (regionalCfg) {
+      const completeEntries = cart.entries.filter(
+        (e) => e.classIds.length > 0 || e.isNfc,
+      );
+      if (completeEntries.length === 0) return null;
+      const declared = regionalMembership
+        ? regionalMemberships.find((m) => m.label === regionalMembership)
+        : undefined;
+      const ctx: RegionalFeeContext = {
+        tiers: declared?.tiers ?? regionalCfg.tiers,
+        isMember: !!declared && !declared.tiers,
+        firstTimeExhibitor: regionalFirstTime && !!regionalCfg.firstTimeEnabled,
+        firstTimeFeePence: regionalCfg.firstTimeFeePence ?? 0,
+        juniorHandlerFeePence: show?.juniorHandlerFee ?? 0,
+      };
+      const rEntries: RegionalDogEntryInput[] = completeEntries.map((e, i) => ({
+        key: String(i),
+        kind: e.entryType === 'junior_handler' ? 'junior_handler' : 'standard',
+      }));
+      const r = computeRegionalOrderFees(rEntries, ctx);
+      return {
+        total: r.entriesTotal,
+        multiDogApplied: false,
+        multiDogSavings: 0,
+        payingDogCount: r.payingDogCount,
+      };
+    }
+
     if (!show || show.firstEntryFee == null) return null;
     const selectedGroup = discountGroups?.find((g) => g.id === discountGroupId) ?? null;
     const feeCtx: FeeContext = {
@@ -370,7 +433,7 @@ export default function EnterShowPage() {
     if (dogEntries.length === 0) return null;
     return computeOrderFees(dogEntries, feeCtx);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [show, discountGroups, discountGroupId, cart.entries]);
+  }, [show, regionalCfg, regionalMembership, regionalFirstTime, discountGroups, discountGroupId, cart.entries]);
 
   // Sync cart sundry item prices/names with server data (handles secretary price changes)
   useEffect(() => {
@@ -557,6 +620,21 @@ export default function EnterShowPage() {
       return count > 0 ? show.juniorHandlerFee : 0;
     }
 
+    // Regional (SV/WUSV) shows charge a tiered per-DOG fee based on how many
+    // dogs the exhibitor enters — not per class. Show the standard rate for
+    // THIS dog's position; member / first-time discounts apply at Review.
+    if (regionalCfg && !isNfc && !isJuniorHandler) {
+      if (count === 0) return 0;
+      const priorPaying = cart.entries.filter(
+        (e) =>
+          e.entryType === 'standard' &&
+          (e.classIds.length > 0 || e.isNfc) &&
+          e.id !== cart.activeEntryId,
+      ).length;
+      const idx = Math.min(priorPaying, regionalCfg.tiers.length - 1);
+      return regionalCfg.tiers[idx]?.standardPence ?? 0;
+    }
+
     if (count === 0) return 0;
 
     // Use show-level fee tiers if available, otherwise fall back to per-class fees
@@ -572,7 +650,8 @@ export default function EnterShowPage() {
     return showClasses
       .filter((sc) => selectedClassIds.includes(sc.id))
       .reduce((sum, sc) => sum + sc.entryFee, 0);
-  }, [showClasses, selectedClassIds, show, isNfc, isJuniorHandler]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showClasses, selectedClassIds, show, isNfc, isJuniorHandler, regionalCfg, cart.entries, cart.activeEntryId]);
 
   // Age eligibility — uses date-anchored bounds so a dog whose 1st
   // birthday IS the show day is still eligible for Puppy (Amanda
@@ -653,6 +732,13 @@ export default function EnterShowPage() {
         })),
         referralSource,
         discountGroupId: discountGroupId ?? undefined,
+        regionalMembership: regionalMembership ?? undefined,
+        regionalMembershipNumber: regionalMembership
+          ? regionalMembershipNumber.trim() || undefined
+          : undefined,
+        regionalFirstTimeExhibitor: regionalFirstTime,
+        donationPence,
+        donationAffix: donationPence > 0 ? donationAffix.trim() || undefined : undefined,
       });
 
       // Free entries (£0) — skip payment, go straight to success
@@ -1382,6 +1468,7 @@ export default function EnterShowPage() {
                         selectedIds={selectedClassIds}
                         onToggle={toggleClass}
                         getAgeEligibility={getAgeEligibility}
+                        hideFee={show?.showRuleset === 'wusv'}
                       />
                     </>
                   )}
@@ -1744,7 +1831,7 @@ export default function EnterShowPage() {
           )}
 
           {/* Discount group declaration — only when the show offers groups */}
-          {discountGroups && discountGroups.length > 0 && (
+          {!regionalCfg && discountGroups && discountGroups.length > 0 && (
             <div className="rounded-lg border bg-card p-4">
               <div className="space-y-1">
                 <p className="text-sm font-semibold">Are you eligible for a discount?</p>
@@ -1784,6 +1871,126 @@ export default function EnterShowPage() {
             </div>
           )}
 
+          {/* Regional (SV/WUSV) membership + first-time + donation. The tiered
+              per-dog fees are applied automatically; these switches choose the
+              member column / free first-time entry and add a donation. */}
+          {regionalCfg && (
+            <div className="space-y-4 rounded-lg border bg-card p-4">
+              <div className="space-y-1">
+                <p className="text-sm font-semibold">Membership &amp; extras</p>
+                <p className="text-xs text-muted-foreground">
+                  Tick anything that applies — by ticking you confirm you qualify.
+                </p>
+              </div>
+
+              {/* Membership options → member rates */}
+              <div className="space-y-2">
+                {regionalMemberships.map((m) => (
+                  <label
+                    key={m.label}
+                    className="flex min-h-[2.75rem] cursor-pointer items-start gap-3 rounded-md border p-3 hover:bg-muted/30"
+                  >
+                    <input
+                      type="radio"
+                      name="regional-membership"
+                      checked={regionalMembership === m.label}
+                      onChange={() => setRegionalMembership(m.label)}
+                      className="mt-0.5 size-4 cursor-pointer"
+                    />
+                    <span className="text-sm font-medium">I am a {m.label}</span>
+                  </label>
+                ))}
+                <label className="flex min-h-[2.75rem] cursor-pointer items-start gap-3 rounded-md border p-3 hover:bg-muted/30">
+                  <input
+                    type="radio"
+                    name="regional-membership"
+                    checked={regionalMembership === null}
+                    onChange={() => {
+                      setRegionalMembership(null);
+                      setRegionalMembershipNumber('');
+                    }}
+                    className="mt-0.5 size-4 cursor-pointer"
+                  />
+                  <span className="text-sm font-medium">Not a member (standard rate)</span>
+                </label>
+              </div>
+
+              {/* Membership number — shown when the chosen membership needs one */}
+              {regionalMembership &&
+                regionalMemberships.find((m) => m.label === regionalMembership)?.requiresNumber && (
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium">
+                      {regionalMembership} number <span className="text-destructive">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={regionalMembershipNumber}
+                      onChange={(e) => setRegionalMembershipNumber(e.target.value)}
+                      placeholder="Your membership number"
+                      className={cn(
+                        'h-11 w-full rounded-md border px-3 text-sm',
+                        membershipNumberMissing && 'border-destructive',
+                      )}
+                    />
+                    {membershipNumberMissing && (
+                      <p className="text-xs text-destructive">
+                        Please enter your membership number to use the member rate.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+              {/* First-time exhibitor */}
+              {regionalCfg.firstTimeEnabled && (
+                <label className="flex min-h-[2.75rem] cursor-pointer items-start gap-3 rounded-md border p-3 hover:bg-muted/30">
+                  <input
+                    type="checkbox"
+                    checked={regionalFirstTime}
+                    onChange={(e) => setRegionalFirstTime(e.target.checked)}
+                    className="mt-0.5 size-4 cursor-pointer"
+                  />
+                  <span className="text-sm">
+                    <span className="font-medium">This is my first time exhibiting</span>
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      {(regionalCfg.firstTimeFeePence ?? 0) === 0
+                        ? 'first dog free'
+                        : `${formatCurrency(regionalCfg.firstTimeFeePence ?? 0)} for your first dog`}
+                    </span>
+                  </span>
+                </label>
+              )}
+
+              {/* Discretionary donation */}
+              {regionalCfg.donationsEnabled && (
+                <div className="space-y-2 rounded-md border border-dashed p-3">
+                  <p className="text-sm font-medium">Add a donation (optional)</p>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">£</span>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        step="0.50"
+                        value={donationPounds}
+                        onChange={(e) => setDonationPounds(e.target.value)}
+                        placeholder="0.00"
+                        className="h-11 w-28 rounded-md border px-3 text-sm"
+                      />
+                    </div>
+                    <input
+                      type="text"
+                      value={donationAffix}
+                      onChange={(e) => setDonationAffix(e.target.value)}
+                      placeholder="Kennel affix to thank (optional)"
+                      className="h-11 flex-1 rounded-md border px-3 text-sm"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Multi-dog savings banner */}
           {feePreview?.multiDogApplied && feePreview.multiDogSavings > 0 && (
             <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900">
@@ -1812,9 +2019,15 @@ export default function EnterShowPage() {
                   <span>{formatCurrency(cart.sundryTotal)}</span>
                 </div>
               )}
+              {donationPence > 0 && (
+                <div className="flex justify-between text-sm text-muted-foreground">
+                  <span>Donation</span>
+                  <span>{formatCurrency(donationPence)}</span>
+                </div>
+              )}
               <div className="flex justify-between border-t pt-1.5 text-sm font-bold sm:text-base">
                 <span>Grand Total</span>
-                <span>{formatCurrency((feePreview?.total ?? cart.entriesTotal) + cart.sundryTotal)}</span>
+                <span>{formatCurrency((feePreview?.total ?? cart.entriesTotal) + cart.sundryTotal + donationPence)}</span>
               </div>
             </div>
           </div>
@@ -1927,6 +2140,8 @@ export default function EnterShowPage() {
                 !healthDeclared ||
                 !termsAccepted ||
                 checkoutMutation.isPending ||
+                // A membership that asks for a number must have one (regional).
+                membershipNumberMissing ||
                 // An entry is submittable if it has at least one class OR it's
                 // an NFC ("not for competition") entry — those deliberately have
                 // no classes. Mirrors the filter in handleProceedToPayment's
@@ -1943,7 +2158,7 @@ export default function EnterShowPage() {
               ) : (
                 <>
                   {(() => {
-                    const previewGrand = (feePreview?.total ?? cart.entriesTotal) + cart.sundryTotal;
+                    const previewGrand = (feePreview?.total ?? cart.entriesTotal) + cart.sundryTotal + donationPence;
                     if (previewGrand === 0) return 'Confirm Entry — Free';
                     return <>Proceed to Payment &middot; {formatCurrency(previewGrand)}</>;
                   })()}
@@ -2310,6 +2525,7 @@ function ClassGroup({
   eligibleClassNames,
   suggestedClassName,
   feeOverride,
+  hideFee,
 }: {
   title: string;
   classes: ShowClassItem[];
@@ -2322,6 +2538,9 @@ function ClassGroup({
   eligibleClassNames?: string[];
   suggestedClassName?: string | null;
   feeOverride?: number | null;
+  /** Hide the per-class price — regional shows charge a tiered per-dog fee, not
+   *  a per-class one, so a per-class amount here is misleading (Mandy 2026-07-05). */
+  hideFee?: boolean;
 }) {
   // Filter out age-ineligible classes if eligibility info is available
   const visibleClasses = getAgeEligibility
@@ -2398,9 +2617,11 @@ function ClassGroup({
                   </p>
                 )}
               </div>
-              <span className="shrink-0 text-sm font-semibold">
-                {formatCurrency(feeOverride != null ? feeOverride : sc.entryFee)}
-              </span>
+              {!hideFee && (
+                <span className="shrink-0 text-sm font-semibold">
+                  {formatCurrency(feeOverride != null ? feeOverride : sc.entryFee)}
+                </span>
+              )}
             </label>
           );
         })}

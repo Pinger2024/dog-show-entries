@@ -34,6 +34,11 @@ import {
   type DogEntryInput,
   type FeeContext,
 } from '@/lib/fee-calc';
+import {
+  computeRegionalOrderFees,
+  type RegionalDogEntryInput,
+  type RegionalFeeContext,
+} from '@/lib/regional-fee-calc';
 import { svEntryMissingRequirements, svEntryBlockedMessage } from '@/lib/sv-entry-validation';
 import { hasJudgingConflict } from '@/lib/judge-exhibitor-conflict';
 
@@ -69,6 +74,18 @@ export const ordersRouter = createTRPCRouter({
           .optional(),
         /** Discount group the exhibitor declared they belong to (e.g. Members). */
         discountGroupId: z.string().uuid().optional(),
+        /** Regional (SV/WUSV) checkout declarations — self-declared, on trust.
+         *  regionalMembership = the membership label the exhibitor ticked (must
+         *  match a configured option); regionalMembershipNumber = the number
+         *  given (never validated). */
+        regionalMembership: z.string().max(120).optional(),
+        regionalMembershipNumber: z.string().max(120).optional(),
+        regionalFirstTimeExhibitor: z.boolean().default(false),
+        /** Optional discretionary donation (pence, capped at £1000) plus the
+         *  kennel affix to thank in the catalogue. Only honoured when the show
+         *  enables donations. */
+        donationPence: z.number().int().min(0).max(100_000).default(0),
+        donationAffix: z.string().max(120).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -525,35 +542,101 @@ export const ordersRouter = createTRPCRouter({
         discountGroup: discountGroupConfig,
       };
 
-      // Map input entries → service inputs (index-aligned so we can read
-      // the per-entry breakdown back when inserting rows below).
-      const dogEntries: DogEntryInput[] = input.entries.map((e, i) => ({
-        key: String(i),
-        kind:
-          e.entryType === 'junior_handler'
-            ? 'junior_handler'
-            : e.isNfc
-              ? 'nfc'
-              : 'standard',
-        classCount: e.classIds.length,
-      }));
+      // Regional (SV/WUSV) shows price on a tiered per-DISTINCT-DOG scale with a
+      // member column — a different model from the RKC first/subsequent-class
+      // fees, so they take their own engine (Mandy 2026-07-02). Falls back to
+      // the standard RKC path when a regional show has no fee config set yet.
+      const regionalCfg =
+        show.showRuleset === 'wusv' ? show.regionalFeeConfig : null;
+      const isRegional = regionalCfg != null;
+      const membershipOptions = regionalCfg?.memberships ?? [
+        { label: 'BRG/League member', requiresNumber: true },
+      ];
 
-      // Legacy fallback: shows that pre-date show-level fees still use
-      // per-class entryFee on showClasses. None exist in current envs
-      // but the path is preserved for safety.
-      const usePerClassFallback = show.firstEntryFee == null;
-      const feeResult = usePerClassFallback ? null : computeOrderFees(dogEntries, feeCtx);
+      // Resolve the declared membership against the show's configured options.
+      // A membership with its own tier schedule prices on that schedule (a
+      // club's own member rates); a plain membership switches the shared tiers
+      // to their member column. Self-declared — never validated (on trust).
+      let regionalMembershipLabel: string | null = null;
+      if (isRegional && input.regionalMembership) {
+        const declared = membershipOptions.find(
+          (m) => m.label === input.regionalMembership,
+        );
+        if (!declared) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Unknown membership option for this show',
+          });
+        }
+        regionalMembershipLabel = declared.label;
+      }
+      const regionalFirstTime =
+        isRegional &&
+        input.regionalFirstTimeExhibitor &&
+        !!regionalCfg.firstTimeEnabled;
 
-      let totalAmount = 0;
-      if (feeResult) {
-        totalAmount = feeResult.total;
+      // Per-entry fee breakdown, shared by the order total and the entry_classes
+      // rows below — sourced from whichever engine applies.
+      let entriesSubtotal = 0;
+      let perEntryBreakdown: { fee: number; perClassFees: number[] }[] | null = null;
+
+      if (isRegional) {
+        const declared = regionalMembershipLabel
+          ? membershipOptions.find((m) => m.label === regionalMembershipLabel)
+          : undefined;
+        const regionalCtx: RegionalFeeContext = {
+          tiers: declared?.tiers ?? regionalCfg.tiers,
+          isMember: !!declared && !declared.tiers,
+          firstTimeExhibitor: regionalFirstTime,
+          firstTimeFeePence: regionalCfg.firstTimeFeePence ?? 0,
+          juniorHandlerFeePence: show.juniorHandlerFee ?? 0,
+        };
+        const regionalEntries: RegionalDogEntryInput[] = input.entries.map((e, i) => ({
+          key: String(i),
+          kind: e.entryType === 'junior_handler' ? 'junior_handler' : 'standard',
+        }));
+        const regionalResult = computeRegionalOrderFees(regionalEntries, regionalCtx);
+        entriesSubtotal = regionalResult.entriesTotal;
+        perEntryBreakdown = regionalResult.perEntry.map((e) => ({
+          fee: e.fee,
+          perClassFees: e.perClassFees,
+        }));
       } else {
-        for (const entry of input.entries) {
-          for (const classId of entry.classIds) {
-            totalAmount += classMap.get(classId)!.entryFee;
+        // Standard RKC path — first/subsequent class fees + optional discount
+        // group + multi-dog package. Legacy per-class fallback for shows that
+        // pre-date show-level fees.
+        const dogEntries: DogEntryInput[] = input.entries.map((e, i) => ({
+          key: String(i),
+          kind:
+            e.entryType === 'junior_handler'
+              ? 'junior_handler'
+              : e.isNfc
+                ? 'nfc'
+                : 'standard',
+          classCount: e.classIds.length,
+        }));
+        const usePerClassFallback = show.firstEntryFee == null;
+        const feeResult = usePerClassFallback ? null : computeOrderFees(dogEntries, feeCtx);
+        if (feeResult) {
+          entriesSubtotal = feeResult.total;
+          perEntryBreakdown = feeResult.perEntry.map((e) => ({
+            fee: e.fee,
+            perClassFees: e.perClassFees,
+          }));
+        } else {
+          for (const entry of input.entries) {
+            for (const classId of entry.classIds) {
+              entriesSubtotal += classMap.get(classId)!.entryFee;
+            }
           }
         }
       }
+
+      // Discretionary donation — only honoured when the show enables it.
+      const donationPence =
+        isRegional && regionalCfg.donationsEnabled ? input.donationPence : 0;
+
+      let totalAmount = entriesSubtotal + donationPence;
 
       // Validate and calculate sundry items
       let sundryTotal = 0;
@@ -622,8 +705,17 @@ export const ordersRouter = createTRPCRouter({
           status: 'pending_payment',
           totalAmount,
           platformFeePence,
+          donationPence,
+          donationAffix:
+            donationPence > 0 ? input.donationAffix?.trim() || null : null,
           referralSource: input.referralSource?.toLowerCase() ?? null,
           discountGroupId: input.discountGroupId ?? null,
+          regionalMembership: regionalMembershipLabel,
+          regionalMembershipNumber:
+            regionalMembershipLabel && input.regionalMembershipNumber
+              ? input.regionalMembershipNumber
+              : null,
+          regionalFirstTimeExhibitor: regionalFirstTime,
         })
         .returning();
 
@@ -632,9 +724,9 @@ export const ordersRouter = createTRPCRouter({
 
       for (let entryIdx = 0; entryIdx < input.entries.length; entryIdx++) {
         const entryInput = input.entries[entryIdx]!;
-        // Fee comes from the canonical service result when available.
-        // The legacy per-class fallback re-sums classMap to match.
-        const feeBreak = feeResult?.perEntry[entryIdx];
+        // Fee comes from the canonical engine breakdown when available (RKC or
+        // regional). The legacy per-class fallback re-sums classMap to match.
+        const feeBreak = perEntryBreakdown?.[entryIdx];
         const entryFee = feeBreak
           ? feeBreak.fee
           : entryInput.classIds.reduce(
