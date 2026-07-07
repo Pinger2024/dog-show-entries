@@ -1163,7 +1163,7 @@ export default function EnterShowPage() {
 
           {eligibleDogs && eligibleDogs.length > 0 && (
             <Link
-              href="/dogs/new"
+              href={`/dogs/new?returnTo=${encodeURIComponent(`/shows/${idOrSlug}/enter`)}`}
               className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
             >
               + Add a new dog
@@ -1339,6 +1339,7 @@ export default function EnterShowPage() {
                 coatType: selectedDog?.coatType,
                 healthRequired: svHealthRequired,
                 profile: selectedDogSvProfile,
+                ownRegistrationNumber: selectedDog?.kcRegNumber,
                 pedigree: selectedDog
                   ? {
                       sireName: selectedDog.sireName,

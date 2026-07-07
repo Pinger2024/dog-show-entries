@@ -51,9 +51,17 @@ export function svMissingRequirements(opts: {
   healthRequired: boolean;
   profile: SvHealthProfile;
   pedigree?: SvPedigree;
+  /** The dog's OWN registration number. When provided (any value, incl. an
+   *  empty string) it is required for SV / regional entry — Mandy 2026-07-07:
+   *  "make the registration number mandatory for SV shows". Omit (undefined)
+   *  to skip the check for back-compat. */
+  ownRegistrationNumber?: string | null;
 }): string[] {
   const missing: string[] = [];
   if (!opts.coatType) missing.push('Coat type (Standard or Long Coat)');
+  if (opts.ownRegistrationNumber !== undefined && blank(opts.ownRegistrationNumber)) {
+    missing.push('Registration number');
+  }
 
   const p = opts.pedigree;
   if (p) {

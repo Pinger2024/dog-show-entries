@@ -156,9 +156,11 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
     onSuccess: () => {
       utils.dogs.list.invalidate();
       toast.success('Dog added successfully!', {
-        description: 'Your dog has been added to your profile.',
+        description: safeReturnTo
+          ? 'Taking you back to your entry…'
+          : 'Your dog has been added to your profile.',
       });
-      router.push('/dogs');
+      router.push(safeReturnTo ?? '/dogs');
     },
     onError: (error) => {
       toast.error('Something went wrong', {
@@ -486,8 +488,9 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
           <CardHeader>
             <CardTitle>Registration Details</CardTitle>
             <CardDescription>
-              Enter the details as they appear on your Royal Kennel Club registration
-              certificate, or use the RKC Lookup to auto-fill.
+              Enter your dog&apos;s registration details. If your dog is RKC registered,
+              use the RKC Lookup below to auto-fill. Registered with another body
+              (SV, FCI, IKC)? Just type the details in.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -502,9 +505,9 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
                 const body = form.watch('registrationBody');
                 const labelByBody: Record<string, { label: string; placeholder: string; helper: string }> = {
                   kc: {
-                    label: 'RKC Registration Number',
+                    label: 'Dog Registration Number',
                     placeholder: 'e.g. AQ04052601',
-                    helper: 'Found on your Royal Kennel Club registration certificate. Leave blank if not yet registered.',
+                    helper: "Found on your dog's registration certificate. Leave blank if not yet registered.",
                   },
                   sv: {
                     label: 'SV Registration Number',
@@ -561,7 +564,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
                     />
                   </FormControl>
                   <FormDescription>
-                    Enter the name exactly as it appears on your RKC registration
+                    Enter the name exactly as it appears on your dog&apos;s registration
                     certificate.
                   </FormDescription>
                   <FormMessage />

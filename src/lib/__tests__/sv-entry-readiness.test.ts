@@ -126,3 +126,45 @@ describe('svMissingRequirements — pedigree (Mandy 2026-06-26)', () => {
     ]);
   });
 });
+
+describe('svMissingRequirements — own registration number (Mandy 2026-07-07)', () => {
+  it("requires the dog's own registration number when it is checked", () => {
+    expect(svMissingRequirements({
+      coatType: 'stock', healthRequired: false, profile: null,
+      ownRegistrationNumber: '',
+    })).toEqual(['Registration number']);
+  });
+
+  it('treats a whitespace-only registration number as missing', () => {
+    expect(svMissingRequirements({
+      coatType: 'stock', healthRequired: false, profile: null,
+      ownRegistrationNumber: '   ',
+    })).toEqual(['Registration number']);
+  });
+
+  it('passes when the dog has a registration number', () => {
+    expect(svMissingRequirements({
+      coatType: 'stock', healthRequired: false, profile: null,
+      ownRegistrationNumber: 'SZ 2355001',
+    })).toEqual([]);
+  });
+
+  it('does not check the registration number when it is omitted (back-compat)', () => {
+    expect(svMissingRequirements({ coatType: 'stock', healthRequired: false, profile: null }))
+      .toEqual([]);
+  });
+
+  it('orders registration right after coat type', () => {
+    expect(svMissingRequirements({
+      coatType: null, healthRequired: false, profile: null,
+      ownRegistrationNumber: '',
+      pedigree: {},
+    })).toEqual([
+      'Coat type (Standard or Long Coat)',
+      'Registration number',
+      "Sire's name and registration number",
+      "Dam's name and registration number",
+      'Breeder details (name, town and postcode)',
+    ]);
+  });
+});
