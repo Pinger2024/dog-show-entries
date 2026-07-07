@@ -318,7 +318,7 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
                   <StepClasses showId={showId} show={show} />
                 )}
                 {step.id === 'judge' && (
-                  <StepJudge showId={showId} />
+                  <StepJudge showId={showId} show={show} />
                 )}
                 {step.id === 'details' && (
                   <StepDetails showId={showId} show={show} onSaved={goNext} />
@@ -372,6 +372,7 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
 
 function StepClasses({ showId, show }: { showId: string; show: Show }) {
   const hasClasses = (show.showClasses?.length ?? 0) > 0;
+  const isWusv = show.showRuleset === 'wusv';
 
   const help = (
     <div className="mb-3">
@@ -382,9 +383,13 @@ function StepClasses({ showId, show }: { showId: string; show: Show }) {
           todo: [
             'Pick the classes you want to offer (you can use a standard set as a starting point).',
             'Add or remove classes if your show is different from the usual.',
-            'For Champ shows, the Royal Kennel Club has rules about which classes must be offered. We try to flag anything missing.',
+            isWusv
+              ? 'Regional shows use the standard SV age classes (Minor Puppy through to Working), split by sex and coat. We set these up for you.'
+              : 'For Champ shows, the Royal Kennel Club has rules about which classes must be offered. We try to flag anything missing.',
           ],
-          benefit: 'No more typing your class list into a Word document and re-typing it next year. We remember your set up, flag any RKC rules that you might miss, and the same classes flow straight through to the schedule, the catalogue, and the judges book without you lifting a finger.',
+          benefit: isWusv
+            ? 'No more typing your class list into a Word document and re-typing it next year. We remember your set up, and the same classes flow straight through to the schedule, the catalogue, and the judges book without you lifting a finger.'
+            : 'No more typing your class list into a Word document and re-typing it next year. We remember your set up, flag any RKC rules that you might miss, and the same classes flow straight through to the schedule, the catalogue, and the judges book without you lifting a finger.',
           tip: 'You can change classes at any time before entries open. Once a dog has entered a class, that class is locked in so its entry stays valid.',
         }}
       />
@@ -407,6 +412,7 @@ function StepClasses({ showId, show }: { showId: string; show: Show }) {
         showId={showId}
         showType={show.showType}
         showScope={show.showScope}
+        showRuleset={show.showRuleset}
         classes={show.showClasses ?? []}
       />
     </>
@@ -415,16 +421,21 @@ function StepClasses({ showId, show }: { showId: string; show: Show }) {
 
 // ── Step 2: Judge ─────────────────────────────────────────
 
-function StepJudge({ showId }: { showId: string }) {
+function StepJudge({ showId, show }: { showId: string; show: Show }) {
+  const isWusv = show.showRuleset === 'wusv';
   return (
     <>
       <div className="mb-3">
         <InlineHelp
           label="How do judges work?"
           content={{
-            what: 'Every breed at your show needs a judge. We keep a directory of judges with their Royal Kennel Club details, and we email each one to ask if they accept the invitation. They confirm online and that locks them in.',
+            what: isWusv
+              ? 'Every regional show needs a judge. Add your judge (or judges) here, and we email each one to ask if they accept the invitation. They confirm online and that locks them in.'
+              : 'Every breed at your show needs a judge. We keep a directory of judges with their Royal Kennel Club details, and we email each one to ask if they accept the invitation. They confirm online and that locks them in.',
             todo: [
-              'Search for the judge by name. If they are in our directory we will fill in their RKC number for you.',
+              isWusv
+                ? 'Add the judge by name and email.'
+                : 'Search for the judge by name. If they are in our directory we will fill in their RKC number for you.',
               'Choose which breeds and sex each judge is doing (for multi-breed shows).',
               'When you save, we send the judge an email with the invitation. They click Accept or Decline.',
               'You can see who has accepted at the top of this section. Chase any that have not replied a week or two before the show.',
@@ -891,28 +902,31 @@ function StepDetails({
         }}
       />
 
-      {/* RKC Licence */}
-      <div className="space-y-1.5">
-        <SectionHeading
-          title="RKC Licence Number"
-          help={{
-            what: 'The Royal Kennel Club gives each licensed show a unique number. It must be printed on the schedule and catalogue. The RKC sends it to you when they approve your show licence.',
-            todo: [
-              'Find the licence number on the approval email or letter the RKC sent you.',
-              'Type it in here. We will put it on the schedule and catalogue automatically.',
-            ],
-            tip: 'If you have not had the licence number back yet, you can come back and add it later. It does not stop you opening entries.',
-          }}
-          level="h5"
-        />
-        <Input
-          id="wiz-licence"
-          placeholder="Licence number"
-          className="min-h-[2.75rem] max-w-xs"
-          value={kcLicenceNo}
-          onChange={(e) => setKcLicenceNo(e.target.value)}
-        />
-      </div>
+      {/* RKC Licence — not applicable to SV/WUSV regional shows, which run
+          under GSDL British Regional Group / WUSV rules, not an RKC licence. */}
+      {!isWusv && (
+        <div className="space-y-1.5">
+          <SectionHeading
+            title="RKC Licence Number"
+            help={{
+              what: 'The Royal Kennel Club gives each licensed show a unique number. It must be printed on the schedule and catalogue. The RKC sends it to you when they approve your show licence.',
+              todo: [
+                'Find the licence number on the approval email or letter the RKC sent you.',
+                'Type it in here. We will put it on the schedule and catalogue automatically.',
+              ],
+              tip: 'If you have not had the licence number back yet, you can come back and add it later. It does not stop you opening entries.',
+            }}
+            level="h5"
+          />
+          <Input
+            id="wiz-licence"
+            placeholder="Licence number"
+            className="min-h-[2.75rem] max-w-xs"
+            value={kcLicenceNo}
+            onChange={(e) => setKcLicenceNo(e.target.value)}
+          />
+        </div>
+      )}
 
       {/* Save + advance — single button does both so half-typed values
           (like the multi-dog package fields) can't get left behind by a

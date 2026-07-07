@@ -581,15 +581,17 @@ export function AddJudgeWizard({
                         className="h-11"
                       />
                     </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">RKC Number</Label>
-                      <Input
-                        placeholder="Optional"
-                        value={manualKc}
-                        onChange={(e) => setManualKc(e.target.value)}
-                        className="h-11"
-                      />
-                    </div>
+                    {!isWusvShow && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground">RKC Number</Label>
+                        <Input
+                          placeholder="Optional"
+                          value={manualKc}
+                          onChange={(e) => setManualKc(e.target.value)}
+                          className="h-11"
+                        />
+                      </div>
+                    )}
                     <div>
                       <Label className="text-xs text-muted-foreground">Phone</Label>
                       <Input
@@ -602,7 +604,7 @@ export function AddJudgeWizard({
                       />
                     </div>
                     <div className="sm:col-span-2">
-                      <Label className="text-xs text-muted-foreground">Kennel Club Affix</Label>
+                      <Label className="text-xs text-muted-foreground">{isWusvShow ? 'Kennel Name' : 'Kennel Club Affix'}</Label>
                       <Input
                         placeholder="e.g. Sadira"
                         value={manualAffix}
@@ -773,7 +775,7 @@ export function AddJudgeWizard({
               </div>
               <div>
                 <Label htmlFor="affix-confirm" className="text-xs text-muted-foreground">
-                  Kennel Club Affix
+                  {isWusvShow ? 'Kennel Name' : 'Kennel Club Affix'}
                 </Label>
                 <Input
                   id="affix-confirm"

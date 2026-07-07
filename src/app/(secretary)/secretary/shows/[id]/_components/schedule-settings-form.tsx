@@ -115,6 +115,45 @@ const SECTION_HELP: Record<SectionId, SectionHelpContent> = {
   },
 };
 
+// SV/WUSV regional shows run under GSDL British Regional Group / WUSV rules, not
+// the RKC — so the help wording drops RKC-specific references (licences,
+// guarantors, F-regulations) for those sections. Falls back to SECTION_HELP.
+const SECTION_HELP_WUSV: Partial<Record<SectionId, SectionHelpContent>> = {
+  showday: {
+    ...SECTION_HELP.showday,
+    todo: [
+      'Pick the time the show opens. This is when exhibitors can start arriving and finding their ring.',
+      'Set the latest arrival time. After this, latecomers may not be allowed in to compete.',
+      'Pick the time judging starts.',
+      'Add the on-call vet contact (a vet who has agreed to be available during the show).',
+    ],
+  },
+  people: {
+    what: 'The people running the show. The officers (Chairman, Secretary, Treasurer, etc.) and the event manager in overall charge on the day.',
+    todo: [
+      'Add the event manager (the person in overall charge on the day).',
+      'Add the club officers, picking from your club roster or typing them in.',
+    ],
+    benefit: 'Your club roster is remembered between shows. When you run the next one, the officers are already there waiting to be ticked.',
+    tip: 'If you have run shows before, the roster pre-fills the people you have used previously. You can add new ones any time.',
+  },
+  regulations: {
+    what: 'The official rules that apply to your show. Tick the ones that apply and we add the right wording to your schedule.',
+    todo: [
+      'Pick the country the show is in.',
+      'Tick whether the public can come in (free admission, paid, or no public).',
+      'Tick if there is wet weather cover (indoor space if it rains).',
+      'Tick if dogs will be benched. If yes, add the time they can be removed.',
+    ],
+    benefit: 'The required wording is long and fiddly. We keep the latest version and add the right paragraphs to your schedule based on a few tick boxes, so you do not have to write them.',
+    tip: 'The wording on the schedule is generated for you, so you do not have to write it.',
+  },
+};
+
+function sectionHelp(id: SectionId, isWusv: boolean): SectionHelpContent {
+  return (isWusv && SECTION_HELP_WUSV[id]) || SECTION_HELP[id];
+}
+
 interface OfficerWithGuarantor {
   name: string;
   position: string;
@@ -157,6 +196,8 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
   const { data: existing, isLoading, isError: existingError } =
     trpc.secretary.getScheduleData.useQuery({ showId }, { retry: 2 });
   const { data: showData } = trpc.shows.getById.useQuery({ id: showId });
+  const isWusvShow =
+    (showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset === 'wusv';
 
   // Derive existing schedule data from showData as fallback if getScheduleData fails.
   // We must NOT use `existing ?? fallback` here — when the server legitimately returns
@@ -727,7 +768,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
               {isEditing && (
                 <div className="border-t px-4 pb-4 pt-4">
                   <div className="mb-3">
-                    <InlineHelp content={SECTION_HELP[section.id]} />
+                    <InlineHelp content={sectionHelp(section.id, isWusvShow)} />
                   </div>
                   {section.id === 'showday' && (
                     <ShowDaySection
@@ -752,7 +793,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
                       guarantorCount={guarantorCount}
                       requiredGuarantors={requiredGuarantors}
                       showType={showData?.showType ?? 'open'}
-                      isWusvShow={(showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset === 'wusv'}
+                      isWusvShow={isWusvShow}
                     />
                   )}
                   {section.id === 'awards' && (
@@ -762,7 +803,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
                       hasBestVeteranInShow={hasBestVeteranInShow} setHasBestVeteranInShow={setHasBestVeteranInShow}
                       bestVeteranInShowEligibility={bestVeteranInShowEligibility} setBestVeteranInShowEligibility={setBestVeteranInShowEligibility}
                       showId={showId}
-                      isWusvShow={(showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset === 'wusv'}
+                      isWusvShow={isWusvShow}
                     />
                   )}
                   {section.id === 'venue' && (

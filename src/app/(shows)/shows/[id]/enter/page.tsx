@@ -817,7 +817,7 @@ export default function EnterShowPage() {
             <CardTitle>Complete Your Profile</CardTitle>
             <CardDescription>
               Your profile needs updating before you can enter a show.
-              The Royal Kennel Club requires exhibitor name and address on all entries.
+              Your name and address are required on every entry.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -1367,7 +1367,7 @@ export default function EnterShowPage() {
             </p>
           </div>
 
-          {dogUnder6Months && (
+          {dogUnder6Months && show?.showRuleset !== 'wusv' && (
             <div className="flex gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950">
               <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
               <div className="text-sm text-amber-800 dark:text-amber-200">
@@ -2105,7 +2105,7 @@ export default function EnterShowPage() {
                 <span className="font-medium">Keep my name and address out of the catalogue</span>
                 <span className="mt-1 block text-xs text-muted-foreground">
                   Your dog&apos;s registered name and pedigree details will still appear — only your owner details will be withheld.
-                  This is your right under Kennel Club regulation F(1).11.b.
+                  {show?.showRuleset !== 'wusv' && ' This is your right under Royal Kennel Club regulation F(1).11.b.'}
                 </span>
               </span>
             </label>

@@ -259,7 +259,7 @@ export default function OverviewPage() {
       )}
 
       {/* Class management */}
-      <ClassManager showId={showId} showType={show.showType} showScope={show.showScope} classes={show.showClasses ?? []} />
+      <ClassManager showId={showId} showType={show.showType} showScope={show.showScope} showRuleset={show.showRuleset} classes={show.showClasses ?? []} />
 
       {/* Add classes — prominent when empty, folded into ClassManager when classes exist */}
       {(show.showClasses?.length ?? 0) === 0 && (
