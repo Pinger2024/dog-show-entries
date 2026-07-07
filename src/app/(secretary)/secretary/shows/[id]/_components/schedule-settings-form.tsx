@@ -662,7 +662,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
           <h2 className="text-lg font-bold tracking-tight">Schedule Settings</h2>
           <p className="text-sm text-muted-foreground">
             Configure your show schedule PDF.
-            <span className="hidden sm:inline"> Mandatory RKC statements are auto-included.</span>
+            <span className="hidden sm:inline"> {isWusvShow ? 'The standard statements are auto-included.' : 'Mandatory RKC statements are auto-included.'}</span>
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -826,6 +826,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
                       acceptsNfc={acceptsNfc} setAcceptsNfc={setAcceptsNfc}
                       judgedOnGroupSystem={judgedOnGroupSystem} setJudgedOnGroupSystem={setJudgedOnGroupSystem}
                       customStatements={customStatements} setCustomStatements={setCustomStatements}
+                      isWusvShow={isWusvShow}
                     />
                   )}
                 </div>
@@ -1406,7 +1407,7 @@ function RegulationsSection({
   wetWeather, setWetWeather, isBenched, setIsBenched,
   benchingRemovalTime, setBenchingRemovalTime,
   acceptsNfc, setAcceptsNfc, judgedOnGroupSystem, setJudgedOnGroupSystem,
-  customStatements, setCustomStatements,
+  customStatements, setCustomStatements, isWusvShow,
 }: {
   country: string; setCountry: (v: string) => void;
   publicAdmission: boolean; setPublicAdmission: (v: boolean) => void;
@@ -1416,11 +1417,14 @@ function RegulationsSection({
   acceptsNfc: boolean; setAcceptsNfc: (v: boolean) => void;
   judgedOnGroupSystem: boolean; setJudgedOnGroupSystem: (v: boolean) => void;
   customStatements: string[]; setCustomStatements: (v: string[]) => void;
+  isWusvShow: boolean;
 }) {
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground">
-        Mandatory RKC statements are auto-included. These settings control show-specific regulations.
+        {isWusvShow
+          ? 'The standard schedule statements are auto-included. These settings control show-specific regulations.'
+          : 'Mandatory RKC statements are auto-included. These settings control show-specific regulations.'}
       </p>
 
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
@@ -1472,6 +1476,10 @@ function RegulationsSection({
       <div className="space-y-3">
         <Label className="text-xs">Additional Schedule Statements</Label>
 
+        {/* RKC preset F-regulation statements — not applicable to SV/WUSV
+            regionals (they run under GSDL-BRG/WUSV rules). Custom statements
+            below stay available for regionals. */}
+        {!isWusvShow && (
         <div className="space-y-2 max-h-48 overflow-y-auto rounded-lg border p-3">
           {RKC_STATEMENT_CATEGORIES.map((category) => {
             const statementsInCategory = RKC_STATEMENTS.filter((s) => s.category === category);
@@ -1499,6 +1507,7 @@ function RegulationsSection({
             );
           })}
         </div>
+        )}
 
         {customStatements.filter((s) => !RKC_STATEMENTS.some((r) => r.text === s)).length > 0 && (
           <div className="space-y-2">

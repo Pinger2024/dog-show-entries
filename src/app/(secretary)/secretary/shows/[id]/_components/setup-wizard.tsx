@@ -324,7 +324,7 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
                   <StepDetails showId={showId} show={show} onSaved={goNext} />
                 )}
                 {step.id === 'schedule' && (
-                  <StepSchedule showId={showId} onSaved={goNext} />
+                  <StepSchedule showId={showId} show={show} onSaved={goNext} />
                 )}
                 {step.id === 'open' && (
                   <StepOpenEntries showId={showId} />
@@ -976,18 +976,23 @@ function StepDetails({
 
 function StepSchedule({
   showId,
+  show,
   onSaved,
 }: {
   showId: string;
+  show: Show;
   onSaved: () => void;
 }) {
+  const isWusv = show.showRuleset === 'wusv';
   return (
     <>
       <div className="mb-3">
         <InlineHelp
           label="What is the schedule for?"
           content={{
-            what: 'The schedule is the printed (or shared digitally) document that tells exhibitors everything about your show. It includes the date, the venue, the classes, the judges, the fees, and all the rules. The Royal Kennel Club requires certain statements to be on it, and we add those for you automatically.',
+            what: isWusv
+              ? 'The schedule is the printed (or shared digitally) document that tells exhibitors everything about your show. It includes the date, the venue, the classes, the judges, the fees, and all the rules. We add the standard statements for you automatically.'
+              : 'The schedule is the printed (or shared digitally) document that tells exhibitors everything about your show. It includes the date, the venue, the classes, the judges, the fees, and all the rules. The Royal Kennel Club requires certain statements to be on it, and we add those for you automatically.',
             todo: [
               'Fill in each section by clicking it open and typing the details.',
               'Click Preview PDF at the top to see how it looks before you share it.',

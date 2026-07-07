@@ -745,7 +745,7 @@ export function ShowPreviewClient() {
             <h2 className="mt-7 max-w-2xl text-center font-serif text-2xl font-bold uppercase leading-tight tracking-[0.05em] text-stone-900 sm:text-3xl lg:text-[2rem]">
               {org?.name}
             </h2>
-            {(org as { kcRegNumber?: string | null } | null | undefined)?.kcRegNumber && (
+            {show.showRuleset !== 'wusv' && (org as { kcRegNumber?: string | null } | null | undefined)?.kcRegNumber && (
               <div className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] font-medium text-stone-600 sm:text-xs">
                 <span className="inline-flex items-center gap-1.5">
                   <ShieldCheck className="size-3.5 text-amber-700" />
