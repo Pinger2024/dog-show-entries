@@ -870,6 +870,9 @@ function CatalogueOrdersContent({ showId }: { showId: string }) {
 function AbsenteeReportContent({ showId }: { showId: string }) {
   const { data: absentees, isLoading } =
     trpc.secretary.getAbsenteeList.useQuery({ showId });
+  const { data: show } = trpc.shows.getById.useQuery({ id: showId });
+  // The KC SH01 return is only for RKC championship (CC-awarding) shows.
+  const isKcChampionship = show?.showType === 'championship' && show?.showRuleset !== 'wusv';
 
   const absenteeCount = absentees?.length ?? 0;
 
@@ -956,6 +959,15 @@ function AbsenteeReportContent({ showId }: { showId: string }) {
                   <span className="hidden sm:inline">Download CSV</span>
                 </a>
               </Button>
+              {isKcChampionship && (
+                <Button size="sm" asChild>
+                  <a href={`/api/reports/${showId}/sh01`} download>
+                    <Download className="size-4" />
+                    <span className="hidden sm:inline">KC Absentee Return (SH01)</span>
+                    <span className="sm:hidden">SH01</span>
+                  </a>
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>
