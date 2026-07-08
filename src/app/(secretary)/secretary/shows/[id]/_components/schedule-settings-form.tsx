@@ -814,6 +814,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
                       futureShowDates={futureShowDates} setFutureShowDates={setFutureShowDates}
                       additionalNotes={additionalNotes} setAdditionalNotes={setAdditionalNotes}
                       outsideAttraction={outsideAttraction} setOutsideAttraction={setOutsideAttraction}
+                      isWusvShow={isWusvShow}
                     />
                   )}
                   {section.id === 'regulations' && (
@@ -1354,7 +1355,7 @@ function VenueSection({
   directions, setDirections, what3words, setWhat3words,
   catering, setCatering, futureShowDates, setFutureShowDates,
   additionalNotes, setAdditionalNotes,
-  outsideAttraction, setOutsideAttraction,
+  outsideAttraction, setOutsideAttraction, isWusvShow,
 }: {
   directions: string; setDirections: (v: string) => void;
   what3words: string; setWhat3words: (v: string) => void;
@@ -1362,6 +1363,7 @@ function VenueSection({
   futureShowDates: string; setFutureShowDates: (v: string) => void;
   additionalNotes: string; setAdditionalNotes: (v: string) => void;
   outsideAttraction: boolean; setOutsideAttraction: (v: boolean) => void;
+  isWusvShow: boolean;
 }) {
   return (
     <div className="space-y-4">
@@ -1387,15 +1389,19 @@ function VenueSection({
         <Label htmlFor="additionalNotes" className="text-xs">Additional Notes</Label>
         <Textarea id="additionalNotes" value={additionalNotes} onChange={(e) => setAdditionalNotes(e.target.value)} placeholder="Any other information to include in the schedule" rows={2} />
       </div>
-      <div className="flex items-center justify-between rounded-lg border p-3">
-        <div>
-          <Label className="text-xs">Outside Attraction</Label>
-          <p className="text-xs text-muted-foreground">
-            Displays notice: &quot;RKC Regulation F(1) 16H will be strictly enforced&quot;
-          </p>
+      {/* Outside Attraction is an RKC F(1) 16h schedule notice — not used on
+          SV/WUSV regionals (Mandy 2026-07-08). */}
+      {!isWusvShow && (
+        <div className="flex items-center justify-between rounded-lg border p-3">
+          <div>
+            <Label className="text-xs">Outside Attraction</Label>
+            <p className="text-xs text-muted-foreground">
+              Displays notice: &quot;RKC Regulation F(1) 16H will be strictly enforced&quot;
+            </p>
+          </div>
+          <Switch checked={outsideAttraction} onCheckedChange={setOutsideAttraction} />
         </div>
-        <Switch checked={outsideAttraction} onCheckedChange={setOutsideAttraction} />
-      </div>
+      )}
     </div>
   );
 }
@@ -1441,35 +1447,42 @@ function RegulationsSection({
           </Select>
         </div>
 
-        <div className="flex items-center justify-between rounded-lg border p-3">
-          <Label className="text-xs">Public admission fee</Label>
-          <Switch checked={publicAdmission} onCheckedChange={setPublicAdmission} />
-        </div>
+        {/* These toggles are RKC schedule concepts (public admission, wet
+            weather, NFC, group-system judging, benching) — not used on SV/WUSV
+            regionals (Mandy 2026-07-08). Country + custom statements stay. */}
+        {!isWusvShow && (
+          <>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <Label className="text-xs">Public admission fee</Label>
+              <Switch checked={publicAdmission} onCheckedChange={setPublicAdmission} />
+            </div>
 
-        <div className="flex items-center justify-between rounded-lg border p-3">
-          <Label className="text-xs">Wet weather accommodation</Label>
-          <Switch checked={wetWeather} onCheckedChange={setWetWeather} />
-        </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <Label className="text-xs">Wet weather accommodation</Label>
+              <Switch checked={wetWeather} onCheckedChange={setWetWeather} />
+            </div>
 
-        <div className="flex items-center justify-between rounded-lg border p-3">
-          <Label className="text-xs">NFC entries accepted</Label>
-          <Switch checked={acceptsNfc} onCheckedChange={setAcceptsNfc} />
-        </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <Label className="text-xs">NFC entries accepted</Label>
+              <Switch checked={acceptsNfc} onCheckedChange={setAcceptsNfc} />
+            </div>
 
-        <div className="flex items-center justify-between rounded-lg border p-3">
-          <Label className="text-xs">Group system judging</Label>
-          <Switch checked={judgedOnGroupSystem} onCheckedChange={setJudgedOnGroupSystem} />
-        </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <Label className="text-xs">Group system judging</Label>
+              <Switch checked={judgedOnGroupSystem} onCheckedChange={setJudgedOnGroupSystem} />
+            </div>
 
-        <div className="space-y-2">
-          <div className="flex items-center justify-between rounded-lg border p-3">
-            <Label className="text-xs">Benched show</Label>
-            <Switch checked={isBenched} onCheckedChange={setIsBenched} />
-          </div>
-          {isBenched && (
-            <Input value={benchingRemovalTime} onChange={(e) => setBenchingRemovalTime(e.target.value)} placeholder="e.g. Dogs may be removed after Best in Show" className="min-h-[2.75rem]" />
-          )}
-        </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <Label className="text-xs">Benched show</Label>
+                <Switch checked={isBenched} onCheckedChange={setIsBenched} />
+              </div>
+              {isBenched && (
+                <Input value={benchingRemovalTime} onChange={(e) => setBenchingRemovalTime(e.target.value)} placeholder="e.g. Dogs may be removed after Best in Show" className="min-h-[2.75rem]" />
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Optional extra statements */}
