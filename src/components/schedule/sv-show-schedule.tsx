@@ -145,60 +145,69 @@ function FeeRow({
   );
 }
 
-const FEE_ORDINALS = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th'];
-
-/** Regional (SV/WUSV) tiered per-dog fees on the schedule's Fees box — the
- *  per-dog scale (1st £20, 2nd £20, 3rd £16, 4th+ free) with member rates shown
- *  as "standard / member", plus the first-time-exhibitor line (Mandy 2026-07-05). */
+/** Regional (SV/WUSV) entry fees on the schedule's Fees box. The BRG model is a
+ *  flat per-dog rate with a "3 or more dogs" package price, shown for EACH fee
+ *  level — Non-member plus every membership the club offers (Mandy 2026-07-08:
+ *  the old 1st/2nd/3rd positional scale was only a Google-Forms workaround).
+ *  Each level resolves to the exact tiers the checkout charges, so the printed
+ *  schedule and the till always agree. Plus the first-time-exhibitor line. */
 function RegionalFeeRows({ config }: { config: RegionalFeeConfig }) {
   const money = (p: number) => (p === 0 ? 'Free' : fmtMoney(p));
-  const hasMember = config.tiers.some((t) => t.memberPence !== t.standardPence);
-  const ord = (i: number) => FEE_ORDINALS[i] ?? `${i + 1}th`;
-  const tierCount = config.tiers.length;
 
-  // Collapse consecutive identical tiers into one row (e.g. 1st & 2nd both
-  // £20/£17 → "1st–2nd dog") so a long scale stays compact and doesn't push
-  // the page over (Mandy 2026-07-05).
-  const groups: { from: number; to: number; t: RegionalFeeConfig['tiers'][number] }[] = [];
-  config.tiers.forEach((t, i) => {
-    const prev = groups[groups.length - 1];
-    if (prev && prev.t.standardPence === t.standardPence && prev.t.memberPence === t.memberPence) {
-      prev.to = i;
-    } else {
-      groups.push({ from: i, to: i, t });
+  // Build the fee levels exactly the way checkout resolves them:
+  //  - Non-member → the config standard column
+  //  - a membership WITH its own prices (option B) → those prices
+  //  - a membership WITHOUT its own prices (option A) → the config member column
+  type Level = { label: string; tiers: RegionalFeeConfig['tiers']; member: boolean };
+  const hasConfigMember = config.tiers.some((t) => t.memberPence !== t.standardPence);
+  const levels: Level[] = [{ label: 'Non-member', tiers: config.tiers, member: false }];
+  const explicit = config.memberships ?? [];
+  if (explicit.length) {
+    for (const m of explicit) {
+      if (m.tiers && m.tiers.length) {
+        levels.push({ label: m.label, tiers: m.tiers, member: false });
+      } else if (hasConfigMember) {
+        levels.push({ label: m.label, tiers: config.tiers, member: true });
+      }
     }
-  });
+  } else if (hasConfigMember) {
+    levels.push({ label: 'Member', tiers: config.tiers, member: true });
+  }
+
+  const priceAt = (lvl: Level, position: number) => {
+    if (!lvl.tiers.length) return 0;
+    const t = lvl.tiers[Math.min(position - 1, lvl.tiers.length - 1)]!;
+    return lvl.member ? t.memberPence : t.standardPence;
+  };
+  const perDog = (lvl: Level) => priceAt(lvl, 1);
+  const threePlus = (lvl: Level) => priceAt(lvl, 1) + priceAt(lvl, 2) + priceAt(lvl, 3);
+
+  // "3 or more dogs" is a flat package only when the scale frees the 4th dog on.
+  const capped =
+    config.tiers.length >= 4 &&
+    config.tiers[config.tiers.length - 1]!.standardPence === 0 &&
+    config.tiers[config.tiers.length - 1]!.memberPence === 0;
+  const multi = levels.length > 1;
 
   return (
     <>
-      {/* Column key at the top so the two figures are unambiguous — Mandy
-          2026-07-05: label the pair "Non-member / Member" right above the fees. */}
-      {hasMember ? (
-        <Text
-          style={{
-            fontFamily: SV_FONTS.serif,
-            fontSize: 6.5,
-            color: SV.ink3,
-            fontStyle: 'italic',
-            textAlign: 'right',
-            marginBottom: 1,
-          }}
-        >
-          Non-member / Member
-        </Text>
-      ) : null}
-      {groups.map((g, gi) => {
-        const isLastGroup = g.to === tierCount - 1;
-        const suffix = isLastGroup ? '+' : '';
-        const label =
-          g.from === g.to
-            ? `${ord(g.from)} dog${suffix}`
-            : `${ord(g.from)}–${ord(g.to)} dog${suffix}`;
-        const value =
-          hasMember && g.t.memberPence !== g.t.standardPence
-            ? `${money(g.t.standardPence)} / ${money(g.t.memberPence)}`
-            : money(g.t.standardPence);
-        return <FeeRow key={gi} label={label} value={value} />;
+      <Text
+        style={{
+          fontFamily: SV_FONTS.serif,
+          fontSize: 6.5,
+          color: SV.ink3,
+          fontStyle: 'italic',
+          textAlign: 'right',
+          marginBottom: 1,
+        }}
+      >
+        {capped ? 'Per dog / 3 or more dogs' : 'Per dog'}
+      </Text>
+      {levels.map((lvl, i) => {
+        const value = capped
+          ? `${money(perDog(lvl))} / ${money(threePlus(lvl))}`
+          : money(perDog(lvl));
+        return <FeeRow key={i} label={multi ? lvl.label : 'Entry fee'} value={value} />;
       })}
       {config.firstTimeEnabled ? (
         <FeeRow
