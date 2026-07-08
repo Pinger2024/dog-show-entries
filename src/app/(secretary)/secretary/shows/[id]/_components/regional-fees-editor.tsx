@@ -10,20 +10,48 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import type { RegionalFeeConfig } from '@/server/db/schema/shows';
 
-/** Regional (SV/WUSV) entry-fee editor. Edits the BRG-style tiered per-dog
- *  scale (standard + member columns), any club memberships (optionally with
- *  their own prices — Mandy's option B), the first-time-exhibitor option and
- *  the discretionary donation, plus the Junior Handler fee. Saves the whole
- *  config to shows.regionalFeeConfig. Kept deliberately calm for the 60+
- *  secretary — pre-filled sensible defaults, one Save button. */
+/** Regional (SV/WUSV) entry-fee editor. The BRG model is a flat rate PER DOG
+ *  with a "3 or more dogs" package price, at several levels — Non-member plus
+ *  each club membership. This editor speaks that plain model (Mandy 2026-07-08:
+ *  the old 1st/2nd/3rd positional grid was only a Google-Forms-era artefact).
+ *
+ *  Under the hood the fee config still stores a per-dog scale, so we encode each
+ *  level's (per-dog, 3-or-more) pair to `[P, P, K−2P, 0]` — 1st & 2nd dog £P,
+ *  the 3rd dog tops the running total up to £K, and the 4th dog on is free — and
+ *  decode it back when loading. The checkout + schedule read that scale, so what
+ *  the secretary types here is exactly what's charged and printed.
+ *  Kept deliberately calm for the 60+ secretary: pre-filled defaults, one Save. */
 
-type TierRow = { standard: string; member: string };
-type MembershipRow = { label: string; requiresNumber: boolean; ownPrices: string[] | null };
+type MemberLevel = { label: string; requiresNumber: boolean; perDog: string; threePlus: string };
 
 const poundsFromPence = (pence: number) => (pence / 100).toFixed(2);
 const penceFromPounds = (s: string) => Math.round((parseFloat(s) || 0) * 100);
-const ORDINALS = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th'];
-const ordinal = (i: number) => ORDINALS[i] ?? `${i + 1}th`;
+
+/** Price the dog at 1-based `position` would pay on a stored per-dog scale. */
+function priceAt(tiers: RegionalFeeConfig['tiers'], position: number, member: boolean): number {
+  if (!tiers.length) return 0;
+  const t = tiers[Math.min(position - 1, tiers.length - 1)]!;
+  return member ? t.memberPence : t.standardPence;
+}
+/** Decode a stored per-dog scale back to the plain (per-dog, 3-or-more) pair. */
+function decodeLevel(tiers: RegionalFeeConfig['tiers'], member: boolean): { perDog: number; threePlus: number } {
+  return {
+    perDog: priceAt(tiers, 1, member),
+    threePlus: priceAt(tiers, 1, member) + priceAt(tiers, 2, member) + priceAt(tiers, 3, member),
+  };
+}
+/** Encode a (per-dog, 3-or-more) pair to the stored per-dog scale. The 3rd dog
+ *  carries the top-up to the package total; the 4th dog on is free so "3 or more"
+ *  is a flat cap. Clamped so the 3rd dog is never negative. */
+function encodeTiers(perDogPence: number, threePlusPence: number): RegionalFeeConfig['tiers'] {
+  const third = Math.max(0, threePlusPence - 2 * perDogPence);
+  return [
+    { standardPence: perDogPence, memberPence: perDogPence },
+    { standardPence: perDogPence, memberPence: perDogPence },
+    { standardPence: third, memberPence: third },
+    { standardPence: 0, memberPence: 0 },
+  ];
+}
 
 export type RegionalFeePayload = {
   config: RegionalFeeConfig;
@@ -47,29 +75,29 @@ export function RegionalFeesEditor({
   onChange?: (payload: RegionalFeePayload) => void;
 }) {
   const utils = trpc.useUtils();
-  const seed: RegionalFeeConfig = config ?? {
-    tiers: [
-      { standardPence: 2000, memberPence: 1700 },
-      { standardPence: 2000, memberPence: 1700 },
-      { standardPence: 1600, memberPence: 1100 },
-      { standardPence: 0, memberPence: 0 },
-    ],
-    memberships: [{ label: 'BRG/League member', requiresNumber: true }],
-  };
 
-  const [tiers, setTiers] = useState<TierRow[]>(
-    seed.tiers.map((t) => ({ standard: poundsFromPence(t.standardPence), member: poundsFromPence(t.memberPence) })),
-  );
-  const [memberships, setMemberships] = useState<MembershipRow[]>(
-    (seed.memberships ?? [{ label: 'BRG/League member', requiresNumber: true }]).map((m) => ({
-      label: m.label,
-      requiresNumber: !!m.requiresNumber,
-      ownPrices: m.tiers ? m.tiers.map((t) => poundsFromPence(t.standardPence)) : null,
-    })),
-  );
-  const [firstTimeEnabled, setFirstTimeEnabled] = useState(!!seed.firstTimeEnabled);
-  const [firstTimeFee, setFirstTimeFee] = useState(poundsFromPence(seed.firstTimeFeePence ?? 0));
-  const [donationsEnabled, setDonationsEnabled] = useState(!!seed.donationsEnabled);
+  // Decode the stored config back to plain per-dog / 3-or-more figures.
+  const seedNonMember = config ? decodeLevel(config.tiers, false) : { perDog: 2000, threePlus: 5600 };
+  const seedMemberships: MemberLevel[] = config
+    ? (config.memberships ?? []).map((m) => {
+        // Option B (own prices) reads its own scale; option A shares the config
+        // member column. Either way we present a plain per-dog / 3-or-more pair.
+        const d = m.tiers && m.tiers.length ? decodeLevel(m.tiers, false) : decodeLevel(config.tiers, true);
+        return {
+          label: m.label,
+          requiresNumber: !!m.requiresNumber,
+          perDog: poundsFromPence(d.perDog),
+          threePlus: poundsFromPence(d.threePlus),
+        };
+      })
+    : [{ label: 'BRG/League member', requiresNumber: true, perDog: '17.00', threePlus: '45.00' }];
+
+  const [nmPerDog, setNmPerDog] = useState(poundsFromPence(seedNonMember.perDog));
+  const [nmThreePlus, setNmThreePlus] = useState(poundsFromPence(seedNonMember.threePlus));
+  const [memberships, setMemberships] = useState<MemberLevel[]>(seedMemberships);
+  const [firstTimeEnabled, setFirstTimeEnabled] = useState(config ? !!config.firstTimeEnabled : true);
+  const [firstTimeFee, setFirstTimeFee] = useState(poundsFromPence(config?.firstTimeFeePence ?? 0));
+  const [donationsEnabled, setDonationsEnabled] = useState(!!config?.donationsEnabled);
   const [jhFee, setJhFee] = useState(poundsFromPence(juniorHandlerFeePence ?? 0));
 
   const save = trpc.shows.update.useMutation({
@@ -80,43 +108,22 @@ export function RegionalFeesEditor({
     onError: (e) => toast.error(e.message),
   });
 
-  function updateTier(i: number, key: keyof TierRow, value: string) {
-    setTiers((prev) => prev.map((t, idx) => (idx === i ? { ...t, [key]: value } : t)));
-  }
-  function addTier() {
-    setTiers((prev) => [...prev, { standard: '0.00', member: '0.00' }]);
-  }
-  function removeTier(i: number) {
-    setTiers((prev) => prev.filter((_, idx) => idx !== i));
-  }
-
-  function updateMembership(i: number, patch: Partial<MembershipRow>) {
+  function updateMembership(i: number, patch: Partial<MemberLevel>) {
     setMemberships((prev) => prev.map((m, idx) => (idx === i ? { ...m, ...patch } : m)));
   }
 
   function buildPayload(): RegionalFeePayload {
-    const cfgTiers = tiers.map((t) => ({
-      standardPence: penceFromPounds(t.standard),
-      memberPence: penceFromPounds(t.member),
-    }));
-    const cfgMemberships = memberships
+    const memberConfigs = memberships
       .filter((m) => m.label.trim())
       .map((m) => ({
         label: m.label.trim(),
         requiresNumber: m.requiresNumber,
-        ...(m.ownPrices
-          ? {
-              tiers: m.ownPrices.map((pr) => {
-                const pence = penceFromPounds(pr);
-                return { standardPence: pence, memberPence: pence };
-              }),
-            }
-          : {}),
+        tiers: encodeTiers(penceFromPounds(m.perDog), penceFromPounds(m.threePlus)),
       }));
     return {
       config: {
-        tiers: cfgTiers,
-        memberships: cfgMemberships,
+        tiers: encodeTiers(penceFromPounds(nmPerDog), penceFromPounds(nmThreePlus)),
+        memberships: memberConfigs,
         firstTimeEnabled,
         firstTimeFeePence: penceFromPounds(firstTimeFee),
         donationsEnabled,
@@ -131,14 +138,10 @@ export function RegionalFeesEditor({
     if (!onChange) return;
     onChange(buildPayload());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tiers, memberships, firstTimeEnabled, firstTimeFee, donationsEnabled, jhFee]);
+  }, [nmPerDog, nmThreePlus, memberships, firstTimeEnabled, firstTimeFee, donationsEnabled, jhFee]);
 
   function onSave() {
     const payload = buildPayload();
-    if (payload.config.tiers.length === 0) {
-      toast.error('Add at least one fee tier');
-      return;
-    }
     save.mutate({
       id: showId,
       juniorHandlerFee: payload.juniorHandlerFeePence,
@@ -146,107 +149,91 @@ export function RegionalFeesEditor({
     });
   }
 
+  // Gentle validation: a "3 or more" price below two dogs can't be represented
+  // (three dogs would never cost less than two), so warn rather than mis-charge.
+  const belowTwoDogs = (perDog: string, threePlus: string) => {
+    const p = penceFromPounds(perDog);
+    const k = penceFromPounds(threePlus);
+    return k > 0 && k < 2 * p;
+  };
+
   return (
     <div className="space-y-6 rounded-lg border bg-card p-4">
       <div className="space-y-1">
         <h3 className="text-sm font-semibold">Regional entry fees</h3>
         <p className="text-xs text-muted-foreground">
-          Set the price per dog. The scale counts how many dogs an exhibitor enters — the last
-          row applies to that dog and every dog after it.
+          Set a price per dog, and a price for when someone enters 3 or more dogs. First-time
+          exhibitors and Junior Handlers are set further down.
         </p>
       </div>
 
-      {/* Tier table */}
+      {/* Non-member */}
       <div className="space-y-2">
-        <div className="hidden gap-2 px-1 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[5rem_1fr_1fr_2.5rem]">
-          <span>Dog</span>
-          <span>Standard</span>
-          <span>Member</span>
-          <span />
-        </div>
-        {tiers.map((t, i) => (
-          <div key={i} className="grid grid-cols-1 gap-2 rounded-md border p-2 sm:grid-cols-[5rem_1fr_1fr_2.5rem] sm:items-center sm:border-0 sm:p-0">
-            <span className="text-sm font-medium">
-              {ordinal(i)} dog{i === tiers.length - 1 ? '+' : ''}
-            </span>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">£</span>
-              <Input type="number" min="0" step="0.01" className="pl-7 h-11" value={t.standard}
-                onChange={(e) => updateTier(i, 'standard', e.target.value)} />
-            </div>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">£</span>
-              <Input type="number" min="0" step="0.01" className="pl-7 h-11" value={t.member}
-                onChange={(e) => updateTier(i, 'member', e.target.value)} />
-            </div>
-            <Button type="button" variant="ghost" size="icon" className="h-11 w-11"
-              disabled={tiers.length <= 1} onClick={() => removeTier(i)} aria-label="Remove tier">
-              <Trash2 className="size-4" />
-            </Button>
-          </div>
-        ))}
-        <Button type="button" variant="outline" size="sm" onClick={addTier} className="min-h-[2.75rem]">
-          <Plus className="size-4" /> Add another tier
-        </Button>
+        <p className="text-sm font-medium">Standard (non-member)</p>
+        <LevelPrices
+          perDog={nmPerDog}
+          threePlus={nmThreePlus}
+          onPerDog={setNmPerDog}
+          onThreePlus={setNmThreePlus}
+        />
+        {belowTwoDogs(nmPerDog, nmThreePlus) && <BelowTwoDogsHint perDog={nmPerDog} />}
       </div>
 
-      {/* Memberships */}
+      {/* Membership rates */}
       <div className="space-y-3 border-t pt-4">
         <div className="space-y-1">
-          <p className="text-sm font-medium">Membership discounts</p>
+          <p className="text-sm font-medium">Membership rates</p>
           <p className="text-xs text-muted-foreground">
-            The Member column above is used by the BRG/League membership. A club can add its own
-            membership with its own prices.
+            Cheaper rates for members. Add each type your club offers — they show on the schedule
+            and exhibitors pick which one they are at checkout.
           </p>
         </div>
         {memberships.map((m, i) => (
           <div key={i} className="space-y-3 rounded-md border p-3">
             <div className="flex items-center gap-2">
-              <Input value={m.label} placeholder="Membership name"
-                onChange={(e) => updateMembership(i, { label: e.target.value })} className="h-11" />
-              <Button type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0"
+              <Input
+                value={m.label}
+                placeholder="e.g. BRG/League member"
+                onChange={(e) => updateMembership(i, { label: e.target.value })}
+                className="h-11"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-11 w-11 shrink-0"
                 onClick={() => setMemberships((prev) => prev.filter((_, idx) => idx !== i))}
-                aria-label="Remove membership">
+                aria-label="Remove membership"
+              >
                 <Trash2 className="size-4" />
               </Button>
             </div>
+            <LevelPrices
+              perDog={m.perDog}
+              threePlus={m.threePlus}
+              onPerDog={(v) => updateMembership(i, { perDog: v })}
+              onThreePlus={(v) => updateMembership(i, { threePlus: v })}
+            />
+            {belowTwoDogs(m.perDog, m.threePlus) && <BelowTwoDogsHint perDog={m.perDog} />}
             <label className="flex items-center gap-2 text-sm">
-              <Switch checked={m.requiresNumber}
-                onCheckedChange={(v) => updateMembership(i, { requiresNumber: v })} />
+              <Switch
+                checked={m.requiresNumber}
+                onCheckedChange={(v) => updateMembership(i, { requiresNumber: v })}
+              />
               Ask for a membership number
             </label>
-            <label className="flex items-center gap-2 text-sm">
-              <Switch checked={m.ownPrices !== null}
-                onCheckedChange={(v) =>
-                  updateMembership(i, { ownPrices: v ? tiers.map((t) => t.member) : null })
-                } />
-              This membership has its own prices
-            </label>
-            {m.ownPrices !== null && (
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {m.ownPrices.map((pr, pi) => (
-                  <div key={pi} className="space-y-1">
-                    <Label className="text-xs">{ordinal(pi)} dog{pi === m.ownPrices!.length - 1 ? '+' : ''}</Label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">£</span>
-                      <Input type="number" min="0" step="0.01" className="pl-7 h-11" value={pr}
-                        onChange={(e) =>
-                          updateMembership(i, {
-                            ownPrices: m.ownPrices!.map((v, idx) => (idx === pi ? e.target.value : v)),
-                          })
-                        } />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         ))}
-        <Button type="button" variant="outline" size="sm" className="min-h-[2.75rem]"
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="min-h-[2.75rem]"
           onClick={() =>
-            setMemberships((prev) => [...prev, { label: '', requiresNumber: false, ownPrices: null }])
-          }>
-          <Plus className="size-4" /> Add a membership
+            setMemberships((prev) => [...prev, { label: '', requiresNumber: false, perDog: '0.00', threePlus: '0.00' }])
+          }
+        >
+          <Plus className="size-4" /> Add a membership rate
         </Button>
       </div>
 
@@ -261,11 +248,7 @@ export function RegionalFeesEditor({
             <div className="ml-11 max-w-[13rem] space-y-1">
               <Label className="text-xs">First-timer&apos;s first dog</Label>
               <p className="text-[11px] text-muted-foreground">Their other dogs pay the normal rates.</p>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">£</span>
-                <Input type="number" min="0" step="0.01" className="pl-7 h-11" value={firstTimeFee}
-                  onChange={(e) => setFirstTimeFee(e.target.value)} />
-              </div>
+              <PriceInput value={firstTimeFee} onChange={setFirstTimeFee} />
             </div>
           )}
         </div>
@@ -275,11 +258,7 @@ export function RegionalFeesEditor({
         </label>
         <div className="max-w-[10rem] space-y-1">
           <Label className="text-xs">Junior Handler fee</Label>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">£</span>
-            <Input type="number" min="0" step="0.01" className="pl-7 h-11" value={jhFee}
-              onChange={(e) => setJhFee(e.target.value)} />
-          </div>
+          <PriceInput value={jhFee} onChange={setJhFee} />
         </div>
       </div>
 
@@ -290,5 +269,56 @@ export function RegionalFeesEditor({
         </Button>
       )}
     </div>
+  );
+}
+
+/** A single £ number input with the pound prefix. */
+function PriceInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="relative">
+      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">£</span>
+      <Input
+        type="number"
+        min="0"
+        step="0.01"
+        className="pl-7 h-11"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </div>
+  );
+}
+
+/** The "Per dog" + "3 or more dogs" pair for one fee level. */
+function LevelPrices({
+  perDog,
+  threePlus,
+  onPerDog,
+  onThreePlus,
+}: {
+  perDog: string;
+  threePlus: string;
+  onPerDog: (v: string) => void;
+  onThreePlus: (v: string) => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <div className="space-y-1">
+        <Label className="text-xs">Per dog</Label>
+        <PriceInput value={perDog} onChange={onPerDog} />
+      </div>
+      <div className="space-y-1">
+        <Label className="text-xs">3 or more dogs</Label>
+        <PriceInput value={threePlus} onChange={onThreePlus} />
+      </div>
+    </div>
+  );
+}
+
+function BelowTwoDogsHint({ perDog }: { perDog: string }) {
+  return (
+    <p className="text-[11px] text-destructive">
+      The &quot;3 or more dogs&quot; price can&apos;t be less than two dogs (£{(penceFromPounds(perDog) * 2 / 100).toFixed(2)}).
+    </p>
   );
 }
