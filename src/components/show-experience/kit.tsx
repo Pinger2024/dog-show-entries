@@ -96,7 +96,8 @@ export function Pulse({ className }: { className?: string }) {
     <span className={cn('relative inline-flex size-2', className)}>
       <span
         aria-hidden="true"
-        className="absolute -inset-[3px] rounded-full bg-se-fresh/30"
+        // Breathing halo (POLISH.md #4) — keyframes defined in globals.css.
+        className="se-pulse-halo motion-reduce:animate-none absolute -inset-[3px] rounded-full bg-se-fresh/30"
       />
       <span className="relative size-2 rounded-full bg-se-fresh" />
     </span>
@@ -142,9 +143,15 @@ export type SEButtonVariant = 'primary' | 'fresh' | 'ghost' | 'onDark';
 export type SEButtonSize = 'default' | 'sm';
 
 const SE_BUTTON_VARIANTS: Record<SEButtonVariant, string> = {
-  primary: 'bg-se-green text-se-cream shadow-[0_10px_22px_-12px_#2f6b43]',
-  fresh: 'bg-se-fresh text-[#0e2c19] shadow-[0_10px_24px_-12px_#5bb579]',
-  ghost: 'bg-se-surface text-se-ink shadow-[inset_0_0_0_1px_#d7cfba]',
+  // Desktop-only hover lift (POLISH.md #1) is scoped with an explicit
+  // (hover: hover) media query so it never sticks on tap on touch devices;
+  // the active: press state below covers touch feedback instead.
+  primary:
+    'bg-se-green text-se-cream shadow-[0_10px_22px_-12px_#2f6b43] active:shadow-[0_4px_10px_-8px_#2f6b43] [@media(hover:hover)]:hover:shadow-[0_12px_26px_-12px_#2f6b43]',
+  fresh:
+    'bg-se-fresh text-[#0e2c19] shadow-[0_10px_24px_-12px_#5bb579] active:shadow-[0_4px_10px_-8px_#5bb579] [@media(hover:hover)]:hover:shadow-[0_12px_26px_-12px_#5bb579]',
+  ghost:
+    'bg-se-surface text-se-ink shadow-[inset_0_0_0_1px_#d7cfba] [@media(hover:hover)]:hover:shadow-[inset_0_0_0_1px_#8a9182]',
   onDark: 'bg-[rgba(243,236,220,0.14)] text-se-cream',
 };
 
@@ -173,7 +180,11 @@ export const SEButton = React.forwardRef<HTMLButtonElement, SEButtonProps>(
       <Comp
         ref={ref}
         className={cn(
-          'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[13px] font-semibold transition-colors',
+          // Press + hover feel (POLISH.md #1): 120ms ease-out on transform/
+          // shadow/color, a 2% press scale, and a visible focus ring. The
+          // press scale is neutralized under reduced motion; color/shadow
+          // transitions stay (they're not perceptible "motion").
+          'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[13px] font-semibold transition-[transform,box-shadow,background-color,color] duration-[120ms] ease-out active:scale-[0.98] motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-se-fresh focus-visible:ring-offset-2 focus-visible:ring-offset-se-paper',
           SE_BUTTON_VARIANTS[variant],
           SE_BUTTON_SIZES[size],
           full && 'w-full',
@@ -191,12 +202,19 @@ SEButton.displayName = 'SEButton';
 export function SECard({
   children,
   className,
+  interactive,
   ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
+}: React.HTMLAttributes<HTMLDivElement> & {
+  /** Opt-in desktop hover lift (POLISH.md #2) — set on truly interactive
+   *  cards (browse ShowCard, rail cards). Leave unset on static info cards. */
+  interactive?: boolean;
+}) {
   return (
     <div
       className={cn(
         'rounded-[18px] border border-se-line bg-se-surface shadow-[0_1px_2px_rgba(27,36,29,0.04),0_18px_36px_-26px_rgba(27,36,29,0.4)]',
+        interactive &&
+          'transition-[transform,box-shadow] duration-150 ease-out motion-reduce:transition-none motion-reduce:transform-none [@media(hover:hover)]:hover:-translate-y-px [@media(hover:hover)]:hover:shadow-[0_4px_10px_-4px_rgba(27,36,29,0.08),0_24px_44px_-24px_rgba(27,36,29,0.5)]',
         className
       )}
       {...props}
@@ -288,8 +306,13 @@ export function CountdownCells({
           )}
           <div className="flex min-w-[46px] flex-col items-center">
             <span
+              // Keyed by value so React remounts the node on change, which
+              // (re-)triggers the se-countdown-digit CSS animation defined
+              // in globals.css (POLISH.md #3). tabular-nums (already set)
+              // keeps the remount from ever shifting layout.
+              key={cell.value}
               className={cn(
-                'text-[25px] font-bold leading-none tabular-nums',
+                'se-countdown-digit motion-reduce:animate-none text-[25px] font-bold leading-none tabular-nums',
                 valueClass
               )}
             >
@@ -383,3 +406,40 @@ export function SEDarkPanel({
     </Comp>
   );
 }
+
+/* ─── SEImage ────────────────────────────────────── */
+/* Fades images in on load (club crests, photos) to avoid pop-in —
+ * POLISH.md #11. CSS-only: the `.se-img-fade` class (globals.css) starts an
+ * image at opacity 0 and transitions to 1 once `data-loaded` is set; the
+ * `complete` check on mount catches images the browser already had cached,
+ * where `onLoad` may never fire after mount. */
+
+export const SEImage = React.forwardRef<
+  HTMLImageElement,
+  React.ImgHTMLAttributes<HTMLImageElement>
+>(function SEImage({ className, onLoad, ...props }, forwardedRef) {
+  const [loaded, setLoaded] = React.useState(false);
+  const innerRef = React.useRef<HTMLImageElement | null>(null);
+
+  React.useEffect(() => {
+    if (innerRef.current?.complete) setLoaded(true);
+  }, []);
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- generic helper; callers may pass a remote/relative src not known to next/image here.
+    <img
+      ref={(node) => {
+        innerRef.current = node;
+        if (typeof forwardedRef === 'function') forwardedRef(node);
+        else if (forwardedRef) forwardedRef.current = node;
+      }}
+      data-loaded={loaded || undefined}
+      className={cn('se-img-fade', className)}
+      onLoad={(e) => {
+        setLoaded(true);
+        onLoad?.(e);
+      }}
+      {...props}
+    />
+  );
+});

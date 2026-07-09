@@ -263,6 +263,84 @@
   color: #1b241d;
 }
 
+/* Felt selection color within the Show Experience surfaces (POLISH.md #16). */
+.show-exp ::selection {
+  background: var(--color-se-fresh-soft);
+  color: var(--color-se-ink);
+}
+
+/* ── Show Experience — living layer (POLISH.md "beyond the mock") ──────── */
+
+/* Pulse halo breathing (#4) — Pulse component's halo span. Scoped so it's
+ * simply absent (static halo) under prefers-reduced-motion. */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes se-pulse-halo {
+    from { transform: scale(1); opacity: 0.3; }
+    to { transform: scale(1.35); opacity: 0; }
+  }
+  .se-pulse-halo {
+    animation: se-pulse-halo 2s ease-out infinite;
+  }
+}
+
+/* Countdown digit change (#3) — CountdownCells keys each value span by its
+ * value, so this plays on every remount (i.e. every time the number ticks
+ * over). Transform + opacity only; tabular-nums (set on the element)
+ * prevents any width shift. */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes se-countdown-digit-in {
+    from { opacity: 0; transform: translateY(0.3em); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .se-countdown-digit {
+    animation: se-countdown-digit-in 300ms ease-out both;
+  }
+}
+
+/* Skeleton recipe (#10) — se-paper2 base block with a shimmer sweep.
+ * Usage: <div class="se-skeleton h-4 w-24 rounded-md" />. Radius/size are
+ * left to the caller's own Tailwind classes. Reduced motion: no ::after is
+ * ever created, leaving a flat, static se-paper2 block. */
+.se-skeleton {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--color-se-paper2);
+}
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes se-skeleton-shimmer {
+    from { background-position: 150% 0; }
+    to { background-position: -50% 0; }
+  }
+  .se-skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.55),
+      transparent
+    );
+    background-size: 200% 100%;
+    animation: se-skeleton-shimmer 1.6s ease-in-out infinite;
+  }
+}
+
+/* Image fade-in (#11) — paired with the SEImage helper in kit.tsx, which
+ * flips `data-loaded` once the image has loaded (or was already cached). */
+.se-img-fade {
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+}
+.se-img-fade[data-loaded] {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .se-img-fade {
+    transition: none;
+  }
+}
+
 /* CC celebration shimmer animation */
 @media (prefers-reduced-motion: no-preference) {
   @keyframes cc-shimmer {

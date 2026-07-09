@@ -579,7 +579,7 @@ export default function ShowsList() {
     <div className="mx-auto w-full max-w-3xl">
       {/* ─── Page header ─────────────────────────── */}
       <div className="mb-6">
-        <h1 className={cn(SE_H, 'text-[31px] leading-[1.05] text-se-ink')}>
+        <h1 className={cn(SE_H, 'text-balance text-[31px] leading-[1.05] text-se-ink')}>
           Find a Show
         </h1>
         <p className="mt-1 max-w-lg text-[13.5px] leading-normal text-se-ink3">
@@ -873,10 +873,11 @@ function ShowCard({
   return (
     <Link href={`/shows/${show.slug ?? show.id}`} className="group block">
       <SECard
-        className={cn(
-          'flex gap-[13px] p-3.5 transition-shadow duration-200 hover:shadow-[0_2px_4px_rgba(27,36,29,0.06),0_22px_40px_-26px_rgba(27,36,29,0.5)]',
-          featured && 'border-se-fresh-line'
-        )}
+        // Desktop hover lift (POLISH #2): kit.tsx's SECard `interactive`
+        // prop landed (translateY(-1px) + deeper shadow, motion-safe-gated)
+        // — using it here instead of inlining the same classes.
+        interactive
+        className={cn('flex gap-[13px] p-3.5', featured && 'border-se-fresh-line')}
       >
         {/* Date tile */}
         <div

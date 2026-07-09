@@ -61,6 +61,40 @@ import { isGsdOnlyClass, isGsdBreed } from '@/lib/class-templates';
 import { isCatalogueItem } from '@/lib/catalogue-utils';
 import { useEntryCart, getPaymentKey, restoreActionForStatus, type WizardStep } from './use-entry-cart';
 import { SecLabel, Chip, Eyebrow, SE_H, SEButton, SECard, SEDarkPanel } from '@/components/show-experience/kit';
+import { Confetti } from '@/components/show-experience/confetti';
+
+/* ─── Local keyframes ────────────────────────────────
+ * Two one-off animations that don't belong in the shared kit (kit.tsx is
+ * owned by a parallel workstream): the running-total "scale pop" when the
+ * amount changes, and the confirmation check-disc "spring in". Both are
+ * scoped with an `se-` prefix and respect prefers-reduced-motion themselves. */
+function LocalKeyframes() {
+  return (
+    <style>{`
+      @media (prefers-reduced-motion: no-preference) {
+        @keyframes se-total-pop {
+          0% { transform: scale(1); }
+          50% { transform: scale(1.06); }
+          100% { transform: scale(1); }
+        }
+        .se-total-pop { animation: se-total-pop 180ms ease-out; }
+
+        @keyframes se-disc-spring-in {
+          from { opacity: 0; transform: scale(0.6); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        .se-disc-spring-in { animation: se-disc-spring-in 260ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        @keyframes se-disc-fade-in {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        .se-disc-spring-in { animation: se-disc-fade-in 260ms ease-out both; }
+      }
+    `}</style>
+  );
+}
 
 const STEPS: { key: WizardStep; label: string; icon: React.ElementType }[] = [
   { key: 'entry_type', label: 'Type', icon: PawPrint },
@@ -85,15 +119,20 @@ const EMPTY_GROUPED_CLASSES = {
 // heading back out of Hanken and render Inter instead.
 function StepHeading({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="text-[22px] font-bold text-se-ink sm:text-[26px]">{children}</h2>
+    <h2 className="text-balance text-[22px] font-bold text-se-ink sm:text-[26px]">{children}</h2>
   );
 }
 
 // Shared "checked" state styling for the green-tick checkboxes used across
 // the cart/sundry/declaration steps — each call site still supplies its own
-// base size/rounding classes.
+// base size/rounding classes. The `[&_svg]:animate-in` tick (POLISH #7,
+// 140ms scale-in) works for free here: Radix's Checkbox.Indicator only
+// mounts the tick svg into the DOM once checked, so a plain entrance
+// animation on it fires exactly on every check, no `data-state` gating
+// needed. `duration-[140ms]` composes with tw-animate-css's `animate-in`
+// the same way the shadcn dialog/dropdown already do in this codebase.
 const SE_CHECKED_CHECKBOX_CLASS =
-  'data-[state=checked]:border-se-green data-[state=checked]:bg-se-green data-[state=checked]:text-white';
+  'data-[state=checked]:border-se-green data-[state=checked]:bg-se-green data-[state=checked]:text-white [&_svg]:animate-in [&_svg]:zoom-in-50 [&_svg]:duration-[140ms] motion-reduce:[&_svg]:animate-none';
 
 // Everything the payment screen needs to render itself again after a reload
 // (mobile Safari evicting a backgrounded tab mid-3DS). Persisted to localStorage
@@ -789,6 +828,7 @@ export default function EnterShowPage() {
 
   return (
     <div className="show-exp container mx-auto max-w-3xl px-3 py-6 pb-24 sm:px-4 sm:py-8 lg:px-6">
+      <LocalKeyframes />
       {/* Header */}
       <div className="mb-6">
         <Link
@@ -798,7 +838,7 @@ export default function EnterShowPage() {
           <ChevronLeft className="size-4" />
           Back to show
         </Link>
-        <h1 className="mt-2 text-lg font-bold text-se-ink sm:text-xl lg:text-2xl">Enter {show.name}</h1>
+        <h1 className="mt-2 text-balance text-lg font-bold text-se-ink sm:text-xl lg:text-2xl">Enter {show.name}</h1>
         <p className="text-xs text-se-ink3 sm:text-sm">
           {format(parseISO(show.startDate), 'd MMMM yyyy')} &middot; {show.venue?.name ?? 'Venue TBC'}
         </p>
@@ -864,7 +904,7 @@ export default function EnterShowPage() {
 
       {/* Step: Entry Type */}
       {cart.step === 'entry_type' && (
-        <div className="space-y-4">
+        <div key={cart.step} className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-[160ms] motion-reduce:animate-none">
           <StepHeading>What type of entry?</StepHeading>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -918,7 +958,7 @@ export default function EnterShowPage() {
           : 0;
 
         return (
-        <div className="space-y-4">
+        <div key={cart.step} className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-[160ms] motion-reduce:animate-none">
           <StepHeading>Which dog are you entering?</StepHeading>
 
           {/* Single breed show info banner */}
@@ -1116,7 +1156,7 @@ export default function EnterShowPage() {
             : null;
 
         return (
-          <div className="space-y-6">
+          <div key={cart.step} className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-[160ms] motion-reduce:animate-none">
             <StepHeading>Junior Handler Details</StepHeading>
 
             <div className="flex gap-3 rounded-[14px] border border-se-line bg-se-surface p-3">
@@ -1249,9 +1289,9 @@ export default function EnterShowPage() {
             : null;
 
         return (
-        <div className="space-y-6">
+        <div key={cart.step} className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-[160ms] motion-reduce:animate-none">
           <div>
-            <h2 className={cn(SE_H, 'mt-3.5 text-[25px] text-se-ink')}>Select classes</h2>
+            <h2 className={cn(SE_H, 'mt-3.5 text-balance text-[25px] text-se-ink')}>Select classes</h2>
             <p className="text-xs text-se-ink3 sm:text-sm">
               {cart.activeEntry?.entryType === 'standard'
                 ? `Choose classes for ${cart.activeEntry?.dogName ?? 'your dog'}`
@@ -1512,7 +1552,7 @@ export default function EnterShowPage() {
                   {selectedClassIds.length !== 1 ? 'es' : ''}
                   {cart.activeEntry?.dogName ? ` · ${cart.activeEntry.dogName}` : ''}
                 </p>
-                <p className="text-[26px] font-bold leading-none tracking-[-0.015em] text-se-ink">{formatCurrency(selectedTotal)}</p>
+                <p key={selectedTotal} className="se-total-pop text-[26px] font-bold leading-none tracking-[-0.015em] text-se-ink">{formatCurrency(selectedTotal)}</p>
               </div>
               <SEButton
                 variant="fresh"
@@ -1535,7 +1575,7 @@ export default function EnterShowPage() {
 
       {/* Step: Cart Review */}
       {cart.step === 'cart_review' && (
-        <div className="space-y-6">
+        <div key={cart.step} className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-[160ms] motion-reduce:animate-none">
           <StepHeading>Review your entries</StepHeading>
 
           {/* Show info — rich summary */}
@@ -1840,7 +1880,7 @@ export default function EnterShowPage() {
             <h3 className="text-sm font-semibold text-se-ink">
               {show?.showRuleset === 'wusv' ? 'GSDL-BRG Declaration' : 'RKC Declaration'}
             </h3>
-            <div className="max-h-40 overflow-y-auto rounded-[10px] border border-se-line bg-se-paper2 p-3 text-xs leading-relaxed text-se-ink3">
+            <div className="max-h-40 overflow-y-auto rounded-[10px] border border-se-line bg-se-paper2 p-3 text-pretty text-xs leading-relaxed text-se-ink3">
               {show?.showRuleset === 'wusv' ? (
                 <>
                   I/We agree to abide by the GSDL-British Regional Group Rules &amp; Regulations (based on WUSV/SV Rules &amp; Regulations) for this Regional Event. I/We confirm that the information provided about the dog is accurate, and that the dog meets the eligibility requirements for the classes entered — including any health test disclosure, DNA recording, Koerung or working title requirements that apply to the class. I/We undertake not to bring to the Event any dog which has contracted or been knowingly exposed to any infectious or contagious disease during the 21 days prior to the Event, or which is suffering from a visible condition that adversely affects its health or welfare. I/We acknowledge that exhibitors are obligated to make true statements about their dog(s) and to show sportsmanlike conduct; any attempt at deception may result in disqualification and disciplinary action by the GSDL-BRG.
@@ -2036,7 +2076,11 @@ export default function EnterShowPage() {
         ];
 
         return (
-        <div>
+        <div key={cart.step} className="animate-in fade-in slide-in-from-bottom-2 duration-[160ms] motion-reduce:animate-none">
+          {/* Confetti — one burst, fires once as this step mounts (POLISH #8).
+              Self-contained: no-ops under prefers-reduced-motion and unmounts
+              itself after ~1.2s. */}
+          <Confetti />
           {/* Dark hero — full-bleed, no rounded corners */}
           <SEDarkPanel
             angle={178}
@@ -2045,10 +2089,10 @@ export default function EnterShowPage() {
             glowSize="size-[200px]"
             glowOpacity="opacity-25"
           >
-            <div className="relative mx-auto flex size-16 items-center justify-center rounded-full bg-se-fresh text-[#0e2c19] shadow-[0_16px_34px_-14px_rgba(0,0,0,0.55)]">
+            <div className="se-disc-spring-in relative mx-auto flex size-16 items-center justify-center rounded-full bg-se-fresh text-[#0e2c19] shadow-[0_16px_34px_-14px_rgba(0,0,0,0.55)]">
               <Check className="size-8" />
             </div>
-            <h2 className={cn(SE_H, 'relative mt-3.5 text-[29px] text-se-cream')}>
+            <h2 className={cn(SE_H, 'relative mt-3.5 text-balance text-[29px] text-se-cream')}>
               You&apos;re entered{firstName ? `, ${firstName}` : ''}!
             </h2>
             <p className="relative mt-1.5 text-[13.5px] text-se-cream/80">
@@ -2183,9 +2227,11 @@ export default function EnterShowPage() {
                           }
                           try {
                             await navigator.clipboard.writeText(shareText);
+                            // In-place label morph is the feedback (POLISH
+                            // #9) — no toast, aligned with share-kit.tsx's
+                            // copy-link button.
                             setShareCopied(true);
-                            toast.success('Copied! Paste into Facebook, breed groups, etc.');
-                            setTimeout(() => setShareCopied(false), 2000);
+                            setTimeout(() => setShareCopied(false), 1600);
                           } catch {
                             toast.error('Could not copy to clipboard');
                           }
@@ -2196,7 +2242,7 @@ export default function EnterShowPage() {
                         ) : (
                           <LinkIcon className="size-[14px]" />
                         )}
-                        {shareCopied ? 'Copied!' : 'Copy Link'}
+                        {shareCopied ? 'Copied ✓' : 'Copy Link'}
                       </SEButton>
                       <SEButton
                         type="button"
@@ -2487,7 +2533,7 @@ function ClassGroup({
                   </p>
                 )}
               </div>
-              <span className={cn('shrink-0 text-[14.5px] font-bold', isSelected ? 'text-se-fresh-deep' : 'text-se-ink3')}>
+              <span className={cn('shrink-0 text-[14.5px] font-bold transition-colors duration-150', isSelected ? 'text-se-fresh-deep' : 'text-se-ink3')}>
                 {formatCurrency(feeOverride != null ? feeOverride : sc.entryFee)}
               </span>
             </label>

@@ -80,12 +80,15 @@ export function ShareKit({
   const [previewVariant, setPreviewVariant] = useState<'portrait' | 'story'>('portrait');
   const [busy, setBusy] = useState<ShareChannel | null>(null);
   const [captionCopied, setCaptionCopied] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [showPosterTools, setShowPosterTools] = useState(false);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const linkCopyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     return () => {
       if (copyTimer.current) clearTimeout(copyTimer.current);
+      if (linkCopyTimer.current) clearTimeout(linkCopyTimer.current);
     };
   }, []);
 
@@ -195,13 +198,17 @@ export function ShareKit({
 
   /** Copy-link — reuses the same clipboard-copy fallback `shareShowLink`
    *  already falls back to, as its own explicit action for browsers/desktop
-   *  where a share sheet isn't the obvious move. */
+   *  where a share sheet isn't the obvious move. Feedback is in-place (the
+   *  button label morphs to "Copied ✓" for ~1.6s, POLISH #9) rather than a
+   *  toast — the button IS the confirmation. */
   async function copyShareLink() {
     setBusy('copy_link');
     onShare?.('copy_link');
     try {
       await copyText(shareUrl);
-      toast.success('Link copied');
+      setLinkCopied(true);
+      if (linkCopyTimer.current) clearTimeout(linkCopyTimer.current);
+      linkCopyTimer.current = setTimeout(() => setLinkCopied(false), 1600);
     } catch {
       toast.error('Could not copy the link.');
     } finally {
@@ -356,8 +363,14 @@ export function ShareKit({
           onClick={copyShareLink}
           disabled={busy !== null}
         >
-          {busy === 'copy_link' ? <Loader2 className="size-4 animate-spin" /> : <LinkIcon className="size-[15px]" />}
-          Copy link
+          {busy === 'copy_link' ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : linkCopied ? (
+            <Check className="size-4" />
+          ) : (
+            <LinkIcon className="size-[15px]" />
+          )}
+          {linkCopied ? 'Copied ✓' : 'Copy link'}
         </SEButton>
       </div>
 
@@ -498,10 +511,10 @@ export function ShareKitCard(props: ShareKitProps) {
         glowFade="70%"
       >
         <div className="relative mx-auto max-w-2xl text-center">
-          <h3 className={cn(SE_H, 'font-semibold', 'text-[19px] leading-tight')}>
+          <h3 className={cn(SE_H, 'font-semibold', 'text-balance text-[19px] leading-tight')}>
             Every share sells a few more entries.
           </h3>
-          <p className="mx-auto mt-[3px] max-w-lg text-[13px] leading-[1.45] text-se-cream-dim">
+          <p className="mx-auto mt-[3px] max-w-lg text-pretty text-[13px] leading-[1.45] text-se-cream-dim">
             Open the phone share sheet, then choose Facebook, Instagram, Messages, email or anything else installed.
           </p>
 

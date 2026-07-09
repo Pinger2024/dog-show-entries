@@ -39,6 +39,7 @@ import { ShareKitCard } from '@/components/show/share-kit';
 import { cn } from '@/lib/utils';
 import { captureReferralSource } from '@/lib/referral-source';
 import { useCountdown } from '@/components/show-experience/use-countdown';
+import { useInView, useStuckReveal } from '@/components/show-experience/use-in-view';
 import {
   Eyebrow,
   SecLabel,
@@ -52,6 +53,27 @@ import {
   SE_H,
   Wordmark,
 } from '@/components/show-experience/kit';
+
+/* ─── Local keyframes ────────────────────────────────
+ * A couple of one-off animations that don't belong in the shared kit
+ * (kit.tsx/globals.css are owned by a parallel workstream) — scoped here
+ * with an `se-` prefix so they can't collide with anything global. Both
+ * respect `prefers-reduced-motion` themselves so callers don't have to. */
+function LocalKeyframes() {
+  return (
+    <style>{`
+      @media (prefers-reduced-motion: no-preference) {
+        @keyframes se-hero-glow-drift {
+          0% { transform: translate(0, 0); }
+          100% { transform: translate(8px, 6px); }
+        }
+        .se-hero-glow-drift {
+          animation: se-hero-glow-drift 30s ease-in-out infinite alternate;
+        }
+      }
+    `}</style>
+  );
+}
 
 type PreviewShowClass = {
   id: string;
@@ -172,7 +194,7 @@ function JudgeBio({ bio }: { bio: string }) {
   const isLong = bio.length > 220;
   return (
     <div className="mt-3 border-t border-se-line pt-3">
-      <p className={cn('text-[12.5px] leading-[1.5] text-se-ink2', !expanded && isLong && 'line-clamp-4')}>
+      <p className={cn('text-pretty text-[12.5px] leading-[1.5] text-se-ink2', !expanded && isLong && 'line-clamp-4')}>
         {bio}
       </p>
       {isLong && (
@@ -567,6 +589,17 @@ export function ShowPreviewClient() {
   const entryCloseDate = entryCloseDateRaw ? new Date(entryCloseDateRaw) : null;
   const countdown = useCountdown(entryCloseDate);
 
+  // Mobile section entrances (#6) — one useInView per lg:hidden section, kept
+  // unconditional per Rules of Hooks even though the sections themselves are
+  // conditionally rendered below. The sticky action bar's "just stuck" reveal
+  // (#12) is a sibling concern, same IntersectionObserver family.
+  const ctaCardInView = useInView<HTMLElement>();
+  const judgesInView = useInView<HTMLElement>();
+  const classificationInView = useInView<HTMLElement>();
+  const theDayInView = useInView<HTMLElement>();
+  const shareKitInView = useInView<HTMLDivElement>();
+  const stickyBar = useStuckReveal<HTMLDivElement>(72); // top-[4.5rem] = 72px
+
   if (isLoading || !show) {
     return (
       <div className="show-exp min-h-screen bg-se-paper">
@@ -656,6 +689,17 @@ export function ShowPreviewClient() {
 
   return (
     <div className="show-exp min-h-screen bg-se-paper text-se-ink">
+      <LocalKeyframes />
+      {/* iOS rubber-band overscroll backstop (#17) — the dark hero sits above
+          a cream `se-paper` body, and html/body itself carries the app's
+          lighter default background (see globals.css `body { @apply
+          bg-background }`), not se-deep. Scrolling past the top on iOS
+          reveals that lighter band for the bounce's duration. A fixed,
+          viewport-pinned se-deep layer behind everything else closes that
+          gap without touching normal scroll/paint (`fixed` is removed from
+          flow, `-z-10` keeps it behind all in-flow content, pointer-events
+          stays off so it can never intercept a tap). */}
+      <div aria-hidden="true" className="pointer-events-none fixed inset-x-0 top-0 -z-10 h-[50vh] bg-se-deep" />
       {/* ──────────────────────────── Banner (if set) ─────────────────────── */}
       {showAny.bannerImageUrl && (
         // eslint-disable-next-line @next/next/no-img-element
@@ -667,7 +711,15 @@ export function ShowPreviewClient() {
       )}
 
       {/* ──────────────────────────── Hero (mobile/tablet) ─────────────────── */}
-      <SEDarkPanel as="header" angle={172} className="lg:hidden">
+      {/* glow={false}: the kit's own glow blob is static (no exposed hook to
+          animate it without editing kit.tsx, which is owned elsewhere) — we
+          render an equivalent one ourselves with the slow drift (#5) added. */}
+      <SEDarkPanel as="header" angle={172} glow={false} className="lg:hidden">
+        <div
+          aria-hidden="true"
+          className="se-hero-glow-drift pointer-events-none absolute -right-[90px] -top-[70px] size-[260px] rounded-full opacity-[0.28]"
+          style={{ background: 'radial-gradient(circle, #5bb579, transparent 68%)' }}
+        />
         <div className="mx-auto max-w-4xl px-5 pb-[22px] sm:px-6">
           {/* Top row: back-link + wordmark (isolated row — sharing lives in
               the sticky bar + "Spread the word" section, not here). */}
@@ -750,7 +802,24 @@ export function ShowPreviewClient() {
               to the countdown (Amanda 2026-05-27: "22 days" alone confused a
               BAGSD user because the actual date wasn't visible). */}
           {isOpen && entryCloseDate && (
-            <HoneyBanner date={format(entryCloseDate, 'EEE d MMM')} className="mt-[18px]">
+            <HoneyBanner
+              // HoneyBanner's `label` prop is typed `string` and just gets
+              // interpolated as `{label}` inside an <Eyebrow> — a ReactNode
+              // renders there fine at runtime. kit.tsx is owned by a parallel
+              // workstream so the type isn't being widened here; this cast is
+              // the narrow, contained workaround for the under-24h Pulse dot
+              // (#3) rather than duplicating HoneyBanner's markup.
+              label={
+                (
+                  <span className="inline-flex items-center gap-[7px]">
+                    Entries close
+                    {countdown && countdown.totalSecs < 86400 && <Pulse />}
+                  </span>
+                ) as unknown as string
+              }
+              date={format(entryCloseDate, 'EEE d MMM')}
+              className="mt-[18px]"
+            >
               <CountdownCells countdown={countdown} dark />
             </HoneyBanner>
           )}
@@ -817,7 +886,17 @@ export function ShowPreviewClient() {
       )}
 
       {/* ──────────────────────────── Sticky action bar ──────────────────── */}
-      <div className="sticky top-[4.5rem] z-40 border-b border-se-line bg-se-surface/95 shadow-sm backdrop-blur-md">
+      {/* Zero-height sentinel just above the bar — useStuckReveal watches it
+          leave the viewport (past the bar's own top-[4.5rem] offset) to know
+          the exact moment the bar starts sticking, then fires the one-shot
+          "just stuck" entrance below (#12). */}
+      <div ref={stickyBar.sentinelRef} aria-hidden="true" />
+      <div
+        className={cn(
+          'sticky top-[4.5rem] z-40 border-b border-se-line bg-se-surface/95 shadow-sm backdrop-blur-md',
+          stickyBar.stuck && 'animate-in fade-in slide-in-from-top-2 duration-200'
+        )}
+      >
         <div className="mx-auto flex max-w-6xl items-center gap-2 px-3 py-2.5 sm:px-4 lg:px-6">
           {isOpen ? (
             <SEButton
@@ -1033,7 +1112,10 @@ export function ShowPreviewClient() {
               {isOpen && entryCloseDate && (
                 <div className="flex items-center justify-between bg-se-honey px-[18px] py-[13px]">
                   <div>
-                    <Eyebrow className="text-[rgba(74,48,6,0.7)]">Entries close</Eyebrow>
+                    <Eyebrow className="inline-flex items-center gap-[7px] text-[rgba(74,48,6,0.7)]">
+                      Entries close
+                      {countdown && countdown.totalSecs < 86400 && <Pulse />}
+                    </Eyebrow>
                     <p className={cn(SE_H, 'font-semibold', 'mt-0.5 whitespace-nowrap text-[16px] text-se-honey-ink')}>
                       {format(entryCloseDate, 'EEE d MMM')}
                     </p>
@@ -1127,7 +1209,13 @@ export function ShowPreviewClient() {
             mx-auto/max-w/px/py. */}
         <div className="mx-auto max-w-4xl px-4 pt-[18px]">
         {/* ──────────────────────────── CTA card (mobile/tablet) ────────────── */}
-        <section className="lg:hidden">
+        <section
+          ref={ctaCardInView.ref}
+          className={cn(
+            'lg:hidden transition-all duration-[240ms] ease-out motion-reduce:transition-none',
+            ctaCardInView.visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'
+          )}
+        >
           {isOpen ? (
             <SECard className="p-4">
               <SEButton asChild variant="fresh" full>
@@ -1179,7 +1267,13 @@ export function ShowPreviewClient() {
 
         {/* ──────────────────────────── Your judges (mobile/tablet) ─────────── */}
         {judges.length > 0 && (
-          <section className="mt-[22px] lg:hidden">
+          <section
+            ref={judgesInView.ref}
+            className={cn(
+              'mt-[22px] lg:hidden transition-all duration-[240ms] ease-out motion-reduce:transition-none',
+              judgesInView.visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'
+            )}
+          >
             <SecLabel>Your judges</SecLabel>
             <p className="text-sm text-se-ink2">
               {judges.length === 1
@@ -1204,7 +1298,7 @@ export function ShowPreviewClient() {
                 <h3 className={cn(SE_H, 'font-semibold', 'text-base text-se-ink')}>On offer</h3>
               </div>
               {showAny.scheduleData?.awardsDescription && (
-                <p className="mt-3 whitespace-pre-line text-[15px] leading-relaxed text-se-ink2">
+                <p className="mt-3 whitespace-pre-line text-pretty text-[15px] leading-relaxed text-se-ink2">
                   {showAny.scheduleData.awardsDescription}
                 </p>
               )}
@@ -1225,7 +1319,13 @@ export function ShowPreviewClient() {
 
         {/* ──────────────────────────── Classification (mobile/tablet) ──────── */}
         {breedGroups.length > 0 && (
-          <section className="mt-[22px] lg:hidden">
+          <section
+            ref={classificationInView.ref}
+            className={cn(
+              'mt-[22px] lg:hidden transition-all duration-[240ms] ease-out motion-reduce:transition-none',
+              classificationInView.visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'
+            )}
+          >
             <SecLabel
               right={
                 <span className="text-xs font-semibold text-se-fresh-deep">
@@ -1290,7 +1390,13 @@ export function ShowPreviewClient() {
         {/* ──────────────────────────── The day (mobile/tablet) ─────────────── */}
         {/* Doors/Judging are covered by the desktop rail's quick-facts grid. */}
         {(showAny.showOpenTime || showAny.startTime) && (
-          <section className="mt-[22px] lg:hidden">
+          <section
+            ref={theDayInView.ref}
+            className={cn(
+              'mt-[22px] lg:hidden transition-all duration-[240ms] ease-out motion-reduce:transition-none',
+              theDayInView.visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'
+            )}
+          >
             <SecLabel>The day</SecLabel>
             <SECard className="grid grid-cols-1 divide-y divide-se-line sm:grid-cols-2 sm:divide-x sm:divide-y-0">
               {showAny.showOpenTime && (
@@ -1500,7 +1606,7 @@ export function ShowPreviewClient() {
                 {showAny.scheduleData?.directions && (
                   <div className="mt-4 border-t border-se-line pt-4">
                     <Eyebrow>Directions</Eyebrow>
-                    <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-se-ink2">
+                    <p className="mt-1 whitespace-pre-line text-pretty text-sm leading-relaxed text-se-ink2">
                       {showAny.scheduleData.directions}
                     </p>
                   </div>
@@ -1532,7 +1638,7 @@ export function ShowPreviewClient() {
           <section className="mt-[22px]">
             <SecLabel>From the organisers</SecLabel>
             <SECard className="border-l-4 border-se-honey-deep p-5 sm:p-6">
-              <p className="whitespace-pre-line text-[15px] leading-relaxed text-se-ink2">
+              <p className="whitespace-pre-line text-pretty text-[15px] leading-relaxed text-se-ink2">
                 {showAny.scheduleData.additionalNotes}
               </p>
             </SECard>
@@ -1545,7 +1651,7 @@ export function ShowPreviewClient() {
             <SecLabel>Save the date</SecLabel>
             <p className="mb-3 text-sm text-se-ink2">More from {org?.name ?? 'this club'}</p>
             <SECard className="p-5 sm:p-6">
-              <p className="whitespace-pre-line text-[15px] leading-relaxed text-se-ink2">
+              <p className="whitespace-pre-line text-pretty text-[15px] leading-relaxed text-se-ink2">
                 {showAny.scheduleData.futureShowDates}
               </p>
             </SECard>
@@ -1555,9 +1661,16 @@ export function ShowPreviewClient() {
         {/* ──────────────────────────── Share kit (mobile/tablet) ─────────────
             Desktop gets its own ShareKitCard instance as rail card #2. */}
         {show.status !== 'cancelled' && (
+          <div
+            ref={shareKitInView.ref}
+            className={cn(
+              'mt-[22px] lg:hidden transition-all duration-[240ms] ease-out motion-reduce:transition-none',
+              shareKitInView.visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'
+            )}
+          >
           <ShareKitCard
             id="share-invitation"
-            className="mt-[22px] px-0 py-0 sm:px-0 sm:py-0 lg:hidden"
+            className="px-0 py-0 sm:px-0 sm:py-0"
             showId={show.id}
             showName={show.name}
             showType={showType}
@@ -1580,13 +1693,14 @@ export function ShowPreviewClient() {
               }).catch(() => {});
             }}
           />
+          </div>
         )}
 
         {/* ──────────────────────────── Footer CTA ────────────────────────── */}
         {isOpen && (
           <section className="mt-[22px] py-14 text-center sm:py-16">
             <Crown className="mx-auto size-7 text-se-honey-deep" />
-            <h2 className="mt-3 text-[1.75rem] font-extrabold text-se-ink sm:text-3xl">Ready for the ring?</h2>
+            <h2 className="mt-3 text-balance text-[1.75rem] font-extrabold text-se-ink sm:text-3xl">Ready for the ring?</h2>
             <p className="mx-auto mt-2 max-w-xl text-se-ink2">Entries take two minutes on your phone.</p>
             <div className="mt-6">
               <SEButton asChild variant="fresh">
