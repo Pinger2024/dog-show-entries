@@ -217,14 +217,25 @@ export function HoneyBanner({
 
 export function CountdownCells({
   target,
+  countdown,
   dark,
   className,
 }: {
-  target: Date;
+  /** Precomputed {d,h,m} from a countdown a parent is already ticking (e.g.
+   *  a single shared `useCountdown()` call) — pass this to avoid each
+   *  CountdownCells instance running its own 1s interval. Takes priority
+   *  over `target` when both are given. */
+  countdown?: { d: number; h: number; m: number } | null;
+  /** Target date — when `countdown` isn't supplied, CountdownCells runs its
+   *  own internal useCountdown hook against this. */
+  target?: Date;
   dark?: boolean;
   className?: string;
 }) {
-  const c = useCountdown(target);
+  // Hooks must run unconditionally — pass null when a precomputed
+  // `countdown` was given so this internal tick never starts.
+  const hookValue = useCountdown(countdown ? null : target ?? null);
+  const c = countdown ?? hookValue;
   if (!c) return null;
 
   const valueClass = dark ? 'text-[#0e2c19]' : 'text-se-ink';
@@ -266,5 +277,65 @@ export function CountdownCells({
         </React.Fragment>
       ))}
     </div>
+  );
+}
+
+/* ─── SEDarkPanel ────────────────────────────────── */
+/* Dark pine gradient panel (hero banners, confirmation cards, share-prompt
+ * cards) with an optional decorative radial glow blob in the corner.
+ * Consolidates 4 previously hand-rolled copies — pass each site's own
+ * direction/glow position/size/opacity/fade to preserve its exact look. */
+
+export interface SEDarkPanelProps extends React.HTMLAttributes<HTMLElement> {
+  /** Wrapping element — defaults to 'div'; pass 'header' for hero banners
+   *  that want the semantic landmark. */
+  as?: 'div' | 'header';
+  /** Gradient direction, matching Tailwind's bg-gradient-to-* suffix. */
+  direction?: 'b' | 'br';
+  /** Show the decorative radial glow blob. Defaults to true. */
+  glow?: boolean;
+  /** Glow position, as Tailwind position-utility classes (e.g. "-right-20 -top-16"). */
+  glowPosition?: string;
+  /** Glow size, as a Tailwind size-* class (e.g. "size-64"). */
+  glowSize?: string;
+  /** Glow opacity, as a Tailwind opacity-* class (e.g. "opacity-25"). */
+  glowOpacity?: string;
+  /** Radial-gradient fade-out stop (e.g. "68%"). */
+  glowFade?: string;
+}
+
+export function SEDarkPanel({
+  as = 'div',
+  direction = 'b',
+  glow = true,
+  glowPosition = '-right-20 -top-16',
+  glowSize = 'size-64',
+  glowOpacity = 'opacity-25',
+  glowFade = '68%',
+  className,
+  children,
+  ...props
+}: SEDarkPanelProps) {
+  const Comp = as as React.ElementType;
+  return (
+    <Comp
+      className={cn(
+        'relative overflow-hidden text-se-cream',
+        direction === 'br'
+          ? 'bg-gradient-to-br from-se-deep to-se-deepest'
+          : 'bg-gradient-to-b from-se-deep to-se-deepest',
+        className
+      )}
+      {...props}
+    >
+      {glow && (
+        <div
+          aria-hidden="true"
+          className={cn('pointer-events-none absolute rounded-full', glowPosition, glowSize, glowOpacity)}
+          style={{ background: `radial-gradient(circle, #5bb579, transparent ${glowFade})` }}
+        />
+      )}
+      {children}
+    </Comp>
   );
 }

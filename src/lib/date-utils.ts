@@ -87,14 +87,33 @@ export function isWithinAgeRange(
 }
 
 /**
- * RKC-accurate class-eligibility check. "Of six and not exceeding twelve
- * calendar months" means the dog is in the window on or before her
- * 12-month anniversary day — Amanda 2026-05-28: a dog whose first
- * birthday IS the show day should still be eligible for Puppy.
+ * Shared date-anchored bound check behind {@link isAgeEligibleOnShowDay} and
+ * {@link getAgeEligibilityDetail} — returns which bound (if any) failed.
+ * "Of six and not exceeding twelve calendar months" means the dog is in the
+ * window on or before her 12-month anniversary day — Amanda 2026-05-28: a
+ * dog whose first birthday IS the show day should still be eligible for
+ * Puppy.
  *
  * Integer `differenceInMonths` floors, so `ageMonths < 12` wrongly
  * excludes the anniversary day and `ageMonths <= 12` wrongly INcludes
  * the following 27 days. The right test is date-anchored.
+ */
+function ageBoundFailure(
+  dob: string | Date,
+  showDate: string | Date,
+  minAgeMonths: number | null,
+  maxAgeMonths: number | null,
+): 'min' | 'max' | null {
+  const dobDate = typeof dob === 'string' ? parseLocalDate(dob) : dob;
+  const show = typeof showDate === 'string' ? parseLocalDate(showDate) : showDate;
+  if (minAgeMonths !== null && show < addMonths(dobDate, minAgeMonths)) return 'min';
+  if (maxAgeMonths !== null && show > addMonths(dobDate, maxAgeMonths)) return 'max';
+  return null;
+}
+
+/**
+ * RKC-accurate class-eligibility check — see {@link ageBoundFailure} for the
+ * anniversary-day semantics.
  */
 export function isAgeEligibleOnShowDay(
   dob: string | Date,
@@ -102,11 +121,22 @@ export function isAgeEligibleOnShowDay(
   minAgeMonths: number | null,
   maxAgeMonths: number | null,
 ): boolean {
-  const dobDate = typeof dob === 'string' ? parseLocalDate(dob) : dob;
-  const show = typeof showDate === 'string' ? parseLocalDate(showDate) : showDate;
-  if (minAgeMonths !== null && show < addMonths(dobDate, minAgeMonths)) return false;
-  if (maxAgeMonths !== null && show > addMonths(dobDate, maxAgeMonths)) return false;
-  return true;
+  return ageBoundFailure(dob, showDate, minAgeMonths, maxAgeMonths) === null;
+}
+
+/**
+ * Like {@link isAgeEligibleOnShowDay}, but when ineligible also reports which
+ * bound failed — 'min' (too young) or 'max' (too old) — so callers can show
+ * a specific reason without re-running the check per bound.
+ */
+export function getAgeEligibilityDetail(
+  dob: string | Date,
+  showDate: string | Date,
+  minAgeMonths: number | null,
+  maxAgeMonths: number | null,
+): { eligible: boolean; failedBound: 'min' | 'max' | null } {
+  const failedBound = ageBoundFailure(dob, showDate, minAgeMonths, maxAgeMonths);
+  return { eligible: failedBound === null, failedBound };
 }
 
 /**

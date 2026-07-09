@@ -923,16 +923,10 @@ function ShowCard({
               </span>
             )}
 
-            {distance != null && !show.venue && (
+            {distance != null && (
               <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-se-fresh-deep">
                 <Navigation className="size-3" />
-                {distance} miles away
-              </span>
-            )}
-            {distance != null && show.venue && (
-              <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-se-fresh-deep">
-                <Navigation className="size-3" />
-                {distance} mi
+                {distance} {show.venue ? 'mi' : 'miles away'}
               </span>
             )}
 

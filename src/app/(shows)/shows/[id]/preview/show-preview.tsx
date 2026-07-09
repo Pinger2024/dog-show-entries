@@ -47,6 +47,7 @@ import {
   SECard,
   HoneyBanner,
   CountdownCells,
+  SEDarkPanel,
 } from '@/components/show-experience/kit';
 
 type PreviewShowClass = {
@@ -118,10 +119,16 @@ function getInitials(name: string) {
 /* useCountdown lives in @/components/show-experience/use-countdown — extracted
  * for reuse by the Show Experience kit. The hero countdown now uses the kit's
  * <CountdownCells dark /> directly; this narrower ticker only feeds the
- * sticky action bar's inline "Closes in HH:MM:SS" chip. */
+ * sticky action bar's inline "Closes in HH:MM:SS" chip. Takes the shared
+ * countdown tick as a prop (see ShowPreviewClient's single useCountdown call)
+ * rather than running its own 1s interval. */
 
-function CountdownTicker({ target }: { target: Date }) {
-  const c = useCountdown(target);
+function CountdownTicker({
+  countdown,
+}: {
+  countdown: { d: number; h: number; m: number; s: number; totalSecs: number } | null;
+}) {
+  const c = countdown;
   if (!c) return null;
   const veryUrgent = c.totalSecs <= 86400;
   const urgent = c.d <= 3;
@@ -170,37 +177,67 @@ function JudgeBio({ bio }: { bio: string }) {
   );
 }
 
-function JudgeCard({ judge, classCount }: { judge: JudgeData; classCount?: number }) {
+/** Photo, or initials-fallback circle, shared by JudgeCard and JudgeRowD.
+ *  `sizeClassName` must be a literal Tailwind size-* class (not built from a
+ *  numeric prop) so the JIT scanner picks it up. */
+function JudgeAvatar({ judge, sizeClassName }: { judge: JudgeData; sizeClassName: string }) {
   const initials = getInitials(judge.name);
+  return judge.photoUrl ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={judge.photoUrl}
+      alt={judge.name}
+      className={cn(sizeClassName, 'shrink-0 rounded-full object-cover')}
+    />
+  ) : (
+    <div
+      aria-hidden="true"
+      className={cn(
+        sizeClassName,
+        'flex shrink-0 items-center justify-center rounded-full border border-se-fresh-line bg-se-fresh-soft text-lg font-semibold text-se-fresh-deep'
+      )}
+    >
+      {initials}
+    </div>
+  );
+}
+
+/** Name/affix + role/classCount text block shared by JudgeCard and
+ *  JudgeRowD. `as` picks the name element (h3 for JudgeCard's heading vs a
+ *  plain p for JudgeRowD's denser row) — callers supply the wrapping
+ *  min-w-0 flex-1 container since JudgeRowD adds a bio line after this. */
+function JudgeHeader({
+  judge,
+  classCount,
+  as: NameTag = 'p',
+}: {
+  judge: JudgeData;
+  classCount?: number;
+  as?: 'h3' | 'p';
+}) {
+  return (
+    <>
+      <NameTag className="truncate text-[19px] font-semibold leading-tight text-se-ink">
+        {judge.name}{' '}
+        {judge.affix && <span className="text-sm font-normal italic text-se-ink3">({judge.affix})</span>}
+      </NameTag>
+      <p className="mt-0.5 text-[12.5px] text-se-ink2">
+        {judge.role}
+        {classCount !== undefined && classCount > 0
+          ? ` · ${classCount} ${classCount === 1 ? 'class' : 'classes'}`
+          : ''}
+      </p>
+    </>
+  );
+}
+
+function JudgeCard({ judge, classCount }: { judge: JudgeData; classCount?: number }) {
   return (
     <SECard className="p-4 sm:p-[18px]">
       <div className="flex items-center gap-3">
-        {judge.photoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={judge.photoUrl}
-            alt={judge.name}
-            className="size-[52px] shrink-0 rounded-full object-cover"
-          />
-        ) : (
-          <div
-            aria-hidden="true"
-            className="flex size-[52px] shrink-0 items-center justify-center rounded-full border border-se-fresh-line bg-se-fresh-soft text-lg font-semibold text-se-fresh-deep"
-          >
-            {initials}
-          </div>
-        )}
+        <JudgeAvatar judge={judge} sizeClassName="size-[52px]" />
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-[19px] font-semibold leading-tight text-se-ink">
-            {judge.name}{' '}
-            {judge.affix && <span className="text-sm font-normal italic text-se-ink3">({judge.affix})</span>}
-          </h3>
-          <p className="mt-0.5 text-[12.5px] text-se-ink2">
-            {judge.role}
-            {classCount !== undefined && classCount > 0
-              ? ` · ${classCount} ${classCount === 1 ? 'class' : 'classes'}`
-              : ''}
-          </p>
+          <JudgeHeader judge={judge} classCount={classCount} as="h3" />
         </div>
       </div>
 
@@ -230,35 +267,11 @@ function JudgeCard({ judge, classCount }: { judge: JudgeData; classCount?: numbe
 /** Desktop (lg+) judge row — a denser horizontal layout for the 2-col judges
  *  grid in the desktop composition, vs JudgeCard's vertical mobile layout. */
 function JudgeRowD({ judge, classCount }: { judge: JudgeData; classCount?: number }) {
-  const initials = getInitials(judge.name);
   return (
     <div className="flex items-center gap-3.5 py-3.5">
-      {judge.photoUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={judge.photoUrl}
-          alt={judge.name}
-          className="size-[54px] shrink-0 rounded-full object-cover"
-        />
-      ) : (
-        <div
-          aria-hidden="true"
-          className="flex size-[54px] shrink-0 items-center justify-center rounded-full border border-se-fresh-line bg-se-fresh-soft text-lg font-semibold text-se-fresh-deep"
-        >
-          {initials}
-        </div>
-      )}
+      <JudgeAvatar judge={judge} sizeClassName="size-[54px]" />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[19px] font-semibold leading-tight text-se-ink">
-          {judge.name}{' '}
-          {judge.affix && <span className="text-sm font-normal italic text-se-ink3">({judge.affix})</span>}
-        </p>
-        <p className="mt-0.5 text-[12.5px] text-se-ink2">
-          {judge.role}
-          {classCount !== undefined && classCount > 0
-            ? ` · ${classCount} ${classCount === 1 ? 'class' : 'classes'}`
-            : ''}
-        </p>
+        <JudgeHeader judge={judge} classCount={classCount} as="p" />
         {judge.bio && (
           <p className="mt-1.5 line-clamp-2 text-[12.5px] leading-relaxed text-se-ink2">{judge.bio}</p>
         )}
@@ -533,6 +546,16 @@ export function ShowPreviewClient() {
     return map;
   }, [breedGroups]);
 
+  // Single shared countdown tick for the whole page — CountdownCells (mobile
+  // hero + desktop rail) and CountdownTicker (sticky bar) all read from this
+  // one hook instead of each running their own 1s interval. Must be called
+  // unconditionally before the loading early-return below (Rules of Hooks),
+  // so entryCloseDate is derived here rather than from the later `showAny`
+  // cast — same underlying field either way.
+  const entryCloseDateRaw = (show as { entryCloseDate?: string | null } | null | undefined)?.entryCloseDate;
+  const entryCloseDate = entryCloseDateRaw ? new Date(entryCloseDateRaw) : null;
+  const countdown = useCountdown(entryCloseDate);
+
   if (isLoading || !show) {
     return (
       <div className="show-exp min-h-screen bg-se-paper">
@@ -589,7 +612,8 @@ export function ShowPreviewClient() {
 
   const org = show.organisation;
   const venue = show.venue;
-  const entryCloseDate = showAny.entryCloseDate ? new Date(showAny.entryCloseDate) : null;
+  // entryCloseDate is derived earlier (before the loading early-return) so
+  // the shared useCountdown() call above can use it.
   const closeDatePast = entryCloseDate ? entryCloseDate.getTime() < Date.now() : false;
   // "Open" requires status=entries_open AND the close date not yet passed.
   // Show DB status can lag for a few minutes after the cron flips it, so
@@ -632,12 +656,7 @@ export function ShowPreviewClient() {
       )}
 
       {/* ──────────────────────────── Hero (mobile/tablet) ─────────────────── */}
-      <header className="relative overflow-hidden bg-gradient-to-b from-se-deep to-se-deepest pb-6 lg:hidden">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -right-20 -top-16 size-64 rounded-full bg-[radial-gradient(circle,#5bb579,transparent_68%)] opacity-25"
-        />
-
+      <SEDarkPanel as="header" className="pb-6 lg:hidden">
         <div className="relative mx-auto max-w-4xl px-5 pt-3 sm:px-6">
           {/* Breadcrumb/back row + wordmark */}
           <div className="flex items-center justify-between">
@@ -749,11 +768,11 @@ export function ShowPreviewClient() {
         {isOpen && entryCloseDate && (
           <div className="relative mx-auto mt-6 max-w-4xl px-5 sm:px-6">
             <HoneyBanner date={format(entryCloseDate, 'EEE d MMM')}>
-              <CountdownCells target={entryCloseDate} dark />
+              <CountdownCells countdown={countdown} dark />
             </HoneyBanner>
           </div>
         )}
-      </header>
+      </SEDarkPanel>
 
       {/* ──────────────────────────── Hero (desktop, lg+) ───────────────────
           Keeps the site's real <Header/> (rendered by the (shows) layout)
@@ -857,7 +876,7 @@ export function ShowPreviewClient() {
             <div className="hidden items-center gap-1.5 rounded-full bg-se-honey-soft px-3 py-1.5 sm:inline-flex">
               <Clock className="size-3.5 text-se-honey-deep" />
               <span className="text-xs font-semibold text-se-honey-ink">
-                Closes in <CountdownTicker target={entryCloseDate} />
+                Closes in <CountdownTicker countdown={countdown} />
               </span>
             </div>
           )}
@@ -1030,7 +1049,7 @@ export function ShowPreviewClient() {
                       {format(entryCloseDate, 'EEE d MMM')}
                     </p>
                   </div>
-                  <CountdownCells target={entryCloseDate} dark />
+                  <CountdownCells countdown={countdown} dark />
                 </div>
               )}
               <div className="p-4">
@@ -1059,11 +1078,11 @@ export function ShowPreviewClient() {
                       </a>
                     </SEButton>
                     <div className="mt-3 flex flex-col gap-1.5 border-t border-se-line pt-3">
-                      {showAny.acceptsPostalEntries && (
-                        <TrustRow icon={CreditCard}>Card or cheque — same fee</TrustRow>
-                      )}
-                      <TrustRow icon={Check}>Instant email confirmation</TrustRow>
-                      <TrustRow icon={Lock}>Entry private until the catalogue</TrustRow>
+                      {TRUST_BULLETS.filter((b) => !b.requiresPostal || showAny.acceptsPostalEntries).map((b) => (
+                        <TrustRow key={b.shortLabel} icon={b.icon}>
+                          {b.shortLabel}
+                        </TrustRow>
+                      ))}
                     </div>
                   </>
                 ) : show.status === 'in_progress' || show.status === 'completed' || showAny.hasPublishedResults ? (
@@ -1131,11 +1150,11 @@ export function ShowPreviewClient() {
                 </a>
               </SEButton>
               <div className="mt-3.5 flex flex-col gap-2 border-t border-se-line pt-3.5">
-                {showAny.acceptsPostalEntries && (
-                  <TrustRow icon={CreditCard}>Pay by card, or post a cheque — same fee</TrustRow>
-                )}
-                <TrustRow icon={Check}>Instant confirmation by email</TrustRow>
-                <TrustRow icon={Lock}>Your entry stays private until the catalogue</TrustRow>
+                {TRUST_BULLETS.filter((b) => !b.requiresPostal || showAny.acceptsPostalEntries).map((b) => (
+                  <TrustRow key={b.label} icon={b.icon}>
+                    {b.label}
+                  </TrustRow>
+                ))}
               </div>
             </SECard>
           ) : show.status === 'in_progress' || show.status === 'completed' || showAny.hasPublishedResults ? (
@@ -1649,6 +1668,30 @@ export function ShowPreviewClient() {
 }
 
 /* ─── Small composable building blocks ────────────── */
+
+/** Reassurance bullets shown under the Enter CTA — desktop rail uses the
+ *  shorter `shortLabel` copy (denser card), mobile CTA uses the fuller
+ *  `label`. `requiresPostal` bullets only render when the show accepts
+ *  postal entries. */
+const TRUST_BULLETS: Array<{
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  shortLabel: string;
+  requiresPostal?: boolean;
+}> = [
+  {
+    icon: CreditCard,
+    label: 'Pay by card, or post a cheque — same fee',
+    shortLabel: 'Card or cheque — same fee',
+    requiresPostal: true,
+  },
+  { icon: Check, label: 'Instant confirmation by email', shortLabel: 'Instant email confirmation' },
+  {
+    icon: Lock,
+    label: 'Your entry stays private until the catalogue',
+    shortLabel: 'Entry private until the catalogue',
+  },
+];
 
 function TrustRow({
   icon: Icon,

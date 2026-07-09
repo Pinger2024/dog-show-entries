@@ -6,6 +6,7 @@ import {
   penceToPounds,
   penceToPoundsString,
   isAgeEligibleOnShowDay,
+  getAgeEligibilityDetail,
 } from '../date-utils';
 
 describe('formatCurrency', () => {
@@ -151,5 +152,51 @@ describe('isAgeEligibleOnShowDay', () => {
     expect(isAgeEligibleOnShowDay('2018-01-01', '2026-07-04', null, null)).toBe(true);
     expect(isAgeEligibleOnShowDay('2018-01-01', '2026-07-04', 84, null)).toBe(true); // Veteran 7y+
     expect(isAgeEligibleOnShowDay('2022-01-01', '2026-07-04', 84, null)).toBe(false);
+  });
+});
+
+describe('getAgeEligibilityDetail', () => {
+  it('reports eligible with no failedBound when within both bounds', () => {
+    expect(getAgeEligibilityDetail('2025-07-04', '2026-07-04', 6, 12)).toEqual({
+      eligible: true,
+      failedBound: null,
+    });
+  });
+
+  it('reports failedBound "min" when under the minimum', () => {
+    expect(getAgeEligibilityDetail('2026-01-05', '2026-07-04', 6, 12)).toEqual({
+      eligible: false,
+      failedBound: 'min',
+    });
+  });
+
+  it('reports failedBound "max" when over the maximum', () => {
+    expect(getAgeEligibilityDetail('2025-07-04', '2026-07-05', 6, 12)).toEqual({
+      eligible: false,
+      failedBound: 'max',
+    });
+  });
+
+  it('includes a dog whose 1st birthday lands on show day (12-month anniversary edge)', () => {
+    // Same edge case as isAgeEligibleOnShowDay above — a dog turning 12
+    // months old ON the show day is still eligible for Puppy (6-12).
+    expect(getAgeEligibilityDetail('2025-07-04', '2026-07-04', 6, 12)).toEqual({
+      eligible: true,
+      failedBound: null,
+    });
+  });
+
+  it('treats null bounds as open-ended (eligible, no failedBound)', () => {
+    expect(getAgeEligibilityDetail('2018-01-01', '2026-07-04', null, null)).toEqual({
+      eligible: true,
+      failedBound: null,
+    });
+  });
+
+  it('a null min never fails "min" — a too-old dog against only a max bound reports "max"', () => {
+    expect(getAgeEligibilityDetail('2022-01-01', '2026-07-04', null, 24)).toEqual({
+      eligible: false,
+      failedBound: 'max',
+    });
   });
 });

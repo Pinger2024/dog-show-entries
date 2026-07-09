@@ -36,7 +36,7 @@ import {
 } from 'lucide-react';
 import { differenceInMonths, differenceInWeeks, format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
-import { isWithinAgeRange, isAgeEligibleOnShowDay, handlerAgeYearsOnDate, formatCurrency } from '@/lib/date-utils';
+import { isWithinAgeRange, getAgeEligibilityDetail, handlerAgeYearsOnDate, formatCurrency } from '@/lib/date-utils';
 import { trpc } from '@/lib/trpc/client';
 import { formatDogName } from '@/lib/utils';
 import { readReferralSource } from '@/lib/referral-source';
@@ -59,7 +59,7 @@ import { cn } from '@/lib/utils';
 import { isGsdOnlyClass, isGsdBreed } from '@/lib/class-templates';
 import { isCatalogueItem } from '@/lib/catalogue-utils';
 import { useEntryCart, getPaymentKey, restoreActionForStatus, type WizardStep } from './use-entry-cart';
-import { SecLabel, Chip, SEButton, SECard } from '@/components/show-experience/kit';
+import { SecLabel, Chip, SEButton, SECard, SEDarkPanel } from '@/components/show-experience/kit';
 
 const STEPS: { key: WizardStep; label: string; icon: React.ElementType }[] = [
   { key: 'entry_type', label: 'Type', icon: PawPrint },
@@ -70,17 +70,6 @@ const STEPS: { key: WizardStep; label: string; icon: React.ElementType }[] = [
   { key: 'confirmation', label: 'Confirmed', icon: PartyPopper },
 ];
 
-// Local helper mirroring SEButton's class recipe for <Link>-as-button CTAs.
-// SEButton itself renders a real <button> with no Slot/asChild support, so
-// Link-wrapped actions compose the same classes directly instead.
-const SE_LINK_BTN_BASE =
-  'inline-flex min-h-[2.75rem] items-center justify-center gap-2 whitespace-nowrap rounded-[13px] px-[18px] text-[14px] font-semibold transition-colors';
-const SE_LINK_BTN_VARIANT = {
-  fresh: 'bg-se-fresh text-[#0e2c19] shadow-[0_10px_24px_-12px_#5bb579]',
-  ghost: 'bg-se-surface text-se-ink shadow-[inset_0_0_0_1px_#d7cfba]',
-  onDark: 'bg-[rgba(243,236,220,0.14)] text-se-cream shadow-[inset_0_0_0_1px_rgba(243,236,220,0.25)]',
-} as const;
-
 const EMPTY_GROUPED_CLASSES = {
   age: [] as never[],
   achievement: [] as never[],
@@ -88,6 +77,22 @@ const EMPTY_GROUPED_CLASSES = {
   junior_handler: [] as never[],
   sv_age: [] as never[],
 };
+
+// Step heading — deliberately WITHOUT font-serif. `.show-exp` sets the page
+// font to Hanken Grotesk, but `font-serif` resolves to `var(--font-inter)`
+// globally (see globals.css), so using it here would silently opt each
+// heading back out of Hanken and render Inter instead.
+function StepHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="text-[22px] font-bold text-se-ink sm:text-[26px]">{children}</h2>
+  );
+}
+
+// Shared "checked" state styling for the green-tick checkboxes used across
+// the cart/sundry/declaration steps — each call site still supplies its own
+// base size/rounding classes.
+const SE_CHECKED_CHECKBOX_CLASS =
+  'data-[state=checked]:border-se-green data-[state=checked]:bg-se-green data-[state=checked]:text-white';
 
 // Everything the payment screen needs to render itself again after a reload
 // (mobile Safari evicting a backgrounded tab mid-3DS). Persisted to localStorage
@@ -566,15 +571,7 @@ export default function EnterShowPage() {
     const showDay = show?.startDate ? new Date(show.startDate) : new Date();
     const dob = new Date(selectedDog.dateOfBirth);
     const ageMonths = differenceInMonths(showDay, dob);
-    const eligible = isAgeEligibleOnShowDay(dob, showDay, minMonths, maxMonths);
-    // When ineligible, work out which bound failed by re-running the same
-    // date-anchored check with only one bound active — reuses
-    // isAgeEligibleOnShowDay's exact math rather than re-deriving it here.
-    const failedBound: 'min' | 'max' | null = eligible
-      ? null
-      : !isAgeEligibleOnShowDay(dob, showDay, minMonths, null)
-        ? 'min'
-        : 'max';
+    const { eligible, failedBound } = getAgeEligibilityDetail(dob, showDay, minMonths, maxMonths);
     return { ageMonths, eligible, failedBound };
   }
 
@@ -800,7 +797,7 @@ export default function EnterShowPage() {
           <ChevronLeft className="size-4" />
           Back to show
         </Link>
-        <h1 className="mt-2 font-serif text-lg font-bold text-se-ink sm:text-xl lg:text-2xl">Enter {show.name}</h1>
+        <h1 className="mt-2 text-lg font-bold text-se-ink sm:text-xl lg:text-2xl">Enter {show.name}</h1>
         <p className="text-xs text-se-ink3 sm:text-sm">
           {format(parseISO(show.startDate), 'd MMMM yyyy')} &middot; {show.venue?.name ?? 'Venue TBC'}
         </p>
@@ -856,7 +853,7 @@ export default function EnterShowPage() {
       {/* Step: Entry Type */}
       {cart.step === 'entry_type' && (
         <div className="space-y-4">
-          <h2 className="font-serif text-[22px] font-bold text-se-ink sm:text-[26px]">What type of entry?</h2>
+          <StepHeading>What type of entry?</StepHeading>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <button
@@ -910,7 +907,7 @@ export default function EnterShowPage() {
 
         return (
         <div className="space-y-4">
-          <h2 className="font-serif text-[22px] font-bold text-se-ink sm:text-[26px]">Which dog are you entering?</h2>
+          <StepHeading>Which dog are you entering?</StepHeading>
 
           {/* Single breed show info banner */}
           {show?.showScope === 'single_breed' && showBreedName && (
@@ -1040,9 +1037,9 @@ export default function EnterShowPage() {
               <p className="mb-4 text-sm text-se-ink3">
                 This is a {showBreedName ?? 'single breed'} show. None of your registered dogs are this breed.
               </p>
-              <Link href="/dogs/new" className={cn(SE_LINK_BTN_BASE, SE_LINK_BTN_VARIANT.ghost)}>
-                Register a {showBreedName ?? 'new'} dog
-              </Link>
+              <SEButton asChild variant="ghost" size="sm">
+                <Link href="/dogs/new">Register a {showBreedName ?? 'new'} dog</Link>
+              </SEButton>
             </SECard>
           ) : (
             <SECard className="py-8 text-center">
@@ -1051,9 +1048,9 @@ export default function EnterShowPage() {
               <p className="mb-4 text-sm text-se-ink3">
                 You need to add a dog before entering a show.
               </p>
-              <Link href="/dogs/new" className={cn(SE_LINK_BTN_BASE, SE_LINK_BTN_VARIANT.fresh)}>
-                Add a Dog
-              </Link>
+              <SEButton asChild variant="fresh" size="sm">
+                <Link href="/dogs/new">Add a Dog</Link>
+              </SEButton>
             </SECard>
           )}
 
@@ -1073,10 +1070,12 @@ export default function EnterShowPage() {
                 Back
               </SEButton>
             ) : (
-              <Link href={`/shows/${idOrSlug}`} className={cn(SE_LINK_BTN_BASE, SE_LINK_BTN_VARIANT.ghost)}>
-                <ChevronLeft className="size-4" />
-                Back to Show
-              </Link>
+              <SEButton asChild variant="ghost" size="sm">
+                <Link href={`/shows/${idOrSlug}`}>
+                  <ChevronLeft className="size-4" />
+                  Back to Show
+                </Link>
+              </SEButton>
             )}
           </div>
         </div>
@@ -1106,7 +1105,7 @@ export default function EnterShowPage() {
 
         return (
           <div className="space-y-6">
-            <h2 className="font-serif text-[22px] font-bold text-se-ink sm:text-[26px]">Junior Handler Details</h2>
+            <StepHeading>Junior Handler Details</StepHeading>
 
             <div className="flex gap-3 rounded-[14px] border border-se-line bg-se-surface p-3">
               <Info className="mt-0.5 size-4 shrink-0 text-se-fresh-deep" />
@@ -1240,7 +1239,7 @@ export default function EnterShowPage() {
         return (
         <div className="space-y-6">
           <div>
-            <h2 className="font-serif text-[22px] font-bold text-se-ink sm:text-[26px]">Select classes</h2>
+            <StepHeading>Select classes</StepHeading>
             <p className="text-xs text-se-ink3 sm:text-sm">
               {cart.activeEntry?.entryType === 'standard'
                 ? `Choose classes for ${cart.activeEntry?.dogName ?? 'your dog'}`
@@ -1306,12 +1305,16 @@ export default function EnterShowPage() {
                   profile, then come back to complete your entry.
                 </p>
                 {cart.activeEntry?.dogId && (
-                  <Link
-                    href={`/dogs/${cart.activeEntry.dogId}/edit`}
-                    className={cn(SE_LINK_BTN_BASE, 'mt-2 h-9 min-h-0 border border-se-honey bg-white px-3 text-xs text-se-honey-ink hover:bg-se-honey-soft')}
+                  <SEButton
+                    asChild
+                    variant="ghost"
+                    size="sm"
+                    className="mt-2 h-9 min-h-0 border border-se-honey bg-white px-3 text-xs text-se-honey-ink shadow-none hover:bg-se-honey-soft"
                   >
-                    Add health data to {cart.activeEntry.dogName ?? 'this dog'}
-                  </Link>
+                    <Link href={`/dogs/${cart.activeEntry.dogId}/edit`}>
+                      Add health data to {cart.activeEntry.dogName ?? 'this dog'}
+                    </Link>
+                  </SEButton>
                 )}
               </div>
             </div>
@@ -1523,13 +1526,13 @@ export default function EnterShowPage() {
       {/* Step: Cart Review */}
       {cart.step === 'cart_review' && (
         <div className="space-y-6">
-          <h2 className="font-serif text-[22px] font-bold text-se-ink sm:text-[26px]">Review your entries</h2>
+          <StepHeading>Review your entries</StepHeading>
 
           {/* Show info — rich summary */}
           <SECard className="p-4">
             <div className="flex items-start justify-between gap-2">
               <div>
-                <p className="font-serif text-base font-bold text-se-ink">{show.name}</p>
+                <p className="text-base font-bold text-se-ink">{show.name}</p>
                 {show.showType && (
                   <Chip className="mt-1 capitalize">{show.showType.replace('_', ' ')}</Chip>
                 )}
@@ -1662,7 +1665,7 @@ export default function EnterShowPage() {
                             cart.removeSundryItem(item.id);
                           }
                         }}
-                        className="mt-0.5 rounded-[6px] border-se-line2 data-[state=checked]:border-se-green data-[state=checked]:bg-se-green data-[state=checked]:text-white"
+                        className={cn('mt-0.5 rounded-[6px] border-se-line2', SE_CHECKED_CHECKBOX_CLASS)}
                       />
                       <div className="flex-1">
                         <span className="text-sm font-medium text-se-ink">{item.name}</span>
@@ -1869,7 +1872,7 @@ export default function EnterShowPage() {
                   setHealthDeclared(val);
                   setTermsAccepted(val);
                 }}
-                className="mt-0.5 rounded-[6px] border-se-line2 data-[state=checked]:border-se-green data-[state=checked]:bg-se-green data-[state=checked]:text-white"
+                className={cn('mt-0.5 rounded-[6px] border-se-line2', SE_CHECKED_CHECKBOX_CLASS)}
               />
               <span className="text-sm font-medium leading-relaxed text-se-ink">
                 I agree to the above declaration
@@ -1883,7 +1886,7 @@ export default function EnterShowPage() {
               <Checkbox
                 checked={withholdFromPublication}
                 onCheckedChange={(checked) => setWithholdFromPublication(checked === true)}
-                className="mt-0.5 rounded-[6px] border-se-line2 data-[state=checked]:border-se-green data-[state=checked]:bg-se-green data-[state=checked]:text-white"
+                className={cn('mt-0.5 rounded-[6px] border-se-line2', SE_CHECKED_CHECKBOX_CLASS)}
               />
               <span className="text-sm leading-relaxed">
                 <span className="font-medium text-se-ink">Keep my name and address out of the catalogue</span>
@@ -2025,16 +2028,17 @@ export default function EnterShowPage() {
         return (
         <div className="space-y-6">
           {/* Dark hero */}
-          <div className="relative overflow-hidden rounded-[22px] bg-gradient-to-b from-se-deep to-se-deepest px-5 py-8 text-center text-se-cream">
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute -left-12 top-5 size-48 rounded-full opacity-25"
-              style={{ background: 'radial-gradient(circle, #5bb579, transparent 68%)' }}
-            />
+          <SEDarkPanel
+            className="rounded-[22px] px-5 py-8 text-center"
+            glowPosition="-left-12 top-5"
+            glowSize="size-48"
+            glowOpacity="opacity-25"
+            glowFade="68%"
+          >
             <div className="relative mx-auto flex size-16 items-center justify-center rounded-full bg-se-fresh text-[#0e2c19] shadow-[0_16px_34px_-14px_rgba(0,0,0,0.55)]">
               <CheckCircle2 className="size-8" />
             </div>
-            <h2 className="relative mt-3.5 font-serif text-[26px] font-bold text-se-cream sm:text-[29px]">
+            <h2 className="relative mt-3.5 text-[26px] font-bold text-se-cream sm:text-[29px]">
               You&apos;re entered{firstName ? `, ${firstName}` : ''}!
             </h2>
             <p className="relative mt-1.5 text-[13.5px] text-se-cream/80">
@@ -2046,7 +2050,7 @@ export default function EnterShowPage() {
                 Confirmation sent to {userEmail}
               </p>
             )}
-          </div>
+          </SEDarkPanel>
 
           {/* Order details */}
           <SECard className="p-4">
@@ -2133,24 +2137,27 @@ export default function EnterShowPage() {
             const fbShareUrl = `${showUrl}?src=facebook`;
 
             return (
-              <div className="mx-auto w-full max-w-md rounded-[16px] bg-gradient-to-br from-se-deep to-se-deepest p-4 text-center text-se-cream">
+              <SEDarkPanel direction="br" glow={false} className="mx-auto w-full max-w-md rounded-[16px] p-4 text-center">
                 <p className="text-sm font-semibold">
                   You&apos;re in! Let your breed group know you&apos;re coming.
                 </p>
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:justify-center">
-                  <a
-                    href={whatsappUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => trackShare('whatsapp')}
-                    className={cn(SE_LINK_BTN_BASE, 'bg-[#25D366] text-white')}
-                  >
-                    <svg className="size-4" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                    WhatsApp
-                  </a>
-                  <button
+                  <SEButton asChild variant="onDark" size="sm" className="bg-[#25D366] text-white">
+                    <a
+                      href={whatsappUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => trackShare('whatsapp')}
+                    >
+                      <svg className="size-4" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                      WhatsApp
+                    </a>
+                  </SEButton>
+                  <SEButton
                     type="button"
-                    className={cn(SE_LINK_BTN_BASE, 'bg-white text-[#1877F2]')}
+                    variant="onDark"
+                    size="sm"
+                    className="bg-white text-[#1877F2]"
                     onClick={async () => {
                       trackShare('facebook');
                       // Mobile: FB app hijacks facebook.com URLs and shows
@@ -2180,10 +2187,12 @@ export default function EnterShowPage() {
                       <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073" />
                     </svg>
                     Facebook
-                  </button>
-                  <button
+                  </SEButton>
+                  <SEButton
                     type="button"
-                    className={cn(SE_LINK_BTN_BASE, SE_LINK_BTN_VARIANT.onDark)}
+                    variant="onDark"
+                    size="sm"
+                    className="shadow-[inset_0_0_0_1px_rgba(243,236,220,0.25)]"
                     onClick={async () => {
                       trackShare('copy');
                       if (typeof navigator !== 'undefined' && navigator.share) {
@@ -2214,7 +2223,7 @@ export default function EnterShowPage() {
                       <Copy className="size-4" />
                     )}
                     {shareCopied ? 'Copied!' : 'Copy Link'}
-                  </button>
+                  </SEButton>
                 </div>
                 <p className="mt-3 text-xs italic text-se-cream/70">
                   A share from you is worth ten from us.
@@ -2223,23 +2232,22 @@ export default function EnterShowPage() {
                   <Lock className="mt-0.5 size-3 shrink-0" />
                   Entirely your choice — it shares only what you see here, never your dog&apos;s details.
                 </p>
-              </div>
+              </SEDarkPanel>
             );
           })()}
 
           {/* Add to calendar — route already exists */}
-          <a
-            href={`/api/shows/${show.id}/calendar`}
-            className={cn(SE_LINK_BTN_BASE, SE_LINK_BTN_VARIANT.ghost, 'mx-auto w-full max-w-md')}
-          >
-            <CalendarPlus className="size-4" />
-            Add show day to calendar
-          </a>
+          <SEButton asChild variant="ghost" size="sm" className="mx-auto w-full max-w-md">
+            <a href={`/api/shows/${show.id}/calendar`}>
+              <CalendarPlus className="size-4" />
+              Add show day to calendar
+            </a>
+          </SEButton>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-            <Link href="/entries" className={cn(SE_LINK_BTN_BASE, SE_LINK_BTN_VARIANT.fresh)}>
-              View My Entries
-            </Link>
+            <SEButton asChild variant="fresh" size="sm">
+              <Link href="/entries">View My Entries</Link>
+            </SEButton>
             <SEButton
               variant="ghost"
               onClick={() => {
@@ -2386,7 +2394,7 @@ function ClassGroup({
               <Checkbox
                 checked={isSelected}
                 onCheckedChange={() => onToggle(sc.id)}
-                className="size-6 shrink-0 rounded-[7px] border-se-line2 data-[state=checked]:border-se-green data-[state=checked]:bg-se-green data-[state=checked]:text-white"
+                className={cn('size-6 shrink-0 rounded-[7px] border-se-line2', SE_CHECKED_CHECKBOX_CLASS)}
               />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">

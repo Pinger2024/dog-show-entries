@@ -22,6 +22,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { buildSharePost } from '@/lib/share-caption';
+import { SEDarkPanel } from '@/components/show-experience/kit';
 
 type ShareChannel =
   | 'native'
@@ -457,12 +458,14 @@ export function ShareKitCard(props: ShareKitProps) {
         props.className
       )}
     >
-      <div className="relative overflow-hidden rounded-[18px] bg-gradient-to-br from-se-deep to-se-deepest p-6 text-se-cream sm:p-8">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -right-10 -top-8 size-40 rounded-full bg-[radial-gradient(circle,#5bb579,transparent_70%)] opacity-30"
-        />
-
+      <SEDarkPanel
+        direction="br"
+        className="rounded-[18px] p-6 sm:p-8"
+        glowPosition="-right-10 -top-8"
+        glowSize="size-40"
+        glowOpacity="opacity-30"
+        glowFade="70%"
+      >
         <div className="relative mx-auto max-w-2xl text-center">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-se-fresh">
             Spread the word
@@ -478,7 +481,7 @@ export function ShareKitCard(props: ShareKitProps) {
             <ShareKit {...props} compact id={undefined} className={undefined} />
           </div>
         </div>
-      </div>
+      </SEDarkPanel>
     </section>
   );
 }
