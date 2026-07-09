@@ -327,6 +327,21 @@ export function ShowPreviewClient() {
     captureReferralSource(idOrSlug);
   }, [idOrSlug]);
 
+  // iOS rubber-band overscroll backstop (#17). Any in-document paint (fixed
+  // or absolute, however positioned) still sits behind the sticky/
+  // backdrop-blur site Header at rest, because this page's own container
+  // starts below the header — there's no DOM position that's "above the
+  // header" without also being "above the document". Safari fills the
+  // elastic overscroll reveal with the <html> element's own canvas
+  // background color, which paints outside the document entirely (never
+  // behind anything in it) — so that's the actual lever. Scoped to this
+  // page only, cleaned up on unmount. Trade-off accepted: the bottom
+  // rubber-band also shows se-deep, not just the top.
+  useEffect(() => {
+    document.documentElement.classList.add('se-canvas-deep');
+    return () => document.documentElement.classList.remove('se-canvas-deep');
+  }, []);
+
   const { data: show, isLoading } = trpc.shows.getById.useQuery({ id: idOrSlug });
   const { data: showSponsors } = trpc.shows.getShowSponsors.useQuery(
     { showId: show?.id ?? '' },
@@ -690,16 +705,6 @@ export function ShowPreviewClient() {
   return (
     <div className="show-exp min-h-screen bg-se-paper text-se-ink">
       <LocalKeyframes />
-      {/* iOS rubber-band overscroll backstop (#17) — the dark hero sits above
-          a cream `se-paper` body, and html/body itself carries the app's
-          lighter default background (see globals.css `body { @apply
-          bg-background }`), not se-deep. Scrolling past the top on iOS
-          reveals that lighter band for the bounce's duration. A fixed,
-          viewport-pinned se-deep layer behind everything else closes that
-          gap without touching normal scroll/paint (`fixed` is removed from
-          flow, `-z-10` keeps it behind all in-flow content, pointer-events
-          stays off so it can never intercept a tap). */}
-      <div aria-hidden="true" className="pointer-events-none fixed inset-x-0 top-0 -z-10 h-[50vh] bg-se-deep" />
       {/* ──────────────────────────── Banner (if set) ─────────────────────── */}
       {showAny.bannerImageUrl && (
         // eslint-disable-next-line @next/next/no-img-element

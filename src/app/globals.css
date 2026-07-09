@@ -263,6 +263,19 @@
   color: #1b241d;
 }
 
+/* iOS rubber-band overscroll backstop for the show page (POLISH.md #17).
+ * Safari paints the elastic-overscroll reveal (pulling past the top/bottom
+ * of the page) with the <html> element's own canvas background color — that
+ * paint happens outside the document entirely, so it's the only place this
+ * can be set without ending up behind an in-document sticky/backdrop-blur
+ * header at rest. Toggled on the <html> element by show-preview.tsx on
+ * mount/unmount (`document.documentElement.classList`), scoped to that page
+ * only. Trade-off accepted: the bottom rubber-band shows se-deep too, not
+ * just the top. */
+html.se-canvas-deep {
+  background-color: var(--color-se-deep);
+}
+
 /* Felt selection color within the Show Experience surfaces (POLISH.md #16). */
 .show-exp ::selection {
   background: var(--color-se-fresh-soft);
