@@ -72,6 +72,8 @@
   --color-se-line: #e7e1d3;
   --color-se-line2: #d7cfba;
   --color-se-cream: #f3ecdc;
+  --color-se-cream-dim: rgba(243,236,220,0.66);
+  --color-se-honey-line: #f0dcae;
 }
 
 :root {

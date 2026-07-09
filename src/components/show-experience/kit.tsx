@@ -15,6 +15,13 @@ import { useCountdown } from './use-countdown';
  * in globals.css `@theme inline`.
  * ============================================================ */
 
+/* ─── SE_H ───────────────────────────────────────── */
+/* The design's unoverridden heading recipe (H = { fontWeight: 800,
+ * letterSpacing: -0.015em } under the "friendly"/Hanken Grotesk fontset).
+ * Compose per-heading overrides on top, e.g. cn(SE_H, 'text-2xl'). */
+
+export const SE_H = 'font-extrabold tracking-[-0.015em]';
+
 /* ─── Eyebrow ────────────────────────────────────── */
 
 export function Eyebrow({
@@ -32,6 +39,29 @@ export function Eyebrow({
       )}
     >
       {children}
+    </span>
+  );
+}
+
+/* ─── Wordmark ───────────────────────────────────── */
+
+export function Wordmark({
+  className,
+  size = 15,
+}: {
+  className?: string;
+  size?: number;
+}) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-[5px] font-extrabold tracking-[-0.015em] text-se-green',
+        className
+      )}
+      style={{ fontSize: size }}
+    >
+      <span aria-hidden="true" className="inline-block size-1.5 rounded-full bg-se-fresh" />
+      Remi
     </span>
   );
 }
@@ -75,12 +105,11 @@ export function Pulse({ className }: { className?: string }) {
 
 /* ─── Chip ───────────────────────────────────────── */
 
-export type ChipTone = 'light' | 'fresh' | 'honey' | 'onDark';
+export type ChipTone = 'light' | 'fresh' | 'onDark';
 
 const CHIP_TONES: Record<ChipTone, string> = {
   light: 'bg-se-surface text-se-ink2 shadow-[inset_0_0_0_1px_#e7e1d3]',
   fresh: 'bg-se-fresh-soft text-se-fresh-deep shadow-[inset_0_0_0_1px_#c3e2cb]',
-  honey: 'bg-se-honey-soft text-se-honey-deep shadow-[inset_0_0_0_1px_#f0dcae]',
   onDark:
     'bg-[rgba(243,236,220,0.14)] text-se-cream shadow-[inset_0_0_0_1px_rgba(243,236,220,0.25)]',
 };
@@ -121,9 +150,9 @@ const SE_BUTTON_VARIANTS: Record<SEButtonVariant, string> = {
 
 const SE_BUTTON_SIZES: Record<SEButtonSize, string> = {
   default: 'h-[52px] px-[22px] text-[15.5px]',
-  // Design mock used 42px for `sm`; bumped to 44px (h-11) to meet the
-  // project's minimum touch-target rule.
-  sm: 'h-11 px-4 text-[13.5px]',
+  // Matches the design exactly (42px) — the earlier 44px touch-target bump
+  // was revoked; the design is the contract. See DEVIATIONS.md #1.
+  sm: 'h-[42px] px-4 text-[13.5px]',
 };
 
 export interface SEButtonProps
@@ -201,7 +230,7 @@ export function HoneyBanner({
     >
       <div>
         <Eyebrow className="text-[rgba(74,48,6,0.7)]">{label}</Eyebrow>
-        <p className="mt-0.5 text-[15px] font-bold leading-tight text-se-honey-ink">
+        <p className="mt-0.5 whitespace-nowrap text-[17px] font-semibold leading-tight tracking-[-0.015em] text-se-honey-ink">
           {date}
         </p>
       </div>
@@ -240,6 +269,7 @@ export function CountdownCells({
 
   const valueClass = dark ? 'text-[#0e2c19]' : 'text-se-ink';
   const labelClass = dark ? 'text-[rgba(14,44,25,0.6)]' : 'text-se-ink3';
+  const sepClass = dark ? 'text-[rgba(14,44,25,0.4)]' : 'text-se-ink3';
 
   const cells: Array<{ value: number; label: string }> = [
     { value: c.d, label: 'days' },
@@ -248,15 +278,15 @@ export function CountdownCells({
   ];
 
   return (
-    <div className={cn('flex items-center gap-1.5', className)}>
+    <div className={cn('flex items-center gap-[7px]', className)}>
       {cells.map((cell, i) => (
         <React.Fragment key={cell.label}>
           {i > 0 && (
-            <span aria-hidden="true" className={cn('text-[25px] font-bold', valueClass)}>
+            <span aria-hidden="true" className={cn('-mt-1.5 text-[18px] font-bold', sepClass)}>
               :
             </span>
           )}
-          <div className="flex flex-col items-center">
+          <div className="flex min-w-[46px] flex-col items-center">
             <span
               className={cn(
                 'text-[25px] font-bold leading-none tabular-nums',
@@ -267,7 +297,7 @@ export function CountdownCells({
             </span>
             <span
               className={cn(
-                'text-[9px] font-semibold uppercase leading-none tracking-[0.14em]',
+                'mt-1 text-[9px] font-bold uppercase leading-none tracking-[0.14em]',
                 labelClass
               )}
             >
@@ -286,19 +316,31 @@ export function CountdownCells({
  * Consolidates 4 previously hand-rolled copies — pass each site's own
  * direction/glow position/size/opacity/fade to preserve its exact look. */
 
+/** Old Tailwind bg-gradient-to-* directions, mapped to an equivalent angle
+ *  for callers that haven't migrated to `angle` yet. */
+const SE_DARK_PANEL_DIRECTION_ANGLE: Record<'b' | 'br', number> = {
+  b: 180,
+  br: 135,
+};
+
 export interface SEDarkPanelProps extends React.HTMLAttributes<HTMLElement> {
   /** Wrapping element — defaults to 'div'; pass 'header' for hero banners
    *  that want the semantic landmark. */
   as?: 'div' | 'header';
-  /** Gradient direction, matching Tailwind's bg-gradient-to-* suffix. */
+  /** @deprecated use `angle` instead. Mapped to an angle for back-compat:
+   *  'b' → 180, 'br' → 135. */
   direction?: 'b' | 'br';
+  /** Gradient angle in degrees, matching the design's
+   *  `linear-gradient(<angle>deg, se-deep, se-deepest)`. Defaults to 172,
+   *  the design's type-led hero angle. */
+  angle?: number;
   /** Show the decorative radial glow blob. Defaults to true. */
   glow?: boolean;
-  /** Glow position, as Tailwind position-utility classes (e.g. "-right-20 -top-16"). */
+  /** Glow position, as Tailwind position-utility classes (e.g. "-right-[90px] -top-[70px]"). */
   glowPosition?: string;
-  /** Glow size, as a Tailwind size-* class (e.g. "size-64"). */
+  /** Glow size, as a Tailwind size-* class (e.g. "size-[260px]"). */
   glowSize?: string;
-  /** Glow opacity, as a Tailwind opacity-* class (e.g. "opacity-25"). */
+  /** Glow opacity, as a Tailwind opacity-* class (e.g. "opacity-[0.28]"). */
   glowOpacity?: string;
   /** Radial-gradient fade-out stop (e.g. "68%"). */
   glowFade?: string;
@@ -306,26 +348,28 @@ export interface SEDarkPanelProps extends React.HTMLAttributes<HTMLElement> {
 
 export function SEDarkPanel({
   as = 'div',
-  direction = 'b',
+  direction,
+  angle,
   glow = true,
-  glowPosition = '-right-20 -top-16',
-  glowSize = 'size-64',
-  glowOpacity = 'opacity-25',
+  glowPosition = '-right-[90px] -top-[70px]',
+  glowSize = 'size-[260px]',
+  glowOpacity = 'opacity-[0.28]',
   glowFade = '68%',
   className,
+  style,
   children,
   ...props
 }: SEDarkPanelProps) {
   const Comp = as as React.ElementType;
+  const resolvedAngle =
+    angle ?? (direction ? SE_DARK_PANEL_DIRECTION_ANGLE[direction] : 172);
   return (
     <Comp
-      className={cn(
-        'relative overflow-hidden text-se-cream',
-        direction === 'br'
-          ? 'bg-gradient-to-br from-se-deep to-se-deepest'
-          : 'bg-gradient-to-b from-se-deep to-se-deepest',
-        className
-      )}
+      className={cn('relative overflow-hidden text-se-cream', className)}
+      style={{
+        backgroundImage: `linear-gradient(${resolvedAngle}deg, var(--color-se-deep), var(--color-se-deepest))`,
+        ...style,
+      }}
       {...props}
     >
       {glow && (

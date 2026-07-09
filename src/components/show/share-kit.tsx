@@ -15,6 +15,7 @@ import {
   Copy,
   Download,
   Image as ImageIcon,
+  Link as LinkIcon,
   Loader2,
   Share2,
 } from 'lucide-react';
@@ -22,14 +23,15 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { buildSharePost } from '@/lib/share-caption';
-import { SEDarkPanel } from '@/components/show-experience/kit';
+import { SEDarkPanel, SEButton, SE_H } from '@/components/show-experience/kit';
 
 type ShareChannel =
   | 'native'
   | 'instagram_story'
   | 'instagram_post'
   | 'image_saved'
-  | 'copy_post';
+  | 'copy_post'
+  | 'copy_link';
 
 interface ShareKitProps {
   showId: string;
@@ -191,6 +193,22 @@ export function ShareKit({
     }
   }
 
+  /** Copy-link — reuses the same clipboard-copy fallback `shareShowLink`
+   *  already falls back to, as its own explicit action for browsers/desktop
+   *  where a share sheet isn't the obvious move. */
+  async function copyShareLink() {
+    setBusy('copy_link');
+    onShare?.('copy_link');
+    try {
+      await copyText(shareUrl);
+      toast.success('Link copied');
+    } catch {
+      toast.error('Could not copy the link.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
   /**
    * Instagram Story — browsers cannot pre-populate Instagram's native
    * story composer. We prepare the story-sized image and hand it to the
@@ -320,15 +338,28 @@ export function ShareKit({
         className
       )}
     >
-      <Button
-        type="button"
-        onClick={shareShowLink}
-        disabled={busy !== null}
-        className="h-12 w-full gap-2 text-base font-semibold"
-      >
-        {busy === 'native' ? <Loader2 className="size-5 animate-spin" /> : <Share2 className="size-5" />}
-        Share with phone apps
-      </Button>
+      <div className="flex gap-2">
+        <SEButton
+          type="button"
+          variant="fresh"
+          className="h-11 flex-1"
+          onClick={shareShowLink}
+          disabled={busy !== null}
+        >
+          {busy === 'native' ? <Loader2 className="size-5 animate-spin" /> : <Share2 className="size-5" />}
+          Share with phone apps
+        </SEButton>
+        <SEButton
+          type="button"
+          size="sm"
+          className="h-11 flex-1 bg-se-cream text-se-deep"
+          onClick={copyShareLink}
+          disabled={busy !== null}
+        >
+          {busy === 'copy_link' ? <Loader2 className="size-4 animate-spin" /> : <LinkIcon className="size-[15px]" />}
+          Copy link
+        </SEButton>
+      </div>
 
       <div className="border-t border-stone-200 pt-4">
         <Button
@@ -459,21 +490,18 @@ export function ShareKitCard(props: ShareKitProps) {
       )}
     >
       <SEDarkPanel
-        direction="br"
-        className="rounded-[18px] p-6 sm:p-8"
-        glowPosition="-right-10 -top-8"
-        glowSize="size-40"
+        angle={165}
+        className="rounded-[18px] p-[18px] pb-4"
+        glowPosition="-right-10 -top-[30px]"
+        glowSize="size-[150px]"
         glowOpacity="opacity-30"
         glowFade="70%"
       >
         <div className="relative mx-auto max-w-2xl text-center">
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-se-fresh">
-            Spread the word
-          </p>
-          <h3 className="mt-2 text-2xl font-extrabold leading-tight sm:text-[28px]">
+          <h3 className={cn(SE_H, 'font-semibold', 'text-[19px] leading-tight')}>
             Every share sells a few more entries.
           </h3>
-          <p className="mx-auto mt-2 max-w-lg text-[13px] text-se-cream/70">
+          <p className="mx-auto mt-[3px] max-w-lg text-[13px] leading-[1.45] text-se-cream-dim">
             Open the phone share sheet, then choose Facebook, Instagram, Messages, email or anything else installed.
           </p>
 

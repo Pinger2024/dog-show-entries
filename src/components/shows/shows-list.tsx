@@ -30,7 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Chip, Pulse, SEButton, SECard, SecLabel } from '@/components/show-experience/kit';
+import { Chip, Pulse, SE_H, SEButton, SECard, SecLabel } from '@/components/show-experience/kit';
 
 /* ─── Debounce hook ────────────────────────────────── */
 
@@ -579,10 +579,10 @@ export default function ShowsList() {
     <div className="mx-auto w-full max-w-3xl">
       {/* ─── Page header ─────────────────────────── */}
       <div className="mb-6">
-        <h1 className="text-[28px] font-bold leading-[1.05] text-se-ink sm:text-[34px]">
+        <h1 className={cn(SE_H, 'text-[31px] leading-[1.05] text-se-ink')}>
           Find a Show
         </h1>
-        <p className="mt-1.5 max-w-lg text-[13.5px] leading-relaxed text-se-ink3">
+        <p className="mt-1 max-w-lg text-[13.5px] leading-normal text-se-ink3">
           {isNearMeMode
             ? `${postcode.trim() || 'Your location'} · within ${radiusMiles} miles`
             : 'Browse championship, open, and companion shows across the country. Find your next ring and enter online.'}
@@ -648,7 +648,7 @@ export default function ShowsList() {
             variant={nearMeActive ? 'fresh' : 'ghost'}
             size="sm"
             onClick={nearMeActive ? handleDisableNearMe : handleEnableNearMe}
-            className="h-11 gap-2 rounded-[13px]"
+            className="gap-2 rounded-[13px]"
           >
             <Navigation className="size-4" />
             <span className="hidden sm:inline">Near Me</span>
@@ -874,7 +874,7 @@ function ShowCard({
     <Link href={`/shows/${show.slug ?? show.id}`} className="group block">
       <SECard
         className={cn(
-          'flex gap-3 p-3.5 transition-shadow duration-200 hover:shadow-[0_2px_4px_rgba(27,36,29,0.06),0_22px_40px_-26px_rgba(27,36,29,0.5)]',
+          'flex gap-[13px] p-3.5 transition-shadow duration-200 hover:shadow-[0_2px_4px_rgba(27,36,29,0.06),0_22px_40px_-26px_rgba(27,36,29,0.5)]',
           featured && 'border-se-fresh-line'
         )}
       >
@@ -901,7 +901,7 @@ function ShowCard({
         {/* Content */}
         <div className="min-w-0 flex-1">
           {show.organisation && (
-            <h3 className="truncate text-[17px] font-bold leading-tight text-se-ink transition-colors group-hover:text-se-green">
+            <h3 className="truncate text-[17px] font-bold leading-[1.1] tracking-[-0.015em] text-se-ink transition-colors group-hover:text-se-green">
               {show.organisation.name}
             </h3>
           )}
@@ -910,15 +910,23 @@ function ShowCard({
           </p>
 
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
-            <Chip tone={pill.tone}>
+            <span
+              className={cn(
+                'inline-flex h-6 items-center gap-[5px] rounded-full px-[9px] text-[11.5px] font-semibold',
+                pill.tone === 'honey' && 'bg-se-honey-soft text-se-honey-deep',
+                pill.tone === 'fresh' && 'bg-se-fresh-soft text-se-fresh-deep',
+                pill.tone === 'light' &&
+                  'bg-se-surface text-se-ink2 shadow-[inset_0_0_0_1px_var(--color-se-line)]'
+              )}
+            >
               {pill.showPulse && <Pulse />}
               {pill.showClock && <Clock className="size-3" />}
               {pill.label}
-            </Chip>
+            </span>
 
             {show.venue && (
-              <span className="inline-flex min-w-0 items-center gap-1 text-xs text-se-ink2">
-                <MapPin className="size-3 shrink-0 text-se-ink3" />
+              <span className="inline-flex min-w-0 items-center gap-[3px] text-xs text-se-ink2">
+                <MapPin className="size-3 shrink-0 text-se-ink2" />
                 <span className="truncate">{show.venue.name}</span>
               </span>
             )}
@@ -932,7 +940,7 @@ function ShowCard({
 
             {show.firstEntryFee != null && show.firstEntryFee > 0 && (
               <span className="ml-auto shrink-0 whitespace-nowrap text-[12.5px] text-se-ink2">
-                from <b className="text-[15px] font-bold text-se-fresh-deep">{formatCurrency(show.firstEntryFee)}</b>
+                from <b className="text-[15px] font-bold tracking-[-0.015em] text-se-fresh-deep">{formatCurrency(show.firstEntryFee)}</b>
               </span>
             )}
           </div>

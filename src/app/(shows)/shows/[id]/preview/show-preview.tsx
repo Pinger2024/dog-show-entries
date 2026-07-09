@@ -11,6 +11,8 @@ import {
   Ticket,
   Trophy,
   Crown,
+  Award,
+  Flag,
   FileText,
   CalendarPlus,
   ShieldCheck,
@@ -20,7 +22,6 @@ import {
   CreditCard,
   Check,
   Lock,
-  Share2,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
 import {
@@ -48,6 +49,8 @@ import {
   HoneyBanner,
   CountdownCells,
   SEDarkPanel,
+  SE_H,
+  Wordmark,
 } from '@/components/show-experience/kit';
 
 type PreviewShowClass = {
@@ -86,11 +89,19 @@ function formatPublicClassName(sc: PreviewShowClass): string {
   return `${cd?.name ?? 'Class'}${sexLabel ? ` ${sexLabel}` : ''}`;
 }
 
+/** Splits a JH class name's trailing "(age range)" parenthetical into a name
+ *  + subline pair for the classification paper-tile treatment — falls back
+ *  to the whole name with no subline when it carries no age range. */
+function splitJhAgeRange(name: string): { label: string; sub?: string } {
+  const m = name.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
+  return m ? { label: m[1], sub: m[2] } : { label: name };
+}
+
 /* ─── Decorative components ─────────────────────── */
 
 function ClubMedallion({ logoUrl, initials }: { logoUrl?: string | null; initials: string }) {
   return (
-    <div className="relative shrink-0 w-fit rounded-full ring-2 ring-se-fresh/50">
+    <div className="relative shrink-0 w-fit rounded-full ring-2 ring-se-fresh/[.55]">
       <div className="flex size-[84px] items-center justify-center rounded-full bg-se-surface p-3 shadow-[0_8px_28px_rgba(0,0,0,0.3)]">
         {logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -161,7 +172,7 @@ function JudgeBio({ bio }: { bio: string }) {
   const isLong = bio.length > 220;
   return (
     <div className="mt-3 border-t border-se-line pt-3">
-      <p className={cn('text-[12.5px] leading-relaxed text-se-ink2', !expanded && isLong && 'line-clamp-4')}>
+      <p className={cn('text-[12.5px] leading-[1.5] text-se-ink2', !expanded && isLong && 'line-clamp-4')}>
         {bio}
       </p>
       {isLong && (
@@ -217,7 +228,7 @@ function JudgeHeader({
 }) {
   return (
     <>
-      <NameTag className="truncate text-[19px] font-semibold leading-tight text-se-ink">
+      <NameTag className={cn(SE_H, 'font-semibold', 'truncate text-[19px] leading-[1.1] text-se-ink')}>
         {judge.name}{' '}
         {judge.affix && <span className="text-sm font-normal italic text-se-ink3">({judge.affix})</span>}
       </NameTag>
@@ -233,7 +244,7 @@ function JudgeHeader({
 
 function JudgeCard({ judge, classCount }: { judge: JudgeData; classCount?: number }) {
   return (
-    <SECard className="p-4 sm:p-[18px]">
+    <SECard className="px-[18px] py-4">
       <div className="flex items-center gap-3">
         <JudgeAvatar judge={judge} sizeClassName="size-[52px]" />
         <div className="min-w-0 flex-1">
@@ -268,12 +279,12 @@ function JudgeCard({ judge, classCount }: { judge: JudgeData; classCount?: numbe
  *  grid in the desktop composition, vs JudgeCard's vertical mobile layout. */
 function JudgeRowD({ judge, classCount }: { judge: JudgeData; classCount?: number }) {
   return (
-    <div className="flex items-center gap-3.5 py-3.5">
+    <div className="flex items-center gap-[13px] py-3.5">
       <JudgeAvatar judge={judge} sizeClassName="size-[54px]" />
       <div className="min-w-0 flex-1">
         <JudgeHeader judge={judge} classCount={classCount} as="p" />
         {judge.bio && (
-          <p className="mt-1.5 line-clamp-2 text-[12.5px] leading-relaxed text-se-ink2">{judge.bio}</p>
+          <p className="mt-1.5 line-clamp-2 text-[12.5px] leading-[1.5] text-se-ink2">{judge.bio}</p>
         )}
       </div>
     </div>
@@ -656,79 +667,53 @@ export function ShowPreviewClient() {
       )}
 
       {/* ──────────────────────────── Hero (mobile/tablet) ─────────────────── */}
-      <SEDarkPanel as="header" className="pb-6 lg:hidden">
-        <div className="relative mx-auto max-w-4xl px-5 pt-3 sm:px-6">
-          {/* Breadcrumb/back row + wordmark */}
-          <div className="flex items-center justify-between">
+      <SEDarkPanel as="header" angle={172} className="lg:hidden">
+        <div className="mx-auto max-w-4xl px-5 pb-[22px] sm:px-6">
+          {/* Top row: back-link + wordmark (isolated row — sharing lives in
+              the sticky bar + "Spread the word" section, not here). */}
+          <div className="flex items-center justify-between pb-4 pt-2">
             <Link
               href="/shows"
-              className="inline-flex min-h-11 items-center gap-1 text-[13.5px] font-semibold text-se-cream/70 transition-colors hover:text-se-cream"
+              className="inline-flex items-center gap-1 text-[13.5px] font-semibold text-se-cream/[.66] transition-colors hover:text-se-cream"
             >
               <ChevronLeft className="size-[18px]" />
               Shows
             </Link>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={async () => {
-                  const url =
-                    typeof window !== 'undefined'
-                      ? `${window.location.origin}/shows/${slug}?src=hero`
-                      : `https://remishowmanager.co.uk/shows/${slug}?src=hero`;
-                  if (typeof navigator !== 'undefined' && navigator.share) {
-                    try {
-                      await navigator.share({ title: show.name, url });
-                      return;
-                    } catch (e) {
-                      if ((e as Error).name === 'AbortError') return;
-                    }
-                  }
-                  // Fallback on desktop without Web Share: scroll to the
-                  // "Spread the word" section where the big buttons live.
-                  document
-                    .getElementById('share-invitation')
-                    ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }}
-                aria-label="Share this show"
-                className="flex size-9 items-center justify-center rounded-full text-se-cream/80 transition-colors hover:text-se-cream"
-              >
-                <Share2 className="size-4" />
-              </button>
-              <Link
-                href="/"
-                aria-label="Remi"
-                className="inline-flex items-center gap-1.5 text-[15px] font-extrabold text-se-cream"
-              >
-                <span aria-hidden="true" className="size-1.5 rounded-full bg-se-fresh" />
-                Remi
-              </Link>
-            </div>
+            <Link href="/" aria-label="Remi">
+              <Wordmark className="text-se-cream" />
+            </Link>
           </div>
 
-          {/* Club crest + club name as the headline identity */}
-          <div className="mt-5">
+          {/* Crest row — club crest beside the venue name, mirroring desktop */}
+          <div className="mt-3.5 flex items-end gap-3.5">
             <ClubMedallion logoUrl={org?.logoUrl} initials={getInitials(org?.name ?? '?')} />
+            {venue && (
+              <div className="pb-0.5">
+                <p className="text-[12.5px] text-se-cream/80">{venue.name}</p>
+              </div>
+            )}
           </div>
-          <h1 className="mt-4 max-w-2xl text-[2.15rem] font-extrabold leading-[1.03] text-se-cream sm:text-[2.5rem]">
+
+          <h1 className={cn(SE_H, 'mt-4 max-w-2xl text-balance text-[37px] leading-[1.02] text-se-cream')}>
             {org?.name}
           </h1>
-          <p className="mt-2 text-lg font-medium italic text-se-fresh">
+          <p className={cn(SE_H, 'font-medium', 'mt-2 text-lg italic text-se-fresh')}>
             {show.name} {showYear}
           </p>
-          <p className="mt-2 text-[13px] text-se-cream/80">
+          <p className="mt-2 text-[13px] text-se-cream/[.82]">
             {showDate}
             {venue ? ` · ${venue.name}` : ''}
           </p>
 
           {/* Chip row */}
-          <div className="mt-4 flex flex-wrap gap-1.5">
+          <div className="mt-4 flex flex-wrap gap-[7px]">
             {isOpen && (
               <Chip tone="onDark">
                 <Pulse /> Entries open
               </Chip>
             )}
             <Chip tone="onDark">
-              <Crown className="size-3" /> {showType}
+              <Award className="size-3" /> {showType}
             </Chip>
             {singleBreedName && <Chip tone="onDark">{singleBreedName}</Chip>}
             {kcRegNumber && (
@@ -760,18 +745,16 @@ export function ShowPreviewClient() {
               </div>
             </div>
           )}
-        </div>
 
-        {/* Entries-close banner — always paired with the absolute date next
-            to the countdown (Amanda 2026-05-27: "22 days" alone confused a
-            BAGSD user because the actual date wasn't visible). */}
-        {isOpen && entryCloseDate && (
-          <div className="relative mx-auto mt-6 max-w-4xl px-5 sm:px-6">
-            <HoneyBanner date={format(entryCloseDate, 'EEE d MMM')}>
+          {/* Entries-close banner — always paired with the absolute date next
+              to the countdown (Amanda 2026-05-27: "22 days" alone confused a
+              BAGSD user because the actual date wasn't visible). */}
+          {isOpen && entryCloseDate && (
+            <HoneyBanner date={format(entryCloseDate, 'EEE d MMM')} className="mt-[18px]">
               <CountdownCells countdown={countdown} dark />
             </HoneyBanner>
-          </div>
-        )}
+          )}
+        </div>
       </SEDarkPanel>
 
       {/* ──────────────────────────── Hero (desktop, lg+) ───────────────────
@@ -794,7 +777,7 @@ export function ShowPreviewClient() {
             </div>
             {venue && <p className="text-[13px] text-se-cream/85">{venue.name}</p>}
           </div>
-          <h1 className="mt-4 text-[2.875rem] font-extrabold leading-none text-se-cream">{org?.name}</h1>
+          <h1 className={cn(SE_H, 'mt-4 text-balance text-[2.875rem] leading-none text-se-cream')}>{org?.name}</h1>
           <p className="mt-2 text-xl font-medium italic text-se-fresh">
             {show.name} {showYear}
           </p>
@@ -949,7 +932,7 @@ export function ShowPreviewClient() {
       )}
 
       {/* ══════════════════════════ Body (paper) ═══════════════════════════ */}
-      <div className="relative z-10 rounded-t-[22px] bg-se-paper">
+      <div className="relative z-10 -mt-0.5 rounded-t-[22px] bg-se-paper">
         {/* ──────────────────────────── Desktop (lg+) two-column layout ──────
             Replaces the CTA card / judges / classification / the-day mobile
             sections below with the approved desktop composition: left column
@@ -965,26 +948,30 @@ export function ShowPreviewClient() {
                 </Chip>
               )}
               <Chip>
-                <Crown className="size-3" /> {showType}
+                <Award className="size-3" /> {showType}
               </Chip>
               {singleBreedName && <Chip>{singleBreedName}</Chip>}
-              {showAny.kcLicenceNo && <Chip>RKC licensed · {showAny.kcLicenceNo}</Chip>}
+              {showAny.kcLicenceNo && (
+                <Chip>{showAny.showRuleset === 'wusv' ? 'WUSV' : 'RKC'} licensed · {showAny.kcLicenceNo}</Chip>
+              )}
             </div>
 
             {show.description && (
-              <p className="mt-5 max-w-2xl text-xl font-medium leading-relaxed text-se-ink2">
+              <p className={cn(SE_H, 'font-medium', 'mt-[22px] max-w-[620px] text-xl leading-[1.5] text-se-ink2 text-pretty')}>
                 {show.description}
               </p>
             )}
 
             {judges.length > 0 && (
-              <div className="mt-9 max-w-3xl">
-                <SecLabel right={<Eyebrow className="text-se-fresh-deep">{totalClasses} classes</Eyebrow>}>
+              <div className="mt-[34px] max-w-[680px]">
+                <SecLabel
+                  right={<span className="text-xs font-semibold text-se-fresh-deep">{totalClasses} classes</span>}
+                >
                   Your judges
                 </SecLabel>
                 <div className="grid grid-cols-2 gap-3.5">
                   {judges.map((j) => (
-                    <SECard key={j.id} className="px-[18px]">
+                    <SECard key={j.id} className="px-[18px] py-1">
                       <JudgeRowD judge={j} classCount={judgeClassCounts.get(j.name)} />
                     </SECard>
                   ))}
@@ -995,11 +982,11 @@ export function ShowPreviewClient() {
             {breedGroups.length > 0 && (
               <div className="mt-8 max-w-3xl">
                 <SecLabel>Classification</SecLabel>
-                <SECard className="p-5">
+                <SECard className="pt-4 px-5 pb-[18px]">
                   <div className="columns-2 gap-x-8">
                     {breedGroups.map(({ breed, classes, classList, judgeName }) => (
                       <div key={breed} className="break-inside-avoid pb-4">
-                        <p className="mb-1.5 text-base font-semibold text-se-ink">
+                        <p className={cn(SE_H, 'font-semibold', 'mb-1.5 text-base text-se-ink')}>
                           {breed}{' '}
                           <span className="text-xs font-normal text-se-ink3">
                             {classes} {classes === 1 ? 'class' : 'classes'}
@@ -1009,7 +996,9 @@ export function ShowPreviewClient() {
                         {classList.map((c) => (
                           <div key={c.id} className="flex gap-2 py-0.5 text-[13px] text-se-ink2">
                             {c.label && (
-                              <span className="min-w-[16px] shrink-0 font-semibold text-se-fresh-deep">{c.label}</span>
+                              <span className={cn(SE_H, 'font-semibold', 'min-w-[16px] shrink-0 text-se-fresh-deep')}>
+                                {c.label}
+                              </span>
                             )}
                             <span>{c.name}</span>
                           </div>
@@ -1045,7 +1034,7 @@ export function ShowPreviewClient() {
                 <div className="flex items-center justify-between bg-se-honey px-[18px] py-[13px]">
                   <div>
                     <Eyebrow className="text-[rgba(74,48,6,0.7)]">Entries close</Eyebrow>
-                    <p className="mt-0.5 text-[15px] font-semibold text-se-honey-ink">
+                    <p className={cn(SE_H, 'font-semibold', 'mt-0.5 whitespace-nowrap text-[16px] text-se-honey-ink')}>
                       {format(entryCloseDate, 'EEE d MMM')}
                     </p>
                   </div>
@@ -1057,7 +1046,7 @@ export function ShowPreviewClient() {
                   {quickFacts.map(([k, v]) => (
                     <div key={k} className="rounded-[10px] bg-se-paper px-3 py-2.5">
                       <Eyebrow>{k}</Eyebrow>
-                      <p className="mt-0.5 truncate text-sm font-semibold text-se-ink">{v}</p>
+                      <p className={cn(SE_H, 'font-semibold', 'mt-[3px] truncate text-sm text-se-ink')}>{v}</p>
                     </div>
                   ))}
                 </div>
@@ -1079,7 +1068,7 @@ export function ShowPreviewClient() {
                     </SEButton>
                     <div className="mt-3 flex flex-col gap-1.5 border-t border-se-line pt-3">
                       {TRUST_BULLETS.filter((b) => !b.requiresPostal || showAny.acceptsPostalEntries).map((b) => (
-                        <TrustRow key={b.shortLabel} icon={b.icon}>
+                        <TrustRow key={b.shortLabel} icon={b.icon} compact>
                           {b.shortLabel}
                         </TrustRow>
                       ))}
@@ -1132,13 +1121,18 @@ export function ShowPreviewClient() {
           </div>
         </div>
 
+        {/* ──────────────────────────── Mobile/shared section flow ───────────
+            One padded container (design green-live Page/Sec rhythm) — each
+            section below just adds mt-[22px] instead of carrying its own
+            mx-auto/max-w/px/py. */}
+        <div className="mx-auto max-w-4xl px-4 pt-[18px]">
         {/* ──────────────────────────── CTA card (mobile/tablet) ────────────── */}
-        <section className="mx-auto max-w-4xl px-5 pt-7 sm:px-6 sm:pt-9 lg:hidden">
+        <section className="lg:hidden">
           {isOpen ? (
             <SECard className="p-4">
               <SEButton asChild variant="fresh" full>
                 <Link href={enterHref}>
-                  <Ticket className="size-[18px]" />
+                  <Flag className="size-[18px]" />
                   Enter this show
                   {showAny.firstEntryFee != null ? ` · from ${formatCurrency(showAny.firstEntryFee)}` : ''}
                 </Link>
@@ -1149,7 +1143,7 @@ export function ShowPreviewClient() {
                   Read the full schedule (PDF)
                 </a>
               </SEButton>
-              <div className="mt-3.5 flex flex-col gap-2 border-t border-se-line pt-3.5">
+              <div className="mt-3.5 flex flex-col gap-2 border-t border-se-line pt-[13px]">
                 {TRUST_BULLETS.filter((b) => !b.requiresPostal || showAny.acceptsPostalEntries).map((b) => (
                   <TrustRow key={b.label} icon={b.icon}>
                     {b.label}
@@ -1185,14 +1179,14 @@ export function ShowPreviewClient() {
 
         {/* ──────────────────────────── Your judges (mobile/tablet) ─────────── */}
         {judges.length > 0 && (
-          <section className="mx-auto max-w-4xl px-5 py-8 sm:px-6 sm:py-10 lg:hidden">
+          <section className="mt-[22px] lg:hidden">
             <SecLabel>Your judges</SecLabel>
             <p className="text-sm text-se-ink2">
               {judges.length === 1
                 ? 'A single appointment for this show — your breed entrusted to an experienced judge.'
                 : `${judges.length} judges bring breed-specific expertise to the ring.`}
             </p>
-            <div className="mt-5 grid gap-3.5 sm:grid-cols-2">
+            <div className="mt-5 flex flex-col gap-[10px]">
               {judges.map((j) => (
                 <JudgeCard key={j.id} judge={j} classCount={judgeClassCounts.get(j.name)} />
               ))}
@@ -1202,12 +1196,12 @@ export function ShowPreviewClient() {
 
         {/* ──────────────────────────── What's at stake ─────────────────────── */}
         {(showAny.scheduleData?.prizeMoney || showAny.scheduleData?.awardsDescription) && (
-          <section className="mx-auto max-w-4xl px-5 py-8 sm:px-6 sm:py-10">
+          <section className="mt-[22px]">
             <SecLabel>What&apos;s at stake</SecLabel>
-            <SECard className="p-5 sm:p-6">
+            <SECard className="p-4">
               <div className="flex items-center gap-2">
                 <Trophy className="size-5 text-se-honey-deep" />
-                <h3 className="text-lg font-bold text-se-ink">On offer</h3>
+                <h3 className={cn(SE_H, 'font-semibold', 'text-base text-se-ink')}>On offer</h3>
               </div>
               {showAny.scheduleData?.awardsDescription && (
                 <p className="mt-3 whitespace-pre-line text-[15px] leading-relaxed text-se-ink2">
@@ -1231,22 +1225,22 @@ export function ShowPreviewClient() {
 
         {/* ──────────────────────────── Classification (mobile/tablet) ──────── */}
         {breedGroups.length > 0 && (
-          <section className="mx-auto max-w-4xl px-5 py-8 sm:px-6 sm:py-10 lg:hidden">
+          <section className="mt-[22px] lg:hidden">
             <SecLabel
               right={
-                <Eyebrow>
+                <span className="text-xs font-semibold text-se-fresh-deep">
                   {totalClasses} {totalClasses === 1 ? 'class' : 'classes'}
                   {breedCount > 1 ? ` · ${breedCount} breeds` : ''}
-                </Eyebrow>
+                </span>
               }
             >
               Classification
             </SecLabel>
             <div className="grid gap-3 lg:grid-cols-2">
-              {breedGroups.map(({ breed, classes, classList, judgeName }) => (
-                <SECard key={breed} className="p-4 sm:p-[18px]">
+              {breedGroups.map(({ breed, classes, classList, judgeName, isJH }) => (
+                <SECard key={breed} className="px-[18px] pb-4 pt-[14px]">
                   <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                    <p className="text-base font-semibold text-se-ink">{breed}</p>
+                    <p className={cn(SE_H, 'font-semibold', 'text-[16.5px] text-se-ink')}>{breed}</p>
                     <p className="text-xs text-se-ink3">
                       {classes} {classes === 1 ? 'class' : 'classes'}
                       {judgeName ? ` · ${judgeName}` : ''}
@@ -1254,15 +1248,27 @@ export function ShowPreviewClient() {
                   </div>
                   {/* The full classification on the page — so exhibitors don't
                       have to open the PDF to see the classes (Mandy 2026-06-14). */}
-                  <div className="mt-2.5 grid grid-cols-1 gap-x-4 sm:grid-cols-2">
-                    {classList.map((c) => (
-                      <div key={c.id} className="flex items-baseline gap-2 py-1 text-[13px] text-se-ink2">
-                        {c.label && (
-                          <span className="min-w-[15px] shrink-0 font-semibold text-se-fresh-deep">{c.label}</span>
-                        )}
-                        <span className="min-w-0">{c.name}</span>
-                      </div>
-                    ))}
+                  <div className={cn('mt-2 grid', isJH ? 'grid-cols-2 gap-2' : 'grid-cols-1 gap-x-4 sm:grid-cols-2')}>
+                    {isJH
+                      ? classList.map((c) => {
+                          const { label, sub } = splitJhAgeRange(c.name);
+                          return (
+                            <div key={c.id} className="rounded-[11px] bg-se-paper px-3 py-[9px]">
+                              <p className="text-[12.5px] font-semibold text-se-ink">{label}</p>
+                              {sub && <p className="text-[11.5px] text-se-ink3">{sub}</p>}
+                            </div>
+                          );
+                        })
+                      : classList.map((c) => (
+                          <div key={c.id} className="flex items-baseline gap-2 py-1 text-[13px] text-se-ink2">
+                            {c.label && (
+                              <span className={cn(SE_H, 'font-semibold', 'min-w-[14px] shrink-0 text-se-fresh-deep')}>
+                                {c.label}
+                              </span>
+                            )}
+                            <span className="min-w-0">{c.name}</span>
+                          </div>
+                        ))}
                   </div>
                 </SECard>
               ))}
@@ -1273,7 +1279,7 @@ export function ShowPreviewClient() {
                 href={`/api/schedule/${show.id}`}
                 target="_blank"
                 rel="noopener"
-                className="inline-flex min-h-11 items-center font-semibold text-se-fresh-deep underline-offset-2 hover:underline"
+                className="inline-flex items-center font-semibold text-se-fresh-deep underline-offset-2 hover:underline"
               >
                 View the schedule (PDF) →
               </a>
@@ -1284,19 +1290,19 @@ export function ShowPreviewClient() {
         {/* ──────────────────────────── The day (mobile/tablet) ─────────────── */}
         {/* Doors/Judging are covered by the desktop rail's quick-facts grid. */}
         {(showAny.showOpenTime || showAny.startTime) && (
-          <section className="mx-auto max-w-4xl px-5 py-8 sm:px-6 sm:py-10 lg:hidden">
+          <section className="mt-[22px] lg:hidden">
             <SecLabel>The day</SecLabel>
             <SECard className="grid grid-cols-1 divide-y divide-se-line sm:grid-cols-2 sm:divide-x sm:divide-y-0">
               {showAny.showOpenTime && (
-                <div className="p-4 text-center sm:p-5">
+                <div className="px-3 py-[13px]">
                   <Eyebrow>Doors</Eyebrow>
-                  <p className="mt-1 text-lg font-semibold text-se-ink">{showAny.showOpenTime}</p>
+                  <p className={cn(SE_H, 'font-semibold', 'mt-[3px] text-[17px] text-se-ink')}>{showAny.showOpenTime}</p>
                 </div>
               )}
               {showAny.startTime && (
-                <div className="p-4 text-center sm:p-5">
+                <div className="px-3 py-[13px]">
                   <Eyebrow>Judging</Eyebrow>
-                  <p className="mt-1 text-lg font-semibold text-se-ink">{showAny.startTime}</p>
+                  <p className={cn(SE_H, 'font-semibold', 'mt-[3px] text-[17px] text-se-ink')}>{showAny.startTime}</p>
                 </div>
               )}
             </SECard>
@@ -1304,13 +1310,14 @@ export function ShowPreviewClient() {
         )}
 
         {/* ──────────────────────────── Entry fees ──────────────────────────── */}
-        <section className="mx-auto max-w-4xl px-5 py-8 sm:px-6 sm:py-10">
-          <SecLabel>Entry fees</SecLabel>
+        <section className="mt-[22px]">
+          <SecLabel right={<span className="text-xs text-se-ink3">one payment</span>}>Entry fees</SecLabel>
           <p className="text-sm text-se-ink2">
             No surprises at checkout. Every fee is listed here — and all your entries combine into a single payment at the end.
           </p>
           <SECard className="mt-5 overflow-hidden">
             <dl className="divide-y divide-se-line">
+            <div className="divide-y divide-se-line px-[18px] py-1">
               {showAny.showRuleset === 'wusv' ? (
                 <>
                   {/* SV regional shows charge a flat per-dog-per-class fee
@@ -1418,6 +1425,7 @@ export function ShowPreviewClient() {
                   />
                 </>
               )}
+            </div>
               <div className="flex flex-wrap items-center justify-between gap-2 bg-se-honey-soft px-5 py-3.5 text-sm font-medium text-se-honey-ink sm:px-6">
                 <span className="inline-flex items-center gap-1.5"><Info className="size-4 text-se-honey-deep" /> A card processing fee is added at checkout</span>
                 <span className="text-xs text-se-ink2">All prices in GBP</span>
@@ -1428,7 +1436,7 @@ export function ShowPreviewClient() {
 
         {/* ──────────────────────────── Getting there ────────────────────────── */}
         {venue && (
-          <section className="mx-auto max-w-4xl px-5 py-8 sm:px-6 sm:py-10">
+          <section className="mt-[22px]">
             <SecLabel>Getting there</SecLabel>
             <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
               <div className="space-y-3">
@@ -1467,7 +1475,7 @@ export function ShowPreviewClient() {
                 ) : null}
               </div>
               <SECard className="p-5">
-                <h3 className="text-xl font-bold text-se-ink">{venue.name}</h3>
+                <h3 className={cn(SE_H, 'font-bold', 'text-xl text-se-ink')}>{venue.name}</h3>
                 <address className="mt-1.5 whitespace-pre-line text-sm not-italic leading-relaxed text-se-ink2">
                   {[venue.address, venue.postcode].filter(Boolean).join('\n')}
                 </address>
@@ -1502,7 +1510,7 @@ export function ShowPreviewClient() {
                     href={`https://what3words.com/${what3words}`}
                     target="_blank"
                     rel="noopener"
-                    className="mt-3 inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-se-fresh-deep underline-offset-2 hover:underline"
+                    className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-se-fresh-deep underline-offset-2 hover:underline"
                   >
                     <MapPin className="size-3.5" />
                     {`///${what3words}`}
@@ -1521,7 +1529,7 @@ export function ShowPreviewClient() {
 
         {/* ──────────────────────────── Additional notes (if present) ─────── */}
         {showAny.scheduleData?.additionalNotes && (
-          <section className="mx-auto max-w-4xl px-5 py-8 sm:px-6 sm:py-10">
+          <section className="mt-[22px]">
             <SecLabel>From the organisers</SecLabel>
             <SECard className="border-l-4 border-se-honey-deep p-5 sm:p-6">
               <p className="whitespace-pre-line text-[15px] leading-relaxed text-se-ink2">
@@ -1533,7 +1541,7 @@ export function ShowPreviewClient() {
 
         {/* ──────────────────────────── Future shows (if present) ─────────── */}
         {showAny.scheduleData?.futureShowDates && (
-          <section className="mx-auto max-w-4xl px-5 py-8 sm:px-6 sm:py-10">
+          <section className="mt-[22px]">
             <SecLabel>Save the date</SecLabel>
             <p className="mb-3 text-sm text-se-ink2">More from {org?.name ?? 'this club'}</p>
             <SECard className="p-5 sm:p-6">
@@ -1549,7 +1557,7 @@ export function ShowPreviewClient() {
         {show.status !== 'cancelled' && (
           <ShareKitCard
             id="share-invitation"
-            className="lg:hidden"
+            className="mt-[22px] px-0 py-0 sm:px-0 sm:py-0 lg:hidden"
             showId={show.id}
             showName={show.name}
             showType={showType}
@@ -1576,14 +1584,14 @@ export function ShowPreviewClient() {
 
         {/* ──────────────────────────── Footer CTA ────────────────────────── */}
         {isOpen && (
-          <section className="mx-auto max-w-4xl px-5 py-14 text-center sm:px-6 sm:py-16">
+          <section className="mt-[22px] py-14 text-center sm:py-16">
             <Crown className="mx-auto size-7 text-se-honey-deep" />
             <h2 className="mt-3 text-[1.75rem] font-extrabold text-se-ink sm:text-3xl">Ready for the ring?</h2>
             <p className="mx-auto mt-2 max-w-xl text-se-ink2">Entries take two minutes on your phone.</p>
             <div className="mt-6">
               <SEButton asChild variant="fresh">
                 <Link href={enterHref}>
-                  <Ticket className="size-5" />
+                  <Flag className="size-5" />
                   Enter This Show
                 </Link>
               </SEButton>
@@ -1598,28 +1606,22 @@ export function ShowPreviewClient() {
             )}
           </section>
         )}
-      </div>
 
-      {/* ──────────────────────────── Footer ────────────────────────────── */}
-      <footer className="border-t border-se-line bg-se-paper2">
-        <div className="mx-auto max-w-4xl px-5 py-12 text-center sm:px-6 sm:py-14">
-          <Link href="/" className="inline-block transition-opacity hover:opacity-80" aria-label="Remi">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/branding/remi-horizontal.png" alt="Remi" className="mx-auto h-12 w-auto sm:h-14" />
+        {/* ──────────────────────────── Page footer (wordmark) ───────────────
+            Reduced to the design's literal footer — a centred wordmark +
+            subline. Nav links/copyright are NOT repeated here: the global
+            site <Footer/> (rendered by the (shows) layout) already provides
+            that below. */}
+        <div className="pt-6 pb-[30px] text-center">
+          <Link href="/" aria-label="Remi" className="inline-flex transition-opacity hover:opacity-80">
+            <Wordmark />
           </Link>
-          <p className="mt-3 text-sm italic text-se-ink2">Show management, reimagined.</p>
-          <div className="mt-5 flex items-center justify-center gap-3 text-xs text-se-ink3">
-            <Link href="/shows" className="hover:text-se-fresh-deep">Find a show</Link>
-            <span aria-hidden="true">·</span>
-            <Link href="/about" className="hover:text-se-fresh-deep">About Remi</Link>
-            <span aria-hidden="true">·</span>
-            <Link href="/terms" className="hover:text-se-fresh-deep">Terms</Link>
-          </div>
-          <p className="mt-5 text-[11px] text-se-ink3">
-            &copy; {new Date().getFullYear()} Remi · Lovingly built for the UK dog-show community.
+          <p className="mt-[5px] text-[11.5px] text-se-ink3">
+            No account needed to read · entries in under two minutes
           </p>
         </div>
-      </footer>
+        </div>
+      </div>
 
       {/* ──────────────────────────── Mobile slide-up widget (dismissable) ── */}
       {isOpen && !widgetDismissed && (
@@ -1693,16 +1695,20 @@ const TRUST_BULLETS: Array<{
   },
 ];
 
+/** `compact` gives the desktop rail's denser variant (text-xs/gap-2/icon 14);
+ *  the default (mobile CTA card) stays 12.5px/gap-[9px]/icon 15. */
 function TrustRow({
   icon: Icon,
   children,
+  compact,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   children: React.ReactNode;
+  compact?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-2.5 text-[12.5px] text-se-ink2">
-      <Icon className="size-[15px] shrink-0 text-se-fresh-deep" />
+    <div className={cn('flex items-center text-se-ink2', compact ? 'gap-2 text-xs' : 'gap-[9px] text-[12.5px]')}>
+      <Icon className={cn('shrink-0 text-se-fresh-deep', compact ? 'size-3.5' : 'size-[15px]')} />
       {children}
     </div>
   );
@@ -1725,9 +1731,9 @@ function FeeRow({
 }) {
   const unavailable = available === false;
   return (
-    <div className={cn('flex items-center justify-between gap-3 px-5 py-4 sm:px-6', unavailable && 'opacity-60')}>
+    <div className={cn('flex items-center justify-between gap-3 py-[11px]', unavailable && 'opacity-60')}>
       <div className="min-w-0">
-        <dt className="text-[15px] font-semibold text-se-ink">{label}</dt>
+        <dt className="text-[13.5px] font-normal text-se-ink2">{label}</dt>
         {sub && <p className="mt-0.5 text-xs text-se-ink3">{sub}</p>}
       </div>
       <dd className="shrink-0 text-right">
@@ -1737,7 +1743,7 @@ function FeeRow({
           <span className="text-sm italic text-se-ink3">Not offered</span>
         ) : (
           <>
-            <p className="text-lg font-bold text-se-ink">{formatCurrency(value ?? 0)}</p>
+            <p className={cn(SE_H, 'font-semibold', 'text-[15.5px] text-se-ink')}>{formatCurrency(value ?? 0)}</p>
             {note && <p className="text-[10px] text-se-ink3">{note}</p>}
           </>
         )}

@@ -6,14 +6,15 @@ import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import {
   AlertTriangle,
+  ArrowRight,
   Dog,
   CheckCircle2,
   ChevronRight,
   ChevronLeft,
-  Copy,
   Check,
   CreditCard,
   Info,
+  Link as LinkIcon,
   Loader2,
   Minus,
   PawPrint,
@@ -59,7 +60,7 @@ import { cn } from '@/lib/utils';
 import { isGsdOnlyClass, isGsdBreed } from '@/lib/class-templates';
 import { isCatalogueItem } from '@/lib/catalogue-utils';
 import { useEntryCart, getPaymentKey, restoreActionForStatus, type WizardStep } from './use-entry-cart';
-import { SecLabel, Chip, SEButton, SECard, SEDarkPanel } from '@/components/show-experience/kit';
+import { SecLabel, Chip, Eyebrow, SE_H, SEButton, SECard, SEDarkPanel } from '@/components/show-experience/kit';
 
 const STEPS: { key: WizardStep; label: string; icon: React.ElementType }[] = [
   { key: 'entry_type', label: 'Type', icon: PawPrint },
@@ -806,19 +807,30 @@ export default function EnterShowPage() {
       {/* Step indicator — slim segmented progress bar */}
       <nav className="mb-6 sm:mb-8" aria-label="Entry progress">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-semibold text-se-ink2">
-            {displaySteps[Math.max(stepIndex, 0)]?.label}
-          </span>
-          <span className="text-xs font-semibold text-se-ink3">
+          {cart.step === 'select_classes' ? (
+            <button
+              type="button"
+              onClick={handleBackFromSelectClasses}
+              className="inline-flex items-center gap-1 text-[13.5px] font-medium text-se-ink2"
+            >
+              <ChevronLeft className="size-[18px]" />
+              Back
+            </button>
+          ) : (
+            <span className="text-xs font-semibold text-se-ink2">
+              {displaySteps[Math.max(stepIndex, 0)]?.label}
+            </span>
+          )}
+          <span className="text-[12.5px] font-semibold text-se-ink3">
             Step {Math.max(stepIndex, 0) + 1} of {displaySteps.length}
           </span>
         </div>
-        <div className="mt-2 flex gap-1.5">
+        <div className="mt-3 flex gap-[5px]">
           {displaySteps.map((s, i) => (
             <div
               key={s.key}
               className={cn(
-                'h-1.5 flex-1 rounded-full transition-colors',
+                'h-1 flex-1 rounded-[3px] transition-colors',
                 i <= Math.max(stepIndex, 0) ? 'bg-se-fresh' : 'bg-se-line2'
               )}
             />
@@ -1239,7 +1251,7 @@ export default function EnterShowPage() {
         return (
         <div className="space-y-6">
           <div>
-            <StepHeading>Select classes</StepHeading>
+            <h2 className={cn(SE_H, 'mt-3.5 text-[25px] text-se-ink')}>Select classes</h2>
             <p className="text-xs text-se-ink3 sm:text-sm">
               {cart.activeEntry?.entryType === 'standard'
                 ? `Choose classes for ${cart.activeEntry?.dogName ?? 'your dog'}`
@@ -1249,12 +1261,10 @@ export default function EnterShowPage() {
 
           {/* Dog summary card — wiring task: Change reuses the Back handler */}
           {cart.activeEntry?.entryType === 'standard' && cart.activeEntry?.dogName && (
-            <SECard className="flex items-center gap-3 p-3">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-se-fresh-soft text-se-fresh-deep">
-                <Dog className="size-4" />
-              </span>
+            <SECard className="flex items-center gap-[10px] rounded-xl p-[10px_13px]">
+              <Dog className="size-5 shrink-0 text-se-fresh-deep" />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[15px] font-bold text-se-ink">{cart.activeEntry.dogName}</p>
+                <p className="truncate text-[15px] font-bold leading-[1.1] tracking-[-0.015em] text-se-ink">{cart.activeEntry.dogName}</p>
                 <p className="truncate text-xs text-se-ink3">
                   {[
                     selectedDog?.breed?.name,
@@ -1276,7 +1286,7 @@ export default function EnterShowPage() {
           )}
 
           {dogUnder6Months && (
-            <div className="flex gap-3 rounded-[14px] border border-se-honey bg-se-honey-soft p-3">
+            <div className="flex gap-3 rounded-[14px] border border-se-honey-line bg-se-honey-soft p-3">
               <AlertTriangle className="mt-0.5 size-4 shrink-0 text-se-honey-deep" />
               <div className="text-sm text-se-honey-ink">
                 <p className="font-medium">This dog is under 6 months old on show day</p>
@@ -1289,7 +1299,7 @@ export default function EnterShowPage() {
           )}
 
           {svHealthMissing.length > 0 && (
-            <div className="flex gap-3 rounded-[14px] border border-se-honey bg-se-honey-soft p-3">
+            <div className="flex gap-3 rounded-[14px] border border-se-honey-line bg-se-honey-soft p-3">
               <AlertTriangle className="mt-0.5 size-4 shrink-0 text-se-honey-deep" />
               <div className="text-sm text-se-honey-ink">
                 <p className="font-medium">
@@ -1341,7 +1351,7 @@ export default function EnterShowPage() {
                       ? rec.eligible.find((name) => name !== rec.suggested)
                       : undefined;
                     return (
-                      <div className="flex gap-2.5 rounded-[12px] border border-se-honey bg-se-honey-soft p-3">
+                      <div className="flex gap-2.5 rounded-[12px] border border-se-honey-line bg-se-honey-soft p-[11px_13px]">
                         <Star className="mt-0.5 size-[18px] shrink-0 text-se-honey-deep" />
                         <div>
                           <p className="text-[13px] font-bold text-se-honey-deep">
@@ -1371,7 +1381,7 @@ export default function EnterShowPage() {
                           exhibitor sees the list duplicated. Amanda
                           2026-05-20. */}
                       {show?.showRuleset === 'wusv' && !selectedDog?.coatType && (
-                        <div className="flex gap-3 rounded-[14px] border border-se-honey bg-se-honey-soft p-3">
+                        <div className="flex gap-3 rounded-[14px] border border-se-honey-line bg-se-honey-soft p-3">
                           <Info className="mt-0.5 size-4 shrink-0 text-se-honey-deep" />
                           <p className="text-sm text-se-honey-ink">
                             <span className="font-medium">{selectedDog?.registeredName ?? 'This dog'}</span> doesn&apos;t have a coat type set on the profile yet. Both Standard Coat and Long Coat classes are showing — pick the correct one, or set the coat type on the dog&apos;s profile so we can filter automatically.
@@ -1449,7 +1459,7 @@ export default function EnterShowPage() {
                       feeOverride={show.juniorHandlerFee ?? undefined}
                     />
                   ) : (
-                    <div className="flex gap-3 rounded-[14px] border border-se-honey bg-se-honey-soft p-3">
+                    <div className="flex gap-3 rounded-[14px] border border-se-honey-line bg-se-honey-soft p-3">
                       <AlertTriangle className="mt-0.5 size-4 shrink-0 text-se-honey-deep" />
                       <p className="text-sm text-se-honey-ink">
                         No handling classes match the handler&apos;s age. Go back and check the date of birth.
@@ -1458,6 +1468,18 @@ export default function EnterShowPage() {
                   )}
                 </>
               )}
+
+              {/* Fee-tier explainer — RKC shows only (SV/WUSV uses a flat
+                  per-dog-per-class fee, no first/subsequent tier). */}
+              {cart.activeEntry?.entryType === 'standard' &&
+                show?.showRuleset !== 'wusv' &&
+                show?.firstEntryFee != null &&
+                show?.subsequentEntryFee != null && (
+                  <div className="mt-3 flex items-center justify-center gap-2 text-[12.5px] text-se-ink3">
+                    <Info className="size-3.5" />
+                    First class {formatCurrency(show.firstEntryFee)}, each extra {formatCurrency(show.subsequentEntryFee)}
+                  </div>
+                )}
 
               {/* NFC option — RKC-only concept. Hidden for SV shows
                   (Amanda 2026-05-20). */}
@@ -1482,41 +1504,29 @@ export default function EnterShowPage() {
           )}
 
           {/* Running total */}
-          <div className="sticky bottom-16 md:bottom-0 rounded-[16px] border border-se-line bg-se-surface p-3 shadow-[0_-4px_18px_-12px_rgba(27,36,29,0.25)] sm:p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="sticky bottom-16 md:bottom-0 rounded-none border-0 border-t border-se-line2 bg-se-surface px-4 pt-3 pb-1.5 shadow-none">
+            <div className="flex items-center gap-3">
               <div>
-                <p className="text-xs text-se-ink3 sm:text-sm">
+                <p className="text-xs text-se-ink3">
                   {selectedClassIds.length} class
-                  {selectedClassIds.length !== 1 ? 'es' : ''} selected
+                  {selectedClassIds.length !== 1 ? 'es' : ''}
                   {cart.activeEntry?.dogName ? ` · ${cart.activeEntry.dogName}` : ''}
                 </p>
-                <p className="text-2xl font-bold text-se-ink sm:text-[26px]">{formatCurrency(selectedTotal)}</p>
+                <p className="text-[26px] font-bold leading-none tracking-[-0.015em] text-se-ink">{formatCurrency(selectedTotal)}</p>
               </div>
-              <div className="flex w-full gap-2 sm:w-auto">
-                <SEButton
-                  variant="ghost"
-                  size="sm"
-                  className="flex-1 sm:flex-none"
-                  onClick={handleBackFromSelectClasses}
-                >
-                  <ChevronLeft className="size-4" />
-                  Back
-                </SEButton>
-                <SEButton
-                  variant="fresh"
-                  size="sm"
-                  className="flex-1 sm:flex-none"
-                  onClick={handleConfirmClasses}
-                  disabled={
-                    (selectedClassIds.length === 0 && !isNfc) ||
-                    (dogUnder6Months && !isNfc) ||
-                    svHealthMissing.length > 0
-                  }
-                >
-                  {cart.editingExisting ? 'Update' : 'Add to Cart'}
-                  <ChevronRight className="size-4" />
-                </SEButton>
-              </div>
+              <SEButton
+                variant="fresh"
+                className="ml-auto max-w-[200px] flex-1"
+                onClick={handleConfirmClasses}
+                disabled={
+                  (selectedClassIds.length === 0 && !isNfc) ||
+                  (dogUnder6Months && !isNfc) ||
+                  svHealthMissing.length > 0
+                }
+              >
+                {cart.editingExisting ? 'Update' : 'Review entry'}
+                <ArrowRight className="size-[17px]" />
+              </SEButton>
             </div>
           </div>
         </div>
@@ -2026,19 +2036,19 @@ export default function EnterShowPage() {
         ];
 
         return (
-        <div className="space-y-6">
-          {/* Dark hero */}
+        <div>
+          {/* Dark hero — full-bleed, no rounded corners */}
           <SEDarkPanel
-            className="rounded-[22px] px-5 py-8 text-center"
-            glowPosition="-left-12 top-5"
-            glowSize="size-48"
+            angle={178}
+            className="px-5 pt-[10px] pb-[26px] text-center"
+            glowPosition="-left-[50px] top-5"
+            glowSize="size-[200px]"
             glowOpacity="opacity-25"
-            glowFade="68%"
           >
             <div className="relative mx-auto flex size-16 items-center justify-center rounded-full bg-se-fresh text-[#0e2c19] shadow-[0_16px_34px_-14px_rgba(0,0,0,0.55)]">
-              <CheckCircle2 className="size-8" />
+              <Check className="size-8" />
             </div>
-            <h2 className="relative mt-3.5 text-[26px] font-bold text-se-cream sm:text-[29px]">
+            <h2 className={cn(SE_H, 'relative mt-3.5 text-[29px] text-se-cream')}>
               You&apos;re entered{firstName ? `, ${firstName}` : ''}!
             </h2>
             <p className="relative mt-1.5 text-[13.5px] text-se-cream/80">
@@ -2052,235 +2062,276 @@ export default function EnterShowPage() {
             )}
           </SEDarkPanel>
 
-          {/* Order details */}
-          <SECard className="p-4">
-            <div className="space-y-3 text-sm">
-              {orderId && (
-                <div className="flex justify-between">
-                  <span className="text-se-ink3">Order Reference</span>
-                  <span className="font-mono font-medium text-se-ink">
-                    {orderId.slice(0, 8).toUpperCase()}
-                  </span>
-                </div>
-              )}
-              <div className="flex justify-between">
-                <span className="text-se-ink3">Entries</span>
-                <span className="text-se-ink">{confirmedEntries.length}</span>
-              </div>
-              {confirmedEntries.map((entry) => (
-                <div key={entry.id} className="space-y-1">
-                  <div className="flex justify-between">
-                    <span className="font-medium text-se-ink">
-                      {entry.entryType === 'standard'
-                        ? entry.dogName
-                        : `JH: ${entry.handlerName}`}
+          {/* Paper sheet — pulls up over the hero */}
+          <div className="space-y-6 rounded-t-[22px] bg-se-paper px-4 pt-[18px] pb-7 -mt-0.5">
+            {/* What happens next — timeline */}
+            <div>
+              <SecLabel>What happens next</SecLabel>
+              <SECard className="px-[18px] py-1.5">
+                {timelineRows.map(([k, t], i) => (
+                  <div key={k} className={cn('flex items-baseline gap-[13px] py-3', i > 0 && 'border-t border-se-line')}>
+                    <span className="w-[82px] shrink-0 text-[11px] font-bold uppercase tracking-[0.06em] text-se-honey-deep">
+                      {k}
                     </span>
-                    <span className="text-se-ink3">{entry.classIds.length} classes</span>
+                    <span className="text-[13.5px] leading-[1.45] text-se-ink2">{t}</span>
                   </div>
-                  {entry.classNames.length > 0 && (
-                    <ul className="ml-1 space-y-0.5 text-xs text-se-ink3">
-                      {entry.classNames.map((name, i) => (
-                        <li key={i}>{name}</li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ))}
-              <div className="flex justify-between border-t border-se-line pt-3 text-base font-bold text-se-ink">
-                <span>Paid</span>
-                <span>{formatCurrency(paymentAmount)}</span>
-              </div>
+                ))}
+              </SECard>
             </div>
-          </SECard>
 
-          {/* What happens next — timeline */}
-          <div>
-            <SecLabel>What happens next</SecLabel>
-            <SECard className="px-4">
-              {timelineRows.map(([k, t], i) => (
-                <div key={k} className={cn('flex gap-3 py-3', i > 0 && 'border-t border-se-line')}>
-                  <span className="w-[92px] shrink-0 text-[11px] font-bold uppercase tracking-wide text-se-honey-deep">
-                    {k}
-                  </span>
-                  <span className="text-[13.5px] leading-relaxed text-se-ink2">{t}</span>
-                </div>
-              ))}
-            </SECard>
-          </div>
+            {/* Share prompt — "Bring your ring-mates" */}
+            {(() => {
+              const standardEntries = cart.entries.filter(
+                (e) => e.classIds.length > 0 && e.entryType === 'standard'
+              );
+              const dogLabel =
+                standardEntries.length === 1
+                  ? standardEntries[0]!.dogName ?? 'my dog'
+                  : standardEntries.length > 1
+                    ? 'my dogs'
+                    : 'my entry';
+              const showUrl = `https://remishowmanager.co.uk/shows/${show?.slug ?? idOrSlug}`;
+              const shareText = `I've just entered ${dogLabel} into ${show?.name ?? 'a show'}! \u{1F415} ${showUrl}`;
+              const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
 
-          {/* Share prompt — dark "Bring your ring-mates" card */}
-          {(() => {
-            const standardEntries = cart.entries.filter(
-              (e) => e.classIds.length > 0 && e.entryType === 'standard'
-            );
-            const dogLabel =
-              standardEntries.length === 1
-                ? standardEntries[0]!.dogName ?? 'my dog'
-                : standardEntries.length > 1
-                  ? 'my dogs'
-                  : 'my entry';
-            const showUrl = `https://remishowmanager.co.uk/shows/${show?.slug ?? idOrSlug}`;
-            const shareText = `I've just entered ${dogLabel} into ${show?.name ?? 'a show'}! \u{1F415} ${showUrl}`;
-            const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+              const trackShare = (channel: string) => {
+                if (!show?.id) return;
+                fetch('/api/share-events', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ showId: show.id, channel }),
+                  keepalive: true,
+                }).catch(() => {
+                  // Fire-and-forget
+                });
+              };
+              const fbShareUrl = `${showUrl}?src=facebook`;
 
-            const trackShare = (channel: string) => {
-              if (!show?.id) return;
-              fetch('/api/share-events', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ showId: show.id, channel }),
-                keepalive: true,
-              }).catch(() => {
-                // Fire-and-forget
-              });
-            };
-            const fbShareUrl = `${showUrl}?src=facebook`;
+              const clubName = show.organisation?.name ?? show.name;
+              const clubInitials =
+                clubName
+                  .replace(/^(Mr|Mrs|Ms|Miss|Dr|Prof|Mx)\.?\s+/i, '')
+                  .trim()
+                  .split(/\s+/)
+                  .slice(0, 2)
+                  .map((p) => p[0]?.toUpperCase() ?? '')
+                  .join('') || '?';
+              const ringMatesHeadline = firstName
+                ? `${firstName}'s going to the ${show.name}.`
+                : `You're going to the ${show.name}.`;
 
-            return (
-              <SEDarkPanel direction="br" glow={false} className="mx-auto w-full max-w-md rounded-[16px] p-4 text-center">
-                <p className="text-sm font-semibold">
-                  You&apos;re in! Let your breed group know you&apos;re coming.
-                </p>
-                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:justify-center">
-                  <SEButton asChild variant="onDark" size="sm" className="bg-[#25D366] text-white">
-                    <a
-                      href={whatsappUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={() => trackShare('whatsapp')}
+              return (
+                <div>
+                  <SecLabel>Bring your ring-mates</SecLabel>
+                  <SECard className="p-4">
+                    <SEDarkPanel
+                      angle={160}
+                      className="rounded-[13px] p-[14px_16px]"
+                      glowPosition="-right-[30px] -top-6"
+                      glowSize="size-[120px]"
+                      glowOpacity="opacity-30"
                     >
-                      <svg className="size-4" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                      WhatsApp
-                    </a>
-                  </SEButton>
-                  <SEButton
-                    type="button"
-                    variant="onDark"
-                    size="sm"
-                    className="bg-white text-[#1877F2]"
-                    onClick={async () => {
-                      trackShare('facebook');
-                      // Mobile: FB app hijacks facebook.com URLs and shows
-                      // a blank screen — copy the link instead (years-old
-                      // Meta bug, no client-side fix). Desktop: no app to
-                      // intercept so the web sharer works fine.
-                      const mobile =
-                        typeof navigator !== 'undefined' &&
-                        /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-                      if (mobile) {
-                        try {
-                          await navigator.clipboard.writeText(fbShareUrl);
-                          toast.success('Link copied — paste it into your Facebook post or group');
-                        } catch {
-                          toast.error('Could not copy the link. Long-press to copy it manually.');
-                        }
-                        return;
-                      }
-                      window.open(
-                        `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(fbShareUrl)}`,
-                        '_blank',
-                        'noopener,noreferrer'
-                      );
-                    }}
-                  >
-                    <svg className="size-4" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073" />
-                    </svg>
-                    Facebook
-                  </SEButton>
-                  <SEButton
-                    type="button"
-                    variant="onDark"
-                    size="sm"
-                    className="shadow-[inset_0_0_0_1px_rgba(243,236,220,0.25)]"
-                    onClick={async () => {
-                      trackShare('copy');
-                      if (typeof navigator !== 'undefined' && navigator.share) {
-                        try {
-                          await navigator.share({
-                            title: show?.name ?? 'Dog Show Entry',
-                            text: `I've just entered ${dogLabel} into ${show?.name ?? 'a show'}! \u{1F415}`,
-                            url: showUrl,
-                          });
-                          return;
-                        } catch (e) {
-                          if ((e as Error).name === 'AbortError') return;
-                        }
-                      }
-                      try {
-                        await navigator.clipboard.writeText(shareText);
-                        setShareCopied(true);
-                        toast.success('Copied! Paste into Facebook, breed groups, etc.');
-                        setTimeout(() => setShareCopied(false), 2000);
-                      } catch {
-                        toast.error('Could not copy to clipboard');
-                      }
-                    }}
-                  >
-                    {shareCopied ? (
-                      <Check className="size-4" />
-                    ) : (
-                      <Copy className="size-4" />
-                    )}
-                    {shareCopied ? 'Copied!' : 'Copy Link'}
-                  </SEButton>
+                      <div className="relative flex items-center gap-[9px]">
+                        <span className="flex size-[30px] shrink-0 items-center justify-center overflow-hidden rounded-full shadow-[inset_0_0_0_1.5px_rgba(243,236,220,0.35)]">
+                          {show.organisation?.logoUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={show.organisation.logoUrl} alt="" className="size-full object-cover" />
+                          ) : (
+                            <span className="text-[11px] font-bold text-se-cream">{clubInitials}</span>
+                          )}
+                        </span>
+                        <Eyebrow className="text-se-fresh">{clubName}</Eyebrow>
+                      </div>
+                      <p className={cn(SE_H, 'relative mt-2.5 text-[19px]')}>{ringMatesHeadline}</p>
+                      <p className="relative mt-[5px] text-xs text-se-cream/80">
+                        {format(parseISO(show.startDate), 'd MMM yyyy')}
+                        {show.venue?.name ? ` · ${show.venue.name}` : ''}
+                        {show.entryCloseDate ? ` · entries close ${format(new Date(show.entryCloseDate), 'EEE d MMM')}` : ''}
+                      </p>
+                    </SEDarkPanel>
+
+                    <div className="mt-3 flex gap-2">
+                      <SEButton asChild variant="fresh" size="sm" className="flex-1">
+                        <a
+                          href={whatsappUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => trackShare('whatsapp')}
+                        >
+                          <svg className="size-[15px]" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                          WhatsApp
+                        </a>
+                      </SEButton>
+                      <SEButton
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="flex-1"
+                        onClick={async () => {
+                          trackShare('copy');
+                          if (typeof navigator !== 'undefined' && navigator.share) {
+                            try {
+                              await navigator.share({
+                                title: show?.name ?? 'Dog Show Entry',
+                                text: `I've just entered ${dogLabel} into ${show?.name ?? 'a show'}! \u{1F415}`,
+                                url: showUrl,
+                              });
+                              return;
+                            } catch (e) {
+                              if ((e as Error).name === 'AbortError') return;
+                            }
+                          }
+                          try {
+                            await navigator.clipboard.writeText(shareText);
+                            setShareCopied(true);
+                            toast.success('Copied! Paste into Facebook, breed groups, etc.');
+                            setTimeout(() => setShareCopied(false), 2000);
+                          } catch {
+                            toast.error('Could not copy to clipboard');
+                          }
+                        }}
+                      >
+                        {shareCopied ? (
+                          <Check className="size-4" />
+                        ) : (
+                          <LinkIcon className="size-[14px]" />
+                        )}
+                        {shareCopied ? 'Copied!' : 'Copy Link'}
+                      </SEButton>
+                      <SEButton
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="flex-1"
+                        onClick={async () => {
+                          trackShare('facebook');
+                          // Mobile: FB app hijacks facebook.com URLs and shows
+                          // a blank screen — copy the link instead (years-old
+                          // Meta bug, no client-side fix). Desktop: no app to
+                          // intercept so the web sharer works fine.
+                          const mobile =
+                            typeof navigator !== 'undefined' &&
+                            /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+                          if (mobile) {
+                            try {
+                              await navigator.clipboard.writeText(fbShareUrl);
+                              toast.success('Link copied — paste it into your Facebook post or group');
+                            } catch {
+                              toast.error('Could not copy the link. Long-press to copy it manually.');
+                            }
+                            return;
+                          }
+                          window.open(
+                            `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(fbShareUrl)}`,
+                            '_blank',
+                            'noopener,noreferrer'
+                          );
+                        }}
+                      >
+                        <svg className="size-4" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073" />
+                        </svg>
+                        Facebook
+                      </SEButton>
+                    </div>
+
+                    <p className="mt-3 flex gap-[7px] text-[11.5px] leading-[1.45] text-se-ink3">
+                      <Lock className="mt-0.5 size-[13px] shrink-0" />
+                      Entirely your choice — it shares only what you see here, never your dog&apos;s details.
+                    </p>
+                  </SECard>
                 </div>
-                <p className="mt-3 text-xs italic text-se-cream/70">
-                  A share from you is worth ten from us.
-                </p>
-                <p className="mt-3 flex items-start justify-center gap-1.5 text-[11.5px] leading-relaxed text-se-cream/60">
-                  <Lock className="mt-0.5 size-3 shrink-0" />
-                  Entirely your choice — it shares only what you see here, never your dog&apos;s details.
-                </p>
-              </SEDarkPanel>
-            );
-          })()}
+              );
+            })()}
 
-          {/* Add to calendar — route already exists */}
-          <SEButton asChild variant="ghost" size="sm" className="mx-auto w-full max-w-md">
-            <a href={`/api/shows/${show.id}/calendar`}>
-              <CalendarPlus className="size-4" />
-              Add show day to calendar
-            </a>
-          </SEButton>
-
-          <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-            <SEButton asChild variant="fresh" size="sm">
-              <Link href="/entries">View My Entries</Link>
+            {/* Add to calendar — route already exists */}
+            <SEButton asChild variant="ghost" size="sm" full className="mx-auto max-w-md">
+              <a href={`/api/shows/${show.id}/calendar`}>
+                <CalendarPlus className="size-[15px]" />
+                Add show day to calendar
+              </a>
             </SEButton>
-            <SEButton
-              variant="ghost"
-              onClick={() => {
-                cart.reset();
-                setHealthDeclared(false);
-                setTermsAccepted(false);
-                setClientSecret(null);
-                setOrderId(null);
-                cart.startNewEntry();
-              }}
-            >
-              Enter More Dogs
-            </SEButton>
-          </div>
 
-          {/* Catalogue purchase note */}
-          {cart.sundryItems.some((s) => isCatalogueItem(s.name)) && (
-            <SECard className="mx-auto w-full max-w-md border-se-fresh-line bg-se-fresh-soft p-4 text-center">
-              <p className="text-sm font-semibold text-se-fresh-deep">
-                Online Catalogue Purchased
-              </p>
-              <p className="mt-1 text-xs text-se-ink2">
-                Your catalogue will be available at{' '}
-                <Link
-                  href={`/shows/${show?.slug ?? idOrSlug}/catalogue`}
-                  className="underline font-medium text-se-fresh-deep"
-                >
-                  this link
-                </Link>{' '}
-                once entries close.
-              </p>
+            {/* Order details — kept extra, moved below the calendar button
+                to the end of the flow (DEVIATIONS 4b) */}
+            <SECard className="p-4">
+              <div className="space-y-3 text-sm">
+                {orderId && (
+                  <div className="flex justify-between">
+                    <span className="text-se-ink3">Order Reference</span>
+                    <span className="font-mono font-medium text-se-ink">
+                      {orderId.slice(0, 8).toUpperCase()}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-se-ink3">Entries</span>
+                  <span className="text-se-ink">{confirmedEntries.length}</span>
+                </div>
+                {confirmedEntries.map((entry) => (
+                  <div key={entry.id} className="space-y-1">
+                    <div className="flex justify-between">
+                      <span className="font-medium text-se-ink">
+                        {entry.entryType === 'standard'
+                          ? entry.dogName
+                          : `JH: ${entry.handlerName}`}
+                      </span>
+                      <span className="text-se-ink3">{entry.classIds.length} classes</span>
+                    </div>
+                    {entry.classNames.length > 0 && (
+                      <ul className="ml-1 space-y-0.5 text-xs text-se-ink3">
+                        {entry.classNames.map((name, i) => (
+                          <li key={i}>{name}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+                <div className="flex justify-between border-t border-se-line pt-3 text-base font-bold text-se-ink">
+                  <span>Paid</span>
+                  <span>{formatCurrency(paymentAmount)}</span>
+                </div>
+              </div>
             </SECard>
-          )}
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+              <SEButton asChild variant="fresh" size="sm">
+                <Link href="/entries">View My Entries</Link>
+              </SEButton>
+              <SEButton
+                variant="ghost"
+                onClick={() => {
+                  cart.reset();
+                  setHealthDeclared(false);
+                  setTermsAccepted(false);
+                  setClientSecret(null);
+                  setOrderId(null);
+                  cart.startNewEntry();
+                }}
+              >
+                Enter More Dogs
+              </SEButton>
+            </div>
+
+            {/* Catalogue purchase note */}
+            {cart.sundryItems.some((s) => isCatalogueItem(s.name)) && (
+              <SECard className="mx-auto w-full max-w-md border-se-fresh-line bg-se-fresh-soft p-4 text-center">
+                <p className="text-sm font-semibold text-se-fresh-deep">
+                  Online Catalogue Purchased
+                </p>
+                <p className="mt-1 text-xs text-se-ink2">
+                  Your catalogue will be available at{' '}
+                  <Link
+                    href={`/shows/${show?.slug ?? idOrSlug}/catalogue`}
+                    className="underline font-medium text-se-fresh-deep"
+                  >
+                    this link
+                  </Link>{' '}
+                  once entries close.
+                </p>
+              </SECard>
+            )}
+          </div>
         </div>
         );
       })()}
@@ -2377,7 +2428,7 @@ function ClassGroup({
       <h3 className="mb-2.5 text-xs font-bold uppercase tracking-wider text-se-ink3">
         {title}
       </h3>
-      <div className="rounded-[14px] border border-se-line bg-se-surface px-3.5">
+      <div className="rounded-[14px] border border-se-line bg-se-surface px-3.5 py-0.5">
         {unlockedClasses.map((sc, i) => {
           const isSelected = selectedIds.includes(sc.id);
           const isSuggested = suggestedClassName === sc.classDefinition.name;
@@ -2386,7 +2437,7 @@ function ClassGroup({
             <label
               key={sc.id}
               className={cn(
-                'flex min-h-[44px] cursor-pointer items-center gap-3 py-2.5',
+                'flex cursor-pointer items-center gap-3 py-[11px]',
                 i > 0 && 'border-t border-se-line',
                 isIneligible && 'opacity-50',
               )}
@@ -2394,7 +2445,10 @@ function ClassGroup({
               <Checkbox
                 checked={isSelected}
                 onCheckedChange={() => onToggle(sc.id)}
-                className={cn('size-6 shrink-0 rounded-[7px] border-se-line2', SE_CHECKED_CHECKBOX_CLASS)}
+                className={cn(
+                  'size-6 sm:size-6 shrink-0 rounded-[7px] border-0 shadow-[inset_0_0_0_1.5px_var(--color-se-line2)] data-[state=checked]:shadow-none [&_svg]:size-[15px]',
+                  SE_CHECKED_CHECKBOX_CLASS,
+                )}
               />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
@@ -2415,18 +2469,18 @@ function ClassGroup({
                       </span>
                     )}
                   </span>
-                  {isSuggested && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-se-honey-soft px-2 py-0.5 text-[10.5px] font-bold text-se-honey-deep">
-                      <Star className="size-2.5" />
-                      Recommended
-                    </span>
-                  )}
                   {isIneligible && (
                     <span className="rounded-full px-2 py-0.5 text-[10.5px] text-se-ink3 shadow-[inset_0_0_0_1px_#e7e1d3]">
                       May not be eligible
                     </span>
                   )}
                 </div>
+                {isSuggested && (
+                  <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-se-honey-soft px-2 py-0.5 text-[10.5px] font-bold text-se-honey-deep">
+                    <Star className="size-[11px]" />
+                    Recommended
+                  </span>
+                )}
                 {sc.classDefinition.description && (
                   <p className="text-sm text-se-ink3">
                     {sc.classDefinition.description}
@@ -2461,12 +2515,12 @@ function ClassGroup({
           <div
             key={sc.id}
             className={cn(
-              'flex min-h-[44px] items-center gap-3 py-2.5 opacity-50',
+              'flex items-center gap-3 py-[11px] opacity-50',
               (i > 0 || unlockedClasses.length > 0 || (shouldCollapseLocked && showAllLocked)) &&
                 'border-t border-se-line',
             )}
           >
-            <div className="flex size-6 shrink-0 items-center justify-center rounded-[7px] border border-se-line2 bg-se-paper2">
+            <div className="flex size-6 shrink-0 items-center justify-center rounded-[7px] shadow-[inset_0_0_0_1.5px_var(--color-se-line2)]">
               <Lock className="size-3 text-se-ink3" />
             </div>
             <div className="min-w-0 flex-1">
