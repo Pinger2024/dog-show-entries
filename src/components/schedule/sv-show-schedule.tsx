@@ -666,7 +666,7 @@ function SvClassificationPage({
               key={idx}
               style={{
                 flexDirection: 'row',
-                paddingVertical: 3.5,
+                paddingVertical: 3,
                 borderTopWidth: idx === 0 ? 1 : 0.5,
                 borderTopColor: idx === 0 ? SV.ink : SV.rule,
               }}
@@ -719,12 +719,12 @@ function SvClassificationPage({
         {juniorHandling.length > 0 ? (
           <View
             style={{
-              marginTop: 6,
-              padding: 8,
+              marginTop: 4,
+              padding: 6,
               backgroundColor: SV.accentSoft,
             }}
           >
-            <Text style={[ss.eyebrow, { color: SV.accent, marginBottom: 4 }]}>
+            <Text style={[ss.eyebrow, { color: SV.accent, marginBottom: 3 }]}>
               Junior Handling · Judged during lunch
               {juniorHandlingJudge ? ` · ${juniorHandlingJudge}` : ''}
             </Text>
@@ -757,7 +757,7 @@ function SvClassificationPage({
       </View>
 
       {/* Footer note */}
-      <View style={{ marginTop: 8 }}>
+      <View style={{ marginTop: 5 }}>
         <View style={ss.ruleThin} />
         <Text style={[ss.displayIt, { fontSize: 9, color: SV.ink2, marginTop: 3 }]}>
           {youngRange

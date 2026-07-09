@@ -499,6 +499,7 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
   // assignments — those are surfaced via panelJudges below.
   const judgeEntries = new Map<string, {
     name: string;
+    affix: string | null;
     breeds: Set<string>;
     sexes: Set<string>;
     hasNullSexAssignment: boolean;
@@ -524,6 +525,7 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     } else {
       judgeEntries.set(key, {
         name: ja.judge.name,
+        affix: ja.judge.kennelClubAffix ?? null,
         breeds: new Set(ja.breed?.name ? [ja.breed.name] : []),
         sexes: new Set(ja.sex ? [ja.sex] : []),
         hasNullSexAssignment: !ja.sex,
@@ -575,8 +577,14 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     const namePart = `${j.name}${suffix}`;
     return {
       name: j.name,
+      affix: j.affix,
       breeds: breedArr,
       sex: j.sexes.size === 1 ? (Array.from(j.sexes)[0] as 'dog' | 'bitch') : null,
+      // role MUST be set (not just baked into displayLabel) — the SV schedule's
+      // Junior Handling banner reads judges.find(role === 'Junior Handling').
+      // Without it the JH judge silently vanished from this render path while
+      // the /api/schedule route showed it (Mandy 2026-07-09).
+      role: role ?? undefined,
       displayLabel: role ? `${role} — ${namePart}` : namePart,
     };
   });
