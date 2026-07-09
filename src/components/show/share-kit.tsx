@@ -440,37 +440,41 @@ export function ShareKit({
 }
 
 /**
- * Big invitational card variant — used inline on the show page between
- * Judges and Entry Fees.
+ * Big invitational card variant — used inline on the show page, in the
+ * "Spread the word" section.
+ *
+ * Container only is themed here (Show Experience green: dark pine gradient +
+ * fresh radial glow, matching the hero) — the <ShareKit> widget inside keeps
+ * its own light-surface styling untouched, wrapped in a small white card so
+ * its stone-toned text/borders stay legible sitting on a dark background.
  */
 export function ShareKitCard(props: ShareKitProps) {
   return (
     <section
       id={props.id}
       className={cn(
-        'mx-auto max-w-4xl scroll-mt-24 px-4 py-10 sm:px-6 sm:py-14 lg:px-8',
+        'mx-auto max-w-4xl scroll-mt-24 px-5 py-8 sm:px-6 sm:py-10',
         props.className
       )}
     >
-      <div className="relative overflow-hidden rounded-2xl border border-amber-300/50 bg-gradient-to-br from-amber-50/70 via-white to-amber-50/50 p-6 shadow-sm sm:p-10">
-        <span aria-hidden="true" className="absolute left-4 top-4 text-[10px] text-amber-500/50">◆</span>
-        <span aria-hidden="true" className="absolute right-4 top-4 text-[10px] text-amber-500/50">◆</span>
-        <span aria-hidden="true" className="absolute bottom-4 left-4 text-[10px] text-amber-500/50">◆</span>
-        <span aria-hidden="true" className="absolute bottom-4 right-4 text-[10px] text-amber-500/50">◆</span>
+      <div className="relative overflow-hidden rounded-[18px] bg-gradient-to-br from-se-deep to-se-deepest p-6 text-se-cream sm:p-8">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-10 -top-8 size-40 rounded-full bg-[radial-gradient(circle,#5bb579,transparent_70%)] opacity-30"
+        />
 
-        <div className="mx-auto max-w-2xl text-center">
-          <Share2 className="mx-auto size-6 text-amber-700" />
-          <p className="mt-3 font-serif text-[11px] uppercase italic tracking-[0.3em] text-amber-800">
-            Share this show
+        <div className="relative mx-auto max-w-2xl text-center">
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-se-fresh">
+            Spread the word
           </p>
-          <h3 className="mt-2 font-serif text-2xl font-bold leading-tight text-stone-900 sm:text-3xl">
-            Share with the apps on your phone
+          <h3 className="mt-2 text-2xl font-extrabold leading-tight sm:text-[28px]">
+            Every share sells a few more entries.
           </h3>
-          <p className="mx-auto mt-3 max-w-lg text-stone-700">
+          <p className="mx-auto mt-2 max-w-lg text-[13px] text-se-cream/70">
             Open the phone share sheet, then choose Facebook, Instagram, Messages, email or anything else installed.
           </p>
 
-          <div className="mt-8">
+          <div className="mt-6 rounded-2xl bg-se-surface p-4 text-left sm:p-5">
             <ShareKit {...props} compact id={undefined} className={undefined} />
           </div>
         </div>

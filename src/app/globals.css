@@ -48,6 +48,30 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
+
+  /* Show Experience (green) theme — scoped, opt-in tokens.
+   * These are additive: new `se-*` color names only, nothing existing
+   * is overridden. Pages opt in via the `.show-exp` wrapper class below. */
+  --color-se-paper: #f6f4ec;
+  --color-se-paper2: #efe9db;
+  --color-se-surface: #ffffff;
+  --color-se-ink: #1b241d;
+  --color-se-ink2: #535c4d;
+  --color-se-ink3: #8a9182;
+  --color-se-deep: #20452c;
+  --color-se-deepest: #152e1d;
+  --color-se-green: #2f6b43;
+  --color-se-fresh: #5bb579;
+  --color-se-fresh-deep: #2f8a52;
+  --color-se-fresh-soft: #e4f2e7;
+  --color-se-fresh-line: #c3e2cb;
+  --color-se-honey: #e6a53a;
+  --color-se-honey-deep: #b9781a;
+  --color-se-honey-soft: #f8ecd4;
+  --color-se-honey-ink: #3a2606;
+  --color-se-line: #e7e1d3;
+  --color-se-line2: #d7cfba;
+  --color-se-cream: #f3ecdc;
 }
 
 :root {
@@ -222,6 +246,19 @@
 }
 .scrollbar-none::-webkit-scrollbar {
   display: none;
+}
+
+/* ============================================================
+ * Show Experience (green) theme — opt-in wrapper.
+ * Add `.show-exp` to a page's root element to switch to Hanken
+ * Grotesk (loaded per-route in src/app/(shows)/layout.tsx via the
+ * --font-hanken variable) + the warm paper background. Everything
+ * else keeps rendering Inter/default theme until it opts in.
+ * ============================================================ */
+.show-exp {
+  font-family: var(--font-hanken), ui-sans-serif, system-ui, sans-serif;
+  background-color: #f6f4ec;
+  color: #1b241d;
 }
 
 /* CC celebration shimmer animation */

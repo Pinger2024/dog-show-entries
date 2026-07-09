@@ -2,12 +2,12 @@
 
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { format, parseISO, differenceInSeconds, differenceInDays } from 'date-fns';
+import { format, parseISO, differenceInDays } from 'date-fns';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Clock,
   MapPin,
-  ChevronRight,
+  ChevronLeft,
   Ticket,
   Trophy,
   Crown,
@@ -17,7 +17,9 @@ import {
   X,
   Info,
   PoundSterling,
-  ExternalLink,
+  CreditCard,
+  Check,
+  Lock,
   Share2,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
@@ -35,6 +37,17 @@ import { ShareKitDialog } from '@/components/show/share-kit-dialog';
 import { ShareKitCard } from '@/components/show/share-kit';
 import { cn } from '@/lib/utils';
 import { captureReferralSource } from '@/lib/referral-source';
+import { useCountdown } from '@/components/show-experience/use-countdown';
+import {
+  Eyebrow,
+  SecLabel,
+  Pulse,
+  Chip,
+  SEButton,
+  SECard,
+  HoneyBanner,
+  CountdownCells,
+} from '@/components/show-experience/kit';
 
 type PreviewShowClass = {
   id: string;
@@ -74,88 +87,17 @@ function formatPublicClassName(sc: PreviewShowClass): string {
 
 /* ─── Decorative components ─────────────────────── */
 
-function RosetteWatermark() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 200 200"
-      className="pointer-events-none absolute left-1/2 top-8 -translate-x-1/2 opacity-[0.06] sm:top-14"
-      width="340"
-      height="340"
-    >
-      <g fill="currentColor" className="text-amber-800">
-        {Array.from({ length: 16 }).map((_, i) => {
-          const angle = (i * 360) / 16;
-          return (
-            <ellipse
-              key={i}
-              cx="100"
-              cy="60"
-              rx="12"
-              ry="34"
-              transform={`rotate(${angle} 100 100)`}
-            />
-          );
-        })}
-        <circle cx="100" cy="100" r="22" />
-        <circle cx="100" cy="100" r="14" fill="#fbf7ef" />
-      </g>
-    </svg>
-  );
-}
-
 function ClubMedallion({ logoUrl, initials }: { logoUrl?: string | null; initials: string }) {
   return (
-    <div className="relative">
-      {/* Decorative outer gold ring */}
-      <div aria-hidden="true" className="absolute inset-0 rounded-full bg-gradient-to-br from-amber-300 via-amber-500/70 to-amber-600 p-[2px] shadow-[0_4px_30px_rgba(217,119,6,0.15)]">
-        <div className="size-full rounded-full bg-[#fbf7ef]" />
-      </div>
-      {/* Inner medallion */}
-      <div className="relative flex size-36 items-center justify-center rounded-full bg-white p-4 shadow-inner ring-1 ring-amber-100 sm:size-44 sm:p-5">
+    <div className="relative shrink-0 w-fit rounded-full ring-2 ring-se-fresh/50">
+      <div className="flex size-[84px] items-center justify-center rounded-full bg-se-surface p-3 shadow-[0_8px_28px_rgba(0,0,0,0.3)]">
         {logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={logoUrl} alt="" className="size-full object-contain" />
         ) : (
-          <span className="font-serif text-4xl font-bold text-amber-900 sm:text-5xl">{initials}</span>
+          <span className="text-3xl font-extrabold text-se-green">{initials}</span>
         )}
       </div>
-      {/* Corner dots — certificate-style */}
-      <span aria-hidden="true" className="absolute -left-3 top-1/2 -translate-y-1/2 text-amber-500/40">◆</span>
-      <span aria-hidden="true" className="absolute -right-3 top-1/2 -translate-y-1/2 text-amber-500/40">◆</span>
-    </div>
-  );
-}
-
-function DividerDiamond() {
-  return (
-    <span aria-hidden="true" className="text-[8px] text-amber-500/60">◆</span>
-  );
-}
-
-function OrnamentalDivider({ label, className }: { label?: string; className?: string }) {
-  return (
-    <div className={cn('mx-auto flex max-w-md items-center gap-3', className)}>
-      <span className="h-px flex-1 bg-gradient-to-r from-transparent via-amber-500/40 to-amber-500/70" />
-      <span aria-hidden="true" className="text-amber-600">◆</span>
-      {label && (
-        <span className="font-serif text-[11px] italic tracking-[0.35em] text-amber-800">
-          {label}
-        </span>
-      )}
-      <span aria-hidden="true" className="text-amber-600">◆</span>
-      <span className="h-px flex-1 bg-gradient-to-l from-transparent via-amber-500/40 to-amber-500/70" />
-    </div>
-  );
-}
-
-function EditorialStat({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
-  return (
-    <div className="px-2 sm:px-4">
-      <p className={cn('font-serif text-4xl font-bold leading-none sm:text-5xl', highlight ? 'text-amber-700' : 'text-stone-900')}>
-        {value}
-      </p>
-      <p className="mt-1.5 font-serif text-[10px] uppercase tracking-[0.3em] text-stone-500">{label}</p>
     </div>
   );
 }
@@ -172,63 +114,23 @@ function getInitials(name: string) {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-/* ─── Live countdown (ticking) ───────────────────── */
+/* ─── Live countdown (ticking, sticky-bar chip) ──── */
+/* useCountdown lives in @/components/show-experience/use-countdown — extracted
+ * for reuse by the Show Experience kit. The hero countdown now uses the kit's
+ * <CountdownCells dark /> directly; this narrower ticker only feeds the
+ * sticky action bar's inline "Closes in HH:MM:SS" chip. */
 
-function useCountdown(target: Date | null) {
-  const [, tick] = useState(0);
-  useEffect(() => {
-    if (!target) return;
-    const id = setInterval(() => tick((v) => v + 1), 1000);
-    return () => clearInterval(id);
-  }, [target]);
-  if (!target) return null;
-  const secs = Math.max(0, differenceInSeconds(target, new Date()));
-  const d = Math.floor(secs / 86400);
-  const h = Math.floor((secs % 86400) / 3600);
-  const m = Math.floor((secs % 3600) / 60);
-  const s = secs % 60;
-  return { d, h, m, s, totalSecs: secs };
-}
-
-function CountdownTicker({ target, variant = 'hero' }: { target: Date; variant?: 'hero' | 'bar' }) {
+function CountdownTicker({ target }: { target: Date }) {
   const c = useCountdown(target);
   if (!c) return null;
-  const urgent = c.d <= 3;
   const veryUrgent = c.totalSecs <= 86400;
-  const tone = veryUrgent
-    ? 'text-red-600'
-    : urgent
-      ? 'text-amber-600'
-      : variant === 'hero'
-        ? 'text-stone-900'
-        : 'text-stone-700';
-  if (variant === 'bar') {
-    return (
-      <span className={cn('font-mono text-xs tabular-nums font-semibold', tone)}>
-        {c.d > 0 ? `${c.d}d ` : ''}
-        {String(c.h).padStart(2, '0')}:{String(c.m).padStart(2, '0')}:{String(c.s).padStart(2, '0')}
-      </span>
-    );
-  }
+  const urgent = c.d <= 3;
+  const tone = veryUrgent ? 'text-red-600' : urgent ? 'text-se-honey-deep' : 'text-se-ink';
   return (
-    <div className="flex items-baseline gap-2">
-      <CountdownPart label="days" value={c.d} tone={tone} />
-      <span className={cn('font-serif text-2xl', tone)}>:</span>
-      <CountdownPart label="hrs" value={c.h} tone={tone} />
-      <span className={cn('font-serif text-2xl', tone)}>:</span>
-      <CountdownPart label="min" value={c.m} tone={tone} />
-      <span className={cn('font-serif text-2xl', tone)}>:</span>
-      <CountdownPart label="sec" value={c.s} tone={tone} />
-    </div>
-  );
-}
-
-function CountdownPart({ label, value, tone }: { label: string; value: number; tone: string }) {
-  return (
-    <div className="flex flex-col items-center">
-      <span className={cn('font-serif text-3xl font-bold tabular-nums sm:text-4xl', tone)}>{String(value).padStart(2, '0')}</span>
-      <span className="text-[10px] font-medium uppercase tracking-widest text-stone-500">{label}</span>
-    </div>
+    <span className={cn('font-semibold tabular-nums', tone)}>
+      {c.d > 0 ? `${c.d}d ` : ''}
+      {String(c.h).padStart(2, '0')}:{String(c.m).padStart(2, '0')}:{String(c.s).padStart(2, '0')}
+    </span>
   );
 }
 
@@ -246,75 +148,122 @@ type JudgeData = {
   kcNumber?: string | null;
 };
 
+/** Judge bio — clamped to ~4 lines with a Read more/less toggle when long. */
+function JudgeBio({ bio }: { bio: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = bio.length > 220;
+  return (
+    <div className="mt-3 border-t border-se-line pt-3">
+      <p className={cn('text-[12.5px] leading-relaxed text-se-ink2', !expanded && isLong && 'line-clamp-4')}>
+        {bio}
+      </p>
+      {isLong && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-1.5 text-[12px] font-semibold text-se-fresh-deep"
+        >
+          {expanded ? 'Show less' : 'Read more'}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function JudgeCard({ judge, classCount }: { judge: JudgeData; classCount?: number }) {
   const initials = getInitials(judge.name);
   return (
-    <article className="group relative overflow-hidden rounded-2xl border border-amber-200/60 bg-gradient-to-b from-white to-amber-50/30 shadow-sm transition-shadow hover:shadow-md">
-      {/* Certificate-style corner marks */}
-      <span aria-hidden="true" className="absolute left-3 top-3 text-[8px] text-amber-500/50">◆</span>
-      <span aria-hidden="true" className="absolute right-3 top-3 text-[8px] text-amber-500/50">◆</span>
-
-      <div className="flex flex-col items-center gap-4 px-5 pb-5 pt-8 text-center sm:pt-10">
-        {/* Medallion */}
-        <div className="relative">
-          <div aria-hidden="true" className="absolute inset-0 rounded-full bg-gradient-to-br from-amber-300 via-amber-500/80 to-amber-600 p-[2px]">
-            <div className="size-full rounded-full bg-white" />
+    <SECard className="p-4 sm:p-[18px]">
+      <div className="flex items-center gap-3">
+        {judge.photoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={judge.photoUrl}
+            alt={judge.name}
+            className="size-[52px] shrink-0 rounded-full object-cover"
+          />
+        ) : (
+          <div
+            aria-hidden="true"
+            className="flex size-[52px] shrink-0 items-center justify-center rounded-full border border-se-fresh-line bg-se-fresh-soft text-lg font-semibold text-se-fresh-deep"
+          >
+            {initials}
           </div>
-          {judge.photoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={judge.photoUrl}
-              alt={judge.name}
-              className="relative size-20 rounded-full object-cover sm:size-24"
-            />
-          ) : (
-            <div
-              aria-hidden="true"
-              className="relative flex size-20 items-center justify-center rounded-full bg-gradient-to-br from-amber-50 to-amber-100 font-serif text-2xl font-bold text-amber-900 sm:size-24 sm:text-3xl"
-            >
-              {initials}
-            </div>
-          )}
-        </div>
-
-        <div>
-          <h3 className="font-serif text-lg font-bold leading-tight text-stone-900 sm:text-xl">{judge.name}</h3>
-          {judge.affix && (
-            <p className="mt-0.5 text-sm italic text-amber-700">({judge.affix})</p>
-          )}
-          <OrnamentalDivider className="mt-3" />
-          <p className="mt-3 font-serif text-sm italic text-stone-700">{judge.role}</p>
-          {classCount !== undefined && classCount > 0 && (
-            <p className="mt-1 text-xs font-semibold uppercase tracking-[0.2em] text-amber-800">
-              {classCount} {classCount === 1 ? 'Class' : 'Classes'}
-            </p>
-          )}
+        )}
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate text-[19px] font-semibold leading-tight text-se-ink">
+            {judge.name}{' '}
+            {judge.affix && <span className="text-sm font-normal italic text-se-ink3">({judge.affix})</span>}
+          </h3>
+          <p className="mt-0.5 text-[12.5px] text-se-ink2">
+            {judge.role}
+            {classCount !== undefined && classCount > 0
+              ? ` · ${classCount} ${classCount === 1 ? 'class' : 'classes'}`
+              : ''}
+          </p>
         </div>
       </div>
 
       {(judge.jepLevel || judge.kcNumber) && (
-        <div className="flex flex-wrap items-center justify-center gap-1.5 border-t border-amber-200/50 bg-amber-50/40 px-5 py-2.5">
+        <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-se-line pt-3">
           {judge.jepLevel && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+            <Chip tone="fresh">
               <ShieldCheck className="size-3" />
               JEP {judge.jepLevel}
-            </span>
+            </Chip>
           )}
-          {judge.kcNumber && (
-            <span className="rounded-full border border-stone-200 bg-white px-2 py-0.5 text-[11px] font-medium text-stone-600">
-              RKC · {judge.kcNumber}
-            </span>
-          )}
+          {judge.kcNumber && <Chip>RKC · {judge.kcNumber}</Chip>}
         </div>
       )}
 
       {judge.breeds.length > 0 && judge.breeds.length <= 5 && (
-        <div className="border-t border-amber-200/50 px-5 py-3 text-center">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-stone-500">Judging</p>
-          <p className="mt-1 font-serif text-sm italic text-stone-700">{judge.breeds.join(' · ')}</p>
+        <p className="mt-3 border-t border-se-line pt-3 text-[12.5px] italic text-se-ink2">
+          {judge.breeds.join(' · ')}
+        </p>
+      )}
+
+      {judge.bio && <JudgeBio bio={judge.bio} />}
+    </SECard>
+  );
+}
+
+/** Desktop (lg+) judge row — a denser horizontal layout for the 2-col judges
+ *  grid in the desktop composition, vs JudgeCard's vertical mobile layout. */
+function JudgeRowD({ judge, classCount }: { judge: JudgeData; classCount?: number }) {
+  const initials = getInitials(judge.name);
+  return (
+    <div className="flex items-center gap-3.5 py-3.5">
+      {judge.photoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={judge.photoUrl}
+          alt={judge.name}
+          className="size-[54px] shrink-0 rounded-full object-cover"
+        />
+      ) : (
+        <div
+          aria-hidden="true"
+          className="flex size-[54px] shrink-0 items-center justify-center rounded-full border border-se-fresh-line bg-se-fresh-soft text-lg font-semibold text-se-fresh-deep"
+        >
+          {initials}
         </div>
       )}
-    </article>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[19px] font-semibold leading-tight text-se-ink">
+          {judge.name}{' '}
+          {judge.affix && <span className="text-sm font-normal italic text-se-ink3">({judge.affix})</span>}
+        </p>
+        <p className="mt-0.5 text-[12.5px] text-se-ink2">
+          {judge.role}
+          {classCount !== undefined && classCount > 0
+            ? ` · ${classCount} ${classCount === 1 ? 'class' : 'classes'}`
+            : ''}
+        </p>
+        {judge.bio && (
+          <p className="mt-1.5 line-clamp-2 text-[12.5px] leading-relaxed text-se-ink2">{judge.bio}</p>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -586,13 +535,13 @@ export function ShowPreviewClient() {
 
   if (isLoading || !show) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-amber-50/40 to-white">
+      <div className="show-exp min-h-screen bg-se-paper">
         <div className="mx-auto max-w-4xl px-4 py-12">
-          <div className="h-4 w-24 animate-pulse rounded bg-stone-200" />
-          <div className="mt-4 h-12 w-3/4 animate-pulse rounded bg-stone-200" />
+          <div className="h-4 w-24 animate-pulse rounded bg-se-line2" />
+          <div className="mt-4 h-12 w-3/4 animate-pulse rounded bg-se-line2" />
           <div className="mt-8 grid gap-4 sm:grid-cols-3">
             {[0, 1, 2].map((i) => (
-              <div key={i} className="h-24 animate-pulse rounded-xl bg-stone-200/80" />
+              <div key={i} className="h-24 animate-pulse rounded-xl bg-se-line2/70" />
             ))}
           </div>
         </div>
@@ -633,6 +582,8 @@ export function ShowPreviewClient() {
       acceptsNfc?: boolean;
       futureShowDates?: string;
       additionalNotes?: string;
+      directions?: string;
+      what3words?: string;
     };
   };
 
@@ -647,36 +598,30 @@ export function ShowPreviewClient() {
   const isOpen = show.status === 'entries_open' && !closeDatePast;
   const daysToClose = entryCloseDate ? differenceInDays(entryCloseDate, new Date()) : null;
   const showDate = format(parseISO(show.startDate), 'EEEE d MMMM yyyy');
-  const dayName = format(parseISO(show.startDate), 'EEEE');
-  const dayNum = format(parseISO(show.startDate), 'd');
-  const monthYear = format(parseISO(show.startDate), 'MMMM yyyy');
+  const showYear = format(parseISO(show.startDate), 'yyyy');
   const showType = displayShowTypeLabel(show.showType, show.showRuleset);
   const totalClasses = (show.showClasses ?? []).length;
+  const breedCount = breedGroups.filter((g) => !g.isJH && !g.isSac).length;
   // Main show sponsors — Title and Show tiers both head the page.
   // Class / Prize / Advertiser tiers stay off the public page per
   // Amanda 2026-05-28 (keep the hero about the headline backers).
   const mainSponsors = (showSponsors ?? []).filter(
     (s) => s.tier === 'title' || s.tier === 'show',
   );
+  const kcRegNumber = (org as { kcRegNumber?: string | null } | null | undefined)?.kcRegNumber;
+  const what3words = showAny.scheduleData?.what3words?.replace(/^\/+/, '');
+
+  // Desktop right-rail quick facts — only cells backed by real data.
+  const quickFacts: Array<[string, string]> = [
+    ['Date', format(parseISO(show.startDate), 'EEE d MMM')],
+  ];
+  if (showAny.startTime) quickFacts.push(['Judging', showAny.startTime]);
+  if (venue) quickFacts.push(['Venue', venue.name]);
+  if (showAny.showOpenTime) quickFacts.push(['Doors', showAny.showOpenTime]);
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* ──────────────────────────── Breadcrumb ──────────────────────────── */}
-      <nav aria-label="Breadcrumb" className="border-b bg-stone-50/50">
-        <ol className="mx-auto flex max-w-6xl items-center gap-1.5 px-3 py-2.5 text-xs sm:px-4 sm:text-sm lg:px-6">
-          <li>
-            <Link href="/shows" className="text-stone-500 hover:text-stone-800">Shows</Link>
-          </li>
-          <ChevronRight className="size-3 text-stone-400" />
-          <li className="truncate">
-            <span className="text-stone-500 hover:text-stone-800">{org?.name ?? 'Club'}</span>
-          </li>
-          <ChevronRight className="size-3 text-stone-400" />
-          <li className="truncate font-medium text-stone-900">{show.name}</li>
-        </ol>
-      </nav>
-
-      {/* ──────────────────────────── Hero ─────────────────────────────────── */}
+    <div className="show-exp min-h-screen bg-se-paper text-se-ink">
+      {/* ──────────────────────────── Banner (if set) ─────────────────────── */}
       {showAny.bannerImageUrl && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -685,187 +630,111 @@ export function ShowPreviewClient() {
           className="h-44 w-full object-cover sm:h-60 lg:h-80"
         />
       )}
-      <header className="relative overflow-hidden bg-[#fbf7ef]">
-        {/* Layered background — warm cream + rosette watermark + radial highlight */}
-        <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-br from-amber-50/50 via-white/30 to-amber-50/30" />
-        <div aria-hidden="true" className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(217,119,6,0.08),transparent_55%)]" />
-        <RosetteWatermark />
-        {/* Gold hairlines */}
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-600/50 to-transparent" />
-        <div className="absolute inset-x-0 top-[2px] h-px bg-gradient-to-r from-transparent via-amber-400/30 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-amber-600/40 to-transparent" />
 
-        <div className="relative mx-auto max-w-4xl px-4 pb-14 pt-12 sm:px-6 sm:pb-20 sm:pt-16 lg:px-8 lg:pb-24 lg:pt-24">
-          {/* Top-right cluster: Share + Remi hallmark */}
-          <div className="absolute right-4 top-4 flex items-center gap-2 sm:right-6 sm:top-6">
-            <button
-              type="button"
-              onClick={async () => {
-                const url =
-                  typeof window !== 'undefined'
-                    ? `${window.location.origin}/shows/${slug}?src=hero`
-                    : `https://remishowmanager.co.uk/shows/${slug}?src=hero`;
-                if (typeof navigator !== 'undefined' && navigator.share) {
-                  try {
-                    await navigator.share({ title: show.name, url });
-                    return;
-                  } catch (e) {
-                    if ((e as Error).name === 'AbortError') return;
-                  }
-                }
-                // Fallback on desktop without Web Share: scroll to the
-                // "Tell a fellow exhibitor" section where the big buttons live.
-                document
-                  .getElementById('share-invitation')
-                  ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              }}
-              aria-label="Share this show"
-              className="flex size-7 items-center justify-center rounded-full border border-amber-400/50 bg-white/80 text-amber-800 shadow-sm backdrop-blur-sm transition-colors hover:border-amber-600 hover:bg-white hover:text-amber-900"
-            >
-              <Share2 className="size-3.5" />
-            </button>
+      {/* ──────────────────────────── Hero (mobile/tablet) ─────────────────── */}
+      <header className="relative overflow-hidden bg-gradient-to-b from-se-deep to-se-deepest pb-6 lg:hidden">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-20 -top-16 size-64 rounded-full bg-[radial-gradient(circle,#5bb579,transparent_68%)] opacity-25"
+        />
+
+        <div className="relative mx-auto max-w-4xl px-5 pt-3 sm:px-6">
+          {/* Breadcrumb/back row + wordmark */}
+          <div className="flex items-center justify-between">
             <Link
-              href="/"
-              className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-white/70 px-2.5 py-1 font-serif text-[10px] uppercase tracking-[0.2em] text-primary backdrop-blur-sm transition-colors hover:border-primary hover:bg-white"
-              aria-label="Listed on Remi"
+              href="/shows"
+              className="inline-flex min-h-11 items-center gap-1 text-[13.5px] font-semibold text-se-cream/70 transition-colors hover:text-se-cream"
             >
-              <span aria-hidden="true" className="text-[8px] text-primary/70">◆</span>
-              <span className="font-semibold">Remi</span>
+              <ChevronLeft className="size-[18px]" />
+              Shows
             </Link>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={async () => {
+                  const url =
+                    typeof window !== 'undefined'
+                      ? `${window.location.origin}/shows/${slug}?src=hero`
+                      : `https://remishowmanager.co.uk/shows/${slug}?src=hero`;
+                  if (typeof navigator !== 'undefined' && navigator.share) {
+                    try {
+                      await navigator.share({ title: show.name, url });
+                      return;
+                    } catch (e) {
+                      if ((e as Error).name === 'AbortError') return;
+                    }
+                  }
+                  // Fallback on desktop without Web Share: scroll to the
+                  // "Spread the word" section where the big buttons live.
+                  document
+                    .getElementById('share-invitation')
+                    ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+                aria-label="Share this show"
+                className="flex size-9 items-center justify-center rounded-full text-se-cream/80 transition-colors hover:text-se-cream"
+              >
+                <Share2 className="size-4" />
+              </button>
+              <Link
+                href="/"
+                aria-label="Remi"
+                className="inline-flex items-center gap-1.5 text-[15px] font-extrabold text-se-cream"
+              >
+                <span aria-hidden="true" className="size-1.5 rounded-full bg-se-fresh" />
+                Remi
+              </Link>
+            </div>
           </div>
 
-          {/* Tiny notice label — heritage programme feel */}
-          <p className="text-center text-[10px] font-semibold uppercase tracking-[0.4em] text-amber-800/70">
-            Notice of Show
+          {/* Club crest + club name as the headline identity */}
+          <div className="mt-5">
+            <ClubMedallion logoUrl={org?.logoUrl} initials={getInitials(org?.name ?? '?')} />
+          </div>
+          <h1 className="mt-4 max-w-2xl text-[2.15rem] font-extrabold leading-[1.03] text-se-cream sm:text-[2.5rem]">
+            {org?.name}
+          </h1>
+          <p className="mt-2 text-lg font-medium italic text-se-fresh">
+            {show.name} {showYear}
+          </p>
+          <p className="mt-2 text-[13px] text-se-cream/80">
+            {showDate}
+            {venue ? ` · ${venue.name}` : ''}
           </p>
 
-          {/* Club crest — on an ornamented medallion */}
-          <div className="mt-6 flex flex-col items-center">
-            <ClubMedallion logoUrl={org?.logoUrl} initials={getInitials(org?.name ?? '?')} />
-            <h2 className="mt-7 max-w-2xl text-center font-serif text-2xl font-bold uppercase leading-tight tracking-[0.05em] text-stone-900 sm:text-3xl lg:text-[2rem]">
-              {org?.name}
-            </h2>
-            {(org as { kcRegNumber?: string | null } | null | undefined)?.kcRegNumber && (
-              <div className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] font-medium text-stone-600 sm:text-xs">
-                <span className="inline-flex items-center gap-1.5">
-                  <ShieldCheck className="size-3.5 text-amber-700" />
-                  RKC Registered
-                </span>
-              </div>
+          {/* Chip row */}
+          <div className="mt-4 flex flex-wrap gap-1.5">
+            {isOpen && (
+              <Chip tone="onDark">
+                <Pulse /> Entries open
+              </Chip>
+            )}
+            <Chip tone="onDark">
+              <Crown className="size-3" /> {showType}
+            </Chip>
+            {singleBreedName && <Chip tone="onDark">{singleBreedName}</Chip>}
+            {kcRegNumber && (
+              <Chip tone="onDark">
+                <ShieldCheck className="size-3" /> RKC Registered
+              </Chip>
             )}
           </div>
 
-          {/* Ornate 'presents' divider */}
-          <OrnamentalDivider label="presents" className="mt-10 sm:mt-12" />
-
-          {/* Show type */}
-          <div className="mt-6 flex justify-center">
-            <span className="inline-flex items-center gap-2 rounded-full border border-amber-400/60 bg-amber-50 px-3.5 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-amber-900">
-              <Crown className="size-3" />
-              {showType}
-            </span>
-          </div>
-
-          {/* Show name — the event itself */}
-          <h1 className="mt-5 text-center font-serif text-[2.5rem] font-bold leading-[1.02] text-stone-900 sm:text-5xl lg:text-6xl">
-            {show.name}
-          </h1>
-
-          {/* Thin rule + year */}
-          <div className="mt-6 flex items-center justify-center gap-3">
-            <span className="h-px w-12 bg-amber-500/50" />
-            <span className="font-serif text-xs italic tracking-[0.3em] text-stone-500">
-              {format(parseISO(show.startDate), 'yyyy')}
-            </span>
-            <span className="h-px w-12 bg-amber-500/50" />
-          </div>
-
-          {/* Editorial date / venue / rhythm */}
-          <div className="mt-10 grid gap-6 text-center sm:mt-12 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-10">
-            {/* Date column */}
-            <div className="flex flex-col items-center">
-              <span className="font-serif text-[11px] uppercase tracking-[0.3em] text-stone-500">{dayName}</span>
-              <span className="mt-1 font-serif text-7xl font-bold leading-none text-stone-900 sm:text-[5.5rem]">{dayNum}</span>
-              <span className="mt-1 font-serif text-sm italic tracking-[0.15em] text-stone-600">{monthYear}</span>
-            </div>
-
-            {/* Center: venue */}
-            {venue && (
-              <div className="border-y border-amber-500/20 py-4 sm:border-x sm:border-y-0 sm:px-10">
-                <p className="font-serif text-[10px] uppercase tracking-[0.3em] text-amber-800/70">At</p>
-                <p className="mt-1.5 font-serif text-lg font-bold leading-tight text-stone-900 sm:text-xl">{venue.name}</p>
-                <p className="mt-0.5 text-sm text-stone-600">{venue.postcode ?? venue.address ?? ''}</p>
-              </div>
-            )}
-
-            {/* Right: rhythm */}
-            {(showAny.showOpenTime || showAny.startTime) && (
-              <div className="flex flex-col items-center gap-1 text-sm text-stone-700">
-                {showAny.showOpenTime && (
-                  <div>
-                    <p className="font-serif text-[10px] uppercase tracking-[0.3em] text-stone-500">Doors</p>
-                    <p className="mt-0.5 font-serif text-lg font-semibold text-stone-900">{showAny.showOpenTime}</p>
-                  </div>
-                )}
-                {showAny.startTime && (
-                  <div className="mt-2">
-                    <p className="font-serif text-[10px] uppercase tracking-[0.3em] text-stone-500">Judging</p>
-                    <p className="mt-0.5 font-serif text-lg font-semibold text-stone-900">{showAny.startTime}</p>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Countdown — elegant, inline. Always render the absolute
-              close date alongside the countdown (Amanda 2026-05-27: a
-              BAGSD user was confused by "22 days" because the actual
-              date wasn't visible on mobile — was sm:block only). */}
-          {isOpen && entryCloseDate && (
-            <div className="mt-12 flex flex-col items-center gap-3 sm:flex-row sm:justify-center sm:gap-6">
-              <p className="font-serif text-[10px] uppercase tracking-[0.3em] text-amber-800/80">
-                Entries close in
-              </p>
-              <div className="inline-flex items-center gap-2 rounded-full border border-amber-400/50 bg-white/70 px-4 py-2 shadow-sm ring-1 ring-amber-100 backdrop-blur-sm">
-                <HeroCountdown target={entryCloseDate} />
-              </div>
-              <p className="text-xs text-stone-500">{format(entryCloseDate, 'EEE d MMM · HH:mm')}</p>
-            </div>
-          )}
-
-          {/* Stats — editorial row with hairline separators. Entry counts
-              (dogs, exhibitors) are intentionally omitted — secretaries
-              want the option to hold those back from the public until
-              after the close date. Classes and Breeds come from the
-              published card and are safe to show. */}
-          {totalClasses > 0 && (
-            <div className="mt-10 sm:mt-12">
-              <div className="mx-auto grid max-w-xl grid-cols-2 divide-amber-500/20 text-center sm:divide-x">
-                <EditorialStat label="Classes" value={totalClasses} highlight />
-                <EditorialStat label="Breeds" value={breedGroups.filter((g) => !g.isJH && !g.isSac).length} />
-              </div>
-            </div>
-          )}
-
+          {/* Sponsors — Title/Show tiers only (Amanda 2026-05-28) */}
           {mainSponsors.length > 0 && (
-            <div className="mt-12 flex flex-col items-center gap-4 border-t border-amber-500/20 pt-8">
-              <span className="font-serif text-[10px] uppercase tracking-[0.3em] text-amber-800/80">
+            <div className="mt-6 flex flex-col items-center gap-3 border-t border-se-cream/15 pt-5 text-center">
+              <Eyebrow className="text-se-fresh/80">
                 {mainSponsors.length === 1 ? 'In association with' : 'Proudly sponsored by'}
-              </span>
-              <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-4">
+              </Eyebrow>
+              <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-3">
                 {mainSponsors.map((s) => (
                   <div key={s.id} className="flex items-center">
                     {s.sponsor.logoUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={s.sponsor.logoUrl}
-                        alt={s.sponsor.name}
-                        className="h-10 object-contain sm:h-12"
-                      />
-                    ) : (
-                      <span className="font-serif text-base font-semibold text-stone-900 sm:text-lg">
-                        {s.sponsor.name}
+                      <span className="flex h-9 items-center rounded-lg bg-se-cream/95 px-2.5 sm:h-10">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={s.sponsor.logoUrl} alt={s.sponsor.name} className="h-6 object-contain sm:h-7" />
                       </span>
+                    ) : (
+                      <span className="text-sm font-semibold text-se-cream">{s.sponsor.name}</span>
                     )}
                   </div>
                 ))}
@@ -873,21 +742,56 @@ export function ShowPreviewClient() {
             </div>
           )}
         </div>
+
+        {/* Entries-close banner — always paired with the absolute date next
+            to the countdown (Amanda 2026-05-27: "22 days" alone confused a
+            BAGSD user because the actual date wasn't visible). */}
+        {isOpen && entryCloseDate && (
+          <div className="relative mx-auto mt-6 max-w-4xl px-5 sm:px-6">
+            <HoneyBanner date={format(entryCloseDate, 'EEE d MMM')}>
+              <CountdownCells target={entryCloseDate} dark />
+            </HoneyBanner>
+          </div>
+        )}
       </header>
+
+      {/* ──────────────────────────── Hero (desktop, lg+) ───────────────────
+          Keeps the site's real <Header/> (rendered by the (shows) layout)
+          above this — no duplicate back-link/wordmark row here. */}
+      <div className="relative hidden h-[260px] overflow-hidden bg-[linear-gradient(120deg,#20452c,#152e1d)] lg:block">
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 bg-[linear-gradient(105deg,#152e1d_12%,rgba(21,46,29,0.72)_40%,rgba(21,46,29,0.1)_100%)]"
+        />
+        <div className="absolute left-11 top-1/2 max-w-xl -translate-y-1/2">
+          <div className="flex items-center gap-3.5">
+            <div className="flex size-[72px] shrink-0 items-center justify-center rounded-full bg-se-surface p-3 ring-[3px] ring-se-cream">
+              {org?.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={org.logoUrl} alt="" className="size-full object-contain" />
+              ) : (
+                <span className="text-2xl font-extrabold text-se-green">{getInitials(org?.name ?? '?')}</span>
+              )}
+            </div>
+            {venue && <p className="text-[13px] text-se-cream/85">{venue.name}</p>}
+          </div>
+          <h1 className="mt-4 text-[2.875rem] font-extrabold leading-none text-se-cream">{org?.name}</h1>
+          <p className="mt-2 text-xl font-medium italic text-se-fresh">
+            {show.name} {showYear}
+          </p>
+        </div>
+      </div>
 
       {/* ─── LIVE RESULTS banner — appears as soon as ANY class has been
            published, regardless of whether the show is formally
-           "in_progress". Drops to a calmer "Results available" tone
-           once the show is completed so the pulsing dot doesn't carry
-           on weeks later. ── */}
+           "in_progress". Drops to a calmer tone once the show is completed
+           so the pulsing dot doesn't carry on weeks later. ── */}
       {(showAny.hasPublishedResults || show.status === 'in_progress') && (
         <Link
           href={`/shows/${slug}/results`}
           className={cn(
-            'block text-white shadow-md transition-opacity hover:opacity-95',
-            show.status === 'completed'
-              ? 'bg-gradient-to-r from-stone-700 via-stone-600 to-stone-700'
-              : 'bg-gradient-to-r from-red-600 via-red-500 to-red-600'
+            'block text-se-cream shadow-md transition-opacity hover:opacity-95',
+            show.status === 'completed' ? 'bg-se-ink2' : 'bg-gradient-to-r from-red-600 via-red-500 to-red-600'
           )}
         >
           <div className="mx-auto flex max-w-6xl items-center justify-center gap-3 px-3 py-3 sm:gap-4 sm:py-3.5">
@@ -911,21 +815,25 @@ export function ShowPreviewClient() {
       )}
 
       {/* ──────────────────────────── Sticky action bar ──────────────────── */}
-      <div className="sticky top-[calc(4.5rem+2.5rem)] z-40 border-b bg-white/95 shadow-sm backdrop-blur-md sm:top-[calc(4.5rem+2.75rem)]">
+      <div className="sticky top-[4.5rem] z-40 border-b border-se-line bg-se-surface/95 shadow-sm backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center gap-2 px-3 py-2.5 sm:px-4 lg:px-6">
           {isOpen ? (
-            <Button className="h-12 flex-1 px-5 text-base font-semibold shadow-lg shadow-primary/30 sm:h-11 sm:flex-initial sm:shrink-0 sm:px-5" asChild>
+            <SEButton
+              asChild
+              variant="fresh"
+              className="h-12 flex-1 px-5 text-base sm:h-11 sm:flex-initial sm:shrink-0 sm:px-5"
+            >
               <Link href={enterHref}>
                 <Ticket className="size-5 sm:size-4" />
                 Enter This Show
               </Link>
-            </Button>
+            </SEButton>
           ) : show.status === 'in_progress' || show.status === 'completed' || showAny.hasPublishedResults ? (
             <Button
               className={cn(
                 'h-12 flex-1 px-5 text-base font-semibold shadow-lg sm:h-11 sm:flex-initial sm:shrink-0 sm:px-5 text-white',
                 show.status === 'completed'
-                  ? 'bg-stone-700 hover:bg-stone-800 shadow-stone-700/30'
+                  ? 'bg-se-ink2 hover:bg-se-ink2/90 shadow-se-ink2/30'
                   : 'bg-red-600 hover:bg-red-700 shadow-red-600/30'
               )}
               asChild
@@ -936,7 +844,7 @@ export function ShowPreviewClient() {
               </Link>
             </Button>
           ) : (
-            <div className="flex-1 text-sm font-medium text-stone-600 sm:flex-initial">{
+            <div className="flex-1 text-sm font-medium text-se-ink2 sm:flex-initial">{
               show.status === 'cancelled'
                 ? 'Cancelled'
                 : show.status === 'draft' || show.status === 'published'
@@ -946,16 +854,16 @@ export function ShowPreviewClient() {
           )}
 
           {isOpen && entryCloseDate && (
-            <div className="hidden items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 sm:inline-flex">
-              <Clock className="size-3.5 text-amber-700" />
-              <span className="text-xs font-semibold text-amber-900">
-                Closes in <CountdownTicker target={entryCloseDate} variant="bar" />
+            <div className="hidden items-center gap-1.5 rounded-full bg-se-honey-soft px-3 py-1.5 sm:inline-flex">
+              <Clock className="size-3.5 text-se-honey-deep" />
+              <span className="text-xs font-semibold text-se-honey-ink">
+                Closes in <CountdownTicker target={entryCloseDate} />
               </span>
             </div>
           )}
 
           <div className="ml-auto flex items-center gap-1">
-            <Button variant="outline" size="sm" className="h-9 shrink-0 gap-1.5" asChild>
+            <Button variant="outline" size="sm" className="h-9 shrink-0 gap-1.5 border-se-line2 text-se-ink2 hover:bg-se-paper2" asChild>
               <a
                 href={`/api/schedule/${show.id}`}
                 target="_blank"
@@ -969,7 +877,7 @@ export function ShowPreviewClient() {
                 <span>Schedule</span>
               </a>
             </Button>
-            <Button variant="outline" size="sm" className="h-9 gap-1.5" asChild>
+            <Button variant="outline" size="sm" className="h-9 gap-1.5 border-se-line2 text-se-ink2 hover:bg-se-paper2" asChild>
               <a href={`/api/shows/${show.id}/calendar`}>
                 <CalendarPlus className="size-4" />
                 <span className="hidden sm:inline">Add to Calendar</span>
@@ -1003,20 +911,17 @@ export function ShowPreviewClient() {
 
       {/* Reassurance strip — the schedule is public, but the page never said so,
           and exhibitors were phoning to ask "do I need to log in to see the
-          schedule?" (Mandy 2026-06-13). This sits right where the Enter/Schedule
-          buttons are — the moment the wrong mental model forms — and gives a
-          plainly-labelled, no-login schedule link. flex-wrap + max-w-6xl keep it
-          safe at 390px. */}
+          schedule?" (Mandy 2026-06-13). */}
       {show.status !== 'cancelled' && (
-        <div className="border-b bg-stone-50/80">
-          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-2 gap-y-1 px-4 py-2.5 text-center text-xs text-stone-600 sm:px-6 lg:px-8">
-            <FileText className="size-3.5 shrink-0 text-stone-500" />
+        <div className="border-b border-se-line bg-se-paper2/70">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-2 gap-y-1 px-4 py-2.5 text-center text-xs text-se-ink2 sm:px-6 lg:px-8">
+            <FileText className="size-3.5 shrink-0 text-se-ink3" />
             <span>You don&apos;t need an account to read the schedule — only to enter.</span>
             <a
               href={`/api/schedule/${show.id}`}
               target="_blank"
               rel="noopener"
-              className="font-semibold text-primary underline-offset-2 hover:underline"
+              className="font-semibold text-se-fresh-deep underline-offset-2 hover:underline"
             >
               View the schedule (PDF) →
             </a>
@@ -1024,60 +929,369 @@ export function ShowPreviewClient() {
         </div>
       )}
 
-      {/* ──────────────────────────── Meet the Judges ────────────────────── */}
-      {judges.length > 0 && (
-        <section className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
-          <SectionHeading eyebrow="Officiating" title="Meet the Judges" />
-          <p className="mt-3 max-w-2xl text-stone-600">
-            {judges.length === 1
-              ? 'A single appointment for this show — your breed entrusted to an experienced judge.'
-              : `${judges.length} judges bring breed-specific expertise to the ring.`}
-          </p>
-          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {judges.map((j) => (
-              <JudgeCard key={j.id} judge={j} classCount={judgeClassCounts.get(j.name)} />
-            ))}
+      {/* ══════════════════════════ Body (paper) ═══════════════════════════ */}
+      <div className="relative z-10 rounded-t-[22px] bg-se-paper">
+        {/* ──────────────────────────── Desktop (lg+) two-column layout ──────
+            Replaces the CTA card / judges / classification / the-day mobile
+            sections below with the approved desktop composition: left column
+            (chips, description, judges, classification, at-the-show) + a
+            344px right rail (entries-close + quick facts + CTA, then the
+            ShareKit card). */}
+        <div className="hidden gap-10 px-11 py-[34px] lg:flex lg:items-start">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap gap-2">
+              {isOpen && (
+                <Chip tone="fresh">
+                  <Pulse /> Entries open
+                </Chip>
+              )}
+              <Chip>
+                <Crown className="size-3" /> {showType}
+              </Chip>
+              {singleBreedName && <Chip>{singleBreedName}</Chip>}
+              {showAny.kcLicenceNo && <Chip>RKC licensed · {showAny.kcLicenceNo}</Chip>}
+            </div>
+
+            {show.description && (
+              <p className="mt-5 max-w-2xl text-xl font-medium leading-relaxed text-se-ink2">
+                {show.description}
+              </p>
+            )}
+
+            {judges.length > 0 && (
+              <div className="mt-9 max-w-3xl">
+                <SecLabel right={<Eyebrow className="text-se-fresh-deep">{totalClasses} classes</Eyebrow>}>
+                  Your judges
+                </SecLabel>
+                <div className="grid grid-cols-2 gap-3.5">
+                  {judges.map((j) => (
+                    <SECard key={j.id} className="px-[18px]">
+                      <JudgeRowD judge={j} classCount={judgeClassCounts.get(j.name)} />
+                    </SECard>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {breedGroups.length > 0 && (
+              <div className="mt-8 max-w-3xl">
+                <SecLabel>Classification</SecLabel>
+                <SECard className="p-5">
+                  <div className="columns-2 gap-x-8">
+                    {breedGroups.map(({ breed, classes, classList, judgeName }) => (
+                      <div key={breed} className="break-inside-avoid pb-4">
+                        <p className="mb-1.5 text-base font-semibold text-se-ink">
+                          {breed}{' '}
+                          <span className="text-xs font-normal text-se-ink3">
+                            {classes} {classes === 1 ? 'class' : 'classes'}
+                            {judgeName ? ` · ${judgeName}` : ''}
+                          </span>
+                        </p>
+                        {classList.map((c) => (
+                          <div key={c.id} className="flex gap-2 py-0.5 text-[13px] text-se-ink2">
+                            {c.label && (
+                              <span className="min-w-[16px] shrink-0 font-semibold text-se-fresh-deep">{c.label}</span>
+                            )}
+                            <span>{c.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </SECard>
+              </div>
+            )}
+
+            {(showAny.scheduleData?.catering || showAny.scheduleData?.wetWeatherAccommodation) && (
+              <div className="mt-8 max-w-3xl">
+                <SecLabel>At the show</SecLabel>
+                <SECard className="p-5">
+                  <div className="grid grid-cols-3 gap-4">
+                    {showAny.scheduleData?.catering && (
+                      <Facility label="Catering" value={showAny.scheduleData.catering} />
+                    )}
+                    {showAny.scheduleData?.wetWeatherAccommodation && (
+                      <Facility label="Weather" value={showAny.scheduleData.wetWeatherAccommodation} />
+                    )}
+                  </div>
+                </SECard>
+              </div>
+            )}
           </div>
+
+          {/* Right rail — 344px, hidden below lg (handled by the parent flex) */}
+          <div className="flex w-[344px] shrink-0 flex-col gap-4">
+            <SECard className="overflow-hidden">
+              {isOpen && entryCloseDate && (
+                <div className="flex items-center justify-between bg-se-honey px-[18px] py-[13px]">
+                  <div>
+                    <Eyebrow className="text-[rgba(74,48,6,0.7)]">Entries close</Eyebrow>
+                    <p className="mt-0.5 text-[15px] font-semibold text-se-honey-ink">
+                      {format(entryCloseDate, 'EEE d MMM')}
+                    </p>
+                  </div>
+                  <CountdownCells target={entryCloseDate} dark />
+                </div>
+              )}
+              <div className="p-4">
+                <div className="grid grid-cols-2 gap-2">
+                  {quickFacts.map(([k, v]) => (
+                    <div key={k} className="rounded-[10px] bg-se-paper px-3 py-2.5">
+                      <Eyebrow>{k}</Eyebrow>
+                      <p className="mt-0.5 truncate text-sm font-semibold text-se-ink">{v}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {isOpen ? (
+                  <>
+                    <SEButton asChild variant="fresh" full className="mt-3.5">
+                      <Link href={enterHref}>
+                        <Ticket className="size-[17px]" />
+                        Enter
+                        {showAny.firstEntryFee != null ? ` · from ${formatCurrency(showAny.firstEntryFee)}` : ''}
+                      </Link>
+                    </SEButton>
+                    <SEButton asChild variant="ghost" size="sm" full className="mt-2">
+                      <a href={`/api/schedule/${show.id}`} target="_blank" rel="noopener">
+                        <FileText className="size-[15px]" />
+                        Schedule (PDF)
+                      </a>
+                    </SEButton>
+                    <div className="mt-3 flex flex-col gap-1.5 border-t border-se-line pt-3">
+                      {showAny.acceptsPostalEntries && (
+                        <TrustRow icon={CreditCard}>Card or cheque — same fee</TrustRow>
+                      )}
+                      <TrustRow icon={Check}>Instant email confirmation</TrustRow>
+                      <TrustRow icon={Lock}>Entry private until the catalogue</TrustRow>
+                    </div>
+                  </>
+                ) : show.status === 'in_progress' || show.status === 'completed' || showAny.hasPublishedResults ? (
+                  <SEButton asChild variant={show.status === 'completed' ? 'primary' : 'fresh'} full className="mt-3.5">
+                    <Link href={`/shows/${slug}/results`}>
+                      <Trophy className="size-[17px]" />
+                      {show.status === 'completed' ? 'View Results' : 'View Live Results'}
+                    </Link>
+                  </SEButton>
+                ) : (
+                  <p className="mt-3.5 text-center text-sm font-medium text-se-ink2">
+                    {show.status === 'cancelled'
+                      ? 'This show has been cancelled.'
+                      : show.status === 'draft' || show.status === 'published'
+                        ? 'Entries are opening soon.'
+                        : 'Entries for this show have closed.'}
+                  </p>
+                )}
+              </div>
+            </SECard>
+
+            {show.status !== 'cancelled' && (
+              <ShareKitCard
+                showId={show.id}
+                showName={show.name}
+                showType={showType}
+                showDate={showDate}
+                organisationName={org?.name ?? ''}
+                venueName={venue?.name}
+                entryCloseDate={show.entryCloseDate ?? null}
+                shareUrl={
+                  typeof window !== 'undefined'
+                    ? `${window.location.origin}/shows/${slug}`
+                    : `https://remishowmanager.co.uk/shows/${slug}`
+                }
+                onShare={(channel) => {
+                  fetch('/api/share-events', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ showId: show.id, channel }),
+                    keepalive: true,
+                  }).catch(() => {});
+                }}
+                className="mx-0 max-w-none px-0 py-0 sm:px-0 sm:py-0"
+              />
+            )}
+          </div>
+        </div>
+
+        {/* ──────────────────────────── CTA card (mobile/tablet) ────────────── */}
+        <section className="mx-auto max-w-4xl px-5 pt-7 sm:px-6 sm:pt-9 lg:hidden">
+          {isOpen ? (
+            <SECard className="p-4">
+              <SEButton asChild variant="fresh" full>
+                <Link href={enterHref}>
+                  <Ticket className="size-[18px]" />
+                  Enter this show
+                  {showAny.firstEntryFee != null ? ` · from ${formatCurrency(showAny.firstEntryFee)}` : ''}
+                </Link>
+              </SEButton>
+              <SEButton asChild variant="ghost" size="sm" full className="mt-2">
+                <a href={`/api/schedule/${show.id}`} target="_blank" rel="noopener">
+                  <FileText className="size-[15px]" />
+                  Read the full schedule (PDF)
+                </a>
+              </SEButton>
+              <div className="mt-3.5 flex flex-col gap-2 border-t border-se-line pt-3.5">
+                {showAny.acceptsPostalEntries && (
+                  <TrustRow icon={CreditCard}>Pay by card, or post a cheque — same fee</TrustRow>
+                )}
+                <TrustRow icon={Check}>Instant confirmation by email</TrustRow>
+                <TrustRow icon={Lock}>Your entry stays private until the catalogue</TrustRow>
+              </div>
+            </SECard>
+          ) : show.status === 'in_progress' || show.status === 'completed' || showAny.hasPublishedResults ? (
+            <SECard className="p-4">
+              <SEButton asChild variant={show.status === 'completed' ? 'primary' : 'fresh'} full>
+                <Link href={`/shows/${slug}/results`}>
+                  <Trophy className="size-[18px]" />
+                  {show.status === 'completed' ? 'View Results' : 'View Live Results'}
+                </Link>
+              </SEButton>
+              <SEButton asChild variant="ghost" size="sm" full className="mt-2">
+                <a href={`/api/schedule/${show.id}`} target="_blank" rel="noopener">
+                  <FileText className="size-[15px]" />
+                  Read the full schedule (PDF)
+                </a>
+              </SEButton>
+            </SECard>
+          ) : (
+            <SECard className="p-4 text-center text-sm font-medium text-se-ink2">
+              {show.status === 'cancelled'
+                ? 'This show has been cancelled.'
+                : show.status === 'draft' || show.status === 'published'
+                  ? 'Entries are opening soon.'
+                  : 'Entries for this show have closed.'}
+            </SECard>
+          )}
         </section>
-      )}
 
-      {/* ──────────────────────────── Share kit (Save & Post) ──── */}
-      {show.status !== 'cancelled' && (
-        <ShareKitCard
-          id="share-invitation"
-          showId={show.id}
-          showName={show.name}
-          showType={showType}
-          showDate={showDate}
-          organisationName={org?.name ?? ''}
-          venueName={venue?.name}
-          entryCloseDate={show.entryCloseDate ?? null}
-          shareUrl={
-            typeof window !== 'undefined'
-              ? `${window.location.origin}/shows/${slug}`
-              : `https://remishowmanager.co.uk/shows/${slug}`
-          }
-          onShare={(channel) => {
-            // Fire-and-forget — never block the share UX.
-            fetch('/api/share-events', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ showId: show.id, channel }),
-              keepalive: true,
-            }).catch(() => {});
-          }}
-        />
-      )}
+        {/* ──────────────────────────── Your judges (mobile/tablet) ─────────── */}
+        {judges.length > 0 && (
+          <section className="mx-auto max-w-4xl px-5 py-8 sm:px-6 sm:py-10 lg:hidden">
+            <SecLabel>Your judges</SecLabel>
+            <p className="text-sm text-se-ink2">
+              {judges.length === 1
+                ? 'A single appointment for this show — your breed entrusted to an experienced judge.'
+                : `${judges.length} judges bring breed-specific expertise to the ring.`}
+            </p>
+            <div className="mt-5 grid gap-3.5 sm:grid-cols-2">
+              {judges.map((j) => (
+                <JudgeCard key={j.id} judge={j} classCount={judgeClassCounts.get(j.name)} />
+              ))}
+            </div>
+          </section>
+        )}
 
-      {/* ──────────────────────────── Entry fees (transparent) ───────────── */}
-      <section className="border-y bg-gradient-to-b from-amber-50/40 to-white">
-        <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
-          <SectionHeading eyebrow="Transparent pricing" title="Entry Fees" />
-          <p className="mt-3 max-w-2xl text-stone-600">
+        {/* ──────────────────────────── What's at stake ─────────────────────── */}
+        {(showAny.scheduleData?.prizeMoney || showAny.scheduleData?.awardsDescription) && (
+          <section className="mx-auto max-w-4xl px-5 py-8 sm:px-6 sm:py-10">
+            <SecLabel>What&apos;s at stake</SecLabel>
+            <SECard className="p-5 sm:p-6">
+              <div className="flex items-center gap-2">
+                <Trophy className="size-5 text-se-honey-deep" />
+                <h3 className="text-lg font-bold text-se-ink">On offer</h3>
+              </div>
+              {showAny.scheduleData?.awardsDescription && (
+                <p className="mt-3 whitespace-pre-line text-[15px] leading-relaxed text-se-ink2">
+                  {showAny.scheduleData.awardsDescription}
+                </p>
+              )}
+              {showAny.scheduleData?.prizeMoney && (
+                <div
+                  className={cn(
+                    'inline-flex items-center gap-2 rounded-full bg-se-honey-soft px-4 py-1.5 text-sm font-semibold text-se-honey-ink',
+                    showAny.scheduleData?.awardsDescription ? 'mt-4' : 'mt-1'
+                  )}
+                >
+                  <PoundSterling className="size-4" />
+                  {showAny.scheduleData.prizeMoney}
+                </div>
+              )}
+            </SECard>
+          </section>
+        )}
+
+        {/* ──────────────────────────── Classification (mobile/tablet) ──────── */}
+        {breedGroups.length > 0 && (
+          <section className="mx-auto max-w-4xl px-5 py-8 sm:px-6 sm:py-10 lg:hidden">
+            <SecLabel
+              right={
+                <Eyebrow>
+                  {totalClasses} {totalClasses === 1 ? 'class' : 'classes'}
+                  {breedCount > 1 ? ` · ${breedCount} breeds` : ''}
+                </Eyebrow>
+              }
+            >
+              Classification
+            </SecLabel>
+            <div className="grid gap-3 lg:grid-cols-2">
+              {breedGroups.map(({ breed, classes, classList, judgeName }) => (
+                <SECard key={breed} className="p-4 sm:p-[18px]">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                    <p className="text-base font-semibold text-se-ink">{breed}</p>
+                    <p className="text-xs text-se-ink3">
+                      {classes} {classes === 1 ? 'class' : 'classes'}
+                      {judgeName ? ` · ${judgeName}` : ''}
+                    </p>
+                  </div>
+                  {/* The full classification on the page — so exhibitors don't
+                      have to open the PDF to see the classes (Mandy 2026-06-14). */}
+                  <div className="mt-2.5 grid grid-cols-1 gap-x-4 sm:grid-cols-2">
+                    {classList.map((c) => (
+                      <div key={c.id} className="flex items-baseline gap-2 py-1 text-[13px] text-se-ink2">
+                        {c.label && (
+                          <span className="min-w-[15px] shrink-0 font-semibold text-se-fresh-deep">{c.label}</span>
+                        )}
+                        <span className="min-w-0">{c.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </SECard>
+              ))}
+            </div>
+            <p className="mt-5 text-center text-sm text-se-ink2">
+              Prefer the full document?{' '}
+              <a
+                href={`/api/schedule/${show.id}`}
+                target="_blank"
+                rel="noopener"
+                className="inline-flex min-h-11 items-center font-semibold text-se-fresh-deep underline-offset-2 hover:underline"
+              >
+                View the schedule (PDF) →
+              </a>
+            </p>
+          </section>
+        )}
+
+        {/* ──────────────────────────── The day (mobile/tablet) ─────────────── */}
+        {/* Doors/Judging are covered by the desktop rail's quick-facts grid. */}
+        {(showAny.showOpenTime || showAny.startTime) && (
+          <section className="mx-auto max-w-4xl px-5 py-8 sm:px-6 sm:py-10 lg:hidden">
+            <SecLabel>The day</SecLabel>
+            <SECard className="grid grid-cols-1 divide-y divide-se-line sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+              {showAny.showOpenTime && (
+                <div className="p-4 text-center sm:p-5">
+                  <Eyebrow>Doors</Eyebrow>
+                  <p className="mt-1 text-lg font-semibold text-se-ink">{showAny.showOpenTime}</p>
+                </div>
+              )}
+              {showAny.startTime && (
+                <div className="p-4 text-center sm:p-5">
+                  <Eyebrow>Judging</Eyebrow>
+                  <p className="mt-1 text-lg font-semibold text-se-ink">{showAny.startTime}</p>
+                </div>
+              )}
+            </SECard>
+          </section>
+        )}
+
+        {/* ──────────────────────────── Entry fees ──────────────────────────── */}
+        <section className="mx-auto max-w-4xl px-5 py-8 sm:px-6 sm:py-10">
+          <SecLabel>Entry fees</SecLabel>
+          <p className="text-sm text-se-ink2">
             No surprises at checkout. Every fee is listed here — and all your entries combine into a single payment at the end.
           </p>
-          <div className="mt-8 overflow-hidden rounded-2xl border bg-white">
-            <dl className="divide-y">
+          <SECard className="mt-5 overflow-hidden">
+            <dl className="divide-y divide-se-line">
               {showAny.showRuleset === 'wusv' ? (
                 <>
                   {/* SV regional shows charge a flat per-dog-per-class fee
@@ -1185,253 +1399,204 @@ export function ShowPreviewClient() {
                   />
                 </>
               )}
-              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-amber-200 bg-amber-50 px-5 py-3.5 text-sm font-medium text-stone-800 sm:px-6">
-                <span className="inline-flex items-center gap-1.5"><Info className="size-4 text-amber-700" /> A card processing fee is added at checkout</span>
-                <span className="text-xs text-stone-600">All prices in GBP</span>
+              <div className="flex flex-wrap items-center justify-between gap-2 bg-se-honey-soft px-5 py-3.5 text-sm font-medium text-se-honey-ink sm:px-6">
+                <span className="inline-flex items-center gap-1.5"><Info className="size-4 text-se-honey-deep" /> A card processing fee is added at checkout</span>
+                <span className="text-xs text-se-ink2">All prices in GBP</span>
               </div>
             </dl>
-          </div>
-        </div>
-      </section>
-
-      {/* ──────────────────────────── Prize & Trophy story ──────────────── */}
-      {(showAny.scheduleData?.prizeMoney || showAny.scheduleData?.awardsDescription) && (
-        <section className="mx-auto max-w-4xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
-          <SectionHeading eyebrow="The silverware" title="Awards & Prizes" />
-
-          {/* Awards description — clean readable card, NOT stylised */}
-          {showAny.scheduleData?.awardsDescription && (
-            <div className="mt-6 rounded-2xl border bg-white p-6 shadow-sm sm:p-7">
-              <div className="flex items-center gap-2 border-b border-amber-200/60 pb-3">
-                <Trophy className="size-5 text-amber-600" />
-                <h3 className="font-serif text-lg font-bold text-stone-900">On offer</h3>
-              </div>
-              <p className="mt-4 whitespace-pre-line leading-relaxed text-stone-800">
-                {showAny.scheduleData.awardsDescription}
-              </p>
-              {showAny.scheduleData.prizeMoney && (
-                <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-4 py-1.5 text-sm font-semibold text-amber-900">
-                  <PoundSterling className="size-4" />
-                  {showAny.scheduleData.prizeMoney}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Prize money only (when no description) */}
-          {!showAny.scheduleData?.awardsDescription && showAny.scheduleData?.prizeMoney && (
-            <div className="mt-6 flex justify-center">
-              <div className="inline-flex items-center gap-2 rounded-full border border-amber-400 bg-amber-50 px-5 py-2 font-serif text-sm font-semibold text-amber-900">
-                <PoundSterling className="size-4" />
-                {showAny.scheduleData.prizeMoney}
-              </div>
-            </div>
-          )}
-
-          {/* Per Amanda 2026-05-28: only main show sponsors (Title + Show
-              tiers, shown in the hero) appear on the public page. Class
-              sponsors / trophy attributions stay in the catalogue and
-              schedule, not on the public show page. */}
+          </SECard>
         </section>
-      )}
 
-      {/* ──────────────────────────── Classes ───────────────────────────── */}
-      {breedGroups.length > 0 && (
-        <section className="border-y bg-stone-50/60">
-          <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
-            <SectionHeading eyebrow="The card" title={(() => {
-              const breedCount = breedGroups.filter((g) => !g.isJH && !g.isSac).length;
-              if (breedCount <= 1) return 'Classes on Offer';
-              return `${breedCount} Breeds`;
-            })()} />
-            <div className="mt-8 grid gap-4 lg:grid-cols-2">
-              {breedGroups.map(({ breed, classes, classList, judgeName }) => (
-                <div
-                  key={breed}
-                  className="rounded-2xl border border-stone-200 bg-white p-4 sm:p-5"
-                >
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                    <p className="font-serif text-lg font-semibold text-stone-900">{breed}</p>
-                    <p className="text-xs text-stone-500">
-                      {classes} {classes === 1 ? 'class' : 'classes'}
-                      {judgeName ? ` · ${judgeName}` : ''}
-                    </p>
+        {/* ──────────────────────────── Getting there ────────────────────────── */}
+        {venue && (
+          <section className="mx-auto max-w-4xl px-5 py-8 sm:px-6 sm:py-10">
+            <SecLabel>Getting there</SecLabel>
+            <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
+              <div className="space-y-3">
+                {venue.imageUrl && (
+                  <div className="overflow-hidden rounded-[18px] border border-se-line bg-se-paper2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={venue.imageUrl} alt={venue.name} className="aspect-[16/10] w-full object-cover" />
                   </div>
-                  {/* The full classification on the page — so exhibitors don't
-                      have to open the PDF to see the classes (Mandy 2026-06-14). */}
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {classList.map((c) => (
-                      <span
-                        key={c.id}
-                        className="inline-flex items-center gap-1 rounded-md bg-stone-100 px-2 py-1 text-xs text-stone-700"
-                      >
-                        {c.label && <span className="font-semibold text-amber-700">{c.label}</span>}
-                        <span>{c.name}</span>
-                      </span>
-                    ))}
+                )}
+                {venue.lat && venue.lng ? (
+                  <div className="overflow-hidden rounded-[18px] border border-se-line bg-se-paper2">
+                    <iframe
+                      title={`Map of ${venue.name}`}
+                      width="100%"
+                      height="280"
+                      style={{ border: 0 }}
+                      loading="lazy"
+                      referrerPolicy="no-referrer-when-downgrade"
+                      src={`https://www.google.com/maps?q=${venue.lat},${venue.lng}&z=14&output=embed`}
+                      allowFullScreen
+                    />
                   </div>
-                </div>
-              ))}
-            </div>
-            <p className="mt-6 text-center text-sm text-stone-600">
-              Prefer the full document?{' '}
-              <a
-                href={`/api/schedule/${show.id}`}
-                target="_blank"
-                rel="noopener"
-                className="inline-flex min-h-[2.75rem] items-center font-semibold text-primary underline-offset-2 hover:underline"
-              >
-                View the schedule (PDF) →
-              </a>
-            </p>
-          </div>
-        </section>
-      )}
-
-      {/* ──────────────────────────── Venue ─────────────────────────────── */}
-      {venue && (
-        <section className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
-          <SectionHeading eyebrow="Where" title="The Venue" />
-          <div className="mt-8 grid gap-6 lg:grid-cols-[1.2fr_1fr]">
-            <div className="space-y-4">
-              {venue.imageUrl && (
-                <div className="overflow-hidden rounded-2xl border bg-stone-100">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={venue.imageUrl} alt={venue.name} className="aspect-[16/10] w-full object-cover" />
-                </div>
-              )}
-              {venue.lat && venue.lng ? (
-                <div className="overflow-hidden rounded-2xl border bg-stone-100">
-                  <iframe
-                    title={`Map of ${venue.name}`}
-                    width="100%"
-                    height="320"
-                    style={{ border: 0 }}
-                    loading="lazy"
-                    referrerPolicy="no-referrer-when-downgrade"
-                    src={`https://www.google.com/maps?q=${venue.lat},${venue.lng}&z=14&output=embed`}
-                    allowFullScreen
-                  />
-                </div>
-              ) : venue.postcode ? (
-                <div className="overflow-hidden rounded-2xl border bg-stone-100">
-                  <iframe
-                    title={`Map of ${venue.name}`}
-                    width="100%"
-                    height="320"
-                    style={{ border: 0 }}
-                    loading="lazy"
-                    referrerPolicy="no-referrer-when-downgrade"
-                    src={`https://www.google.com/maps?q=${encodeURIComponent(venue.postcode)}&z=14&output=embed`}
-                    allowFullScreen
-                  />
-                </div>
-              ) : null}
-            </div>
-            <div>
-              <h3 className="font-serif text-2xl font-bold text-stone-900">{venue.name}</h3>
-              <address className="mt-2 whitespace-pre-line not-italic leading-relaxed text-stone-700">
-                {[venue.address, venue.postcode].filter(Boolean).join('\n')}
-              </address>
-              <div className="mt-5 flex flex-wrap gap-2">
-                {(venue.lat && venue.lng) || venue.postcode ? (
-                  <Button variant="outline" size="sm" asChild>
-                    <a
-                      href={
-                        venue.lat && venue.lng
-                          ? `https://www.google.com/maps/dir/?api=1&destination=${venue.lat},${venue.lng}`
-                          : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(venue.postcode ?? '')}`
-                      }
-                      target="_blank"
-                      rel="noopener"
-                    >
-                      <MapPin className="size-4" />
-                      Get directions
-                    </a>
-                  </Button>
+                ) : venue.postcode ? (
+                  <div className="overflow-hidden rounded-[18px] border border-se-line bg-se-paper2">
+                    <iframe
+                      title={`Map of ${venue.name}`}
+                      width="100%"
+                      height="280"
+                      style={{ border: 0 }}
+                      loading="lazy"
+                      referrerPolicy="no-referrer-when-downgrade"
+                      src={`https://www.google.com/maps?q=${encodeURIComponent(venue.postcode)}&z=14&output=embed`}
+                      allowFullScreen
+                    />
+                  </div>
                 ) : null}
               </div>
-              <div className="mt-6 grid grid-cols-2 gap-3 text-sm">
-                <Facility label="Parking" value="Free on-site" />
-                <Facility label="Accessibility" value="Step-free access" />
-                <Facility label="Catering" value={showAny.scheduleData?.catering ?? 'Refreshments available'} />
-                <Facility label="Weather" value={showAny.scheduleData?.wetWeatherAccommodation ?? 'Indoor/outdoor'} />
-              </div>
+              <SECard className="p-5">
+                <h3 className="text-xl font-bold text-se-ink">{venue.name}</h3>
+                <address className="mt-1.5 whitespace-pre-line text-sm not-italic leading-relaxed text-se-ink2">
+                  {[venue.address, venue.postcode].filter(Boolean).join('\n')}
+                </address>
+                {((venue.lat && venue.lng) || venue.postcode) && (
+                  <div className="mt-4">
+                    <SEButton asChild variant="ghost" size="sm">
+                      <a
+                        href={
+                          venue.lat && venue.lng
+                            ? `https://www.google.com/maps/dir/?api=1&destination=${venue.lat},${venue.lng}`
+                            : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(venue.postcode ?? '')}`
+                        }
+                        target="_blank"
+                        rel="noopener"
+                      >
+                        <MapPin className="size-4" />
+                        Get directions
+                      </a>
+                    </SEButton>
+                  </div>
+                )}
+                {showAny.scheduleData?.directions && (
+                  <div className="mt-4 border-t border-se-line pt-4">
+                    <Eyebrow>Directions</Eyebrow>
+                    <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-se-ink2">
+                      {showAny.scheduleData.directions}
+                    </p>
+                  </div>
+                )}
+                {what3words && (
+                  <a
+                    href={`https://what3words.com/${what3words}`}
+                    target="_blank"
+                    rel="noopener"
+                    className="mt-3 inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-se-fresh-deep underline-offset-2 hover:underline"
+                  >
+                    <MapPin className="size-3.5" />
+                    {`///${what3words}`}
+                  </a>
+                )}
+                {/* Desktop covers Catering/Weather in the "At the show" card
+                    above (real-data-only there) — avoid repeating it at lg. */}
+                <div className="mt-5 grid grid-cols-2 gap-2.5 lg:hidden">
+                  <Facility label="Catering" value={showAny.scheduleData?.catering ?? 'Refreshments available'} />
+                  <Facility label="Weather" value={showAny.scheduleData?.wetWeatherAccommodation ?? 'Indoor/outdoor'} />
+                </div>
+              </SECard>
             </div>
-          </div>
-        </section>
-      )}
+          </section>
+        )}
 
-      {/* ──────────────────────────── Additional notes (if present) ─────── */}
-      {showAny.scheduleData?.additionalNotes && (
-        <section className="mx-auto max-w-4xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
-          <SectionHeading eyebrow="Please note" title="From the organisers" />
-          <div className="mt-6 rounded-2xl border-l-4 border-amber-500 bg-amber-50/50 p-6 sm:p-7">
-            <p className="whitespace-pre-line leading-relaxed text-stone-800">
-              {showAny.scheduleData.additionalNotes}
-            </p>
-          </div>
-        </section>
-      )}
+        {/* ──────────────────────────── Additional notes (if present) ─────── */}
+        {showAny.scheduleData?.additionalNotes && (
+          <section className="mx-auto max-w-4xl px-5 py-8 sm:px-6 sm:py-10">
+            <SecLabel>From the organisers</SecLabel>
+            <SECard className="border-l-4 border-se-honey-deep p-5 sm:p-6">
+              <p className="whitespace-pre-line text-[15px] leading-relaxed text-se-ink2">
+                {showAny.scheduleData.additionalNotes}
+              </p>
+            </SECard>
+          </section>
+        )}
 
-      {/* ──────────────────────────── Future shows (if present) ─────────── */}
-      {showAny.scheduleData?.futureShowDates && (
-        <section className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
-          <SectionHeading eyebrow="Save the date" title={`More from ${org?.name ?? 'this club'}`} />
-          <div className="mt-6 rounded-2xl border bg-white p-6 shadow-sm">
-            <p className="whitespace-pre-line leading-relaxed text-stone-700">
-              {showAny.scheduleData.futureShowDates}
-            </p>
-          </div>
-        </section>
-      )}
+        {/* ──────────────────────────── Future shows (if present) ─────────── */}
+        {showAny.scheduleData?.futureShowDates && (
+          <section className="mx-auto max-w-4xl px-5 py-8 sm:px-6 sm:py-10">
+            <SecLabel>Save the date</SecLabel>
+            <p className="mb-3 text-sm text-se-ink2">More from {org?.name ?? 'this club'}</p>
+            <SECard className="p-5 sm:p-6">
+              <p className="whitespace-pre-line text-[15px] leading-relaxed text-se-ink2">
+                {showAny.scheduleData.futureShowDates}
+              </p>
+            </SECard>
+          </section>
+        )}
 
-      {/* ──────────────────────────── Footer CTA ────────────────────────── */}
-      {isOpen && (
-        <section className="border-t bg-gradient-to-br from-amber-100 via-amber-50 to-stone-50">
-          <div className="mx-auto max-w-4xl px-4 py-16 text-center sm:px-6 sm:py-20 lg:px-8">
-            <Crown className="mx-auto size-8 text-amber-700" />
-            <h2 className="mt-4 font-serif text-3xl font-bold text-stone-900 sm:text-4xl">Ready for the ring?</h2>
-            <p className="mx-auto mt-3 max-w-xl text-stone-700">
-              Entries take two minutes on your phone.
-            </p>
-            <div className="mt-8">
-              <Button size="lg" className="h-14 px-8 text-base font-bold shadow-lg shadow-primary/30" asChild>
+        {/* ──────────────────────────── Share kit (mobile/tablet) ─────────────
+            Desktop gets its own ShareKitCard instance as rail card #2. */}
+        {show.status !== 'cancelled' && (
+          <ShareKitCard
+            id="share-invitation"
+            className="lg:hidden"
+            showId={show.id}
+            showName={show.name}
+            showType={showType}
+            showDate={showDate}
+            organisationName={org?.name ?? ''}
+            venueName={venue?.name}
+            entryCloseDate={show.entryCloseDate ?? null}
+            shareUrl={
+              typeof window !== 'undefined'
+                ? `${window.location.origin}/shows/${slug}`
+                : `https://remishowmanager.co.uk/shows/${slug}`
+            }
+            onShare={(channel) => {
+              // Fire-and-forget — never block the share UX.
+              fetch('/api/share-events', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ showId: show.id, channel }),
+                keepalive: true,
+              }).catch(() => {});
+            }}
+          />
+        )}
+
+        {/* ──────────────────────────── Footer CTA ────────────────────────── */}
+        {isOpen && (
+          <section className="mx-auto max-w-4xl px-5 py-14 text-center sm:px-6 sm:py-16">
+            <Crown className="mx-auto size-7 text-se-honey-deep" />
+            <h2 className="mt-3 text-[1.75rem] font-extrabold text-se-ink sm:text-3xl">Ready for the ring?</h2>
+            <p className="mx-auto mt-2 max-w-xl text-se-ink2">Entries take two minutes on your phone.</p>
+            <div className="mt-6">
+              <SEButton asChild variant="fresh">
                 <Link href={enterHref}>
                   <Ticket className="size-5" />
                   Enter This Show
                 </Link>
-              </Button>
+              </SEButton>
             </div>
             {entryCloseDate && (
-              <p className="mt-4 text-xs text-stone-500">
-                Entries close <strong className="text-stone-700">{format(entryCloseDate, 'EEEE d MMMM · HH:mm')}</strong>
+              <p className="mt-4 text-xs text-se-ink3">
+                Entries close <strong className="text-se-ink2">{format(entryCloseDate, 'EEEE d MMMM · HH:mm')}</strong>
                 {daysToClose !== null && daysToClose <= 7 && (
-                  <span className="ml-1 font-semibold text-amber-700">({daysToClose}d left)</span>
+                  <span className="ml-1 font-semibold text-se-honey-deep">({daysToClose}d left)</span>
                 )}
               </p>
             )}
-          </div>
-        </section>
-      )}
+          </section>
+        )}
+      </div>
 
       {/* ──────────────────────────── Footer ────────────────────────────── */}
-      <footer className="border-t bg-[#fbf7ef]">
-        <div className="mx-auto max-w-4xl px-4 py-12 text-center sm:px-6 sm:py-16 lg:px-8">
-          <OrnamentalDivider className="mb-8" />
+      <footer className="border-t border-se-line bg-se-paper2">
+        <div className="mx-auto max-w-4xl px-5 py-12 text-center sm:px-6 sm:py-14">
           <Link href="/" className="inline-block transition-opacity hover:opacity-80" aria-label="Remi">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/branding/remi-horizontal.png" alt="Remi" className="mx-auto h-14 w-auto sm:h-16" />
+            <img src="/branding/remi-horizontal.png" alt="Remi" className="mx-auto h-12 w-auto sm:h-14" />
           </Link>
-          <p className="mt-4 font-serif text-sm italic text-stone-600">Show management, reimagined.</p>
-          <div className="mt-6 flex items-center justify-center gap-4 text-xs text-stone-500">
-            <Link href="/shows" className="hover:text-primary">Find a show</Link>
-            <DividerDiamond />
-            <Link href="/about" className="hover:text-primary">About Remi</Link>
-            <DividerDiamond />
-            <Link href="/terms" className="hover:text-primary">Terms</Link>
+          <p className="mt-3 text-sm italic text-se-ink2">Show management, reimagined.</p>
+          <div className="mt-5 flex items-center justify-center gap-3 text-xs text-se-ink3">
+            <Link href="/shows" className="hover:text-se-fresh-deep">Find a show</Link>
+            <span aria-hidden="true">·</span>
+            <Link href="/about" className="hover:text-se-fresh-deep">About Remi</Link>
+            <span aria-hidden="true">·</span>
+            <Link href="/terms" className="hover:text-se-fresh-deep">Terms</Link>
           </div>
-          <p className="mt-6 text-[11px] text-stone-400">
+          <p className="mt-5 text-[11px] text-se-ink3">
             &copy; {new Date().getFullYear()} Remi · Lovingly built for the UK dog-show community.
           </p>
         </div>
@@ -1441,7 +1606,7 @@ export function ShowPreviewClient() {
       {isOpen && !widgetDismissed && (
         <div
           className={cn(
-            'fixed inset-x-0 bottom-0 z-40 border-t bg-white/95 shadow-2xl shadow-stone-900/20 backdrop-blur-lg transition-transform duration-300 ease-out motion-reduce:transition-none sm:hidden',
+            'fixed inset-x-0 bottom-0 z-40 border-t border-se-line bg-se-surface/95 shadow-2xl shadow-black/20 backdrop-blur-lg transition-transform duration-300 ease-out motion-reduce:transition-none sm:hidden',
             widgetVisible ? 'translate-y-0' : 'translate-y-full'
           )}
           style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
@@ -1450,32 +1615,32 @@ export function ShowPreviewClient() {
             type="button"
             onClick={() => setWidgetDismissed(true)}
             aria-label="Dismiss entry widget"
-            className="absolute -top-8 right-3 flex size-7 items-center justify-center rounded-full bg-white shadow-md ring-1 ring-stone-200"
+            className="absolute -top-8 right-3 flex size-7 items-center justify-center rounded-full bg-se-surface shadow-md ring-1 ring-se-line"
           >
-            <X className="size-3.5 text-stone-600" />
+            <X className="size-3.5 text-se-ink2" />
           </button>
           <div className="flex items-center gap-3 px-4 pt-3">
             <div className="min-w-0 flex-1">
               {showAny.firstEntryFee != null && showAny.firstEntryFee > 0 ? (
                 <>
-                  <p className="font-serif text-xl font-bold text-primary">{formatCurrency(showAny.firstEntryFee)}</p>
-                  <p className="text-xs text-stone-500">entry fee</p>
+                  <p className="text-xl font-extrabold text-se-green">{formatCurrency(showAny.firstEntryFee)}</p>
+                  <p className="text-xs text-se-ink3">entry fee</p>
                 </>
               ) : (
-                <p className="text-sm font-semibold text-stone-900">Enter This Show</p>
+                <p className="text-sm font-semibold text-se-ink">Enter This Show</p>
               )}
               {entryCloseDate && daysToClose !== null && daysToClose <= 14 && (
-                <p className={cn('mt-0.5 text-[11px] font-semibold', daysToClose <= 3 ? 'text-red-600' : 'text-amber-700')}>
+                <p className={cn('mt-0.5 text-[11px] font-semibold', daysToClose <= 3 ? 'text-red-600' : 'text-se-honey-deep')}>
                   Closes in {daysToClose === 0 ? 'today' : `${daysToClose}d`}
                 </p>
               )}
             </div>
-            <Button className="h-12 shrink-0 px-6 text-base font-semibold shadow-lg shadow-primary/30" asChild>
+            <SEButton asChild variant="fresh" className="shrink-0 px-6">
               <Link href={enterHref}>
                 <Ticket className="size-5" />
                 Enter Now
               </Link>
-            </Button>
+            </SEButton>
           </div>
         </div>
       )}
@@ -1485,38 +1650,17 @@ export function ShowPreviewClient() {
 
 /* ─── Small composable building blocks ────────────── */
 
-function SectionHeading({ eyebrow, title, centered }: { eyebrow?: string; title: string; centered?: boolean }) {
+function TrustRow({
+  icon: Icon,
+  children,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  children: React.ReactNode;
+}) {
   return (
-    <div className={cn(centered && 'text-center')}>
-      {eyebrow && (
-        <p className="font-serif text-[11px] uppercase italic tracking-[0.3em] text-amber-800">{eyebrow}</p>
-      )}
-      <h2 className="mt-2 font-serif text-3xl font-bold leading-tight text-stone-900 sm:text-[2.25rem]">{title}</h2>
-      <div className={cn('mt-3 flex items-center gap-2', centered && 'justify-center')}>
-        <span className="h-px w-10 bg-amber-500/60" />
-        <span aria-hidden="true" className="text-[10px] text-amber-500">◆</span>
-        <span className="h-px w-10 bg-amber-500/30" />
-      </div>
-    </div>
-  );
-}
-
-function HeroCountdown({ target }: { target: Date }) {
-  const c = useCountdown(target);
-  if (!c) return null;
-  return (
-    <div className="flex items-baseline gap-1 font-mono tabular-nums text-stone-900">
-      {c.d > 0 && (
-        <>
-          <span className="font-serif text-2xl font-bold sm:text-3xl">{c.d}</span>
-          <span className="mr-1.5 text-[10px] uppercase tracking-wider text-stone-500">days</span>
-        </>
-      )}
-      <span className="font-serif text-2xl font-bold sm:text-3xl">{String(c.h).padStart(2, '0')}</span>
-      <span className="text-amber-600">:</span>
-      <span className="font-serif text-2xl font-bold sm:text-3xl">{String(c.m).padStart(2, '0')}</span>
-      <span className="text-amber-600">:</span>
-      <span className="font-serif text-2xl font-bold sm:text-3xl">{String(c.s).padStart(2, '0')}</span>
+    <div className="flex items-center gap-2.5 text-[12.5px] text-se-ink2">
+      <Icon className="size-[15px] shrink-0 text-se-fresh-deep" />
+      {children}
     </div>
   );
 }
@@ -1540,18 +1684,18 @@ function FeeRow({
   return (
     <div className={cn('flex items-center justify-between gap-3 px-5 py-4 sm:px-6', unavailable && 'opacity-60')}>
       <div className="min-w-0">
-        <dt className="font-serif text-base font-semibold text-stone-900">{label}</dt>
-        {sub && <p className="text-xs text-stone-500">{sub}</p>}
+        <dt className="text-[15px] font-semibold text-se-ink">{label}</dt>
+        {sub && <p className="mt-0.5 text-xs text-se-ink3">{sub}</p>}
       </div>
       <dd className="shrink-0 text-right">
         {custom ? (
-          <span className="text-sm text-stone-600">{custom}</span>
+          <span className="text-sm text-se-ink2">{custom}</span>
         ) : unavailable ? (
-          <span className="text-sm italic text-stone-400">Not offered</span>
+          <span className="text-sm italic text-se-ink3">Not offered</span>
         ) : (
           <>
-            <p className="font-serif text-lg font-bold text-stone-900">{formatCurrency(value ?? 0)}</p>
-            {note && <p className="text-[10px] text-stone-500">{note}</p>}
+            <p className="text-lg font-bold text-se-ink">{formatCurrency(value ?? 0)}</p>
+            {note && <p className="text-[10px] text-se-ink3">{note}</p>}
           </>
         )}
       </dd>
@@ -1561,10 +1705,9 @@ function FeeRow({
 
 function Facility({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border bg-white px-3 py-2">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-500">{label}</p>
-      <p className="mt-0.5 font-medium text-stone-800">{value}</p>
+    <div className="rounded-lg border border-se-line bg-se-surface px-3 py-2">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-se-ink3">{label}</p>
+      <p className="mt-0.5 font-medium text-se-ink">{value}</p>
     </div>
   );
 }
-

@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import {
   AlertTriangle,
@@ -26,9 +27,12 @@ import {
   Trash2,
   Users,
   CalendarDays,
+  CalendarPlus,
   Mail,
   MapPin,
   Ticket,
+  Star,
+  Lock,
 } from 'lucide-react';
 import { differenceInMonths, differenceInWeeks, format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
@@ -45,23 +49,17 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion';
 import { StripeProvider, stripePromise } from '@/components/providers/stripe-provider';
 import { PaymentForm } from './payment-form';
 import { cn } from '@/lib/utils';
 import { isGsdOnlyClass, isGsdBreed } from '@/lib/class-templates';
 import { isCatalogueItem } from '@/lib/catalogue-utils';
 import { useEntryCart, getPaymentKey, restoreActionForStatus, type WizardStep } from './use-entry-cart';
+import { SecLabel, Chip, SEButton, SECard } from '@/components/show-experience/kit';
 
 const STEPS: { key: WizardStep; label: string; icon: React.ElementType }[] = [
   { key: 'entry_type', label: 'Type', icon: PawPrint },
@@ -71,6 +69,17 @@ const STEPS: { key: WizardStep; label: string; icon: React.ElementType }[] = [
   { key: 'payment', label: 'Payment', icon: CreditCard },
   { key: 'confirmation', label: 'Confirmed', icon: PartyPopper },
 ];
+
+// Local helper mirroring SEButton's class recipe for <Link>-as-button CTAs.
+// SEButton itself renders a real <button> with no Slot/asChild support, so
+// Link-wrapped actions compose the same classes directly instead.
+const SE_LINK_BTN_BASE =
+  'inline-flex min-h-[2.75rem] items-center justify-center gap-2 whitespace-nowrap rounded-[13px] px-[18px] text-[14px] font-semibold transition-colors';
+const SE_LINK_BTN_VARIANT = {
+  fresh: 'bg-se-fresh text-[#0e2c19] shadow-[0_10px_24px_-12px_#5bb579]',
+  ghost: 'bg-se-surface text-se-ink shadow-[inset_0_0_0_1px_#d7cfba]',
+  onDark: 'bg-[rgba(243,236,220,0.14)] text-se-cream shadow-[inset_0_0_0_1px_rgba(243,236,220,0.25)]',
+} as const;
 
 const EMPTY_GROUPED_CLASSES = {
   age: [] as never[],
@@ -107,6 +116,7 @@ export default function EnterShowPage() {
   const idOrSlug = params.id as string;
 
   const cart = useEntryCart(idOrSlug);
+  const { data: session } = useSession();
   // Rehydrate the payment screen after a payment-step reload. loadSavedState
   // keeps step:'payment' when this snapshot exists, so seeding these from it
   // means the card form, amount and fee breakdown all come back intact and the
@@ -291,15 +301,15 @@ export default function EnterShowPage() {
 
   const addDogsButtons = (
     <div className="flex flex-col gap-2 sm:flex-row">
-      <Button variant="outline" className="flex-1 min-h-[2.75rem]" onClick={handleAddAnother}>
+      <SEButton variant="ghost" size="sm" className="flex-1" onClick={handleAddAnother}>
         <Plus className="size-4" />
         Add Another Dog
-      </Button>
+      </SEButton>
       {hasJhClasses && (
-        <Button variant="outline" className="flex-1 min-h-[2.75rem]" onClick={handleAddJuniorHandler}>
+        <SEButton variant="ghost" size="sm" className="flex-1" onClick={handleAddJuniorHandler}>
           <Users className="size-4" />
           Add Junior Handler
-        </Button>
+        </SEButton>
       )}
     </div>
   );
@@ -557,7 +567,15 @@ export default function EnterShowPage() {
     const dob = new Date(selectedDog.dateOfBirth);
     const ageMonths = differenceInMonths(showDay, dob);
     const eligible = isAgeEligibleOnShowDay(dob, showDay, minMonths, maxMonths);
-    return { ageMonths, eligible };
+    // When ineligible, work out which bound failed by re-running the same
+    // date-anchored check with only one bound active — reuses
+    // isAgeEligibleOnShowDay's exact math rather than re-deriving it here.
+    const failedBound: 'min' | 'max' | null = eligible
+      ? null
+      : !isAgeEligibleOnShowDay(dob, showDay, minMonths, null)
+        ? 'min'
+        : 'max';
+    return { ageMonths, eligible, failedBound };
   }
 
   function toggleClass(classId: string) {
@@ -585,6 +603,18 @@ export default function EnterShowPage() {
     cart.setClasses(selectedClassIds, names, selectedTotal, isNfc);
     setSelectedClassIds([]);
     setIsNfc(false);
+  }
+
+  // Shared by the select_classes "Back" button and the dog-summary-card
+  // "Change" link — both should send the exhibitor to the same place.
+  function handleBackFromSelectClasses() {
+    if (cart.editingExisting) {
+      cart.setStep('cart_review');
+    } else {
+      cart.setStep(
+        cart.activeEntry?.entryType === 'standard' ? 'select_dog' : 'junior_handler'
+      );
+    }
   }
 
   function handleAddAnother() {
@@ -760,100 +790,86 @@ export default function EnterShowPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-3xl px-3 py-6 pb-24 sm:px-4 sm:py-8 lg:px-6">
+    <div className="show-exp container mx-auto max-w-3xl px-3 py-6 pb-24 sm:px-4 sm:py-8 lg:px-6">
       {/* Header */}
       <div className="mb-6">
         <Link
           href={`/shows/${idOrSlug}`}
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          className="inline-flex items-center gap-1 text-sm text-se-ink3 hover:text-se-ink"
         >
           <ChevronLeft className="size-4" />
           Back to show
         </Link>
-        <h1 className="mt-2 text-lg font-bold sm:text-xl lg:text-2xl">Enter {show.name}</h1>
-        <p className="text-xs text-muted-foreground sm:text-sm">
+        <h1 className="mt-2 font-serif text-lg font-bold text-se-ink sm:text-xl lg:text-2xl">Enter {show.name}</h1>
+        <p className="text-xs text-se-ink3 sm:text-sm">
           {format(parseISO(show.startDate), 'd MMMM yyyy')} &middot; {show.venue?.name ?? 'Venue TBC'}
         </p>
       </div>
 
-      {/* Step indicator */}
-      <nav className="mb-6 sm:mb-8">
-        <ol className="flex items-center justify-between gap-1 sm:justify-start sm:gap-2">
-          {displaySteps.map((s, i) => {
-            const isCurrent = s.key === cart.step || (s.key === 'select_dog' && cart.step === 'junior_handler');
-            const isComplete = i < stepIndex;
-            return (
-              <li key={s.key} className="flex items-center gap-1 sm:gap-2">
-                {i > 0 && (
-                  <div
-                    className={cn(
-                      'h-px w-3 sm:w-8',
-                      isComplete ? 'bg-primary' : 'bg-border'
-                    )}
-                  />
-                )}
-                <div
-                  className={cn(
-                    'flex items-center justify-center gap-1.5 rounded-full px-2 py-1.5 text-xs font-medium transition-colors sm:px-3',
-                    isCurrent && 'bg-primary text-primary-foreground',
-                    isComplete && 'bg-primary/10 text-primary',
-                    !isCurrent && !isComplete && 'text-muted-foreground'
-                  )}
-                >
-                  {isComplete ? (
-                    <CheckCircle2 className="size-3.5" />
-                  ) : (
-                    <s.icon className="size-3.5" />
-                  )}
-                  <span className="text-[10px] leading-tight sm:text-xs">{s.label}</span>
-                </div>
-              </li>
-            );
-          })}
-        </ol>
+      {/* Step indicator — slim segmented progress bar */}
+      <nav className="mb-6 sm:mb-8" aria-label="Entry progress">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-semibold text-se-ink2">
+            {displaySteps[Math.max(stepIndex, 0)]?.label}
+          </span>
+          <span className="text-xs font-semibold text-se-ink3">
+            Step {Math.max(stepIndex, 0) + 1} of {displaySteps.length}
+          </span>
+        </div>
+        <div className="mt-2 flex gap-1.5">
+          {displaySteps.map((s, i) => (
+            <div
+              key={s.key}
+              className={cn(
+                'h-1.5 flex-1 rounded-full transition-colors',
+                i <= Math.max(stepIndex, 0) ? 'bg-se-fresh' : 'bg-se-line2'
+              )}
+            />
+          ))}
+        </div>
       </nav>
 
       {/* Cart badge */}
       {cart.entries.length > 0 && cart.step !== 'cart_review' && cart.step !== 'payment' && cart.step !== 'confirmation' && (
-        <div className="mb-4 flex items-center justify-between rounded-lg border bg-muted/50 px-3 py-2 sm:px-4">
-          <div className="flex items-center gap-2 text-xs sm:text-sm">
+        <div className="mb-4 flex items-center justify-between rounded-[13px] border border-se-line bg-se-surface px-3 py-2 sm:px-4">
+          <div className="flex items-center gap-2 text-xs text-se-ink2 sm:text-sm">
             <ShoppingCart className="size-4" />
             <span>
               {cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length} entr
               {cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length !== 1 ? 'ies' : 'y'} in cart
             </span>
             {cart.grandTotal > 0 && (
-              <Badge variant="secondary">{formatCurrency(cart.grandTotal)}</Badge>
+              <Chip tone="fresh">{formatCurrency(cart.grandTotal)}</Chip>
             )}
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
+          <button
+            type="button"
             onClick={() => cart.setStep('cart_review')}
             disabled={cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length === 0}
+            className="text-xs font-semibold text-se-fresh-deep hover:underline disabled:opacity-40"
           >
             View Cart
-          </Button>
+          </button>
         </div>
       )}
 
       {/* Step: Entry Type */}
       {cart.step === 'entry_type' && (
         <div className="space-y-4">
-          <h2 className="text-base font-semibold sm:text-lg">What type of entry?</h2>
+          <h2 className="font-serif text-[22px] font-bold text-se-ink sm:text-[26px]">What type of entry?</h2>
 
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <button
               type="button"
               onClick={() => cart.setEntryType('standard')}
-              className="flex min-h-[44px] items-start gap-3 rounded-xl border p-3 text-left transition-all hover:border-primary/50 sm:p-4"
+              className="flex min-h-[44px] items-start gap-3 rounded-[18px] border border-se-line bg-se-surface p-4 text-left shadow-[0_1px_2px_rgba(27,36,29,0.04)] transition-colors hover:border-se-fresh-line"
             >
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                <Dog className="size-5 text-primary" />
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-se-fresh-soft">
+                <Dog className="size-5 text-se-fresh-deep" />
               </div>
               <div>
-                <p className="text-sm font-medium sm:text-base">Enter a Dog</p>
-                <p className="text-xs text-muted-foreground sm:text-sm">
+                <p className="text-[15px] font-semibold text-se-ink">Enter a Dog</p>
+                <p className="text-[13px] text-se-ink3">
                   Standard breed class entry for your registered dog.
                 </p>
               </div>
@@ -863,14 +879,14 @@ export default function EnterShowPage() {
               <button
                 type="button"
                 onClick={() => cart.setEntryType('junior_handler')}
-                className="flex min-h-[44px] items-start gap-3 rounded-xl border p-3 text-left transition-all hover:border-primary/50 sm:p-4"
+                className="flex min-h-[44px] items-start gap-3 rounded-[18px] border border-se-line bg-se-surface p-4 text-left shadow-[0_1px_2px_rgba(27,36,29,0.04)] transition-colors hover:border-se-fresh-line"
               >
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-900/30">
-                  <Users className="size-5 text-orange-600 dark:text-orange-400" />
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-se-honey-soft">
+                  <Users className="size-5 text-se-honey-deep" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium sm:text-base">Junior Handler</p>
-                  <p className="text-xs text-muted-foreground sm:text-sm">
+                  <p className="text-[15px] font-semibold text-se-ink">Junior Handler</p>
+                  <p className="text-[13px] text-se-ink3">
                     Young handler entry — judged on handling skill, not the dog.
                   </p>
                 </div>
@@ -894,17 +910,17 @@ export default function EnterShowPage() {
 
         return (
         <div className="space-y-4">
-          <h2 className="text-base font-semibold sm:text-lg">Which dog are you entering?</h2>
+          <h2 className="font-serif text-[22px] font-bold text-se-ink sm:text-[26px]">Which dog are you entering?</h2>
 
           {/* Single breed show info banner */}
           {show?.showScope === 'single_breed' && showBreedName && (
-            <div className="flex gap-3 rounded-lg border border-dashed border-primary/30 bg-primary/5 p-3">
-              <Info className="mt-0.5 size-4 shrink-0 text-primary" />
-              <p className="text-sm text-muted-foreground">
-                This is a <span className="font-medium text-foreground">{showBreedName}</span> breed show.
+            <div className="flex gap-3 rounded-[14px] border border-se-line bg-se-surface p-3">
+              <Info className="mt-0.5 size-4 shrink-0 text-se-fresh-deep" />
+              <p className="text-sm text-se-ink2">
+                This is a <span className="font-medium text-se-ink">{showBreedName}</span> breed show.
                 Only dogs of this breed can be entered.
                 {filteredOutCount > 0 && (
-                  <span className="block mt-1 text-xs">
+                  <span className="block mt-1 text-xs text-se-ink3">
                     {filteredOutCount} of your dog{filteredOutCount !== 1 ? 's are' : ' is'} a different breed and not shown below.
                   </span>
                 )}
@@ -914,10 +930,10 @@ export default function EnterShowPage() {
 
           {dogsLoading ? (
             <div className="flex justify-center py-12">
-              <Loader2 className="size-6 animate-spin text-muted-foreground" />
+              <Loader2 className="size-6 animate-spin text-se-ink3" />
             </div>
           ) : eligibleDogs && eligibleDogs.length > 0 ? (
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {eligibleDogs.map((dog) => {
                 const alreadyInCart = cart.entries.some(
                   (e) => e.dogId === dog.id && e.classIds.length > 0
@@ -945,12 +961,13 @@ export default function EnterShowPage() {
                     }}
                     disabled={tooYoungForAll}
                     className={cn(
-                      'flex min-h-[44px] items-start gap-3 rounded-xl border p-3 text-left transition-all sm:p-4',
+                      'flex min-h-[44px] items-start gap-3 rounded-[18px] border p-4 text-left shadow-[0_1px_2px_rgba(27,36,29,0.04)] transition-colors',
                       tooYoungForAll && 'cursor-not-allowed opacity-50',
                       alreadyInCart
-                        ? 'border-primary/30 bg-primary/5'
-                        : !tooYoungForAll && 'hover:border-primary/50',
-                      tooYoungForCompetition && 'border-amber-300 dark:border-amber-700'
+                        ? 'border-se-fresh-line bg-se-fresh-soft'
+                        : !tooYoungForAll && 'border-se-line bg-se-surface hover:border-se-fresh-line',
+                      tooYoungForAll && 'border-se-line bg-se-surface',
+                      tooYoungForCompetition && !alreadyInCart && 'border-se-honey bg-se-surface'
                     )}
                   >
                     <div className={cn(
@@ -958,8 +975,8 @@ export default function EnterShowPage() {
                       tooYoungForAll
                         ? 'bg-destructive/10'
                         : tooYoungForCompetition
-                          ? 'bg-amber-100 dark:bg-amber-900/30'
-                          : 'bg-primary/10'
+                          ? 'bg-se-honey-soft'
+                          : 'bg-se-fresh-soft'
                     )}>
                       {tooYoungForAll ? (
                         <AlertTriangle className="size-5 text-destructive" />
@@ -972,29 +989,25 @@ export default function EnterShowPage() {
                       ) : (
                         <Dog className={cn(
                           'size-5',
-                          tooYoungForCompetition ? 'text-amber-600 dark:text-amber-400' : 'text-primary'
+                          tooYoungForCompetition ? 'text-se-honey-deep' : 'text-se-fresh-deep'
                         )} />
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <p className="font-medium">{formatDogName(dog)}</p>
-                        {alreadyInCart && (
-                          <Badge variant="secondary" className="text-xs shrink-0">
-                            In cart
-                          </Badge>
-                        )}
+                        <p className="font-semibold text-se-ink">{formatDogName(dog)}</p>
+                        {alreadyInCart && <Chip tone="fresh">In cart</Chip>}
                       </div>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-sm text-se-ink3">
                         {dog.breed?.name}
                       </p>
                       {dog.kcRegNumber && (
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-se-ink3">
                           RKC: {dog.kcRegNumber}
                         </p>
                       )}
                       {ageMonths !== null && show?.startDate && (
-                        <p className="mt-1 text-xs text-muted-foreground">
+                        <p className="mt-1 text-xs text-se-ink3">
                           Age on show day: {ageMonths} months
                         </p>
                       )}
@@ -1005,8 +1018,8 @@ export default function EnterShowPage() {
                       )}
                       {tooYoungForCompetition && (
                         <div className="mt-1.5 flex gap-1.5 items-start">
-                          <AlertTriangle className="mt-0.5 size-3 shrink-0 text-amber-600 dark:text-amber-400" />
-                          <p className="text-xs text-amber-700 dark:text-amber-300">
+                          <AlertTriangle className="mt-0.5 size-3 shrink-0 text-se-honey-deep" />
+                          <p className="text-xs text-se-honey-deep">
                             Under 6 months — eligible for NFC (Not For Competition) only
                           </p>
                         </div>
@@ -1021,37 +1034,33 @@ export default function EnterShowPage() {
             </div>
           ) : dogs && dogs.length > 0 && show?.showScope === 'single_breed' ? (
             // User has dogs but none match the show's breed
-            <Card>
-              <CardContent className="py-8 text-center">
-                <AlertTriangle className="mx-auto mb-3 size-10 text-amber-500" />
-                <p className="font-medium">No eligible dogs</p>
-                <p className="mb-4 text-sm text-muted-foreground">
-                  This is a {showBreedName ?? 'single breed'} show. None of your registered dogs are this breed.
-                </p>
-                <Button asChild variant="outline">
-                  <Link href="/dogs/new">Register a {showBreedName ?? 'new'} dog</Link>
-                </Button>
-              </CardContent>
-            </Card>
+            <SECard className="py-8 text-center">
+              <AlertTriangle className="mx-auto mb-3 size-10 text-se-honey-deep" />
+              <p className="font-medium text-se-ink">No eligible dogs</p>
+              <p className="mb-4 text-sm text-se-ink3">
+                This is a {showBreedName ?? 'single breed'} show. None of your registered dogs are this breed.
+              </p>
+              <Link href="/dogs/new" className={cn(SE_LINK_BTN_BASE, SE_LINK_BTN_VARIANT.ghost)}>
+                Register a {showBreedName ?? 'new'} dog
+              </Link>
+            </SECard>
           ) : (
-            <Card>
-              <CardContent className="py-8 text-center">
-                <Dog className="mx-auto mb-3 size-10 text-muted-foreground" />
-                <p className="font-medium">No dogs registered yet</p>
-                <p className="mb-4 text-sm text-muted-foreground">
-                  You need to add a dog before entering a show.
-                </p>
-                <Button asChild>
-                  <Link href="/dogs/new">Add a Dog</Link>
-                </Button>
-              </CardContent>
-            </Card>
+            <SECard className="py-8 text-center">
+              <Dog className="mx-auto mb-3 size-10 text-se-ink3" />
+              <p className="font-medium text-se-ink">No dogs registered yet</p>
+              <p className="mb-4 text-sm text-se-ink3">
+                You need to add a dog before entering a show.
+              </p>
+              <Link href="/dogs/new" className={cn(SE_LINK_BTN_BASE, SE_LINK_BTN_VARIANT.fresh)}>
+                Add a Dog
+              </Link>
+            </SECard>
           )}
 
           {eligibleDogs && eligibleDogs.length > 0 && (
             <Link
               href="/dogs/new"
-              className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+              className="inline-flex items-center gap-1 text-sm font-semibold text-se-fresh-deep hover:underline"
             >
               + Add a new dog
             </Link>
@@ -1059,17 +1068,15 @@ export default function EnterShowPage() {
 
           <div className="flex justify-start pt-4">
             {hasJhClasses ? (
-              <Button variant="outline" onClick={() => cart.setStep('entry_type')}>
+              <SEButton variant="ghost" size="sm" onClick={() => cart.setStep('entry_type')}>
                 <ChevronLeft className="size-4" />
                 Back
-              </Button>
+              </SEButton>
             ) : (
-              <Button variant="outline" asChild>
-                <Link href={`/shows/${idOrSlug}`}>
-                  <ChevronLeft className="size-4" />
-                  Back to Show
-                </Link>
-              </Button>
+              <Link href={`/shows/${idOrSlug}`} className={cn(SE_LINK_BTN_BASE, SE_LINK_BTN_VARIANT.ghost)}>
+                <ChevronLeft className="size-4" />
+                Back to Show
+              </Link>
             )}
           </div>
         </div>
@@ -1099,16 +1106,16 @@ export default function EnterShowPage() {
 
         return (
           <div className="space-y-6">
-            <h2 className="text-lg font-semibold">Junior Handler Details</h2>
+            <h2 className="font-serif text-[22px] font-bold text-se-ink sm:text-[26px]">Junior Handler Details</h2>
 
-            <div className="flex gap-3 rounded-lg border border-dashed border-primary/30 bg-primary/5 p-3">
-              <Info className="mt-0.5 size-4 shrink-0 text-primary" />
-              <p className="text-sm text-muted-foreground">
+            <div className="flex gap-3 rounded-[14px] border border-se-line bg-se-surface p-3">
+              <Info className="mt-0.5 size-4 shrink-0 text-se-fresh-deep" />
+              <p className="text-sm text-se-ink2">
                 Junior handling classes are judged on the handler&apos;s skill in presenting and moving their dog — not on the dog itself. Age is calculated on the first day of the show.
               </p>
             </div>
 
-            <div className="space-y-4">
+            <SECard className="space-y-4 p-4 sm:p-5">
               <div>
                 <Label htmlFor="jh-name">Handler Name</Label>
                 <Input
@@ -1118,7 +1125,7 @@ export default function EnterShowPage() {
                   placeholder="Full name of handler"
                   className="mt-1 h-11"
                 />
-                <p className="mt-1 text-xs text-muted-foreground">
+                <p className="mt-1 text-xs text-se-ink3">
                   The name of the person handling the dog in the ring.
                 </p>
               </div>
@@ -1133,9 +1140,7 @@ export default function EnterShowPage() {
                   className="mt-1 h-11"
                 />
                 {jhAgeYears !== null && !jhAgeError && (
-                  <Badge variant="secondary" className="mt-2">
-                    Age on show day: {jhAgeYears} years
-                  </Badge>
+                  <Chip tone="fresh" className="mt-2">Age on show day: {jhAgeYears} years</Chip>
                 )}
                 {jhAgeError && (
                   <p className="mt-2 text-sm font-medium text-destructive">
@@ -1143,9 +1148,9 @@ export default function EnterShowPage() {
                   </p>
                 )}
                 {!jhAgeError && jhAgeMonths !== null && !jhHasMatchingClasses && (
-                  <div className="mt-2 flex gap-2 rounded-md border border-amber-300 bg-amber-50 p-2 dark:border-amber-700 dark:bg-amber-950">
-                    <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
-                    <p className="text-sm text-amber-800 dark:text-amber-200">
+                  <div className="mt-2 flex gap-2 rounded-[10px] border border-se-honey bg-se-honey-soft p-2">
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0 text-se-honey-deep" />
+                    <p className="text-sm text-se-honey-ink">
                       No handling classes at this show match the handler&apos;s age.
                     </p>
                   </div>
@@ -1161,19 +1166,21 @@ export default function EnterShowPage() {
                   placeholder="YKC or JHA number"
                   className="mt-1 h-11"
                 />
-                <p className="mt-1 text-xs text-muted-foreground">
+                <p className="mt-1 text-xs text-se-ink3">
                   YKC or JHA membership number, if applicable.
                 </p>
               </div>
-            </div>
+            </SECard>
 
             <div className="flex gap-2 pt-4">
-              <Button variant="outline" className="h-11 flex-1 text-sm sm:flex-none" onClick={() => cart.setStep('entry_type')}>
+              <SEButton variant="ghost" className="flex-1 sm:flex-none" size="sm" onClick={() => cart.setStep('entry_type')}>
                 <ChevronLeft className="size-4" />
                 Back
-              </Button>
-              <Button
-                className="h-11 flex-1 text-sm sm:flex-none"
+              </SEButton>
+              <SEButton
+                variant="fresh"
+                className="flex-1 sm:flex-none"
+                size="sm"
                 onClick={() => {
                   cart.setJHDetails(jhName, jhDob, jhKcNumber || undefined);
                   setJhName('');
@@ -1184,7 +1191,7 @@ export default function EnterShowPage() {
               >
                 Next
                 <ChevronRight className="size-4" />
-              </Button>
+              </SEButton>
             </div>
           </div>
         );
@@ -1225,21 +1232,54 @@ export default function EnterShowPage() {
           return missing;
         })();
 
+        const dogAgeMonths =
+          selectedDog?.dateOfBirth && show?.startDate
+            ? differenceInMonths(new Date(show.startDate), new Date(selectedDog.dateOfBirth))
+            : null;
+
         return (
         <div className="space-y-6">
           <div>
-            <h2 className="text-base font-semibold sm:text-lg">Select classes</h2>
-            <p className="text-xs text-muted-foreground sm:text-sm">
+            <h2 className="font-serif text-[22px] font-bold text-se-ink sm:text-[26px]">Select classes</h2>
+            <p className="text-xs text-se-ink3 sm:text-sm">
               {cart.activeEntry?.entryType === 'standard'
                 ? `Choose classes for ${cart.activeEntry?.dogName ?? 'your dog'}`
                 : `Choose classes for ${cart.activeEntry?.handlerName ?? 'the handler'}`}
             </p>
           </div>
 
+          {/* Dog summary card — wiring task: Change reuses the Back handler */}
+          {cart.activeEntry?.entryType === 'standard' && cart.activeEntry?.dogName && (
+            <SECard className="flex items-center gap-3 p-3">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-se-fresh-soft text-se-fresh-deep">
+                <Dog className="size-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[15px] font-bold text-se-ink">{cart.activeEntry.dogName}</p>
+                <p className="truncate text-xs text-se-ink3">
+                  {[
+                    selectedDog?.breed?.name,
+                    selectedDog?.sex === 'dog' ? 'Dog' : selectedDog?.sex === 'bitch' ? 'Bitch' : null,
+                    dogAgeMonths !== null ? `${dogAgeMonths} months on show day` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleBackFromSelectClasses}
+                className="shrink-0 text-xs font-semibold text-se-fresh-deep hover:underline"
+              >
+                Change
+              </button>
+            </SECard>
+          )}
+
           {dogUnder6Months && (
-            <div className="flex gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950">
-              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
-              <div className="text-sm text-amber-800 dark:text-amber-200">
+            <div className="flex gap-3 rounded-[14px] border border-se-honey bg-se-honey-soft p-3">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-se-honey-deep" />
+              <div className="text-sm text-se-honey-ink">
                 <p className="font-medium">This dog is under 6 months old on show day</p>
                 <p className="mt-0.5 text-xs">
                   Per RKC regulations, dogs must be at least 6 months old for competition classes.
@@ -1250,9 +1290,9 @@ export default function EnterShowPage() {
           )}
 
           {svHealthMissing.length > 0 && (
-            <div className="flex gap-3 rounded-lg border border-amber-400 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950">
-              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
-              <div className="text-sm text-amber-900 dark:text-amber-100">
+            <div className="flex gap-3 rounded-[14px] border border-se-honey bg-se-honey-soft p-3">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-se-honey-deep" />
+              <div className="text-sm text-se-honey-ink">
                 <p className="font-medium">
                   Health data required for{' '}
                   {selectedSvHealthClasses
@@ -1266,16 +1306,12 @@ export default function EnterShowPage() {
                   profile, then come back to complete your entry.
                 </p>
                 {cart.activeEntry?.dogId && (
-                  <Button
-                    asChild
-                    variant="outline"
-                    size="sm"
-                    className="mt-2 h-9 border-amber-400 bg-white text-amber-900 hover:bg-amber-100"
+                  <Link
+                    href={`/dogs/${cart.activeEntry.dogId}/edit`}
+                    className={cn(SE_LINK_BTN_BASE, 'mt-2 h-9 min-h-0 border border-se-honey bg-white px-3 text-xs text-se-honey-ink hover:bg-se-honey-soft')}
                   >
-                    <Link href={`/dogs/${cart.activeEntry.dogId}/edit`}>
-                      Add health data to {cart.activeEntry.dogName ?? 'this dog'}
-                    </Link>
-                  </Button>
+                    Add health data to {cart.activeEntry.dogName ?? 'this dog'}
+                  </Link>
                 )}
               </div>
             </div>
@@ -1290,18 +1326,40 @@ export default function EnterShowPage() {
               {/* Render class groups */}
               {cart.activeEntry?.entryType === 'standard' ? (
                 <>
-                  {winSummary && (groupedClasses.age.length > 0 || groupedClasses.achievement.length > 0) && (
-                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm dark:border-blue-800 dark:bg-blue-950">
-                      <p className="font-medium text-blue-900 dark:text-blue-100">
-                        {winSummary.recommendation.suggested
-                          ? <>Suggested class: <span className="font-bold">{winSummary.recommendation.suggested}</span></>
-                          : 'Eligible for all achievement classes'}
-                      </p>
-                      <p className="mt-0.5 text-xs text-blue-700 dark:text-blue-300">
-                        {winSummary.recommendation.reason}
-                      </p>
-                    </div>
-                  )}
+                  {winSummary && (groupedClasses.age.length > 0 || groupedClasses.achievement.length > 0) && (() => {
+                    const rec = winSummary.recommendation;
+                    // Multi-class copy: when the suggestion is an achievement
+                    // class (i.e. it's in the achievement `eligible` list —
+                    // age-class suggestions aren't) and there's a runner-up,
+                    // phrase it as "we suggest X or Y". Single-class + the
+                    // existing reason string stay as the fallback.
+                    const isAchievementSuggestion = !!rec.suggested && rec.eligible.includes(rec.suggested);
+                    const second = isAchievementSuggestion
+                      ? rec.eligible.find((name) => name !== rec.suggested)
+                      : undefined;
+                    return (
+                      <div className="flex gap-2.5 rounded-[12px] border border-se-honey bg-se-honey-soft p-3">
+                        <Star className="mt-0.5 size-[18px] shrink-0 text-se-honey-deep" />
+                        <div>
+                          <p className="text-[13px] font-bold text-se-honey-deep">
+                            Recommended for {cart.activeEntry?.dogName ?? 'your dog'}
+                          </p>
+                          <p className="mt-1 text-[12.5px] leading-relaxed text-se-ink2">
+                            {rec.suggested ? (
+                              isAchievementSuggestion && second ? (
+                                <>We suggest <b className="text-se-ink">{rec.suggested}</b> or <b className="text-se-ink">{second}</b>.</>
+                              ) : (
+                                <>Suggested class: <b className="text-se-ink">{rec.suggested}</b>.</>
+                              )
+                            ) : (
+                              'Eligible for all achievement classes.'
+                            )}{' '}
+                            {rec.reason}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })()}
                   {groupedClasses.sv_age.length > 0 && (
                     <>
                       {/* SV shows: warn when the dog has no coat type set
@@ -1310,19 +1368,19 @@ export default function EnterShowPage() {
                           exhibitor sees the list duplicated. Amanda
                           2026-05-20. */}
                       {show?.showRuleset === 'wusv' && !selectedDog?.coatType && (
-                        <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
-                          <Info className="mt-0.5 size-4 shrink-0 text-amber-600" />
-                          <p className="text-sm text-amber-800 dark:text-amber-200">
+                        <div className="flex gap-3 rounded-[14px] border border-se-honey bg-se-honey-soft p-3">
+                          <Info className="mt-0.5 size-4 shrink-0 text-se-honey-deep" />
+                          <p className="text-sm text-se-honey-ink">
                             <span className="font-medium">{selectedDog?.registeredName ?? 'This dog'}</span> doesn&apos;t have a coat type set on the profile yet. Both Standard Coat and Long Coat classes are showing — pick the correct one, or set the coat type on the dog&apos;s profile so we can filter automatically.
                           </p>
                         </div>
                       )}
                       {groupedClasses.sv_age.length === 1 && selectedClassIds.length === 1 && (
-                        <div className="flex gap-3 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-950">
-                          <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-green-600" />
-                          <p className="text-sm text-green-800 dark:text-green-200">
+                        <div className="flex gap-3 rounded-[14px] border border-se-fresh-line bg-se-fresh-soft p-3">
+                          <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-se-fresh-deep" />
+                          <p className="text-sm text-se-ink2">
                             Based on your dog&apos;s age and coat type, they are eligible for{' '}
-                            <span className="font-medium">{(groupedClasses.sv_age[0] as { classDefinition: { name: string } }).classDefinition.name}</span>.
+                            <span className="font-medium text-se-ink">{(groupedClasses.sv_age[0] as { classDefinition: { name: string } }).classDefinition.name}</span>.
                             This has been automatically selected.
                           </p>
                         </div>
@@ -1333,6 +1391,7 @@ export default function EnterShowPage() {
                         selectedIds={selectedClassIds}
                         onToggle={toggleClass}
                         getAgeEligibility={getAgeEligibility}
+                        dogName={selectedDog?.registeredName}
                       />
                     </>
                   )}
@@ -1344,6 +1403,7 @@ export default function EnterShowPage() {
                       onToggle={toggleClass}
                       getAgeEligibility={getAgeEligibility}
                       suggestedClassName={winSummary?.recommendation.suggested}
+                      dogName={selectedDog?.registeredName}
                     />
                   )}
                   {groupedClasses.achievement.length > 0 && (
@@ -1368,11 +1428,11 @@ export default function EnterShowPage() {
               ) : (
                 <>
                   {availableClasses.length === 1 && selectedClassIds.length === 1 && (
-                    <div className="flex gap-3 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-950">
-                      <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-green-600" />
-                      <p className="text-sm text-green-800 dark:text-green-200">
+                    <div className="flex gap-3 rounded-[14px] border border-se-fresh-line bg-se-fresh-soft p-3">
+                      <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-se-fresh-deep" />
+                      <p className="text-sm text-se-ink2">
                         Based on the handler&apos;s age, they are eligible for{' '}
-                        <span className="font-medium">{availableClasses[0].classDefinition.name}</span>.
+                        <span className="font-medium text-se-ink">{availableClasses[0].classDefinition.name}</span>.
                         This has been automatically selected.
                       </p>
                     </div>
@@ -1386,9 +1446,9 @@ export default function EnterShowPage() {
                       feeOverride={show.juniorHandlerFee ?? undefined}
                     />
                   ) : (
-                    <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
-                      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
-                      <p className="text-sm text-amber-800 dark:text-amber-200">
+                    <div className="flex gap-3 rounded-[14px] border border-se-honey bg-se-honey-soft p-3">
+                      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-se-honey-deep" />
+                      <p className="text-sm text-se-honey-ink">
                         No handling classes match the handler&apos;s age. Go back and check the date of birth.
                       </p>
                     </div>
@@ -1400,15 +1460,15 @@ export default function EnterShowPage() {
                   (Amanda 2026-05-20). */}
               {cart.activeEntry?.entryType === 'standard' && show?.showRuleset !== 'wusv' && (
                 <>
-                  <Separator />
-                  <label className="flex cursor-pointer items-center gap-3">
+                  <Separator className="bg-se-line" />
+                  <label className="flex min-h-[44px] cursor-pointer items-center gap-3 rounded-[14px] border border-se-line bg-se-surface p-3">
                     <Checkbox
                       checked={isNfc}
                       onCheckedChange={(checked) => setIsNfc(checked === true)}
                     />
                     <div>
-                      <span className="font-medium">Not For Competition (NFC)</span>
-                      <p className="text-sm text-muted-foreground">
+                      <span className="font-medium text-se-ink">Not For Competition (NFC)</span>
+                      <p className="text-sm text-se-ink3">
                         Enter classes for experience only, not competing for awards.
                       </p>
                     </div>
@@ -1419,36 +1479,30 @@ export default function EnterShowPage() {
           )}
 
           {/* Running total */}
-          <div className="sticky bottom-16 md:bottom-0 rounded-lg border bg-background p-3 shadow-sm sm:p-4">
+          <div className="sticky bottom-16 md:bottom-0 rounded-[16px] border border-se-line bg-se-surface p-3 shadow-[0_-4px_18px_-12px_rgba(27,36,29,0.25)] sm:p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-xs text-muted-foreground sm:text-sm">
+                <p className="text-xs text-se-ink3 sm:text-sm">
                   {selectedClassIds.length} class
                   {selectedClassIds.length !== 1 ? 'es' : ''} selected
+                  {cart.activeEntry?.dogName ? ` · ${cart.activeEntry.dogName}` : ''}
                 </p>
-                <p className="text-base font-bold sm:text-lg">{formatCurrency(selectedTotal)}</p>
+                <p className="text-2xl font-bold text-se-ink sm:text-[26px]">{formatCurrency(selectedTotal)}</p>
               </div>
               <div className="flex w-full gap-2 sm:w-auto">
-                <Button
-                  variant="outline"
-                  className="h-11 flex-1 text-sm sm:flex-none"
-                  onClick={() => {
-                    if (cart.editingExisting) {
-                      cart.setStep('cart_review');
-                    } else {
-                      cart.setStep(
-                        cart.activeEntry?.entryType === 'standard'
-                          ? 'select_dog'
-                          : 'junior_handler'
-                      );
-                    }
-                  }}
+                <SEButton
+                  variant="ghost"
+                  size="sm"
+                  className="flex-1 sm:flex-none"
+                  onClick={handleBackFromSelectClasses}
                 >
                   <ChevronLeft className="size-4" />
                   Back
-                </Button>
-                <Button
-                  className="h-11 flex-1 text-sm sm:flex-none"
+                </SEButton>
+                <SEButton
+                  variant="fresh"
+                  size="sm"
+                  className="flex-1 sm:flex-none"
                   onClick={handleConfirmClasses}
                   disabled={
                     (selectedClassIds.length === 0 && !isNfc) ||
@@ -1458,7 +1512,7 @@ export default function EnterShowPage() {
                 >
                   {cart.editingExisting ? 'Update' : 'Add to Cart'}
                   <ChevronRight className="size-4" />
-                </Button>
+                </SEButton>
               </div>
             </div>
           </div>
@@ -1469,117 +1523,111 @@ export default function EnterShowPage() {
       {/* Step: Cart Review */}
       {cart.step === 'cart_review' && (
         <div className="space-y-6">
-          <h2 className="text-base font-semibold sm:text-lg">Review your entries</h2>
+          <h2 className="font-serif text-[22px] font-bold text-se-ink sm:text-[26px]">Review your entries</h2>
 
           {/* Show info — rich summary */}
-          <Card>
-            <CardHeader className="pb-2">
-              <div className="flex items-start justify-between">
-                <div>
-                  <CardTitle className="font-serif text-base">{show.name}</CardTitle>
-                  {show.showType && (
-                    <Badge variant="outline" className="mt-1 text-xs capitalize">{show.showType.replace('_', ' ')}</Badge>
-                  )}
-                </div>
+          <SECard className="p-4">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="font-serif text-base font-bold text-se-ink">{show.name}</p>
+                {show.showType && (
+                  <Chip className="mt-1 capitalize">{show.showType.replace('_', ' ')}</Chip>
+                )}
               </div>
-            </CardHeader>
-            <CardContent className="space-y-1.5 text-sm">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <CalendarDays className="size-3.5 shrink-0" />
+            </div>
+            <div className="mt-3 space-y-1.5 text-sm text-se-ink2">
+              <div className="flex items-center gap-2">
+                <CalendarDays className="size-3.5 shrink-0 text-se-ink3" />
                 {format(parseISO(show.startDate), 'EEEE d MMMM yyyy')}
               </div>
               {show.venue && (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <MapPin className="size-3.5 shrink-0" />
+                <div className="flex items-center gap-2">
+                  <MapPin className="size-3.5 shrink-0 text-se-ink3" />
                   {show.venue.name}{show.venue.postcode ? `, ${show.venue.postcode}` : ''}
                 </div>
               )}
               {show.organisation && (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Ticket className="size-3.5 shrink-0" />
+                <div className="flex items-center gap-2">
+                  <Ticket className="size-3.5 shrink-0 text-se-ink3" />
                   {(show.organisation as { name?: string }).name}
                 </div>
               )}
               {show.secretaryEmail && (
                 <a
                   href={`mailto:${show.secretaryEmail}?subject=Entry query — ${show.name}`}
-                  className="mt-2 inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                  className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-se-fresh-deep hover:underline"
                 >
                   <Mail className="size-3" />
                   Contact show secretary
                 </a>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </SECard>
 
           {/* Cart entries */}
           {cart.entries
             .filter((e) => e.classIds.length > 0 || e.isNfc)
             .map((entry) => (
-              <Card key={entry.id}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <CardTitle className="text-base">
-                        {entry.entryType === 'standard'
-                          ? entry.dogName ?? 'Dog'
-                          : `Junior Handler: ${entry.handlerName}`}
-                      </CardTitle>
-                      {entry.breedName && (
-                        <CardDescription>{entry.breedName}</CardDescription>
-                      )}
-                    </div>
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-11"
-                        onClick={() => cart.editEntry(entry.id)}
-                      >
-                        <Pencil className="size-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-11 text-destructive"
-                        onClick={() => cart.removeEntry(entry.id)}
-                      >
-                        <Trash2 className="size-4" />
-                      </Button>
-                    </div>
+              <SECard key={entry.id} className="p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-base font-bold text-se-ink">
+                      {entry.entryType === 'standard'
+                        ? entry.dogName ?? 'Dog'
+                        : `Junior Handler: ${entry.handlerName}`}
+                    </p>
+                    {entry.breedName && (
+                      <p className="text-sm text-se-ink3">{entry.breedName}</p>
+                    )}
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      aria-label="Edit entry"
+                      className="flex size-11 shrink-0 items-center justify-center rounded-full text-se-ink2 hover:bg-se-paper2"
+                      onClick={() => cart.editEntry(entry.id)}
+                    >
+                      <Pencil className="size-4" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Remove entry"
+                      className="flex size-11 shrink-0 items-center justify-center rounded-full text-destructive hover:bg-se-paper2"
+                      onClick={() => cart.removeEntry(entry.id)}
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  </div>
+                </div>
+                <div className="mt-2 space-y-2 text-sm">
                   {entry.entryType === 'junior_handler' && entry.handlerDob && show?.startDate && (
                     <div className="flex flex-wrap gap-2">
-                      <Badge variant="secondary">
+                      <Chip tone="fresh">
                         Age on show day: {handlerAgeYearsOnDate(entry.handlerDob, show.startDate)} years
-                      </Badge>
+                      </Chip>
                       {entry.handlerKcNumber && (
-                        <Badge variant="outline">
-                          Membership: {entry.handlerKcNumber}
-                        </Badge>
+                        <Chip>Membership: {entry.handlerKcNumber}</Chip>
                       )}
                     </div>
                   )}
                   {entry.classNames.length > 0 ? (
-                    <ul className="space-y-0.5 text-muted-foreground">
+                    <ul className="space-y-0.5 text-se-ink3">
                       {entry.classNames.map((name, i) => (
                         <li key={i}>{name}</li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-muted-foreground">
+                    <p className="text-se-ink3">
                       {entry.classIds.length} class
                       {entry.classIds.length !== 1 ? 'es' : ''}
                     </p>
                   )}
                   {entry.isNfc && (
-                    <p className="text-xs font-semibold text-amber-600">NOT FOR COMPETITION</p>
+                    <p className="text-xs font-semibold text-se-honey-deep">NOT FOR COMPETITION</p>
                   )}
-                  <p className="font-semibold">{formatCurrency(entry.totalFee)}</p>
-                </CardContent>
-              </Card>
+                  <p className="font-bold text-se-ink">{formatCurrency(entry.totalFee)}</p>
+                </div>
+              </SECard>
             ))}
 
           {/* Add another */}
@@ -1588,8 +1636,8 @@ export default function EnterShowPage() {
           {/* Sundry items (catalogues, memberships, donations, etc.) — shown BEFORE total */}
           {sundryItemsData && sundryItemsData.length > 0 && (
             <div className="space-y-2">
-              <h3 className="text-sm font-semibold">Add-ons</h3>
-              <p className="text-xs text-muted-foreground">
+              <h3 className="text-sm font-bold text-se-ink">Add-ons</h3>
+              <p className="text-xs text-se-ink3">
                 Optional extras available for this show — catalogues, memberships, and more.
               </p>
               {sundryItemsData.map((item) => {
@@ -1598,7 +1646,7 @@ export default function EnterShowPage() {
 
                 if (isCheckbox) {
                   return (
-                    <label key={item.id} className="flex cursor-pointer items-start gap-3 rounded-lg border p-3">
+                    <label key={item.id} className="flex cursor-pointer items-start gap-3 rounded-[14px] border border-se-line bg-se-surface p-3">
                       <Checkbox
                         checked={!!inCart}
                         onCheckedChange={(checked) => {
@@ -1614,15 +1662,15 @@ export default function EnterShowPage() {
                             cart.removeSundryItem(item.id);
                           }
                         }}
-                        className="mt-0.5"
+                        className="mt-0.5 rounded-[6px] border-se-line2 data-[state=checked]:border-se-green data-[state=checked]:bg-se-green data-[state=checked]:text-white"
                       />
                       <div className="flex-1">
-                        <span className="text-sm font-medium">{item.name}</span>
-                        <span className="ml-2 text-sm text-muted-foreground">
+                        <span className="text-sm font-medium text-se-ink">{item.name}</span>
+                        <span className="ml-2 text-sm text-se-ink3">
                           {formatCurrency(item.priceInPence)}
                         </span>
                         {item.description && (
-                          <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
+                          <p className="text-xs text-se-ink3 mt-0.5">{item.description}</p>
                         )}
                       </div>
                     </label>
@@ -1634,23 +1682,23 @@ export default function EnterShowPage() {
                 const max = item.maxPerOrder;
 
                 return (
-                  <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+                  <div key={item.id} className="flex items-center justify-between gap-3 rounded-[14px] border border-se-line bg-se-surface p-3">
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium">{item.name}</p>
+                      <p className="text-sm font-medium text-se-ink">{item.name}</p>
                       {item.description && (
-                        <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
+                        <p className="text-xs text-se-ink3 mt-0.5">{item.description}</p>
                       )}
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-se-ink3">
                         {formatCurrency(item.priceInPence)} each
                         {max ? ` · max ${max}` : ''}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="size-10"
+                      <button
+                        type="button"
+                        aria-label="Decrease quantity"
                         disabled={qty === 0}
+                        className="flex size-10 shrink-0 items-center justify-center rounded-full text-se-ink2 shadow-[inset_0_0_0_1px_#d7cfba] disabled:opacity-40"
                         onClick={() => {
                           if (qty <= 1) {
                             cart.removeSundryItem(item.id);
@@ -1666,13 +1714,13 @@ export default function EnterShowPage() {
                         }}
                       >
                         <Minus className="size-4" />
-                      </Button>
-                      <span className="w-6 text-center text-sm font-medium">{qty}</span>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="size-10"
+                      </button>
+                      <span className="w-6 text-center text-sm font-medium text-se-ink">{qty}</span>
+                      <button
+                        type="button"
+                        aria-label="Increase quantity"
                         disabled={max != null && qty >= max}
+                        className="flex size-10 shrink-0 items-center justify-center rounded-full text-se-ink2 shadow-[inset_0_0_0_1px_#d7cfba] disabled:opacity-40"
                         onClick={() => {
                           cart.setSundryItem({
                             sundryItemId: item.id,
@@ -1684,7 +1732,7 @@ export default function EnterShowPage() {
                         }}
                       >
                         <Plus className="size-3.5" />
-                      </Button>
+                      </button>
                     </div>
                   </div>
                 );
@@ -1694,61 +1742,61 @@ export default function EnterShowPage() {
 
           {/* Discount group declaration — only when the show offers groups */}
           {discountGroups && discountGroups.length > 0 && (
-            <div className="rounded-lg border bg-card p-4">
+            <SECard className="p-4">
               <div className="space-y-1">
-                <p className="text-sm font-semibold">Are you eligible for a discount?</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-sm font-semibold text-se-ink">Are you eligible for a discount?</p>
+                <p className="text-xs text-se-ink3">
                   Tick the option that applies to you. By checking it you confirm you qualify.
                 </p>
               </div>
               <div className="mt-3 space-y-2">
                 {discountGroups.map((g) => (
-                  <label key={g.id} className="flex cursor-pointer items-start gap-3 rounded-md border p-3 hover:bg-muted/30">
+                  <label key={g.id} className="flex cursor-pointer items-start gap-3 rounded-[10px] border border-se-line p-3 hover:bg-se-paper2/60">
                     <input
                       type="radio"
                       name="discount-group"
                       checked={discountGroupId === g.id}
                       onChange={() => setDiscountGroupId(g.id)}
-                      className="mt-0.5 size-4 cursor-pointer"
+                      className="mt-0.5 size-4 cursor-pointer accent-se-green"
                     />
                     <span className="text-sm">
-                      <span className="font-medium">I am a {g.label}</span>
-                      <span className="ml-2 text-xs text-muted-foreground">
+                      <span className="font-medium text-se-ink">I am a {g.label}</span>
+                      <span className="ml-2 text-xs text-se-ink3">
                         {formatCurrency(g.firstEntryFeePence)}/first class
                       </span>
                     </span>
                   </label>
                 ))}
-                <label className="flex cursor-pointer items-start gap-3 rounded-md border p-3 hover:bg-muted/30">
+                <label className="flex cursor-pointer items-start gap-3 rounded-[10px] border border-se-line p-3 hover:bg-se-paper2/60">
                   <input
                     type="radio"
                     name="discount-group"
                     checked={discountGroupId === null}
                     onChange={() => setDiscountGroupId(null)}
-                    className="mt-0.5 size-4 cursor-pointer"
+                    className="mt-0.5 size-4 cursor-pointer accent-se-green"
                   />
-                  <span className="text-sm font-medium">None of the above (standard rate)</span>
+                  <span className="text-sm font-medium text-se-ink">None of the above (standard rate)</span>
                 </label>
               </div>
-            </div>
+            </SECard>
           )}
 
           {/* Multi-dog savings banner */}
           {feePreview?.multiDogApplied && feePreview.multiDogSavings > 0 && (
-            <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900">
+            <div className="rounded-[14px] border border-se-fresh-line bg-se-fresh-soft px-4 py-3 text-sm text-se-ink">
               <p className="font-medium">
                 Multi-dog discount applied — saving {formatCurrency(feePreview.multiDogSavings)}
               </p>
-              <p className="mt-0.5 text-xs text-green-800/80">
+              <p className="mt-0.5 text-xs text-se-ink2">
                 You&apos;ve entered {feePreview.payingDogCount} dogs in paying classes.
               </p>
             </div>
           )}
 
           {/* Grand total with breakdown */}
-          <div className="rounded-lg border bg-muted/50 p-3 sm:p-4">
+          <div className="rounded-[16px] border border-se-line bg-se-paper2 p-3 sm:p-4">
             <div className="space-y-1.5">
-              <div className="flex justify-between text-sm text-muted-foreground">
+              <div className="flex justify-between text-sm text-se-ink3">
                 <span>
                   {cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length} entr
                   {cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length !== 1 ? 'ies' : 'y'}
@@ -1756,12 +1804,12 @@ export default function EnterShowPage() {
                 <span>{formatCurrency(feePreview?.total ?? cart.entriesTotal)}</span>
               </div>
               {cart.sundryTotal > 0 && (
-                <div className="flex justify-between text-sm text-muted-foreground">
+                <div className="flex justify-between text-sm text-se-ink3">
                   <span>Add-ons</span>
                   <span>{formatCurrency(cart.sundryTotal)}</span>
                 </div>
               )}
-              <div className="flex justify-between border-t pt-1.5 text-sm font-bold sm:text-base">
+              <div className="flex justify-between border-t border-se-line2 pt-1.5 text-sm font-bold text-se-ink sm:text-base">
                 <span>Grand Total</span>
                 <span>{formatCurrency((feePreview?.total ?? cart.entriesTotal) + cart.sundryTotal)}</span>
               </div>
@@ -1776,10 +1824,10 @@ export default function EnterShowPage() {
               official SV declaration; until then a sensible placeholder
               that names the right ruleset. */}
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold">
+            <h3 className="text-sm font-semibold text-se-ink">
               {show?.showRuleset === 'wusv' ? 'GSDL-BRG Declaration' : 'RKC Declaration'}
             </h3>
-            <div className="max-h-40 overflow-y-auto rounded-md border bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">
+            <div className="max-h-40 overflow-y-auto rounded-[10px] border border-se-line bg-se-paper2 p-3 text-xs leading-relaxed text-se-ink3">
               {show?.showRuleset === 'wusv' ? (
                 <>
                   I/We agree to abide by the GSDL-British Regional Group Rules &amp; Regulations (based on WUSV/SV Rules &amp; Regulations) for this Regional Event. I/We confirm that the information provided about the dog is accurate, and that the dog meets the eligibility requirements for the classes entered — including any health test disclosure, DNA recording, Koerung or working title requirements that apply to the class. I/We undertake not to bring to the Event any dog which has contracted or been knowingly exposed to any infectious or contagious disease during the 21 days prior to the Event, or which is suffering from a visible condition that adversely affects its health or welfare. I/We acknowledge that exhibitors are obligated to make true statements about their dog(s) and to show sportsmanlike conduct; any attempt at deception may result in disqualification and disciplinary action by the GSDL-BRG.
@@ -1821,43 +1869,42 @@ export default function EnterShowPage() {
                   setHealthDeclared(val);
                   setTermsAccepted(val);
                 }}
-                className="mt-0.5"
+                className="mt-0.5 rounded-[6px] border-se-line2 data-[state=checked]:border-se-green data-[state=checked]:bg-se-green data-[state=checked]:text-white"
               />
-              <span className="text-sm font-medium leading-relaxed">
+              <span className="text-sm font-medium leading-relaxed text-se-ink">
                 I agree to the above declaration
               </span>
             </label>
           </div>
 
           {/* Privacy: right to withhold from catalogue — RKC F(1).11.b.(6)/(8) */}
-          <div className="rounded-lg border bg-card p-4">
+          <SECard className="p-4">
             <label className="flex cursor-pointer items-start gap-3">
               <Checkbox
                 checked={withholdFromPublication}
                 onCheckedChange={(checked) => setWithholdFromPublication(checked === true)}
-                className="mt-0.5"
+                className="mt-0.5 rounded-[6px] border-se-line2 data-[state=checked]:border-se-green data-[state=checked]:bg-se-green data-[state=checked]:text-white"
               />
               <span className="text-sm leading-relaxed">
-                <span className="font-medium">Keep my name and address out of the catalogue</span>
-                <span className="mt-1 block text-xs text-muted-foreground">
+                <span className="font-medium text-se-ink">Keep my name and address out of the catalogue</span>
+                <span className="mt-1 block text-xs text-se-ink3">
                   Your dog&apos;s registered name and pedigree details will still appear — only your owner details will be withheld.
                   This is your right under Kennel Club regulation F(1).11.b.
                 </span>
               </span>
             </label>
-          </div>
+          </SECard>
 
           {checkoutMutation.error && (
-            <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+            <div className="rounded-[14px] bg-destructive/10 p-3 text-sm text-destructive">
               {checkoutMutation.error.message}
             </div>
           )}
 
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              className="h-11 text-sm sm:text-base"
-              size="lg"
+            <SEButton
+              variant="ghost"
+              className="text-sm sm:text-base"
               onClick={() => {
                 const lastEntry = cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).pop();
                 if (lastEntry) {
@@ -1867,10 +1914,10 @@ export default function EnterShowPage() {
             >
               <ChevronLeft className="size-4" />
               Back
-            </Button>
-            <Button
-              className="h-11 flex-1 text-sm sm:text-base"
-              size="lg"
+            </SEButton>
+            <SEButton
+              variant="fresh"
+              className="flex-1 text-sm sm:text-base"
               onClick={handleProceedToPayment}
               disabled={
                 !healthDeclared ||
@@ -1898,14 +1945,16 @@ export default function EnterShowPage() {
                   })()}
                 </>
               )}
-            </Button>
+            </SEButton>
           </div>
         </div>
       )}
 
-      {/* Step: Payment */}
+      {/* Step: Payment — font-sans deliberately restores Inter here (the
+          .show-exp wrapper's Hanken Grotesk otherwise cascades into every
+          descendant); this whole block's markup is untouched, see notes. */}
       {cart.step === 'payment' && clientSecret && (
-        <div className="space-y-6">
+        <div className="space-y-6 font-sans">
           <h2 className="text-base font-semibold sm:text-lg">Payment</h2>
           <Card>
             <CardHeader>
@@ -1952,65 +2001,110 @@ export default function EnterShowPage() {
       )}
 
       {/* Step: Confirmation */}
-      {cart.step === 'confirmation' && (
-        <div className="space-y-6 text-center">
-          <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30 sm:size-16">
-            <CheckCircle2 className="size-8 text-green-600 dark:text-green-400" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold sm:text-2xl">
-              {cart.entries.length === 1 ? 'Entry' : 'Entries'} Confirmed!
+      {cart.step === 'confirmation' && (() => {
+        const confirmedEntries = cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc);
+        // First name / email come straight from the session, same pattern as
+        // dashboard/page.tsx (`session?.user?.name?.split(' ')[0]`) — skipped
+        // entirely if the session hasn't got them.
+        const firstName = session?.user?.name?.split(' ')[0];
+        const userEmail = session?.user?.email;
+        // Existing, honest copy (no promised running-order email date — that
+        // send doesn't exist). Show day only adds the doors time when the
+        // show actually has one set.
+        const timelineRows: [string, string][] = [
+          ['Now', "You'll receive a confirmation email shortly with your entry details."],
+          ['Before the show', 'Ring numbers and catalogue details will be emailed to you before the show.'],
+          [
+            'Show day',
+            show.showOpenTime
+              ? `Doors ${show.showOpenTime} — bring your entry confirmation.`
+              : 'Bring your entry confirmation on show day.',
+          ],
+        ];
+
+        return (
+        <div className="space-y-6">
+          {/* Dark hero */}
+          <div className="relative overflow-hidden rounded-[22px] bg-gradient-to-b from-se-deep to-se-deepest px-5 py-8 text-center text-se-cream">
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute -left-12 top-5 size-48 rounded-full opacity-25"
+              style={{ background: 'radial-gradient(circle, #5bb579, transparent 68%)' }}
+            />
+            <div className="relative mx-auto flex size-16 items-center justify-center rounded-full bg-se-fresh text-[#0e2c19] shadow-[0_16px_34px_-14px_rgba(0,0,0,0.55)]">
+              <CheckCircle2 className="size-8" />
+            </div>
+            <h2 className="relative mt-3.5 font-serif text-[26px] font-bold text-se-cream sm:text-[29px]">
+              You&apos;re entered{firstName ? `, ${firstName}` : ''}!
             </h2>
-            <p className="mt-2 text-muted-foreground">
-              Your {cart.entries.length === 1 ? 'entry' : `${cart.entries.length} entries`} for{' '}
-              {show.name} {cart.entries.length === 1 ? 'has' : 'have'} been submitted.
+            <p className="relative mt-1.5 text-[13.5px] text-se-cream/80">
+              {confirmedEntries.length} {confirmedEntries.length === 1 ? 'entry' : 'entries'} &middot; {formatCurrency(paymentAmount)} paid
             </p>
+            {userEmail && (
+              <p className="relative mt-3 inline-flex items-center gap-1.5 text-xs text-se-cream/75">
+                <Mail className="size-3.5" />
+                Confirmation sent to {userEmail}
+              </p>
+            )}
           </div>
 
-          <Card>
-            <CardContent className="space-y-3 py-4">
+          {/* Order details */}
+          <SECard className="p-4">
+            <div className="space-y-3 text-sm">
               {orderId && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Order Reference</span>
-                  <span className="font-mono font-medium">
+                <div className="flex justify-between">
+                  <span className="text-se-ink3">Order Reference</span>
+                  <span className="font-mono font-medium text-se-ink">
                     {orderId.slice(0, 8).toUpperCase()}
                   </span>
                 </div>
               )}
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Entries</span>
-                <span>{cart.entries.filter((e) => e.classIds.length > 0 || e.isNfc).length}</span>
+              <div className="flex justify-between">
+                <span className="text-se-ink3">Entries</span>
+                <span className="text-se-ink">{confirmedEntries.length}</span>
               </div>
-              {cart.entries
-                .filter((e) => e.classIds.length > 0 || e.isNfc)
-                .map((entry) => (
-                  <div key={entry.id} className="space-y-1 text-sm">
-                    <div className="flex justify-between">
-                      <span className="font-medium">
-                        {entry.entryType === 'standard'
-                          ? entry.dogName
-                          : `JH: ${entry.handlerName}`}
-                      </span>
-                      <span className="text-muted-foreground">{entry.classIds.length} classes</span>
-                    </div>
-                    {entry.classNames.length > 0 && (
-                      <ul className="ml-1 space-y-0.5 text-xs text-muted-foreground">
-                        {entry.classNames.map((name, i) => (
-                          <li key={i}>{name}</li>
-                        ))}
-                      </ul>
-                    )}
+              {confirmedEntries.map((entry) => (
+                <div key={entry.id} className="space-y-1">
+                  <div className="flex justify-between">
+                    <span className="font-medium text-se-ink">
+                      {entry.entryType === 'standard'
+                        ? entry.dogName
+                        : `JH: ${entry.handlerName}`}
+                    </span>
+                    <span className="text-se-ink3">{entry.classIds.length} classes</span>
                   </div>
-                ))}
-              <Separator />
-              <div className="flex justify-between font-bold">
+                  {entry.classNames.length > 0 && (
+                    <ul className="ml-1 space-y-0.5 text-xs text-se-ink3">
+                      {entry.classNames.map((name, i) => (
+                        <li key={i}>{name}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
+              <div className="flex justify-between border-t border-se-line pt-3 text-base font-bold text-se-ink">
                 <span>Paid</span>
                 <span>{formatCurrency(paymentAmount)}</span>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </SECard>
 
-          {/* Share prompt */}
+          {/* What happens next — timeline */}
+          <div>
+            <SecLabel>What happens next</SecLabel>
+            <SECard className="px-4">
+              {timelineRows.map(([k, t], i) => (
+                <div key={k} className={cn('flex gap-3 py-3', i > 0 && 'border-t border-se-line')}>
+                  <span className="w-[92px] shrink-0 text-[11px] font-bold uppercase tracking-wide text-se-honey-deep">
+                    {k}
+                  </span>
+                  <span className="text-[13.5px] leading-relaxed text-se-ink2">{t}</span>
+                </div>
+              ))}
+            </SECard>
+          </div>
+
+          {/* Share prompt — dark "Bring your ring-mates" card */}
           {(() => {
             const standardEntries = cart.entries.filter(
               (e) => e.classIds.length > 0 && e.entryType === 'standard'
@@ -2039,108 +2133,115 @@ export default function EnterShowPage() {
             const fbShareUrl = `${showUrl}?src=facebook`;
 
             return (
-              <Card className="mx-auto w-full max-w-md border-primary/20 bg-primary/5">
-                <CardContent className="space-y-3 py-5 text-center">
-                  <p className="text-sm font-semibold">
-                    You&apos;re in! Let your breed group know you&apos;re coming.
-                  </p>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
-                    <Button
-                      className="min-h-[2.75rem] gap-2 bg-[#25D366] text-white hover:bg-[#20BD5A]"
-                      asChild
-                    >
-                      <a
-                        href={whatsappUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={() => trackShare('whatsapp')}
-                      >
-                        <svg className="size-4" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                        WhatsApp
-                      </a>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="min-h-[2.75rem] gap-2 border-[#1877F2]/30 bg-white text-[#1877F2]"
-                      onClick={async () => {
-                        trackShare('facebook');
-                        // Mobile: FB app hijacks facebook.com URLs and shows
-                        // a blank screen — copy the link instead (years-old
-                        // Meta bug, no client-side fix). Desktop: no app to
-                        // intercept so the web sharer works fine.
-                        const mobile =
-                          typeof navigator !== 'undefined' &&
-                          /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-                        if (mobile) {
-                          try {
-                            await navigator.clipboard.writeText(fbShareUrl);
-                            toast.success('Link copied — paste it into your Facebook post or group');
-                          } catch {
-                            toast.error('Could not copy the link. Long-press to copy it manually.');
-                          }
-                          return;
-                        }
-                        window.open(
-                          `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(fbShareUrl)}`,
-                          '_blank',
-                          'noopener,noreferrer'
-                        );
-                      }}
-                    >
-                      <svg className="size-4" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073" />
-                      </svg>
-                      Facebook
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="min-h-[2.75rem] gap-2"
-                      onClick={async () => {
-                        trackShare('copy');
-                        if (typeof navigator !== 'undefined' && navigator.share) {
-                          try {
-                            await navigator.share({
-                              title: show?.name ?? 'Dog Show Entry',
-                              text: `I've just entered ${dogLabel} into ${show?.name ?? 'a show'}! \u{1F415}`,
-                              url: showUrl,
-                            });
-                            return;
-                          } catch (e) {
-                            if ((e as Error).name === 'AbortError') return;
-                          }
-                        }
+              <div className="mx-auto w-full max-w-md rounded-[16px] bg-gradient-to-br from-se-deep to-se-deepest p-4 text-center text-se-cream">
+                <p className="text-sm font-semibold">
+                  You&apos;re in! Let your breed group know you&apos;re coming.
+                </p>
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:justify-center">
+                  <a
+                    href={whatsappUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => trackShare('whatsapp')}
+                    className={cn(SE_LINK_BTN_BASE, 'bg-[#25D366] text-white')}
+                  >
+                    <svg className="size-4" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                    WhatsApp
+                  </a>
+                  <button
+                    type="button"
+                    className={cn(SE_LINK_BTN_BASE, 'bg-white text-[#1877F2]')}
+                    onClick={async () => {
+                      trackShare('facebook');
+                      // Mobile: FB app hijacks facebook.com URLs and shows
+                      // a blank screen — copy the link instead (years-old
+                      // Meta bug, no client-side fix). Desktop: no app to
+                      // intercept so the web sharer works fine.
+                      const mobile =
+                        typeof navigator !== 'undefined' &&
+                        /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+                      if (mobile) {
                         try {
-                          await navigator.clipboard.writeText(shareText);
-                          setShareCopied(true);
-                          toast.success('Copied! Paste into Facebook, breed groups, etc.');
-                          setTimeout(() => setShareCopied(false), 2000);
+                          await navigator.clipboard.writeText(fbShareUrl);
+                          toast.success('Link copied — paste it into your Facebook post or group');
                         } catch {
-                          toast.error('Could not copy to clipboard');
+                          toast.error('Could not copy the link. Long-press to copy it manually.');
                         }
-                      }}
-                    >
-                      {shareCopied ? (
-                        <Check className="size-4 text-green-600" />
-                      ) : (
-                        <Copy className="size-4" />
-                      )}
-                      {shareCopied ? 'Copied!' : 'Copy Link'}
-                    </Button>
-                  </div>
-                  <p className="text-xs italic text-muted-foreground">
-                    A share from you is worth ten from us.
-                  </p>
-                </CardContent>
-              </Card>
+                        return;
+                      }
+                      window.open(
+                        `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(fbShareUrl)}`,
+                        '_blank',
+                        'noopener,noreferrer'
+                      );
+                    }}
+                  >
+                    <svg className="size-4" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073" />
+                    </svg>
+                    Facebook
+                  </button>
+                  <button
+                    type="button"
+                    className={cn(SE_LINK_BTN_BASE, SE_LINK_BTN_VARIANT.onDark)}
+                    onClick={async () => {
+                      trackShare('copy');
+                      if (typeof navigator !== 'undefined' && navigator.share) {
+                        try {
+                          await navigator.share({
+                            title: show?.name ?? 'Dog Show Entry',
+                            text: `I've just entered ${dogLabel} into ${show?.name ?? 'a show'}! \u{1F415}`,
+                            url: showUrl,
+                          });
+                          return;
+                        } catch (e) {
+                          if ((e as Error).name === 'AbortError') return;
+                        }
+                      }
+                      try {
+                        await navigator.clipboard.writeText(shareText);
+                        setShareCopied(true);
+                        toast.success('Copied! Paste into Facebook, breed groups, etc.');
+                        setTimeout(() => setShareCopied(false), 2000);
+                      } catch {
+                        toast.error('Could not copy to clipboard');
+                      }
+                    }}
+                  >
+                    {shareCopied ? (
+                      <Check className="size-4" />
+                    ) : (
+                      <Copy className="size-4" />
+                    )}
+                    {shareCopied ? 'Copied!' : 'Copy Link'}
+                  </button>
+                </div>
+                <p className="mt-3 text-xs italic text-se-cream/70">
+                  A share from you is worth ten from us.
+                </p>
+                <p className="mt-3 flex items-start justify-center gap-1.5 text-[11.5px] leading-relaxed text-se-cream/60">
+                  <Lock className="mt-0.5 size-3 shrink-0" />
+                  Entirely your choice — it shares only what you see here, never your dog&apos;s details.
+                </p>
+              </div>
             );
           })()}
 
+          {/* Add to calendar — route already exists */}
+          <a
+            href={`/api/shows/${show.id}/calendar`}
+            className={cn(SE_LINK_BTN_BASE, SE_LINK_BTN_VARIANT.ghost, 'mx-auto w-full max-w-md')}
+          >
+            <CalendarPlus className="size-4" />
+            Add show day to calendar
+          </a>
+
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-            <Button asChild>
-              <Link href="/entries">View My Entries</Link>
-            </Button>
-            <Button
-              variant="outline"
+            <Link href="/entries" className={cn(SE_LINK_BTN_BASE, SE_LINK_BTN_VARIANT.fresh)}>
+              View My Entries
+            </Link>
+            <SEButton
+              variant="ghost"
               onClick={() => {
                 cart.reset();
                 setHealthDeclared(false);
@@ -2151,45 +2252,30 @@ export default function EnterShowPage() {
               }}
             >
               Enter More Dogs
-            </Button>
+            </SEButton>
           </div>
 
           {/* Catalogue purchase note */}
           {cart.sundryItems.some((s) => isCatalogueItem(s.name)) && (
-            <Card className="mx-auto w-full max-w-md border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-900/20">
-              <CardContent className="py-4 text-center">
-                <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
-                  Online Catalogue Purchased
-                </p>
-                <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
-                  Your catalogue will be available at{' '}
-                  <Link
-                    href={`/shows/${show?.slug ?? idOrSlug}/catalogue`}
-                    className="underline font-medium"
-                  >
-                    this link
-                  </Link>{' '}
-                  once entries close.
-                </p>
-              </CardContent>
-            </Card>
+            <SECard className="mx-auto w-full max-w-md border-se-fresh-line bg-se-fresh-soft p-4 text-center">
+              <p className="text-sm font-semibold text-se-fresh-deep">
+                Online Catalogue Purchased
+              </p>
+              <p className="mt-1 text-xs text-se-ink2">
+                Your catalogue will be available at{' '}
+                <Link
+                  href={`/shows/${show?.slug ?? idOrSlug}/catalogue`}
+                  className="underline font-medium text-se-fresh-deep"
+                >
+                  this link
+                </Link>{' '}
+                once entries close.
+              </p>
+            </SECard>
           )}
-
-          <Accordion type="single" collapsible className="mx-auto w-full max-w-md text-left">
-            <AccordionItem value="what-next">
-              <AccordionTrigger className="justify-center gap-2 text-sm font-medium text-muted-foreground">
-                <Info className="size-4 shrink-0" />
-                What happens next?
-              </AccordionTrigger>
-              <AccordionContent className="space-y-2 text-sm text-muted-foreground">
-                <p>You&apos;ll receive a confirmation email shortly with your entry details.</p>
-                <p>Ring numbers and catalogue details will be emailed to you before the show.</p>
-                <p>Bring your entry confirmation on show day.</p>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
@@ -2211,6 +2297,17 @@ interface ShowClassItem {
   };
 }
 
+/** Humanizes a class age-bound (in months) for the ineligible-reason pill.
+ *  Round multiples of a year — e.g. Veteran's 84-month minimum — read far
+ *  more naturally as "7 years" than "84 months". Anything not year-aligned
+ *  (Puppy/Junior/etc. bounds) stays in months. */
+function formatAgeBoundForReason(months: number): string {
+  if (months >= 24 && months % 12 === 0) {
+    return `${months / 12} years`;
+  }
+  return `${months} months`;
+}
+
 function ClassGroup({
   title,
   classes,
@@ -2220,6 +2317,7 @@ function ClassGroup({
   eligibleClassNames,
   suggestedClassName,
   feeOverride,
+  dogName,
 }: {
   title: string;
   classes: ShowClassItem[];
@@ -2228,32 +2326,51 @@ function ClassGroup({
   getAgeEligibility?: (
     min: number | null,
     max: number | null
-  ) => { ageMonths: number; eligible: boolean } | null;
+  ) => { ageMonths: number; eligible: boolean; failedBound: 'min' | 'max' | null } | null;
   eligibleClassNames?: string[];
   suggestedClassName?: string | null;
   feeOverride?: number | null;
+  dogName?: string | null;
 }) {
-  // Filter out age-ineligible classes if eligibility info is available
-  const visibleClasses = getAgeEligibility
-    ? classes.filter((sc) => {
-        if (sc.classDefinition.type !== 'age' && sc.classDefinition.type !== 'sv_age') return true;
-        const elig = getAgeEligibility(
-          sc.classDefinition.minAgeMonths,
-          sc.classDefinition.maxAgeMonths
-        );
-        return !elig || elig.eligible;
-      })
-    : classes;
+  const [showAllLocked, setShowAllLocked] = useState(false);
 
-  if (visibleClasses.length === 0) return null;
+  // Split age/sv_age classes into ones the dog is age-eligible for
+  // (selectable, as before) and ones it isn't (shown locked-with-reason
+  // rather than silently hidden). Sex/coat/AVNSC/JH-age filtering all
+  // happen upstream (groupedClasses / availableClasses) before classes
+  // ever reach this component, so those stay completely hidden — only
+  // age-based ineligibility becomes a visible locked row here.
+  const unlockedClasses: ShowClassItem[] = [];
+  const lockedClasses: Array<{ sc: ShowClassItem; reason: string }> = [];
+  for (const sc of classes) {
+    const isAgeType = sc.classDefinition.type === 'age' || sc.classDefinition.type === 'sv_age';
+    const elig = isAgeType && getAgeEligibility
+      ? getAgeEligibility(sc.classDefinition.minAgeMonths, sc.classDefinition.maxAgeMonths)
+      : null;
+    if (!elig || elig.eligible) {
+      unlockedClasses.push(sc);
+      continue;
+    }
+    const { minAgeMonths, maxAgeMonths } = sc.classDefinition;
+    const reason = elig.failedBound === 'min'
+      ? `Under ${formatAgeBoundForReason(minAgeMonths ?? 0)} on show day`
+      : `Over ${formatAgeBoundForReason(maxAgeMonths ?? 0)} on show day`;
+    lockedClasses.push({ sc, reason });
+  }
+
+  if (unlockedClasses.length === 0 && lockedClasses.length === 0) return null;
+
+  const LOCKED_COLLAPSE_THRESHOLD = 4;
+  const shouldCollapseLocked = lockedClasses.length > LOCKED_COLLAPSE_THRESHOLD;
+  const visibleLocked = shouldCollapseLocked && !showAllLocked ? [] : lockedClasses;
 
   return (
     <div>
-      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+      <h3 className="mb-2.5 text-xs font-bold uppercase tracking-wider text-se-ink3">
         {title}
       </h3>
-      <div className="space-y-2">
-        {visibleClasses.map((sc) => {
+      <div className="rounded-[14px] border border-se-line bg-se-surface px-3.5">
+        {unlockedClasses.map((sc, i) => {
           const isSelected = selectedIds.includes(sc.id);
           const isSuggested = suggestedClassName === sc.classDefinition.name;
           const isIneligible = eligibleClassNames && !eligibleClassNames.includes(sc.classDefinition.name);
@@ -2261,20 +2378,19 @@ function ClassGroup({
             <label
               key={sc.id}
               className={cn(
-                'flex min-h-[44px] cursor-pointer items-start gap-2 rounded-lg border p-3 transition-all hover:bg-accent/50 sm:gap-3',
-                isSelected && 'border-primary bg-primary/5',
-                isSuggested && !isSelected && 'border-blue-300 bg-blue-50/50 dark:border-blue-700 dark:bg-blue-950/30',
+                'flex min-h-[44px] cursor-pointer items-center gap-3 py-2.5',
+                i > 0 && 'border-t border-se-line',
                 isIneligible && 'opacity-50',
               )}
             >
               <Checkbox
                 checked={isSelected}
                 onCheckedChange={() => onToggle(sc.id)}
-                className="mt-0.5"
+                className="size-6 shrink-0 rounded-[7px] border-se-line2 data-[state=checked]:border-se-green data-[state=checked]:bg-se-green data-[state=checked]:text-white"
               />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                  <span className="font-medium">
+                  <span className={cn('text-[14.5px]', isSelected ? 'font-semibold text-se-ink' : 'font-medium text-se-ink')}>
                     {sc.classDefinition.name.replace(/^SV\s+/, '')}
                     {sc.sex && (
                       <span className="ml-1">
@@ -2286,34 +2402,76 @@ function ClassGroup({
                         Adult Bitch (stock) and Adult Bitch (long_stock)
                         rows. Amanda 2026-05-20. */}
                     {(sc as { svCoatType?: 'stock' | 'long_stock' | null }).svCoatType && (
-                      <span className="ml-1 text-muted-foreground">
+                      <span className="ml-1 text-se-ink3">
                         — {(sc as { svCoatType?: 'stock' | 'long_stock' }).svCoatType === 'long_stock' ? 'Long Coat' : 'Standard Coat'}
                       </span>
                     )}
                   </span>
                   {isSuggested && (
-                    <Badge variant="secondary" className="bg-blue-100 text-blue-800 text-xs px-1.5 py-0 dark:bg-blue-900 dark:text-blue-200">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-se-honey-soft px-2 py-0.5 text-[10.5px] font-bold text-se-honey-deep">
+                      <Star className="size-2.5" />
                       Recommended
-                    </Badge>
+                    </span>
                   )}
                   {isIneligible && (
-                    <Badge variant="outline" className="text-xs px-1.5 py-0 text-muted-foreground">
+                    <span className="rounded-full px-2 py-0.5 text-[10.5px] text-se-ink3 shadow-[inset_0_0_0_1px_#e7e1d3]">
                       May not be eligible
-                    </Badge>
+                    </span>
                   )}
                 </div>
                 {sc.classDefinition.description && (
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-se-ink3">
                     {sc.classDefinition.description}
                   </p>
                 )}
               </div>
-              <span className="shrink-0 text-sm font-semibold">
+              <span className={cn('shrink-0 text-[14.5px] font-bold', isSelected ? 'text-se-fresh-deep' : 'text-se-ink3')}>
                 {formatCurrency(feeOverride != null ? feeOverride : sc.entryFee)}
               </span>
             </label>
           );
         })}
+
+        {/* Age-ineligible classes: locked-with-reason rather than hidden,
+            so exhibitors can see why a class is missing. Never selectable,
+            never priced, never counted toward the total. */}
+        {shouldCollapseLocked && (
+          <button
+            type="button"
+            onClick={() => setShowAllLocked((v) => !v)}
+            className={cn(
+              'w-full py-2.5 text-left text-[12.5px] font-semibold text-se-ink3 underline underline-offset-2',
+              unlockedClasses.length > 0 && 'border-t border-se-line',
+            )}
+          >
+            {showAllLocked
+              ? 'Hide'
+              : `Show ${lockedClasses.length} classes ${dogName ?? 'this dog'} isn't eligible for`}
+          </button>
+        )}
+        {visibleLocked.map(({ sc, reason }, i) => (
+          <div
+            key={sc.id}
+            className={cn(
+              'flex min-h-[44px] items-center gap-3 py-2.5 opacity-50',
+              (i > 0 || unlockedClasses.length > 0 || (shouldCollapseLocked && showAllLocked)) &&
+                'border-t border-se-line',
+            )}
+          >
+            <div className="flex size-6 shrink-0 items-center justify-center rounded-[7px] border border-se-line2 bg-se-paper2">
+              <Lock className="size-3 text-se-ink3" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <span className="text-[14.5px] font-medium text-se-ink3">
+                {sc.classDefinition.name.replace(/^SV\s+/, '')}
+                {sc.sex && <span className="ml-1">{sc.sex === 'dog' ? 'Dog' : 'Bitch'}</span>}
+              </span>
+            </div>
+            <span className="shrink-0 whitespace-nowrap rounded-full bg-se-paper2 px-2.5 py-0.5 text-[11px] font-semibold text-se-ink3">
+              {reason}
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   );
