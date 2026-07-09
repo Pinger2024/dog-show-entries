@@ -51,6 +51,7 @@ import {
 } from '@/lib/default-checklist';
 import { getStripe } from '@/server/services/stripe';
 import { executeStripeRefund } from '@/server/services/stripe-refunds';
+import { deriveTopAwardJudge } from '@/server/services/derive-award-judge';
 import { penceToPoundsString } from '@/lib/date-utils';
 import { Resend } from 'resend';
 import { searchKcJudges, fetchKcJudgeProfile } from '@/server/services/kc-judges';
@@ -6884,6 +6885,10 @@ export const secretaryRouter = createTRPCRouter({
           );
       }
 
+      // Capture the judge (derived from the show's breed-level judge
+      // assignments) so a CC credits the right judge toward the Champion
+      // "3 different judges" rule (Mandy 2026-07-09).
+      const judgeId = await deriveTopAwardJudge(ctx.db, input.showId, input.type);
       const [achievement] = await ctx.db
         .insert(achievements)
         .values({
@@ -6891,6 +6896,7 @@ export const secretaryRouter = createTRPCRouter({
           dogId: input.dogId,
           type: input.type,
           date: input.date,
+          judgeId,
         })
         .returning();
 

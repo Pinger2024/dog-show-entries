@@ -24,6 +24,7 @@ import {
 import { isUuid } from '@/lib/slugify';
 import { publicOrgColumns } from '../public-org-columns';
 import { sendJudgeApprovalRequestEmail } from '@/server/services/email';
+import { deriveTopAwardJudge } from '@/server/services/derive-award-judge';
 
 /** Resolve a show slug or UUID to a UUID */
 async function resolveShowId(db: Database, idOrSlug: string): Promise<string> {
@@ -827,6 +828,10 @@ export const stewardRouter = createTRPCRouter({
           )
         );
 
+      // Capture the judge who awarded it (derived from the show's breed-level
+      // judge assignments) so a CC credits the right judge toward the Champion
+      // "3 different judges" rule (Mandy 2026-07-09).
+      const judgeId = await deriveTopAwardJudge(ctx.db, input.showId, input.type);
       const [achievement] = await ctx.db
         .insert(achievements)
         .values({
@@ -834,6 +839,7 @@ export const stewardRouter = createTRPCRouter({
           dogId: input.dogId,
           type: input.type,
           date: input.date,
+          judgeId,
         })
         .returning();
 
