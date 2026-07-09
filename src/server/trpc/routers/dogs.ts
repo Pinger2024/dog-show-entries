@@ -7,6 +7,7 @@ import { dogs, dogOwners, dogTitles, dogPhotos, users, entries, entryClasses, sh
 import { deleteFromR2 } from '@/server/services/storage';
 import { scrapeKcDog, searchKcDogs, fetchKcDogProfile } from '@/server/services/firecrawl';
 import { isCcType, isRccType } from '@/lib/placements';
+import { effectiveCcType } from '@/lib/effective-achievement-type';
 import { isAgeEligibleOnShowDay, todayInLondon } from '@/lib/date-utils';
 
 /**
@@ -116,7 +117,7 @@ export const dogsRouter = createTRPCRouter({
             },
           },
           titles: true,
-          achievements: true,
+          achievements: { with: { show: { columns: { showType: true, showScope: true } } } },
           owners: {
             columns: { userId: true },
           },
@@ -129,6 +130,13 @@ export const dogsRouter = createTRPCRouter({
           message: 'Dog not found',
         });
       }
+
+      // A Best Dog/Bitch at a single-breed championship IS the CC, so surface an
+      // `effectiveType` the profile displays + counts as (Mandy 2026-07-09).
+      const withEffectiveType = <T extends { type: string; show?: { showType: string | null; showScope: string | null } | null }>(a: T) => {
+        const { show, ...rest } = a;
+        return { ...rest, effectiveType: effectiveCcType(a.type, show?.showType, show?.showScope) };
+      };
 
       // Fetch show history: entries → entryClasses → showClass → classDefinition + result
       const dogEntries = await ctx.db.query.entries.findMany({
@@ -232,8 +240,8 @@ export const dogsRouter = createTRPCRouter({
         // Same publication gate as results: achievements keyed in on show day
         // stay hidden until published (owners see their own immediately).
         achievements: viewerIsOwner
-          ? dog.achievements
-          : dog.achievements.filter((a) => a.publishedAt != null),
+          ? dog.achievements.map(withEffectiveType)
+          : dog.achievements.filter((a) => a.publishedAt != null).map(withEffectiveType),
         showHistory,
         stats: {
           totalShows,
@@ -755,17 +763,16 @@ export const dogsRouter = createTRPCRouter({
         (r) => r.showType === 'open' || r.showType === 'championship' || r.showType === 'premier_open'
       ).length;
 
-      const ccCount = await ctx.db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(achievements)
-        .where(
-          and(
-            eq(achievements.dogId, input.dogId),
-            eq(achievements.type, 'cc'),
-          )
-        );
-
-      const hasCC = (ccCount[0]?.count ?? 0) > 0;
+      // "Has this dog won a CC?" — count every CC variant, and treat a
+      // single-breed championship Best Dog/Bitch as the CC it is (Mandy
+      // 2026-07-09). Fetch with show type/scope so the mapping can apply.
+      const ccAchs = await ctx.db.query.achievements.findMany({
+        where: eq(achievements.dogId, input.dogId),
+        with: { show: { columns: { showType: true, showScope: true } } },
+      });
+      const hasCC = ccAchs.some((a) =>
+        isCcType(effectiveCcType(a.type, a.show?.showType, a.show?.showScope)),
+      );
 
       // Get achievement class names actually in this show's schedule
       let availableClassNames: string[] | undefined;
@@ -850,7 +857,7 @@ export const dogsRouter = createTRPCRouter({
         with: {
           breed: { with: { group: true } },
           titles: true,
-          achievements: true,
+          achievements: { with: { show: { columns: { showType: true, showScope: true } } } },
         },
       });
 
@@ -872,8 +879,12 @@ export const dogsRouter = createTRPCRouter({
       // Count achievements by type. CCs at UK championship shows are
       // recorded as `dog_cc` / `bitch_cc` (sex-specific), so we need to
       // include all CC variants — matching the canonical set in placements.ts.
-      const ccAchievements = dog.achievements.filter((a) => isCcType(a.type));
-      const reserveCCs = dog.achievements.filter((a) => isRccType(a.type));
+      // At a single-breed championship show a Best Dog/Bitch IS the CC, so map
+      // to the effective type first (Mandy 2026-07-09).
+      const effType = (a: (typeof dog.achievements)[number]) =>
+        effectiveCcType(a.type, a.show?.showType, a.show?.showScope);
+      const ccAchievements = dog.achievements.filter((a) => isCcType(effType(a)));
+      const reserveCCs = dog.achievements.filter((a) => isRccType(effType(a)));
       const bobs = dog.achievements.filter((a) => a.type === 'best_of_breed');
 
       // Count unique judges who awarded CCs and RCCs
@@ -1356,32 +1367,19 @@ export const dogsRouter = createTRPCRouter({
   checkLimitedShowEligibility: protectedProcedure
     .input(z.object({ dogId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      // Count CCs (any type: cc, dog_cc, bitch_cc)
-      const ccTypes = ['cc', 'dog_cc', 'bitch_cc'] as const;
-      const ccRows = await ctx.db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(achievements)
-        .where(
-          and(
-            eq(achievements.dogId, input.dogId),
-            inArray(achievements.type, [...ccTypes])
-          )
-        );
-      const ccCount = ccRows[0]?.count ?? 0;
+      // Count CCs / RCCs, treating a single-breed championship Best Dog/Bitch
+      // (+ reserve) as the CC (+ RCC) it is (Mandy 2026-07-09). Fetch with show
+      // type/scope so the mapping can apply.
+      const limitedAchs = await ctx.db.query.achievements.findMany({
+        where: eq(achievements.dogId, input.dogId),
+        with: { show: { columns: { showType: true, showScope: true } } },
+      });
+      const limEffType = (a: (typeof limitedAchs)[number]) =>
+        effectiveCcType(a.type, a.show?.showType, a.show?.showScope);
+      const ccCount = limitedAchs.filter((a) => isCcType(limEffType(a))).length;
 
-      // Count RCCs with distinct judges (reserve_cc, reserve_dog_cc, reserve_bitch_cc)
-      const rccTypes = ['reserve_cc', 'reserve_dog_cc', 'reserve_bitch_cc'] as const;
-      const rccRows = await ctx.db
-        .select({
-          judgeId: achievements.judgeId,
-        })
-        .from(achievements)
-        .where(
-          and(
-            eq(achievements.dogId, input.dogId),
-            inArray(achievements.type, [...rccTypes])
-          )
-        );
+      // Count RCCs with distinct judges.
+      const rccRows = limitedAchs.filter((a) => isRccType(limEffType(a)));
       // Count distinct judges (null judgeId counts as one)
       const distinctJudges = new Set(rccRows.map((r) => r.judgeId ?? 'unknown'));
       const rccDistinctJudgeCount = distinctJudges.size;

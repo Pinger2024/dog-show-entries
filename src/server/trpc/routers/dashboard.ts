@@ -32,6 +32,7 @@ import {
   dogTimelinePosts,
 } from '@/server/db/schema';
 import { isCcType, isRccType } from '@/lib/placements';
+import { effectiveCcType } from '@/lib/effective-achievement-type';
 
 export const dashboardRouter = createTRPCRouter({
   getSummary: protectedProcedure.query(async ({ ctx }) => {
@@ -156,8 +157,13 @@ export const dashboardRouter = createTRPCRouter({
               type: achievements.type,
               judgeId: achievements.judgeId,
               date: achievements.date,
+              // show type/scope so a single-breed championship Best Dog/Bitch
+              // counts as the CC it is (Mandy 2026-07-09).
+              showType: shows.showType,
+              showScope: shows.showScope,
             })
             .from(achievements)
+            .leftJoin(shows, eq(achievements.showId, shows.id))
             .where(inArray(achievements.dogId, userDogIds))
         : Promise.resolve([]),
 
@@ -420,7 +426,7 @@ export const dashboardRouter = createTRPCRouter({
         const hasCc = allAchievements.some(
           (a) =>
             a.dogId === entry.dogId &&
-            isCcType(a.type) &&
+            isCcType(effectiveCcType(a.type, a.showType, a.showScope)) &&
             a.date === entry.show.startDate
         );
 
@@ -486,14 +492,16 @@ export const dashboardRouter = createTRPCRouter({
         const dogAchievements = achievementsByDog.get(dog.id) ?? [];
         const dogTitlesList = titlesByDog.get(dog.id) ?? [];
 
-        const ccCount = dogAchievements.filter((a) => isCcType(a.type)).length;
+        const dEff = (a: (typeof dogAchievements)[number]) =>
+          effectiveCcType(a.type, a.showType, a.showScope);
+        const ccCount = dogAchievements.filter((a) => isCcType(dEff(a))).length;
 
-        const rccCount = dogAchievements.filter((a) => isRccType(a.type)).length;
+        const rccCount = dogAchievements.filter((a) => isRccType(dEff(a))).length;
 
         // Distinct judges who awarded CCs (for the 3-different-judges rule)
         const ccJudgeIds = new Set(
           dogAchievements
-            .filter((a) => isCcType(a.type) && a.judgeId)
+            .filter((a) => isCcType(dEff(a)) && a.judgeId)
             .map((a) => a.judgeId!)
         );
 
