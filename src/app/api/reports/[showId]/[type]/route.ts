@@ -20,8 +20,10 @@ import {
   type ClassBreakdownRow,
   type PrebookedCatalogueRow,
 } from '@/components/reports/show-report-pdf';
+import { Sh01AbsenteeReport } from '@/components/reports/sh01-absentee-report';
+import { computeSh01Stats, type Sh01EntryInput, type Sh01ClassInput } from '@/lib/sh01-absentee';
 
-const TYPES = ['catalogue-order', 'class-breakdown', 'catalogue-orders'] as const;
+const TYPES = ['catalogue-order', 'class-breakdown', 'catalogue-orders', 'sh01'] as const;
 type ReportType = (typeof TYPES)[number];
 
 export async function GET(
@@ -134,7 +136,7 @@ export async function GET(
       });
     element = React.createElement(CatalogueOrderReport, { info, rows, showBreed });
     filenameSuffix = 'Exhibitor-List';
-  } else {
+  } else if (type === 'class-breakdown') {
     // class-breakdown: one row per class, in schedule order, with its count.
     const counts = new Map<string, number>();
     for (const e of confirmed) {
@@ -161,6 +163,23 @@ export async function GET(
     }));
     element = React.createElement(ClassBreakdownReport, { info, rows });
     filenameSuffix = 'Class-Breakdown';
+  } else if (type === 'sh01') {
+    // RKC SH01 Championship Absentee Report — per-breed dog/bitch/absentee
+    // statistics feeding the KC's CC allocation (Mandy 2026-07-07).
+    const nonDeleted = entries.filter((e) => !e.deletedAt) as unknown as Sh01EntryInput[];
+    const { breeds } = computeSh01Stats(nonDeleted, showClasses as unknown as Sh01ClassInput[]);
+    element = React.createElement(Sh01AbsenteeReport, {
+      info: {
+        society: show.organisation?.name ?? show.name,
+        showDate: format(parseISO(show.startDate), 'dd/MM/yyyy'),
+        secretaryName: show.secretaryName ?? '',
+      },
+      breeds,
+    });
+    filenameSuffix = 'KC-Absentee-Report-SH01';
+  } else {
+    // Unreachable — TYPES is validated above — but keeps element definitely assigned.
+    return NextResponse.json({ error: 'Unhandled report type' }, { status: 400 });
   }
 
   try {

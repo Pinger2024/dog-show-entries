@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, eq, isNull, isNotNull, asc, sql, inArray } from 'drizzle-orm';
+import { and, eq, ne, isNull, isNotNull, asc, sql, inArray } from 'drizzle-orm';
 import { stewardProcedure, publicProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import type { Database } from '@/server/db';
-import { ACHIEVEMENT_TYPES } from '@/lib/placements';
+import { ACHIEVEMENT_TYPES, getPlacementLabel } from '@/lib/placements';
 import { isShowDayReached } from '@/lib/date-utils';
 import {
   shows,
@@ -24,6 +24,7 @@ import {
 import { isUuid } from '@/lib/slugify';
 import { publicOrgColumns } from '../public-org-columns';
 import { sendJudgeApprovalRequestEmail } from '@/server/services/email';
+import { deriveTopAwardJudge } from '@/server/services/derive-award-judge';
 
 /** Resolve a show slug or UUID to a UUID */
 async function resolveShowId(db: Database, idOrSlug: string): Promise<string> {
@@ -480,6 +481,34 @@ export const stewardRouter = createTRPCRouter({
 
       await assertResultsNotLocked(ctx.db, ec.showClass.showId);
 
+      // Guard against two dogs landing in the same placement slot. Rapid taps
+      // on one phone, or two stewards recording the same class at once, can both
+      // write e.g. placement=1 — and the ladder renders one dog per slot, so the
+      // loser silently vanishes. Reject a numeric placement that another entry in
+      // THIS class already holds, in plain English the steward can act on.
+      if (input.placement != null) {
+        const clash = await ctx.db
+          .select({ catalogueNumber: entries.catalogueNumber })
+          .from(results)
+          .innerJoin(entryClasses, eq(entryClasses.id, results.entryClassId))
+          .innerJoin(entries, eq(entries.id, entryClasses.entryId))
+          .where(
+            and(
+              eq(entryClasses.showClassId, ec.showClassId),
+              ne(entryClasses.id, input.entryClassId),
+              eq(results.placement, input.placement),
+            ),
+          )
+          .limit(1);
+        if (clash.length > 0) {
+          const cat = clash[0]!.catalogueNumber;
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `${getPlacementLabel(input.placement)} is already taken by #${cat ?? '—'} — clear it first.`,
+          });
+        }
+      }
+
       // Upsert the result
       const [result] = await ctx.db
         .insert(results)
@@ -510,6 +539,25 @@ export const stewardRouter = createTRPCRouter({
           },
         })
         .returning();
+
+      // Auto-start the show. The first placing recorded on show day flips an
+      // entries_closed show to in_progress, so a remote secretary never has to
+      // remember to "start" it — and the end-of-day Publish Results (which needs
+      // in_progress) just works. The steward fairness lock already blocks
+      // recording before show day, but we guard on BOTH the date and the status
+      // so this is the only transition ever made: entries_closed → in_progress,
+      // never backwards, and draft/completed/cancelled are left untouched. The
+      // status condition in the WHERE keeps it idempotent and race-safe.
+      const showForStart = await ctx.db.query.shows.findFirst({
+        where: eq(shows.id, ec.showClass.showId),
+        columns: { status: true, startDate: true },
+      });
+      if (showForStart?.status === 'entries_closed' && isShowDayReached(showForStart.startDate)) {
+        await ctx.db
+          .update(shows)
+          .set({ status: 'in_progress' })
+          .where(and(eq(shows.id, ec.showClass.showId), eq(shows.status, 'entries_closed')));
+      }
 
       return result!;
     }),
@@ -780,6 +828,10 @@ export const stewardRouter = createTRPCRouter({
           )
         );
 
+      // Capture the judge who awarded it (derived from the show's breed-level
+      // judge assignments) so a CC credits the right judge toward the Champion
+      // "3 different judges" rule (Mandy 2026-07-09).
+      const judgeId = await deriveTopAwardJudge(ctx.db, input.showId, input.type);
       const [achievement] = await ctx.db
         .insert(achievements)
         .values({
@@ -787,6 +839,7 @@ export const stewardRouter = createTRPCRouter({
           dogId: input.dogId,
           type: input.type,
           date: input.date,
+          judgeId,
         })
         .returning();
 
@@ -1211,6 +1264,24 @@ export const stewardRouter = createTRPCRouter({
         throw new TRPCError({
           code: 'BAD_REQUEST',
           message: 'This judge does not have an email address on file. Please ask the secretary to add one.',
+        });
+      }
+
+      // Don't fire an approval email before anything has been judged — the button
+      // is live from first page load, and one accidental tap at 9am would ask the
+      // judge to confirm an empty result sheet. Guard at show level (the target is
+      // single-judge shows where the judge judges everything); per-judge scoping
+      // for breed-null classes is deferred (see H6).
+      const [resultCount] = await ctx.db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(results)
+        .innerJoin(entryClasses, eq(entryClasses.id, results.entryClassId))
+        .innerJoin(entries, eq(entries.id, entryClasses.entryId))
+        .where(and(eq(entries.showId, input.showId), eq(entries.status, 'confirmed')));
+      if ((resultCount?.n ?? 0) === 0) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Record at least one result before submitting for the judge’s approval.',
         });
       }
 

@@ -52,6 +52,7 @@ const personalNavItems = [
 
 const adminNavItems = [
   { href: '/admin', label: 'Overview', mobileLabel: 'Admin', icon: Activity },
+  { href: '/admin/shows', label: 'All Shows', mobileLabel: 'Shows', icon: CalendarDays },
   { href: '/admin/users', label: 'Users', mobileLabel: 'Users', icon: Users },
   { href: '/feedback', label: 'Feedback', mobileLabel: 'Feedback', icon: Inbox },
   { href: '/backlog', label: 'Backlog', mobileLabel: 'Backlog', icon: ListTodo },
@@ -67,7 +68,7 @@ const adminMobileItems = adminNavItems;
 // Paths that are "top-level" — no back button shown
 const rootPaths = new Set([
   '/dashboard', '/dogs', '/entries', '/browse', '/feed', '/settings', '/apply',
-  '/admin', '/admin/users', '/admin/applications', '/admin/invitations', '/admin/reference-data', '/admin/calculator',
+  '/admin', '/admin/shows', '/admin/users', '/admin/applications', '/admin/invitations', '/admin/reference-data', '/admin/calculator',
   '/feedback', '/backlog',
 ]);
 
@@ -266,7 +267,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
           </div>
           <div className="flex items-center gap-1.5">
             {(user.role === 'secretary' || user.role === 'admin' || user.role === 'steward') && (
-              <RoleSwitcherCompact activeView="exhibitor" showSteward={user.role === 'steward' || user.role === 'secretary' || user.role === 'admin'} />
+              <RoleSwitcherCompact activeView="exhibitor" showSteward={user.role === 'steward' || user.role === 'secretary' || user.role === 'admin'} preferRole={user.role} />
             )}
             <Button variant="ghost" size="sm" className="size-11" asChild>
               <Link href="/settings" aria-label="Settings">

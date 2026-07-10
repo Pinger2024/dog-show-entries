@@ -14,6 +14,8 @@ import {
   makeEntryClass,
   makeResult,
   makeStewardAssignment,
+  makeJudge,
+  makeJudgeAssignment,
   lockShowResults,
 } from '../helpers/factories';
 
@@ -108,6 +110,56 @@ describe('steward.recordResult', () => {
     ).rejects.toThrow(/not assigned/);
   });
 
+  it('rejects a second dog into a placement another dog already holds', async () => {
+    const { steward, exhibitor, breed, show, showClass, ec } = await showWithStewardAndEntry();
+    // A second confirmed dog in the SAME class.
+    const dogB = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+    const entryB = await makeEntry({
+      showId: show.id,
+      dogId: dogB.id,
+      exhibitorId: exhibitor.id,
+      status: 'confirmed',
+    });
+    const ecB = await makeEntryClass({ entryId: entryB.id, showClassId: showClass.id });
+    const caller = createTestCaller(steward);
+
+    await caller.steward.recordResult({ entryClassId: ec.id, placement: 1 });
+
+    await expect(
+      caller.steward.recordResult({ entryClassId: ecB.id, placement: 1 }),
+    ).rejects.toThrow(/already taken/);
+  });
+
+  it('still lets the same entry change its own placement (no false clash)', async () => {
+    const { steward, ec } = await showWithStewardAndEntry();
+    const caller = createTestCaller(steward);
+
+    await caller.steward.recordResult({ entryClassId: ec.id, placement: 1 });
+    const res = await caller.steward.recordResult({ entryClassId: ec.id, placement: 2 });
+
+    expect(res.placement).toBe(2);
+  });
+
+  it('lets the same placement be reused in a DIFFERENT class', async () => {
+    const { steward, exhibitor, breed, show, ec } = await showWithStewardAndEntry();
+    // A second class + dog on the same show — placement 1 there must be allowed.
+    const otherClass = await makeShowClass({ showId: show.id, breedId: breed.id });
+    const dogB = await makeDog({ ownerId: exhibitor.id, breedId: breed.id });
+    const entryB = await makeEntry({
+      showId: show.id,
+      dogId: dogB.id,
+      exhibitorId: exhibitor.id,
+      status: 'confirmed',
+    });
+    const ecB = await makeEntryClass({ entryId: entryB.id, showClassId: otherClass.id });
+    const caller = createTestCaller(steward);
+
+    await caller.steward.recordResult({ entryClassId: ec.id, placement: 1 });
+    const res = await caller.steward.recordResult({ entryClassId: ecB.id, placement: 1 });
+
+    expect(res.placement).toBe(1);
+  });
+
   it('rejects recording for a non-confirmed entry', async () => {
     const { steward, exhibitor, breed, show, showClass } = await showWithStewardAndEntry();
     // Build a SECOND entry that is still pending (e.g. abandoned checkout)
@@ -127,6 +179,77 @@ describe('steward.recordResult', () => {
     await expect(
       caller.steward.recordResult({ entryClassId: pendingEc.id, placement: 1 }),
     ).rejects.toThrow(/non-confirmed/);
+  });
+});
+
+/** An entries_closed show with a steward + one confirmed entry, on a given
+ *  start date, ready for the very first placing. */
+async function closedShowReadyForFirstResult(startDate: string) {
+  const [steward, exhibitor, org, breed] = await Promise.all([
+    makeUser({ role: 'steward' }),
+    makeUser({ role: 'exhibitor' }),
+    makeOrg(),
+    makeBreed(),
+  ]);
+  const show = await makeShow({
+    organisationId: org.id,
+    breedId: breed.id,
+    status: 'entries_closed',
+    startDate,
+    endDate: startDate,
+  });
+  const [, showClass, dog] = await Promise.all([
+    makeStewardAssignment({ userId: steward.id, showId: show.id }),
+    makeShowClass({ showId: show.id, breedId: breed.id }),
+    makeDog({ ownerId: exhibitor.id, breedId: breed.id }),
+  ]);
+  const entry = await makeEntry({
+    showId: show.id,
+    dogId: dog.id,
+    exhibitorId: exhibitor.id,
+    status: 'confirmed',
+  });
+  const ec = await makeEntryClass({ entryId: entry.id, showClassId: showClass.id });
+  return { steward, show, ec };
+}
+
+describe('steward.recordResult — auto-start the show on show day', () => {
+  const PAST = '2020-01-01'; // show day has passed → reached
+  const FUTURE = '2999-01-01'; // show day is years away → not reached
+
+  it('flips entries_closed → in_progress on the first placing on show day', async () => {
+    const { steward, show, ec } = await closedShowReadyForFirstResult(PAST);
+    await createTestCaller(steward).steward.recordResult({ entryClassId: ec.id, placement: 1 });
+
+    const after = await testDb.query.shows.findFirst({ where: eq(shows.id, show.id) });
+    expect(after?.status).toBe('in_progress');
+  });
+
+  it('does NOT start the show before show day', async () => {
+    const { steward, show, ec } = await closedShowReadyForFirstResult(FUTURE);
+    await createTestCaller(steward).steward.recordResult({ entryClassId: ec.id, placement: 1 });
+
+    const after = await testDb.query.shows.findFirst({ where: eq(shows.id, show.id) });
+    expect(after?.status).toBe('entries_closed');
+  });
+
+  it('never runs backwards — a completed show stays completed', async () => {
+    const { steward, show, ec } = await closedShowReadyForFirstResult(PAST);
+    await testDb.update(shows).set({ status: 'completed' }).where(eq(shows.id, show.id));
+    await createTestCaller(steward).steward.recordResult({ entryClassId: ec.id, placement: 1 });
+
+    const after = await testDb.query.shows.findFirst({ where: eq(shows.id, show.id) });
+    expect(after?.status).toBe('completed');
+  });
+
+  it('is idempotent — a second placing leaves an already-started show in_progress', async () => {
+    const { steward, show, ec } = await closedShowReadyForFirstResult(PAST);
+    const caller = createTestCaller(steward);
+    await caller.steward.recordResult({ entryClassId: ec.id, placement: 1 }); // flips it
+    await caller.steward.recordResult({ entryClassId: ec.id, placement: 2 }); // no-op transition
+
+    const after = await testDb.query.shows.findFirst({ where: eq(shows.id, show.id) });
+    expect(after?.status).toBe('in_progress');
   });
 });
 
@@ -176,6 +299,31 @@ describe('steward.markAbsent', () => {
     await expect(
       caller.steward.markAbsent({ entryId: entry.id, absent: true }),
     ).rejects.toThrow(/completed or cancelled/);
+  });
+});
+
+describe('steward.submitForJudgeApproval', () => {
+  it('refuses to email the judge before any results are recorded', async () => {
+    const { steward, show, breed } = await showWithStewardAndEntry();
+    const judge = await makeJudge({ contactEmail: 'judge@test.local' });
+    await makeJudgeAssignment({ showId: show.id, judgeId: judge.id, breedId: breed.id });
+    const caller = createTestCaller(steward);
+
+    await expect(
+      caller.steward.submitForJudgeApproval({ showId: show.id, judgeId: judge.id }),
+    ).rejects.toThrow(/record at least one result/i);
+  });
+
+  it('sends once at least one result exists', async () => {
+    const { steward, show, breed, ec } = await showWithStewardAndEntry();
+    const judge = await makeJudge({ contactEmail: 'judge@test.local' });
+    await makeJudgeAssignment({ showId: show.id, judgeId: judge.id, breedId: breed.id });
+    const caller = createTestCaller(steward);
+
+    await caller.steward.recordResult({ entryClassId: ec.id, placement: 1 });
+    const res = await caller.steward.submitForJudgeApproval({ showId: show.id, judgeId: judge.id });
+
+    expect(res.sent).toBe(true);
   });
 });
 

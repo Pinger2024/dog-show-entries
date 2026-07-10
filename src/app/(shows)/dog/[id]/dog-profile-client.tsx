@@ -94,6 +94,15 @@ const achievementLabels: Record<string, string> = {
   best_long_coat_dog: 'Best Long Coat Dog',
   best_long_coat_bitch: 'Best Long Coat Bitch',
   best_long_coat_in_show: 'Best Long Coat in Show',
+  best_dog: 'Best Dog',
+  best_bitch: 'Best Bitch',
+  reserve_best_dog: 'Reserve Best Dog',
+  reserve_best_bitch: 'Reserve Best Bitch',
+  best_veteran_in_show: 'Best Veteran in Show',
+  reserve_best_veteran_in_show: 'Reserve Best Veteran in Show',
+  best_veteran_in_group: 'Best Veteran in Group',
+  most_promising_young_dog: 'Most Promising Young Dog',
+  most_promising_young_bitch: 'Most Promising Young Bitch',
 };
 
 const achievementWeight: Record<string, number> = {
@@ -106,6 +115,10 @@ const achievementWeight: Record<string, number> = {
   reserve_cc: 6,
   reserve_dog_cc: 6,
   reserve_bitch_cc: 6,
+  best_dog: 6,
+  best_bitch: 6,
+  reserve_best_dog: 5,
+  reserve_best_bitch: 5,
   best_puppy_in_show: 5,
   best_puppy_in_breed: 4,
   best_puppy_dog: 4,
@@ -724,15 +737,18 @@ export function DogProfileClient({ id }: { id: string }) {
             <div className="space-y-2">
               {[...achievements]
                 .sort((a, b) => {
-                  // Sort by weight (prestige) desc, then date desc
-                  const wa = achievementWeight[a.type] ?? 0;
-                  const wb = achievementWeight[b.type] ?? 0;
+                  // Sort by weight (prestige) desc, then date desc — using the
+                  // effective type so a championship Best Bitch (= Bitch CC)
+                  // ranks and reads as a CC.
+                  const wa = achievementWeight[a.effectiveType ?? a.type] ?? 0;
+                  const wb = achievementWeight[b.effectiveType ?? b.type] ?? 0;
                   if (wb !== wa) return wb - wa;
                   return b.date.localeCompare(a.date);
                 })
                 .map((achievement) => {
-                  const label = achievementLabels[achievement.type] ?? achievement.type;
-                  const isPrestigious = (achievementWeight[achievement.type] ?? 0) >= 7;
+                  const effType = achievement.effectiveType ?? achievement.type;
+                  const label = achievementLabels[effType] ?? effType;
+                  const isPrestigious = (achievementWeight[effType] ?? 0) >= 7;
                   const details =
                     achievement.details != null && typeof achievement.details === 'object'
                       ? (achievement.details as Record<string, unknown>)

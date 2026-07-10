@@ -52,6 +52,7 @@ import {
 } from '@/lib/default-checklist';
 import { getStripe } from '@/server/services/stripe';
 import { executeStripeRefund } from '@/server/services/stripe-refunds';
+import { deriveTopAwardJudge } from '@/server/services/derive-award-judge';
 import { penceToPoundsString } from '@/lib/date-utils';
 import { Resend } from 'resend';
 import { searchKcJudges, fetchKcJudgeProfile } from '@/server/services/kc-judges';
@@ -3829,8 +3830,14 @@ export const secretaryRouter = createTRPCRouter({
         detected.judge_offers_sent = false;
       }
 
-      // Additional auto-detect keys for lifecycle gates
-      detected.entry_fees_set = show.firstEntryFee != null && show.firstEntryFee > 0;
+      // Additional auto-detect keys for lifecycle gates. Regional (SV/WUSV)
+      // shows price via regionalFeeConfig, not firstEntryFee — count either
+      // (Mandy 2026-07-05: regional fees set but checklist said "not set").
+      const regionalFeesSet = !!(
+        (show as { regionalFeeConfig?: { tiers?: unknown[] } | null }).regionalFeeConfig?.tiers?.length
+      );
+      detected.entry_fees_set =
+        regionalFeesSet || (show.firstEntryFee != null && show.firstEntryFee > 0);
       detected.entry_close_date_set = show.entryCloseDate != null;
       detected.secretary_details_set = !!(show.secretaryName && show.secretaryEmail);
       // Post-show: the "Publish results" checklist item declares this autoDetectKey
@@ -3938,7 +3945,12 @@ export const secretaryRouter = createTRPCRouter({
           actionPath: '/people', severity: 'required',
         });
       }
-      if (!show.firstEntryFee || show.firstEntryFee <= 0) {
+      // Regional (SV/WUSV) shows price via regionalFeeConfig, not firstEntryFee
+      // — treat either as "fees set" (Mandy 2026-07-05).
+      const regionalFeesSet = !!(
+        (show as { regionalFeeConfig?: { tiers?: unknown[] } | null }).regionalFeeConfig?.tiers?.length
+      );
+      if (!regionalFeesSet && (!show.firstEntryFee || show.firstEntryFee <= 0)) {
         openEntriesBlockers.push({
           key: 'no_entry_fees', label: 'Entry fees not set',
           detail: 'Click Edit on the main show page to set entry fees',
@@ -6402,6 +6414,18 @@ export const secretaryRouter = createTRPCRouter({
         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to publish results. Please try again.' });
       }
 
+      // Sweep any Top Award achievements (Best Dog/Bitch, Best Puppy, etc.) live
+      // too. The steward records these on the show page and publishes each one
+      // individually — but if one is forgotten, this end-of-day publish is the
+      // backstop. Without it, resultsLockedAt (set just above) blocks the
+      // steward's publishAchievement, so a missed award would stay invisible to
+      // the public forever.
+      const sweptAwards = await ctx.db
+        .update(achievements)
+        .set({ publishedAt: now })
+        .where(and(eq(achievements.showId, input.showId), isNull(achievements.publishedAt)))
+        .returning({ id: achievements.id });
+
       // Fire downstream notifications async (Phase 4)
       if (input.sendNotifications) {
         const { sendExhibitorResultsEmails, sendFollowerResultsNotifications, createResultsMilestonePosts } = await import('@/server/services/results-notifications');
@@ -6413,7 +6437,7 @@ export const secretaryRouter = createTRPCRouter({
         ]);
       }
 
-      return { published: true, publishedAt: now };
+      return { published: true, publishedAt: now, awardsSwept: sweptAwards.length };
     }),
 
   unpublishResults: secretaryProcedure
@@ -6862,6 +6886,10 @@ export const secretaryRouter = createTRPCRouter({
           );
       }
 
+      // Capture the judge (derived from the show's breed-level judge
+      // assignments) so a CC credits the right judge toward the Champion
+      // "3 different judges" rule (Mandy 2026-07-09).
+      const judgeId = await deriveTopAwardJudge(ctx.db, input.showId, input.type);
       const [achievement] = await ctx.db
         .insert(achievements)
         .values({
@@ -6869,6 +6897,7 @@ export const secretaryRouter = createTRPCRouter({
           dogId: input.dogId,
           type: input.type,
           date: input.date,
+          judgeId,
         })
         .returning();
 

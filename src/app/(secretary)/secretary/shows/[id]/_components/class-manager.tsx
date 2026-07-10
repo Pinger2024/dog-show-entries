@@ -63,6 +63,7 @@ interface ClassManagerProps {
   showId: string;
   showType: string;
   showScope?: string;
+  showRuleset?: string | null;
   classes: {
     id: string;
     entryFee: number;
@@ -74,7 +75,7 @@ interface ClassManagerProps {
   }[];
 }
 
-export function ClassManager({ showId, showType, showScope, classes }: ClassManagerProps) {
+export function ClassManager({ showId, showType, showScope, showRuleset, classes }: ClassManagerProps) {
   const [editingFees, setEditingFees] = useState<Record<string, string>>({});
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [hasInitializedCollapse, setHasInitializedCollapse] = useState(false);
@@ -278,7 +279,9 @@ export function ClassManager({ showId, showType, showScope, classes }: ClassMana
   // implicit via the show's scope. Resolve a fallback breed name so those classes still
   // count toward their (single) breed's requirement.
   const championshipWarnings = useMemo(() => {
-    if (showType !== 'championship') return [];
+    // SV/WUSV regionals are championship shows but run under WUSV rules — the
+    // RKC "Open + Limit for each sex" requirement does not apply to them.
+    if (showType !== 'championship' || showRuleset === 'wusv') return [];
 
     const fallbackBreedName = showScope === 'single_breed'
       ? classes.find((c) => c.breed?.name)?.breed?.name ?? null
@@ -308,7 +311,7 @@ export function ClassManager({ showId, showType, showScope, classes }: ClassMana
       if (missing.length > 0) warnings.push({ breed: entry.name, missing });
     }
     return warnings;
-  }, [showType, showScope, classes]);
+  }, [showType, showScope, showRuleset, classes]);
 
   if (classes.length === 0) {
     return (

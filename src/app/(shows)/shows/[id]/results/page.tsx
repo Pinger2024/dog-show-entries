@@ -149,10 +149,11 @@ export default function LiveResultsPage({
   const isWusv = (show as { showRuleset?: string }).showRuleset === 'wusv';
 
   // Group achievements by type for display
-  const showLevelTypes = ['best_in_show', 'reserve_best_in_show', 'best_puppy_in_show', 'best_long_coat_in_show'];
+  const showLevelTypes = ['best_in_show', 'reserve_best_in_show', 'best_puppy_in_show', 'best_veteran_in_show', 'reserve_best_veteran_in_show', 'best_long_coat_in_show'];
   const breedLevelTypes = [
     'best_of_breed', 'best_puppy_in_breed', 'best_veteran_in_breed',
     'dog_cc', 'reserve_dog_cc', 'bitch_cc', 'reserve_bitch_cc',
+    'best_dog', 'best_bitch', 'reserve_best_dog', 'reserve_best_bitch',
     'best_puppy_dog', 'best_puppy_bitch',
     'best_long_coat_dog', 'best_long_coat_bitch',
     'cc', 'reserve_cc',

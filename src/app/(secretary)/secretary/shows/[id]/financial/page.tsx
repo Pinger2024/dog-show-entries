@@ -762,7 +762,14 @@ function OrderRefundCard({
   const paid = succeeded?.amount ?? order.totalAmount + order.platformFeePence;
   const refunded = succeeded?.refundAmount ?? 0;
   const remaining = paid - refunded;
-  const fullyRefunded = remaining <= 0;
+  // A £0 order (e.g. a free Junior Handler entry) has paid === 0, which would
+  // make remaining <= 0 trivially true and wrongly show "Fully refunded".
+  // Only treat it as refunded if there was actually something paid to refund.
+  const fullyRefunded = paid > 0 && remaining <= 0;
+  // Only orders with a real Stripe payment can be refunded. Free entries and
+  // secretary-recorded (manually entered) orders have no payment row, so the
+  // refund actions would only error with "No completed payment found" — hide them.
+  const hasRefundablePayment = !!succeeded?.stripePaymentId;
 
   const entryFeesTotal = order.entries.reduce((s, e) => s + e.totalFee, 0);
   const sundryTotal = order.orderSundryItems.reduce(
@@ -826,7 +833,7 @@ function OrderRefundCard({
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <span className="text-sm">{formatCurrency(entry.totalFee)}</span>
-                {!fullyRefunded && entry.totalFee > 0 && entry.status === 'confirmed' && (
+                {!fullyRefunded && hasRefundablePayment && entry.totalFee > 0 && entry.status === 'confirmed' && (
                   <Button
                     size="sm"
                     variant="ghost"
@@ -875,7 +882,7 @@ function OrderRefundCard({
             </span>
           )}
         </div>
-        {!fullyRefunded && (
+        {!fullyRefunded && hasRefundablePayment && remaining > 0 && (
           <Button
             variant="destructive"
             size="sm"

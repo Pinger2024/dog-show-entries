@@ -103,6 +103,27 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
     }
 
     case 'SET_ENTRY_TYPE': {
+      const nextStep: WizardStep =
+        action.entryType === 'standard' ? 'select_dog' : 'junior_handler';
+      // If there's no active entry to retype (a stale or cleared activeEntryId —
+      // e.g. after a rehydrate to cart_review, a removed entry, or a browser
+      // back), CREATE one. Otherwise this silently no-ops yet still advances the
+      // step, so the user walks into class selection with no entry and the page
+      // renders the wrong branch + every class (Mandy 2026-06-26).
+      const hasActive = state.entries.some((e) => e.id === state.activeEntryId);
+      if (!hasActive) {
+        const id = nextEntryId(state.entries);
+        return {
+          ...state,
+          activeEntryId: id,
+          editingExisting: false,
+          step: nextStep,
+          entries: [
+            ...state.entries,
+            { id, entryType: action.entryType, classIds: [], classNames: [], isNfc: false, totalFee: 0 },
+          ],
+        };
+      }
       return {
         ...state,
         entries: state.entries.map((e) =>
@@ -110,11 +131,15 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
             ? { ...e, entryType: action.entryType }
             : e
         ),
-        step: action.entryType === 'standard' ? 'select_dog' : 'junior_handler',
+        step: nextStep,
       };
     }
 
     case 'SET_DOG': {
+      // No active entry to attach the dog to — ignore rather than advancing to
+      // class selection with no entry (which renders the wrong branch + every
+      // class). Mandy 2026-06-26.
+      if (!state.entries.some((e) => e.id === state.activeEntryId)) return state;
       return {
         ...state,
         entries: state.entries.map((e) =>

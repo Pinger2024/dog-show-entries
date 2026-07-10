@@ -212,9 +212,11 @@ describe('steward.updateWinnerPhoto', () => {
 
 describe('steward.submitForJudgeApproval', () => {
   it('stamps approval token + status on assignments and sends an email', async () => {
-    const { steward, show, breed } = await showWithSteward();
+    const { steward, show, breed, ec } = await showWithSteward();
     const judge = await makeJudge({ contactEmail: 'judge@example.test' });
     await makeJudgeAssignment({ showId: show.id, judgeId: judge.id, breedId: breed.id });
+    // A result must exist before the judge can be asked to approve it.
+    await makeResult({ entryClassId: ec.id, placement: 1, recordedBy: steward.id });
     vi.mocked(emailService.sendJudgeApprovalRequestEmail).mockClear();
 
     const res = await createTestCaller(steward).steward.submitForJudgeApproval({

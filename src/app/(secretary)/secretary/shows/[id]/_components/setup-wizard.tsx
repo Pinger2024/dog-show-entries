@@ -38,6 +38,7 @@ import {
 import type { RouterOutputs } from '@/server/trpc/router';
 import { ClassManager, BulkClassCreator } from './class-manager';
 import { DiscountsSection } from './discounts-section';
+import { RegionalFeesEditor, type RegionalFeePayload } from './regional-fees-editor';
 import { SectionHeading, InlineHelp } from './section-help';
 import { JudgesSection } from './judge-section';
 import { ScheduleSettingsForm } from './schedule-settings-form';
@@ -317,13 +318,13 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
                   <StepClasses showId={showId} show={show} />
                 )}
                 {step.id === 'judge' && (
-                  <StepJudge showId={showId} />
+                  <StepJudge showId={showId} show={show} />
                 )}
                 {step.id === 'details' && (
                   <StepDetails showId={showId} show={show} onSaved={goNext} />
                 )}
                 {step.id === 'schedule' && (
-                  <StepSchedule showId={showId} onSaved={goNext} />
+                  <StepSchedule showId={showId} show={show} onSaved={goNext} />
                 )}
                 {step.id === 'open' && (
                   <StepOpenEntries showId={showId} />
@@ -371,6 +372,7 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
 
 function StepClasses({ showId, show }: { showId: string; show: Show }) {
   const hasClasses = (show.showClasses?.length ?? 0) > 0;
+  const isWusv = show.showRuleset === 'wusv';
 
   const help = (
     <div className="mb-3">
@@ -381,9 +383,13 @@ function StepClasses({ showId, show }: { showId: string; show: Show }) {
           todo: [
             'Pick the classes you want to offer (you can use a standard set as a starting point).',
             'Add or remove classes if your show is different from the usual.',
-            'For Champ shows, the Royal Kennel Club has rules about which classes must be offered. We try to flag anything missing.',
+            isWusv
+              ? 'Regional shows use the standard SV age classes (Minor Puppy through to Working), split by sex and coat. We set these up for you.'
+              : 'For Champ shows, the Royal Kennel Club has rules about which classes must be offered. We try to flag anything missing.',
           ],
-          benefit: 'No more typing your class list into a Word document and re-typing it next year. We remember your set up, flag any RKC rules that you might miss, and the same classes flow straight through to the schedule, the catalogue, and the judges book without you lifting a finger.',
+          benefit: isWusv
+            ? 'No more typing your class list into a Word document and re-typing it next year. We remember your set up, and the same classes flow straight through to the schedule, the catalogue, and the judges book without you lifting a finger.'
+            : 'No more typing your class list into a Word document and re-typing it next year. We remember your set up, flag any RKC rules that you might miss, and the same classes flow straight through to the schedule, the catalogue, and the judges book without you lifting a finger.',
           tip: 'You can change classes at any time before entries open. Once a dog has entered a class, that class is locked in so its entry stays valid.',
         }}
       />
@@ -406,6 +412,7 @@ function StepClasses({ showId, show }: { showId: string; show: Show }) {
         showId={showId}
         showType={show.showType}
         showScope={show.showScope}
+        showRuleset={show.showRuleset}
         classes={show.showClasses ?? []}
       />
     </>
@@ -414,16 +421,21 @@ function StepClasses({ showId, show }: { showId: string; show: Show }) {
 
 // ── Step 2: Judge ─────────────────────────────────────────
 
-function StepJudge({ showId }: { showId: string }) {
+function StepJudge({ showId, show }: { showId: string; show: Show }) {
+  const isWusv = show.showRuleset === 'wusv';
   return (
     <>
       <div className="mb-3">
         <InlineHelp
           label="How do judges work?"
           content={{
-            what: 'Every breed at your show needs a judge. We keep a directory of judges with their Royal Kennel Club details, and we email each one to ask if they accept the invitation. They confirm online and that locks them in.',
+            what: isWusv
+              ? 'Every regional show needs a judge. Add your judge (or judges) here, and we email each one to ask if they accept the invitation. They confirm online and that locks them in.'
+              : 'Every breed at your show needs a judge. We keep a directory of judges with their Royal Kennel Club details, and we email each one to ask if they accept the invitation. They confirm online and that locks them in.',
             todo: [
-              'Search for the judge by name. If they are in our directory we will fill in their RKC number for you.',
+              isWusv
+                ? 'Add the judge by name and email.'
+                : 'Search for the judge by name. If they are in our directory we will fill in their RKC number for you.',
               'Choose which breeds and sex each judge is doing (for multi-breed shows).',
               'When you save, we send the judge an email with the invitation. They click Accept or Decline.',
               'You can see who has accepted at the top of this section. Chase any that have not replied a week or two before the show.',
@@ -650,6 +662,10 @@ function StepDetails({
     show.secretaryAddress ?? '',
   );
   const [kcLicenceNo, setKcLicenceNo] = useState(show.kcLicenceNo ?? '');
+  const isWusv = show.showRuleset === 'wusv';
+  // Embedded RegionalFeesEditor reports its config here so this step's single
+  // Save persists fees alongside the close dates (no two-save-button trap).
+  const [regionalPayload, setRegionalPayload] = useState<RegionalFeePayload | null>(null);
 
   const utils = trpc.useUtils();
   const updateMutation = trpc.shows.update.useMutation({
@@ -678,14 +694,21 @@ function StepDetails({
 
     updateMutation.mutate({
       id: showId,
-      firstEntryFee: firstEntryFee ? poundsToPence(Number(firstEntryFee)) : null,
-      subsequentEntryFee: subsequentEntryFee
+      // Regional (SV/WUSV) shows price via regionalFeeConfig (reported up by the
+      // embedded RegionalFeesEditor); their RKC fee fields stay untouched.
+      firstEntryFee: isWusv ? undefined : firstEntryFee ? poundsToPence(Number(firstEntryFee)) : null,
+      subsequentEntryFee: isWusv
+        ? undefined
+        : subsequentEntryFee
         ? poundsToPence(Number(subsequentEntryFee))
         : null,
-      nfcEntryFee: nfcEntryFee ? poundsToPence(Number(nfcEntryFee)) : null,
-      juniorHandlerFee: juniorHandlerFee ? poundsToPence(Number(juniorHandlerFee)) : null,
-      multiDogThreshold: multiDog.threshold ? Number(multiDog.threshold) : null,
-      multiDogPackagePence: multiDog.packagePence ? poundsToPence(Number(multiDog.packagePence)) : null,
+      nfcEntryFee: isWusv ? undefined : nfcEntryFee ? poundsToPence(Number(nfcEntryFee)) : null,
+      juniorHandlerFee: isWusv
+        ? regionalPayload?.juniorHandlerFeePence ?? undefined
+        : juniorHandlerFee ? poundsToPence(Number(juniorHandlerFee)) : null,
+      regionalFeeConfig: isWusv ? regionalPayload?.config ?? undefined : undefined,
+      multiDogThreshold: isWusv ? undefined : multiDog.threshold ? Number(multiDog.threshold) : null,
+      multiDogPackagePence: isWusv ? undefined : multiDog.packagePence ? poundsToPence(Number(multiDog.packagePence)) : null,
       entryCloseDate: entryCloseDate
         ? new Date(entryCloseDate).toISOString()
         : null,
@@ -718,6 +741,15 @@ function StepDetails({
             tip: 'You can leave any of these blank if you do not offer that type of entry. Just set what applies to your show.',
           }}
         />
+        {isWusv ? (
+          <RegionalFeesEditor
+            showId={showId}
+            config={show.regionalFeeConfig}
+            juniorHandlerFeePence={show.juniorHandlerFee}
+            onChange={setRegionalPayload}
+          />
+        ) : (
+          <>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="wiz-first-fee" className="text-xs">
@@ -806,6 +838,8 @@ function StepDetails({
           multiDog={multiDog}
           onMultiDogChange={setMultiDog}
         />
+          </>
+        )}
       </div>
 
       {/* Close Dates */}
@@ -868,28 +902,31 @@ function StepDetails({
         }}
       />
 
-      {/* RKC Licence */}
-      <div className="space-y-1.5">
-        <SectionHeading
-          title="RKC Licence Number"
-          help={{
-            what: 'The Royal Kennel Club gives each licensed show a unique number. It must be printed on the schedule and catalogue. The RKC sends it to you when they approve your show licence.',
-            todo: [
-              'Find the licence number on the approval email or letter the RKC sent you.',
-              'Type it in here. We will put it on the schedule and catalogue automatically.',
-            ],
-            tip: 'If you have not had the licence number back yet, you can come back and add it later. It does not stop you opening entries.',
-          }}
-          level="h5"
-        />
-        <Input
-          id="wiz-licence"
-          placeholder="Licence number"
-          className="min-h-[2.75rem] max-w-xs"
-          value={kcLicenceNo}
-          onChange={(e) => setKcLicenceNo(e.target.value)}
-        />
-      </div>
+      {/* RKC Licence — not applicable to SV/WUSV regional shows, which run
+          under GSDL British Regional Group / WUSV rules, not an RKC licence. */}
+      {!isWusv && (
+        <div className="space-y-1.5">
+          <SectionHeading
+            title="RKC Licence Number"
+            help={{
+              what: 'The Royal Kennel Club gives each licensed show a unique number. It must be printed on the schedule and catalogue. The RKC sends it to you when they approve your show licence.',
+              todo: [
+                'Find the licence number on the approval email or letter the RKC sent you.',
+                'Type it in here. We will put it on the schedule and catalogue automatically.',
+              ],
+              tip: 'If you have not had the licence number back yet, you can come back and add it later. It does not stop you opening entries.',
+            }}
+            level="h5"
+          />
+          <Input
+            id="wiz-licence"
+            placeholder="Licence number"
+            className="min-h-[2.75rem] max-w-xs"
+            value={kcLicenceNo}
+            onChange={(e) => setKcLicenceNo(e.target.value)}
+          />
+        </div>
+      )}
 
       {/* Save + advance — single button does both so half-typed values
           (like the multi-dog package fields) can't get left behind by a
@@ -939,18 +976,23 @@ function StepDetails({
 
 function StepSchedule({
   showId,
+  show,
   onSaved,
 }: {
   showId: string;
+  show: Show;
   onSaved: () => void;
 }) {
+  const isWusv = show.showRuleset === 'wusv';
   return (
     <>
       <div className="mb-3">
         <InlineHelp
           label="What is the schedule for?"
           content={{
-            what: 'The schedule is the printed (or shared digitally) document that tells exhibitors everything about your show. It includes the date, the venue, the classes, the judges, the fees, and all the rules. The Royal Kennel Club requires certain statements to be on it, and we add those for you automatically.',
+            what: isWusv
+              ? 'The schedule is the printed (or shared digitally) document that tells exhibitors everything about your show. It includes the date, the venue, the classes, the judges, the fees, and all the rules. We add the standard statements for you automatically.'
+              : 'The schedule is the printed (or shared digitally) document that tells exhibitors everything about your show. It includes the date, the venue, the classes, the judges, the fees, and all the rules. The Royal Kennel Club requires certain statements to be on it, and we add those for you automatically.',
             todo: [
               'Fill in each section by clicking it open and typing the details.',
               'Click Preview PDF at the top to see how it looks before you share it.',

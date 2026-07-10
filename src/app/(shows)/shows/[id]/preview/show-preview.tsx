@@ -34,6 +34,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { displayShowTypeLabel } from '@/lib/show-types';
 import { formatCurrency } from '@/lib/date-utils';
+import { buildRegionalFeeDisplay, buildRegionalSpecialClassFees } from '@/lib/regional-fee-calc';
 import { ShareKitDialog } from '@/components/show/share-kit-dialog';
 import { ShareKitCard } from '@/components/show/share-kit';
 import { cn } from '@/lib/utils';
@@ -583,6 +584,29 @@ export function ShowPreviewClient() {
     return Array.from(seen.values()).sort((a, b) => a.fee - b.fee || a.label.localeCompare(b.label));
   }, [show]);
 
+  /* Regional (SV/WUSV) fee config → the same fee levels the schedule PDF and
+   * checkout resolve, plus flat-priced special classes (Baby Puppy £10 —
+   * Mandy 2026-07-10), so the public panel can't promise a price the till
+   * doesn't charge. */
+  const regionalCfg =
+    show?.showRuleset === 'wusv' ? show.regionalFeeConfig ?? null : null;
+  const regionalFees = useMemo(() => {
+    if (!regionalCfg) return null;
+    return {
+      ...buildRegionalFeeDisplay(regionalCfg),
+      firstTimeEnabled: !!regionalCfg.firstTimeEnabled,
+      firstTimeFeePence: regionalCfg.firstTimeFeePence ?? 0,
+      specialClasses: buildRegionalSpecialClassFees(
+        (show?.showClasses ?? []).map((sc) => ({
+          className: sc.classDefinition?.name,
+          classType: sc.classDefinition?.type,
+          entryFee: sc.entryFee ?? null,
+        })),
+        regionalCfg.tiers,
+      ),
+    };
+  }, [show, regionalCfg]);
+
   /* Derive total class counts per judge for display */
   const judgeClassCounts = useMemo(() => {
     const map = new Map<string, number>();
@@ -691,7 +715,13 @@ export function ShowPreviewClient() {
   const mainSponsors = (showSponsors ?? []).filter(
     (s) => s.tier === 'title' || s.tier === 'show',
   );
-  const kcRegNumber = (org as { kcRegNumber?: string | null } | null | undefined)?.kcRegNumber;
+  // RKC registration branding never applies to SV/WUSV regional shows
+  // (project_regional_kc_cleanup — strip all RKC/KC leaks from regional
+  // surfaces).
+  const kcRegNumber =
+    show.showRuleset !== 'wusv'
+      ? (org as { kcRegNumber?: string | null } | null | undefined)?.kcRegNumber
+      : null;
   const what3words = showAny.scheduleData?.what3words?.replace(/^\/+/, '');
 
   // Desktop right-rail quick facts — only cells backed by real data.
@@ -1431,35 +1461,75 @@ export function ShowPreviewClient() {
             <div className="divide-y divide-se-line px-[18px] py-1">
               {showAny.showRuleset === 'wusv' ? (
                 <>
-                  {/* SV regional shows charge a flat per-dog-per-class fee
-                       (no subsequent-entry discount, no NFC concept). Show
-                       discount groups + multi-dog package if set. */}
-                  <FeeRow label="Per dog, per class" sub="Standard rate" value={showAny.firstEntryFee} />
-                  {(showAny.discountGroups ?? []).map((g) => (
-                    <FeeRow
-                      key={g.label}
-                      label={`${g.label} rate`}
-                      sub={`Per dog, per class — claim at checkout`}
-                      value={g.firstEntryFeePence}
-                    />
-                  ))}
-                  {showAny.multiDogThreshold != null && showAny.multiDogPackagePence != null && (
-                    <FeeRow
-                      label={`${showAny.multiDogThreshold}+ dog package`}
-                      sub={`Flat package price when entering ${showAny.multiDogThreshold} or more dogs`}
-                      value={showAny.multiDogPackagePence}
-                    />
+                  {/* Regional shows with a fee config price per dog with a
+                       "3 or more dogs" package, one row per fee level —
+                       resolved by the same helper as the schedule PDF and
+                       checkout, so the three can't disagree. Flat-priced
+                       special classes (Baby Puppy) get their own row. Legacy
+                       regionals without a config keep the old flat rows. */}
+                  {regionalFees ? (
+                    <>
+                      {regionalFees.levels.map((lvl) => (
+                        <FeeRow
+                          key={lvl.label}
+                          label={regionalFees.levels.length > 1 ? lvl.label : 'Entry fee'}
+                          sub={
+                            regionalFees.capped
+                              ? `Per dog — or ${lvl.threePlusPence === 0 ? 'free' : formatCurrency(lvl.threePlusPence)} for 3 or more dogs`
+                              : 'Per dog'
+                          }
+                          value={lvl.perDogPence}
+                          custom={lvl.perDogPence === 0 ? 'Free' : undefined}
+                        />
+                      ))}
+                      {regionalFees.firstTimeEnabled && (
+                        <FeeRow
+                          label="First-time exhibitor"
+                          sub="Your first dog, if you've never shown before"
+                          value={regionalFees.firstTimeFeePence}
+                          custom={regionalFees.firstTimeFeePence === 0 ? 'Free' : undefined}
+                        />
+                      )}
+                      {regionalFees.specialClasses.map((g) => (
+                        <FeeRow
+                          key={`${g.label}-${g.fee}`}
+                          label={g.label}
+                          sub="Per dog"
+                          value={g.fee}
+                          custom={g.fee === 0 ? 'Free' : undefined}
+                        />
+                      ))}
+                    </>
+                  ) : (
+                    <>
+                      <FeeRow label="Per dog, per class" sub="Standard rate" value={showAny.firstEntryFee} />
+                      {(showAny.discountGroups ?? []).map((g) => (
+                        <FeeRow
+                          key={g.label}
+                          label={`${g.label} rate`}
+                          sub={`Per dog, per class — claim at checkout`}
+                          value={g.firstEntryFeePence}
+                        />
+                      ))}
+                      {showAny.multiDogThreshold != null && showAny.multiDogPackagePence != null && (
+                        <FeeRow
+                          label={`${showAny.multiDogThreshold}+ dog package`}
+                          sub={`Flat package price when entering ${showAny.multiDogThreshold} or more dogs`}
+                          value={showAny.multiDogPackagePence}
+                        />
+                      )}
+                      {(showAny.discountGroups ?? [])
+                        .filter((g) => g.multiDogPackagePence != null)
+                        .map((g) => (
+                          <FeeRow
+                            key={`${g.label}-pkg`}
+                            label={`${g.label} ${showAny.multiDogThreshold ?? 3}+ dog package`}
+                            sub="Members get a reduced package price"
+                            value={g.multiDogPackagePence!}
+                          />
+                        ))}
+                    </>
                   )}
-                  {(showAny.discountGroups ?? [])
-                    .filter((g) => g.multiDogPackagePence != null)
-                    .map((g) => (
-                      <FeeRow
-                        key={`${g.label}-pkg`}
-                        label={`${g.label} ${showAny.multiDogThreshold ?? 3}+ dog package`}
-                        sub="Members get a reduced package price"
-                        value={g.multiDogPackagePence!}
-                      />
-                    ))}
                   {(showAny.juniorHandlerFee == null || showAny.juniorHandlerFee === 0) ? (
                     <FeeRow label="Junior Handling" sub="Handling classes for under-18s" custom="Free" />
                   ) : (

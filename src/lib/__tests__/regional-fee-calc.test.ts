@@ -1,0 +1,366 @@
+import { describe, it, expect } from 'vitest';
+import {
+  buildRegionalFeeDisplay,
+  buildRegionalSpecialClassFees,
+  computeRegionalOrderFees,
+  regionalClassFlatFee,
+  resolveClassFlatFee,
+  DEFAULT_REGIONAL_FEE_TIERS,
+  type RegionalFeeContext,
+} from '@/lib/regional-fee-calc';
+
+/** BRG default schedule: 1st £20, 2nd £20, 3rd £16, 4th+ £0 (member £17/£17/£11/£0). */
+const base: RegionalFeeContext = {
+  tiers: DEFAULT_REGIONAL_FEE_TIERS,
+  isMember: false,
+  firstTimeExhibitor: false,
+  juniorHandlerFeePence: 0,
+};
+
+const dogs = (n: number) =>
+  Array.from({ length: n }, (_, i) => ({ key: `d${i}`, kind: 'standard' as const }));
+
+describe('computeRegionalOrderFees — tiered per-dog scale', () => {
+  it('charges one dog the first-tier standard rate', () => {
+    const r = computeRegionalOrderFees(dogs(1), base);
+    expect(r.entriesTotal).toBe(2000);
+    expect(r.payingDogCount).toBe(1);
+  });
+
+  it("matches Mandy's example: 3 member dogs = £17 + £17 + £11 = £45", () => {
+    const r = computeRegionalOrderFees(dogs(3), { ...base, isMember: true });
+    expect(r.entriesTotal).toBe(4500);
+    expect(r.perEntry.map((e) => e.fee)).toEqual([1700, 1700, 1100]);
+  });
+
+  it('charges 3 non-member dogs £20 + £20 + £16 = £56', () => {
+    const r = computeRegionalOrderFees(dogs(3), base);
+    expect(r.entriesTotal).toBe(5600);
+    expect(r.perEntry.map((e) => e.fee)).toEqual([2000, 2000, 1600]);
+  });
+
+  it('makes the 4th dog free', () => {
+    const r = computeRegionalOrderFees(dogs(4), base);
+    expect(r.entriesTotal).toBe(5600); // 20 + 20 + 16 + 0
+    expect(r.perEntry[3]!.fee).toBe(0);
+  });
+
+  it('applies the last tier to the 5th dog and beyond', () => {
+    const r = computeRegionalOrderFees(dogs(6), base);
+    // 20 + 20 + 16 + 0 + 0 + 0
+    expect(r.entriesTotal).toBe(5600);
+    expect(r.perEntry.map((e) => e.fee)).toEqual([2000, 2000, 1600, 0, 0, 0]);
+    expect(r.payingDogCount).toBe(6);
+  });
+
+  it('tracks the 1-based dog position on each standard entry', () => {
+    const r = computeRegionalOrderFees(dogs(3), base);
+    expect(r.perEntry.map((e) => e.position)).toEqual([1, 2, 3]);
+  });
+
+  it('exposes a single-class perClassFees array per dog', () => {
+    const r = computeRegionalOrderFees(dogs(2), base);
+    expect(r.perEntry.map((e) => e.perClassFees)).toEqual([[2000], [2000]]);
+  });
+});
+
+describe('computeRegionalOrderFees — member column', () => {
+  it('uses the member rate for a single member dog', () => {
+    expect(computeRegionalOrderFees(dogs(1), { ...base, isMember: true }).entriesTotal).toBe(1700);
+  });
+  it('uses the standard rate when not a member', () => {
+    expect(computeRegionalOrderFees(dogs(1), base).entriesTotal).toBe(2000);
+  });
+});
+
+describe('computeRegionalOrderFees — first-time exhibitor', () => {
+  it('frees only the FIRST dog; the rest pay their normal tier position', () => {
+    // Mandy 2026-07-05: "one entry free" — 1st free, then 2nd £20, 3rd £16.
+    const r = computeRegionalOrderFees(dogs(3), { ...base, firstTimeExhibitor: true });
+    expect(r.perEntry.map((e) => e.fee)).toEqual([0, 2000, 1600]);
+    expect(r.entriesTotal).toBe(3600);
+  });
+
+  it('a first-timer with a single dog pays nothing', () => {
+    expect(computeRegionalOrderFees(dogs(1), { ...base, firstTimeExhibitor: true }).entriesTotal).toBe(0);
+  });
+
+  it('honours a configurable first-time first-dog rate over the tier price', () => {
+    const r = computeRegionalOrderFees(dogs(2), {
+      ...base,
+      firstTimeExhibitor: true,
+      firstTimeFeePence: 500,
+    });
+    // 1st dog £5 (first-time rate), 2nd dog normal £20 tier.
+    expect(r.perEntry.map((e) => e.fee)).toEqual([500, 2000]);
+    expect(r.entriesTotal).toBe(2500);
+  });
+});
+
+describe('computeRegionalOrderFees — Junior Handler', () => {
+  it('charges the JH flat fee and does not consume a dog position', () => {
+    const entries = [
+      { key: 'd0', kind: 'standard' as const },
+      { key: 'jh', kind: 'junior_handler' as const },
+      { key: 'd1', kind: 'standard' as const },
+    ];
+    const r = computeRegionalOrderFees(entries, { ...base, juniorHandlerFeePence: 0 });
+    // Two standard dogs occupy positions 1 and 2 (JH does not shift them).
+    expect(r.perEntry.map((e) => e.position)).toEqual([1, 0, 2]);
+    expect(r.entriesTotal).toBe(4000); // £20 + £0 + £20
+    expect(r.payingDogCount).toBe(2);
+  });
+
+  it('honours a non-zero JH fee', () => {
+    const r = computeRegionalOrderFees(
+      [{ key: 'jh', kind: 'junior_handler' as const }],
+      { ...base, juniorHandlerFeePence: 300 },
+    );
+    expect(r.entriesTotal).toBe(300);
+    expect(r.perEntry[0]!.position).toBe(0);
+  });
+});
+
+describe('computeRegionalOrderFees — flat-priced special classes (Baby Puppy)', () => {
+  // Mandy 2026-07-10 (North East Regional): Baby Puppy is priced flat (£10)
+  // and is EXCLUDED from the per-dog discount scale — it neither consumes a
+  // position nor benefits from cheaper later-dog tiers.
+  const std = (key: string) => ({ key, kind: 'standard' as const });
+  const bp = (key: string, fee = 1000) => ({ key, kind: 'standard' as const, flatFeePence: fee });
+
+  it('charges the flat fee and does not consume a dog position', () => {
+    // Two adults + a baby puppy = £20 + £10 + £20; adults keep positions 1 & 2.
+    const r = computeRegionalOrderFees([std('d0'), bp('bp'), std('d1')], base);
+    expect(r.perEntry.map((e) => e.fee)).toEqual([2000, 1000, 2000]);
+    expect(r.perEntry.map((e) => e.position)).toEqual([1, 0, 2]);
+    expect(r.entriesTotal).toBe(5000);
+    expect(r.payingDogCount).toBe(2);
+  });
+
+  it('a third ADULT dog still reaches the £16 tier past a baby puppy', () => {
+    // The BP sits AFTER the three paid dogs on the scale (notional 4th slot,
+    // free) — it neither takes the £16 slot nor pays £10 here.
+    const r = computeRegionalOrderFees([std('d0'), std('d1'), bp('bp'), std('d2')], base);
+    expect(r.perEntry.map((e) => e.fee)).toEqual([2000, 2000, 0, 1600]);
+    expect(r.entriesTotal).toBe(5600);
+  });
+
+  it("rides the free 4th+ slot after three paid dogs (Mandy 2026-07-10: 'classed as the 4th dog')", () => {
+    const r = computeRegionalOrderFees([std('d0'), std('d1'), std('d2'), bp('bp')], base);
+    expect(r.perEntry.map((e) => e.fee)).toEqual([2000, 2000, 1600, 0]);
+    expect(r.entriesTotal).toBe(5600);
+    expect(r.payingDogCount).toBe(3);
+  });
+
+  it('members: 3 member dogs + baby puppy = £17 + £17 + £11 + free', () => {
+    const r = computeRegionalOrderFees(
+      [std('d0'), std('d1'), std('d2'), bp('bp')],
+      { ...base, isMember: true },
+    );
+    expect(r.perEntry.map((e) => e.fee)).toEqual([1700, 1700, 1100, 0]);
+    expect(r.entriesTotal).toBe(4500);
+  });
+
+  it('every baby puppy past the paid dogs takes its own notional slot', () => {
+    const r = computeRegionalOrderFees(
+      [std('d0'), std('d1'), std('d2'), bp('bp1'), bp('bp2')],
+      base,
+    );
+    // Notional 4th and 5th slots are both free on the BRG scale.
+    expect(r.perEntry.map((e) => e.fee)).toEqual([2000, 2000, 1600, 0, 0]);
+  });
+
+  it('charges whichever is cheaper: the flat fee or the scale slot', () => {
+    // A scale whose 2nd slot (£5) undercuts the £10 flat fee.
+    const cheapSecond = [
+      { standardPence: 2000, memberPence: 2000 },
+      { standardPence: 500, memberPence: 500 },
+    ];
+    const r = computeRegionalOrderFees([std('d0'), bp('bp')], { ...base, tiers: cheapSecond });
+    expect(r.perEntry.map((e) => e.fee)).toEqual([2000, 500]);
+  });
+
+  it('members pay the same flat fee for a baby puppy', () => {
+    const r = computeRegionalOrderFees([bp('bp')], { ...base, isMember: true });
+    expect(r.entriesTotal).toBe(1000);
+  });
+
+  it('first-time exhibitor frees the first STANDARD dog, not the baby puppy', () => {
+    const r = computeRegionalOrderFees([bp('bp'), std('d0')], {
+      ...base,
+      firstTimeExhibitor: true,
+    });
+    expect(r.perEntry.map((e) => e.fee)).toEqual([1000, 0]);
+    expect(r.entriesTotal).toBe(1000);
+  });
+
+  it('honours a flat fee of zero', () => {
+    expect(computeRegionalOrderFees([bp('bp', 0)], base).entriesTotal).toBe(0);
+  });
+
+  it('exposes the flat fee as the single per-class fee', () => {
+    const r = computeRegionalOrderFees([bp('bp')], base);
+    expect(r.perEntry[0]!.perClassFees).toEqual([1000]);
+  });
+});
+
+describe('buildRegionalFeeDisplay — fee levels for the schedule + public page', () => {
+  it('resolves the BRG default into Non-member and Member levels with 3+ package', () => {
+    expect(buildRegionalFeeDisplay({ tiers: DEFAULT_REGIONAL_FEE_TIERS })).toEqual({
+      capped: true,
+      levels: [
+        { label: 'Non-member', perDogPence: 2000, threePlusPence: 5600 },
+        { label: 'Member', perDogPence: 1700, threePlusPence: 4500 },
+      ],
+    });
+  });
+
+  it('gives a membership with its own price list its own level (option B)', () => {
+    // North East's shape: flat standard column + memberships with own tiers.
+    const display = buildRegionalFeeDisplay({
+      tiers: [
+        { standardPence: 2000, memberPence: 2000 },
+        { standardPence: 2000, memberPence: 2000 },
+        { standardPence: 1600, memberPence: 1600 },
+        { standardPence: 0, memberPence: 0 },
+      ],
+      memberships: [
+        {
+          label: 'BRG/League member',
+          tiers: [
+            { standardPence: 1700, memberPence: 1700 },
+            { standardPence: 1700, memberPence: 1700 },
+            { standardPence: 1100, memberPence: 1100 },
+            { standardPence: 0, memberPence: 0 },
+          ],
+        },
+      ],
+    });
+    expect(display.capped).toBe(true);
+    expect(display.levels).toEqual([
+      { label: 'Non-member', perDogPence: 2000, threePlusPence: 5600 },
+      { label: 'BRG/League member', perDogPence: 1700, threePlusPence: 4500 },
+    ]);
+  });
+
+  it('is not capped when the scale never reaches free', () => {
+    const display = buildRegionalFeeDisplay({
+      tiers: [
+        { standardPence: 2000, memberPence: 2000 },
+        { standardPence: 1600, memberPence: 1600 },
+      ],
+    });
+    expect(display.capped).toBe(false);
+    expect(display.levels).toEqual([
+      { label: 'Non-member', perDogPence: 2000, threePlusPence: 5200 },
+    ]);
+  });
+});
+
+describe('regionalClassFlatFee — special-class detection', () => {
+  const tiers = DEFAULT_REGIONAL_FEE_TIERS; // 1st dog £20 standard
+
+  it('returns the fee for a Baby Puppy class priced away from the first-dog tier', () => {
+    expect(
+      regionalClassFlatFee({ className: 'Baby Puppy', classType: 'sv_age', entryFee: 1000 }, tiers),
+    ).toBe(1000);
+  });
+
+  it('returns null for a Baby Puppy class left at the first-dog tier price', () => {
+    // No deliberate re-pricing → the dog prices on the normal scale.
+    expect(
+      regionalClassFlatFee({ className: 'Baby Puppy', classType: 'sv_age', entryFee: 2000 }, tiers),
+    ).toBeNull();
+  });
+
+  it('returns null for non-Baby-Puppy classes even when re-priced', () => {
+    expect(
+      regionalClassFlatFee({ className: 'Adult', classType: 'sv_age', entryFee: 1000 }, tiers),
+    ).toBeNull();
+  });
+
+  it('returns null for Junior Handler classes (they have their own flat fee)', () => {
+    expect(
+      regionalClassFlatFee(
+        { className: 'Junior Handler (6-11)', classType: 'junior_handler', entryFee: 200 },
+        tiers,
+      ),
+    ).toBeNull();
+  });
+
+  it('returns null when the show has no tier schedule to compare against', () => {
+    expect(
+      regionalClassFlatFee({ className: 'Baby Puppy', classType: 'sv_age', entryFee: 1000 }, []),
+    ).toBeNull();
+  });
+
+  it('matches the class name case-insensitively', () => {
+    expect(
+      regionalClassFlatFee({ className: 'baby puppy', classType: 'sv_age', entryFee: 1000 }, tiers),
+    ).toBe(1000);
+  });
+});
+
+describe('buildRegionalSpecialClassFees — fee-panel rows', () => {
+  const tiers = DEFAULT_REGIONAL_FEE_TIERS;
+
+  it('collapses the four Baby Puppy sex/coat variants into one row, SV prefix stripped', () => {
+    const classes = ['bitch-stock', 'bitch-long', 'dog-stock', 'dog-long'].map(() => ({
+      className: 'Baby Puppy',
+      classType: 'sv_age',
+      entryFee: 1000,
+    }));
+    expect(buildRegionalSpecialClassFees(classes, tiers)).toEqual([
+      { label: 'Baby Puppy', fee: 1000 },
+    ]);
+  });
+
+  it('returns no rows when Baby Puppy sits at the first-dog tier price', () => {
+    expect(
+      buildRegionalSpecialClassFees(
+        [{ className: 'Baby Puppy', classType: 'sv_age', entryFee: 2000 }],
+        tiers,
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe('resolveClassFlatFee — entry class lookup', () => {
+  const tiers = DEFAULT_REGIONAL_FEE_TIERS;
+  const classes = new Map([
+    ['bp', { entryFee: 1000, classDefinition: { name: 'Baby Puppy', type: 'sv_age' } }],
+    ['adult', { entryFee: 2000, classDefinition: { name: 'Adult', type: 'sv_age' } }],
+  ]);
+
+  it('resolves a Baby Puppy entry to its flat fee', () => {
+    expect(resolveClassFlatFee('bp', classes, tiers)).toBe(1000);
+  });
+
+  it('returns null for scale-priced classes, unknown ids and missing ids', () => {
+    expect(resolveClassFlatFee('adult', classes, tiers)).toBeNull();
+    expect(resolveClassFlatFee('nope', classes, tiers)).toBeNull();
+    expect(resolveClassFlatFee(undefined, classes, tiers)).toBeNull();
+  });
+});
+
+describe('computeRegionalOrderFees — edge cases', () => {
+  it('prices every dog at £0 when the tier schedule is empty', () => {
+    expect(computeRegionalOrderFees(dogs(3), { ...base, tiers: [] }).entriesTotal).toBe(0);
+  });
+
+  it('returns a zero total for an empty order', () => {
+    const r = computeRegionalOrderFees([], base);
+    expect(r.entriesTotal).toBe(0);
+    expect(r.payingDogCount).toBe(0);
+    expect(r.perEntry).toEqual([]);
+  });
+
+  it('first-time exhibitor takes precedence over the member column', () => {
+    const r = computeRegionalOrderFees(dogs(1), {
+      ...base,
+      isMember: true,
+      firstTimeExhibitor: true,
+    });
+    expect(r.entriesTotal).toBe(0);
+  });
+});

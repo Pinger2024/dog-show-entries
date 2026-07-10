@@ -3,7 +3,9 @@ import { TRPCError } from '@trpc/server';
 import { eq, asc, desc, sql, ilike, and } from 'drizzle-orm';
 import { adminProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
-import { breeds, breedGroups, classDefinitions, showClasses } from '@/server/db/schema';
+import { breeds, breedGroups, classDefinitions, showClasses, shows } from '@/server/db/schema';
+import { computeShowsMetrics } from '@/server/services/show-metrics';
+import { publicOrgColumns } from '../public-org-columns';
 
 export const adminRouter = createTRPCRouter({
   // ── Breed Groups ──────────────────────────────────────────
@@ -224,4 +226,64 @@ export const adminRouter = createTRPCRouter({
       classDefinitions: classCount.count,
     };
   }),
+
+  // ── Platform-wide shows (owners' oversight) ───────────────
+  // Every show on the platform, regardless of org membership. Admins only.
+  // Reuses computeShowsMetrics so the figures agree with the secretary
+  // dashboard exactly. This is what lets the founders see (and click into)
+  // shows for clubs they aren't members of.
+  listAllShows: adminProcedure
+    .input(
+      z
+        .object({
+          status: z
+            .enum([
+              'draft',
+              'published',
+              'entries_open',
+              'entries_closed',
+              'in_progress',
+              'completed',
+              'cancelled',
+            ])
+            .optional(),
+        })
+        .optional()
+    )
+    .query(async ({ ctx, input }) => {
+      const allShows = await ctx.db.query.shows.findMany({
+        where: input?.status ? eq(shows.status, input.status) : undefined,
+        with: { organisation: { columns: publicOrgColumns }, venue: true },
+        orderBy: [desc(shows.startDate)],
+      });
+
+      const metricsByShow = await computeShowsMetrics(
+        ctx.db,
+        allShows.map((s) => s.id)
+      );
+
+      return allShows.map((s) => {
+        const m = metricsByShow.get(s.id);
+        return {
+          id: s.id,
+          name: s.name,
+          slug: s.slug,
+          status: s.status,
+          startDate: s.startDate,
+          createdAt: s.createdAt,
+          organisationName: s.organisation?.name ?? '—',
+          venueName: s.venue?.name ?? null,
+          confirmedEntries: m?.confirmedEntryCount ?? 0,
+          pendingEntries: m?.pendingEntryCount ?? 0,
+          paidOrderCount: m?.paidOrderCount ?? 0,
+          // What the club is due (paid entry fees + sundry, net of refunds).
+          collectedPence: m?.clubReceivablePence ?? 0,
+          // Remi's booking-fee income (£1 + 1% per entry) on paid orders.
+          platformFeePence: m?.paidPlatformFeePence ?? 0,
+          grossChargedPence: m?.grossChargedPence ?? 0,
+          printedCatalogues: m?.paidPrintedCatalogueCount ?? 0,
+          onlineCatalogues: m?.paidOnlineCatalogueCount ?? 0,
+        };
+      });
+    }),
 });

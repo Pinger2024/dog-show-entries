@@ -244,6 +244,10 @@ export default function StewardClassResultsPage({
   const dogsForward = entries.filter((e) => !e.absent).length;
   const placedCount = placedByValue.size;
   const progressPct = dogsForward > 0 ? Math.round((placedCount / dogsForward) * 100) : 0;
+  // Everyone in the ring has been dealt with (placed / withheld / unplaced) but
+  // the class isn't live yet — make the Publish call-to-action loud so the last
+  // step doesn't get missed.
+  const readyToPublish = remaining.length === 0 && placedCount > 0 && !showClass.isPublished;
 
   const sortedClasses = allClasses?.sort((a, b) => a.sortOrder - b.sortOrder);
   const currentIndex = sortedClasses?.findIndex((c) => c.id === classId) ?? -1;
@@ -387,7 +391,8 @@ export default function StewardClassResultsPage({
               <li>· <strong>Tap any dog</strong> in the list to place it in the next open slot</li>
               <li>· <strong>Tap ×</strong> next to a placed dog to undo</li>
               <li>· <strong>Tap "Status ▾"</strong> on a dog to mark Absent / Withheld / Unplaced</li>
-              <li>· <strong>Tap the trophy</strong> to give a Special Award (Best of Breed, etc)</li>
+              <li>· <strong>Tap Award</strong> to note a special class award — the show&apos;s Top Awards (Best Dog, Best Bitch…) are chosen on the show page when judging finishes</li>
+              <li>· <strong>When the class is finished, tap Publish</strong> so exhibitors can see the results</li>
             </ul>
           </div>
 
@@ -537,7 +542,11 @@ export default function StewardClassResultsPage({
                   <DogCard
                     key={entry.entryClassId}
                     entry={entry}
-                    canPlace={nextOpenSlot != null}
+                    canPlace={nextOpenSlot != null && !recordResult.isPending}
+                    isPlacing={
+                      recordResult.isPending &&
+                      recordResult.variables?.entryClassId === entry.entryClassId
+                    }
                     onPlace={() => placeNext(entry.entryClassId, entry.result?.specialAward ?? null)}
                     onMarkAbsent={() => markAbsent.mutate({ entryId: entry.entryId, absent: true })}
                     onWithhold={() => setStatus(entry.entryClassId, 'withheld', entry.result?.specialAward ?? null)}
@@ -587,7 +596,9 @@ export default function StewardClassResultsPage({
                 'mt-5 rounded-xl border p-4',
                 showClass.isPublished
                   ? 'border-green-300 bg-green-50/60'
-                  : 'border-se-line bg-se-paper2'
+                  : readyToPublish
+                    ? 'border-se-fresh-line bg-se-fresh-soft'
+                    : 'border-se-line bg-se-paper2'
               )}
             >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -595,7 +606,7 @@ export default function StewardClassResultsPage({
                   <div
                     className={cn(
                       'flex size-9 shrink-0 items-center justify-center rounded-full',
-                      showClass.isPublished ? 'bg-green-600 text-white' : 'bg-se-line2 text-se-ink2'
+                      showClass.isPublished || readyToPublish ? 'bg-green-600 text-white' : 'bg-se-line2 text-se-ink2'
                     )}
                   >
                     <Globe className="size-4" />
@@ -604,7 +615,9 @@ export default function StewardClassResultsPage({
                     <p className="text-sm font-semibold">
                       {showClass.isPublished
                         ? 'Live to public'
-                        : 'Not yet visible to the public'}
+                        : readyToPublish
+                          ? 'All dogs placed — publish the results'
+                          : 'Not yet visible to the public'}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {showClass.isPublished
@@ -803,6 +816,7 @@ interface DogCardEntry {
 function DogCard({
   entry,
   canPlace,
+  isPlacing = false,
   onPlace,
   onMarkAbsent,
   onWithhold,
@@ -811,6 +825,7 @@ function DogCard({
 }: {
   entry: DogCardEntry;
   canPlace: boolean;
+  isPlacing?: boolean;
   onPlace: () => void;
   onMarkAbsent: () => void;
   onWithhold: () => void;
@@ -832,7 +847,7 @@ function DogCard({
       }}
     >
       <div className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-green-800 text-base font-bold text-white">
-        {entry.catalogueNumber ?? '—'}
+        {isPlacing ? <Loader2 className="size-5 animate-spin" /> : (entry.catalogueNumber ?? '—')}
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold">{entry.dogName}</p>

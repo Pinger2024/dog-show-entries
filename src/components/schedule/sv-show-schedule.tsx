@@ -34,6 +34,8 @@ import type {
   ScheduleAdvert,
 } from './shared/types';
 import { groupSvClasses, type SvNumberedClass } from './shared/sv-classification';
+import { buildRegionalFeeDisplay, buildRegionalSpecialClassFees } from '@/lib/regional-fee-calc';
+import type { RegionalFeeConfig } from '@/server/db/schema/shows';
 import { ss, SV, SV_FONTS } from './shared/sv-styles';
 import { Numero } from './shared/numero';
 import { AdvertPage, selectAdverts } from './shared/advert-page';
@@ -142,6 +144,50 @@ function FeeRow({
       <Text style={ss.feeRowLabel}>{label}</Text>
       <Text style={ss.feeRowValue}>{value}</Text>
     </View>
+  );
+}
+
+/** Regional (SV/WUSV) entry fees on the schedule's Fees box. The BRG model is a
+ *  flat per-dog rate with a "3 or more dogs" package price, shown for EACH fee
+ *  level — Non-member plus every membership the club offers (Mandy 2026-07-08:
+ *  the old 1st/2nd/3rd positional scale was only a Google-Forms workaround).
+ *  Each level resolves to the exact tiers the checkout charges, so the printed
+ *  schedule and the till always agree. Plus the first-time-exhibitor line. */
+function RegionalFeeRows({ config }: { config: RegionalFeeConfig }) {
+  const money = (p: number) => (p === 0 ? 'Free' : fmtMoney(p));
+
+  // Level resolution lives in `buildRegionalFeeDisplay`, shared with the
+  // public show page so the two fee panels can't drift apart.
+  const { levels, capped } = buildRegionalFeeDisplay(config);
+  const multi = levels.length > 1;
+
+  return (
+    <>
+      <Text
+        style={{
+          fontFamily: SV_FONTS.serif,
+          fontSize: 6.5,
+          color: SV.ink3,
+          fontStyle: 'italic',
+          textAlign: 'right',
+          marginBottom: 1,
+        }}
+      >
+        {capped ? 'Per dog / 3 or more dogs' : 'Per dog'}
+      </Text>
+      {levels.map((lvl, i) => {
+        const value = capped
+          ? `${money(lvl.perDogPence)} / ${money(lvl.threePlusPence)}`
+          : money(lvl.perDogPence);
+        return <FeeRow key={i} label={multi ? lvl.label : 'Entry fee'} value={value} />;
+      })}
+      {config.firstTimeEnabled ? (
+        <FeeRow
+          label="First-time exhibitor"
+          value={(config.firstTimeFeePence ?? 0) === 0 ? 'First dog free' : `${fmtMoney(config.firstTimeFeePence ?? 0)} first dog`}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -311,7 +357,39 @@ function SvCover({
 
 // ── PAGE 2 — AT A GLANCE ───────────────────────────────────────────────────
 
-function SvOverview({ show, washes }: { show: ScheduleShowInfo; washes?: SvWashBuffers }) {
+/** Flat-priced special classes (e.g. North East's £10 Baby Puppy — Mandy
+ *  2026-07-10): one fee row per distinct class name, shown under the per-dog
+ *  fee levels. Uses the same detection as checkout so the schedule can't
+ *  promise a price the till doesn't charge. */
+function SpecialClassFeeRows({
+  config,
+  classes,
+}: {
+  config: RegionalFeeConfig;
+  classes: ScheduleClass[];
+}) {
+  return (
+    <>
+      {buildRegionalSpecialClassFees(classes, config.tiers).map((r) => (
+        <FeeRow
+          key={`${r.label}-${r.fee}`}
+          label={`${r.label} · per dog`}
+          value={r.fee === 0 ? 'Free' : fmtMoney(r.fee)}
+        />
+      ))}
+    </>
+  );
+}
+
+function SvOverview({
+  show,
+  classes,
+  washes,
+}: {
+  show: ScheduleShowInfo;
+  classes: ScheduleClass[];
+  washes?: SvWashBuffers;
+}) {
   const memberTier = show.discountGroups?.[0] ?? null;
   const firstAider = show.scheduleData?.firstAiders?.[0] ?? null;
 
@@ -325,6 +403,13 @@ function SvOverview({ show, washes }: { show: ScheduleShowInfo; washes?: SvWashB
     const name = s.name.toLowerCase();
     return !name.includes('catalogue');
   });
+  // Catalogue prices come from sundry items named "… Catalogue" (Printed /
+  // Online). Render them as fee rows from the real configured prices rather
+  // than a hardcoded placeholder, so e.g. the Online Catalogue price actually
+  // shows on the schedule (Mandy 2026-06-18).
+  const catalogueItems = (show.sundryItems ?? []).filter((s) =>
+    s.name.toLowerCase().includes('catalogue'),
+  );
 
   return (
     <Page size="A5" style={ss.page}>
@@ -341,31 +426,43 @@ function SvOverview({ show, washes }: { show: ScheduleShowInfo; washes?: SvWashB
         {/* LEFT */}
         <View style={{ width: '50%', paddingRight: 10 }}>
           <SectionTitle title="Fees" />
-          <FeeRow label="Per dog · per class" value={fmtMoney(show.firstEntryFee)} />
-          {memberTier ? (
-            <FeeRow
-              label={memberTier.label}
-              value={fmtMoney(memberTier.firstEntryFeePence)}
-            />
-          ) : null}
-          {show.multiDogPackagePence != null ? (
-            <FeeRow
-              label={`${show.multiDogThreshold ?? 3}+ dogs · multi-dog`}
-              value={fmtMoney(show.multiDogPackagePence)}
-            />
-          ) : null}
-          {memberTier?.multiDogPackagePence != null ? (
-            <FeeRow
-              label="Members · multi-dog"
-              value={fmtMoney(memberTier.multiDogPackagePence)}
-            />
-          ) : null}
+          {show.regionalFeeConfig ? (
+            <>
+              <RegionalFeeRows config={show.regionalFeeConfig} />
+              <SpecialClassFeeRows config={show.regionalFeeConfig} classes={classes} />
+            </>
+          ) : (
+            <>
+              <FeeRow label="Per dog · per class" value={fmtMoney(show.firstEntryFee)} />
+              {memberTier ? (
+                <FeeRow
+                  label={memberTier.label}
+                  value={fmtMoney(memberTier.firstEntryFeePence)}
+                />
+              ) : null}
+              {show.multiDogPackagePence != null ? (
+                <FeeRow
+                  label={`${show.multiDogThreshold ?? 3}+ dogs · multi-dog`}
+                  value={fmtMoney(show.multiDogPackagePence)}
+                />
+              ) : null}
+              {memberTier?.multiDogPackagePence != null ? (
+                <FeeRow
+                  label="Members · multi-dog"
+                  value={fmtMoney(memberTier.multiDogPackagePence)}
+                />
+              ) : null}
+            </>
+          )}
           <FeeRow
             label="Junior Handling"
             value={!show.juniorHandlerFee ? 'Free' : fmtMoney(show.juniorHandlerFee)}
           />
-          {/* Catalogue prices — static fallback per HANDOFF decision-needed. */}
-          <FeeRow label="Catalogue (pre-paid)" value="£5.00" />
+          {/* Catalogue prices — pulled from the catalogue sundry items
+              (Printed / Online) so the real configured prices show. */}
+          {catalogueItems.map((s) => (
+            <FeeRow key={s.name} label={s.name} value={fmtMoney(s.priceInPence)} />
+          ))}
           {/* Multi-dog ownership note — only show when there's no sundry
               block competing for vertical space (Amanda 2026-05-22). */}
           {sundryExtras.length === 0 ? (
@@ -411,7 +508,8 @@ function SvOverview({ show, washes }: { show: ScheduleShowInfo; washes?: SvWashB
             </View>
           ))}
           <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 7.5, color: SV.ink3, marginTop: 4, fontStyle: 'italic' }}>
-            Trophies for 1st · Medals 1st–3rd · GSDL-BRG Grading Cards for all classes.
+            {show.scheduleData?.awardsDescription?.trim() ||
+              'Trophies for 1st · Medals 1st–3rd · GSDL-BRG Grading Cards for all classes.'}
           </Text>
         </View>
 
@@ -577,7 +675,7 @@ function SvClassificationPage({
               key={idx}
               style={{
                 flexDirection: 'row',
-                paddingVertical: 3.5,
+                paddingVertical: 3,
                 borderTopWidth: idx === 0 ? 1 : 0.5,
                 borderTopColor: idx === 0 ? SV.ink : SV.rule,
               }}
@@ -630,12 +728,12 @@ function SvClassificationPage({
         {juniorHandling.length > 0 ? (
           <View
             style={{
-              marginTop: 6,
-              padding: 8,
+              marginTop: 4,
+              padding: 6,
               backgroundColor: SV.accentSoft,
             }}
           >
-            <Text style={[ss.eyebrow, { color: SV.accent, marginBottom: 4 }]}>
+            <Text style={[ss.eyebrow, { color: SV.accent, marginBottom: 3 }]}>
               Junior Handling · Judged during lunch
               {juniorHandlingJudge ? ` · ${juniorHandlingJudge}` : ''}
             </Text>
@@ -668,7 +766,7 @@ function SvClassificationPage({
       </View>
 
       {/* Footer note */}
-      <View style={{ marginTop: 8 }}>
+      <View style={{ marginTop: 5 }}>
         <View style={ss.ruleThin} />
         <Text style={[ss.displayIt, { fontSize: 9, color: SV.ink2, marginTop: 3 }]}>
           {youngRange
@@ -934,7 +1032,7 @@ export function SvShowSchedule({
         <AdvertPage key={`ad-if-${ad.id}`} advert={ad} />
       ))}
 
-      <SvOverview show={show} washes={washes} />
+      <SvOverview show={show} classes={classes} washes={washes} />
       <SvClassificationPage
         breedClasses={groups.breedClasses}
         juniorHandling={groups.juniorHandling}

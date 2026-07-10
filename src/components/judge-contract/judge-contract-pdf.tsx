@@ -249,6 +249,7 @@ export function JudgeContractPdf({ data }: { data: JudgeContractPdfData }) {
     : data.show.showType
       ? SHOW_TYPE_LABELS[data.show.showType] ?? data.show.showType
       : null;
+  const isWusv = data.show.showRuleset === 'wusv';
   const venue = data.show.venueName
     ? `${data.show.venueName}${data.show.venuePostcode ? `, ${data.show.venuePostcode}` : ''}`
     : 'Venue to be confirmed';
@@ -284,7 +285,7 @@ export function JudgeContractPdf({ data }: { data: JudgeContractPdfData }) {
             This is an agreement between <Text style={{ fontWeight: 'bold' }}>{data.societyName}</Text>{' '}
             (the &quot;Society&quot;) and <Text style={{ fontWeight: 'bold' }}>{judgeName}</Text>{' '}
             (the &quot;Judge&quot;), formalising the Judge&apos;s appointment to officiate at the
-            above show under the rules and regulations of the Royal Kennel Club.
+            above show under {isWusv ? 'the GSDL British Regional Group Rules & Regulations (based on those of the WUSV)' : 'the rules and regulations of the Royal Kennel Club'}.
           </Text>
         </View>
 
@@ -404,7 +405,7 @@ export function JudgeContractPdf({ data }: { data: JudgeContractPdfData }) {
           <Text style={s.paragraph}>
             By clicking &quot;Accept Appointment&quot; on the offer link sent to the Judge&apos;s email
             address, the Judge has confirmed acceptance of this appointment on the terms set out above.
-            This digital acceptance is recorded by Remi and is binding under Royal Kennel Club regulations.
+            This digital acceptance is recorded by Remi and is binding under {isWusv ? 'the GSDL British Regional Group Rules & Regulations' : 'Royal Kennel Club regulations'}.
           </Text>
 
           <View style={s.signatureGrid}>

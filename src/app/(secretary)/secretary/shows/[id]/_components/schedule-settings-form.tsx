@@ -116,6 +116,45 @@ const SECTION_HELP: Record<SectionId, SectionHelpContent> = {
   },
 };
 
+// SV/WUSV regional shows run under GSDL British Regional Group / WUSV rules, not
+// the RKC — so the help wording drops RKC-specific references (licences,
+// guarantors, F-regulations) for those sections. Falls back to SECTION_HELP.
+const SECTION_HELP_WUSV: Partial<Record<SectionId, SectionHelpContent>> = {
+  showday: {
+    ...SECTION_HELP.showday,
+    todo: [
+      'Pick the time the show opens. This is when exhibitors can start arriving and finding their ring.',
+      'Set the latest arrival time. After this, latecomers may not be allowed in to compete.',
+      'Pick the time judging starts.',
+      'Add the on-call vet contact (a vet who has agreed to be available during the show).',
+    ],
+  },
+  people: {
+    what: 'The people running the show. The officers (Chairman, Secretary, Treasurer, etc.) and the event manager in overall charge on the day.',
+    todo: [
+      'Add the event manager (the person in overall charge on the day).',
+      'Add the club officers, picking from your club roster or typing them in.',
+    ],
+    benefit: 'Your club roster is remembered between shows. When you run the next one, the officers are already there waiting to be ticked.',
+    tip: 'If you have run shows before, the roster pre-fills the people you have used previously. You can add new ones any time.',
+  },
+  regulations: {
+    what: 'The official rules that apply to your show. Tick the ones that apply and we add the right wording to your schedule.',
+    todo: [
+      'Pick the country the show is in.',
+      'Tick whether the public can come in (free admission, paid, or no public).',
+      'Tick if there is wet weather cover (indoor space if it rains).',
+      'Tick if dogs will be benched. If yes, add the time they can be removed.',
+    ],
+    benefit: 'The required wording is long and fiddly. We keep the latest version and add the right paragraphs to your schedule based on a few tick boxes, so you do not have to write them.',
+    tip: 'The wording on the schedule is generated for you, so you do not have to write it.',
+  },
+};
+
+function sectionHelp(id: SectionId, isWusv: boolean): SectionHelpContent {
+  return (isWusv && SECTION_HELP_WUSV[id]) || SECTION_HELP[id];
+}
+
 interface OfficerWithGuarantor {
   name: string;
   position: string;
@@ -158,6 +197,8 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
   const { data: existing, isLoading, isError: existingError } =
     trpc.secretary.getScheduleData.useQuery({ showId }, { retry: 2 });
   const { data: showData } = trpc.shows.getById.useQuery({ id: showId });
+  const isWusvShow =
+    (showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset === 'wusv';
 
   // Derive existing schedule data from showData as fallback if getScheduleData fails.
   // We must NOT use `existing ?? fallback` here — when the server legitimately returns
@@ -622,7 +663,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
           <h2 className={cn(SE_H, 'text-lg')}>Schedule Settings</h2>
           <p className="text-sm text-muted-foreground">
             Configure your show schedule PDF.
-            <span className="hidden sm:inline"> Mandatory RKC statements are auto-included.</span>
+            <span className="hidden sm:inline"> {isWusvShow ? 'The standard statements are auto-included.' : 'Mandatory RKC statements are auto-included.'}</span>
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -728,7 +769,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
               {isEditing && (
                 <div className="border-t px-4 pb-4 pt-4">
                   <div className="mb-3">
-                    <InlineHelp content={SECTION_HELP[section.id]} />
+                    <InlineHelp content={sectionHelp(section.id, isWusvShow)} />
                   </div>
                   {section.id === 'showday' && (
                     <ShowDaySection
@@ -753,7 +794,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
                       guarantorCount={guarantorCount}
                       requiredGuarantors={requiredGuarantors}
                       showType={showData?.showType ?? 'open'}
-                      isWusvShow={(showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset === 'wusv'}
+                      isWusvShow={isWusvShow}
                     />
                   )}
                   {section.id === 'awards' && (
@@ -763,7 +804,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
                       hasBestVeteranInShow={hasBestVeteranInShow} setHasBestVeteranInShow={setHasBestVeteranInShow}
                       bestVeteranInShowEligibility={bestVeteranInShowEligibility} setBestVeteranInShowEligibility={setBestVeteranInShowEligibility}
                       showId={showId}
-                      isWusvShow={(showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset === 'wusv'}
+                      isWusvShow={isWusvShow}
                     />
                   )}
                   {section.id === 'venue' && (
@@ -774,6 +815,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
                       futureShowDates={futureShowDates} setFutureShowDates={setFutureShowDates}
                       additionalNotes={additionalNotes} setAdditionalNotes={setAdditionalNotes}
                       outsideAttraction={outsideAttraction} setOutsideAttraction={setOutsideAttraction}
+                      isWusvShow={isWusvShow}
                     />
                   )}
                   {section.id === 'regulations' && (
@@ -786,6 +828,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
                       acceptsNfc={acceptsNfc} setAcceptsNfc={setAcceptsNfc}
                       judgedOnGroupSystem={judgedOnGroupSystem} setJudgedOnGroupSystem={setJudgedOnGroupSystem}
                       customStatements={customStatements} setCustomStatements={setCustomStatements}
+                      isWusvShow={isWusvShow}
                     />
                   )}
                 </div>
@@ -1313,7 +1356,7 @@ function VenueSection({
   directions, setDirections, what3words, setWhat3words,
   catering, setCatering, futureShowDates, setFutureShowDates,
   additionalNotes, setAdditionalNotes,
-  outsideAttraction, setOutsideAttraction,
+  outsideAttraction, setOutsideAttraction, isWusvShow,
 }: {
   directions: string; setDirections: (v: string) => void;
   what3words: string; setWhat3words: (v: string) => void;
@@ -1321,6 +1364,7 @@ function VenueSection({
   futureShowDates: string; setFutureShowDates: (v: string) => void;
   additionalNotes: string; setAdditionalNotes: (v: string) => void;
   outsideAttraction: boolean; setOutsideAttraction: (v: boolean) => void;
+  isWusvShow: boolean;
 }) {
   return (
     <div className="space-y-4">
@@ -1346,15 +1390,19 @@ function VenueSection({
         <Label htmlFor="additionalNotes" className="text-xs">Additional Notes</Label>
         <Textarea id="additionalNotes" value={additionalNotes} onChange={(e) => setAdditionalNotes(e.target.value)} placeholder="Any other information to include in the schedule" rows={2} />
       </div>
-      <div className="flex items-center justify-between rounded-lg border p-3">
-        <div>
-          <Label className="text-xs">Outside Attraction</Label>
-          <p className="text-xs text-muted-foreground">
-            Displays notice: &quot;RKC Regulation F(1) 16H will be strictly enforced&quot;
-          </p>
+      {/* Outside Attraction is an RKC F(1) 16h schedule notice — not used on
+          SV/WUSV regionals (Mandy 2026-07-08). */}
+      {!isWusvShow && (
+        <div className="flex items-center justify-between rounded-lg border p-3">
+          <div>
+            <Label className="text-xs">Outside Attraction</Label>
+            <p className="text-xs text-muted-foreground">
+              Displays notice: &quot;RKC Regulation F(1) 16H will be strictly enforced&quot;
+            </p>
+          </div>
+          <Switch checked={outsideAttraction} onCheckedChange={setOutsideAttraction} />
         </div>
-        <Switch checked={outsideAttraction} onCheckedChange={setOutsideAttraction} />
-      </div>
+      )}
     </div>
   );
 }
@@ -1366,7 +1414,7 @@ function RegulationsSection({
   wetWeather, setWetWeather, isBenched, setIsBenched,
   benchingRemovalTime, setBenchingRemovalTime,
   acceptsNfc, setAcceptsNfc, judgedOnGroupSystem, setJudgedOnGroupSystem,
-  customStatements, setCustomStatements,
+  customStatements, setCustomStatements, isWusvShow,
 }: {
   country: string; setCountry: (v: string) => void;
   publicAdmission: boolean; setPublicAdmission: (v: boolean) => void;
@@ -1376,11 +1424,14 @@ function RegulationsSection({
   acceptsNfc: boolean; setAcceptsNfc: (v: boolean) => void;
   judgedOnGroupSystem: boolean; setJudgedOnGroupSystem: (v: boolean) => void;
   customStatements: string[]; setCustomStatements: (v: string[]) => void;
+  isWusvShow: boolean;
 }) {
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground">
-        Mandatory RKC statements are auto-included. These settings control show-specific regulations.
+        {isWusvShow
+          ? 'The standard schedule statements are auto-included. These settings control show-specific regulations.'
+          : 'Mandatory RKC statements are auto-included. These settings control show-specific regulations.'}
       </p>
 
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
@@ -1397,41 +1448,52 @@ function RegulationsSection({
           </Select>
         </div>
 
-        <div className="flex items-center justify-between rounded-lg border p-3">
-          <Label className="text-xs">Public admission fee</Label>
-          <Switch checked={publicAdmission} onCheckedChange={setPublicAdmission} />
-        </div>
+        {/* These toggles are RKC schedule concepts (public admission, wet
+            weather, NFC, group-system judging, benching) — not used on SV/WUSV
+            regionals (Mandy 2026-07-08). Country + custom statements stay. */}
+        {!isWusvShow && (
+          <>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <Label className="text-xs">Public admission fee</Label>
+              <Switch checked={publicAdmission} onCheckedChange={setPublicAdmission} />
+            </div>
 
-        <div className="flex items-center justify-between rounded-lg border p-3">
-          <Label className="text-xs">Wet weather accommodation</Label>
-          <Switch checked={wetWeather} onCheckedChange={setWetWeather} />
-        </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <Label className="text-xs">Wet weather accommodation</Label>
+              <Switch checked={wetWeather} onCheckedChange={setWetWeather} />
+            </div>
 
-        <div className="flex items-center justify-between rounded-lg border p-3">
-          <Label className="text-xs">NFC entries accepted</Label>
-          <Switch checked={acceptsNfc} onCheckedChange={setAcceptsNfc} />
-        </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <Label className="text-xs">NFC entries accepted</Label>
+              <Switch checked={acceptsNfc} onCheckedChange={setAcceptsNfc} />
+            </div>
 
-        <div className="flex items-center justify-between rounded-lg border p-3">
-          <Label className="text-xs">Group system judging</Label>
-          <Switch checked={judgedOnGroupSystem} onCheckedChange={setJudgedOnGroupSystem} />
-        </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <Label className="text-xs">Group system judging</Label>
+              <Switch checked={judgedOnGroupSystem} onCheckedChange={setJudgedOnGroupSystem} />
+            </div>
 
-        <div className="space-y-2">
-          <div className="flex items-center justify-between rounded-lg border p-3">
-            <Label className="text-xs">Benched show</Label>
-            <Switch checked={isBenched} onCheckedChange={setIsBenched} />
-          </div>
-          {isBenched && (
-            <Input value={benchingRemovalTime} onChange={(e) => setBenchingRemovalTime(e.target.value)} placeholder="e.g. Dogs may be removed after Best in Show" className="min-h-[2.75rem]" />
-          )}
-        </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <Label className="text-xs">Benched show</Label>
+                <Switch checked={isBenched} onCheckedChange={setIsBenched} />
+              </div>
+              {isBenched && (
+                <Input value={benchingRemovalTime} onChange={(e) => setBenchingRemovalTime(e.target.value)} placeholder="e.g. Dogs may be removed after Best in Show" className="min-h-[2.75rem]" />
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Optional extra statements */}
       <div className="space-y-3">
         <Label className="text-xs">Additional Schedule Statements</Label>
 
+        {/* RKC preset F-regulation statements — not applicable to SV/WUSV
+            regionals (they run under GSDL-BRG/WUSV rules). Custom statements
+            below stay available for regionals. */}
+        {!isWusvShow && (
         <div className="space-y-2 max-h-48 overflow-y-auto rounded-lg border p-3">
           {RKC_STATEMENT_CATEGORIES.map((category) => {
             const statementsInCategory = RKC_STATEMENTS.filter((s) => s.category === category);
@@ -1459,6 +1521,7 @@ function RegulationsSection({
             );
           })}
         </div>
+        )}
 
         {customStatements.filter((s) => !RKC_STATEMENTS.some((r) => r.text === s)).length > 0 && (
           <div className="space-y-2">

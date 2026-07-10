@@ -125,9 +125,14 @@ interface DogFormProps {
    *  German-Shepherd-specific data together as one visual block). Only
    *  rendered when the selected breed matches German Shepherd. */
   svSection?: React.ReactNode;
+  /** Where to go after a successful save. Used when the exhibitor came from an
+   *  entry to fill in mandatory info — send them straight back to that show's
+   *  entry instead of the dog profile (Mandy 2026-06-26). Internal paths only. */
+  returnTo?: string;
 }
 
-export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps) {
+export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: DogFormProps) {
+  const safeReturnTo = returnTo && returnTo.startsWith('/shows/') ? returnTo : null;
   const router = useRouter();
   const [breedOpen, setBreedOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -151,9 +156,11 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
     onSuccess: () => {
       utils.dogs.list.invalidate();
       toast.success('Dog added successfully!', {
-        description: 'Your dog has been added to your profile.',
+        description: safeReturnTo
+          ? 'Taking you back to your entry…'
+          : 'Your dog has been added to your profile.',
       });
-      router.push('/dogs');
+      router.push(safeReturnTo ?? '/dogs');
     },
     onError: (error) => {
       toast.error('Something went wrong', {
@@ -167,9 +174,11 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
       utils.dogs.list.invalidate();
       if (dogId) utils.dogs.getById.invalidate({ id: dogId });
       toast.success('Dog updated successfully!', {
-        description: 'Your changes have been saved.',
+        description: safeReturnTo
+          ? 'Taking you back to your entry…'
+          : 'Your changes have been saved.',
       });
-      router.push(`/dogs/${dogId}`);
+      router.push(safeReturnTo ?? `/dogs/${dogId}`);
     },
     onError: (error) => {
       toast.error('Something went wrong', {
@@ -434,6 +443,25 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
         toast.error('Please add at least one owner');
         return;
       }
+      // Pedigree (sire + dam + breeder) is mandatory — a catalogue can't be
+      // produced with this missing (Michael 2026-06-25; breeder added 2026-06-26).
+      let pedigreeMissing = false;
+      if (!data.sireName || !data.sireName.trim()) {
+        form.setError('sireName', { type: 'manual', message: "The sire's name is required" });
+        pedigreeMissing = true;
+      }
+      if (!data.damName || !data.damName.trim()) {
+        form.setError('damName', { type: 'manual', message: "The dam's name is required" });
+        pedigreeMissing = true;
+      }
+      if (!data.breederName || !data.breederName.trim()) {
+        form.setError('breederName', { type: 'manual', message: "The breeder's name is required" });
+        pedigreeMissing = true;
+      }
+      if (pedigreeMissing) {
+        toast.error('Please add the sire, dam and breeder — they appear in the catalogue');
+        return;
+      }
       createDog.mutate(data);
     } else if (dogId) {
       const { owners: _owners, ...dogFields } = data;
@@ -460,8 +488,9 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
           <CardHeader>
             <CardTitle>Registration Details</CardTitle>
             <CardDescription>
-              Enter the details as they appear on your Royal Kennel Club registration
-              certificate, or use the RKC Lookup to auto-fill.
+              Enter your dog&apos;s registration details. If your dog is RKC registered,
+              use the RKC Lookup below to auto-fill. Registered with another body
+              (SV, FCI, IKC)? Just type the details in.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -476,9 +505,9 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
                 const body = form.watch('registrationBody');
                 const labelByBody: Record<string, { label: string; placeholder: string; helper: string }> = {
                   kc: {
-                    label: 'RKC Registration Number',
+                    label: 'Dog Registration Number',
                     placeholder: 'e.g. AQ04052601',
-                    helper: 'Found on your Royal Kennel Club registration certificate. Leave blank if not yet registered.',
+                    helper: "Found on your dog's registration certificate. Leave blank if not yet registered.",
                   },
                   sv: {
                     label: 'SV Registration Number',
@@ -535,7 +564,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
                     />
                   </FormControl>
                   <FormDescription>
-                    Enter the name exactly as it appears on your RKC registration
+                    Enter the name exactly as it appears on your dog&apos;s registration
                     certificate.
                   </FormDescription>
                   <FormMessage />

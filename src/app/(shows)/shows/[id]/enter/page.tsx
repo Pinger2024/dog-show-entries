@@ -38,10 +38,19 @@ import {
 import { differenceInMonths, differenceInWeeks, format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { isWithinAgeRange, getAgeEligibilityDetail, handlerAgeYearsOnDate, formatCurrency } from '@/lib/date-utils';
+import { svWorkingClassAllowed, svMissingRequirements, hasWorkingTitle } from '@/lib/sv-entry-readiness';
 import { trpc } from '@/lib/trpc/client';
 import { formatDogName } from '@/lib/utils';
 import { readReferralSource } from '@/lib/referral-source';
 import { computeOrderFees, type DogEntryInput, type FeeContext } from '@/lib/fee-calc';
+import {
+  computeRegionalOrderFees,
+  regionalClassFlatFee,
+  resolveClassFlatFee,
+  type RegionalDogEntryInput,
+  type RegionalFeeContext,
+  type RegionalFeeTier,
+} from '@/lib/regional-fee-calc';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -186,6 +195,15 @@ export default function EnterShowPage() {
   // so the fee-calc service can apply the group's first-class rate
   // and (if set) member-specific multi-dog package price.
   const [discountGroupId, setDiscountGroupId] = useState<string | null>(null);
+  // Regional (SV/WUSV) checkout declarations — self-declared, on trust. Kept as
+  // transient page state (not persisted with the cart) so a reload just resets
+  // them to the standard rate rather than risking a stale membership sticking to
+  // a different exhibitor.
+  const [regionalMembership, setRegionalMembership] = useState<string | null>(null);
+  const [regionalMembershipNumber, setRegionalMembershipNumber] = useState('');
+  const [regionalFirstTime, setRegionalFirstTime] = useState(false);
+  const [donationPounds, setDonationPounds] = useState('');
+  const [donationAffix, setDonationAffix] = useState('');
 
   // JH form state
   const [jhName, setJhName] = useState('');
@@ -209,6 +227,23 @@ export default function EnterShowPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Safety net (Mandy 2026-06-26): if we ever land on a per-entry step with no
+  // active entry — a stale/cleared activeEntryId after navigation, a removed
+  // entry, or a dev hot-reload mid-flow — recover to the type chooser with a
+  // fresh entry. Without this the page renders the wrong branch ("Choose
+  // classes for the handler") with EVERY class, because no selected dog means
+  // no sex/coat filter.
+  useEffect(() => {
+    const needsActiveEntry =
+      cart.step === 'select_dog' ||
+      cart.step === 'select_classes' ||
+      cart.step === 'junior_handler';
+    if (needsActiveEntry && !cart.activeEntry) {
+      cart.startNewEntry();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cart.step, cart.activeEntry]);
 
   // After a Stripe redirect (3-D Secure / bank auth) the return URL carries
   // payment_intent / redirect_status params. loadSavedState has already used
@@ -373,10 +408,63 @@ export default function EnterShowPage() {
     { enabled: !!showId && cart.step === 'cart_review' }
   );
 
+  // Regional (SV/WUSV) shows price on a tiered per-dog scale + member column
+  // (project_regional_fee_structure). Null on RKC shows / regionals with no fee
+  // config yet, which fall back to the standard fee model.
+  const regionalCfg =
+    show?.showRuleset === 'wusv' ? show.regionalFeeConfig ?? null : null;
+  const regionalMemberships = regionalCfg?.memberships ?? [
+    { label: 'BRG/League member', requiresNumber: true },
+  ];
+  const donationPence = regionalCfg?.donationsEnabled
+    ? Math.round((parseFloat(donationPounds) || 0) * 100)
+    : 0;
+  // A membership that asks for a number must have one before checkout —
+  // Mandy 2026-07-05 (still taken on trust, just not left blank).
+  const selectedMembership = regionalMembership
+    ? regionalMemberships.find((m) => m.label === regionalMembership)
+    : undefined;
+  const membershipNumberMissing =
+    !!selectedMembership?.requiresNumber && !regionalMembershipNumber.trim();
+
   // Live fee preview — mirrors server-side computation so the exhibitor sees
   // the right total before paying. The server recomputes authoritatively at
   // checkout, so this is purely informational; mismatch would be caught there.
   const feePreview = useMemo(() => {
+    // Regional tiered pricing — per distinct dog, with the member/first-time
+    // switches. JH entries don't consume a dog position.
+    if (regionalCfg) {
+      const completeEntries = cart.entries.filter(
+        (e) => e.classIds.length > 0 || e.isNfc,
+      );
+      if (completeEntries.length === 0) return null;
+      const declared = regionalMembership
+        ? regionalMemberships.find((m) => m.label === regionalMembership)
+        : undefined;
+      const ctx: RegionalFeeContext = {
+        tiers: declared?.tiers ?? regionalCfg.tiers,
+        isMember: !!declared && !declared.tiers,
+        firstTimeExhibitor: regionalFirstTime && !!regionalCfg.firstTimeEnabled,
+        firstTimeFeePence: regionalCfg.firstTimeFeePence ?? 0,
+        juniorHandlerFeePence: show?.juniorHandlerFee ?? 0,
+      };
+      // Regional dogs sit in one class; a Baby Puppy class priced away from
+      // the scale charges flat, outside the discount (Mandy 2026-07-10).
+      const classById = new Map((allShowClasses ?? []).map((sc) => [sc.id, sc]));
+      const rEntries: RegionalDogEntryInput[] = completeEntries.map((e, i) => ({
+        key: String(i),
+        kind: e.entryType === 'junior_handler' ? 'junior_handler' : 'standard',
+        flatFeePence: resolveClassFlatFee(e.classIds[0], classById, regionalCfg.tiers),
+      }));
+      const r = computeRegionalOrderFees(rEntries, ctx);
+      return {
+        total: r.entriesTotal,
+        multiDogApplied: false,
+        multiDogSavings: 0,
+        payingDogCount: r.payingDogCount,
+      };
+    }
+
     if (!show || show.firstEntryFee == null) return null;
     const selectedGroup = discountGroups?.find((g) => g.id === discountGroupId) ?? null;
     const feeCtx: FeeContext = {
@@ -408,7 +496,7 @@ export default function EnterShowPage() {
     if (dogEntries.length === 0) return null;
     return computeOrderFees(dogEntries, feeCtx);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [show, discountGroups, discountGroupId, cart.entries]);
+  }, [show, regionalCfg, regionalMembership, regionalFirstTime, discountGroups, discountGroupId, cart.entries, allShowClasses]);
 
   // Sync cart sundry item prices/names with server data (handles secretary price changes)
   useEffect(() => {
@@ -500,14 +588,23 @@ export default function EnterShowPage() {
     const byCanonicalOrder = (a: (typeof eligible)[0], b: (typeof eligible)[0]) =>
       (a.classDefinition.sortOrder ?? 0) - (b.classDefinition.sortOrder ?? 0);
 
+    // SV: the Working class (Gebrauchshundklasse) is only for dogs with a
+    // working title — an adult without one enters Adult instead (Mandy
+    // 2026-06-26). Hide it so the exhibitor can't pick a class they aren't
+    // eligible for.
+    const dogHasWorkingTitle = hasWorkingTitle(selectedDogSvProfile?.workingTitle);
+
     return {
       age: eligible.filter((sc) => sc.classDefinition.type === 'age').sort(byCanonicalOrder),
       achievement: eligible.filter((sc) => sc.classDefinition.type === 'achievement').sort(byCanonicalOrder),
       special: eligible.filter((sc) => sc.classDefinition.type === 'special').sort(byCanonicalOrder),
       junior_handler: eligible.filter((sc) => sc.classDefinition.type === 'junior_handler').sort(byCanonicalOrder),
-      sv_age: eligible.filter((sc) => sc.classDefinition.type === 'sv_age').sort(byCanonicalOrder),
+      sv_age: eligible
+        .filter((sc) => sc.classDefinition.type === 'sv_age')
+        .filter((sc) => svWorkingClassAllowed(sc.classDefinition.name, dogHasWorkingTitle))
+        .sort(byCanonicalOrder),
     };
-  }, [showClasses, selectedDogSex, selectedDog?.breed?.name, selectedDog?.coatType]);
+  }, [showClasses, selectedDogSex, selectedDog?.breed?.name, selectedDog?.coatType, selectedDogSvProfile?.workingTitle]);
 
   // Filter classes by entry type (and by handler age for JH entries)
   const availableClasses = useMemo(() => {
@@ -586,6 +683,21 @@ export default function EnterShowPage() {
       return count > 0 ? show.juniorHandlerFee : 0;
     }
 
+    // Regional (SV/WUSV) shows charge a tiered per-DOG fee based on how many
+    // dogs the exhibitor enters — not per class. Show the standard rate for
+    // THIS dog's position; member / first-time discounts apply at Review.
+    if (regionalCfg && !isNfc && !isJuniorHandler) {
+      if (count === 0) return 0;
+      const priorPaying = cart.entries.filter(
+        (e) =>
+          e.entryType === 'standard' &&
+          (e.classIds.length > 0 || e.isNfc) &&
+          e.id !== cart.activeEntryId,
+      ).length;
+      const idx = Math.min(priorPaying, regionalCfg.tiers.length - 1);
+      return regionalCfg.tiers[idx]?.standardPence ?? 0;
+    }
+
     if (count === 0) return 0;
 
     // Use show-level fee tiers if available, otherwise fall back to per-class fees
@@ -601,7 +713,8 @@ export default function EnterShowPage() {
     return showClasses
       .filter((sc) => selectedClassIds.includes(sc.id))
       .reduce((sum, sc) => sum + sc.entryFee, 0);
-  }, [showClasses, selectedClassIds, show, isNfc, isJuniorHandler]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showClasses, selectedClassIds, show, isNfc, isJuniorHandler, regionalCfg, cart.entries, cart.activeEntryId]);
 
   // Age eligibility — uses date-anchored bounds so a dog whose 1st
   // birthday IS the show day is still eligible for Puppy (Amanda
@@ -694,6 +807,13 @@ export default function EnterShowPage() {
         })),
         referralSource,
         discountGroupId: discountGroupId ?? undefined,
+        regionalMembership: regionalMembership ?? undefined,
+        regionalMembershipNumber: regionalMembership
+          ? regionalMembershipNumber.trim() || undefined
+          : undefined,
+        regionalFirstTimeExhibitor: regionalFirstTime,
+        donationPence,
+        donationAffix: donationPence > 0 ? donationAffix.trim() || undefined : undefined,
       });
 
       // Free entries (£0) — skip payment, go straight to success
@@ -772,7 +892,7 @@ export default function EnterShowPage() {
             <CardTitle>Complete Your Profile</CardTitle>
             <CardDescription>
               Your profile needs updating before you can enter a show.
-              The Royal Kennel Club requires exhibitor name and address on all entries.
+              Your name and address are required on every entry.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -1109,7 +1229,7 @@ export default function EnterShowPage() {
 
           {eligibleDogs && eligibleDogs.length > 0 && (
             <Link
-              href="/dogs/new"
+              href={`/dogs/new?returnTo=${encodeURIComponent(`/shows/${idOrSlug}/enter`)}`}
               className="inline-flex items-center gap-1 text-sm font-semibold text-se-fresh-deep hover:underline"
             >
               + Add a new dog
@@ -1273,16 +1393,35 @@ export default function EnterShowPage() {
           show?.showRuleset === 'wusv' &&
           cart.activeEntry?.entryType === 'standard' &&
           selectedSvHealthClasses.length > 0;
-        const svHealthMissing: string[] = (() => {
-          if (!svHealthRequired) return [];
-          const profile = selectedDogSvProfile;
-          const missing: string[] = [];
-          const isEmpty = (v: string | null | undefined) => !v || v === 'not_required';
-          if (isEmpty(profile?.hipGrade ?? null)) missing.push('hip score');
-          if (isEmpty(profile?.elbowGrade ?? null)) missing.push('elbow score');
-          if (!profile?.dna) missing.push('DNA recording');
-          return missing;
-        })();
+        // One consolidated SV readiness check (Mandy 2026-06-26): coat type +
+        // health gathered into a SINGLE list, surfaced as one warning that
+        // blocks the entry until everything for the dog's age/class is complete
+        // — no more separate warnings the exhibitor has to scroll between.
+        const svStandard =
+          show?.showRuleset === 'wusv' && cart.activeEntry?.entryType === 'standard';
+        const svMissing =
+          svStandard && !isNfc
+            ? svMissingRequirements({
+                coatType: selectedDog?.coatType,
+                healthRequired: svHealthRequired,
+                profile: selectedDogSvProfile,
+                ownRegistrationNumber: selectedDog?.kcRegNumber,
+                pedigree: selectedDog
+                  ? {
+                      sireName: selectedDog.sireName,
+                      sireRegistrationNumber: selectedDog.sireRegistrationNumber,
+                      damName: selectedDog.damName,
+                      damRegistrationNumber: selectedDog.damRegistrationNumber,
+                      breederName: selectedDog.breederName,
+                      breederCity: selectedDog.breederCity,
+                      breederPostcode: selectedDog.breederPostcode,
+                    }
+                  : undefined,
+              })
+            : [];
+        const svNoWorkingTitle =
+          svStandard && !hasWorkingTitle(selectedDogSvProfile?.workingTitle);
+        const svBlocked = svMissing.length > 0;
 
         const dogAgeMonths =
           selectedDog?.dateOfBirth && show?.startDate
@@ -1326,7 +1465,7 @@ export default function EnterShowPage() {
             </SECard>
           )}
 
-          {dogUnder6Months && (
+          {dogUnder6Months && show?.showRuleset !== 'wusv' && (
             <div className="flex gap-3 rounded-[14px] border border-se-honey-line bg-se-honey-soft p-3">
               <AlertTriangle className="mt-0.5 size-4 shrink-0 text-se-honey-deep" />
               <div className="text-sm text-se-honey-ink">
@@ -1339,22 +1478,26 @@ export default function EnterShowPage() {
             </div>
           )}
 
-          {svHealthMissing.length > 0 && (
+          {/* One consolidated SV readiness warning (Mandy 2026-06-26): coat
+              type + health tests in a single block at the top, with the entry
+              blocked until they're done — replaces the separate coat and health
+              warnings that used to sit in different places on the page. */}
+          {svStandard && svMissing.length > 0 && (
             <div className="flex gap-3 rounded-[14px] border border-se-honey-line bg-se-honey-soft p-3">
               <AlertTriangle className="mt-0.5 size-4 shrink-0 text-se-honey-deep" />
               <div className="text-sm text-se-honey-ink">
                 <p className="font-medium">
-                  Health data required for{' '}
-                  {selectedSvHealthClasses
-                    .map((sc) => sc.classDefinition!.name)
-                    .join(', ')}
+                  {selectedDog?.registeredName ?? 'This dog'} isn&apos;t ready to enter yet
                 </p>
                 <p className="mt-0.5 text-xs">
-                  SV/WUSV rules require this dog to have a recorded{' '}
-                  <strong>{svHealthMissing.join(', ')}</strong> before it can be
-                  entered into these classes. Add the details on the dog&apos;s
-                  profile, then come back to complete your entry.
+                  SV/WUSV rules need the following recorded on this dog&apos;s
+                  profile before it can be entered:
                 </p>
+                <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs">
+                  {svMissing.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
                 {cart.activeEntry?.dogId && (
                   <SEButton
                     asChild
@@ -1362,8 +1505,8 @@ export default function EnterShowPage() {
                     size="sm"
                     className="mt-2 h-9 min-h-0 border border-se-honey bg-white px-3 text-xs text-se-honey-ink shadow-none hover:bg-se-honey-soft"
                   >
-                    <Link href={`/dogs/${cart.activeEntry.dogId}/edit`}>
-                      Add health data to {cart.activeEntry.dogName ?? 'this dog'}
+                    <Link href={`/dogs/${cart.activeEntry.dogId}/edit?returnTo=${encodeURIComponent(`/shows/${idOrSlug}/enter`)}`}>
+                      Complete {cart.activeEntry.dogName ?? 'this dog'}&apos;s profile
                     </Link>
                   </SEButton>
                 )}
@@ -1416,16 +1559,16 @@ export default function EnterShowPage() {
                   })()}
                   {groupedClasses.sv_age.length > 0 && (
                     <>
-                      {/* SV shows: warn when the dog has no coat type set
-                          on its profile — without it we can't auto-filter
-                          to the correct Standard/Long Coat class and the
-                          exhibitor sees the list duplicated. Amanda
-                          2026-05-20. */}
-                      {show?.showRuleset === 'wusv' && !selectedDog?.coatType && (
-                        <div className="flex gap-3 rounded-[14px] border border-se-honey-line bg-se-honey-soft p-3">
-                          <Info className="mt-0.5 size-4 shrink-0 text-se-honey-deep" />
-                          <p className="text-sm text-se-honey-ink">
-                            <span className="font-medium">{selectedDog?.registeredName ?? 'This dog'}</span> doesn&apos;t have a coat type set on the profile yet. Both Standard Coat and Long Coat classes are showing — pick the correct one, or set the coat type on the dog&apos;s profile so we can filter automatically.
+                      {/* Coat type now lives in the consolidated readiness
+                          warning at the top. Here we only explain the absent
+                          Working class for a dog with no working title (it's
+                          filtered out of the list above). Mandy 2026-06-26. */}
+                      {svNoWorkingTitle && (
+                        <div className="flex gap-3 rounded-[14px] border border-se-line bg-se-surface p-3">
+                          <Info className="mt-0.5 size-4 shrink-0 text-se-fresh-deep" />
+                          <p className="text-xs text-se-ink3">
+                            The <span className="font-medium text-se-ink2">Working</span> class isn&apos;t shown — it needs a working title recorded on{' '}
+                            <span className="font-medium text-se-ink2">{selectedDog?.registeredName ?? 'this dog'}</span>&apos;s profile. Without one, this dog enters the Adult class.
                           </p>
                         </div>
                       )}
@@ -1446,6 +1589,8 @@ export default function EnterShowPage() {
                         onToggle={toggleClass}
                         getAgeEligibility={getAgeEligibility}
                         dogName={selectedDog?.registeredName}
+                        hideFee={show?.showRuleset === 'wusv'}
+                        regionalTiers={regionalCfg?.tiers ?? null}
                       />
                     </>
                   )}
@@ -1562,7 +1707,7 @@ export default function EnterShowPage() {
                 disabled={
                   (selectedClassIds.length === 0 && !isNfc) ||
                   (dogUnder6Months && !isNfc) ||
-                  svHealthMissing.length > 0
+                  svBlocked
                 }
               >
                 {cart.editingExisting ? 'Update' : 'Review entry'}
@@ -1687,12 +1832,14 @@ export default function EnterShowPage() {
           {/* Add another */}
           {addDogsButtons}
 
-          {/* Sundry items (catalogues, memberships, donations, etc.) — shown BEFORE total */}
+          {/* Sundry items (catalogues, memberships, donations, etc.) — shown BEFORE total.
+              Wrapped in an accent panel so the add-ons (esp. the catalogue) aren't
+              missed in the entry flow (Mandy/Michael, 2026-06-25). */}
           {sundryItemsData && sundryItemsData.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="text-sm font-bold text-se-ink">Add-ons</h3>
-              <p className="text-xs text-se-ink3">
-                Optional extras available for this show — catalogues, memberships, and more.
+            <div className="space-y-3 rounded-[14px] border-2 border-se-fresh-line bg-se-fresh-soft p-4 shadow-sm">
+              <h3 className="text-base font-bold text-se-ink">Add to your entry</h3>
+              <p className="-mt-1 text-xs text-se-ink3">
+                Optional extras for this show — don&apos;t forget to pre-order your catalogue. You won&apos;t be able to add these after you&apos;ve paid.
               </p>
               {sundryItemsData.map((item) => {
                 const inCart = cart.sundryItems.find((s) => s.sundryItemId === item.id);
@@ -1795,7 +1942,7 @@ export default function EnterShowPage() {
           )}
 
           {/* Discount group declaration — only when the show offers groups */}
-          {discountGroups && discountGroups.length > 0 && (
+          {!regionalCfg && discountGroups && discountGroups.length > 0 && (
             <SECard className="p-4">
               <div className="space-y-1">
                 <p className="text-sm font-semibold text-se-ink">Are you eligible for a discount?</p>
@@ -1835,6 +1982,126 @@ export default function EnterShowPage() {
             </SECard>
           )}
 
+          {/* Regional (SV/WUSV) membership + first-time + donation. The tiered
+              per-dog fees are applied automatically; these switches choose the
+              member column / free first-time entry and add a donation. */}
+          {regionalCfg && (
+            <div className="space-y-4 rounded-lg border bg-card p-4">
+              <div className="space-y-1">
+                <p className="text-sm font-semibold">Membership &amp; extras</p>
+                <p className="text-xs text-muted-foreground">
+                  Tick anything that applies — by ticking you confirm you qualify.
+                </p>
+              </div>
+
+              {/* Membership options → member rates */}
+              <div className="space-y-2">
+                {regionalMemberships.map((m) => (
+                  <label
+                    key={m.label}
+                    className="flex min-h-[2.75rem] cursor-pointer items-start gap-3 rounded-md border p-3 hover:bg-muted/30"
+                  >
+                    <input
+                      type="radio"
+                      name="regional-membership"
+                      checked={regionalMembership === m.label}
+                      onChange={() => setRegionalMembership(m.label)}
+                      className="mt-0.5 size-4 cursor-pointer"
+                    />
+                    <span className="text-sm font-medium">I am a {m.label}</span>
+                  </label>
+                ))}
+                <label className="flex min-h-[2.75rem] cursor-pointer items-start gap-3 rounded-md border p-3 hover:bg-muted/30">
+                  <input
+                    type="radio"
+                    name="regional-membership"
+                    checked={regionalMembership === null}
+                    onChange={() => {
+                      setRegionalMembership(null);
+                      setRegionalMembershipNumber('');
+                    }}
+                    className="mt-0.5 size-4 cursor-pointer"
+                  />
+                  <span className="text-sm font-medium">Not a member (standard rate)</span>
+                </label>
+              </div>
+
+              {/* Membership number — shown when the chosen membership needs one */}
+              {regionalMembership &&
+                regionalMemberships.find((m) => m.label === regionalMembership)?.requiresNumber && (
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium">
+                      {regionalMembership} number <span className="text-destructive">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={regionalMembershipNumber}
+                      onChange={(e) => setRegionalMembershipNumber(e.target.value)}
+                      placeholder="Your membership number"
+                      className={cn(
+                        'h-11 w-full rounded-md border px-3 text-sm',
+                        membershipNumberMissing && 'border-destructive',
+                      )}
+                    />
+                    {membershipNumberMissing && (
+                      <p className="text-xs text-destructive">
+                        Please enter your membership number to use the member rate.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+              {/* First-time exhibitor */}
+              {regionalCfg.firstTimeEnabled && (
+                <label className="flex min-h-[2.75rem] cursor-pointer items-start gap-3 rounded-md border p-3 hover:bg-muted/30">
+                  <input
+                    type="checkbox"
+                    checked={regionalFirstTime}
+                    onChange={(e) => setRegionalFirstTime(e.target.checked)}
+                    className="mt-0.5 size-4 cursor-pointer"
+                  />
+                  <span className="text-sm">
+                    <span className="font-medium">This is my first time exhibiting</span>
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      {(regionalCfg.firstTimeFeePence ?? 0) === 0
+                        ? 'first dog free'
+                        : `${formatCurrency(regionalCfg.firstTimeFeePence ?? 0)} for your first dog`}
+                    </span>
+                  </span>
+                </label>
+              )}
+
+              {/* Discretionary donation */}
+              {regionalCfg.donationsEnabled && (
+                <div className="space-y-2 rounded-md border border-dashed p-3">
+                  <p className="text-sm font-medium">Add a donation (optional)</p>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">£</span>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        step="0.50"
+                        value={donationPounds}
+                        onChange={(e) => setDonationPounds(e.target.value)}
+                        placeholder="0.00"
+                        className="h-11 w-28 rounded-md border px-3 text-sm"
+                      />
+                    </div>
+                    <input
+                      type="text"
+                      value={donationAffix}
+                      onChange={(e) => setDonationAffix(e.target.value)}
+                      placeholder="Kennel affix to thank (optional)"
+                      className="h-11 flex-1 rounded-md border px-3 text-sm"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Multi-dog savings banner */}
           {feePreview?.multiDogApplied && feePreview.multiDogSavings > 0 && (
             <div className="rounded-[14px] border border-se-fresh-line bg-se-fresh-soft px-4 py-3 text-sm text-se-ink">
@@ -1863,9 +2130,15 @@ export default function EnterShowPage() {
                   <span>{formatCurrency(cart.sundryTotal)}</span>
                 </div>
               )}
+              {donationPence > 0 && (
+                <div className="flex justify-between text-sm text-se-ink3">
+                  <span>Donation</span>
+                  <span>{formatCurrency(donationPence)}</span>
+                </div>
+              )}
               <div className="flex justify-between border-t border-se-line2 pt-1.5 text-sm font-bold text-se-ink sm:text-base">
                 <span>Grand Total</span>
-                <span>{formatCurrency((feePreview?.total ?? cart.entriesTotal) + cart.sundryTotal)}</span>
+                <span>{formatCurrency((feePreview?.total ?? cart.entriesTotal) + cart.sundryTotal + donationPence)}</span>
               </div>
             </div>
           </div>
@@ -1943,7 +2216,7 @@ export default function EnterShowPage() {
                 <span className="font-medium text-se-ink">Keep my name and address out of the catalogue</span>
                 <span className="mt-1 block text-xs text-se-ink3">
                   Your dog&apos;s registered name and pedigree details will still appear — only your owner details will be withheld.
-                  This is your right under Kennel Club regulation F(1).11.b.
+                  {show?.showRuleset !== 'wusv' && ' This is your right under Royal Kennel Club regulation F(1).11.b.'}
                 </span>
               </span>
             </label>
@@ -1977,6 +2250,8 @@ export default function EnterShowPage() {
                 !healthDeclared ||
                 !termsAccepted ||
                 checkoutMutation.isPending ||
+                // A membership that asks for a number must have one (regional).
+                membershipNumberMissing ||
                 // An entry is submittable if it has at least one class OR it's
                 // an NFC ("not for competition") entry — those deliberately have
                 // no classes. Mirrors the filter in handleProceedToPayment's
@@ -1993,7 +2268,7 @@ export default function EnterShowPage() {
               ) : (
                 <>
                   {(() => {
-                    const previewGrand = (feePreview?.total ?? cart.entriesTotal) + cart.sundryTotal;
+                    const previewGrand = (feePreview?.total ?? cart.entriesTotal) + cart.sundryTotal + donationPence;
                     if (previewGrand === 0) return 'Confirm Entry — Free';
                     return <>Proceed to Payment &middot; {formatCurrency(previewGrand)}</>;
                   })()}
@@ -2360,24 +2635,44 @@ export default function EnterShowPage() {
               </SEButton>
             </div>
 
-            {/* Catalogue purchase note */}
-            {cart.sundryItems.some((s) => isCatalogueItem(s.name)) && (
-              <SECard className="mx-auto w-full max-w-md border-se-fresh-line bg-se-fresh-soft p-4 text-center">
-                <p className="text-sm font-semibold text-se-fresh-deep">
-                  Online Catalogue Purchased
-                </p>
-                <p className="mt-1 text-xs text-se-ink2">
-                  Your catalogue will be available at{' '}
-                  <Link
-                    href={`/shows/${show?.slug ?? idOrSlug}/catalogue`}
-                    className="underline font-medium text-se-fresh-deep"
-                  >
-                    this link
-                  </Link>{' '}
-                  once entries close.
-                </p>
-              </SECard>
-            )}
+            {/* Catalogue note — adapt to whether a PRINTED (collect on the day)
+                or ONLINE catalogue was bought (Michael, 2026-06-25). */}
+            {(() => {
+              const catalogueItems = cart.sundryItems.filter((s) => isCatalogueItem(s.name));
+              const hasCatalogue = catalogueItems.length > 0;
+              const catalogueIsOnline =
+                hasCatalogue &&
+                catalogueItems.some((s) => {
+                  const full = sundryItemsData?.find((d) => d.id === s.sundryItemId);
+                  return /\b(online|digital|pdf|download|e-?catalogue)\b/i.test(
+                    `${s.name} ${full?.description ?? ''}`
+                  );
+                });
+              if (!hasCatalogue) return null;
+              return (
+                <SECard className="mx-auto w-full max-w-md border-se-fresh-line bg-se-fresh-soft p-4 text-center">
+                  <p className="text-sm font-semibold text-se-fresh-deep">
+                    {catalogueIsOnline ? 'Online Catalogue Purchased' : 'Catalogue Pre-ordered'}
+                  </p>
+                  <p className="mt-1 text-xs text-se-ink2">
+                    {catalogueIsOnline ? (
+                      <>
+                        Your catalogue will be available at{' '}
+                        <Link
+                          href={`/shows/${show?.slug ?? idOrSlug}/catalogue`}
+                          className="underline font-medium text-se-fresh-deep"
+                        >
+                          this link
+                        </Link>{' '}
+                        once entries close.
+                      </>
+                    ) : (
+                      <>Collect your printed catalogue from the secretary&apos;s table on the day.</>
+                    )}
+                  </p>
+                </SECard>
+              );
+            })()}
           </div>
         </div>
         );
@@ -2424,6 +2719,8 @@ function ClassGroup({
   suggestedClassName,
   feeOverride,
   dogName,
+  hideFee,
+  regionalTiers,
 }: {
   title: string;
   classes: ShowClassItem[];
@@ -2437,6 +2734,12 @@ function ClassGroup({
   suggestedClassName?: string | null;
   feeOverride?: number | null;
   dogName?: string | null;
+  /** Hide the per-class price — regional shows charge a tiered per-dog fee, not
+   *  a per-class one, so a per-class amount here is misleading (Mandy 2026-07-05).
+   *  Flat-priced special classes (Baby Puppy) are the exception — their price
+   *  still shows when `regionalTiers` is provided (Mandy 2026-07-10). */
+  hideFee?: boolean;
+  regionalTiers?: RegionalFeeTier[] | null;
 }) {
   const [showAllLocked, setShowAllLocked] = useState(false);
 
@@ -2480,6 +2783,19 @@ function ClassGroup({
           const isSelected = selectedIds.includes(sc.id);
           const isSuggested = suggestedClassName === sc.classDefinition.name;
           const isIneligible = eligibleClassNames && !eligibleClassNames.includes(sc.classDefinition.name);
+          // A flat-priced special class (Baby Puppy) shows its price even on
+          // regional shows where scale-priced classes hide theirs.
+          const regionalFlatFee =
+            hideFee && regionalTiers
+              ? regionalClassFlatFee(
+                  {
+                    className: sc.classDefinition.name,
+                    classType: sc.classDefinition.type,
+                    entryFee: sc.entryFee,
+                  },
+                  regionalTiers,
+                )
+              : null;
           return (
             <label
               key={sc.id}
@@ -2534,9 +2850,11 @@ function ClassGroup({
                   </p>
                 )}
               </div>
-              <span className={cn('shrink-0 text-[14.5px] font-bold transition-colors duration-150', isSelected ? 'text-se-fresh-deep' : 'text-se-ink3')}>
-                {formatCurrency(feeOverride != null ? feeOverride : sc.entryFee)}
-              </span>
+              {(!hideFee || regionalFlatFee != null) && (
+                <span className={cn('shrink-0 text-[14.5px] font-bold transition-colors duration-150', isSelected ? 'text-se-fresh-deep' : 'text-se-ink3')}>
+                  {formatCurrency(regionalFlatFee ?? feeOverride ?? sc.entryFee)}
+                </span>
+              )}
             </label>
           );
         })}

@@ -42,6 +42,7 @@ import { OnboardingChecklist } from '@/components/dashboard/onboarding-checklist
 import { SecretaryCTA } from '@/components/dashboard/secretary-cta';
 import { RolePickerBanner } from '@/components/dashboard/role-picker-banner';
 import { SE_H } from '@/components/show-experience/tokens';
+import { StewardShowBanner } from '@/components/dashboard/steward-show-banner';
 
 function getTimeGreeting(): string {
   const hour = new Date().getHours();
@@ -65,6 +66,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6 pb-20 md:pb-0">
       {/* Multi-role quick switch + onboarding + secretary CTA */}
+      <StewardShowBanner />
       <RolePickerBanner />
       <OnboardingChecklist />
       <SecretaryCTA />

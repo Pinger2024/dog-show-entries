@@ -134,6 +134,10 @@ export function JudgesSection({ showId }: { showId: string }) {
   const { data: showRings } = trpc.secretary.getShowRings.useQuery({ showId });
   const { data: contracts } = trpc.secretary.getJudgeContracts.useQuery({ showId });
   const { data: showData } = trpc.shows.getById.useQuery({ id: showId });
+  // SV/WUSV regional shows aren't RKC-licensed — soften the RKC-specific judge
+  // wording (contract process, "subject to approval", affix, duplicate-check).
+  const isWusv =
+    (showData as { showRuleset?: 'rkc' | 'wusv' } | undefined)?.showRuleset === 'wusv';
 
   // For single-breed shows, derive the breed from the show's classes
   const singleBreedId = useMemo(() => {
@@ -178,7 +182,7 @@ export function JudgesSection({ showId }: { showId: string }) {
       const msg = err.message ?? 'Failed to add judge';
       // Provide more helpful error messages for common issues
       if (msg.includes('unique') || msg.includes('duplicate')) {
-        toast.error('A judge with this name or RKC number already exists. Select them from the dropdown instead.');
+        toast.error(isWusv ? 'A judge with this name already exists. Select them from the dropdown instead.' : 'A judge with this name or RKC number already exists. Select them from the dropdown instead.');
       } else if (msg.includes('required') || msg.includes('min')) {
         toast.error('Judge name is required.');
       } else {
@@ -322,12 +326,12 @@ export function JudgesSection({ showId }: { showId: string }) {
     onSuccess: (_data, vars) => {
       toast.success(
         vars.subjectToRkcApproval
-          ? 'Judge flagged as subject to RKC approval'
-          : 'RKC approval flag cleared',
+          ? (isWusv ? 'Judge flagged as subject to approval' : 'Judge flagged as subject to RKC approval')
+          : (isWusv ? 'Approval flag cleared' : 'RKC approval flag cleared'),
       );
       utils.secretary.getShowJudges.invalidate({ showId });
     },
-    onError: (err) => toast.error(err.message ?? 'Failed to update RKC approval flag'),
+    onError: (err) => toast.error(err.message ?? (isWusv ? 'Failed to update approval flag' : 'Failed to update RKC approval flag')),
   });
 
   function openEditJudge(judge: { judgeId: string; name: string; contactEmail: string | null; contactPhone: string | null; kennelClubAffix?: string | null }) {
@@ -522,7 +526,7 @@ export function JudgesSection({ showId }: { showId: string }) {
         <CardHeader>
           <CardTitle>Current Assignments ({uniqueJudges.length})</CardTitle>
           <CardDescription>
-            Manage judge assignments and track the three-stage RKC contract process.
+            Manage judge assignments and track the three-stage {isWusv ? 'contract' : 'RKC contract'} process.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -621,7 +625,7 @@ export function JudgesSection({ showId }: { showId: string }) {
                             }}
                           />
                           <span className="flex-1">
-                            <span className="font-medium">Subject to RKC approval</span>
+                            <span className="font-medium">{isWusv ? 'Subject to approval' : 'Subject to RKC approval'}</span>
                             <span className="ml-1 text-xs text-muted-foreground">
                               — adds the note after the judge&apos;s name on the schedule
                             </span>
@@ -827,7 +831,7 @@ export function JudgesSection({ showId }: { showId: string }) {
           <DialogHeader>
             <DialogTitle>Send Judging Offer</DialogTitle>
             <DialogDescription>
-              Stage 1 of the RKC three-part contract process. Review the email preview below.
+              Stage 1 of the {isWusv ? 'three-part' : 'RKC three-part'} contract process. Review the email preview below.
             </DialogDescription>
           </DialogHeader>
 
@@ -1049,7 +1053,7 @@ export function JudgesSection({ showId }: { showId: string }) {
               />
             </div>
             <div>
-              <Label htmlFor="edit-judge-affix" className="text-sm">Kennel Club affix</Label>
+              <Label htmlFor="edit-judge-affix" className="text-sm">{isWusv ? 'Kennel name' : 'Kennel Club affix'}</Label>
               <Input
                 id="edit-judge-affix"
                 value={editJudgeForm.kennelClubAffix}

@@ -14,8 +14,9 @@ import {
   makeEntry,
   makeEntryClass,
   makeResult,
+  makeAchievement,
 } from '../helpers/factories';
-import { shows, results } from '@/server/db/schema';
+import { shows, results, achievements } from '@/server/db/schema';
 
 /**
  * Builds a show that is mid-event with one entered dog and one recorded result,
@@ -67,6 +68,21 @@ describe('secretary.publishResults', () => {
       where: eq(results.id, result.id),
     });
     expect(dbResult?.publishedAt).not.toBeNull();
+  });
+
+  it('sweeps unpublished Top Award achievements live on publish', async () => {
+    const { secretary, show, dog } = await showReadyToPublish();
+    const award = await makeAchievement({ showId: show.id, dogId: dog.id, type: 'best_dog' });
+    expect(award.publishedAt).toBeNull();
+    const caller = createTestCaller(secretary);
+
+    const res = await caller.secretary.publishResults({ showId: show.id });
+
+    expect(res.awardsSwept).toBe(1);
+    const dbAward = await testDb.query.achievements.findFirst({
+      where: eq(achievements.id, award.id),
+    });
+    expect(dbAward?.publishedAt).not.toBeNull();
   });
 
   it('fires async exhibitor notifications by default', async () => {
