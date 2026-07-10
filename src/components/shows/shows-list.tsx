@@ -569,9 +569,21 @@ export default function ShowsList() {
   const totalShows = data?.total ?? 0;
   const hasMore = data?.nextCursor != null;
 
-  /* Split into actually-accepting-entries vs others for visual grouping */
+  /* Split by lifecycle for visual grouping — Mandy 2026-07-10: make it
+   * really obvious which shows are about to actually run. A single
+   * "everything else" bucket mislabelled completed shows too. */
   const openShows = filteredShows.filter((s) => s.status === 'entries_open' && !isEntryCloseDatePast(s.entryCloseDate));
-  const otherShows = filteredShows.filter((s) => s.status !== 'entries_open' || isEntryCloseDatePast(s.entryCloseDate));
+  const aboutToRun = filteredShows.filter(
+    (s) =>
+      s.status === 'entries_closed' ||
+      s.status === 'in_progress' ||
+      (s.status === 'entries_open' && isEntryCloseDatePast(s.entryCloseDate)),
+  );
+  const openingSoon = filteredShows.filter((s) => s.status === 'published');
+  const recentlyHeld = filteredShows.filter((s) => s.status === 'completed');
+  const visibleSectionCount = [openShows, aboutToRun, openingSoon, recentlyHeld].filter(
+    (g) => g.length > 0,
+  ).length;
 
   // Nearby shows
   const nearbyShows = nearbyData ?? [];
@@ -806,10 +818,11 @@ export default function ShowsList() {
             )}
           </p>
 
-          {/* ─── Entries open section ────────────── */}
+          {/* ─── Lifecycle sections (labels only when there's more than
+                 one section on screen) ────────────── */}
           {openShows.length > 0 && (
             <div className="mb-8">
-              <SecLabel>Accepting Entries</SecLabel>
+              {visibleSectionCount > 1 && <SecLabel>Accepting Entries</SecLabel>}
               <div className="flex flex-col gap-3">
                 {openShows.map((show, idx) => (
                   <ShowCard key={show.id} show={show} featured={idx === 0} />
@@ -818,12 +831,33 @@ export default function ShowsList() {
             </div>
           )}
 
-          {/* ─── Other shows section ─────────────── */}
-          {otherShows.length > 0 && (
-            <div>
-              {openShows.length > 0 && <SecLabel>Show day approaching</SecLabel>}
+          {aboutToRun.length > 0 && (
+            <div className="mb-8">
+              {visibleSectionCount > 1 && <SecLabel>Show day approaching</SecLabel>}
               <div className="flex flex-col gap-3">
-                {otherShows.map((show) => (
+                {aboutToRun.map((show) => (
+                  <ShowCard key={show.id} show={show} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {openingSoon.length > 0 && (
+            <div className="mb-8">
+              {visibleSectionCount > 1 && <SecLabel>Entries opening soon</SecLabel>}
+              <div className="flex flex-col gap-3">
+                {openingSoon.map((show) => (
+                  <ShowCard key={show.id} show={show} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {recentlyHeld.length > 0 && (
+            <div>
+              {visibleSectionCount > 1 && <SecLabel>Recently held</SecLabel>}
+              <div className="flex flex-col gap-3">
+                {recentlyHeld.map((show) => (
                   <ShowCard key={show.id} show={show} />
                 ))}
               </div>
