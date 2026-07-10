@@ -36,18 +36,19 @@
  */
 import path from 'path';
 import { Font } from '@react-pdf/renderer';
+import { HANKEN_GROTESK_FACES } from '@/lib/hanken-faces';
 
 const fontsDir = path.join(process.cwd(), 'public', 'fonts');
 
 Font.register({
   family: 'HankenGrotesk',
-  fonts: [
-    { src: path.join(fontsDir, 'hanken-grotesk-regular.ttf') },
-    { src: path.join(fontsDir, 'hanken-grotesk-500.ttf'), fontWeight: 500 },
-    { src: path.join(fontsDir, 'hanken-grotesk-600.ttf'), fontWeight: 600 },
-    { src: path.join(fontsDir, 'hanken-grotesk-700.ttf'), fontWeight: 'bold' },
-    { src: path.join(fontsDir, 'hanken-grotesk-800.ttf'), fontWeight: 800 },
-    { src: path.join(fontsDir, 'hanken-grotesk-italic.ttf'), fontStyle: 'italic' },
-    { src: path.join(fontsDir, 'hanken-grotesk-700italic.ttf'), fontWeight: 'bold', fontStyle: 'italic' },
-  ],
+  // Weight 400 registers with no explicit fontWeight (react-pdf's default);
+  // 700 registers as the 'bold' alias — both preserve the previous
+  // hand-written registration exactly, now generated from the shared
+  // HANKEN_GROTESK_FACES manifest instead of being duplicated here.
+  fonts: HANKEN_GROTESK_FACES.map((face) => ({
+    src: path.join(fontsDir, face.file),
+    ...(face.weight !== 400 ? { fontWeight: face.weight === 700 ? ('bold' as const) : face.weight } : {}),
+    ...(face.style ? { fontStyle: face.style } : {}),
+  })),
 });

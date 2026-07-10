@@ -35,6 +35,7 @@ import type {
 } from './shared/types';
 import { groupSvClasses, type SvNumberedClass } from './shared/sv-classification';
 import { ss, SV, SV_FONTS } from './shared/sv-styles';
+import { Numero } from './shared/numero';
 import { AdvertPage, selectAdverts } from './shared/advert-page';
 import {
   SV_CLASS_DEFINITIONS,
@@ -148,9 +149,7 @@ function Topper({ num, subject }: { num: number; subject: string }) {
   return (
     <>
       <View style={ss.topper}>
-        {/* The "№" glyph isn't in Hanken Grotesk's latin subset — nest a
-            differently-styled run just for that character (2026-07-10). */}
-        <Text style={ss.eyebrow}><Text style={{ fontFamily: 'Inter' }}>№</Text> {pad2(num)}</Text>
+        <Text style={ss.eyebrow}><Numero /> {pad2(num)}</Text>
         <Text style={ss.eyebrow}>{subject}</Text>
       </View>
       <View style={[ss.ruleThin, { marginTop: 4 }]} />
@@ -206,10 +205,8 @@ function SvCover({
             {show.name}
           </Text>
           {show.kcLicenceNo ? (
-            // The "№" glyph isn't in Hanken Grotesk's latin subset — nest a
-            // Times/Inter-styled run just for that character (2026-07-10).
             <Text style={[ss.eyebrow, { color: SV.ink3 }]}>
-              <Text style={{ fontFamily: 'Inter' }}>№</Text> {show.kcLicenceNo}
+              <Numero /> {show.kcLicenceNo}
             </Text>
           ) : null}
         </View>

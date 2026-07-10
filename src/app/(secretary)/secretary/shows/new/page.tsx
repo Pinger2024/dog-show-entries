@@ -601,7 +601,7 @@ export default function NewShowPage() {
     return (
       <div className="space-y-6 pb-16 md:pb-0">
         <div>
-          <h1 className={cn(SE_H, 'font-serif text-2xl font-bold tracking-tight sm:text-3xl')}>Create New Show</h1>
+          <h1 className={cn(SE_H, 'font-serif text-2xl sm:text-3xl')}>Create New Show</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             You need to set up your club before creating a show.
           </p>
@@ -628,7 +628,7 @@ export default function NewShowPage() {
     <div className="space-y-6 pb-16 md:pb-0">
       {/* Header */}
       <div>
-        <h1 className={cn(SE_H, 'font-serif text-2xl font-bold tracking-tight sm:text-3xl')}>Create New Show</h1>
+        <h1 className={cn(SE_H, 'font-serif text-2xl sm:text-3xl')}>Create New Show</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Step {step + 1} of {STEPS.length} — <span className="font-medium text-foreground">{STEPS[step]}</span>
         </p>

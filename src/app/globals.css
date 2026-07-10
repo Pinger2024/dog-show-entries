@@ -47,7 +47,9 @@
 
   /* Show Experience (green) theme — scoped, opt-in tokens.
    * These are additive: new `se-*` color names only, nothing existing
-   * is overridden. Pages opt in via the `.show-exp` wrapper class below. */
+   * is overridden. Pages opt in via the `.show-exp` wrapper class below.
+   * Mirrored server-side (emails/PDFs/OG — contexts that can't read CSS
+   * vars) as BRAND in src/lib/brand.ts — change BOTH together. */
   --color-se-paper: #f6f4ec;
   --color-se-paper2: #efe9db;
   --color-se-surface: #ffffff;
@@ -202,16 +204,11 @@
 
 /* ============================================================
  * Show Experience (green) theme — opt-in wrapper.
- * Add `.show-exp` to a page's root element to switch to Hanken
- * Grotesk (loaded per-route in src/app/(shows)/layout.tsx via the
- * --font-hanken variable) + the warm paper background. Everything
- * else keeps rendering Inter/default theme until it opts in.
+ * Font/background/color are no longer set here: since the green theme
+ * became the global default (see :root comment above), they're identical
+ * to the unscoped defaults. The class survives only as the ::selection
+ * scoping hook below.
  * ============================================================ */
-.show-exp {
-  font-family: var(--font-hanken), ui-sans-serif, system-ui, sans-serif;
-  background-color: #f6f4ec;
-  color: #1b241d;
-}
 
 /* iOS rubber-band overscroll backstop for the show page (POLISH.md #17).
  * Safari paints the elastic-overscroll reveal (pulling past the top/bottom

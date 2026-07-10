@@ -13,6 +13,7 @@ import {
   users,
 } from '@/server/db/schema';
 import { generateToken, getBaseUrl, assignRole } from '@/server/lib/utils';
+import { BRAND } from '@/lib/brand';
 
 const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
@@ -116,17 +117,17 @@ export const secretaryApplicationsRouter = createTRPCRouter({
               replyTo: 'feedback@remishowmanager.co.uk',
               subject: `New Secretary Registered: ${input.organisationName}`,
               html: `
-                <div style="font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; background-color: #f6f4ec; padding: 28px 24px; color: #1b241d; border: 1px solid #e7e1d3; border-radius: 14px;">
-                  <h1 style="margin: 0 0 16px; font-size: 22px; font-weight: 800; letter-spacing: -0.015em; color: #2f6b43;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#5bb579;margin-left:3px;"></span></h1>
+                <div style="font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; background-color: ${BRAND.paper}; padding: 28px 24px; color: ${BRAND.ink}; border: 1px solid ${BRAND.line}; border-radius: 14px;">
+                  <h1 style="margin: 0 0 16px; font-size: 22px; font-weight: 800; letter-spacing: -0.015em; color: ${BRAND.green};">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${BRAND.fresh};margin-left:3px;"></span></h1>
                   <p>A new secretary has registered on Remi.</p>
-                  <div style="padding: 16px; background: #f2ede1; border-radius: 8px; border-left: 3px solid #2f6b43; margin: 16px 0;">
+                  <div style="padding: 16px; background: ${BRAND.paper}; border-radius: 8px; border-left: 3px solid ${BRAND.green}; margin: 16px 0;">
                     <p style="margin: 0 0 8px;"><strong>Secretary:</strong> ${ctx.session.user.name ?? 'Unknown'} (${ctx.session.user.email})</p>
                     <p style="margin: 0 0 8px;"><strong>Organisation:</strong> ${input.organisationName}</p>
                     <p style="margin: 0 0 8px;"><strong>Club Type:</strong> ${CLUB_TYPE_LABELS[input.clubType] ?? input.clubType}</p>
                     ${input.breedOrGroup ? `<p style="margin: 0 0 8px;"><strong>Breed/Group:</strong> ${input.breedOrGroup}</p>` : ''}
                     ${input.details ? `<p style="margin: 0;"><strong>Details:</strong> ${input.details}</p>` : ''}
                   </div>
-                  <p style="color: #535c4d; font-size: 14px;">Their account has been automatically set up — no action required.</p>
+                  <p style="color: ${BRAND.ink2}; font-size: 14px;">Their account has been automatically set up — no action required.</p>
                 </div>
               `,
             }).then((r) => {
@@ -294,18 +295,18 @@ export const secretaryApplicationsRouter = createTRPCRouter({
             replyTo: 'feedback@remishowmanager.co.uk',
             subject: `Your Remi Secretary Application Has Been Approved!`,
             html: `
-              <div style="font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; background-color: #f6f4ec; padding: 28px 24px; color: #1b241d; border: 1px solid #e7e1d3; border-radius: 14px;">
-                <h1 style="margin: 0 0 16px; font-size: 22px; font-weight: 800; letter-spacing: -0.015em; color: #2f6b43;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#5bb579;margin-left:3px;"></span></h1>
+              <div style="font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; background-color: ${BRAND.paper}; padding: 28px 24px; color: ${BRAND.ink}; border: 1px solid ${BRAND.line}; border-radius: 14px;">
+                <h1 style="margin: 0 0 16px; font-size: 22px; font-weight: 800; letter-spacing: -0.015em; color: ${BRAND.green};">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${BRAND.fresh};margin-left:3px;"></span></h1>
                 <p>Hi ${application.user.name?.split(' ')[0] ?? 'there'},</p>
                 <p>Great news! Your application to become a show secretary for <strong>${application.organisationName}</strong> has been approved.</p>
-                ${input.notes ? `<p style="padding: 12px 16px; background: #f2ede1; border-radius: 8px; border-left: 3px solid #2f6b43;"><em>"${input.notes}"</em></p>` : ''}
+                ${input.notes ? `<p style="padding: 12px 16px; background: ${BRAND.paper}; border-radius: 8px; border-left: 3px solid ${BRAND.green};"><em>"${input.notes}"</em></p>` : ''}
                 <p>Click the button below to activate your secretary account. You'll then be able to create and manage shows on Remi.</p>
                 <p style="margin: 24px 0;">
-                  <a href="${acceptUrl}" style="display: inline-block; background: #2f6b43; color: #f3ecdc; padding: 12px 24px; border-radius: 13px; text-decoration: none; font-weight: 700;">
+                  <a href="${acceptUrl}" style="display: inline-block; background: ${BRAND.green}; color: ${BRAND.cream}; padding: 12px 24px; border-radius: 13px; text-decoration: none; font-weight: 700;">
                     Activate Secretary Access
                   </a>
                 </p>
-                <p style="color: #535c4d; font-size: 14px;">
+                <p style="color: ${BRAND.ink2}; font-size: 14px;">
                   This link expires in 30 days. If you have any questions, just reply to this email.
                 </p>
               </div>
@@ -355,14 +356,14 @@ export const secretaryApplicationsRouter = createTRPCRouter({
             replyTo: 'feedback@remishowmanager.co.uk',
             subject: `Update on Your Remi Secretary Application`,
             html: `
-              <div style="font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; background-color: #f6f4ec; padding: 28px 24px; color: #1b241d; border: 1px solid #e7e1d3; border-radius: 14px;">
-                <h1 style="margin: 0 0 16px; font-size: 22px; font-weight: 800; letter-spacing: -0.015em; color: #2f6b43;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#5bb579;margin-left:3px;"></span></h1>
+              <div style="font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; background-color: ${BRAND.paper}; padding: 28px 24px; color: ${BRAND.ink}; border: 1px solid ${BRAND.line}; border-radius: 14px;">
+                <h1 style="margin: 0 0 16px; font-size: 22px; font-weight: 800; letter-spacing: -0.015em; color: ${BRAND.green};">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${BRAND.fresh};margin-left:3px;"></span></h1>
                 <p>Hi ${application.user.name?.split(' ')[0] ?? 'there'},</p>
                 <p>Thank you for your interest in running shows on Remi. After reviewing your application for <strong>${application.organisationName}</strong>, we're unable to approve it at this time.</p>
-                ${input.notes ? `<p style="padding: 12px 16px; background: #f2ede1; border-radius: 8px; border-left: 3px solid #2f6b43;"><em>"${input.notes}"</em></p>` : ''}
+                ${input.notes ? `<p style="padding: 12px 16px; background: ${BRAND.paper}; border-radius: 8px; border-left: 3px solid ${BRAND.green};"><em>"${input.notes}"</em></p>` : ''}
                 <p>This doesn't have to be the end of the road — we'd love to help you get set up. If you have additional information to share or would like to discuss your application, simply reply to this email.</p>
                 <p>You're also welcome to submit a new application at any time.</p>
-                <p style="margin-top: 24px; color: #535c4d; font-size: 14px;">
+                <p style="margin-top: 24px; color: ${BRAND.ink2}; font-size: 14px;">
                   Best wishes,<br />The Remi Team
                 </p>
               </div>

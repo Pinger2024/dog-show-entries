@@ -5,6 +5,8 @@ import { judgeContracts, judgeAssignments, showChecklistItems } from '@/server/d
 import { getBaseUrl } from '@/server/lib/utils';
 import { Resend } from 'resend';
 import { generateJudgeContractPdf } from '@/server/services/judge-contract-pdf';
+import { emailHeader } from '@/server/services/email';
+import { BRAND } from '@/lib/brand';
 
 function renderPage(title: string, body: string) {
   return `
@@ -17,9 +19,9 @@ function renderPage(title: string, body: string) {
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      background-color: #f6f4ec;
+      background-color: ${BRAND.paper};
       font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      color: #1b241d;
+      color: ${BRAND.ink};
       min-height: 100vh;
       display: flex;
       align-items: center;
@@ -27,35 +29,26 @@ function renderPage(title: string, body: string) {
       padding: 24px;
     }
     .container { max-width: 560px; width: 100%; }
-    .logo {
-      text-align: center;
-      padding: 24px 0;
-      font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      font-size: 26px;
-      font-weight: 800;
-      color: #2f6b43;
-      letter-spacing: -0.015em;
-    }
     .card {
       background: #ffffff;
-      border: 1px solid #e7e1d3;
+      border: 1px solid ${BRAND.line};
       border-radius: 14px;
       overflow: hidden;
       box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
     .banner {
-      background: #2f6b43;
+      background: ${BRAND.green};
       padding: 24px;
       text-align: center;
-      color: #f3ecdc;
+      color: ${BRAND.cream};
     }
     .banner h2 { font-size: 22px; font-weight: 700; }
     .banner .sub { color: rgba(243, 236, 220, 0.78); font-size: 14px; margin-top: 8px; }
     .body { padding: 24px; }
-    .body p { font-size: 15px; line-height: 1.6; color: #1b241d; margin-bottom: 16px; }
+    .body p { font-size: 15px; line-height: 1.6; color: ${BRAND.ink}; margin-bottom: 16px; }
     .detail-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-    .detail-table td { padding: 10px 12px; border-bottom: 1px solid #e7e1d3; }
-    .detail-table .label { font-weight: 600; color: #1b241d; width: 120px; }
+    .detail-table td { padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; }
+    .detail-table .label { font-weight: 600; color: ${BRAND.ink}; width: 120px; }
     .buttons { text-align: center; margin: 28px 0; }
     .btn {
       display: inline-block;
@@ -69,17 +62,17 @@ function renderPage(title: string, body: string) {
       transition: opacity 0.2s;
     }
     .btn:hover { opacity: 0.9; }
-    .btn-primary { background: #2f6b43; color: #f3ecdc; }
+    .btn-primary { background: ${BRAND.green}; color: ${BRAND.cream}; }
     .btn-danger { background: #dc2626; color: #ffffff; margin-left: 12px; }
-    .btn-outline { background: transparent; border: 1px solid #e7e1d3; color: #535c4d; margin-left: 12px; }
+    .btn-outline { background: transparent; border: 1px solid ${BRAND.line}; color: ${BRAND.ink2}; margin-left: 12px; }
     .success-icon { font-size: 48px; margin-bottom: 12px; }
-    .footer { text-align: center; padding: 24px; font-size: 12px; color: #535c4d; }
+    .footer { text-align: center; padding: 24px; font-size: 12px; color: ${BRAND.ink2}; }
     form { display: inline; }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="logo">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#5bb579;margin-left:3px;"></span></div>
+    ${emailHeader()}
     <div class="card">
       ${body}
     </div>
@@ -199,7 +192,7 @@ export async function GET(
           <p>If you have a reason you'd like to share, please enter it below (optional):</p>
           <form method="POST" action="/api/judge-contract/${token}">
             <input type="hidden" name="action" value="decline">
-            <textarea name="reason" rows="3" placeholder="Reason for declining (optional)" style="width: 100%; padding: 10px; border: 1px solid #e7e1d3; border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical; margin-bottom: 16px;"></textarea>
+            <textarea name="reason" rows="3" placeholder="Reason for declining (optional)" style="width: 100%; padding: 10px; border: 1px solid ${BRAND.line}; border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical; margin-bottom: 16px;"></textarea>
             <div class="buttons">
               <button type="submit" class="btn btn-danger">Yes, Decline</button>
               <a href="/api/judge-contract/${token}" class="btn btn-outline">Go Back</a>
@@ -230,7 +223,7 @@ export async function GET(
           ${show.showType ? `<tr><td class="label">Show Type</td><td>${show.showType.replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}</td></tr>` : ''}
         </table>
 
-        ${contract.notes ? `<p style="padding: 12px; background: #f2ede1; border-radius: 8px; font-size: 14px; color: #535c4d;">${contract.notes}</p>` : ''}
+        ${contract.notes ? `<p style="padding: 12px; background: ${BRAND.paper}; border-radius: 8px; font-size: 14px; color: ${BRAND.ink2};">${contract.notes}</p>` : ''}
 
         <p>Please click the button below to accept or decline this appointment.</p>
 
@@ -351,26 +344,24 @@ export async function POST(
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin: 0; padding: 0; background-color: #f6f4ec; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
-    <div style="text-align: center; padding: 24px 0;">
-      <h1 style="margin: 0; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 26px; font-weight: 800; color: #2f6b43; letter-spacing: -0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#5bb579;margin-left:3px;"></span></h1>
-    </div>
-    <div style="background: #ffffff; border: 1px solid #e7e1d3; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-      <div style="background: #20452c; padding: 24px; text-align: center;">
+    ${emailHeader()}
+    <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: ${BRAND.deep}; padding: 24px; text-align: center;">
         <div style="font-size: 32px; margin-bottom: 8px;">&#10003;</div>
-        <h2 style="margin: 0; color: #f3ecdc; font-size: 22px; font-weight: 700;">Judge Accepted</h2>
+        <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 22px; font-weight: 700;">Judge Accepted</h2>
       </div>
       <div style="padding: 24px;">
-        <p style="font-size: 15px; color: #1b241d; line-height: 1.6;">
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           <strong>${contract.judgeName}</strong> has accepted the invitation to judge at <strong>${show.name}</strong>.
         </p>
-        <p style="font-size: 15px; color: #1b241d; line-height: 1.6;">
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           The next step is to send the formal confirmation letter. You can do this from the Judges tab in the show management page.
         </p>
         <div style="text-align: center; margin: 24px 0;">
           <a href="${getBaseUrl()}/secretary/shows/${show.slug ?? show.id}/people"
-             style="display: inline-block; background: #2f6b43; color: #f3ecdc; padding: 12px 24px; border-radius: 13px; font-size: 15px; font-weight: 700; text-decoration: none;">
+             style="display: inline-block; background: ${BRAND.green}; color: ${BRAND.cream}; padding: 12px 24px; border-radius: 13px; font-size: 15px; font-weight: 700; text-decoration: none;">
             View Judges in Remi
           </a>
         </div>
@@ -393,7 +384,7 @@ export async function POST(
         <div class="body">
           <p>Thank you for accepting the invitation to judge at <strong>${show.name}</strong>.</p>
           <p>${orgName} has been notified and will send your formal confirmation letter shortly.</p>
-          <p style="color: #535c4d; font-size: 14px;">You can safely close this page.</p>
+          <p style="color: ${BRAND.ink2}; font-size: 14px;">You can safely close this page.</p>
         </div>
       `),
       { headers: { 'Content-Type': 'text/html' } }
@@ -446,26 +437,24 @@ export async function POST(
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin: 0; padding: 0; background-color: #f6f4ec; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
-    <div style="text-align: center; padding: 24px 0;">
-      <h1 style="margin: 0; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 26px; font-weight: 800; color: #2f6b43; letter-spacing: -0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#5bb579;margin-left:3px;"></span></h1>
-    </div>
-    <div style="background: #ffffff; border: 1px solid #e7e1d3; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+    ${emailHeader()}
+    <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
       <div style="background: #dc2626; padding: 24px; text-align: center;">
-        <h2 style="margin: 0; color: #f3ecdc; font-size: 22px; font-weight: 700;">Judge Declined</h2>
+        <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 22px; font-weight: 700;">Judge Declined</h2>
       </div>
       <div style="padding: 24px;">
-        <p style="font-size: 15px; color: #1b241d; line-height: 1.6;">
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           <strong>${contract.judgeName}</strong> has declined the invitation to judge at <strong>${show.name}</strong>.
         </p>
-        ${reason ? `<p style="font-size: 14px; color: #535c4d; line-height: 1.6; padding: 12px; background: #fef2f2; border-radius: 8px; border-left: 3px solid #dc2626;"><strong>Reason:</strong> ${reason}</p>` : ''}
-        <p style="font-size: 15px; color: #1b241d; line-height: 1.6;">
+        ${reason ? `<p style="font-size: 14px; color: ${BRAND.ink2}; line-height: 1.6; padding: 12px; background: #fef2f2; border-radius: 8px; border-left: 3px solid #dc2626;"><strong>Reason:</strong> ${reason}</p>` : ''}
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           You may need to find a replacement judge and send a new offer. All checklist items for this judge have been marked as not applicable.
         </p>
         <div style="text-align: center; margin: 24px 0;">
           <a href="${getBaseUrl()}/secretary/shows/${show.slug ?? show.id}/people"
-             style="display: inline-block; background: #2f6b43; color: #f3ecdc; padding: 12px 24px; border-radius: 13px; font-size: 15px; font-weight: 700; text-decoration: none;">
+             style="display: inline-block; background: ${BRAND.green}; color: ${BRAND.cream}; padding: 12px 24px; border-radius: 13px; font-size: 15px; font-weight: 700; text-decoration: none;">
             View Judges in Remi
           </a>
         </div>
@@ -485,7 +474,7 @@ export async function POST(
         <div class="body">
           <p>You have declined the invitation to judge at <strong>${show.name}</strong>.</p>
           <p>${orgName} has been notified.</p>
-          <p style="color: #535c4d; font-size: 14px;">You can safely close this page.</p>
+          <p style="color: ${BRAND.ink2}; font-size: 14px;">You can safely close this page.</p>
         </div>
       `),
       { headers: { 'Content-Type': 'text/html' } }

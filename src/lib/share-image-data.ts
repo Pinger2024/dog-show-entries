@@ -16,6 +16,8 @@ import { join } from 'node:path';
 import { db } from '@/server/db';
 import { shows, entries, showSponsors } from '@/server/db/schema';
 import { isUuid } from '@/lib/slugify';
+import { HANKEN_GROTESK_FACES } from '@/lib/hanken-faces';
+import { BRAND } from '@/lib/brand';
 
 const SHOW_TYPE_LABELS: Record<string, string> = {
   companion: 'Companion Show',
@@ -71,27 +73,21 @@ export type ShareImageFont = {
  * (research/design-reference/green-live.original.jsx, token object `G`).
  * Shared here so every share-image route (OG cards, portrait, story) draws
  * from one definition instead of five copy-pasted hex maps.
+ *
+ * Sourced from the canonical BRAND palette (src/lib/brand.ts) where the two
+ * overlap, plus a couple of extras BRAND doesn't carry: `surface` (plain
+ * white) and `freshLine` (a design-token hex), and `creamDim` (an rgba
+ * derived from `cream`, needed here because satori/CSS-in-JS can't do
+ * `color-mix`/alpha-on-var()). Several keys below (surface, ink/ink2/ink3,
+ * freshDeep/freshSoft/freshLine, honeyDeep/honeySoft, line/line2, paper2)
+ * are currently unused by any share-image route — kept as a deliberate
+ * verbatim mirror of the full design-token set (reserved for future
+ * variants) rather than trimmed to only what's referenced today.
  */
 export const SHARE_GREEN = {
-  paper: '#f6f4ec',
-  paper2: '#efe9db',
+  ...BRAND,
   surface: '#ffffff',
-  ink: '#1b241d',
-  ink2: '#535c4d',
-  ink3: '#8a9182',
-  deep: '#20452c',
-  deepest: '#152e1d',
-  green: '#2f6b43',
-  fresh: '#5bb579',
-  freshDeep: '#2f8a52',
-  freshSoft: '#e4f2e7',
   freshLine: '#c3e2cb',
-  honey: '#e6a53a',
-  honeyDeep: '#b9781a',
-  honeySoft: '#f8ecd4',
-  line: '#e7e1d3',
-  line2: '#d7cfba',
-  cream: '#f3ecdc',
   creamDim: 'rgba(243,236,220,0.66)',
 } as const;
 
@@ -108,22 +104,31 @@ export const SHARE_GREEN = {
  * Inter pairing is fully retired from share images — those TTF files stay
  * in public/fonts for unrelated PDF consumers (catalogue, judges book,
  * prize cards, etc.) but nothing here references them any more.
+ *
+ * Face list comes from the shared HANKEN_GROTESK_FACES manifest (also
+ * consumed by pdf-fonts.ts's Font.register) so the two font-loading paths
+ * can't drift. Buffers are read once per process and cached module-level —
+ * every share-image request otherwise re-reads all 7 TTFs from disk.
  */
-export function loadShareImageFonts(): ShareImageFont[] {
+let cache: ShareImageFont[] | null = null;
+
+function buildShareImageFonts(): ShareImageFont[] {
   const fontsDir = join(process.cwd(), 'public', 'fonts');
   const readFont = (name: string): ArrayBuffer => {
     const buf = readFileSync(join(fontsDir, name));
     return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
   };
-  return [
-    { name: 'Hanken Grotesk', data: readFont('hanken-grotesk-regular.ttf'), weight: 400 },
-    { name: 'Hanken Grotesk', data: readFont('hanken-grotesk-500.ttf'), weight: 500 },
-    { name: 'Hanken Grotesk', data: readFont('hanken-grotesk-600.ttf'), weight: 600 },
-    { name: 'Hanken Grotesk', data: readFont('hanken-grotesk-700.ttf'), weight: 700 },
-    { name: 'Hanken Grotesk', data: readFont('hanken-grotesk-800.ttf'), weight: 800 },
-    { name: 'Hanken Grotesk', data: readFont('hanken-grotesk-italic.ttf'), weight: 400, style: 'italic' },
-    { name: 'Hanken Grotesk', data: readFont('hanken-grotesk-700italic.ttf'), weight: 700, style: 'italic' },
-  ];
+  return HANKEN_GROTESK_FACES.map((face) => ({
+    name: 'Hanken Grotesk',
+    data: readFont(face.file),
+    weight: face.weight,
+    ...(face.style ? { style: face.style } : {}),
+  }));
+}
+
+export function loadShareImageFonts(): ShareImageFont[] {
+  cache ??= buildShareImageFonts();
+  return cache;
 }
 
 async function fetchShow(idOrSlug: string) {

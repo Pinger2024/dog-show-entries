@@ -159,7 +159,7 @@ export default function AdvertsPage() {
     <div className="space-y-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className={cn(SE_H, 'text-xl font-bold tracking-tight')}>Adverts</h2>
+          <h2 className={cn(SE_H, 'text-xl')}>Adverts</h2>
           <p className="text-sm text-muted-foreground">
             Upload full-page A5 adverts. They slot into your Schedule or Catalogue at the position you pick.
           </p>

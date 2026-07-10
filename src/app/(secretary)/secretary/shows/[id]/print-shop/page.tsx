@@ -148,7 +148,7 @@ export default function PrintShopPage() {
       <div className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className={cn(SE_H, 'font-serif text-lg font-semibold')}>Print Shop</h2>
+            <h2 className={cn(SE_H, 'font-serif text-lg')}>Print Shop</h2>
             <p className="text-sm text-muted-foreground">
               Professional printing for your show documents
             </p>
@@ -204,7 +204,7 @@ export default function PrintShopPage() {
       <div className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className={cn(SE_H, 'font-serif text-lg font-semibold')}>Print Shop</h2>
+            <h2 className={cn(SE_H, 'font-serif text-lg')}>Print Shop</h2>
             <p className="text-sm text-muted-foreground">
               Everything you need for show day, in one order
             </p>
@@ -299,7 +299,7 @@ export default function PrintShopPage() {
             <ChevronLeft className="size-4" />
             Back
           </Button>
-          <h2 className={cn(SE_H, 'mt-2 font-serif text-lg font-semibold')}>Delivery Details</h2>
+          <h2 className={cn(SE_H, 'mt-2 font-serif text-lg')}>Delivery Details</h2>
           <p className="text-sm text-muted-foreground">
             Where should we send the printed documents?
           </p>
@@ -410,7 +410,7 @@ export default function PrintShopPage() {
             <ChevronLeft className="size-4" />
             Back
           </Button>
-          <h2 className={cn(SE_H, 'mt-2 font-serif text-lg font-semibold')}>How would you like to pay?</h2>
+          <h2 className={cn(SE_H, 'mt-2 font-serif text-lg')}>How would you like to pay?</h2>
         </div>
 
         <div className="space-y-3">
@@ -507,7 +507,7 @@ export default function PrintShopPage() {
     return (
       <div className="space-y-4">
         <div>
-          <h2 className={cn(SE_H, 'font-serif text-lg font-semibold')}>Payment</h2>
+          <h2 className={cn(SE_H, 'font-serif text-lg')}>Payment</h2>
           <p className="text-sm text-muted-foreground">
             Complete your payment to place the print order
           </p>

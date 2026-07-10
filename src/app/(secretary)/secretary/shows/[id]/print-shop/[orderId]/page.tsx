@@ -130,7 +130,7 @@ export default function PrintOrderDetailPage({
               Back to Print Shop
             </Link>
           </Button>
-          <h2 className={cn(SE_H, 'mt-1 font-serif text-lg font-semibold')}>
+          <h2 className={cn(SE_H, 'mt-1 font-serif text-lg')}>
             Order #{formatOrderRef(order.id)}
           </h2>
           <p className="text-sm text-muted-foreground">

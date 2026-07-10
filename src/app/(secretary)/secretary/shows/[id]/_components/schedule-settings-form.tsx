@@ -619,7 +619,7 @@ export function ScheduleSettingsForm({ showId, onSaved }: ScheduleSettingsFormPr
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className={cn(SE_H, 'text-lg font-bold tracking-tight')}>Schedule Settings</h2>
+          <h2 className={cn(SE_H, 'text-lg')}>Schedule Settings</h2>
           <p className="text-sm text-muted-foreground">
             Configure your show schedule PDF.
             <span className="hidden sm:inline"> Mandatory RKC statements are auto-included.</span>

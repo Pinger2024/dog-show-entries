@@ -4,15 +4,6 @@ import * as React from 'react';
 import { Slot } from 'radix-ui';
 import { cn } from '@/lib/utils';
 import { useCountdown } from './use-countdown';
-import { SE_H } from './tokens';
-
-// Re-exported for back-compat with existing `import { SE_H } from
-// '@/components/show-experience/kit'` call sites — but prefer importing
-// SE_H directly from './tokens' in new code (and in Server Components
-// especially: kit.tsx is 'use client', and a value imported from a
-// 'use client' module inside a Server Component arrives as a client
-// reference that cn()/clsx silently drops instead of the real string).
-export { SE_H };
 
 /* ============================================================
  * Show Experience (green) — shared presentational kit.

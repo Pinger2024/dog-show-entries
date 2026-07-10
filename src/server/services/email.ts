@@ -5,6 +5,7 @@ import { orders, memberships, users, printOrders, breeds, showClasses } from '@/
 import { formatOrderRef, PRINT_PAYMENT_METHODS } from '@/lib/print-products';
 import { isCatalogueItem } from '@/lib/catalogue-utils';
 import { buildClassLabelMap } from '@/lib/class-labels';
+import { BRAND } from '@/lib/brand';
 
 export const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -18,8 +19,33 @@ function formatFee(pence: number) {
   return `£${(pence / 100).toFixed(2)}`;
 }
 
-export function btn(href: string, label: string, bg = '#2f6b43') {
-  return `<a href="${href}" style="display: inline-block; padding: 12px 28px; background: ${bg}; color: #f3ecdc; text-decoration: none; border-radius: 13px; font-size: 14px; font-weight: 700;">${label}</a>`;
+export function btn(href: string, label: string, bg: string = BRAND.green) {
+  return `<a href="${href}" style="display: inline-block; padding: 12px 28px; background: ${bg}; color: ${BRAND.cream}; text-decoration: none; border-radius: 13px; font-size: 14px; font-weight: 700;">${label}</a>`;
+}
+
+/**
+ * Shared "Remi" wordmark header — the centered h1 + green dot, used at the
+ * top of every transactional email. `size` is the h1 font-size in px (all
+ * call sites use 26 except the compact "New Entry Received" secretary
+ * notification, which now shares the standard 24px-0 wrapper padding —
+ * previously 16px-0 — in exchange for de-duplicating this block).
+ */
+export function emailHeader(size = 26) {
+  return `<div style="text-align: center; padding: 24px 0;">
+      <h1 style="margin: 0; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: ${size}px; font-weight: 800; color: ${BRAND.green}; letter-spacing: -0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${BRAND.fresh};margin-left:3px;"></span></h1>
+    </div>`;
+}
+
+/**
+ * Shared "Sent by Remi[ on behalf of X]." footer line. Normalizes the
+ * handful of near-identical footer variants this replaces (a couple omitted
+ * the trailing period or the "on behalf of" clause) onto one shape — pass
+ * the org name to include it, or omit for the plain "Sent by Remi." form.
+ */
+export function emailFooter(orgName?: string | null) {
+  return `<p style="text-align: center; margin-top: 16px; font-size: 12px; color: ${BRAND.ink2};">
+      Sent by <a href="${APP_URL}" style="color: ${BRAND.green}; text-decoration: none; font-weight: 600;">Remi</a>${orgName ? ` on behalf of ${orgName}` : ''}.
+    </p>`;
 }
 
 function formatLongDate(date: string | Date): string {
@@ -116,21 +142,21 @@ export async function sendEntryConfirmationEmail(orderId: string) {
         const className = cd?.name ?? 'Class';
         const sexLabel = sex === 'dog' ? ' Dog' : sex === 'bitch' ? ' Bitch' : '';
         const prefix = label ? `${label}. ` : '';
-        return `<div style="padding: 2px 0; color: #1b241d;">${prefix}${className}${sexLabel} — ${formatFee(ec.fee)}</div>`;
+        return `<div style="padding: 2px 0; color: ${BRAND.ink};">${prefix}${className}${sexLabel} — ${formatFee(ec.fee)}</div>`;
       })
       .join('');
 
     return `
         <tr>
-          <td style="padding: 16px; border-bottom: 1px solid #e7e1d3;">
-            <strong style="color: #1b241d;">${name}</strong>
-            ${breed ? `<br><span style="color: #535c4d; font-size: 14px;">${breed}</span>` : ''}
-            ${entry.isNfc ? '<br><span style="color: #535c4d; font-size: 12px; font-weight: 600;">NOT FOR COMPETITION</span>' : ''}
+          <td style="padding: 16px; border-bottom: 1px solid ${BRAND.line};">
+            <strong style="color: ${BRAND.ink};">${name}</strong>
+            ${breed ? `<br><span style="color: ${BRAND.ink2}; font-size: 14px;">${breed}</span>` : ''}
+            ${entry.isNfc ? '<br><span style="color: ${BRAND.ink2}; font-size: 12px; font-weight: 600;">NOT FOR COMPETITION</span>' : ''}
             <div style="margin-top: 8px; font-size: 14px;">
               ${classLines}
             </div>
           </td>
-          <td style="padding: 16px; border-bottom: 1px solid #e7e1d3; text-align: right; font-weight: 600; vertical-align: top;">
+          <td style="padding: 16px; border-bottom: 1px solid ${BRAND.line}; text-align: right; font-weight: 600; vertical-align: top;">
             ${formatFee(entry.totalFee)}
           </td>
         </tr>`;
@@ -158,42 +184,40 @@ export async function sendEntryConfirmationEmail(orderId: string) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
-<body style="margin: 0; padding: 0; background-color: #f6f4ec; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
 
     <!-- Header -->
-    <div style="text-align: center; padding: 24px 0;">
-      <h1 style="margin: 0; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 26px; font-weight: 800; color: #2f6b43; letter-spacing: -0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#5bb579;margin-left:3px;"></span></h1>
-    </div>
+    ${emailHeader()}
 
     <!-- Main card -->
-    <div style="background: #ffffff; border: 1px solid #e7e1d3; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+    <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
 
       <!-- Green banner -->
-      <div style="background: #20452c; padding: 24px 24px 20px; text-align: center;">
-        <div style="display: inline-block; width: 40px; height: 40px; line-height: 40px; border-radius: 50%; background: rgba(243,236,220,0.2); font-size: 20px; color: #f3ecdc; margin-bottom: 8px;">&#10003;</div>
-        <h2 style="margin: 0; color: #f3ecdc; font-size: 22px; font-weight: 700;">Entry Confirmed</h2>
+      <div style="background: ${BRAND.deep}; padding: 24px 24px 20px; text-align: center;">
+        <div style="display: inline-block; width: 40px; height: 40px; line-height: 40px; border-radius: 50%; background: rgba(243,236,220,0.2); font-size: 20px; color: ${BRAND.cream}; margin-bottom: 8px;">&#10003;</div>
+        <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 22px; font-weight: 700;">Entry Confirmed</h2>
         <p style="margin: 8px 0 0; color: rgba(243, 236, 220, 0.78); font-size: 14px;">
           Order ${orderRef} &middot; ${formatFee(order.totalAmount)}
         </p>
       </div>
 
       <!-- Show details -->
-      <div style="padding: 20px 24px; border-bottom: 1px solid #e7e1d3;">
-        <h3 style="margin: 0 0 4px; font-size: 18px; color: #1b241d;">${show.name}</h3>
-        <p style="margin: 0; font-size: 14px; color: #535c4d;">
+      <div style="padding: 20px 24px; border-bottom: 1px solid ${BRAND.line};">
+        <h3 style="margin: 0 0 4px; font-size: 18px; color: ${BRAND.ink};">${show.name}</h3>
+        <p style="margin: 0; font-size: 14px; color: ${BRAND.ink2};">
           ${showDate}<br>
           ${venue}
         </p>
-        ${show.organisation?.name ? `<p style="margin: 4px 0 0; font-size: 13px; color: #535c4d;">${show.organisation.name}</p>` : ''}
+        ${show.organisation?.name ? `<p style="margin: 4px 0 0; font-size: 13px; color: ${BRAND.ink2};">${show.organisation.name}</p>` : ''}
       </div>
 
       <!-- Entries -->
       <table style="width: 100%; border-collapse: collapse;">
         <thead>
           <tr>
-            <th style="padding: 12px 24px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #535c4d; border-bottom: 1px solid #e7e1d3;">Entry</th>
-            <th style="padding: 12px 24px; text-align: right; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #535c4d; border-bottom: 1px solid #e7e1d3;">Fee</th>
+            <th style="padding: 12px 24px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: ${BRAND.ink2}; border-bottom: 1px solid ${BRAND.line};">Entry</th>
+            <th style="padding: 12px 24px; text-align: right; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: ${BRAND.ink2}; border-bottom: 1px solid ${BRAND.line};">Fee</th>
           </tr>
         </thead>
         <tbody>
@@ -203,44 +227,44 @@ export async function sendEntryConfirmationEmail(orderId: string) {
 
       ${(order.orderSundryItems ?? []).length > 0 ? `
       <!-- Sundry Items -->
-      <div style="padding: 16px 24px; border-top: 1px solid #e7e1d3;">
-        <p style="margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #535c4d;">Add-ons</p>
+      <div style="padding: 16px 24px; border-top: 1px solid ${BRAND.line};">
+        <p style="margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: ${BRAND.ink2};">Add-ons</p>
         ${(order.orderSundryItems ?? []).map((osi) => `
         <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 14px;">
-          <span style="color: #1b241d;">${osi.sundryItem?.name ?? 'Item'}${osi.quantity > 1 ? ` x${osi.quantity}` : ''}</span>
+          <span style="color: ${BRAND.ink};">${osi.sundryItem?.name ?? 'Item'}${osi.quantity > 1 ? ` x${osi.quantity}` : ''}</span>
           <span style="font-weight: 600;">${formatFee(osi.unitPrice * osi.quantity)}</span>
         </div>`).join('')}
       </div>` : ''}
 
       <!-- Total -->
-      <div style="padding: 16px 24px; background: #f2ede1;">
+      <div style="padding: 16px 24px; background: ${BRAND.paper};">
         <table style="width: 100%;">
           <tr>
-            <td style="font-weight: 700; font-size: 16px; color: #1b241d;">Total Paid</td>
-            <td style="text-align: right; font-weight: 700; font-size: 16px; color: #2f6b43;">${formatFee(order.totalAmount)}</td>
+            <td style="font-weight: 700; font-size: 16px; color: ${BRAND.ink};">Total Paid</td>
+            <td style="text-align: right; font-weight: 700; font-size: 16px; color: ${BRAND.green};">${formatFee(order.totalAmount)}</td>
           </tr>
         </table>
       </div>
 
       <!-- CTA -->
-      <div style="padding: 20px 24px; text-align: center; border-top: 1px solid #e7e1d3;">
+      <div style="padding: 20px 24px; text-align: center; border-top: 1px solid ${BRAND.line};">
         ${btn(`${APP_URL}/entries`, 'View Your Entries')}
-        <p style="margin: 12px 0 0; font-size: 12px; color: #535c4d;">
+        <p style="margin: 12px 0 0; font-size: 12px; color: ${BRAND.ink2};">
           Manage your entries, change handlers, or withdraw from your dashboard.
         </p>
       </div>
 
       ${(order.orderSundryItems ?? []).some((osi) => osi.sundryItem?.name && isCatalogueItem(osi.sundryItem.name)) ? `
       <!-- Online Catalogue -->
-      <div style="padding: 16px 24px; text-align: center; border-top: 1px solid #e7e1d3; background: #eaf7ee;">
-        <p style="margin: 0 0 8px; font-size: 13px; font-weight: 600; color: #2f6b43;">Online Catalogue Purchased</p>
-        <p style="margin: 0 0 12px; font-size: 13px; color: #535c4d;">Your catalogue unlocks on the morning of the show — we&apos;ll email you the link first thing that day.</p>
-        ${btn(`${APP_URL}/shows/${show.slug ?? show.id}/catalogue`, 'View Catalogue', '#2f6b43')}
+      <div style="padding: 16px 24px; text-align: center; border-top: 1px solid ${BRAND.line}; background: #eaf7ee;">
+        <p style="margin: 0 0 8px; font-size: 13px; font-weight: 600; color: ${BRAND.green};">Online Catalogue Purchased</p>
+        <p style="margin: 0 0 12px; font-size: 13px; color: ${BRAND.ink2};">Your catalogue unlocks on the morning of the show — we&apos;ll email you the link first thing that day.</p>
+        ${btn(`${APP_URL}/shows/${show.slug ?? show.id}/catalogue`, 'View Catalogue', '${BRAND.green}')}
       </div>` : ''}
 
       <!-- Share -->
-      <div style="padding: 16px 24px; text-align: center; border-top: 1px solid #e7e1d3; background: #eaf7ee;">
-        <p style="margin: 0 0 10px; font-size: 13px; font-weight: 600; color: #1b241d;">Tell your breed group!</p>
+      <div style="padding: 16px 24px; text-align: center; border-top: 1px solid ${BRAND.line}; background: #eaf7ee;">
+        <p style="margin: 0 0 10px; font-size: 13px; font-weight: 600; color: ${BRAND.ink};">Tell your breed group!</p>
         <div style="display: inline-block;">
           <!--[if mso]><table><tr><td><![endif]-->
           <a href="https://wa.me/?text=${encodeURIComponent(`I've just entered ${show.name}! 🐕 ${APP_URL}/shows/${show.slug ?? show.id}`)}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 8px 16px; background: #25D366; color: #fff; font-size: 13px; font-weight: 600; text-decoration: none; border-radius: 6px; margin: 0 4px;">WhatsApp</a>
@@ -251,16 +275,16 @@ export async function sendEntryConfirmationEmail(orderId: string) {
       </div>
 
       <!-- Exhibitor -->
-      <div style="padding: 16px 24px; border-top: 1px solid #e7e1d3; font-size: 13px; color: #535c4d;">
-        <strong style="color: #1b241d;">Exhibitor:</strong> ${exhibitor.name ?? exhibitor.email}
-        ${exhibitor.kcAccountNo ? `<br><strong style="color: #1b241d;">RKC Account:</strong> ${exhibitor.kcAccountNo}` : ''}
+      <div style="padding: 16px 24px; border-top: 1px solid ${BRAND.line}; font-size: 13px; color: ${BRAND.ink2};">
+        <strong style="color: ${BRAND.ink};">Exhibitor:</strong> ${exhibitor.name ?? exhibitor.email}
+        ${exhibitor.kcAccountNo ? `<br><strong style="color: ${BRAND.ink};">RKC Account:</strong> ${exhibitor.kcAccountNo}` : ''}
       </div>
     </div>
 
     <!-- Footer -->
-    <div style="text-align: center; padding: 24px 16px; font-size: 12px; color: #535c4d;">
+    <div style="text-align: center; padding: 24px 16px; font-size: 12px; color: ${BRAND.ink2};">
       <p style="margin: 0;">
-        This confirmation was sent by <a href="${APP_URL}" style="color: #2f6b43; text-decoration: none; font-weight: 600;">Remi</a> on behalf of ${show.organisation?.name ?? 'the show society'}.
+        This confirmation was sent by <a href="${APP_URL}" style="color: ${BRAND.green}; text-decoration: none; font-weight: 600;">Remi</a> on behalf of ${show.organisation?.name ?? 'the show society'}.
       </p>
       <p style="margin: 8px 0 0;">
         If you have questions about this entry, please reply to this email.
@@ -365,12 +389,12 @@ export async function sendSecretaryNotificationEmail(orderId: string) {
 
     return `
       <tr>
-        <td style="padding: 8px 16px; border-bottom: 1px solid #e7e1d3; font-size: 14px;">
+        <td style="padding: 8px 16px; border-bottom: 1px solid ${BRAND.line}; font-size: 14px;">
           <strong>${name}</strong>${breed ? ` (${breed})` : ''}
-          ${entry.isNfc ? ' <span style="color: #535c4d; font-weight: 600;">NFC</span>' : ''}
+          ${entry.isNfc ? ' <span style="color: ${BRAND.ink2}; font-weight: 600;">NFC</span>' : ''}
         </td>
-        <td style="padding: 8px 16px; border-bottom: 1px solid #e7e1d3; font-size: 14px;">${classes}</td>
-        <td style="padding: 8px 16px; border-bottom: 1px solid #e7e1d3; font-size: 14px; text-align: right;">${formatFee(entry.totalFee)}</td>
+        <td style="padding: 8px 16px; border-bottom: 1px solid ${BRAND.line}; font-size: 14px;">${classes}</td>
+        <td style="padding: 8px 16px; border-bottom: 1px solid ${BRAND.line}; font-size: 14px; text-align: right;">${formatFee(entry.totalFee)}</td>
       </tr>`;
   }).join('');
 
@@ -378,36 +402,34 @@ export async function sendSecretaryNotificationEmail(orderId: string) {
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"></head>
-<body style="margin: 0; padding: 0; background-color: #f6f4ec; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
-    <div style="text-align: center; padding: 16px 0;">
-      <h1 style="margin: 0; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 24px; font-weight: 800; color: #2f6b43; letter-spacing: -0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#5bb579;margin-left:3px;"></span></h1>
-    </div>
-    <div style="background: #fff; border: 1px solid #e7e1d3; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-      <div style="background: #20452c; padding: 16px 24px; text-align: center;">
-        <h2 style="margin: 0; color: #f3ecdc; font-size: 18px; font-weight: 700;">New Entry Received</h2>
+    ${emailHeader(24)}
+    <div style="background: #fff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: ${BRAND.deep}; padding: 16px 24px; text-align: center;">
+        <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 18px; font-weight: 700;">New Entry Received</h2>
       </div>
       <div style="padding: 20px 24px;">
         <p style="margin: 0 0 4px; font-size: 16px; font-weight: 600;">${show.name}</p>
-        <p style="margin: 0 0 16px; font-size: 14px; color: #535c4d;">
+        <p style="margin: 0 0 16px; font-size: 14px; color: ${BRAND.ink2};">
           Exhibitor: <strong>${exhibitor?.name ?? exhibitor?.email ?? 'Unknown'}</strong>
           ${exhibitor?.kcAccountNo ? ` · RKC: ${exhibitor.kcAccountNo}` : ''}
         </p>
         <table style="width: 100%; border-collapse: collapse;">
           <thead>
             <tr>
-              <th style="padding: 8px 16px; text-align: left; font-size: 11px; text-transform: uppercase; color: #535c4d; border-bottom: 2px solid #e7e1d3;">Dog/Handler</th>
-              <th style="padding: 8px 16px; text-align: left; font-size: 11px; text-transform: uppercase; color: #535c4d; border-bottom: 2px solid #e7e1d3;">Classes</th>
-              <th style="padding: 8px 16px; text-align: right; font-size: 11px; text-transform: uppercase; color: #535c4d; border-bottom: 2px solid #e7e1d3;">Fee</th>
+              <th style="padding: 8px 16px; text-align: left; font-size: 11px; text-transform: uppercase; color: ${BRAND.ink2}; border-bottom: 2px solid ${BRAND.line};">Dog/Handler</th>
+              <th style="padding: 8px 16px; text-align: left; font-size: 11px; text-transform: uppercase; color: ${BRAND.ink2}; border-bottom: 2px solid ${BRAND.line};">Classes</th>
+              <th style="padding: 8px 16px; text-align: right; font-size: 11px; text-transform: uppercase; color: ${BRAND.ink2}; border-bottom: 2px solid ${BRAND.line};">Fee</th>
             </tr>
           </thead>
           <tbody>${entrySummary}</tbody>
         </table>
         ${(order.orderSundryItems ?? []).length > 0 ? `
         <div style="margin-top: 12px; padding: 8px 16px;">
-          <p style="margin: 0 0 4px; font-size: 11px; text-transform: uppercase; color: #535c4d;">Add-ons</p>
+          <p style="margin: 0 0 4px; font-size: 11px; text-transform: uppercase; color: ${BRAND.ink2};">Add-ons</p>
           ${(order.orderSundryItems ?? []).map((osi) =>
-            `<p style="margin: 2px 0; font-size: 13px; color: #1b241d;">${osi.sundryItem?.name ?? 'Item'}${osi.quantity > 1 ? ` x${osi.quantity}` : ''} — ${formatFee(osi.unitPrice * osi.quantity)}</p>`
+            `<p style="margin: 2px 0; font-size: 13px; color: ${BRAND.ink};">${osi.sundryItem?.name ?? 'Item'}${osi.quantity > 1 ? ` x${osi.quantity}` : ''} — ${formatFee(osi.unitPrice * osi.quantity)}</p>`
           ).join('')}
         </div>` : ''}
         <div style="margin-top: 16px; padding: 12px 16px; background: #eaf7ee; border-radius: 8px;">
@@ -418,9 +440,7 @@ export async function sendSecretaryNotificationEmail(orderId: string) {
         </div>
       </div>
     </div>
-    <p style="text-align: center; margin-top: 16px; font-size: 12px; color: #535c4d;">
-      Sent by <a href="${APP_URL}" style="color: #2f6b43; text-decoration: none; font-weight: 600;">Remi</a> on behalf of ${org?.name ?? 'your organisation'}.
-    </p>
+    ${emailFooter(org?.name ?? 'your organisation')}
   </div>
 </body>
 </html>`;
@@ -468,13 +488,13 @@ export async function sendPrintOrderConfirmationEmail(printOrderId: string) {
 
   const itemRows = order.items.map((item) => `
     <tr>
-      <td style="padding: 8px 16px; border-bottom: 1px solid #e7e1d3; font-size: 14px;">
+      <td style="padding: 8px 16px; border-bottom: 1px solid ${BRAND.line}; font-size: 14px;">
         ${item.documentLabel}
       </td>
-      <td style="padding: 8px 16px; border-bottom: 1px solid #e7e1d3; font-size: 14px; text-align: center;">
+      <td style="padding: 8px 16px; border-bottom: 1px solid ${BRAND.line}; font-size: 14px; text-align: center;">
         ${item.quantity}
       </td>
-      <td style="padding: 8px 16px; border-bottom: 1px solid #e7e1d3; font-size: 14px; text-align: right;">
+      <td style="padding: 8px 16px; border-bottom: 1px solid ${BRAND.line}; font-size: 14px; text-align: right;">
         ${formatFee(item.lineTotal)}
       </td>
     </tr>`).join('');
@@ -487,23 +507,21 @@ export async function sendPrintOrderConfirmationEmail(printOrderId: string) {
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin: 0; padding: 0; background-color: #f6f4ec; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
-    <div style="text-align: center; padding: 24px 0;">
-      <h1 style="margin: 0; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 26px; font-weight: 800; color: #2f6b43; letter-spacing: -0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#5bb579;margin-left:3px;"></span></h1>
-    </div>
-    <div style="background: #ffffff; border: 1px solid #e7e1d3; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-      <div style="background: #20452c; padding: 24px 24px 20px; text-align: center;">
-        <div style="display: inline-block; width: 40px; height: 40px; line-height: 40px; border-radius: 50%; background: rgba(243,236,220,0.2); font-size: 20px; color: #f3ecdc; margin-bottom: 8px;">&#535c4d8;</div>
-        <h2 style="margin: 0; color: #f3ecdc; font-size: 22px; font-weight: 700;">Print Order Confirmed</h2>
+    ${emailHeader()}
+    <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: ${BRAND.deep}; padding: 24px 24px 20px; text-align: center;">
+        <div style="display: inline-block; width: 40px; height: 40px; line-height: 40px; border-radius: 50%; background: rgba(243,236,220,0.2); font-size: 20px; color: ${BRAND.cream}; margin-bottom: 8px;">&#9998;</div>
+        <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 22px; font-weight: 700;">Print Order Confirmed</h2>
         <p style="margin: 8px 0 0; color: rgba(243, 236, 220, 0.78); font-size: 14px;">
           Order ${orderRef} &middot; ${formatFee(order.totalAmount)}
         </p>
       </div>
 
-      <div style="padding: 20px 24px; border-bottom: 1px solid #e7e1d3;">
-        <h3 style="margin: 0 0 4px; font-size: 18px; color: #1b241d;">${show.name}</h3>
-        <p style="margin: 0; font-size: 14px; color: #535c4d;">
+      <div style="padding: 20px 24px; border-bottom: 1px solid ${BRAND.line};">
+        <h3 style="margin: 0 0 4px; font-size: 18px; color: ${BRAND.ink};">${show.name}</h3>
+        <p style="margin: 0; font-size: 14px; color: ${BRAND.ink2};">
           Your print order has been received. We&apos;re preparing your documents and will be in touch shortly.
         </p>
       </div>
@@ -511,42 +529,40 @@ export async function sendPrintOrderConfirmationEmail(printOrderId: string) {
       <table style="width: 100%; border-collapse: collapse;">
         <thead>
           <tr>
-            <th style="padding: 8px 16px; text-align: left; font-size: 11px; text-transform: uppercase; color: #535c4d; border-bottom: 2px solid #e7e1d3;">Item</th>
-            <th style="padding: 8px 16px; text-align: center; font-size: 11px; text-transform: uppercase; color: #535c4d; border-bottom: 2px solid #e7e1d3;">Qty</th>
-            <th style="padding: 8px 16px; text-align: right; font-size: 11px; text-transform: uppercase; color: #535c4d; border-bottom: 2px solid #e7e1d3;">Price</th>
+            <th style="padding: 8px 16px; text-align: left; font-size: 11px; text-transform: uppercase; color: ${BRAND.ink2}; border-bottom: 2px solid ${BRAND.line};">Item</th>
+            <th style="padding: 8px 16px; text-align: center; font-size: 11px; text-transform: uppercase; color: ${BRAND.ink2}; border-bottom: 2px solid ${BRAND.line};">Qty</th>
+            <th style="padding: 8px 16px; text-align: right; font-size: 11px; text-transform: uppercase; color: ${BRAND.ink2}; border-bottom: 2px solid ${BRAND.line};">Price</th>
           </tr>
         </thead>
         <tbody>${itemRows}</tbody>
       </table>
 
-      <div style="padding: 16px 24px; background: #f2ede1;">
+      <div style="padding: 16px 24px; background: ${BRAND.paper};">
         <table style="width: 100%;">
           <tr>
-            <td style="font-weight: 700; font-size: 16px; color: #1b241d;">Total</td>
-            <td style="text-align: right; font-weight: 700; font-size: 16px; color: #2f6b43;">${formatFee(order.totalAmount)}</td>
+            <td style="font-weight: 700; font-size: 16px; color: ${BRAND.ink};">Total</td>
+            <td style="text-align: right; font-weight: 700; font-size: 16px; color: ${BRAND.green};">${formatFee(order.totalAmount)}</td>
           </tr>
         </table>
       </div>
 
-      <div style="padding: 16px 24px; border-top: 1px solid #e7e1d3;">
-        <p style="margin: 0 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #535c4d;">Delivery</p>
-        <p style="margin: 0; font-size: 14px; color: #1b241d;">
+      <div style="padding: 16px 24px; border-top: 1px solid ${BRAND.line};">
+        <p style="margin: 0 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: ${BRAND.ink2};">Delivery</p>
+        <p style="margin: 0; font-size: 14px; color: ${BRAND.ink};">
           ${order.deliveryName ? `<strong>${order.deliveryName}</strong><br>` : ''}
           ${deliveryAddr}
         </p>
-        ${estDelivery ? `<p style="margin: 8px 0 0; font-size: 14px; color: #2f6b43; font-weight: 600;">Estimated delivery: ${estDelivery}</p>` : ''}
+        ${estDelivery ? `<p style="margin: 8px 0 0; font-size: 14px; color: ${BRAND.green}; font-weight: 600;">Estimated delivery: ${estDelivery}</p>` : ''}
       </div>
 
-      <div style="padding: 20px 24px; text-align: center; border-top: 1px solid #e7e1d3;">
+      <div style="padding: 20px 24px; text-align: center; border-top: 1px solid ${BRAND.line};">
         ${btn(`${APP_URL}/secretary/shows/${show.slug ?? show.id}/print-shop/${order.id}`, 'Track Your Order')}
-        <p style="margin: 12px 0 0; font-size: 12px; color: #535c4d;">
+        <p style="margin: 12px 0 0; font-size: 12px; color: ${BRAND.ink2};">
           We'll email you again when your order is dispatched with tracking details.
         </p>
       </div>
     </div>
-    <p style="text-align: center; margin-top: 16px; font-size: 12px; color: #535c4d;">
-      Sent by <a href="${APP_URL}" style="color: #2f6b43; text-decoration: none; font-weight: 600;">Remi</a> on behalf of ${show.organisation?.name ?? 'your organisation'}.
-    </p>
+    ${emailFooter(show.organisation?.name ?? 'your organisation')}
   </div>
 </body>
 </html>`;
@@ -596,11 +612,11 @@ export async function sendPrintOrderAdminNotificationEmail(printOrderId: string)
 
   const itemRows = order.items.map((item) => `
     <tr>
-      <td style="padding: 8px 16px; border-bottom: 1px solid #e7e1d3; font-size: 14px;">${item.documentLabel}</td>
-      <td style="padding: 8px 16px; border-bottom: 1px solid #e7e1d3; font-size: 14px; text-align: center;">${item.quantity}</td>
-      <td style="padding: 8px 16px; border-bottom: 1px solid #e7e1d3; font-size: 14px; text-align: right;">${formatFee(item.lineTotal)}</td>
-      <td style="padding: 8px 16px; border-bottom: 1px solid #e7e1d3; font-size: 13px;">
-        ${item.pdfPublicUrl ? `<a href="${item.pdfPublicUrl}" style="color: #2f6b43;">Download PDF</a>` : 'PDF pending'}
+      <td style="padding: 8px 16px; border-bottom: 1px solid ${BRAND.line}; font-size: 14px;">${item.documentLabel}</td>
+      <td style="padding: 8px 16px; border-bottom: 1px solid ${BRAND.line}; font-size: 14px; text-align: center;">${item.quantity}</td>
+      <td style="padding: 8px 16px; border-bottom: 1px solid ${BRAND.line}; font-size: 14px; text-align: right;">${formatFee(item.lineTotal)}</td>
+      <td style="padding: 8px 16px; border-bottom: 1px solid ${BRAND.line}; font-size: 13px;">
+        ${item.pdfPublicUrl ? `<a href="${item.pdfPublicUrl}" style="color: ${BRAND.green};">Download PDF</a>` : 'PDF pending'}
       </td>
     </tr>`).join('');
 
@@ -608,22 +624,20 @@ export async function sendPrintOrderAdminNotificationEmail(printOrderId: string)
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin: 0; padding: 0; background-color: #f6f4ec; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
-    <div style="text-align: center; padding: 24px 0;">
-      <h1 style="margin: 0; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 26px; font-weight: 800; color: #2f6b43; letter-spacing: -0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#5bb579;margin-left:3px;"></span></h1>
-    </div>
-    <div style="background: #ffffff; border: 1px solid #e7e1d3; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-      <div style="background: #e6a53a; padding: 24px 24px 20px; text-align: center;">
-        <h2 style="margin: 0; color: #1b241d; font-size: 22px; font-weight: 700;">Print Order — Action Required</h2>
+    ${emailHeader()}
+    <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: ${BRAND.honey}; padding: 24px 24px 20px; text-align: center;">
+        <h2 style="margin: 0; color: ${BRAND.ink}; font-size: 22px; font-weight: 700;">Print Order — Action Required</h2>
         <p style="margin: 8px 0 0; color: rgba(27, 36, 29, 0.65); font-size: 14px;">
           Order ${orderRef} &middot; ${formatFee(order.totalAmount)}
         </p>
       </div>
 
-      <div style="padding: 20px 24px; border-bottom: 1px solid #e7e1d3;">
-        <h3 style="margin: 0 0 4px; font-size: 18px; color: #1b241d;">${show.name}</h3>
-        <p style="margin: 0; font-size: 14px; color: #535c4d;">
+      <div style="padding: 20px 24px; border-bottom: 1px solid ${BRAND.line};">
+        <h3 style="margin: 0 0 4px; font-size: 18px; color: ${BRAND.ink};">${show.name}</h3>
+        <p style="margin: 0; font-size: 14px; color: ${BRAND.ink2};">
           ${order.paymentMethod === PRINT_PAYMENT_METHODS.DEDUCTED_FROM_PAYOUT
             ? 'A print order has been paid by deduction from entry income. Please submit the PDFs below to Mixam manually.'
             : 'A print order has been paid by card. Please submit the PDFs below to Mixam manually.'}
@@ -633,34 +647,34 @@ export async function sendPrintOrderAdminNotificationEmail(printOrderId: string)
       <table style="width: 100%; border-collapse: collapse;">
         <thead>
           <tr>
-            <th style="padding: 8px 16px; text-align: left; font-size: 11px; text-transform: uppercase; color: #535c4d; border-bottom: 2px solid #e7e1d3;">Item</th>
-            <th style="padding: 8px 16px; text-align: center; font-size: 11px; text-transform: uppercase; color: #535c4d; border-bottom: 2px solid #e7e1d3;">Qty</th>
-            <th style="padding: 8px 16px; text-align: right; font-size: 11px; text-transform: uppercase; color: #535c4d; border-bottom: 2px solid #e7e1d3;">Price</th>
-            <th style="padding: 8px 16px; text-align: left; font-size: 11px; text-transform: uppercase; color: #535c4d; border-bottom: 2px solid #e7e1d3;">PDF</th>
+            <th style="padding: 8px 16px; text-align: left; font-size: 11px; text-transform: uppercase; color: ${BRAND.ink2}; border-bottom: 2px solid ${BRAND.line};">Item</th>
+            <th style="padding: 8px 16px; text-align: center; font-size: 11px; text-transform: uppercase; color: ${BRAND.ink2}; border-bottom: 2px solid ${BRAND.line};">Qty</th>
+            <th style="padding: 8px 16px; text-align: right; font-size: 11px; text-transform: uppercase; color: ${BRAND.ink2}; border-bottom: 2px solid ${BRAND.line};">Price</th>
+            <th style="padding: 8px 16px; text-align: left; font-size: 11px; text-transform: uppercase; color: ${BRAND.ink2}; border-bottom: 2px solid ${BRAND.line};">PDF</th>
           </tr>
         </thead>
         <tbody>${itemRows}</tbody>
       </table>
 
-      <div style="padding: 16px 24px; background: #f2ede1;">
+      <div style="padding: 16px 24px; background: ${BRAND.paper};">
         <table style="width: 100%;">
           <tr>
-            <td style="font-weight: 700; font-size: 16px; color: #1b241d;">Total paid</td>
-            <td style="text-align: right; font-weight: 700; font-size: 16px; color: #2f6b43;">${formatFee(order.totalAmount)}</td>
+            <td style="font-weight: 700; font-size: 16px; color: ${BRAND.ink};">Total paid</td>
+            <td style="text-align: right; font-weight: 700; font-size: 16px; color: ${BRAND.green};">${formatFee(order.totalAmount)}</td>
           </tr>
         </table>
       </div>
 
-      <div style="padding: 16px 24px; border-top: 1px solid #e7e1d3;">
-        <p style="margin: 0 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #535c4d;">Deliver to</p>
-        <p style="margin: 0; font-size: 14px; color: #1b241d;">
+      <div style="padding: 16px 24px; border-top: 1px solid ${BRAND.line};">
+        <p style="margin: 0 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: ${BRAND.ink2};">Deliver to</p>
+        <p style="margin: 0; font-size: 14px; color: ${BRAND.ink};">
           ${order.deliveryName ? `<strong>${order.deliveryName}</strong><br>` : ''}
           ${deliveryAddr}
           ${order.deliveryPhone ? `<br>${order.deliveryPhone}` : ''}
         </p>
       </div>
 
-      <div style="padding: 20px 24px; text-align: center; border-top: 1px solid #e7e1d3;">
+      <div style="padding: 20px 24px; text-align: center; border-top: 1px solid ${BRAND.line};">
         ${btn(`${APP_URL}/secretary/shows/${show.slug ?? show.id}/print-shop/${order.id}`, 'View Order')}
       </div>
     </div>
@@ -708,17 +722,17 @@ export async function sendPrintOrderDispatchEmail(printOrderId: string) {
   const show = order.show;
 
   const itemList = order.items
-    .map((item) => `<li style="padding: 4px 0; font-size: 14px; color: #1b241d;">${item.documentLabel} &times; ${item.quantity}</li>`)
+    .map((item) => `<li style="padding: 4px 0; font-size: 14px; color: ${BRAND.ink};">${item.documentLabel} &times; ${item.quantity}</li>`)
     .join('');
 
   const trackingSection = order.trackingUrl
     ? `<div style="padding: 16px 24px; text-align: center;">
         ${btn(order.trackingUrl, 'Track Delivery')}
-        ${order.trackingNumber ? `<p style="margin: 8px 0 0; font-size: 13px; color: #535c4d;">Tracking: ${order.trackingNumber}</p>` : ''}
+        ${order.trackingNumber ? `<p style="margin: 8px 0 0; font-size: 13px; color: ${BRAND.ink2};">Tracking: ${order.trackingNumber}</p>` : ''}
        </div>`
     : order.trackingNumber
       ? `<div style="padding: 16px 24px;">
-          <p style="margin: 0; font-size: 14px; color: #1b241d;">Tracking number: <strong>${order.trackingNumber}</strong></p>
+          <p style="margin: 0; font-size: 14px; color: ${BRAND.ink};">Tracking number: <strong>${order.trackingNumber}</strong></p>
          </div>`
       : '';
 
@@ -732,48 +746,44 @@ export async function sendPrintOrderDispatchEmail(printOrderId: string) {
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin: 0; padding: 0; background-color: #f6f4ec; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
-    <div style="text-align: center; padding: 24px 0;">
-      <h1 style="margin: 0; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 26px; font-weight: 800; color: #2f6b43; letter-spacing: -0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#5bb579;margin-left:3px;"></span></h1>
-    </div>
-    <div style="background: #ffffff; border: 1px solid #e7e1d3; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-      <div style="background: #20452c; padding: 24px 24px 20px; text-align: center;">
-        <div style="display: inline-block; width: 40px; height: 40px; line-height: 40px; border-radius: 50%; background: rgba(243,236,220,0.2); font-size: 20px; color: #f3ecdc; margin-bottom: 8px;">&#128230;</div>
-        <h2 style="margin: 0; color: #f3ecdc; font-size: 22px; font-weight: 700;">Your Print Order Has Shipped!</h2>
+    ${emailHeader()}
+    <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: ${BRAND.deep}; padding: 24px 24px 20px; text-align: center;">
+        <div style="display: inline-block; width: 40px; height: 40px; line-height: 40px; border-radius: 50%; background: rgba(243,236,220,0.2); font-size: 20px; color: ${BRAND.cream}; margin-bottom: 8px;">&#128230;</div>
+        <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 22px; font-weight: 700;">Your Print Order Has Shipped!</h2>
         <p style="margin: 8px 0 0; color: rgba(243, 236, 220, 0.78); font-size: 14px;">Order ${orderRef}</p>
       </div>
 
-      <div style="padding: 20px 24px; border-bottom: 1px solid #e7e1d3;">
-        <h3 style="margin: 0 0 4px; font-size: 18px; color: #1b241d;">${show.name}</h3>
-        <p style="margin: 0; font-size: 14px; color: #535c4d;">
+      <div style="padding: 20px 24px; border-bottom: 1px solid ${BRAND.line};">
+        <h3 style="margin: 0 0 4px; font-size: 18px; color: ${BRAND.ink};">${show.name}</h3>
+        <p style="margin: 0; font-size: 14px; color: ${BRAND.ink2};">
           Great news — your printing is on its way!
           ${estDelivery ? ` Expected delivery: <strong>${estDelivery}</strong>.` : ''}
         </p>
       </div>
 
-      <div style="padding: 16px 24px; border-bottom: 1px solid #e7e1d3;">
-        <p style="margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #535c4d;">What's in the box</p>
+      <div style="padding: 16px 24px; border-bottom: 1px solid ${BRAND.line};">
+        <p style="margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: ${BRAND.ink2};">What's in the box</p>
         <ul style="margin: 0; padding-left: 20px;">${itemList}</ul>
       </div>
 
       ${trackingSection}
 
-      <div style="padding: 16px 24px; border-bottom: 1px solid #e7e1d3;">
-        <p style="margin: 0 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #535c4d;">Delivering to</p>
-        <p style="margin: 0; font-size: 14px; color: #1b241d;">
+      <div style="padding: 16px 24px; border-bottom: 1px solid ${BRAND.line};">
+        <p style="margin: 0 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: ${BRAND.ink2};">Delivering to</p>
+        <p style="margin: 0; font-size: 14px; color: ${BRAND.ink};">
           ${order.deliveryName ? `<strong>${order.deliveryName}</strong><br>` : ''}
           ${deliveryAddr}
         </p>
       </div>
 
-      <div style="padding: 20px 24px; text-align: center; border-top: 1px solid #e7e1d3;">
+      <div style="padding: 20px 24px; text-align: center; border-top: 1px solid ${BRAND.line};">
         ${btn(`${APP_URL}/secretary/shows/${show.slug ?? show.id}/print-shop/${order.id}`, 'View Order Details')}
       </div>
     </div>
-    <p style="text-align: center; margin-top: 16px; font-size: 12px; color: #535c4d;">
-      Sent by <a href="${APP_URL}" style="color: #2f6b43; text-decoration: none; font-weight: 600;">Remi</a> on behalf of ${show.organisation?.name ?? 'your organisation'}.
-    </p>
+    ${emailFooter(show.organisation?.name ?? 'your organisation')}
   </div>
 </body>
 </html>`;
@@ -840,40 +850,36 @@ export async function sendJudgeApprovalRequestEmail(params: {
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin: 0; padding: 0; background-color: #f6f4ec; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
-    <div style="text-align: center; padding: 24px 0;">
-      <h1 style="margin: 0; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 26px; font-weight: 800; color: #2f6b43; letter-spacing: -0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#5bb579;margin-left:3px;"></span></h1>
-    </div>
-    <div style="background: #ffffff; border: 1px solid #e7e1d3; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-      <div style="background: #20452c; padding: 24px 24px 20px; text-align: center;">
-        <h2 style="margin: 0; color: #f3ecdc; font-size: 22px; font-weight: 700;">Results Approval Required</h2>
+    ${emailHeader()}
+    <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: ${BRAND.deep}; padding: 24px 24px 20px; text-align: center;">
+        <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 22px; font-weight: 700;">Results Approval Required</h2>
         <p style="margin: 8px 0 0; color: rgba(243, 236, 220, 0.78); font-size: 14px;">from ${orgName}</p>
       </div>
       <div style="padding: 24px;">
-        <p style="font-size: 15px; color: #1b241d; line-height: 1.6;">Dear ${judge.name},</p>
-        <p style="font-size: 15px; color: #1b241d; line-height: 1.6;">
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">Dear ${judge.name},</p>
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           The results from your judging at <strong>${show.name}</strong> on <strong>${showDate}</strong> have been recorded digitally and are ready for your review and approval.
         </p>
         <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
-          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #e7e1d3; font-weight: 600; color: #1b241d; width: 100px;">Show</td><td style="padding: 8px 12px; border-bottom: 1px solid #e7e1d3;">${show.name}</td></tr>
-          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #e7e1d3; font-weight: 600; color: #1b241d;">Date</td><td style="padding: 8px 12px; border-bottom: 1px solid #e7e1d3;">${showDate}</td></tr>
-          <tr><td style="padding: 8px 12px; border-bottom: 1px solid #e7e1d3; font-weight: 600; color: #1b241d;">Breeds</td><td style="padding: 8px 12px; border-bottom: 1px solid #e7e1d3;">${breedsText}</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink}; width: 100px;">Show</td><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line};">${show.name}</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Date</td><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line};">${showDate}</td></tr>
+          <tr><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Breeds</td><td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.line};">${breedsText}</td></tr>
         </table>
-        <p style="font-size: 15px; color: #1b241d; line-height: 1.6;">
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           Please click the button below to review the results and confirm they are correct.
         </p>
         <div style="text-align: center; margin: 28px 0;">
           ${btn(approvalUrl, 'Review & Approve Results')}
         </div>
-        <p style="font-size: 13px; color: #535c4d; text-align: center;">
+        <p style="font-size: 13px; color: ${BRAND.ink2}; text-align: center;">
           No login required — simply click the button to review.
         </p>
       </div>
     </div>
-    <p style="text-align: center; margin-top: 16px; font-size: 12px; color: #535c4d;">
-      Sent by <a href="${APP_URL}" style="color: #2f6b43; text-decoration: none; font-weight: 600;">Remi</a> on behalf of ${orgName}.
-    </p>
+    ${emailFooter(orgName)}
   </div>
 </body>
 </html>`;
@@ -922,29 +928,25 @@ export async function sendCatalogueReadyEmail(orderId: string) {
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin: 0; padding: 0; background-color: #f6f4ec; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 560px; margin: 0 auto; padding: 24px 16px;">
-    <div style="text-align: center; padding: 24px 0;">
-      <h1 style="margin: 0; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 26px; font-weight: 800; color: #2f6b43; letter-spacing: -0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#5bb579;margin-left:3px;"></span></h1>
-    </div>
-    <div style="background: #ffffff; border: 1px solid #e7e1d3; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+    ${emailHeader()}
+    <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
       <div style="padding: 28px 24px; text-align: center;">
-        <p style="margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: #535c4d;">${showDate}</p>
-        <h2 style="margin: 0 0 12px; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-weight: 800; letter-spacing: -0.015em; font-size: 22px; color: #1b241d;">${show.name}</h2>
-        <p style="margin: 0 0 20px; font-size: 15px; color: #1b241d; line-height: 1.5;">
+        <p style="margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: ${BRAND.ink2};">${showDate}</p>
+        <h2 style="margin: 0 0 12px; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-weight: 800; letter-spacing: -0.015em; font-size: 22px; color: ${BRAND.ink};">${show.name}</h2>
+        <p style="margin: 0 0 20px; font-size: 15px; color: ${BRAND.ink}; line-height: 1.5;">
           Good morning${exhibitor.name ? `, ${exhibitor.name.split(' ')[0]}` : ''} — your catalogue is ready.
         </p>
         <div style="margin: 0 0 16px;">
           ${btn(catalogueUrl, 'Open Your Catalogue')}
         </div>
-        <p style="margin: 0; font-size: 13px; color: #535c4d;">
+        <p style="margin: 0; font-size: 13px; color: ${BRAND.ink2};">
           Best of luck in the ring today!
         </p>
       </div>
     </div>
-    <div style="text-align: center; padding: 24px 16px; font-size: 12px; color: #535c4d;">
-      <p style="margin: 0;">Sent by <a href="${APP_URL}" style="color: #2f6b43; text-decoration: none; font-weight: 600;">Remi</a>.</p>
-    </div>
+    ${emailFooter()}
   </div>
 </body>
 </html>`;

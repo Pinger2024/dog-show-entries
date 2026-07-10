@@ -84,7 +84,7 @@ export default function CatalogueSettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className={cn(SE_H, 'flex items-center gap-2 text-2xl font-bold')}>
+        <h1 className={cn(SE_H, 'flex items-center gap-2 text-2xl')}>
           <BookOpen className="size-6 text-primary" />
           Catalogue Settings
         </h1>

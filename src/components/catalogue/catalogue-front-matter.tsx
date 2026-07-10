@@ -6,6 +6,7 @@ import { ownerHeading, uppercaseName, formatOwnerKC } from './catalogue-utils';
 import { buildBestAwards } from '@/lib/best-awards';
 import { MastheadBand, TonalWash, ClubCrestSlot } from '@/components/sv-pdf/cover-atoms';
 import { ss, SV, SV_FONTS } from '@/components/schedule/shared/sv-styles';
+import { Numero } from '@/components/schedule/shared/numero';
 
 const SHOW_TYPE_LABELS: Record<string, string> = {
   championship: 'Championship Show',
@@ -697,10 +698,8 @@ function SvCoverPage({ show, classCount }: { show: CatalogueShowInfo; classCount
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
           <Text style={[ss.eyebrow, { maxWidth: '60%' }]}>{show.name}</Text>
           {show.kcLicenceNo ? (
-            // The "№" glyph isn't in Hanken Grotesk's latin subset — nest a
-            // differently-styled run just for that character (2026-07-10).
             <Text style={[ss.eyebrow, { color: SV.ink3 }]}>
-              <Text style={{ fontFamily: 'Inter' }}>№</Text> {show.kcLicenceNo}
+              <Numero /> {show.kcLicenceNo}
             </Text>
           ) : null}
         </View>

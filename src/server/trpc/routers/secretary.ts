@@ -9,6 +9,7 @@ import { verifyOrgAccess } from '../verify-org-access';
 import { getBaseUrl } from '@/server/lib/utils';
 import { ACHIEVEMENT_TYPES } from '@/lib/placements';
 import { computeOrderFees, type FeeContext } from '@/lib/fee-calc';
+import { BRAND } from '@/lib/brand';
 import {
   shows,
   entries,
@@ -4277,20 +4278,20 @@ export const secretaryRouter = createTRPCRouter({
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
-<body style="margin: 0; padding: 0; background-color: #f6f4ec; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
 
     <!-- Header -->
     <div style="text-align: center; padding: 24px 0;">
-      <h1 style="margin: 0; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 26px; font-weight: 800; color: #2f6b43; letter-spacing: -0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#5bb579;margin-left:3px;"></span></h1>
+      <h1 style="margin: 0; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 26px; font-weight: 800; color: ${BRAND.green}; letter-spacing: -0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${BRAND.fresh};margin-left:3px;"></span></h1>
     </div>
 
     <!-- Main card -->
-    <div style="background: #ffffff; border: 1px solid #e7e1d3; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+    <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
 
       <!-- Banner -->
-      <div style="background: #20452c; padding: 24px 24px 20px; text-align: center;">
-        <h2 style="margin: 0; color: #f3ecdc; font-size: 22px; font-weight: 700;">Judging Appointment Offer</h2>
+      <div style="background: ${BRAND.deep}; padding: 24px 24px 20px; text-align: center;">
+        <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 22px; font-weight: 700;">Judging Appointment Offer</h2>
         <p style="margin: 8px 0 0; color: rgba(243, 236, 220, 0.78); font-size: 14px;">
           from ${orgName}
         </p>
@@ -4298,34 +4299,34 @@ export const secretaryRouter = createTRPCRouter({
 
       <!-- Letter body -->
       <div style="padding: 24px;">
-        <p style="font-size: 15px; color: #1b241d; line-height: 1.6;">
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           Dear ${judge.name},
         </p>
-        <p style="font-size: 15px; color: #1b241d; line-height: 1.6;">
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           On behalf of ${orgName}, I have much pleasure in inviting you to judge at our forthcoming show. The details are as follows:
         </p>
 
         <!-- Show details table -->
         <table style="width: 100%; margin: 20px 0; border-collapse: collapse;">
           <tr>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; font-weight: 600; color: #1b241d; width: 120px;">Show</td>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; color: #1b241d;">${show.name}</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink}; width: 120px;">Show</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${show.name}</td>
           </tr>
           <tr>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; font-weight: 600; color: #1b241d;">Date</td>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; color: #1b241d;">${showDate}</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Date</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${showDate}</td>
           </tr>
           <tr>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; font-weight: 600; color: #1b241d;">Venue</td>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; color: #1b241d;">${venue}</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Venue</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${venue}</td>
           </tr>
           <tr>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; font-weight: 600; color: #1b241d;">Breed</td>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; color: #1b241d;">${breedLine}</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Breed</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${breedLine}</td>
           </tr>
           <tr>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; font-weight: 600; color: #1b241d;">Classification</td>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; color: #1b241d;">${classificationLine}</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Classification</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${classificationLine}</td>
           </tr>
           ${(() => {
             // SV/WUSV regional shows still carry show_type='championship' on
@@ -4336,8 +4337,8 @@ export const secretaryRouter = createTRPCRouter({
               ? 'Regional'
               : (show.showType ? show.showType.replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) : null);
             return showTypeText ? `<tr>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; font-weight: 600; color: #1b241d;">Show Type</td>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; color: #1b241d;">${showTypeText}</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Show Type</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${showTypeText}</td>
           </tr>` : '';
           })()}
           ${(() => {
@@ -4348,39 +4349,39 @@ export const secretaryRouter = createTRPCRouter({
             if (parts.length === 0) return '';
             const expText = parts.join(', ') + (input.expenseNotes ? ` (${input.expenseNotes})` : '');
             return `<tr>
-              <td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; font-weight: 600; color: #1b241d;">Expenses</td>
-              <td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; color: #1b241d;">${expText}</td>
+              <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Expenses</td>
+              <td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${expText}</td>
             </tr>`;
           })()}
         </table>
 
-        ${input.notes ? `<p style="font-size: 14px; color: #535c4d; line-height: 1.6; padding: 12px; background: #f2ede1; border-radius: 8px;">${input.notes}</p>` : ''}
+        ${input.notes ? `<p style="font-size: 14px; color: ${BRAND.ink2}; line-height: 1.6; padding: 12px; background: ${BRAND.paper}; border-radius: 8px;">${input.notes}</p>` : ''}
 
-        <p style="font-size: 15px; color: #1b241d; line-height: 1.6;">
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           If you are willing to accept this appointment, please confirm by clicking the button below. This constitutes the formal written offer as required under Royal Kennel Club regulations.
         </p>
 
         <!-- Buttons -->
         <div style="text-align: center; margin: 28px 0;">
           <a href="${acceptUrl}?action=accept"
-             style="display: inline-block; background: #2f6b43; color: #f3ecdc; padding: 14px 32px; border-radius: 13px; font-size: 16px; font-weight: 700; text-decoration: none; margin-bottom: 12px;">
+             style="display: inline-block; background: ${BRAND.green}; color: ${BRAND.cream}; padding: 14px 32px; border-radius: 13px; font-size: 16px; font-weight: 700; text-decoration: none; margin-bottom: 12px;">
             Accept Appointment
           </a>
           <br>
           <a href="${acceptUrl}?action=decline"
-             style="display: inline-block; color: #535c4d; padding: 8px 16px; font-size: 13px; text-decoration: underline; margin-top: 8px;">
+             style="display: inline-block; color: ${BRAND.ink2}; padding: 8px 16px; font-size: 13px; text-decoration: underline; margin-top: 8px;">
             Decline
           </a>
         </div>
 
-        <p style="font-size: 13px; color: #535c4d; line-height: 1.5; text-align: center;">
+        <p style="font-size: 13px; color: ${BRAND.ink2}; line-height: 1.5; text-align: center;">
           This link will expire on ${tokenExpiresAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.
         </p>
       </div>
     </div>
 
     <!-- Footer -->
-    <div style="text-align: center; padding: 24px 16px; font-size: 12px; color: #535c4d;">
+    <div style="text-align: center; padding: 24px 16px; font-size: 12px; color: ${BRAND.ink2};">
       <p style="margin: 0;">
         This offer was sent by <strong>Remi</strong> on behalf of ${orgName}.
       </p>
@@ -4491,39 +4492,39 @@ export const secretaryRouter = createTRPCRouter({
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
-<body style="margin: 0; padding: 0; background-color: #f6f4ec; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
     <div style="text-align: center; padding: 24px 0;">
-      <h1 style="margin: 0; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 26px; font-weight: 800; color: #2f6b43; letter-spacing: -0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#5bb579;margin-left:3px;"></span></h1>
+      <h1 style="margin: 0; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 26px; font-weight: 800; color: ${BRAND.green}; letter-spacing: -0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${BRAND.fresh};margin-left:3px;"></span></h1>
     </div>
-    <div style="background: #ffffff; border: 1px solid #e7e1d3; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-      <div style="background: #20452c; padding: 24px 24px 20px; text-align: center;">
-        <h2 style="margin: 0; color: #f3ecdc; font-size: 22px; font-weight: 700;">Judging Appointment Offer</h2>
+    <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: ${BRAND.deep}; padding: 24px 24px 20px; text-align: center;">
+        <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 22px; font-weight: 700;">Judging Appointment Offer</h2>
         <p style="margin: 8px 0 0; color: rgba(243, 236, 220, 0.78); font-size: 14px;">Reminder from ${orgName}</p>
       </div>
       <div style="padding: 24px;">
-        <p style="font-size: 15px; color: #1b241d; line-height: 1.6;">Dear ${contract.judgeName},</p>
-        <p style="font-size: 15px; color: #1b241d; line-height: 1.6;">
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">Dear ${contract.judgeName},</p>
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           This is a reminder regarding our invitation for you to judge at our show. We would be delighted if you could confirm your acceptance at your earliest convenience.
         </p>
         <table style="width: 100%; margin: 20px 0; border-collapse: collapse;">
-          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; font-weight: 600; color: #1b241d; width: 120px;">Show</td><td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; color: #1b241d;">${show.name}</td></tr>
-          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; font-weight: 600; color: #1b241d;">Date</td><td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; color: #1b241d;">${showDate}</td></tr>
-          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; font-weight: 600; color: #1b241d;">Venue</td><td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; color: #1b241d;">${venue}</td></tr>
-          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; font-weight: 600; color: #1b241d;">Breed</td><td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; color: #1b241d;">${breedLine}</td></tr>
-          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; font-weight: 600; color: #1b241d;">Classification</td><td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; color: #1b241d;">${classificationLine}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink}; width: 120px;">Show</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${show.name}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Date</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${showDate}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Venue</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${venue}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Breed</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${breedLine}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Classification</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${classificationLine}</td></tr>
         </table>
         <div style="text-align: center; margin: 28px 0;">
-          <a href="${acceptUrl}?action=accept" style="display: inline-block; background: #2f6b43; color: #f3ecdc; padding: 14px 32px; border-radius: 13px; font-size: 16px; font-weight: 700; text-decoration: none; margin-bottom: 12px;">Accept Appointment</a>
+          <a href="${acceptUrl}?action=accept" style="display: inline-block; background: ${BRAND.green}; color: ${BRAND.cream}; padding: 14px 32px; border-radius: 13px; font-size: 16px; font-weight: 700; text-decoration: none; margin-bottom: 12px;">Accept Appointment</a>
           <br>
-          <a href="${acceptUrl}?action=decline" style="display: inline-block; color: #535c4d; padding: 8px 16px; font-size: 13px; text-decoration: underline; margin-top: 8px;">Decline</a>
+          <a href="${acceptUrl}?action=decline" style="display: inline-block; color: ${BRAND.ink2}; padding: 8px 16px; font-size: 13px; text-decoration: underline; margin-top: 8px;">Decline</a>
         </div>
-        <p style="font-size: 13px; color: #535c4d; line-height: 1.5; text-align: center;">
+        <p style="font-size: 13px; color: ${BRAND.ink2}; line-height: 1.5; text-align: center;">
           This link will expire on ${tokenExpiresAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.
         </p>
       </div>
     </div>
-    <div style="text-align: center; padding: 24px 16px; font-size: 12px; color: #535c4d;">
+    <div style="text-align: center; padding: 24px 16px; font-size: 12px; color: ${BRAND.ink2};">
       <p style="margin: 0;">This offer was sent by <strong>Remi</strong> on behalf of ${orgName}.</p>
     </div>
   </div>
@@ -4657,38 +4658,38 @@ export const secretaryRouter = createTRPCRouter({
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
-<body style="margin: 0; padding: 0; background-color: #f6f4ec; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+<body style="margin: 0; padding: 0; background-color: ${BRAND.paper}; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
     <div style="text-align: center; padding: 24px 0;">
-      <h1 style="margin: 0; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 26px; font-weight: 800; color: #2f6b43; letter-spacing: -0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#5bb579;margin-left:3px;"></span></h1>
+      <h1 style="margin: 0; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 26px; font-weight: 800; color: ${BRAND.green}; letter-spacing: -0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${BRAND.fresh};margin-left:3px;"></span></h1>
     </div>
-    <div style="background: #ffffff; border: 1px solid #e7e1d3; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-      <div style="background: #20452c; padding: 24px 24px 20px; text-align: center;">
+    <div style="background: #ffffff; border: 1px solid ${BRAND.line}; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: ${BRAND.deep}; padding: 24px 24px 20px; text-align: center;">
         <div style="font-size: 32px; margin-bottom: 8px;">&#10003;</div>
-        <h2 style="margin: 0; color: #f3ecdc; font-size: 22px; font-weight: 700;">Appointment Confirmed</h2>
+        <h2 style="margin: 0; color: ${BRAND.cream}; font-size: 22px; font-weight: 700;">Appointment Confirmed</h2>
       </div>
       <div style="padding: 24px;">
-        <p style="font-size: 15px; color: #1b241d; line-height: 1.6;">Dear ${contract.judgeName},</p>
-        <p style="font-size: 15px; color: #1b241d; line-height: 1.6;">
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">Dear ${contract.judgeName},</p>
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           Thank you for accepting our invitation. This letter confirms your appointment to judge at our show. Please retain this as your formal confirmation.
         </p>
         <table style="width: 100%; margin: 20px 0; border-collapse: collapse;">
-          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; font-weight: 600; color: #1b241d; width: 120px;">Show</td><td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; color: #1b241d;">${show.name}</td></tr>
-          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; font-weight: 600; color: #1b241d;">Date</td><td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; color: #1b241d;">${showDate}</td></tr>
-          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; font-weight: 600; color: #1b241d;">Venue</td><td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; color: #1b241d;">${venue}</td></tr>
-          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; font-weight: 600; color: #1b241d;">Breeds</td><td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; color: #1b241d;">${breedsText}</td></tr>
-          <tr><td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; font-weight: 600; color: #1b241d;">Ring(s)</td><td style="padding: 10px 12px; border-bottom: 1px solid #e7e1d3; color: #1b241d;">${ringsText}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink}; width: 120px;">Show</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${show.name}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Date</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${showDate}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Venue</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${venue}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Breeds</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${breedsText}</td></tr>
+          <tr><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; font-weight: 600; color: ${BRAND.ink};">Ring(s)</td><td style="padding: 10px 12px; border-bottom: 1px solid ${BRAND.line}; color: ${BRAND.ink};">${ringsText}</td></tr>
         </table>
-        <p style="font-size: 15px; color: #1b241d; line-height: 1.6;">
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6;">
           Further details regarding entry numbers and the running order will be sent to you closer to the show date. We look forward to welcoming you.
         </p>
-        <p style="font-size: 15px; color: #1b241d; line-height: 1.6; margin-top: 24px;">
+        <p style="font-size: 15px; color: ${BRAND.ink}; line-height: 1.6; margin-top: 24px;">
           Yours sincerely,<br>
           <strong>${orgName}</strong>
         </p>
       </div>
     </div>
-    <div style="text-align: center; padding: 24px 16px; font-size: 12px; color: #535c4d;">
+    <div style="text-align: center; padding: 24px 16px; font-size: 12px; color: ${BRAND.ink2};">
       <p style="margin: 0;">This confirmation was sent by <strong>Remi</strong> on behalf of ${orgName}.</p>
     </div>
   </div>
@@ -5055,29 +5056,29 @@ export const secretaryRouter = createTRPCRouter({
             replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
             subject: `Judging Offer — ${show.name}`,
             html: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background-color:#f6f4ec;font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<body style="margin:0;padding:0;background-color:${BRAND.paper};font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
 <div style="max-width:600px;margin:0 auto;padding:24px 16px;">
-  <div style="text-align:center;padding:24px 0;"><h1 style="margin:0;font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:26px;font-weight:800;color:#2f6b43;letter-spacing:-0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#5bb579;margin-left:3px;"></span></h1></div>
-  <div style="background:#fff;border:1px solid #e7e1d3;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-    <div style="background:#20452c;padding:24px;text-align:center;">
-      <h2 style="margin:0;color:#f3ecdc;font-size:22px;font-weight:700;">Judging Appointment Offer</h2>
+  <div style="text-align:center;padding:24px 0;"><h1 style="margin:0;font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:26px;font-weight:800;color:${BRAND.green};letter-spacing:-0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${BRAND.fresh};margin-left:3px;"></span></h1></div>
+  <div style="background:#fff;border:1px solid ${BRAND.line};border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="background:${BRAND.deep};padding:24px;text-align:center;">
+      <h2 style="margin:0;color:${BRAND.cream};font-size:22px;font-weight:700;">Judging Appointment Offer</h2>
       <p style="margin:8px 0 0;color:rgba(243,236,220,0.78);font-size:14px;">from ${orgName}</p>
     </div>
     <div style="padding:24px;">
-      <p style="font-size:15px;color:#1b241d;line-height:1.6;">Dear ${judge.name},</p>
-      <p style="font-size:15px;color:#1b241d;line-height:1.6;">On behalf of ${orgName}, I have much pleasure in inviting you to judge at our forthcoming show.</p>
+      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;">Dear ${judge.name},</p>
+      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;">On behalf of ${orgName}, I have much pleasure in inviting you to judge at our forthcoming show.</p>
       <table style="width:100%;margin:20px 0;border-collapse:collapse;">
-        <tr><td style="padding:10px 12px;border-bottom:1px solid #e7e1d3;font-weight:600;color:#1b241d;width:120px;">Show</td><td style="padding:10px 12px;border-bottom:1px solid #e7e1d3;">${show.name}</td></tr>
-        <tr><td style="padding:10px 12px;border-bottom:1px solid #e7e1d3;font-weight:600;color:#1b241d;">Date</td><td style="padding:10px 12px;border-bottom:1px solid #e7e1d3;">${showDate}</td></tr>
-        <tr><td style="padding:10px 12px;border-bottom:1px solid #e7e1d3;font-weight:600;color:#1b241d;">Venue</td><td style="padding:10px 12px;border-bottom:1px solid #e7e1d3;">${venue}</td></tr>
-        <tr><td style="padding:10px 12px;border-bottom:1px solid #e7e1d3;font-weight:600;color:#1b241d;">Breeds</td><td style="padding:10px 12px;border-bottom:1px solid #e7e1d3;">${breedsText}</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};font-weight:600;color:${BRAND.ink};width:120px;">Show</td><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};">${show.name}</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};font-weight:600;color:${BRAND.ink};">Date</td><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};">${showDate}</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};font-weight:600;color:${BRAND.ink};">Venue</td><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};">${venue}</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};font-weight:600;color:${BRAND.ink};">Breeds</td><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};">${breedsText}</td></tr>
       </table>
-      <p style="font-size:15px;color:#1b241d;line-height:1.6;">Please confirm by clicking below.</p>
+      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;">Please confirm by clicking below.</p>
       <div style="text-align:center;margin:28px 0;">
-        <a href="${acceptUrl}?action=accept" style="display:inline-block;background:#2f6b43;color:#f3ecdc;padding:14px 32px;border-radius:13px;font-size:16px;font-weight:700;text-decoration:none;">Accept Appointment</a>
-        <br><a href="${acceptUrl}?action=decline" style="display:inline-block;color:#535c4d;padding:8px 16px;font-size:13px;text-decoration:underline;margin-top:8px;">Decline</a>
+        <a href="${acceptUrl}?action=accept" style="display:inline-block;background:${BRAND.green};color:${BRAND.cream};padding:14px 32px;border-radius:13px;font-size:16px;font-weight:700;text-decoration:none;">Accept Appointment</a>
+        <br><a href="${acceptUrl}?action=decline" style="display:inline-block;color:${BRAND.ink2};padding:8px 16px;font-size:13px;text-decoration:underline;margin-top:8px;">Decline</a>
       </div>
-      <p style="font-size:13px;color:#535c4d;text-align:center;">This link expires on ${tokenExpiresAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.</p>
+      <p style="font-size:13px;color:${BRAND.ink2};text-align:center;">This link expires on ${tokenExpiresAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.</p>
     </div>
   </div>
 </div></body></html>`,
@@ -5179,26 +5180,26 @@ export const secretaryRouter = createTRPCRouter({
             replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
             subject: `Appointment Confirmed — ${show.name}`,
             html: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background-color:#f6f4ec;font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<body style="margin:0;padding:0;background-color:${BRAND.paper};font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
 <div style="max-width:600px;margin:0 auto;padding:24px 16px;">
-  <div style="text-align:center;padding:24px 0;"><h1 style="margin:0;font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:26px;font-weight:800;color:#2f6b43;letter-spacing:-0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#5bb579;margin-left:3px;"></span></h1></div>
-  <div style="background:#fff;border:1px solid #e7e1d3;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-    <div style="background:#20452c;padding:24px;text-align:center;">
+  <div style="text-align:center;padding:24px 0;"><h1 style="margin:0;font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:26px;font-weight:800;color:${BRAND.green};letter-spacing:-0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${BRAND.fresh};margin-left:3px;"></span></h1></div>
+  <div style="background:#fff;border:1px solid ${BRAND.line};border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="background:${BRAND.deep};padding:24px;text-align:center;">
       <div style="font-size:32px;margin-bottom:8px;">&#10003;</div>
-      <h2 style="margin:0;color:#f3ecdc;font-size:22px;font-weight:700;">Appointment Confirmed</h2>
+      <h2 style="margin:0;color:${BRAND.cream};font-size:22px;font-weight:700;">Appointment Confirmed</h2>
     </div>
     <div style="padding:24px;">
-      <p style="font-size:15px;color:#1b241d;line-height:1.6;">Dear ${contract.judgeName},</p>
-      <p style="font-size:15px;color:#1b241d;line-height:1.6;">Thank you for accepting our invitation. This confirms your appointment to judge at our show.</p>
+      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;">Dear ${contract.judgeName},</p>
+      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;">Thank you for accepting our invitation. This confirms your appointment to judge at our show.</p>
       <table style="width:100%;margin:20px 0;border-collapse:collapse;">
-        <tr><td style="padding:10px 12px;border-bottom:1px solid #e7e1d3;font-weight:600;color:#1b241d;width:120px;">Show</td><td style="padding:10px 12px;border-bottom:1px solid #e7e1d3;">${show.name}</td></tr>
-        <tr><td style="padding:10px 12px;border-bottom:1px solid #e7e1d3;font-weight:600;color:#1b241d;">Date</td><td style="padding:10px 12px;border-bottom:1px solid #e7e1d3;">${showDate}</td></tr>
-        <tr><td style="padding:10px 12px;border-bottom:1px solid #e7e1d3;font-weight:600;color:#1b241d;">Venue</td><td style="padding:10px 12px;border-bottom:1px solid #e7e1d3;">${venue}</td></tr>
-        <tr><td style="padding:10px 12px;border-bottom:1px solid #e7e1d3;font-weight:600;color:#1b241d;">Breeds</td><td style="padding:10px 12px;border-bottom:1px solid #e7e1d3;">${breedsText}</td></tr>
-        <tr><td style="padding:10px 12px;border-bottom:1px solid #e7e1d3;font-weight:600;color:#1b241d;">Ring(s)</td><td style="padding:10px 12px;border-bottom:1px solid #e7e1d3;">${ringsText}</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};font-weight:600;color:${BRAND.ink};width:120px;">Show</td><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};">${show.name}</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};font-weight:600;color:${BRAND.ink};">Date</td><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};">${showDate}</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};font-weight:600;color:${BRAND.ink};">Venue</td><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};">${venue}</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};font-weight:600;color:${BRAND.ink};">Breeds</td><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};">${breedsText}</td></tr>
+        <tr><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};font-weight:600;color:${BRAND.ink};">Ring(s)</td><td style="padding:10px 12px;border-bottom:1px solid ${BRAND.line};">${ringsText}</td></tr>
       </table>
-      <p style="font-size:15px;color:#1b241d;line-height:1.6;">Further details regarding entry numbers will be sent closer to the show date. We look forward to welcoming you.</p>
-      <p style="font-size:15px;color:#1b241d;line-height:1.6;margin-top:24px;">Yours sincerely,<br><strong>${orgName}</strong></p>
+      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;">Further details regarding entry numbers will be sent closer to the show date. We look forward to welcoming you.</p>
+      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;margin-top:24px;">Yours sincerely,<br><strong>${orgName}</strong></p>
     </div>
   </div>
 </div></body></html>`,
@@ -5302,9 +5303,9 @@ export const secretaryRouter = createTRPCRouter({
 
       const classRows = classEntries.length > 0
         ? classEntries.map((c) =>
-            `<tr><td style="padding:8px 12px;border-bottom:1px solid #e7e1d3;font-size:14px;">${c.breedName ? `${c.breedName} — ` : ''}${c.className}</td><td style="padding:8px 12px;border-bottom:1px solid #e7e1d3;text-align:center;font-weight:600;">${c.entryCount}</td></tr>`
+            `<tr><td style="padding:8px 12px;border-bottom:1px solid ${BRAND.line};font-size:14px;">${c.breedName ? `${c.breedName} — ` : ''}${c.className}</td><td style="padding:8px 12px;border-bottom:1px solid ${BRAND.line};text-align:center;font-weight:600;">${c.entryCount}</td></tr>`
           ).join('')
-        : '<tr><td colspan="2" style="padding:12px;text-align:center;color:#535c4d;">No class data available yet</td></tr>';
+        : '<tr><td colspan="2" style="padding:12px;text-align:center;color:${BRAND.ink2};">No class data available yet</td></tr>';
 
       const resend = new Resend(process.env.RESEND_API_KEY);
       const emailFrom = process.env.EMAIL_FROM ?? 'Remi <noreply@remishowmanager.co.uk>';
@@ -5315,24 +5316,24 @@ export const secretaryRouter = createTRPCRouter({
         replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
         subject: `Entry Numbers — ${show.name}`,
         html: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background-color:#f6f4ec;font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<body style="margin:0;padding:0;background-color:${BRAND.paper};font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
 <div style="max-width:600px;margin:0 auto;padding:24px 16px;">
-  <div style="text-align:center;padding:24px 0;"><h1 style="margin:0;font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:26px;font-weight:800;color:#2f6b43;letter-spacing:-0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#5bb579;margin-left:3px;"></span></h1></div>
-  <div style="background:#fff;border:1px solid #e7e1d3;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-    <div style="background:#20452c;padding:24px;text-align:center;">
-      <h2 style="margin:0;color:#f3ecdc;font-size:22px;font-weight:700;">Entry Numbers</h2>
+  <div style="text-align:center;padding:24px 0;"><h1 style="margin:0;font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:26px;font-weight:800;color:${BRAND.green};letter-spacing:-0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${BRAND.fresh};margin-left:3px;"></span></h1></div>
+  <div style="background:#fff;border:1px solid ${BRAND.line};border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="background:${BRAND.deep};padding:24px;text-align:center;">
+      <h2 style="margin:0;color:${BRAND.cream};font-size:22px;font-weight:700;">Entry Numbers</h2>
       <p style="margin:8px 0 0;color:rgba(243,236,220,0.78);font-size:14px;">${show.name} — ${showDate}</p>
     </div>
     <div style="padding:24px;">
-      <p style="font-size:15px;color:#1b241d;line-height:1.6;">Dear ${judge.name},</p>
-      <p style="font-size:15px;color:#1b241d;line-height:1.6;">Please find below the entry numbers for your judging appointment. You will be judging <strong>${breedsText}</strong> with a total of <strong>${totalEntries}</strong> entries.</p>
+      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;">Dear ${judge.name},</p>
+      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;">Please find below the entry numbers for your judging appointment. You will be judging <strong>${breedsText}</strong> with a total of <strong>${totalEntries}</strong> entries.</p>
       <table style="width:100%;margin:20px 0;border-collapse:collapse;">
-        <tr><th style="padding:10px 12px;border-bottom:2px solid #2f6b43;text-align:left;font-size:14px;color:#1b241d;">Class</th><th style="padding:10px 12px;border-bottom:2px solid #2f6b43;text-align:center;font-size:14px;color:#1b241d;">Entries</th></tr>
+        <tr><th style="padding:10px 12px;border-bottom:2px solid ${BRAND.green};text-align:left;font-size:14px;color:${BRAND.ink};">Class</th><th style="padding:10px 12px;border-bottom:2px solid ${BRAND.green};text-align:center;font-size:14px;color:${BRAND.ink};">Entries</th></tr>
         ${classRows}
         <tr><td style="padding:10px 12px;font-weight:700;">Total</td><td style="padding:10px 12px;text-align:center;font-weight:700;">${totalEntries}</td></tr>
       </table>
-      <p style="font-size:15px;color:#1b241d;line-height:1.6;">We look forward to welcoming you on the day.</p>
-      <p style="font-size:15px;color:#1b241d;line-height:1.6;margin-top:24px;">Yours sincerely,<br><strong>${orgName}</strong></p>
+      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;">We look forward to welcoming you on the day.</p>
+      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;margin-top:24px;">Yours sincerely,<br><strong>${orgName}</strong></p>
     </div>
   </div>
 </div></body></html>`,
@@ -5398,7 +5399,7 @@ export const secretaryRouter = createTRPCRouter({
 
       const totalExpenses = (contract?.hotelCost ?? 0) + (contract?.travelCost ?? 0) + (contract?.otherExpenses ?? 0);
       const expenseSection = totalExpenses > 0 ? `
-        <p style="font-size:14px;color:#535c4d;line-height:1.6;padding:12px;background:#f2ede1;border-radius:8px;margin-top:16px;">
+        <p style="font-size:14px;color:${BRAND.ink2};line-height:1.6;padding:12px;background:${BRAND.paper};border-radius:8px;margin-top:16px;">
           <strong>Expenses Summary:</strong><br>
           ${contract?.hotelCost ? `Hotel: £${penceToPoundsString(contract.hotelCost)}<br>` : ''}
           ${contract?.travelCost ? `Travel: £${penceToPoundsString(contract.travelCost)}<br>` : ''}
@@ -5415,19 +5416,19 @@ export const secretaryRouter = createTRPCRouter({
         replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
         subject: `Thank You — ${show.name}`,
         html: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background-color:#f6f4ec;font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<body style="margin:0;padding:0;background-color:${BRAND.paper};font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
 <div style="max-width:600px;margin:0 auto;padding:24px 16px;">
-  <div style="text-align:center;padding:24px 0;"><h1 style="margin:0;font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:26px;font-weight:800;color:#2f6b43;letter-spacing:-0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#5bb579;margin-left:3px;"></span></h1></div>
-  <div style="background:#fff;border:1px solid #e7e1d3;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-    <div style="background:#20452c;padding:24px;text-align:center;">
-      <h2 style="margin:0;color:#f3ecdc;font-size:22px;font-weight:700;">Thank You</h2>
+  <div style="text-align:center;padding:24px 0;"><h1 style="margin:0;font-family:'Hanken Grotesk',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:26px;font-weight:800;color:${BRAND.green};letter-spacing:-0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${BRAND.fresh};margin-left:3px;"></span></h1></div>
+  <div style="background:#fff;border:1px solid ${BRAND.line};border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="background:${BRAND.deep};padding:24px;text-align:center;">
+      <h2 style="margin:0;color:${BRAND.cream};font-size:22px;font-weight:700;">Thank You</h2>
       <p style="margin:8px 0 0;color:rgba(243,236,220,0.78);font-size:14px;">${show.name}</p>
     </div>
     <div style="padding:24px;">
-      <p style="font-size:15px;color:#1b241d;line-height:1.6;">Dear ${judge.name},</p>
-      <p style="font-size:15px;color:#1b241d;line-height:1.6;">${customMessage}</p>
+      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;">Dear ${judge.name},</p>
+      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;">${customMessage}</p>
       ${expenseSection}
-      <p style="font-size:15px;color:#1b241d;line-height:1.6;margin-top:24px;">With kind regards,<br><strong>${orgName}</strong></p>
+      <p style="font-size:15px;color:${BRAND.ink};line-height:1.6;margin-top:24px;">With kind regards,<br><strong>${orgName}</strong></p>
     </div>
   </div>
 </div></body></html>`,

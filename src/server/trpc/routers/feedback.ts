@@ -5,6 +5,7 @@ import { Resend } from 'resend';
 import { protectedProcedure } from '../procedures';
 import { createTRPCRouter } from '../init';
 import { feedback } from '@/server/db/schema';
+import { BRAND } from '@/lib/brand';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -75,17 +76,17 @@ export const feedbackRouter = createTRPCRouter({
             to: notifyEmails,
             replyTo: process.env.FEEDBACK_EMAIL ?? 'feedback@remishowmanager.co.uk',
             subject: `Support request from ${fromName ?? fromEmail}: ${input.subject}`,
-            html: `<div style="font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px 20px; background-color: #f6f4ec; color: #1b241d;">
-<h2 style="margin: 0 0 12px; font-size: 20px; font-weight: 800; letter-spacing: -0.015em; color: #2f6b43;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#5bb579;margin-left:3px;"></span></h2>
-<h3 style="color: #1b241d; font-size: 16px; margin: 0 0 12px;">New Support Request</h3>
+            html: `<div style="font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px 20px; background-color: ${BRAND.paper}; color: ${BRAND.ink};">
+<h2 style="margin: 0 0 12px; font-size: 20px; font-weight: 800; letter-spacing: -0.015em; color: ${BRAND.green};">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${BRAND.fresh};margin-left:3px;"></span></h2>
+<h3 style="color: ${BRAND.ink}; font-size: 16px; margin: 0 0 12px;">New Support Request</h3>
 <p><strong>From:</strong> ${displaySender}</p>
 <p><strong>Subject:</strong> ${input.subject}</p>
 <p><strong>Page:</strong> ${input.pageUrl}</p>
-<hr style="border: none; border-top: 1px solid #e7e1d3; margin: 16px 0;">
+<hr style="border: none; border-top: 1px solid ${BRAND.line}; margin: 16px 0;">
 <p style="white-space: pre-wrap;">${input.body}</p>
-${input.attachmentUrl ? `<p style="margin: 12px 0;"><strong>Attachment:</strong> <a href="${input.attachmentUrl}">${input.attachmentFileName ?? 'View attachment'}</a></p><img src="${input.attachmentUrl}" alt="Attachment" style="max-width: 100%; border-radius: 8px; border: 1px solid #e7e1d3;">` : ''}
-<hr style="border: none; border-top: 1px solid #e7e1d3; margin: 16px 0;">
-<p style="color: #535c4d; font-size: 13px;">
+${input.attachmentUrl ? `<p style="margin: 12px 0;"><strong>Attachment:</strong> <a href="${input.attachmentUrl}">${input.attachmentFileName ?? 'View attachment'}</a></p><img src="${input.attachmentUrl}" alt="Attachment" style="max-width: 100%; border-radius: 8px; border: 1px solid ${BRAND.line};">` : ''}
+<hr style="border: none; border-top: 1px solid ${BRAND.line}; margin: 16px 0;">
+<p style="color: ${BRAND.ink2}; font-size: 13px;">
 <strong>Diagnostics:</strong><br>
 ${diagnostics.replace(/\n/g, '<br>')}
 </p>
