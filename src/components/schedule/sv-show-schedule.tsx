@@ -34,7 +34,7 @@ import type {
   ScheduleAdvert,
 } from './shared/types';
 import { groupSvClasses, type SvNumberedClass } from './shared/sv-classification';
-import { buildRegionalFeeDisplay, regionalClassFlatFee } from '@/lib/regional-fee-calc';
+import { buildRegionalFeeDisplay, buildRegionalSpecialClassFees } from '@/lib/regional-fee-calc';
 import type { RegionalFeeConfig } from '@/server/db/schema/shows';
 import { ss, SV, SV_FONTS } from './shared/sv-styles';
 import { AdvertPage, selectAdverts } from './shared/advert-page';
@@ -365,19 +365,9 @@ function SpecialClassFeeRows({
   config: RegionalFeeConfig;
   classes: ScheduleClass[];
 }) {
-  const rows = new Map<string, { label: string; fee: number }>();
-  for (const c of classes) {
-    const flat = regionalClassFlatFee(
-      { className: c.className, classType: c.classType, entryFee: c.entryFee ?? null },
-      config.tiers,
-    );
-    if (flat == null) continue;
-    const label = c.className.replace(/^SV\s+/, '');
-    rows.set(`${label}|${flat}`, { label, fee: flat });
-  }
   return (
     <>
-      {Array.from(rows.values()).map((r) => (
+      {buildRegionalSpecialClassFees(classes, config.tiers).map((r) => (
         <FeeRow
           key={`${r.label}-${r.fee}`}
           label={`${r.label} · per dog`}

@@ -20,6 +20,7 @@
  * This engine computes the ENTRY-FEE subtotal only. Catalogue, sundries,
  * discretionary donation and any platform fee are layered on at checkout.
  */
+import { svDisplayAge } from './class-labels';
 
 export type RegionalDogEntryInput = {
   /** Stable id used as the key in the per-entry breakdown (typically entry.id). */
@@ -190,6 +191,61 @@ export function buildRegionalFeeDisplay(config: {
       threePlusPence: priceAt(lvl, 1) + priceAt(lvl, 2) + priceAt(lvl, 3),
     })),
   };
+}
+
+/** The flat fee for the (single) class a regional dog entry sits in, or null
+ *  when the class prices on the per-dog scale. One lookup shared by checkout
+ *  and the enter-page preview so the two can't disagree. */
+export function resolveClassFlatFee(
+  classId: string | undefined,
+  classes: ReadonlyMap<
+    string,
+    {
+      entryFee: number | null;
+      classDefinition?: { name: string | null; type: string | null } | null;
+    }
+  >,
+  tiers: RegionalFeeTier[],
+): number | null {
+  const sc = classId ? classes.get(classId) : undefined;
+  if (!sc) return null;
+  return regionalClassFlatFee(
+    {
+      className: sc.classDefinition?.name,
+      classType: sc.classDefinition?.type,
+      entryFee: sc.entryFee,
+    },
+    tiers,
+  );
+}
+
+export type RegionalSpecialClassFee = { label: string; fee: number };
+
+/**
+ * Distinct flat-priced special classes for the fee panels — one row per
+ * (display name, fee), e.g. one "Baby Puppy £10" row from the four sex/coat
+ * class variants. Shared by the schedule PDF and the public show page so
+ * their rows can't drift (same pattern as `buildRegionalFeeDisplay`).
+ */
+export function buildRegionalSpecialClassFees(
+  classes: ReadonlyArray<{
+    className?: string | null;
+    classType?: string | null;
+    entryFee?: number | null;
+  }>,
+  tiers: RegionalFeeTier[],
+): RegionalSpecialClassFee[] {
+  const rows = new Map<string, RegionalSpecialClassFee>();
+  for (const c of classes) {
+    const flat = regionalClassFlatFee(
+      { className: c.className, classType: c.classType, entryFee: c.entryFee ?? null },
+      tiers,
+    );
+    if (flat == null) continue;
+    const label = svDisplayAge(c.className);
+    rows.set(`${label}|${flat}`, { label, fee: flat });
+  }
+  return Array.from(rows.values());
 }
 
 /**

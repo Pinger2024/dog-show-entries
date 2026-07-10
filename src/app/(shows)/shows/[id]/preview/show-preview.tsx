@@ -31,8 +31,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { displayShowTypeLabel } from '@/lib/show-types';
 import { formatCurrency } from '@/lib/date-utils';
-import { buildRegionalFeeDisplay, regionalClassFlatFee } from '@/lib/regional-fee-calc';
-import type { RegionalFeeConfig } from '@/server/db/schema/shows';
+import { buildRegionalFeeDisplay, buildRegionalSpecialClassFees } from '@/lib/regional-fee-calc';
 import { ShareKitDialog } from '@/components/show/share-kit-dialog';
 import { ShareKitCard } from '@/components/show/share-kit';
 import { cn } from '@/lib/utils';
@@ -580,31 +579,22 @@ export function ShowPreviewClient() {
    * Mandy 2026-07-10), so the public panel can't promise a price the till
    * doesn't charge. */
   const regionalCfg =
-    ((show as { showRuleset?: string; regionalFeeConfig?: RegionalFeeConfig | null } | null | undefined)
-      ?.showRuleset === 'wusv'
-      ? (show as { regionalFeeConfig?: RegionalFeeConfig | null }).regionalFeeConfig
-      : null) ?? null;
-  const regionalFeeDisplay = regionalCfg ? buildRegionalFeeDisplay(regionalCfg) : null;
-  const regionalSpecialClassFees = useMemo(() => {
-    if (!regionalCfg) return [] as Array<{ label: string; fee: number }>;
-    const showAny = show as {
-      showClasses?: Array<{ entryFee?: number | null; classDefinition?: { name?: string; type?: string } }>;
-    } | null;
-    const seen = new Map<string, { label: string; fee: number }>();
-    for (const sc of showAny?.showClasses ?? []) {
-      const flat = regionalClassFlatFee(
-        {
+    show?.showRuleset === 'wusv' ? show.regionalFeeConfig ?? null : null;
+  const regionalFees = useMemo(() => {
+    if (!regionalCfg) return null;
+    return {
+      ...buildRegionalFeeDisplay(regionalCfg),
+      firstTimeEnabled: !!regionalCfg.firstTimeEnabled,
+      firstTimeFeePence: regionalCfg.firstTimeFeePence ?? 0,
+      specialClasses: buildRegionalSpecialClassFees(
+        (show?.showClasses ?? []).map((sc) => ({
           className: sc.classDefinition?.name,
           classType: sc.classDefinition?.type,
           entryFee: sc.entryFee ?? null,
-        },
+        })),
         regionalCfg.tiers,
-      );
-      if (flat == null) continue;
-      const label = (sc.classDefinition?.name ?? '').replace(/^SV\s+/, '');
-      seen.set(`${label}|${flat}`, { label, fee: flat });
-    }
-    return Array.from(seen.values());
+      ),
+    };
   }, [show, regionalCfg]);
 
   /* Derive total class counts per judge for display */
@@ -1120,14 +1110,14 @@ export function ShowPreviewClient() {
                        checkout, so the three can't disagree. Flat-priced
                        special classes (Baby Puppy) get their own row. Legacy
                        regionals without a config keep the old flat rows. */}
-                  {regionalFeeDisplay && regionalCfg ? (
+                  {regionalFees ? (
                     <>
-                      {regionalFeeDisplay.levels.map((lvl) => (
+                      {regionalFees.levels.map((lvl) => (
                         <FeeRow
                           key={lvl.label}
-                          label={regionalFeeDisplay.levels.length > 1 ? lvl.label : 'Entry fee'}
+                          label={regionalFees.levels.length > 1 ? lvl.label : 'Entry fee'}
                           sub={
-                            regionalFeeDisplay.capped
+                            regionalFees.capped
                               ? `Per dog — or ${lvl.threePlusPence === 0 ? 'free' : formatCurrency(lvl.threePlusPence)} for 3 or more dogs`
                               : 'Per dog'
                           }
@@ -1135,15 +1125,15 @@ export function ShowPreviewClient() {
                           custom={lvl.perDogPence === 0 ? 'Free' : undefined}
                         />
                       ))}
-                      {regionalCfg.firstTimeEnabled && (
+                      {regionalFees.firstTimeEnabled && (
                         <FeeRow
                           label="First-time exhibitor"
                           sub="Your first dog, if you've never shown before"
-                          value={regionalCfg.firstTimeFeePence ?? 0}
-                          custom={(regionalCfg.firstTimeFeePence ?? 0) === 0 ? 'Free' : undefined}
+                          value={regionalFees.firstTimeFeePence}
+                          custom={regionalFees.firstTimeFeePence === 0 ? 'Free' : undefined}
                         />
                       )}
-                      {regionalSpecialClassFees.map((g) => (
+                      {regionalFees.specialClasses.map((g) => (
                         <FeeRow
                           key={`${g.label}-${g.fee}`}
                           label={g.label}

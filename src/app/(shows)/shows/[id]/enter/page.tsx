@@ -41,6 +41,7 @@ import { computeOrderFees, type DogEntryInput, type FeeContext } from '@/lib/fee
 import {
   computeRegionalOrderFees,
   regionalClassFlatFee,
+  resolveClassFlatFee,
   type RegionalDogEntryInput,
   type RegionalFeeContext,
   type RegionalFeeTier,
@@ -394,23 +395,11 @@ export default function EnterShowPage() {
       // Regional dogs sit in one class; a Baby Puppy class priced away from
       // the scale charges flat, outside the discount (Mandy 2026-07-10).
       const classById = new Map((allShowClasses ?? []).map((sc) => [sc.id, sc]));
-      const rEntries: RegionalDogEntryInput[] = completeEntries.map((e, i) => {
-        const sc = e.classIds[0] ? classById.get(e.classIds[0]) : undefined;
-        return {
-          key: String(i),
-          kind: e.entryType === 'junior_handler' ? 'junior_handler' : 'standard',
-          flatFeePence: sc
-            ? regionalClassFlatFee(
-                {
-                  className: sc.classDefinition.name,
-                  classType: sc.classDefinition.type,
-                  entryFee: sc.entryFee,
-                },
-                regionalCfg.tiers,
-              )
-            : null,
-        };
-      });
+      const rEntries: RegionalDogEntryInput[] = completeEntries.map((e, i) => ({
+        key: String(i),
+        kind: e.entryType === 'junior_handler' ? 'junior_handler' : 'standard',
+        flatFeePence: resolveClassFlatFee(e.classIds[0], classById, regionalCfg.tiers),
+      }));
       const r = computeRegionalOrderFees(rEntries, ctx);
       return {
         total: r.entriesTotal,
@@ -2656,9 +2645,7 @@ function ClassGroup({
               </div>
               {(!hideFee || regionalFlatFee != null) && (
                 <span className="shrink-0 text-sm font-semibold">
-                  {formatCurrency(
-                    regionalFlatFee ?? (feeOverride != null ? feeOverride : sc.entryFee),
-                  )}
+                  {formatCurrency(regionalFlatFee ?? feeOverride ?? sc.entryFee)}
                 </span>
               )}
             </label>

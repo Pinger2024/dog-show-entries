@@ -36,7 +36,7 @@ import {
 } from '@/lib/fee-calc';
 import {
   computeRegionalOrderFees,
-  regionalClassFlatFee,
+  resolveClassFlatFee,
   type RegionalDogEntryInput,
   type RegionalFeeContext,
 } from '@/lib/regional-fee-calc';
@@ -598,23 +598,11 @@ export const ordersRouter = createTRPCRouter({
         };
         // Regional dogs sit in exactly one class; a Baby Puppy class priced
         // away from the scale charges flat (Mandy 2026-07-10).
-        const regionalEntries: RegionalDogEntryInput[] = input.entries.map((e, i) => {
-          const sc = e.classIds[0] ? classMap.get(e.classIds[0]) : undefined;
-          return {
-            key: String(i),
-            kind: e.entryType === 'junior_handler' ? 'junior_handler' : 'standard',
-            flatFeePence: sc
-              ? regionalClassFlatFee(
-                  {
-                    className: sc.classDefinition?.name,
-                    classType: sc.classDefinition?.type,
-                    entryFee: sc.entryFee,
-                  },
-                  regionalCfg.tiers,
-                )
-              : null,
-          };
-        });
+        const regionalEntries: RegionalDogEntryInput[] = input.entries.map((e, i) => ({
+          key: String(i),
+          kind: e.entryType === 'junior_handler' ? 'junior_handler' : 'standard',
+          flatFeePence: resolveClassFlatFee(e.classIds[0], classMap, regionalCfg.tiers),
+        }));
         const regionalResult = computeRegionalOrderFees(regionalEntries, regionalCtx);
         entriesSubtotal = regionalResult.entriesTotal;
         perEntryBreakdown = regionalResult.perEntry.map((e) => ({

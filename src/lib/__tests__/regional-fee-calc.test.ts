@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildRegionalFeeDisplay,
+  buildRegionalSpecialClassFees,
   computeRegionalOrderFees,
   regionalClassFlatFee,
+  resolveClassFlatFee,
   DEFAULT_REGIONAL_FEE_TIERS,
   type RegionalFeeContext,
 } from '@/lib/regional-fee-calc';
@@ -259,6 +261,48 @@ describe('regionalClassFlatFee — special-class detection', () => {
     expect(
       regionalClassFlatFee({ className: 'baby puppy', classType: 'sv_age', entryFee: 1000 }, tiers),
     ).toBe(1000);
+  });
+});
+
+describe('buildRegionalSpecialClassFees — fee-panel rows', () => {
+  const tiers = DEFAULT_REGIONAL_FEE_TIERS;
+
+  it('collapses the four Baby Puppy sex/coat variants into one row, SV prefix stripped', () => {
+    const classes = ['bitch-stock', 'bitch-long', 'dog-stock', 'dog-long'].map(() => ({
+      className: 'Baby Puppy',
+      classType: 'sv_age',
+      entryFee: 1000,
+    }));
+    expect(buildRegionalSpecialClassFees(classes, tiers)).toEqual([
+      { label: 'Baby Puppy', fee: 1000 },
+    ]);
+  });
+
+  it('returns no rows when Baby Puppy sits at the first-dog tier price', () => {
+    expect(
+      buildRegionalSpecialClassFees(
+        [{ className: 'Baby Puppy', classType: 'sv_age', entryFee: 2000 }],
+        tiers,
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe('resolveClassFlatFee — entry class lookup', () => {
+  const tiers = DEFAULT_REGIONAL_FEE_TIERS;
+  const classes = new Map([
+    ['bp', { entryFee: 1000, classDefinition: { name: 'Baby Puppy', type: 'sv_age' } }],
+    ['adult', { entryFee: 2000, classDefinition: { name: 'Adult', type: 'sv_age' } }],
+  ]);
+
+  it('resolves a Baby Puppy entry to its flat fee', () => {
+    expect(resolveClassFlatFee('bp', classes, tiers)).toBe(1000);
+  });
+
+  it('returns null for scale-priced classes, unknown ids and missing ids', () => {
+    expect(resolveClassFlatFee('adult', classes, tiers)).toBeNull();
+    expect(resolveClassFlatFee('nope', classes, tiers)).toBeNull();
+    expect(resolveClassFlatFee(undefined, classes, tiers)).toBeNull();
   });
 });
 
