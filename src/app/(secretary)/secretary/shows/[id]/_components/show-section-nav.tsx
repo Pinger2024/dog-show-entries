@@ -31,6 +31,11 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 
+const SECTION_BADGE_TONES: Record<'fresh' | 'honey', string> = {
+  fresh: 'bg-se-fresh-soft text-se-fresh-deep',
+  honey: 'bg-se-honey-soft text-se-honey-deep',
+};
+
 type Section = {
   path: string;
   label: string;
@@ -107,18 +112,18 @@ export function ShowSectionNav({ showId, isWusv = false }: { showId: string; isW
   const pendingActions = (judgeSummary?.summary.accepted ?? 0) + (judgeSummary?.summary.declined ?? 0);
 
   // Phase-aware badges for sections
-  function getSectionBadge(path: string): { label: string; color: string } | null {
+  function getSectionBadge(path: string): { label: string; tone: 'fresh' | 'honey' } | null {
     if (!phaseContext) return null;
     const { phase } = phaseContext;
 
     if (path === '/entries' && phase === 'entries_open') {
-      return { label: 'Live', color: 'bg-se-fresh-soft text-se-fresh-deep' };
+      return { label: 'Live', tone: 'fresh' };
     }
     if (path === '/results' && phase === 'show_day') {
-      return { label: 'Recording', color: 'bg-se-fresh-soft text-se-fresh-deep' };
+      return { label: 'Recording', tone: 'fresh' };
     }
     if (path === '/results' && phase === 'post_show' && !phaseContext.resultsPublished) {
-      return { label: 'Publish', color: 'bg-se-honey-soft text-se-honey-deep' };
+      return { label: 'Publish', tone: 'honey' };
     }
     return null;
   }
@@ -189,7 +194,7 @@ export function ShowSectionNav({ showId, isWusv = false }: { showId: string; isW
                             const phaseBadge = getSectionBadge(path);
                             if (phaseBadge && !active) {
                               return (
-                                <span className={`ml-auto shrink-0 rounded-full px-1.5 py-0.5 text-xs font-medium ${phaseBadge.color}`}>
+                                <span className={cn("ml-auto shrink-0 rounded-full px-1.5 py-0.5 text-xs font-semibold", SECTION_BADGE_TONES[phaseBadge.tone])}>
                                   {phaseBadge.label}
                                 </span>
                               );
@@ -246,7 +251,7 @@ export function ShowSectionNav({ showId, isWusv = false }: { showId: string; isW
                         const phaseBadge = getSectionBadge(path);
                         if (phaseBadge && !active) {
                           return (
-                            <span className={`ml-auto shrink-0 rounded-full px-1.5 py-0.5 text-xs font-medium ${phaseBadge.color}`}>
+                            <span className={cn("ml-auto shrink-0 rounded-full px-1.5 py-0.5 text-xs font-semibold", SECTION_BADGE_TONES[phaseBadge.tone])}>
                               {phaseBadge.label}
                             </span>
                           );

@@ -21,6 +21,16 @@ import type { ScheduleData } from '@/server/db/schema/shows';
 import { Button } from '@/components/ui/button';
 import type { RouterOutputs } from '@/server/trpc/router';
 import {
+  SECard,
+  SEDarkPanel,
+  SEButton,
+  Pulse,
+  Chip,
+  HoneyBanner,
+  CountdownCells,
+} from '@/components/show-experience/kit';
+import { SE_H } from '@/components/show-experience/tokens';
+import {
   derivePhase,
   formatDeadline,
   PHASE_CONFIG,
@@ -45,6 +55,15 @@ const phaseIcons: Record<ShowPhase, React.ElementType> = {
   cancelled: XCircle,
 };
 
+/* ============================================================
+ * Lifecycle Banner — the show overview's phase-aware status card.
+ * Re-presented in the Show Experience language: show day gets the
+ * dark "living" band (SEDarkPanel + Pulse), entries closing soon get
+ * a honey countdown, everything else is a tinted SECard using the
+ * same phase colors PHASE_CONFIG has always defined. Content per
+ * phase is unchanged — only the shell + presentational primitives.
+ * ============================================================ */
+
 export function LifecycleBanner({ show, entryStats, onOpenEntries }: LifecycleBannerProps) {
   const phase = derivePhase(show.status);
   const config = PHASE_CONFIG[phase];
@@ -56,45 +75,52 @@ export function LifecycleBanner({ show, entryStats, onOpenEntries }: LifecycleBa
 
   const Icon = entriesOverdue ? AlertTriangle : phaseIcons[phase];
 
+  // Show day (not overdue) is the most exciting moment of the show — give
+  // it the dark "living" band treatment, same language as the dashboard's
+  // UrgentBand.
+  if (phase === 'show_day' && !entriesOverdue) {
+    return (
+      <SEDarkPanel angle={172} className="rounded-2xl px-5 py-5 sm:px-6">
+        <ShowDayContent show={show} />
+      </SEDarkPanel>
+    );
+  }
+
   return (
-    <div
+    <SECard
       className={cn(
-        'rounded-lg border-l-4 p-3 sm:p-4',
-        entriesOverdue
-          ? 'bg-destructive/10 border-destructive'
-          : cn(config.bgColor, config.borderColor),
-        // Show day gets a more prominent treatment
-        phase === 'show_day' && !entriesOverdue && 'bg-primary/10 border-primary',
+        'p-4 sm:p-5',
+        entriesOverdue ? 'border-destructive/30 bg-destructive/5' : cn(config.bgColor, config.borderColor),
       )}
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-        <div className="flex items-start gap-3 min-w-0">
-          <div className={cn('mt-0.5 shrink-0', entriesOverdue ? 'text-destructive' : config.color)}>
-            <Icon className="size-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            {phase === 'setup' && (
-              <SetupContent show={show} onOpenEntries={onOpenEntries} />
-            )}
-            {phase === 'entries_open' && (
-              <EntriesOpenContent show={show} entryStats={entryStats} />
-            )}
-            {phase === 'pre_show' && (
-              <PreShowContent show={show} entryStats={entryStats} />
-            )}
-            {phase === 'show_day' && (
-              <ShowDayContent show={show} />
-            )}
-            {phase === 'post_show' && (
-              <PostShowContent show={show} />
-            )}
-            {phase === 'cancelled' && (
-              <CancelledContent />
-            )}
-          </div>
+      <div className="flex items-start gap-3 min-w-0">
+        <div
+          className={cn(
+            'mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-se-surface/70',
+            entriesOverdue ? 'text-destructive' : config.color,
+          )}
+        >
+          <Icon className="size-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          {phase === 'setup' && (
+            <SetupContent show={show} onOpenEntries={onOpenEntries} />
+          )}
+          {phase === 'entries_open' && (
+            <EntriesOpenContent show={show} entryStats={entryStats} />
+          )}
+          {phase === 'pre_show' && (
+            <PreShowContent show={show} entryStats={entryStats} />
+          )}
+          {phase === 'post_show' && (
+            <PostShowContent show={show} />
+          )}
+          {phase === 'cancelled' && (
+            <CancelledContent />
+          )}
         </div>
       </div>
-    </div>
+    </SECard>
   );
 }
 
@@ -123,15 +149,15 @@ function SetupContent({
     : null;
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2.5">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
-        <h3 className="text-sm font-semibold text-foreground">
+        <h3 className={cn(SE_H, 'text-sm text-se-ink sm:text-base')}>
           {canOpen && !isLoading ? 'Everything\'s ready' : 'Set up your show'}
         </h3>
         {entriesOpenInfo && (
           <span className={cn(
             'text-xs',
-            entriesOpenInfo.urgent ? 'text-se-honey-deep font-medium' : 'text-muted-foreground',
+            entriesOpenInfo.urgent ? 'font-medium text-se-honey-deep' : 'text-se-ink3',
           )}>
             {entriesOpenInfo.text}
           </span>
@@ -154,19 +180,19 @@ function SetupContent({
                 ) : (
                   <X className={cn(
                     'size-3.5 shrink-0',
-                    isRequired ? 'text-destructive' : 'text-se-honey',
+                    isRequired ? 'text-destructive' : 'text-se-honey-deep',
                   )} />
                 )}
                 <span className={cn(
                   'text-xs',
-                  isRequired ? 'text-foreground' : 'text-muted-foreground',
+                  isRequired ? 'text-se-ink' : 'text-se-ink3',
                 )}>
                   {blocker.label}
                 </span>
                 {blocker.actionPath && (
                   <Link
                     href={`/secretary/shows/${show.id}${blocker.actionPath}`}
-                    className="ml-auto flex items-center gap-1 rounded-full border border-primary/30 bg-primary/5 px-2.5 py-0.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 shrink-0 min-h-[1.75rem]"
+                    className="ml-auto flex shrink-0 items-center gap-1 rounded-full bg-se-fresh-soft px-2.5 py-0.5 text-xs font-semibold text-se-fresh-deep transition-colors hover:bg-se-fresh-soft/70 min-h-[1.75rem]"
                   >
                     Fix
                     <ChevronRight className="size-3" />
@@ -181,21 +207,23 @@ function SetupContent({
       {/* Action button */}
       <div className="pt-1">
         {canOpen ? (
-          <Button
+          <SEButton
+            variant="fresh"
             size="sm"
             className="w-full sm:w-auto"
             onClick={onOpenEntries}
           >
             Open Entries
-          </Button>
+          </SEButton>
         ) : !isLoading && requiredBlockers.length > 0 ? (
-          <Button
+          <SEButton
+            variant="ghost"
             size="sm"
-            className="w-full sm:w-auto"
+            className="w-full disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
             disabled
           >
             Complete {requiredBlockers.length} item{requiredBlockers.length !== 1 ? 's' : ''} to open entries
-          </Button>
+          </SEButton>
         ) : null}
       </div>
     </div>
@@ -227,88 +255,92 @@ function EntriesOpenContent({
     onError: (err: { message: string }) => toast.error(err.message),
   });
 
+  if (closeInfo?.overdue) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-start gap-2">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
+          <div>
+            <p className={cn(SE_H, 'text-sm text-destructive')}>
+              Entries were scheduled to close on{' '}
+              {new Date(show.entryCloseDate!).toLocaleDateString('en-GB', {
+                day: 'numeric',
+                month: 'long',
+              })}
+            </p>
+            <p className="text-xs text-destructive/80">
+              {totalEntries} {totalEntries === 1 ? 'entry' : 'entries'} from{' '}
+              {uniqueExhibitors} {uniqueExhibitors === 1 ? 'exhibitor' : 'exhibitors'} — entries are still being accepted
+            </p>
+          </div>
+        </div>
+        <Button
+          size="sm"
+          variant="destructive"
+          className="w-full sm:w-auto min-h-[2.75rem]"
+          disabled={closeEntriesMutation.isPending}
+          onClick={() => closeEntriesMutation.mutate({ id: show.id, status: 'entries_closed' })}
+        >
+          {closeEntriesMutation.isPending ? (
+            <>
+              <Loader2 className="size-4 animate-spin" />
+              Closing...
+            </>
+          ) : (
+            'Close Entries Now'
+          )}
+        </Button>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-2">
-      {closeInfo?.overdue ? (
-        <>
-          <div className="flex items-start gap-2">
-            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
-            <div>
-              <h3 className="text-sm font-semibold text-destructive">
-                Entries were scheduled to close on{' '}
-                {new Date(show.entryCloseDate!).toLocaleDateString('en-GB', {
-                  day: 'numeric',
-                  month: 'long',
-                })}
-              </h3>
-              <p className="text-xs text-destructive/80">
-                {totalEntries} {totalEntries === 1 ? 'entry' : 'entries'} from{' '}
-                {uniqueExhibitors} {uniqueExhibitors === 1 ? 'exhibitor' : 'exhibitors'} — entries are still being accepted
-              </p>
-            </div>
-          </div>
-          <Button
-            size="sm"
-            variant="destructive"
-            className="w-full sm:w-auto min-h-[2.75rem]"
-            disabled={closeEntriesMutation.isPending}
-            onClick={() => closeEntriesMutation.mutate({ id: show.id, status: 'entries_closed' })}
-          >
-            {closeEntriesMutation.isPending ? (
-              <>
-                <Loader2 className="size-4 animate-spin" />
-                Closing...
-              </>
-            ) : (
-              'Close Entries Now'
-            )}
-          </Button>
-        </>
-      ) : (
-        <>
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
-            <h3 className="text-sm font-semibold text-foreground">
-              {totalEntries} {totalEntries === 1 ? 'entry' : 'entries'} from {uniqueExhibitors}{' '}
-              {uniqueExhibitors === 1 ? 'exhibitor' : 'exhibitors'}
-            </h3>
-            {closeInfo && (
-              <span className={cn(
-                'text-xs',
-                closeInfo.urgent ? 'text-se-honey-deep font-medium' : 'text-muted-foreground',
-              )}>
-                {closeInfo.text}
-              </span>
-            )}
-          </div>
-          {/* Two clear actions while entries are open: view the list, or
-              close entries early. The early-close button used to only appear
-              once the deadline had passed — Amanda 2026-05-28 needed to close
-              before the date without hunting for the status badge. */}
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <Button size="sm" variant="outline" className="w-full sm:w-auto" asChild>
-              <Link href={`/secretary/shows/${show.id}/entries`}>
-                View Entries
-              </Link>
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="w-full sm:w-auto"
-              disabled={closeEntriesMutation.isPending}
-              onClick={() => closeEntriesMutation.mutate({ id: show.id, status: 'entries_closed' })}
-            >
-              {closeEntriesMutation.isPending ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" />
-                  Closing...
-                </>
-              ) : (
-                'Close entries now'
-              )}
-            </Button>
-          </div>
-        </>
-      )}
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Pulse />
+        <h3 className={cn(SE_H, 'text-sm text-se-ink sm:text-base')}>
+          {totalEntries} {totalEntries === 1 ? 'entry' : 'entries'} from {uniqueExhibitors}{' '}
+          {uniqueExhibitors === 1 ? 'exhibitor' : 'exhibitors'}
+        </h3>
+      </div>
+
+      {/* Countdown — honey band once we're inside the urgent window,
+          otherwise a quiet deadline line. */}
+      {closeInfo?.urgent ? (
+        <HoneyBanner label="Entries close" date={closeInfo.text}>
+          <CountdownCells target={new Date(show.entryCloseDate!)} dark />
+        </HoneyBanner>
+      ) : closeInfo ? (
+        <p className="text-xs text-se-ink3">{closeInfo.text}</p>
+      ) : null}
+
+      {/* Two clear actions while entries are open: view the list, or
+          close entries early. The early-close button used to only appear
+          once the deadline had passed — Amanda 2026-05-28 needed to close
+          before the date without hunting for the status badge. */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <SEButton asChild variant="ghost" size="sm" className="w-full sm:w-auto">
+          <Link href={`/secretary/shows/${show.id}/entries`}>
+            View Entries
+          </Link>
+        </SEButton>
+        <SEButton
+          variant="ghost"
+          size="sm"
+          className="w-full disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
+          disabled={closeEntriesMutation.isPending}
+          onClick={() => closeEntriesMutation.mutate({ id: show.id, status: 'entries_closed' })}
+        >
+          {closeEntriesMutation.isPending ? (
+            <>
+              <Loader2 className="size-4 animate-spin" />
+              Closing...
+            </>
+          ) : (
+            'Close entries now'
+          )}
+        </SEButton>
+      </div>
     </div>
   );
 }
@@ -329,42 +361,47 @@ function PreShowContent({
     : null;
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
-        <h3 className="text-sm font-semibold text-foreground">
+        <h3 className={cn(SE_H, 'text-sm text-se-ink sm:text-base')}>
           Entries closed &mdash; {confirmedEntries} {confirmedEntries === 1 ? 'entry' : 'entries'} confirmed
         </h3>
-        {showDayInfo && (
-          <span className={cn(
-            'text-xs',
-            showDayInfo.urgent ? 'text-se-honey-deep font-medium' : 'text-muted-foreground',
-          )}>
-            {showDayInfo.text}
-          </span>
-        )}
       </div>
-      <Button size="sm" variant="outline" className="w-full sm:w-auto" asChild>
+
+      {showDayInfo?.urgent ? (
+        <HoneyBanner label="Show day" date={showDayInfo.text}>
+          <CountdownCells target={new Date(show.startDate)} dark />
+        </HoneyBanner>
+      ) : showDayInfo ? (
+        <p className="text-xs text-se-ink3">{showDayInfo.text}</p>
+      ) : null}
+
+      <SEButton asChild variant="ghost" size="sm" className="w-full sm:w-auto">
         <Link href={`/secretary/shows/${show.id}/checklist`}>
           Go to Checklist
         </Link>
-      </Button>
+      </SEButton>
     </div>
   );
 }
 
-// ── Phase 4: Show Day ───────────────────────────────────────
+// ── Phase 4: Show Day (rendered inside SEDarkPanel by the parent) ──
 
 function ShowDayContent({ show }: { show: Show }) {
   return (
-    <div className="space-y-2">
-      <h3 className="text-sm font-semibold text-foreground">
-        Show day is here
-      </h3>
-      <Button size="sm" className="w-full sm:w-auto" asChild>
+    <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center gap-2.5">
+        <Pulse />
+        <h3 className={cn(SE_H, 'text-base text-se-cream sm:text-lg')}>
+          Show day is here
+        </h3>
+      </div>
+      <SEButton asChild variant="fresh" size="sm" className="w-full sm:w-auto">
         <Link href={`/secretary/shows/${show.id}/results`}>
+          <Gavel className="size-4" />
           Record Results
         </Link>
-      </Button>
+      </SEButton>
     </div>
   );
 }
@@ -385,23 +422,20 @@ function PostShowContent({ show }: { show: Show }) {
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
-        <h3 className="text-sm font-semibold text-foreground">
+      <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+        <h3 className={cn(SE_H, 'text-sm text-se-ink sm:text-base')}>
           Show complete
         </h3>
-        <span className={cn(
-          'text-xs',
-          resultsPublished ? 'text-se-fresh-deep' : 'text-muted-foreground',
-        )}>
+        <Chip tone={resultsPublished ? 'fresh' : 'light'}>
           {resultsPublished ? 'Results published' : 'Results not yet published'}
-        </span>
+        </Chip>
       </div>
       <span className={cn(
         'block text-xs',
         rkcSubmitted && 'text-se-fresh-deep',
-        !rkcSubmitted && rkcInfo.urgent ? 'text-se-honey-deep font-medium' : '',
-        !rkcSubmitted && rkcInfo.overdue && 'text-destructive font-medium',
-        !rkcSubmitted && !rkcInfo.urgent && !rkcInfo.overdue && 'text-muted-foreground',
+        !rkcSubmitted && rkcInfo.urgent ? 'font-medium text-se-honey-deep' : '',
+        !rkcSubmitted && rkcInfo.overdue && 'font-medium text-destructive',
+        !rkcSubmitted && !rkcInfo.urgent && !rkcInfo.overdue && 'text-se-ink3',
       )}>
         {rkcInfo.text}
       </span>
@@ -413,7 +447,7 @@ function PostShowContent({ show }: { show: Show }) {
 
 function CancelledContent() {
   return (
-    <h3 className="text-sm font-semibold text-foreground">
+    <h3 className={cn(SE_H, 'text-sm text-destructive sm:text-base')}>
       This show has been cancelled
     </h3>
   );

@@ -17,6 +17,7 @@ import {
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { trpc } from '@/lib/trpc';
+import { SECard, Eyebrow } from '@/components/show-experience/kit';
 import { SE_H } from '@/components/show-experience/tokens';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -413,46 +414,46 @@ export default function ShowManagementLayout({
 
       {/* Stats */}
       {entryStats && entryStats.totalEntries > 0 && (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <div className="rounded-lg border bg-card p-3">
-            <div className="flex items-center gap-1.5 text-muted-foreground">
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+          <SECard className="p-3.5">
+            <div className="flex items-center gap-1.5 text-se-ink3">
               <ClipboardList className="size-3.5" />
-              <span className="text-xs font-medium uppercase tracking-wider">Entries</span>
+              <Eyebrow>Entries</Eyebrow>
             </div>
-            <p className="mt-1 text-lg font-bold">{entryStats.totalEntries}</p>
-            <p className="text-[11px] text-muted-foreground">
+            <p className={cn(SE_H, 'mt-1.5 text-[22px] leading-none tabular-nums text-se-ink')}>{entryStats.totalEntries}</p>
+            <p className="mt-1 text-[11px] text-se-ink3">
               {entryStats.confirmed > 0 && <span className="text-se-fresh-deep">{entryStats.confirmed} confirmed</span>}
               {entryStats.pending > 0 && <span>{entryStats.confirmed > 0 ? ' · ' : ''}<span className="text-se-honey-deep">{entryStats.pending} pending</span></span>}
             </p>
-          </div>
-          <div className="rounded-lg border bg-card p-3">
-            <div className="flex items-center gap-1.5 text-muted-foreground">
+          </SECard>
+          <SECard className="p-3.5">
+            <div className="flex items-center gap-1.5 text-se-ink3">
               <PoundSterling className="size-3.5" />
-              <span className="text-xs font-medium uppercase tracking-wider">Revenue</span>
+              <Eyebrow>Revenue</Eyebrow>
             </div>
-            <p className="mt-1 text-lg font-bold text-se-fresh-deep">
+            <p className={cn(SE_H, 'mt-1.5 text-[22px] leading-none tabular-nums text-se-fresh-deep')}>
               {formatCompactRevenue(entryStats.totalRevenue)}
             </p>
-            <p className="text-[11px] text-muted-foreground">{entryStats.paidOrders} paid</p>
-          </div>
-          <div className="rounded-lg border bg-card p-3">
-            <div className="flex items-center gap-1.5 text-muted-foreground">
+            <p className="mt-1 text-[11px] text-se-ink3">{entryStats.paidOrders} paid</p>
+          </SECard>
+          <SECard className="p-3.5">
+            <div className="flex items-center gap-1.5 text-se-ink3">
               <Users className="size-3.5" />
-              <span className="text-xs font-medium uppercase tracking-wider">Exhibitors</span>
+              <Eyebrow>Exhibitors</Eyebrow>
             </div>
-            <p className="mt-1 text-lg font-bold">{entryStats.uniqueExhibitors}</p>
-            <p className="text-[11px] text-muted-foreground">unique</p>
-          </div>
-          <div className="rounded-lg border bg-card p-3">
-            <div className="flex items-center gap-1.5 text-muted-foreground">
+            <p className={cn(SE_H, 'mt-1.5 text-[22px] leading-none tabular-nums text-se-ink')}>{entryStats.uniqueExhibitors}</p>
+            <p className="mt-1 text-[11px] text-se-ink3">unique</p>
+          </SECard>
+          <SECard className="p-3.5">
+            <div className="flex items-center gap-1.5 text-se-ink3">
               <Clock className="size-3.5" />
-              <span className="text-xs font-medium uppercase tracking-wider">Latest</span>
+              <Eyebrow>Latest</Eyebrow>
             </div>
-            <p className="mt-1 text-lg font-bold">
+            <p className={cn(SE_H, 'mt-1.5 truncate text-[22px] leading-none text-se-ink')}>
               {entryStats.lastEntryAt ? formatRelativeTime(new Date(entryStats.lastEntryAt)) : '—'}
             </p>
-            <p className="text-[11px] text-muted-foreground">most recent</p>
-          </div>
+            <p className="mt-1 text-[11px] text-se-ink3">most recent</p>
+          </SECard>
         </div>
       )}
 

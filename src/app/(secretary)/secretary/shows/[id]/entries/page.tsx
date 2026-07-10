@@ -15,7 +15,7 @@ import {
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { formatSvClassName } from '@/lib/class-labels';
-import { formatDogName } from '@/lib/utils';
+import { cn, formatDogName } from '@/lib/utils';
 import { formatCurrency, isAgeEligibleOnShowDay } from '@/lib/date-utils';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -54,8 +54,34 @@ import {
 } from '@/components/ui/dialog';
 import { isGsdOnlyClass, isGsdBreed } from '@/lib/class-templates';
 import { EmptyState } from '@/components/ui/empty-state';
+import { SECard, Eyebrow } from '@/components/show-experience/kit';
+import { SE_H } from '@/components/show-experience/tokens';
 import { EntryItem, entryStatusConfig, formatDate } from '../_lib/show-utils';
 import { useShowId } from '../_lib/show-context';
+
+/* Entry status pill — same fresh/honey/light pill language as the rest of
+ * the Show Experience surfaces (dashboard's getStatusPill, section nav's
+ * SECTION_BADGE_TONES). entryStatusConfig's Badge variants stay in
+ * show-utils.ts for anywhere still using shadcn Badge. */
+const ENTRY_STATUS_TONES: Record<string, string> = {
+  pending: 'bg-se-honey-soft text-se-honey-deep',
+  confirmed: 'bg-se-fresh-soft text-se-fresh-deep',
+  withdrawn: 'bg-se-surface text-se-ink2 shadow-[inset_0_0_0_1px_var(--color-se-line)]',
+  transferred: 'bg-se-surface text-se-ink2 shadow-[inset_0_0_0_1px_var(--color-se-line)]',
+  cancelled: 'bg-destructive/10 text-destructive',
+};
+
+function EntryStatusPill({ status }: { status: string }) {
+  const config = entryStatusConfig[status] ?? { label: status };
+  return (
+    <span className={cn(
+      'inline-flex h-6 shrink-0 items-center rounded-full px-2.5 text-[11.5px] font-semibold',
+      ENTRY_STATUS_TONES[status] ?? 'bg-se-surface text-se-ink2 shadow-[inset_0_0_0_1px_var(--color-se-line)]',
+    )}>
+      {config.label}
+    </span>
+  );
+}
 
 export default function EntriesPage() {
   const showId = useShowId();
@@ -153,21 +179,39 @@ export default function EntriesPage() {
     toast.success(`${entries.length} entries exported to CSV`);
   }
 
+  const confirmedCount = entries.filter((e) => e.status === 'confirmed').length;
+  const pendingCount = entries.filter((e) => e.status === 'pending').length;
+
   return (
     <>
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+      {/* Stat summary */}
+      <div className="mb-4 grid grid-cols-3 gap-2.5">
+        <SECard className="p-3.5">
+          <Eyebrow>Total</Eyebrow>
+          <p className={cn(SE_H, 'mt-1 text-[22px] leading-none tabular-nums text-se-ink')}>{entries.length}</p>
+        </SECard>
+        <SECard className="p-3.5">
+          <Eyebrow>Confirmed</Eyebrow>
+          <p className={cn(SE_H, 'mt-1 text-[22px] leading-none tabular-nums text-se-fresh-deep')}>{confirmedCount}</p>
+        </SECard>
+        <SECard className="p-3.5">
+          <Eyebrow>Pending</Eyebrow>
+          <p className={cn(SE_H, 'mt-1 text-[22px] leading-none tabular-nums text-se-honey-deep')}>{pendingCount}</p>
+        </SECard>
+      </div>
+
+      <SECard>
+        <div className="flex flex-col gap-3 p-4 pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4 sm:p-6 sm:pb-0">
             <div>
-              <CardTitle className="text-base sm:text-lg">Entries ({filtered.length})</CardTitle>
-              <CardDescription>
+              <p className={cn(SE_H, 'text-base text-se-ink sm:text-lg')}>Entries ({filtered.length})</p>
+              <p className="mt-0.5 text-sm text-se-ink3">
                 {statusFilter === 'active' && 'Active entries — withdrawn and cancelled hidden by default'}
                 {statusFilter === 'all' && 'Every entry on this show, including withdrawn and cancelled'}
                 {statusFilter === 'pending' && 'Entries on orders awaiting payment'}
                 {statusFilter === 'confirmed' && 'Confirmed entries on paid orders'}
                 {statusFilter === 'withdrawn' && 'Entries the exhibitor pulled out of after paying'}
                 {statusFilter === 'cancelled' && 'Cancelled entries'}
-              </CardDescription>
+              </p>
               {total > entries.length && (
                 <p className="text-xs text-se-honey-deep">
                   Showing {entries.length} of {total} — CSV export may be incomplete
@@ -190,25 +234,24 @@ export default function EntriesPage() {
                 Export CSV
               </Button>
             </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {/* Filters */}
+        </div>
+        <div className="p-4 sm:p-6">
+          {/* Filters — same search/select language as the public browse page */}
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="relative flex-1 min-w-0">
-              <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+            <div className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-se-ink3" />
               <Input
                 placeholder="Search exhibitor, dog, or breed..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
+                className="h-11 rounded-[13px] border-se-line bg-se-surface pl-10 text-se-ink placeholder:text-se-ink3 shadow-none transition-shadow focus-visible:border-se-fresh focus-visible:ring-se-fresh/25"
               />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full sm:w-36">
+              <SelectTrigger className="h-11 w-full rounded-[13px] border-se-line bg-se-surface text-se-ink shadow-none sm:w-36">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="border-se-line bg-se-surface text-se-ink">
                 <SelectItem value="active">Active</SelectItem>
                 <SelectItem value="all">All Statuses</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
@@ -236,20 +279,12 @@ export default function EntriesPage() {
           ) : (
             <>
               {/* Mobile card view */}
-              <div className="space-y-3 sm:hidden">
-                {filtered.map((entry) => {
-                  const es = entryStatusConfig[entry.status] ?? {
-                    label: entry.status,
-                    variant: 'outline' as const,
-                  };
-                  return (
-                    <div
-                      key={entry.id}
-                      className="rounded-lg border p-3 space-y-2"
-                    >
+              <div className="space-y-2.5 sm:hidden">
+                {filtered.map((entry) => (
+                  <SECard key={entry.id} className="space-y-2 p-3.5">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
-                          <p className="font-medium truncate">
+                          <p className="truncate font-medium text-se-ink">
                             {entry.dog?.registeredName ?? '\u2014'}
                             {entry.isNfc && (
                               <Badge variant="outline" className="ml-1.5 text-xs align-middle">
@@ -257,16 +292,16 @@ export default function EntriesPage() {
                               </Badge>
                             )}
                           </p>
-                          <p className="text-xs text-muted-foreground truncate">
+                          <p className="truncate text-xs text-se-ink3">
                             {entry.dog?.breed?.name ?? ''} &middot; {entry.exhibitor?.name ?? '\u2014'}
                           </p>
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <Badge variant={es.variant}>{es.label}</Badge>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <EntryStatusPill status={entry.status} />
                           {entry.entryClasses.length > 0 && (
                             <button
                               onClick={() => setTransferringEntry(entry)}
-                              className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                              className="flex size-9 items-center justify-center rounded-md text-se-ink3 hover:bg-se-paper2 hover:text-se-ink"
                               title="Transfer class"
                             >
                               <ArrowLeftRight className="size-4" />
@@ -275,7 +310,7 @@ export default function EntriesPage() {
                           {entry.dog && (
                             <button
                               onClick={() => setEditingEntry(entry)}
-                              className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                              className="flex size-9 items-center justify-center rounded-md text-se-ink3 hover:bg-se-paper2 hover:text-se-ink"
                               title="Edit dog details"
                             >
                               <Edit3 className="size-4" />
@@ -295,13 +330,12 @@ export default function EntriesPage() {
                             </Badge>
                           ))}
                         </div>
-                        <span className="text-sm font-semibold shrink-0 ml-2">
+                        <span className="ml-2 shrink-0 text-sm font-semibold text-se-ink">
                           {formatCurrency(entry.totalFee)}
                         </span>
                       </div>
-                    </div>
-                  );
-                })}
+                  </SECard>
+                ))}
               </div>
 
               {/* Desktop table view */}
@@ -321,10 +355,6 @@ export default function EntriesPage() {
                 </TableHeader>
                 <TableBody>
                   {filtered.map((entry) => {
-                    const es = entryStatusConfig[entry.status] ?? {
-                      label: entry.status,
-                      variant: 'outline' as const,
-                    };
                     return (
                       <TableRow key={entry.id}>
                         <TableCell>
@@ -361,7 +391,7 @@ export default function EntriesPage() {
                         </TableCell>
                         <TableCell>{formatCurrency(entry.totalFee)}</TableCell>
                         <TableCell>
-                          <Badge variant={es.variant}>{es.label}</Badge>
+                          <EntryStatusPill status={entry.status} />
                         </TableCell>
                         <TableCell className="hidden md:table-cell text-muted-foreground">
                           {formatDate(entry.createdAt)}
@@ -396,7 +426,7 @@ export default function EntriesPage() {
               </div>
             </>
           )}
-        </CardContent>
+        </div>
 
         {editingEntry && (
           <EditDogDialog
@@ -421,7 +451,7 @@ export default function EntriesPage() {
             onClose={() => setTransferringEntry(null)}
           />
         )}
-      </Card>
+      </SECard>
     </>
   );
 }
