@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
+  buildRegionalFeeDisplay,
   computeRegionalOrderFees,
+  regionalClassFlatFee,
   DEFAULT_REGIONAL_FEE_TIERS,
   type RegionalFeeContext,
 } from '@/lib/regional-fee-calc';
@@ -114,6 +116,149 @@ describe('computeRegionalOrderFees — Junior Handler', () => {
     );
     expect(r.entriesTotal).toBe(300);
     expect(r.perEntry[0]!.position).toBe(0);
+  });
+});
+
+describe('computeRegionalOrderFees — flat-priced special classes (Baby Puppy)', () => {
+  // Mandy 2026-07-10 (North East Regional): Baby Puppy is priced flat (£10)
+  // and is EXCLUDED from the per-dog discount scale — it neither consumes a
+  // position nor benefits from cheaper later-dog tiers.
+  const std = (key: string) => ({ key, kind: 'standard' as const });
+  const bp = (key: string, fee = 1000) => ({ key, kind: 'standard' as const, flatFeePence: fee });
+
+  it('charges the flat fee and does not consume a dog position', () => {
+    // Two adults + a baby puppy = £20 + £10 + £20; adults keep positions 1 & 2.
+    const r = computeRegionalOrderFees([std('d0'), bp('bp'), std('d1')], base);
+    expect(r.perEntry.map((e) => e.fee)).toEqual([2000, 1000, 2000]);
+    expect(r.perEntry.map((e) => e.position)).toEqual([1, 0, 2]);
+    expect(r.entriesTotal).toBe(5000);
+    expect(r.payingDogCount).toBe(2);
+  });
+
+  it('a third ADULT dog still reaches the £16 tier past a baby puppy', () => {
+    const r = computeRegionalOrderFees([std('d0'), std('d1'), bp('bp'), std('d2')], base);
+    expect(r.perEntry.map((e) => e.fee)).toEqual([2000, 2000, 1000, 1600]);
+    expect(r.entriesTotal).toBe(6600);
+  });
+
+  it('members pay the same flat fee for a baby puppy', () => {
+    const r = computeRegionalOrderFees([bp('bp')], { ...base, isMember: true });
+    expect(r.entriesTotal).toBe(1000);
+  });
+
+  it('first-time exhibitor frees the first STANDARD dog, not the baby puppy', () => {
+    const r = computeRegionalOrderFees([bp('bp'), std('d0')], {
+      ...base,
+      firstTimeExhibitor: true,
+    });
+    expect(r.perEntry.map((e) => e.fee)).toEqual([1000, 0]);
+    expect(r.entriesTotal).toBe(1000);
+  });
+
+  it('honours a flat fee of zero', () => {
+    expect(computeRegionalOrderFees([bp('bp', 0)], base).entriesTotal).toBe(0);
+  });
+
+  it('exposes the flat fee as the single per-class fee', () => {
+    const r = computeRegionalOrderFees([bp('bp')], base);
+    expect(r.perEntry[0]!.perClassFees).toEqual([1000]);
+  });
+});
+
+describe('buildRegionalFeeDisplay — fee levels for the schedule + public page', () => {
+  it('resolves the BRG default into Non-member and Member levels with 3+ package', () => {
+    expect(buildRegionalFeeDisplay({ tiers: DEFAULT_REGIONAL_FEE_TIERS })).toEqual({
+      capped: true,
+      levels: [
+        { label: 'Non-member', perDogPence: 2000, threePlusPence: 5600 },
+        { label: 'Member', perDogPence: 1700, threePlusPence: 4500 },
+      ],
+    });
+  });
+
+  it('gives a membership with its own price list its own level (option B)', () => {
+    // North East's shape: flat standard column + memberships with own tiers.
+    const display = buildRegionalFeeDisplay({
+      tiers: [
+        { standardPence: 2000, memberPence: 2000 },
+        { standardPence: 2000, memberPence: 2000 },
+        { standardPence: 1600, memberPence: 1600 },
+        { standardPence: 0, memberPence: 0 },
+      ],
+      memberships: [
+        {
+          label: 'BRG/League member',
+          tiers: [
+            { standardPence: 1700, memberPence: 1700 },
+            { standardPence: 1700, memberPence: 1700 },
+            { standardPence: 1100, memberPence: 1100 },
+            { standardPence: 0, memberPence: 0 },
+          ],
+        },
+      ],
+    });
+    expect(display.capped).toBe(true);
+    expect(display.levels).toEqual([
+      { label: 'Non-member', perDogPence: 2000, threePlusPence: 5600 },
+      { label: 'BRG/League member', perDogPence: 1700, threePlusPence: 4500 },
+    ]);
+  });
+
+  it('is not capped when the scale never reaches free', () => {
+    const display = buildRegionalFeeDisplay({
+      tiers: [
+        { standardPence: 2000, memberPence: 2000 },
+        { standardPence: 1600, memberPence: 1600 },
+      ],
+    });
+    expect(display.capped).toBe(false);
+    expect(display.levels).toEqual([
+      { label: 'Non-member', perDogPence: 2000, threePlusPence: 5200 },
+    ]);
+  });
+});
+
+describe('regionalClassFlatFee — special-class detection', () => {
+  const tiers = DEFAULT_REGIONAL_FEE_TIERS; // 1st dog £20 standard
+
+  it('returns the fee for a Baby Puppy class priced away from the first-dog tier', () => {
+    expect(
+      regionalClassFlatFee({ className: 'Baby Puppy', classType: 'sv_age', entryFee: 1000 }, tiers),
+    ).toBe(1000);
+  });
+
+  it('returns null for a Baby Puppy class left at the first-dog tier price', () => {
+    // No deliberate re-pricing → the dog prices on the normal scale.
+    expect(
+      regionalClassFlatFee({ className: 'Baby Puppy', classType: 'sv_age', entryFee: 2000 }, tiers),
+    ).toBeNull();
+  });
+
+  it('returns null for non-Baby-Puppy classes even when re-priced', () => {
+    expect(
+      regionalClassFlatFee({ className: 'Adult', classType: 'sv_age', entryFee: 1000 }, tiers),
+    ).toBeNull();
+  });
+
+  it('returns null for Junior Handler classes (they have their own flat fee)', () => {
+    expect(
+      regionalClassFlatFee(
+        { className: 'Junior Handler (6-11)', classType: 'junior_handler', entryFee: 200 },
+        tiers,
+      ),
+    ).toBeNull();
+  });
+
+  it('returns null when the show has no tier schedule to compare against', () => {
+    expect(
+      regionalClassFlatFee({ className: 'Baby Puppy', classType: 'sv_age', entryFee: 1000 }, []),
+    ).toBeNull();
+  });
+
+  it('matches the class name case-insensitively', () => {
+    expect(
+      regionalClassFlatFee({ className: 'baby puppy', classType: 'sv_age', entryFee: 1000 }, tiers),
+    ).toBe(1000);
   });
 });
 

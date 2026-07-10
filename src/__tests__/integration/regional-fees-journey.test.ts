@@ -16,6 +16,7 @@ import {
   makeBreed,
   makeShow,
   makeShowClass,
+  makeClassDef,
   makeDog,
   makeSecretaryWithOrg,
 } from '../helpers/factories';
@@ -182,6 +183,79 @@ describe('regional (SV/WUSV) entry fees — journey', () => {
     const order = await testDb.query.orders.findFirst({ where: eq(orders.id, result.orderId) });
     expect(order?.donationPence).toBe(500);
     expect(order?.donationAffix).toBe('Hundark');
+  });
+
+  // Mandy 2026-07-10 (North East Regional): Baby Puppy classes priced away
+  // from the scale (£10) charge that flat fee and sit OUTSIDE the per-dog
+  // discount — they neither consume a position nor get cheaper-tier rates.
+  describe('flat-priced Baby Puppy classes', () => {
+    async function withBabyPuppy(fixture: Awaited<ReturnType<typeof regionalFixture>>, bpFee: number) {
+      const { show, exhibitor, dogs, cartEntries } = fixture;
+      const bpDef = await makeClassDef({ name: 'Baby Puppy', type: 'sv_age' });
+      const bpClass = await makeShowClass({
+        showId: show.id,
+        classDefinitionId: bpDef.id,
+        entryFee: bpFee,
+      });
+      const bpDog = await makeDog({
+        ownerId: exhibitor.id,
+        breedId: dogs[0]!.breedId,
+        kcRegNumber: 'SZ9999',
+        microchipNumber: '981000000099',
+      });
+      return {
+        show,
+        exhibitor,
+        cartEntries: [
+          ...cartEntries,
+          { entryType: 'standard' as const, dogId: bpDog.id, classIds: [bpClass.id], isNfc: false },
+        ],
+      };
+    }
+
+    it('charges a £10 baby puppy flat: 2 adults + BP = £20 + £20 + £10 = £50', async () => {
+      const { show, exhibitor, cartEntries } = await withBabyPuppy(await regionalFixture(2), 1000);
+      const result = await createTestCaller(exhibitor).orders.checkout({
+        showId: show.id,
+        entries: cartEntries,
+      });
+      expect(result.totalAmount).toBe(5000);
+
+      const orderEntries = await testDb.query.entries.findMany({
+        where: eq(entries.orderId, result.orderId),
+      });
+      expect(orderEntries.map((e) => e.totalFee).sort((a, b) => a - b)).toEqual([1000, 2000, 2000]);
+    });
+
+    it('keeps the discount scale for adults: 3 adults + BP = £20 + £20 + £16 + £10 = £66', async () => {
+      const { show, exhibitor, cartEntries } = await withBabyPuppy(await regionalFixture(3), 1000);
+      const result = await createTestCaller(exhibitor).orders.checkout({
+        showId: show.id,
+        entries: cartEntries,
+      });
+      expect(result.totalAmount).toBe(6600);
+    });
+
+    it('members pay the same flat £10 for the baby puppy (2 member adults + BP = £44)', async () => {
+      const { show, exhibitor, cartEntries } = await withBabyPuppy(await regionalFixture(2), 1000);
+      const result = await createTestCaller(exhibitor).orders.checkout({
+        showId: show.id,
+        entries: cartEntries,
+        regionalMembership: 'BRG/League member',
+        regionalMembershipNumber: 'BRG-1',
+      });
+      expect(result.totalAmount).toBe(4400); // £17 + £17 + £10
+    });
+
+    it('a Baby Puppy class left at the first-dog tier price stays on the scale', async () => {
+      const { show, exhibitor, cartEntries } = await withBabyPuppy(await regionalFixture(2), 2000);
+      const result = await createTestCaller(exhibitor).orders.checkout({
+        showId: show.id,
+        entries: cartEntries,
+      });
+      // No deliberate re-pricing → BP is just the 3rd dog: £20 + £20 + £16.
+      expect(result.totalAmount).toBe(5600);
+    });
   });
 
   it('rejects a membership label that is not configured for the show', async () => {

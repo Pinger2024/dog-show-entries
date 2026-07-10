@@ -36,6 +36,7 @@ import {
 } from '@/lib/fee-calc';
 import {
   computeRegionalOrderFees,
+  regionalClassFlatFee,
   type RegionalDogEntryInput,
   type RegionalFeeContext,
 } from '@/lib/regional-fee-calc';
@@ -485,7 +486,10 @@ export const ordersRouter = createTRPCRouter({
 
       // Collect all class IDs and validate
       const allClassIds = input.entries.flatMap((e) => e.classIds);
-      const classMap = new Map<string, { id: string; entryFee: number }>();
+      const classMap = new Map<
+        string,
+        { id: string; entryFee: number; classDefinition?: { name: string; type: string } | null }
+      >();
 
       if (allClassIds.length > 0) {
         const selectedClasses = await ctx.db.query.showClasses.findMany({
@@ -493,6 +497,7 @@ export const ordersRouter = createTRPCRouter({
             inArray(showClasses.id, allClassIds),
             eq(showClasses.showId, input.showId)
           ),
+          with: { classDefinition: { columns: { name: true, type: true } } },
         });
 
         for (const sc of selectedClasses) {
@@ -591,10 +596,25 @@ export const ordersRouter = createTRPCRouter({
           firstTimeFeePence: regionalCfg.firstTimeFeePence ?? 0,
           juniorHandlerFeePence: show.juniorHandlerFee ?? 0,
         };
-        const regionalEntries: RegionalDogEntryInput[] = input.entries.map((e, i) => ({
-          key: String(i),
-          kind: e.entryType === 'junior_handler' ? 'junior_handler' : 'standard',
-        }));
+        // Regional dogs sit in exactly one class; a Baby Puppy class priced
+        // away from the scale charges flat (Mandy 2026-07-10).
+        const regionalEntries: RegionalDogEntryInput[] = input.entries.map((e, i) => {
+          const sc = e.classIds[0] ? classMap.get(e.classIds[0]) : undefined;
+          return {
+            key: String(i),
+            kind: e.entryType === 'junior_handler' ? 'junior_handler' : 'standard',
+            flatFeePence: sc
+              ? regionalClassFlatFee(
+                  {
+                    className: sc.classDefinition?.name,
+                    classType: sc.classDefinition?.type,
+                    entryFee: sc.entryFee,
+                  },
+                  regionalCfg.tiers,
+                )
+              : null,
+          };
+        });
         const regionalResult = computeRegionalOrderFees(regionalEntries, regionalCtx);
         entriesSubtotal = regionalResult.entriesTotal;
         perEntryBreakdown = regionalResult.perEntry.map((e) => ({

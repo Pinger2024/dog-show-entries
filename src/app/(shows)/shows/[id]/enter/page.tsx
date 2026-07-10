@@ -40,8 +40,10 @@ import { readReferralSource } from '@/lib/referral-source';
 import { computeOrderFees, type DogEntryInput, type FeeContext } from '@/lib/fee-calc';
 import {
   computeRegionalOrderFees,
+  regionalClassFlatFee,
   type RegionalDogEntryInput,
   type RegionalFeeContext,
+  type RegionalFeeTier,
 } from '@/lib/regional-fee-calc';
 import { Button } from '@/components/ui/button';
 import {
@@ -389,10 +391,26 @@ export default function EnterShowPage() {
         firstTimeFeePence: regionalCfg.firstTimeFeePence ?? 0,
         juniorHandlerFeePence: show?.juniorHandlerFee ?? 0,
       };
-      const rEntries: RegionalDogEntryInput[] = completeEntries.map((e, i) => ({
-        key: String(i),
-        kind: e.entryType === 'junior_handler' ? 'junior_handler' : 'standard',
-      }));
+      // Regional dogs sit in one class; a Baby Puppy class priced away from
+      // the scale charges flat, outside the discount (Mandy 2026-07-10).
+      const classById = new Map((allShowClasses ?? []).map((sc) => [sc.id, sc]));
+      const rEntries: RegionalDogEntryInput[] = completeEntries.map((e, i) => {
+        const sc = e.classIds[0] ? classById.get(e.classIds[0]) : undefined;
+        return {
+          key: String(i),
+          kind: e.entryType === 'junior_handler' ? 'junior_handler' : 'standard',
+          flatFeePence: sc
+            ? regionalClassFlatFee(
+                {
+                  className: sc.classDefinition.name,
+                  classType: sc.classDefinition.type,
+                  entryFee: sc.entryFee,
+                },
+                regionalCfg.tiers,
+              )
+            : null,
+        };
+      });
       const r = computeRegionalOrderFees(rEntries, ctx);
       return {
         total: r.entriesTotal,
@@ -433,7 +451,7 @@ export default function EnterShowPage() {
     if (dogEntries.length === 0) return null;
     return computeOrderFees(dogEntries, feeCtx);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [show, regionalCfg, regionalMembership, regionalFirstTime, discountGroups, discountGroupId, cart.entries]);
+  }, [show, regionalCfg, regionalMembership, regionalFirstTime, discountGroups, discountGroupId, cart.entries, allShowClasses]);
 
   // Sync cart sundry item prices/names with server data (handles secretary price changes)
   useEffect(() => {
@@ -1470,6 +1488,7 @@ export default function EnterShowPage() {
                         onToggle={toggleClass}
                         getAgeEligibility={getAgeEligibility}
                         hideFee={show?.showRuleset === 'wusv'}
+                        regionalTiers={regionalCfg?.tiers ?? null}
                       />
                     </>
                   )}
@@ -2527,6 +2546,7 @@ function ClassGroup({
   suggestedClassName,
   feeOverride,
   hideFee,
+  regionalTiers,
 }: {
   title: string;
   classes: ShowClassItem[];
@@ -2540,8 +2560,11 @@ function ClassGroup({
   suggestedClassName?: string | null;
   feeOverride?: number | null;
   /** Hide the per-class price — regional shows charge a tiered per-dog fee, not
-   *  a per-class one, so a per-class amount here is misleading (Mandy 2026-07-05). */
+   *  a per-class one, so a per-class amount here is misleading (Mandy 2026-07-05).
+   *  Flat-priced special classes (Baby Puppy) are the exception — their price
+   *  still shows when `regionalTiers` is provided (Mandy 2026-07-10). */
   hideFee?: boolean;
+  regionalTiers?: RegionalFeeTier[] | null;
 }) {
   // Filter out age-ineligible classes if eligibility info is available
   const visibleClasses = getAgeEligibility
@@ -2567,6 +2590,19 @@ function ClassGroup({
           const isSelected = selectedIds.includes(sc.id);
           const isSuggested = suggestedClassName === sc.classDefinition.name;
           const isIneligible = eligibleClassNames && !eligibleClassNames.includes(sc.classDefinition.name);
+          // A flat-priced special class (Baby Puppy) shows its price even on
+          // regional shows where scale-priced classes hide theirs.
+          const regionalFlatFee =
+            hideFee && regionalTiers
+              ? regionalClassFlatFee(
+                  {
+                    className: sc.classDefinition.name,
+                    classType: sc.classDefinition.type,
+                    entryFee: sc.entryFee,
+                  },
+                  regionalTiers,
+                )
+              : null;
           return (
             <label
               key={sc.id}
@@ -2618,9 +2654,11 @@ function ClassGroup({
                   </p>
                 )}
               </div>
-              {!hideFee && (
+              {(!hideFee || regionalFlatFee != null) && (
                 <span className="shrink-0 text-sm font-semibold">
-                  {formatCurrency(feeOverride != null ? feeOverride : sc.entryFee)}
+                  {formatCurrency(
+                    regionalFlatFee ?? (feeOverride != null ? feeOverride : sc.entryFee),
+                  )}
                 </span>
               )}
             </label>

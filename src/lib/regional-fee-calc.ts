@@ -27,6 +27,12 @@ export type RegionalDogEntryInput = {
   /** Standard = a dog in a competitive class (consumes a tier position).
    *  Junior Handler = a flat-fee handler entry (does not consume a position). */
   kind: 'standard' | 'junior_handler';
+  /** Flat special-class fee in pence — a dog in a class the secretary priced
+   *  away from the scale (e.g. Baby Puppy at £10). Charged this exact amount,
+   *  excluded from the per-dog discount scale: it neither consumes a position
+   *  nor gets member/first-time rates (Mandy 2026-07-10). Resolve via
+   *  `regionalClassFlatFee`. */
+  flatFeePence?: number | null;
 };
 
 export type RegionalFeeTier = {
@@ -94,6 +100,13 @@ export function computeRegionalOrderFees(
       return { key: entry.key, fee: jh, perClassFees: [jh], position: 0 };
     }
 
+    // Flat-priced special class (Baby Puppy) — charged as-is, outside the
+    // per-dog scale, so it doesn't shift the other dogs' positions.
+    if (entry.flatFeePence != null) {
+      const flat = entry.flatFeePence;
+      return { key: entry.key, fee: flat, perClassFees: [flat], position: 0 };
+    }
+
     // Standard paying dog — consumes the next tier position.
     position += 1;
     // First-time exhibitor: only the FIRST dog gets the first-time rate; the
@@ -108,6 +121,104 @@ export function computeRegionalOrderFees(
 
   const entriesTotal = perEntry.reduce((sum, e) => sum + e.fee, 0);
   return { entriesTotal, perEntry, payingDogCount: position };
+}
+
+export type RegionalFeeLevel = {
+  /** "Non-member", or the membership's own label. */
+  label: string;
+  /** First-dog price at this level, in pence. */
+  perDogPence: number;
+  /** Total for three dogs — the "3 or more dogs" package price. Only
+   *  meaningful when `capped` is true on the display result. */
+  threePlusPence: number;
+};
+
+export type RegionalFeeDisplay = {
+  levels: RegionalFeeLevel[];
+  /** True when the scale frees the 4th dog on, so "3 or more dogs" reads as a
+   *  flat package price. */
+  capped: boolean;
+};
+
+/**
+ * Resolve a regional fee config into display fee levels, EXACTLY the way
+ * checkout resolves them (Mandy 2026-07-08 — the BRG model is a flat per-dog
+ * rate with a "3 or more dogs" package, shown for each fee level):
+ *  - Non-member → the config standard column
+ *  - a membership WITH its own prices (option B) → those prices
+ *  - a membership WITHOUT its own prices (option A) → the config member column
+ * Shared by the schedule PDF and the public show page so the printed fees and
+ * the till can't disagree.
+ */
+export function buildRegionalFeeDisplay(config: {
+  tiers: RegionalFeeTier[];
+  memberships?: { label: string; tiers?: RegionalFeeTier[] }[];
+}): RegionalFeeDisplay {
+  type Level = { label: string; tiers: RegionalFeeTier[]; member: boolean };
+  const hasConfigMember = config.tiers.some((t) => t.memberPence !== t.standardPence);
+  const levels: Level[] = [{ label: 'Non-member', tiers: config.tiers, member: false }];
+  const explicit = config.memberships ?? [];
+  if (explicit.length) {
+    for (const m of explicit) {
+      if (m.tiers && m.tiers.length) {
+        levels.push({ label: m.label, tiers: m.tiers, member: false });
+      } else if (hasConfigMember) {
+        levels.push({ label: m.label, tiers: config.tiers, member: true });
+      }
+    }
+  } else if (hasConfigMember) {
+    levels.push({ label: 'Member', tiers: config.tiers, member: true });
+  }
+
+  const priceAt = (lvl: Level, position: number) => {
+    if (!lvl.tiers.length) return 0;
+    const t = lvl.tiers[Math.min(position - 1, lvl.tiers.length - 1)]!;
+    return lvl.member ? t.memberPence : t.standardPence;
+  };
+
+  // "3 or more dogs" is a flat package only when the scale frees the 4th dog on.
+  const capped =
+    config.tiers.length >= 4 &&
+    config.tiers[config.tiers.length - 1]!.standardPence === 0 &&
+    config.tiers[config.tiers.length - 1]!.memberPence === 0;
+
+  return {
+    capped,
+    levels: levels.map((lvl) => ({
+      label: lvl.label,
+      perDogPence: priceAt(lvl, 1),
+      threePlusPence: priceAt(lvl, 1) + priceAt(lvl, 2) + priceAt(lvl, 3),
+    })),
+  };
+}
+
+/**
+ * The flat fee for a regional show class that the secretary has deliberately
+ * priced away from the per-dog scale, or null when the class prices normally.
+ *
+ * Only Baby Puppy qualifies (Mandy 2026-07-10, North East £10 Baby Puppy):
+ * it's the SV world's special reduced-fee class. The fee must differ from the
+ * standard first-dog tier — a Baby Puppy left at the seeded default behaves
+ * as an ordinary scale dog, so shows that never re-priced it are unaffected.
+ * Junior Handler classes are excluded; they price via `juniorHandlerFeePence`.
+ *
+ * Shared by checkout (orders router), the enter-page fee preview and the
+ * schedule's Fees box so all three surfaces agree.
+ */
+export function regionalClassFlatFee(
+  cls: {
+    className: string | null | undefined;
+    classType?: string | null;
+    entryFee: number | null | undefined;
+  },
+  tiers: RegionalFeeTier[],
+): number | null {
+  if (cls.classType === 'junior_handler') return null;
+  if (cls.entryFee == null) return null;
+  if (!/baby\s*puppy/i.test(cls.className ?? '')) return null;
+  const firstDogPence = tiers[0]?.standardPence;
+  if (firstDogPence == null || cls.entryFee === firstDogPence) return null;
+  return cls.entryFee;
 }
 
 /** The default BRG / Scottish Progressive tier schedule, in pence

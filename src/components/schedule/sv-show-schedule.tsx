@@ -34,6 +34,7 @@ import type {
   ScheduleAdvert,
 } from './shared/types';
 import { groupSvClasses, type SvNumberedClass } from './shared/sv-classification';
+import { buildRegionalFeeDisplay, regionalClassFlatFee } from '@/lib/regional-fee-calc';
 import type { RegionalFeeConfig } from '@/server/db/schema/shows';
 import { ss, SV, SV_FONTS } from './shared/sv-styles';
 import { AdvertPage, selectAdverts } from './shared/advert-page';
@@ -154,39 +155,9 @@ function FeeRow({
 function RegionalFeeRows({ config }: { config: RegionalFeeConfig }) {
   const money = (p: number) => (p === 0 ? 'Free' : fmtMoney(p));
 
-  // Build the fee levels exactly the way checkout resolves them:
-  //  - Non-member → the config standard column
-  //  - a membership WITH its own prices (option B) → those prices
-  //  - a membership WITHOUT its own prices (option A) → the config member column
-  type Level = { label: string; tiers: RegionalFeeConfig['tiers']; member: boolean };
-  const hasConfigMember = config.tiers.some((t) => t.memberPence !== t.standardPence);
-  const levels: Level[] = [{ label: 'Non-member', tiers: config.tiers, member: false }];
-  const explicit = config.memberships ?? [];
-  if (explicit.length) {
-    for (const m of explicit) {
-      if (m.tiers && m.tiers.length) {
-        levels.push({ label: m.label, tiers: m.tiers, member: false });
-      } else if (hasConfigMember) {
-        levels.push({ label: m.label, tiers: config.tiers, member: true });
-      }
-    }
-  } else if (hasConfigMember) {
-    levels.push({ label: 'Member', tiers: config.tiers, member: true });
-  }
-
-  const priceAt = (lvl: Level, position: number) => {
-    if (!lvl.tiers.length) return 0;
-    const t = lvl.tiers[Math.min(position - 1, lvl.tiers.length - 1)]!;
-    return lvl.member ? t.memberPence : t.standardPence;
-  };
-  const perDog = (lvl: Level) => priceAt(lvl, 1);
-  const threePlus = (lvl: Level) => priceAt(lvl, 1) + priceAt(lvl, 2) + priceAt(lvl, 3);
-
-  // "3 or more dogs" is a flat package only when the scale frees the 4th dog on.
-  const capped =
-    config.tiers.length >= 4 &&
-    config.tiers[config.tiers.length - 1]!.standardPence === 0 &&
-    config.tiers[config.tiers.length - 1]!.memberPence === 0;
+  // Level resolution lives in `buildRegionalFeeDisplay`, shared with the
+  // public show page so the two fee panels can't drift apart.
+  const { levels, capped } = buildRegionalFeeDisplay(config);
   const multi = levels.length > 1;
 
   return (
@@ -205,8 +176,8 @@ function RegionalFeeRows({ config }: { config: RegionalFeeConfig }) {
       </Text>
       {levels.map((lvl, i) => {
         const value = capped
-          ? `${money(perDog(lvl))} / ${money(threePlus(lvl))}`
-          : money(perDog(lvl));
+          ? `${money(lvl.perDogPence)} / ${money(lvl.threePlusPence)}`
+          : money(lvl.perDogPence);
         return <FeeRow key={i} label={multi ? lvl.label : 'Entry fee'} value={value} />;
       })}
       {config.firstTimeEnabled ? (
@@ -383,7 +354,49 @@ function SvCover({
 
 // ── PAGE 2 — AT A GLANCE ───────────────────────────────────────────────────
 
-function SvOverview({ show, washes }: { show: ScheduleShowInfo; washes?: SvWashBuffers }) {
+/** Flat-priced special classes (e.g. North East's £10 Baby Puppy — Mandy
+ *  2026-07-10): one fee row per distinct class name, shown under the per-dog
+ *  fee levels. Uses the same detection as checkout so the schedule can't
+ *  promise a price the till doesn't charge. */
+function SpecialClassFeeRows({
+  config,
+  classes,
+}: {
+  config: RegionalFeeConfig;
+  classes: ScheduleClass[];
+}) {
+  const rows = new Map<string, { label: string; fee: number }>();
+  for (const c of classes) {
+    const flat = regionalClassFlatFee(
+      { className: c.className, classType: c.classType, entryFee: c.entryFee ?? null },
+      config.tiers,
+    );
+    if (flat == null) continue;
+    const label = c.className.replace(/^SV\s+/, '');
+    rows.set(`${label}|${flat}`, { label, fee: flat });
+  }
+  return (
+    <>
+      {Array.from(rows.values()).map((r) => (
+        <FeeRow
+          key={`${r.label}-${r.fee}`}
+          label={`${r.label} · per dog`}
+          value={r.fee === 0 ? 'Free' : fmtMoney(r.fee)}
+        />
+      ))}
+    </>
+  );
+}
+
+function SvOverview({
+  show,
+  classes,
+  washes,
+}: {
+  show: ScheduleShowInfo;
+  classes: ScheduleClass[];
+  washes?: SvWashBuffers;
+}) {
   const memberTier = show.discountGroups?.[0] ?? null;
   const firstAider = show.scheduleData?.firstAiders?.[0] ?? null;
 
@@ -421,7 +434,10 @@ function SvOverview({ show, washes }: { show: ScheduleShowInfo; washes?: SvWashB
         <View style={{ width: '50%', paddingRight: 10 }}>
           <SectionTitle title="Fees" />
           {show.regionalFeeConfig ? (
-            <RegionalFeeRows config={show.regionalFeeConfig} />
+            <>
+              <RegionalFeeRows config={show.regionalFeeConfig} />
+              <SpecialClassFeeRows config={show.regionalFeeConfig} classes={classes} />
+            </>
           ) : (
             <>
               <FeeRow label="Per dog · per class" value={fmtMoney(show.firstEntryFee)} />
@@ -1023,7 +1039,7 @@ export function SvShowSchedule({
         <AdvertPage key={`ad-if-${ad.id}`} advert={ad} />
       ))}
 
-      <SvOverview show={show} washes={washes} />
+      <SvOverview show={show} classes={classes} washes={washes} />
       <SvClassificationPage
         breedClasses={groups.breedClasses}
         juniorHandling={groups.juniorHandling}
