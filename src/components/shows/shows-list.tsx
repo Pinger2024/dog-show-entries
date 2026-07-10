@@ -821,7 +821,7 @@ export default function ShowsList() {
           {/* ─── Other shows section ─────────────── */}
           {otherShows.length > 0 && (
             <div>
-              {openShows.length > 0 && <SecLabel>Coming Soon</SecLabel>}
+              {openShows.length > 0 && <SecLabel>Show day approaching</SecLabel>}
               <div className="flex flex-col gap-3">
                 {otherShows.map((show) => (
                   <ShowCard key={show.id} show={show} />
