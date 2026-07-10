@@ -346,11 +346,11 @@ export function ShareKit({
         className
       )}
     >
-      <div className="flex gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row">
         <SEButton
           type="button"
           variant="fresh"
-          className="h-11 flex-1"
+          className="h-11 w-full min-w-0 sm:flex-1"
           onClick={shareShowLink}
           disabled={busy !== null}
         >
@@ -360,7 +360,7 @@ export function ShareKit({
         <SEButton
           type="button"
           size="sm"
-          className="h-11 flex-1 bg-se-cream text-se-deep"
+          className="h-11 w-full min-w-0 bg-se-cream text-se-deep sm:flex-1"
           onClick={copyShareLink}
           disabled={busy !== null}
         >
