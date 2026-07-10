@@ -4,6 +4,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+import { SE_H } from '@/components/show-experience/tokens';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -97,7 +99,7 @@ export default function AdminPayoutsPage() {
       </div>
 
       <div>
-        <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">
+        <h1 className={cn(SE_H, 'text-2xl sm:text-3xl')}>
           Club payouts
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -119,16 +121,16 @@ export default function AdminPayoutsPage() {
         </Card>
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <CheckCircle2 className="size-5 shrink-0 text-emerald-600" />
+            <CheckCircle2 className="size-5 shrink-0 text-se-fresh-deep" />
             <div>
               <p className="text-2xl font-bold">{formatCurrency(summary.totalPaid)}</p>
               <p className="text-xs text-muted-foreground">Paid out to clubs so far</p>
             </div>
           </CardContent>
         </Card>
-        <Card className={summary.totalOutstanding > 0 ? 'border-amber-500/40' : ''}>
+        <Card className={summary.totalOutstanding > 0 ? 'border-se-honey-line' : ''}>
           <CardContent className="flex items-center gap-3 p-4">
-            <AlertCircle className={`size-5 shrink-0 ${summary.totalOutstanding > 0 ? 'text-amber-600' : 'text-muted-foreground'}`} />
+            <AlertCircle className={`size-5 shrink-0 ${summary.totalOutstanding > 0 ? 'text-se-honey-deep' : 'text-muted-foreground'}`} />
             <div>
               <p className="text-2xl font-bold">{formatCurrency(summary.totalOutstanding)}</p>
               <p className="text-xs text-muted-foreground">Outstanding</p>
@@ -161,7 +163,7 @@ export default function AdminPayoutsPage() {
                         {row.payoutAccountName} — {row.payoutSortCode} / {row.payoutAccountNumber}
                       </p>
                     ) : (
-                      <p className="mt-0.5 text-xs text-amber-600">
+                      <p className="mt-0.5 text-xs text-se-honey-deep">
                         No bank details on file yet
                       </p>
                     )}
@@ -171,8 +173,8 @@ export default function AdminPayoutsPage() {
                       <span
                         className={
                           row.outstandingPence > 0
-                            ? 'font-semibold text-amber-700'
-                            : 'text-emerald-700'
+                            ? 'font-semibold text-se-honey-deep'
+                            : 'text-se-fresh-deep'
                         }
                       >
                         Outstanding: {formatCurrency(row.outstandingPence)}

@@ -134,7 +134,7 @@ export default function StewardShowPage({
                   className="flex items-center gap-2 sm:gap-3 rounded-lg border p-2.5 sm:p-3 transition-colors hover:bg-muted/30 active:bg-muted/50"
                 >
                   {sc.hasResults ? (
-                    <CheckCircle2 className="size-5 shrink-0 text-green-500" />
+                    <CheckCircle2 className="size-5 shrink-0 text-se-fresh-deep" />
                   ) : (
                     <div className="size-5 shrink-0 rounded-full border-2 border-muted-foreground/20" />
                   )}
@@ -157,12 +157,12 @@ export default function StewardShowPage({
                         </Badge>
                       )}
                       {sc.isPublished && (
-                        <Badge className="bg-green-600 text-white text-[10px] uppercase tracking-wider">
+                        <Badge className="bg-se-fresh-soft text-se-fresh-deep text-[10px] uppercase tracking-wider">
                           Live
                         </Badge>
                       )}
                       {sc.hasUnpublishedChanges && (
-                        <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700 text-[10px]">
+                        <Badge variant="outline" className="border-se-honey-line bg-se-honey-soft text-se-honey-deep text-[10px]">
                           Updates pending
                         </Badge>
                       )}
@@ -171,12 +171,12 @@ export default function StewardShowPage({
                       <Users className="size-3" />
                       {sc.entryCount} {sc.entryCount === 1 ? 'entry' : 'entries'}
                       {sc.absentCount > 0 && (
-                        <span className="ml-1 text-amber-600">
+                        <span className="ml-1 text-se-honey-deep">
                           ({sc.absentCount} abs)
                         </span>
                       )}
                       {sc.resultsCount > 0 && (
-                        <span className="ml-1 text-green-600">
+                        <span className="ml-1 text-se-fresh-deep">
                           ({sc.resultsCount} placed)
                         </span>
                       )}
@@ -192,7 +192,7 @@ export default function StewardShowPage({
 
       {/* Locked banner */}
       {lockStatus?.locked && (
-        <div className="mt-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+        <div className="mt-4 flex items-center gap-2 rounded-lg border border-se-honey-line bg-se-honey-soft p-3 text-sm text-se-honey-deep">
           <Lock className="size-4 shrink-0" />
           <p>Results have been published. Contact the secretary to make changes.</p>
         </div>
@@ -476,7 +476,7 @@ function BestOfBreedSection({
     return (
       <div className="mt-6 sm:mt-8 space-y-4">
         <div className="flex items-center gap-2">
-          <Trophy className="size-5 text-amber-500" />
+          <Trophy className="size-5 text-se-honey-deep" />
           <h2 className="text-sm sm:text-base font-semibold">Top Awards</h2>
         </div>
         <p className="text-xs text-muted-foreground">
@@ -515,7 +515,7 @@ function BestOfBreedSection({
   return (
     <div className="mt-6 sm:mt-8 space-y-6">
       <div className="flex items-center gap-2">
-        <Trophy className="size-5 text-amber-500" />
+        <Trophy className="size-5 text-se-honey-deep" />
         <h2 className="text-sm sm:text-base font-semibold">Best of Breed & Show Awards</h2>
       </div>
 
@@ -591,8 +591,8 @@ function BestOfBreedSection({
           applicable; conversely even a 2-breed show with one class winner
           each still has a meaningful BIS selection. */}
       {classWinnersByBreed.size > 1 && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 sm:p-4 space-y-3">
-          <h3 className="text-xs sm:text-sm font-semibold uppercase tracking-wider text-amber-700">
+        <div className="rounded-lg border border-se-honey-line bg-se-honey-soft/50 p-3 sm:p-4 space-y-3">
+          <h3 className="text-xs sm:text-sm font-semibold uppercase tracking-wider text-se-honey-deep">
             Show Awards
           </h3>
           {BIS_AWARDS
@@ -660,7 +660,7 @@ function JudgeApprovalSection({
   return (
     <div className="mt-6 sm:mt-8 space-y-4">
       <div className="flex items-center gap-2">
-        <Mail className="size-5 text-blue-500" />
+        <Mail className="size-5 text-se-fresh-deep" />
         <h2 className="text-sm sm:text-base font-semibold">Judge Approval</h2>
       </div>
       <p className="text-xs text-muted-foreground">
@@ -682,17 +682,17 @@ function JudgeApprovalSection({
               </div>
               <div className="flex items-center gap-2">
                 {judge.approvalStatus === 'approved' ? (
-                  <Badge className="bg-green-100 text-green-800 text-xs gap-1">
+                  <Badge className="bg-se-fresh-soft text-se-fresh-deep text-xs gap-1">
                     <CheckCircle2 className="size-3" />
                     Approved
                   </Badge>
                 ) : judge.approvalStatus === 'pending' ? (
-                  <Badge className="bg-amber-100 text-amber-800 text-xs gap-1">
+                  <Badge className="bg-se-honey-soft text-se-honey-deep text-xs gap-1">
                     <Clock className="size-3" />
                     Awaiting
                   </Badge>
                 ) : judge.approvalStatus === 'declined' ? (
-                  <Badge className="bg-red-100 text-red-800 text-xs gap-1">
+                  <Badge className="bg-destructive/10 text-destructive text-xs gap-1">
                     <XCircle className="size-3" />
                     Query
                   </Badge>
@@ -701,7 +701,7 @@ function JudgeApprovalSection({
             </div>
 
             {judge.approvalNote && (
-              <p className="text-xs italic text-amber-700">"{judge.approvalNote}"</p>
+              <p className="text-xs italic text-se-honey-deep">"{judge.approvalNote}"</p>
             )}
 
             {!judge.contactEmail ? (

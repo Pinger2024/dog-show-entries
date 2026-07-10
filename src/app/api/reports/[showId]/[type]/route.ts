@@ -7,6 +7,7 @@ import React from 'react';
 import { format, parseISO } from 'date-fns';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, makePdfResponse } from '@/lib/pdf-utils';
+import { stripUnembeddedBase14Fonts } from '@/lib/pdf-pad';
 import { ensureCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { buildClassLabelMap } from '@/lib/class-labels';
 import { CATALOGUE_NAME_PATTERN } from '@/lib/catalogue-utils';
@@ -163,7 +164,12 @@ export async function GET(
   }
 
   try {
-    const buffer = await renderToBuffer(element as React.ReactElement<DocumentProps>);
+    const rawBuffer = await renderToBuffer(element as React.ReactElement<DocumentProps>);
+    // Strip react-pdf's unembedded base-14 phantom font refs (Helvetica etc.)
+    // — inserted into every document's Resources regardless of which fonts
+    // are actually drawn — so these reports pass the same print-preflight
+    // bar as the catalogue.
+    const buffer = Buffer.from(await stripUnembeddedBase14Fonts(rawBuffer));
     const filename = `${sanitizeFilename(show.name)}-${filenameSuffix}.pdf`;
     return makePdfResponse(buffer, filename, request.nextUrl.searchParams.has('preview'));
   } catch (err) {

@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import { auth } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
+import { SE_H } from '@/components/show-experience/tokens';
+import { cn } from '@/lib/utils';
 export const metadata = {
   title: 'Pricing - Remi',
   description:
@@ -90,16 +92,16 @@ export default async function PricingPage() {
       <section className="relative overflow-hidden">
         <div className="pointer-events-none absolute inset-0 -z-10">
           <div className="absolute -top-40 right-0 h-[600px] w-[600px] rounded-full bg-primary/[0.04] blur-3xl" />
-          <div className="absolute -bottom-40 left-0 h-[500px] w-[500px] rounded-full bg-gold/[0.06] blur-3xl" />
+          <div className="absolute -bottom-40 left-0 h-[500px] w-[500px] rounded-full bg-se-honey/[0.06] blur-3xl" />
         </div>
 
         <div className="mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-3xl text-center">
-            <h1 className="animate-fade-in-up font-serif text-[2.5rem] font-bold leading-[1.15] tracking-tight sm:text-5xl">
+            <h1 className={cn(SE_H, 'animate-fade-in-up text-[2.5rem] leading-[1.15] sm:text-5xl')}>
               A plan to fit{' '}
               <span className="text-primary">your club</span>
             </h1>
-            <p className="gold-rule-center mx-auto mt-6 max-w-2xl animate-fade-in-up text-lg leading-relaxed text-muted-foreground [animation-delay:100ms] sm:text-xl">
+            <p className="after:mx-auto after:mt-3 after:block after:h-0.5 after:w-12 after:bg-se-honey after:content-[''] mx-auto mt-6 max-w-2xl animate-fade-in-up text-lg leading-relaxed text-muted-foreground [animation-delay:100ms] sm:text-xl">
               Every club is different. We&apos;ll work out the right plan with you — whether
               you run one show a year or a busy calendar of championships.
             </p>
@@ -154,7 +156,7 @@ export default async function PricingPage() {
       <section className="border-t">
         <div className="mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
-            <h2 className="gold-rule-center font-serif text-3xl font-bold tracking-tight sm:text-4xl">
+            <h2 className="after:mx-auto after:mt-3 after:block after:h-0.5 after:w-12 after:bg-se-honey after:content-[''] font-serif text-3xl font-bold tracking-tight sm:text-4xl">
               How It Works
             </h2>
             <p className="mt-5 text-lg text-muted-foreground">
@@ -168,7 +170,7 @@ export default async function PricingPage() {
                   <div className="absolute left-1/2 top-10 hidden h-px w-full bg-border sm:block" />
                 )}
                 <div className="relative mx-auto mb-6 flex size-20 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
-                  <span className="absolute -right-1.5 -top-1.5 flex size-7 items-center justify-center rounded-full bg-gold text-xs font-bold text-gold-foreground shadow">
+                  <span className="absolute -right-1.5 -top-1.5 flex size-7 items-center justify-center rounded-full bg-se-honey text-xs font-bold text-se-honey-ink shadow">
                     {step.number}
                   </span>
                   <step.icon className="size-8" strokeWidth={1.5} />
@@ -187,7 +189,7 @@ export default async function PricingPage() {
       <section className="border-t bg-card">
         <div className="mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
-            <h2 className="gold-rule-center font-serif text-3xl font-bold tracking-tight sm:text-4xl">
+            <h2 className="after:mx-auto after:mt-3 after:block after:h-0.5 after:w-12 after:bg-se-honey after:content-[''] font-serif text-3xl font-bold tracking-tight sm:text-4xl">
               Everything Your Club Needs
             </h2>
             <p className="mt-5 text-lg text-muted-foreground">
@@ -257,7 +259,7 @@ export default async function PricingPage() {
       <section className="border-t">
         <div className="mx-auto max-w-3xl px-4 py-24 sm:px-6">
           <div className="text-center">
-            <h2 className="gold-rule-center font-serif text-3xl font-bold tracking-tight sm:text-4xl">
+            <h2 className="after:mx-auto after:mt-3 after:block after:h-0.5 after:w-12 after:bg-se-honey after:content-[''] font-serif text-3xl font-bold tracking-tight sm:text-4xl">
               Frequently Asked Questions
             </h2>
             <p className="mt-5 text-lg text-muted-foreground">
@@ -295,7 +297,7 @@ export default async function PricingPage() {
           <div className="relative overflow-hidden rounded-2xl bg-primary px-6 py-20 text-center shadow-xl shadow-primary/15 sm:px-16">
             <div className="pointer-events-none absolute inset-0 -z-0">
               <div className="absolute -right-20 -top-20 size-72 rounded-full bg-white/10 blur-3xl" />
-              <div className="absolute -bottom-20 -left-20 size-72 rounded-full bg-gold/15 blur-3xl" />
+              <div className="absolute -bottom-20 -left-20 size-72 rounded-full bg-se-honey/15 blur-3xl" />
             </div>
             <div className="relative z-10">
               <h2 className="font-serif text-3xl font-bold tracking-tight text-primary-foreground sm:text-4xl">

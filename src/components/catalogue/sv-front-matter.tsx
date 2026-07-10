@@ -39,7 +39,9 @@ function Topper({ num, subject }: { num: number; subject: string }) {
   return (
     <>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <Text style={ss.eyebrow}>№ {String(num).padStart(2, '0')}</Text>
+        {/* The "№" glyph isn't in Hanken Grotesk's latin subset — nest a
+            differently-styled run just for that character (2026-07-10). */}
+        <Text style={ss.eyebrow}><Text style={{ fontFamily: 'Inter' }}>№</Text> {String(num).padStart(2, '0')}</Text>
         <Text style={ss.eyebrow}>{subject}</Text>
       </View>
       <View style={[ss.ruleThin, { marginTop: 4 }]} />

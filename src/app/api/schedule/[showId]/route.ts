@@ -16,6 +16,7 @@ import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, makePdfResponse } from '@/lib/pdf-utils';
 import { buildClassLabelMap } from '@/lib/class-labels';
+import { stripUnembeddedBase14Fonts } from '@/lib/pdf-pad';
 
 export async function GET(
   request: NextRequest,
@@ -391,7 +392,10 @@ export async function GET(
       panelJudges,
       washes,
     });
-    const buffer = await renderToBuffer(pdfDocument);
+    const rawBuffer = await renderToBuffer(pdfDocument);
+    // Strip react-pdf's unembedded base-14 phantom font refs (Helvetica etc.)
+    // so the schedule passes the same print-preflight bar as the catalogue.
+    const buffer = Buffer.from(await stripUnembeddedBase14Fonts(rawBuffer));
     const filename = `${sanitizeFilename(show.name)}-Schedule.pdf`;
     const isPreview = request.nextUrl.searchParams.has('preview');
     return makePdfResponse(buffer, filename, isPreview);

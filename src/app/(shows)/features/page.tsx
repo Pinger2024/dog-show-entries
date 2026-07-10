@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import { AnimateIn } from '@/components/animate-in';
 import { FeatureTabs } from '@/components/features/feature-tabs';
+import { SE_H } from '@/components/show-experience/tokens';
+import { cn } from '@/lib/utils';
 
 export const metadata: Metadata = {
   title: 'Features — Remi Dog Show Management Platform',
@@ -44,13 +46,13 @@ export default function FeaturesPage() {
               </div>
             </AnimateIn>
             <AnimateIn delay={100}>
-              <h1 className="font-serif text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
+              <h1 className={cn(SE_H, 'text-4xl sm:text-5xl lg:text-6xl')}>
                 Every feature your{' '}
                 <span className="text-primary">show needs</span>
               </h1>
             </AnimateIn>
             <AnimateIn delay={200}>
-              <p className="gold-rule-center mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl">
+              <p className="after:mx-auto after:mt-3 after:block after:h-0.5 after:w-12 after:bg-se-honey after:content-[''] mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl">
                 From online entries to printed catalogues, from smart class
                 eligibility to live ringside results — Remi replaces
                 spreadsheets, paper forms, and manual admin with one
@@ -89,7 +91,7 @@ export default function FeaturesPage() {
       <section className="border-b bg-card">
         <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
           <AnimateIn className="mx-auto max-w-2xl text-center">
-            <h2 className="gold-rule-center font-serif text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
+            <h2 className="after:mx-auto after:mt-3 after:block after:h-0.5 after:w-12 after:bg-se-honey after:content-[''] font-serif text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
               What makes Remi different
             </h2>
             <p className="mt-5 text-lg text-muted-foreground">
@@ -134,7 +136,7 @@ export default function FeaturesPage() {
                       {item.old}
                     </p>
                     <p className="mt-3 flex items-start gap-2 text-sm font-medium leading-relaxed">
-                      <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-green-600" />
+                      <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-se-fresh-deep" />
                       {item.new}
                     </p>
                   </div>

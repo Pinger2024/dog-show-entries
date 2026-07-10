@@ -391,7 +391,7 @@ export function AddJudgeWizard({
             <div key={s.key} className="flex items-center gap-1">
               <div className={cn(
                 'flex size-6 items-center justify-center rounded-full text-xs font-medium',
-                i < currentStepIndex && 'bg-emerald-500 text-white',
+                i < currentStepIndex && 'bg-se-fresh-deep text-white',
                 i === currentStepIndex && 'bg-primary text-primary-foreground',
                 i > currentStepIndex && 'bg-muted text-muted-foreground',
               )}>
@@ -718,7 +718,7 @@ export function AddJudgeWizard({
                           </Badge>
                         )}
                         {notApproved && !disabled && (
-                          <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
+                          <Badge variant="outline" className="text-xs text-se-honey-deep border-se-honey-line">
                             Not on RKC approvals
                           </Badge>
                         )}
@@ -730,10 +730,10 @@ export function AddJudgeWizard({
             </div>
 
             {selectedCount === 0 && breedCombos.length > 0 && (
-              <p className="text-xs text-amber-600">Select at least one breed/sex to assign</p>
+              <p className="text-xs text-se-honey-deep">Select at least one breed/sex to assign</p>
             )}
             {selectedCount > 0 && !selectedJudge.contactEmail && !manualEmail && (
-              <p className="text-xs text-amber-600">An email address is required — judges need it to receive their offer</p>
+              <p className="text-xs text-se-honey-deep">An email address is required — judges need it to receive their offer</p>
             )}
             <DialogFooter className="flex-col gap-2 sm:flex-row">
               <Button variant="outline" onClick={() => setStep('find')} className="min-h-[2.75rem]">

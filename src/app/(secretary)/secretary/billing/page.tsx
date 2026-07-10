@@ -6,6 +6,8 @@ import { useSearchParams } from 'next/navigation';
 import { trpc } from '@/lib/trpc';
 import { formatCurrency } from '@/lib/date-utils';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+import { SE_H } from '@/components/show-experience/tokens';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -138,7 +140,7 @@ export default function BillingPage() {
     return (
       <div className="space-y-8 pb-16 md:pb-0">
         <div>
-          <h1 className="font-serif text-lg font-bold tracking-tight sm:text-2xl lg:text-3xl">
+          <h1 className={cn(SE_H, 'font-serif text-lg sm:text-2xl lg:text-3xl')}>
             Billing &amp; Subscription
           </h1>
           <p className="mt-1 text-sm text-muted-foreground sm:text-base">
@@ -186,7 +188,7 @@ export default function BillingPage() {
     <div className="space-y-8 pb-16 md:pb-0">
       {/* Header */}
       <div>
-        <h1 className="font-serif text-lg font-bold tracking-tight sm:text-2xl lg:text-3xl">
+        <h1 className={cn(SE_H, 'font-serif text-lg sm:text-2xl lg:text-3xl')}>
           Billing &amp; Subscription
         </h1>
         <p className="mt-1 text-sm text-muted-foreground sm:text-base">
@@ -471,7 +473,7 @@ export default function BillingPage() {
                             <p className="font-serif text-lg font-bold">
                               {upgradePlan.name}
                             </p>
-                            <Badge className="border-gold/30 bg-gold/15 text-gold">
+                            <Badge className="border-se-honey/30 bg-se-honey-soft text-se-honey-deep">
                               <Crown className="mr-0.5 size-3" />
                               Recommended
                             </Badge>

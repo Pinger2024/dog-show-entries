@@ -112,13 +112,13 @@ export function ShowSectionNav({ showId, isWusv = false }: { showId: string; isW
     const { phase } = phaseContext;
 
     if (path === '/entries' && phase === 'entries_open') {
-      return { label: 'Live', color: 'bg-emerald-100 text-emerald-700' };
+      return { label: 'Live', color: 'bg-se-fresh-soft text-se-fresh-deep' };
     }
     if (path === '/results' && phase === 'show_day') {
-      return { label: 'Recording', color: 'bg-emerald-100 text-emerald-700' };
+      return { label: 'Recording', color: 'bg-se-fresh-soft text-se-fresh-deep' };
     }
     if (path === '/results' && phase === 'post_show' && !phaseContext.resultsPublished) {
-      return { label: 'Publish', color: 'bg-amber-100 text-amber-700' };
+      return { label: 'Publish', color: 'bg-se-honey-soft text-se-honey-deep' };
     }
     return null;
   }
@@ -144,7 +144,7 @@ export function ShowSectionNav({ showId, isWusv = false }: { showId: string; isW
           </div>
           <ChevronDown className="size-4 text-muted-foreground" />
           {currentSection.path !== '/checklist' && pendingActions > 0 && (
-            <span className="flex size-5 items-center justify-center rounded-full bg-amber-500 text-xs font-bold text-white">
+            <span className="flex size-5 items-center justify-center rounded-full bg-se-honey text-xs font-bold text-white">
               {pendingActions > 9 ? '9+' : pendingActions}
             </span>
           )}
@@ -197,7 +197,7 @@ export function ShowSectionNav({ showId, isWusv = false }: { showId: string; isW
                             return null;
                           })()}
                           {showBadge && (
-                            <span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-amber-500 text-xs font-bold text-white">
+                            <span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-se-honey text-xs font-bold text-white">
                               {pendingActions > 9 ? '9+' : pendingActions}
                             </span>
                           )}
@@ -254,7 +254,7 @@ export function ShowSectionNav({ showId, isWusv = false }: { showId: string; isW
                         return null;
                       })()}
                       {showBadge && (
-                        <span className="absolute -top-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-amber-500 text-xs font-bold text-white">
+                        <span className="absolute -top-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-se-honey text-xs font-bold text-white">
                           {pendingActions > 9 ? '9+' : pendingActions}
                         </span>
                       )}

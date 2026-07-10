@@ -198,7 +198,7 @@ export default function FinancialPage() {
       <div className="grid gap-4 grid-cols-2 sm:grid-cols-4">
         <StatCard
           label="Total Income"
-          value={<span className="text-green-600 dark:text-green-400">{formatCurrency(stats?.clubReceivablePence ?? 0)}</span>}
+          value={<span className="text-se-fresh-deep">{formatCurrency(stats?.clubReceivablePence ?? 0)}</span>}
           subtext={`${entryBreakdownText} + sundries`}
         />
         <StatCard
@@ -208,7 +208,7 @@ export default function FinancialPage() {
         />
         <StatCard
           label="Awaiting Payment"
-          value={<span className="text-amber-600 dark:text-amber-400">{formatCurrency(stats?.pendingClubReceivablePence ?? 0)}</span>}
+          value={<span className="text-se-honey-deep">{formatCurrency(stats?.pendingClubReceivablePence ?? 0)}</span>}
           subtext={`${stats?.pendingEntries ?? 0} started checkout`}
         />
         <StatCard

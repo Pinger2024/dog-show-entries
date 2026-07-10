@@ -13,6 +13,7 @@ import {
 import { cn } from '@/lib/utils';
 import { isUuid } from '@/lib/slugify';
 import { Button } from '@/components/ui/button';
+import { Chip, Wordmark } from '@/components/show-experience/kit';
 
 interface StewardShellProps {
   user: {
@@ -87,15 +88,12 @@ export function StewardShell({ user, children }: StewardShellProps) {
             </>
           ) : (
             <>
-              <Link
-                href="/"
-                className="font-serif text-xl font-bold tracking-tight text-primary"
-              >
-                Remi
+              <Link href="/">
+                <Wordmark size={19} />
               </Link>
-              <span className="rounded-md bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">
+              <Chip tone="fresh" className="h-auto px-2 py-0.5 text-xs">
                 Steward
-              </span>
+              </Chip>
             </>
           )}
         </div>
@@ -145,7 +143,7 @@ export function StewardShell({ user, children }: StewardShellProps) {
               className={cn(
                 'flex flex-1 flex-col items-center justify-center gap-0.5 min-h-[48px] py-2 text-xs sm:text-xs font-medium transition-colors',
                 isActive
-                  ? 'text-blue-600'
+                  ? 'text-primary'
                   : 'text-muted-foreground hover:text-foreground'
               )}
             >

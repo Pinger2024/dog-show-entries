@@ -90,11 +90,11 @@ export function ShowStatusAction({ showId }: ActionPanelProps & { actionKey?: st
                 {prereqChecks.map((p) => (
                   <div key={p.label} className="flex items-center gap-1.5">
                     {p.met ? (
-                      <Check className="size-3 text-green-500" />
+                      <Check className="size-3 text-se-fresh-deep" />
                     ) : (
-                      <AlertTriangle className="size-3 text-amber-500" />
+                      <AlertTriangle className="size-3 text-se-honey-deep" />
                     )}
-                    <span className={p.met ? 'text-muted-foreground' : 'text-amber-600'}>
+                    <span className={p.met ? 'text-muted-foreground' : 'text-se-honey-deep'}>
                       {p.label}
                     </span>
                   </div>

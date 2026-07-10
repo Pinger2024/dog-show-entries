@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils';
 import { formatSvClassName } from '@/lib/class-labels';
 import { trpc } from '@/lib/trpc';
 import { uploadImage } from '@/lib/upload';
+import { SE_H } from '@/components/show-experience/tokens';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -74,11 +75,11 @@ const TIER_LABELS: Record<string, string> = {
 };
 
 const TIER_COLORS: Record<string, string> = {
-  title: 'bg-amber-100 text-amber-800',
+  title: 'bg-se-honey-soft text-se-honey-deep',
   show: 'bg-violet-100 text-violet-800',
   class: 'bg-sky-100 text-sky-800',
-  prize: 'bg-emerald-100 text-emerald-800',
-  advertiser: 'bg-slate-100 text-slate-800',
+  prize: 'bg-se-fresh-soft text-se-fresh-deep',
+  advertiser: 'bg-muted text-foreground',
 };
 
 /* ─── Sponsor Directory Tab ──────────────────────────── */
@@ -569,7 +570,7 @@ function ShowSponsorAssignments({
                               )}
                             </p>
                             {cs.trophyName && (
-                              <p className="mt-0.5 flex items-center gap-1 text-xs text-amber-600">
+                              <p className="mt-0.5 flex items-center gap-1 text-xs text-se-honey-deep">
                                 <Trophy className="size-3 shrink-0" />
                                 <span className="truncate">{cs.trophyName}</span>
                               </p>
@@ -701,7 +702,7 @@ function AutocompleteInput({
         placeholder={placeholder}
         className={cn(
           'h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none',
-          'focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400',
+          'focus:bg-se-honey-soft/50 focus:ring-1 focus:ring-inset focus:ring-se-honey',
           'placeholder:text-muted-foreground/40',
           className
         )}
@@ -898,7 +899,7 @@ function SponsorshipRow({
             }}
             onBlur={() => handleBlur('sponsorAffix', affix)}
             placeholder="Affix"
-            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-muted-foreground/40"
+            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-se-honey-soft/50 focus:ring-1 focus:ring-inset focus:ring-se-honey placeholder:text-muted-foreground/40"
           />
         </div>
         <div className="border-b border-r">
@@ -911,7 +912,7 @@ function SponsorshipRow({
             }}
             onBlur={() => handleBlur('trophyName', trophy)}
             placeholder="Trophy"
-            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-muted-foreground/40"
+            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-se-honey-soft/50 focus:ring-1 focus:ring-inset focus:ring-se-honey placeholder:text-muted-foreground/40"
           />
         </div>
         <div className="flex items-center justify-center gap-1 border-b">
@@ -925,7 +926,7 @@ function SponsorshipRow({
                 className={cn(
                   'flex size-7 items-center justify-center rounded transition-colors',
                   sponsorship.bannerImageUrl
-                    ? 'text-emerald-600 hover:bg-emerald-50'
+                    ? 'text-se-fresh-deep hover:bg-se-fresh-soft'
                     : 'text-muted-foreground/50 hover:bg-muted hover:text-foreground',
                   (bannerUploading || setBannerMutation.isPending) && 'opacity-60'
                 )}
@@ -991,7 +992,7 @@ function SponsorshipRow({
                   }}
                   onBlur={() => handleBlur('sponsorAffix', affix)}
                   placeholder="Affix"
-                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
+                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-se-honey placeholder:text-muted-foreground/40"
                 />
               </div>
               <div>
@@ -1005,7 +1006,7 @@ function SponsorshipRow({
                   }}
                   onBlur={() => handleBlur('trophyName', trophy)}
                   placeholder="Trophy"
-                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
+                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-se-honey placeholder:text-muted-foreground/40"
                 />
               </div>
             </div>
@@ -1040,7 +1041,7 @@ function SponsorshipRow({
                       type="button"
                       onClick={() => bannerInputRef.current?.click()}
                       disabled={bannerUploading || setBannerMutation.isPending}
-                      className="text-xs text-blue-600 underline-offset-2 hover:underline"
+                      className="text-xs text-se-honey-deep underline-offset-2 hover:underline"
                     >
                       {bannerUploading ? 'Uploading…' : 'Replace'}
                     </button>
@@ -1192,7 +1193,7 @@ function NewSponsorshipRow({
     <>
       {/* Desktop: inline cells */}
       <div ref={rowRef} className="hidden sm:contents">
-        <div className="border-b border-r bg-blue-50/30">
+        <div className="border-b border-r bg-se-honey-soft/30">
           <AutocompleteInput
             value={name}
             onChange={(v) => setName(v)}
@@ -1200,30 +1201,30 @@ function NewSponsorshipRow({
             placeholder="Type sponsor name..."
             onPickSuggestion={handlePickSuggestion}
             onBlur={handleRowBlur}
-            className="bg-blue-50/30"
+            className="bg-se-honey-soft/30"
           />
         </div>
-        <div className="border-b border-r bg-blue-50/30">
+        <div className="border-b border-r bg-se-honey-soft/30">
           <input
             type="text"
             value={affix}
             onChange={(e) => setAffix(e.target.value)}
             onBlur={handleRowBlur}
             placeholder="Affix"
-            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-muted-foreground/40"
+            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-se-honey-soft/50 focus:ring-1 focus:ring-inset focus:ring-se-honey placeholder:text-muted-foreground/40"
           />
         </div>
-        <div className="border-b border-r bg-blue-50/30">
+        <div className="border-b border-r bg-se-honey-soft/30">
           <input
             type="text"
             value={trophy}
             onChange={(e) => setTrophy(e.target.value)}
             onBlur={handleRowBlur}
             placeholder="Trophy"
-            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-muted-foreground/40"
+            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-se-honey-soft/50 focus:ring-1 focus:ring-inset focus:ring-se-honey placeholder:text-muted-foreground/40"
           />
         </div>
-        <div className="flex items-center justify-center border-b bg-blue-50/30">
+        <div className="flex items-center justify-center border-b bg-se-honey-soft/30">
           <button
             type="button"
             onClick={() => {
@@ -1241,7 +1242,7 @@ function NewSponsorshipRow({
 
       {/* Mobile: stacked fields */}
       <div ref={mobileRowRef} className="sm:hidden">
-        <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50/30 p-3">
+        <div className="flex items-start gap-2 rounded-md border border-se-honey-line bg-se-honey-soft/30 p-3">
           <div className="min-w-0 flex-1 space-y-2">
             <div>
               <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Sponsor</label>
@@ -1264,7 +1265,7 @@ function NewSponsorshipRow({
                   onChange={(e) => setAffix(e.target.value)}
                   onBlur={handleRowBlur}
                   placeholder="Affix"
-                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
+                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-se-honey placeholder:text-muted-foreground/40"
                 />
               </div>
               <div>
@@ -1275,7 +1276,7 @@ function NewSponsorshipRow({
                   onChange={(e) => setTrophy(e.target.value)}
                   onBlur={handleRowBlur}
                   placeholder="Trophy"
-                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
+                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-se-honey placeholder:text-muted-foreground/40"
                 />
               </div>
             </div>
@@ -1602,7 +1603,7 @@ function AwardSponsorshipRow({
             }}
             onBlur={() => handleBlur('sponsorAffix', affix)}
             placeholder="Affix"
-            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-muted-foreground/40"
+            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-se-honey-soft/50 focus:ring-1 focus:ring-inset focus:ring-se-honey placeholder:text-muted-foreground/40"
           />
         </div>
         <div className="border-b border-r">
@@ -1615,7 +1616,7 @@ function AwardSponsorshipRow({
             }}
             onBlur={() => handleBlur('trophyName', trophy)}
             placeholder="Trophy"
-            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-muted-foreground/40"
+            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-se-honey-soft/50 focus:ring-1 focus:ring-inset focus:ring-se-honey placeholder:text-muted-foreground/40"
           />
         </div>
         <div className="flex items-center justify-center border-b">
@@ -1660,7 +1661,7 @@ function AwardSponsorshipRow({
                   }}
                   onBlur={() => handleBlur('sponsorAffix', affix)}
                   placeholder="Affix"
-                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
+                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-se-honey placeholder:text-muted-foreground/40"
                 />
               </div>
               <div>
@@ -1674,7 +1675,7 @@ function AwardSponsorshipRow({
                   }}
                   onBlur={() => handleBlur('trophyName', trophy)}
                   placeholder="Trophy"
-                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
+                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-se-honey placeholder:text-muted-foreground/40"
                 />
               </div>
             </div>
@@ -1812,7 +1813,7 @@ function NewAwardSponsorshipRow({
     <>
       {/* Desktop: inline cells */}
       <div ref={rowRef} className="hidden sm:contents">
-        <div className="border-b border-r bg-blue-50/30">
+        <div className="border-b border-r bg-se-honey-soft/30">
           <AutocompleteInput
             value={name}
             onChange={(v) => setName(v)}
@@ -1820,30 +1821,30 @@ function NewAwardSponsorshipRow({
             placeholder="Type sponsor name..."
             onPickSuggestion={handlePickSuggestion}
             onBlur={handleRowBlur}
-            className="bg-blue-50/30"
+            className="bg-se-honey-soft/30"
           />
         </div>
-        <div className="border-b border-r bg-blue-50/30">
+        <div className="border-b border-r bg-se-honey-soft/30">
           <input
             type="text"
             value={affix}
             onChange={(e) => setAffix(e.target.value)}
             onBlur={handleRowBlur}
             placeholder="Affix"
-            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-muted-foreground/40"
+            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-se-honey-soft/50 focus:ring-1 focus:ring-inset focus:ring-se-honey placeholder:text-muted-foreground/40"
           />
         </div>
-        <div className="border-b border-r bg-blue-50/30">
+        <div className="border-b border-r bg-se-honey-soft/30">
           <input
             type="text"
             value={trophy}
             onChange={(e) => setTrophy(e.target.value)}
             onBlur={handleRowBlur}
             placeholder="Trophy"
-            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-blue-50/50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-muted-foreground/40"
+            className="h-9 w-full rounded-none border-0 bg-transparent px-2 text-sm outline-none focus:bg-se-honey-soft/50 focus:ring-1 focus:ring-inset focus:ring-se-honey placeholder:text-muted-foreground/40"
           />
         </div>
-        <div className="flex items-center justify-center border-b bg-blue-50/30">
+        <div className="flex items-center justify-center border-b bg-se-honey-soft/30">
           <button
             type="button"
             onClick={() => {
@@ -1861,7 +1862,7 @@ function NewAwardSponsorshipRow({
 
       {/* Mobile: stacked fields */}
       <div ref={mobileRowRef} className="sm:hidden">
-        <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50/30 p-3">
+        <div className="flex items-start gap-2 rounded-md border border-se-honey-line bg-se-honey-soft/30 p-3">
           <div className="min-w-0 flex-1 space-y-2">
             <div>
               <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Sponsor</label>
@@ -1884,7 +1885,7 @@ function NewAwardSponsorshipRow({
                   onChange={(e) => setAffix(e.target.value)}
                   onBlur={handleRowBlur}
                   placeholder="Affix"
-                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
+                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-se-honey placeholder:text-muted-foreground/40"
                 />
               </div>
               <div>
@@ -1895,7 +1896,7 @@ function NewAwardSponsorshipRow({
                   onChange={(e) => setTrophy(e.target.value)}
                   onBlur={handleRowBlur}
                   placeholder="Trophy"
-                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
+                  className="mt-0.5 h-9 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-se-honey placeholder:text-muted-foreground/40"
                 />
               </div>
             </div>
@@ -2060,8 +2061,8 @@ function ClassSponsorshipTable({
       <div className="mb-8">
         <div className="mb-2 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Award className="size-4 text-amber-600" />
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-amber-800">Best Awards</h3>
+            <Award className="size-4 text-se-honey-deep" />
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-se-honey-deep">Best Awards</h3>
           </div>
           <EditAwardsDialog
             awards={bestAwards}
@@ -2073,7 +2074,7 @@ function ClassSponsorshipTable({
         {/* Desktop: spreadsheet grid */}
         <div className="hidden overflow-hidden rounded-md border sm:block">
           {/* Header */}
-          <div className="grid grid-cols-[minmax(140px,1.2fr)_minmax(120px,1fr)_minmax(100px,0.8fr)_minmax(100px,0.8fr)_36px] border-b-2 bg-amber-50/80 text-xs font-medium uppercase tracking-wider text-amber-800/70">
+          <div className="grid grid-cols-[minmax(140px,1.2fr)_minmax(120px,1fr)_minmax(100px,0.8fr)_minmax(100px,0.8fr)_36px] border-b-2 bg-se-honey-soft/80 text-xs font-medium uppercase tracking-wider text-se-honey-ink/70">
             <div className="border-r px-2 py-2">Award</div>
             <div className="border-r px-2 py-2">Sponsor Name</div>
             <div className="border-r px-2 py-2">Affix</div>
@@ -2135,7 +2136,7 @@ function ClassSponsorshipTable({
 
             return (
               <div key={award} className="rounded-lg border bg-card">
-                <div className="border-b bg-amber-50/50 px-3 py-2">
+                <div className="border-b bg-se-honey-soft/50 px-3 py-2">
                   <p className="text-sm font-medium">{award}</p>
                 </div>
                 <div className="space-y-2 p-2">
@@ -2337,7 +2338,7 @@ export default function SponsorsPage() {
     <div>
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="font-serif text-lg font-semibold">Sponsors</h2>
+          <h2 className={cn(SE_H, 'font-serif text-lg')}>Sponsors</h2>
           <p className="text-sm text-muted-foreground">
             Manage your sponsor directory and assign sponsors to this show. RKC regulations require all sponsorships to be acknowledged in schedules and catalogues.
           </p>
@@ -2419,7 +2420,7 @@ function ShowDonations({ showId }: { showId: string }) {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="font-serif text-base font-semibold">Donations</h3>
+        <h3 className={cn(SE_H, 'font-serif text-base')}>Donations</h3>
         <p className="text-sm text-muted-foreground">
           Record the people who kindly gave a donation rather than sponsoring a
           class. They&apos;ll be thanked in the catalogue. Just a name and their

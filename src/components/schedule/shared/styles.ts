@@ -12,6 +12,11 @@ import { StyleSheet, Font } from '@react-pdf/renderer';
 import path from 'path';
 import type { ScheduleData } from '@/server/db/schema/shows';
 import { getDockingStatement as getDockingStatementShared } from '@/lib/rkc-compliance';
+// Side-effect: registers the HankenGrotesk family used below for display/
+// heading elements. Imported from a single shared module (not registered
+// inline here) — see src/lib/pdf-fonts.ts for why duplicate registration
+// of the same family from multiple modules is unsafe.
+import '@/lib/pdf-fonts';
 
 // ── Font Registration ──────────────────────────────────────────────────────────
 const fontsDir = path.join(process.cwd(), 'public', 'fonts');
@@ -193,9 +198,9 @@ export const s = StyleSheet.create({
     marginBottom: 10,
   },
   coverShowName: {
-    fontFamily: 'LibreBaskerville',
+    fontFamily: 'HankenGrotesk',
     fontSize: 17,
-    fontWeight: 'bold',
+    fontWeight: 800,
     textAlign: 'center',
     color: C.textDark,
     marginBottom: 8,
@@ -323,7 +328,7 @@ export const s = StyleSheet.create({
     marginBottom: 14,
   },
   sectionBandText: {
-    fontFamily: 'LibreBaskerville',
+    fontFamily: 'HankenGrotesk',
     fontSize: 11,
     fontWeight: 'bold',
     color: C.textOnPrimary,

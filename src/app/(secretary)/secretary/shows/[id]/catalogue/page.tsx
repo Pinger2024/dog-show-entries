@@ -101,11 +101,11 @@ export default function CataloguePage() {
   return (
     <div className="space-y-6">
       {entriesStillOpen && (
-        <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200">
+        <div className="flex items-start gap-3 rounded-lg border border-se-honey-line bg-se-honey-soft p-4 text-sm text-se-honey-ink">
           <Info className="size-5 shrink-0" />
           <div className="space-y-1">
             <p className="font-medium">The catalogue won&apos;t be generated until entries close.</p>
-            <p className="text-blue-800/80 dark:text-blue-300/80">
+            <p className="text-se-honey-ink/80">
               {entryCloseDate
                 ? `Entries close on ${new Date(entryCloseDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}. Anything you download before then shows the entries received so far.`
                 : 'Anything you download before entries close shows the entries received so far.'}
@@ -190,12 +190,12 @@ export default function CataloguePage() {
           for printing (late entries append so printed numbers never shift). */}
       {hasNumbers &&
         (numbersLocked ? (
-          <div className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          <div className="flex flex-col gap-3 rounded-lg border border-se-fresh-line bg-se-fresh-soft p-4 text-sm text-se-fresh-deep sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
               <Lock className="size-5 shrink-0" />
               <div className="space-y-0.5">
                 <p className="font-medium">Numbers are locked for printing</p>
-                <p className="text-amber-800/80 dark:text-amber-300/80">
+                <p className="text-se-fresh-deep/80">
                   New entries are added at the end, so the numbers on your
                   printed catalogue stay correct.
                 </p>

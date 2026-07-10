@@ -50,9 +50,9 @@ import {
   HoneyBanner,
   CountdownCells,
   SEDarkPanel,
-  SE_H,
   Wordmark,
 } from '@/components/show-experience/kit';
+import { SE_H } from '@/components/show-experience/tokens';
 
 /* ─── Local keyframes ────────────────────────────────
  * A couple of one-off animations that don't belong in the shared kit

@@ -697,7 +697,11 @@ function SvCoverPage({ show, classCount }: { show: CatalogueShowInfo; classCount
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
           <Text style={[ss.eyebrow, { maxWidth: '60%' }]}>{show.name}</Text>
           {show.kcLicenceNo ? (
-            <Text style={[ss.eyebrow, { color: SV.ink3 }]}>№ {show.kcLicenceNo}</Text>
+            // The "№" glyph isn't in Hanken Grotesk's latin subset — nest a
+            // differently-styled run just for that character (2026-07-10).
+            <Text style={[ss.eyebrow, { color: SV.ink3 }]}>
+              <Text style={{ fontFamily: 'Inter' }}>№</Text> {show.kcLicenceNo}
+            </Text>
           ) : null}
         </View>
 

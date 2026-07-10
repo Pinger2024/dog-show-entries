@@ -2,6 +2,11 @@ import React from 'react';
 import { Document, Page, Text, View, Image, StyleSheet, Font } from '@react-pdf/renderer';
 import path from 'path';
 import type { JudgesBookClass, JudgesBookShowInfo } from '@/app/api/judges-book/[showId]/route';
+// Side-effect: registers the HankenGrotesk family used on the branded front
+// cover sheet below. Imported from a single shared module (not registered
+// inline here) — see src/lib/pdf-fonts.ts for why duplicate registration of
+// the same family from multiple modules is unsafe.
+import '@/lib/pdf-fonts';
 
 const fontsDir = path.join(process.cwd(), 'public', 'fonts');
 Font.register({
@@ -12,6 +17,11 @@ Font.register({
     { src: path.join(fontsDir, 'times-new-roman-italic.ttf'), fontStyle: 'italic' },
   ],
 });
+// Show Experience green rebrand — Hanken Grotesk for the branded front
+// cover sheet ONLY (club name, show name, "Judge's Book" title, judge
+// name). The per-class working pages (critique write-in areas, placement
+// columns) stay on Times untouched — those are the print-proofed judging
+// document, not the display cover.
 Font.registerHyphenationCallback((word) => [word]);
 
 const SHOW_TYPE_LABELS: Record<string, string> = {
@@ -352,20 +362,22 @@ const coverStyles = StyleSheet.create({
   top: { alignItems: 'center', width: '100%' },
   logo: { maxWidth: 180, maxHeight: 110, objectFit: 'contain', marginBottom: 16 },
   club: {
+    fontFamily: 'HankenGrotesk',
     fontSize: 13,
-    fontWeight: 'bold',
+    fontWeight: 700,
     textTransform: 'uppercase',
     letterSpacing: 2,
     textAlign: 'center',
-    color: '#222',
+    color: '#20452c',
   },
   middle: { alignItems: 'center', width: '100%' },
-  rule: { width: 120, height: 2, backgroundColor: '#000', marginVertical: 18 },
+  rule: { width: 120, height: 2, backgroundColor: '#2f6b43', marginVertical: 18 },
   showName: {
+    fontFamily: 'HankenGrotesk',
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: 800,
     textAlign: 'center',
-    color: '#000',
+    color: '#1b241d',
     marginBottom: 8,
   },
   showType: {
@@ -377,22 +389,27 @@ const coverStyles = StyleSheet.create({
   },
   date: { fontSize: 12, textAlign: 'center', color: '#444' },
   title: {
+    fontFamily: 'HankenGrotesk',
     fontSize: 30,
-    fontWeight: 'bold',
+    fontWeight: 800,
     textTransform: 'uppercase',
     letterSpacing: 4,
     textAlign: 'center',
-    color: '#000',
+    color: '#20452c',
     marginTop: 24,
   },
   judge: {
+    fontFamily: 'HankenGrotesk',
     fontSize: 15,
+    fontWeight: 600,
     textAlign: 'center',
-    color: '#222',
+    color: '#1b241d',
     marginTop: 10,
   },
   judgeLabel: {
+    fontFamily: 'HankenGrotesk',
     fontSize: 9,
+    fontWeight: 600,
     textTransform: 'uppercase',
     letterSpacing: 1.5,
     color: '#666',

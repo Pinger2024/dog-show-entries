@@ -81,45 +81,45 @@ export async function requestPasswordReset(email: string) {
     html: `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin: 0; padding: 0; background-color: #f5f3ef; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+<body style="margin: 0; padding: 0; background-color: #f6f4ec; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 500px; margin: 0 auto; padding: 32px 16px;">
 
     <div style="text-align: center; padding: 20px 0;">
-      <h1 style="margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 28px; color: #2D5F3F; letter-spacing: -0.5px;">Remi</h1>
+      <h1 style="margin: 0; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 26px; font-weight: 800; color: #2f6b43; letter-spacing: -0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#5bb579;margin-left:3px;"></span></h1>
     </div>
 
-    <div style="background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-      <div style="background: #2D5F3F; padding: 24px; text-align: center;">
-        <h2 style="margin: 0; color: #ffffff; font-size: 20px; font-weight: 700;">Reset Your Password</h2>
+    <div style="background: #ffffff; border: 1px solid #e7e1d3; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: #20452c; padding: 24px; text-align: center;">
+        <h2 style="margin: 0; color: #f3ecdc; font-size: 20px; font-weight: 700;">Reset Your Password</h2>
       </div>
 
       <div style="padding: 28px 24px; text-align: center;">
-        <p style="margin: 0 0 8px; font-size: 15px; color: #333; line-height: 1.5;">
+        <p style="margin: 0 0 8px; font-size: 15px; color: #1b241d; line-height: 1.5;">
           Click the button below to set a new password. This link will expire in 1 hour.
         </p>
-        <p style="margin: 0 0 24px; font-size: 13px; color: #888;">
-          Resetting password for <strong style="color: #333;">${user.email}</strong>
+        <p style="margin: 0 0 24px; font-size: 13px; color: #535c4d;">
+          Resetting password for <strong style="color: #1b241d;">${user.email}</strong>
         </p>
 
-        <a href="${resetUrl}" style="display: inline-block; padding: 14px 36px; background: #2D5F3F; color: #ffffff; text-decoration: none; border-radius: 8px; font-size: 15px; font-weight: 600;">Reset Password</a>
+        <a href="${resetUrl}" style="display: inline-block; padding: 14px 36px; background: #2f6b43; color: #f3ecdc; text-decoration: none; border-radius: 13px; font-size: 15px; font-weight: 700;">Reset Password</a>
 
-        <p style="margin: 24px 0 0; font-size: 12px; color: #999; line-height: 1.5;">
+        <p style="margin: 24px 0 0; font-size: 12px; color: #535c4d; line-height: 1.5;">
           If the button doesn\u2019t work, copy and paste this link into your browser:<br>
-          <a href="${resetUrl}" style="color: #2D5F3F; word-break: break-all;">${resetUrl}</a>
+          <a href="${resetUrl}" style="color: #2f6b43; word-break: break-all;">${resetUrl}</a>
         </p>
       </div>
 
-      <div style="padding: 16px 24px; border-top: 1px solid #e5e5e5; text-align: center;">
-        <p style="margin: 0; font-size: 12px; color: #999; line-height: 1.5;">
+      <div style="padding: 16px 24px; border-top: 1px solid #e7e1d3; text-align: center;">
+        <p style="margin: 0; font-size: 12px; color: #535c4d; line-height: 1.5;">
           If you did not request this email, you can safely ignore it.
           <br>Your password will not be changed.
         </p>
       </div>
     </div>
 
-    <div style="text-align: center; padding: 20px 16px; font-size: 12px; color: #999;">
+    <div style="text-align: center; padding: 20px 16px; font-size: 12px; color: #535c4d;">
       <p style="margin: 0;">
-        <a href="${APP_URL}" style="color: #2D5F3F; text-decoration: none; font-weight: 600;">Remi</a>
+        <a href="${APP_URL}" style="color: #2f6b43; text-decoration: none; font-weight: 600;">Remi</a>
         &mdash; Dog show entries made simple.
       </p>
     </div>

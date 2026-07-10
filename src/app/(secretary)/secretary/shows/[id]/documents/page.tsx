@@ -231,7 +231,7 @@ function DocumentLinkCard({ doc }: { doc: DocumentLink }) {
             onClick={handleShare}
             className="inline-flex min-h-[2.75rem] items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
-            {copied ? <Check className="size-3 text-emerald-600" /> : <Share2 className="size-3" />}
+            {copied ? <Check className="size-3 text-se-fresh-deep" /> : <Share2 className="size-3" />}
             {copied ? 'Copied!' : 'Share'}
           </button>
         </div>
@@ -424,15 +424,15 @@ export default function DocumentsPage() {
   return (
     <div className="space-y-6">
       {!hasNumbers && (
-        <Card className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950">
+        <Card className="border-se-honey-line bg-se-honey-soft">
           <CardContent className="py-4">
             <div className="flex items-start gap-3">
-              <Hash className="mt-0.5 size-4 shrink-0 text-amber-600" />
+              <Hash className="mt-0.5 size-4 shrink-0 text-se-honey-deep" />
               <div>
-                <p className="font-medium text-amber-800 dark:text-amber-200">
+                <p className="font-medium text-se-honey-ink">
                   Catalogue numbers not yet assigned
                 </p>
-                <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
+                <p className="mt-1 text-sm text-se-honey-ink">
                   Some documents require catalogue numbers. Go to the{' '}
                   <a
                     href={`/secretary/shows/${showId}/catalogue`}
@@ -577,7 +577,7 @@ export default function DocumentsPage() {
           </div>
 
           <div className="flex flex-col gap-3 rounded-lg border bg-muted/50 p-4 sm:flex-row sm:items-center">
-            <Award className="size-8 shrink-0 text-amber-500 hidden sm:block" />
+            <Award className="size-8 shrink-0 text-se-honey-deep hidden sm:block" />
             <div className="flex-1">
               <p className="font-medium">
                 {(stats?.totalClasses ?? 0) > 0
@@ -642,7 +642,7 @@ export default function DocumentsPage() {
               to run Print Shop orders: load red blanks → print page 1
               × N, swap to blue blanks → print page 2 × N, etc. */}
           {isAdmin && (
-            <div className="flex flex-col gap-3 rounded-lg border border-dashed border-purple-300 bg-purple-50/50 p-4 sm:flex-row sm:items-center dark:border-purple-900 dark:bg-purple-950/30">
+            <div className="flex flex-col gap-3 rounded-lg border border-dashed border-purple-300 bg-purple-50/50 p-4 sm:flex-row sm:items-center">
               <Sparkles className="size-8 shrink-0 text-purple-600 hidden sm:block" />
               <div className="flex-1">
                 <p className="font-medium flex items-center gap-2">

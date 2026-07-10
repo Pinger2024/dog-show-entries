@@ -18,6 +18,8 @@ import {
   Card,
   CardContent,
 } from '@/components/ui/card';
+import { SE_H } from '@/components/show-experience/tokens';
+import { cn } from '@/lib/utils';
 
 export default function CataloguePage() {
   const params = useParams();
@@ -63,7 +65,7 @@ export default function CataloguePage() {
               <Lock className="size-7 text-muted-foreground" />
             </div>
             <div>
-              <h1 className="text-xl font-bold">{showName}</h1>
+              <h1 className={cn(SE_H, 'text-xl')}>{showName}</h1>
               <p className="mt-2 text-sm text-muted-foreground">
                 The online catalogue is available to exhibitors who purchased it when entering.
               </p>
@@ -86,11 +88,11 @@ export default function CataloguePage() {
       <div className="mx-auto max-w-md px-4 py-12">
         <Card>
           <CardContent className="space-y-4 py-8 text-center">
-            <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30">
-              <CalendarDays className="size-7 text-amber-600 dark:text-amber-400" />
+            <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-se-honey-soft">
+              <CalendarDays className="size-7 text-se-honey-deep" />
             </div>
             <div>
-              <h1 className="text-xl font-bold">{showName}</h1>
+              <h1 className={cn(SE_H, 'text-xl')}>{showName}</h1>
               <h2 className="mt-1 text-base font-semibold text-muted-foreground">
                 Catalogue Coming Soon
               </h2>
@@ -121,12 +123,12 @@ export default function CataloguePage() {
     <div className="mx-auto max-w-md px-4 py-12">
       <Card>
         <CardContent className="space-y-5 py-8 text-center">
-          <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
-            <BookOpen className="size-7 text-emerald-600 dark:text-emerald-400" />
+          <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-se-fresh-soft">
+            <BookOpen className="size-7 text-se-fresh-deep" />
           </div>
           <div>
-            <h1 className="text-xl font-bold">{showName}</h1>
-            <h2 className="mt-1 text-base font-semibold text-emerald-600 dark:text-emerald-400">
+            <h1 className={cn(SE_H, 'text-xl')}>{showName}</h1>
+            <h2 className="mt-1 text-base font-semibold text-se-fresh-deep">
               Online Catalogue
             </h2>
           </div>

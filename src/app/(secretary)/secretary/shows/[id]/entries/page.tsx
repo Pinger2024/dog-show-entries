@@ -169,7 +169,7 @@ export default function EntriesPage() {
                 {statusFilter === 'cancelled' && 'Cancelled entries'}
               </CardDescription>
               {total > entries.length && (
-                <p className="text-xs text-amber-600">
+                <p className="text-xs text-se-honey-deep">
                   Showing {entries.length} of {total} — CSV export may be incomplete
                 </p>
               )}

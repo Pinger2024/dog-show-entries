@@ -17,7 +17,7 @@ import React from 'react';
 import { sanitizeFilename } from '@/lib/slugify';
 import { authenticatePdfRequest, validateRasterLogoUrl, makePdfResponse } from '@/lib/pdf-utils';
 import { isShowDayReached } from '@/lib/date-utils';
-import { padPdfToMultiple } from '@/lib/pdf-pad';
+import { padPdfToMultiple, stripUnembeddedBase14Fonts } from '@/lib/pdf-pad';
 import { ensureCatalogueNumbers } from '@/server/services/catalogue-numbering';
 import { getDockingStatementFromScheduleData } from '@/lib/rkc-compliance';
 import { buildClassLabelMap, buildCatalogueClassDefinitions } from '@/lib/class-labels';
@@ -503,9 +503,13 @@ export async function GET(
     // so they can be sent straight to Mixam. Internal working docs
     // (steward/marked/absentees) are home-printed and don't need it.
     const needsBookletPadding = format === 'standard' || format === 'by-class';
+    // Every format goes through at least the base-14 phantom-font strip
+    // (react-pdf leaves unembedded Helvetica/Times-Roman/etc. refs in every
+    // document's Resources dict regardless of what's actually drawn) —
+    // padPdfToMultiple already includes that step for the booklet formats.
     const finalBuffer = needsBookletPadding
       ? Buffer.from(await padPdfToMultiple(buffer, 4))
-      : buffer;
+      : Buffer.from(await stripUnembeddedBase14Fonts(buffer));
 
     const formatLabels: Record<string, string> = {
       standard: 'Catalogue',

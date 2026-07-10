@@ -60,7 +60,8 @@ import { cn } from '@/lib/utils';
 import { isGsdOnlyClass, isGsdBreed } from '@/lib/class-templates';
 import { isCatalogueItem } from '@/lib/catalogue-utils';
 import { useEntryCart, getPaymentKey, restoreActionForStatus, type WizardStep } from './use-entry-cart';
-import { SecLabel, Chip, Eyebrow, SE_H, SEButton, SECard, SEDarkPanel } from '@/components/show-experience/kit';
+import { SecLabel, Chip, Eyebrow, SEButton, SECard, SEDarkPanel } from '@/components/show-experience/kit';
+import { SE_H } from '@/components/show-experience/tokens';
 import { Confetti } from '@/components/show-experience/confetti';
 
 /* ─── Local keyframes ────────────────────────────────

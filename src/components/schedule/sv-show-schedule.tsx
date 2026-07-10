@@ -148,7 +148,9 @@ function Topper({ num, subject }: { num: number; subject: string }) {
   return (
     <>
       <View style={ss.topper}>
-        <Text style={ss.eyebrow}>№ {pad2(num)}</Text>
+        {/* The "№" glyph isn't in Hanken Grotesk's latin subset — nest a
+            differently-styled run just for that character (2026-07-10). */}
+        <Text style={ss.eyebrow}><Text style={{ fontFamily: 'Inter' }}>№</Text> {pad2(num)}</Text>
         <Text style={ss.eyebrow}>{subject}</Text>
       </View>
       <View style={[ss.ruleThin, { marginTop: 4 }]} />
@@ -204,7 +206,11 @@ function SvCover({
             {show.name}
           </Text>
           {show.kcLicenceNo ? (
-            <Text style={[ss.eyebrow, { color: SV.ink3 }]}>№ {show.kcLicenceNo}</Text>
+            // The "№" glyph isn't in Hanken Grotesk's latin subset — nest a
+            // Times/Inter-styled run just for that character (2026-07-10).
+            <Text style={[ss.eyebrow, { color: SV.ink3 }]}>
+              <Text style={{ fontFamily: 'Inter' }}>№</Text> {show.kcLicenceNo}
+            </Text>
           ) : null}
         </View>
 

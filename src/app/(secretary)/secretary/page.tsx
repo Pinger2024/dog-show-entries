@@ -255,7 +255,7 @@ function ShowList({
                     {entryCount} entr{entryCount !== 1 ? 'ies' : 'y'}
                   </span>
                   {revenue > 0 && (
-                    <span className="font-medium text-emerald-600">
+                    <span className="font-medium text-se-fresh-deep">
                       {formatCurrency(revenue)}
                     </span>
                   )}

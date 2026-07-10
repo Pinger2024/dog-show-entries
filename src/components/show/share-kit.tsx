@@ -23,7 +23,8 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { buildSharePost } from '@/lib/share-caption';
-import { SEDarkPanel, SEButton, SE_H } from '@/components/show-experience/kit';
+import { SEDarkPanel, SEButton } from '@/components/show-experience/kit';
+import { SE_H } from '@/components/show-experience/tokens';
 
 type ShareChannel =
   | 'native'
@@ -374,12 +375,12 @@ export function ShareKit({
         </SEButton>
       </div>
 
-      <div className="border-t border-stone-200 pt-4">
+      <div className="border-t border-se-line pt-4">
         <Button
           type="button"
           variant="ghost"
           onClick={() => setShowPosterTools((value) => !value)}
-          className="h-10 w-full gap-2 text-stone-700"
+          className="h-10 w-full gap-2 text-se-ink2"
         >
           <ImageIcon className="size-4" />
           {showPosterTools ? 'Hide poster tools' : 'Create Instagram poster'}
@@ -389,7 +390,7 @@ export function ShareKit({
           <div className="mt-4 flex flex-col gap-4">
             <div
               className={cn(
-                'mx-auto w-full overflow-hidden rounded-xl border border-amber-300/40 bg-stone-50 shadow-sm transition-all',
+                'mx-auto w-full overflow-hidden rounded-xl border border-se-honey/40 bg-se-paper2 shadow-sm transition-all',
                 previewVariant === 'portrait' ? 'max-w-[280px] sm:max-w-[320px]' : 'max-w-[200px] sm:max-w-[240px]'
               )}
               style={{ aspectRatio: previewVariant === 'portrait' ? '4 / 5' : '9 / 16' }}
@@ -411,8 +412,8 @@ export function ShareKit({
                 className={cn(
                   'rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wider transition',
                   previewVariant === 'portrait'
-                    ? 'bg-stone-900 text-white'
-                    : 'bg-stone-100 text-stone-500 hover:bg-stone-200'
+                    ? 'bg-se-ink text-white'
+                    : 'bg-se-line text-se-ink3 hover:bg-se-line2'
                 )}
               >
                 Post 4:5
@@ -423,8 +424,8 @@ export function ShareKit({
                 className={cn(
                   'rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wider transition',
                   previewVariant === 'story'
-                    ? 'bg-stone-900 text-white'
-                    : 'bg-stone-100 text-stone-500 hover:bg-stone-200'
+                    ? 'bg-se-ink text-white'
+                    : 'bg-se-line text-se-ink3 hover:bg-se-line2'
                 )}
               >
                 Story 9:16
@@ -461,7 +462,7 @@ export function ShareKit({
                 size="sm"
                 onClick={saveImage}
                 disabled={busy !== null}
-                className="h-9 gap-1.5 text-stone-700"
+                className="h-9 gap-1.5 text-se-ink2"
               >
                 {busy === 'image_saved' ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
                 Save image
@@ -471,9 +472,9 @@ export function ShareKit({
                 variant="ghost"
                 size="sm"
                 onClick={copyCaption}
-                className="h-9 gap-1.5 text-stone-700"
+                className="h-9 gap-1.5 text-se-ink2"
               >
-                {captionCopied ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
+                {captionCopied ? <Check className="size-3.5 text-se-fresh-deep" /> : <Copy className="size-3.5" />}
                 Copy caption
               </Button>
             </div>
@@ -491,7 +492,7 @@ export function ShareKit({
  * Container only is themed here (Show Experience green: dark pine gradient +
  * fresh radial glow, matching the hero) — the <ShareKit> widget inside keeps
  * its own light-surface styling untouched, wrapped in a small white card so
- * its stone-toned text/borders stay legible sitting on a dark background.
+ * its se-ink-toned text/borders stay legible sitting on a dark background.
  */
 export function ShareKitCard(props: ShareKitProps) {
   return (

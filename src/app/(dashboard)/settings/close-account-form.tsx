@@ -77,9 +77,9 @@ export function CloseAccountForm() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+        <div className="rounded-lg border border-se-honey-line bg-se-honey-soft p-3 text-sm text-se-honey-ink">
           <p className="font-medium">Before you close</p>
-          <ul className="mt-1.5 list-disc space-y-1 pl-5 text-amber-800">
+          <ul className="mt-1.5 list-disc space-y-1 pl-5 text-se-honey-deep">
             <li>You won&apos;t be able to sign in with this account again.</li>
             <li>
               If you run shows on Remi, please hand them over to another

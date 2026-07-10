@@ -62,14 +62,52 @@ export interface ShareImageData {
 export type ShareImageFont = {
   name: string;
   data: ArrayBuffer;
-  weight: 400 | 600 | 700;
+  weight: 400 | 500 | 600 | 700 | 800;
+  style?: 'normal' | 'italic';
 };
+
+/**
+ * Show Experience green re-skin palette — verbatim from the design source
+ * (research/design-reference/green-live.original.jsx, token object `G`).
+ * Shared here so every share-image route (OG cards, portrait, story) draws
+ * from one definition instead of five copy-pasted hex maps.
+ */
+export const SHARE_GREEN = {
+  paper: '#f6f4ec',
+  paper2: '#efe9db',
+  surface: '#ffffff',
+  ink: '#1b241d',
+  ink2: '#535c4d',
+  ink3: '#8a9182',
+  deep: '#20452c',
+  deepest: '#152e1d',
+  green: '#2f6b43',
+  fresh: '#5bb579',
+  freshDeep: '#2f8a52',
+  freshSoft: '#e4f2e7',
+  freshLine: '#c3e2cb',
+  honey: '#e6a53a',
+  honeyDeep: '#b9781a',
+  honeySoft: '#f8ecd4',
+  line: '#e7e1d3',
+  line2: '#d7cfba',
+  cream: '#f3ecdc',
+  creamDim: 'rgba(243,236,220,0.66)',
+} as const;
 
 /**
  * Read TTF files from public/fonts. Synchronous + node fs because the
  * `new URL('../../...', import.meta.url)` pattern silently breaks under
  * Next 15's prod bundler — that's the bug commit 707c160 fixed for the
  * OG image. Same fix applies here.
+ *
+ * Faces are Hanken Grotesk (the Show Experience green design's "friendly"
+ * fontset — extrabold display headings, tight -0.015em tracking). Satori
+ * can't use next/font, so these are static TTFs in public/fonts, acquired
+ * from the google-webfonts-helper mirror. The previous Libre Baskerville /
+ * Inter pairing is fully retired from share images — those TTF files stay
+ * in public/fonts for unrelated PDF consumers (catalogue, judges book,
+ * prize cards, etc.) but nothing here references them any more.
  */
 export function loadShareImageFonts(): ShareImageFont[] {
   const fontsDir = join(process.cwd(), 'public', 'fonts');
@@ -78,9 +116,13 @@ export function loadShareImageFonts(): ShareImageFont[] {
     return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
   };
   return [
-    { name: 'Libre Baskerville', data: readFont('libre-baskerville-bold.ttf'), weight: 700 },
-    { name: 'Inter', data: readFont('inter-regular.ttf'), weight: 400 },
-    { name: 'Inter', data: readFont('inter-semibold.ttf'), weight: 600 },
+    { name: 'Hanken Grotesk', data: readFont('hanken-grotesk-regular.ttf'), weight: 400 },
+    { name: 'Hanken Grotesk', data: readFont('hanken-grotesk-500.ttf'), weight: 500 },
+    { name: 'Hanken Grotesk', data: readFont('hanken-grotesk-600.ttf'), weight: 600 },
+    { name: 'Hanken Grotesk', data: readFont('hanken-grotesk-700.ttf'), weight: 700 },
+    { name: 'Hanken Grotesk', data: readFont('hanken-grotesk-800.ttf'), weight: 800 },
+    { name: 'Hanken Grotesk', data: readFont('hanken-grotesk-italic.ttf'), weight: 400, style: 'italic' },
+    { name: 'Hanken Grotesk', data: readFont('hanken-grotesk-700italic.ttf'), weight: 700, style: 'italic' },
   ];
 }
 
@@ -124,16 +166,22 @@ function deriveStatus(
   hoursToClose: number,
   closeDateShort: string | null
 ): StatusBadge {
+  // Colours from the green design system: fresh = act now, honey = urgency,
+  // translucent cream = neutral/informational, solid green = wrapped up.
   if (status === 'entries_open') {
     if (hoursToClose <= 72 && closeDateShort) {
-      return { text: `Closing ${closeDateShort}`, bg: '#DC2626', color: '#FAFAF8' };
+      return { text: `Closing ${closeDateShort}`, bg: SHARE_GREEN.honey, color: '#3a2606' };
     }
-    return { text: 'Entries Open', bg: '#059669', color: '#FAFAF8' };
+    return { text: 'Entries Open', bg: SHARE_GREEN.fresh, color: '#0e2c19' };
   }
-  if (status === 'entries_closed') return { text: 'Entries Closed', bg: '#57534E', color: '#FAFAF8' };
-  if (status === 'in_progress') return { text: 'Live Today', bg: '#059669', color: '#FAFAF8' };
-  if (status === 'completed') return { text: 'Results Published', bg: '#059669', color: '#FAFAF8' };
-  if (status === 'published') return { text: 'Coming Soon', bg: '#2563EB', color: '#FAFAF8' };
+  if (status === 'entries_closed') {
+    return { text: 'Entries Closed', bg: 'rgba(243,236,220,0.14)', color: SHARE_GREEN.cream };
+  }
+  if (status === 'in_progress') return { text: 'Live Today', bg: SHARE_GREEN.fresh, color: '#0e2c19' };
+  if (status === 'completed') return { text: 'Results Published', bg: SHARE_GREEN.green, color: SHARE_GREEN.cream };
+  if (status === 'published') {
+    return { text: 'Coming Soon', bg: 'rgba(243,236,220,0.14)', color: SHARE_GREEN.cream };
+  }
   return null;
 }
 

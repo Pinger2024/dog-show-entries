@@ -45,16 +45,16 @@ export function ChampionshipProgress({ dogId, isPro }: ChampionshipProgressProps
     <div className="space-y-5">
       {/* Championship Routes */}
       {(championship.classic.ccs > 0 || championship.alternative.rccs > 0) && (
-        <div className="rounded-lg border border-amber-200/50 bg-gradient-to-b from-amber-50/30 to-transparent">
-          <div className="flex items-center gap-2.5 border-b border-amber-200/30 px-4 py-3">
-            <div className="flex size-7 items-center justify-center rounded-full bg-amber-100">
-              <Crown className="size-3.5 text-amber-600" />
+        <div className="rounded-lg border border-se-honey/50 bg-gradient-to-b from-se-honey-soft/30 to-transparent">
+          <div className="flex items-center gap-2.5 border-b border-se-honey/30 px-4 py-3">
+            <div className="flex size-7 items-center justify-center rounded-full bg-se-honey-soft">
+              <Crown className="size-3.5 text-se-honey-deep" />
             </div>
-            <h3 className="font-serif text-sm font-semibold text-stone-800">
+            <h3 className="font-serif text-sm font-semibold text-se-ink">
               Championship Progress
             </h3>
             {(championship.classic.complete || championship.alternative.complete) && (
-              <Badge className="ml-auto bg-amber-500 text-xs text-white">
+              <Badge className="ml-auto bg-se-honey text-xs text-white">
                 Qualified
               </Badge>
             )}
@@ -96,10 +96,10 @@ export function ChampionshipProgress({ dogId, isPro }: ChampionshipProgressProps
 
           {/* Award details toggle */}
           {(awards.ccs.length > 0 || awards.rccs.length > 0) && (
-            <div className="border-t border-amber-200/30">
+            <div className="border-t border-se-honey/30">
               <button
                 onClick={() => setShowDetails(!showDetails)}
-                className="flex w-full items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-50/50"
+                className="flex w-full items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-medium text-se-honey-deep transition-colors hover:bg-se-honey-soft/50"
               >
                 {showDetails ? (
                   <>
@@ -117,21 +117,21 @@ export function ChampionshipProgress({ dogId, isPro }: ChampionshipProgressProps
                   {awards.ccs.length > 0 && (
                     <AwardList
                       title="Challenge Certificates"
-                      icon={<Trophy className="size-3 text-amber-600" />}
+                      icon={<Trophy className="size-3 text-se-honey-deep" />}
                       items={awards.ccs}
                     />
                   )}
                   {awards.rccs.length > 0 && (
                     <AwardList
                       title="Reserve Challenge Certificates"
-                      icon={<Award className="size-3 text-amber-500" />}
+                      icon={<Award className="size-3 text-se-honey" />}
                       items={awards.rccs}
                     />
                   )}
                   {awards.bobs.length > 0 && (
                     <AwardList
                       title="Best of Breed"
-                      icon={<Trophy className="size-3 text-emerald-600" />}
+                      icon={<Trophy className="size-3 text-se-fresh-deep" />}
                       items={awards.bobs}
                     />
                   )}
@@ -163,7 +163,7 @@ export function ChampionshipProgress({ dogId, isPro }: ChampionshipProgressProps
                       key={year.year}
                       className="flex items-center gap-3 rounded-md bg-muted/30 px-3 py-2 text-sm"
                     >
-                      <span className="font-serif font-semibold text-stone-700">
+                      <span className="font-serif font-semibold text-se-ink2">
                         {year.year}
                       </span>
                       <div className="flex flex-1 flex-wrap gap-3 text-xs text-muted-foreground">
@@ -178,7 +178,7 @@ export function ChampionshipProgress({ dogId, isPro }: ChampionshipProgressProps
                           <strong className="text-foreground">{year.placements}</strong> top 3
                         </span>
                         {year.awards > 0 && (
-                          <span className="text-amber-600">
+                          <span className="text-se-honey-deep">
                             <strong>{year.awards}</strong> award
                             {year.awards !== 1 ? 's' : ''}
                           </span>
@@ -290,34 +290,34 @@ function RouteCard({
     <div
       className={`rounded-md border p-3 ${
         complete
-          ? 'border-amber-300 bg-amber-50/50'
+          ? 'border-se-honey bg-se-honey-soft/50'
           : isRecommended
-            ? 'border-stone-200 bg-white'
-            : 'border-stone-100 bg-stone-50/50'
+            ? 'border-se-line bg-white'
+            : 'border-se-line bg-se-paper2/50'
       }`}
     >
       <div className="flex items-start justify-between">
         <div>
-          <p className="font-serif text-[0.8125rem] font-semibold text-stone-800">
+          <p className="font-serif text-[0.8125rem] font-semibold text-se-ink">
             {title}
           </p>
-          <p className="text-xs text-stone-400">{subtitle}</p>
+          <p className="text-xs text-se-ink3">{subtitle}</p>
         </div>
         {isRecommended && !complete && (
-          <Badge variant="outline" className="text-[9px] border-amber-300 text-amber-700">
+          <Badge variant="outline" className="text-[9px] border-se-honey text-se-honey-deep">
             Closer
           </Badge>
         )}
         {complete && (
-          <Badge className="bg-amber-500 text-[9px] text-white">Complete</Badge>
+          <Badge className="bg-se-honey text-[9px] text-white">Complete</Badge>
         )}
       </div>
 
       {/* Progress bar */}
-      <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-stone-100">
+      <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-se-line">
         <div
           className={`h-full rounded-full transition-all ${
-            complete ? 'bg-amber-500' : 'bg-amber-400'
+            complete ? 'bg-se-honey' : 'bg-se-honey/70'
           }`}
           style={{ width: `${percentage}%` }}
         />
@@ -326,8 +326,8 @@ function RouteCard({
       {/* Stats */}
       <div className="mt-2 flex gap-3 text-[11px]">
         {stats.map((stat) => (
-          <span key={stat.label} className="text-stone-500">
-            <strong className="text-stone-700">
+          <span key={stat.label} className="text-se-ink3">
+            <strong className="text-se-ink2">
               {stat.value}
               {stat.of !== undefined ? `/${stat.of}` : ''}
             </strong>{' '}
@@ -352,7 +352,7 @@ function AwardList({
 }) {
   return (
     <div>
-      <h4 className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-stone-500">
+      <h4 className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-se-ink3">
         {icon}
         {title}
       </h4>
@@ -362,11 +362,11 @@ function AwardList({
             key={i}
             className="flex items-center justify-between rounded-sm bg-white px-2.5 py-1.5 text-xs"
           >
-            <span className="text-stone-600">
+            <span className="text-se-ink2">
               {item.showName || 'Show'}
               {item.className ? ` — ${item.className}` : ''}
             </span>
-            <span className="text-stone-400">
+            <span className="text-se-ink3">
               {format(new Date(item.date), 'd MMM yyyy')}
             </span>
           </div>

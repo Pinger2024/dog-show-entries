@@ -14,13 +14,13 @@ import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc/client';
 import { Button } from '@/components/ui/button';
 import {
-  Card,
   CardContent,
   CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { SECard, Wordmark } from '@/components/show-experience/kit';
 
 const ROLE_DESCRIPTIONS: Record<string, string> = {
   secretary: 'Show Secretary — manage shows, view entries, and run events',
@@ -61,15 +61,15 @@ export default function InviteAcceptPage() {
   // Loading state
   if (isLoading || isLoadingSession) {
     return (
-      <div className="flex min-h-screen items-center justify-center px-3 sm:px-4">
-        <Card className="w-full max-w-sm">
+      <div className="flex min-h-screen items-center justify-center bg-se-paper px-3 sm:px-4">
+        <SECard className="flex w-full max-w-sm flex-col gap-6">
           <CardContent className="flex flex-col items-center py-12">
             <Loader2 className="size-8 animate-spin text-primary" />
             <p className="mt-3 text-sm text-muted-foreground">
               Loading...
             </p>
           </CardContent>
-        </Card>
+        </SECard>
       </div>
     );
   }
@@ -77,8 +77,8 @@ export default function InviteAcceptPage() {
   // Error / not found
   if (error || !invitation) {
     return (
-      <div className="flex min-h-screen items-center justify-center px-3 sm:px-4">
-        <Card className="w-full max-w-sm">
+      <div className="flex min-h-screen items-center justify-center bg-se-paper px-3 sm:px-4">
+        <SECard className="flex w-full max-w-sm flex-col gap-6">
           <CardHeader className="text-center">
             <div className="mx-auto mb-2 flex size-12 items-center justify-center rounded-full bg-destructive/10">
               <AlertTriangle className="size-6 text-destructive" />
@@ -95,7 +95,7 @@ export default function InviteAcceptPage() {
               <Link href="/">Go to Home</Link>
             </Button>
           </CardFooter>
-        </Card>
+        </SECard>
       </div>
     );
   }
@@ -103,11 +103,11 @@ export default function InviteAcceptPage() {
   // Expired
   if (invitation.status === 'expired') {
     return (
-      <div className="flex min-h-screen items-center justify-center px-3 sm:px-4">
-        <Card className="w-full max-w-sm">
+      <div className="flex min-h-screen items-center justify-center bg-se-paper px-3 sm:px-4">
+        <SECard className="flex w-full max-w-sm flex-col gap-6">
           <CardHeader className="text-center">
-            <div className="mx-auto mb-2 flex size-12 items-center justify-center rounded-full bg-amber-100">
-              <AlertTriangle className="size-6 text-amber-700" />
+            <div className="mx-auto mb-2 flex size-12 items-center justify-center rounded-full bg-se-honey-soft">
+              <AlertTriangle className="size-6 text-se-honey-deep" />
             </div>
             <CardTitle className="font-serif text-lg sm:text-xl">
               Link Expired
@@ -122,7 +122,7 @@ export default function InviteAcceptPage() {
               <Link href="/">Go to Home</Link>
             </Button>
           </CardFooter>
-        </Card>
+        </SECard>
       </div>
     );
   }
@@ -130,11 +130,11 @@ export default function InviteAcceptPage() {
   // Already accepted
   if (invitation.status === 'accepted') {
     return (
-      <div className="flex min-h-screen items-center justify-center px-3 sm:px-4">
-        <Card className="w-full max-w-sm">
+      <div className="flex min-h-screen items-center justify-center bg-se-paper px-3 sm:px-4">
+        <SECard className="flex w-full max-w-sm flex-col gap-6">
           <CardHeader className="text-center">
-            <div className="mx-auto mb-2 flex size-12 items-center justify-center rounded-full bg-emerald-100">
-              <CheckCircle2 className="size-6 text-emerald-700" />
+            <div className="mx-auto mb-2 flex size-12 items-center justify-center rounded-full bg-se-fresh-soft">
+              <CheckCircle2 className="size-6 text-se-fresh-deep" />
             </div>
             <CardTitle className="font-serif text-lg sm:text-xl">
               Already Set Up
@@ -148,7 +148,7 @@ export default function InviteAcceptPage() {
               <Link href="/dashboard">Go to Dashboard</Link>
             </Button>
           </CardFooter>
-        </Card>
+        </SECard>
       </div>
     );
   }
@@ -156,11 +156,11 @@ export default function InviteAcceptPage() {
   // Revoked
   if (invitation.status === 'revoked') {
     return (
-      <div className="flex min-h-screen items-center justify-center px-3 sm:px-4">
-        <Card className="w-full max-w-sm">
+      <div className="flex min-h-screen items-center justify-center bg-se-paper px-3 sm:px-4">
+        <SECard className="flex w-full max-w-sm flex-col gap-6">
           <CardHeader className="text-center">
-            <div className="mx-auto mb-2 flex size-12 items-center justify-center rounded-full bg-gray-100">
-              <AlertTriangle className="size-6 text-gray-500" />
+            <div className="mx-auto mb-2 flex size-12 items-center justify-center rounded-full bg-muted">
+              <AlertTriangle className="size-6 text-muted-foreground" />
             </div>
             <CardTitle className="font-serif text-lg sm:text-xl">
               Link Revoked
@@ -174,7 +174,7 @@ export default function InviteAcceptPage() {
               <Link href="/">Go to Home</Link>
             </Button>
           </CardFooter>
-        </Card>
+        </SECard>
       </div>
     );
   }
@@ -184,19 +184,16 @@ export default function InviteAcceptPage() {
     invitation.role.charAt(0).toUpperCase() + invitation.role.slice(1);
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-3 sm:px-4">
+    <div className="flex min-h-screen items-center justify-center bg-se-paper px-3 sm:px-4">
       <div className="w-full max-w-sm space-y-4">
         {/* Logo */}
         <div className="text-center">
-          <Link
-            href="/"
-            className="font-serif text-2xl sm:text-3xl font-bold tracking-tight text-primary"
-          >
-            Remi
+          <Link href="/" className="inline-flex justify-center">
+            <Wordmark size={26} />
           </Link>
         </div>
 
-        <Card>
+        <SECard className="flex flex-col gap-6">
           <CardHeader className="text-center">
             <div className="mx-auto mb-2 flex size-12 items-center justify-center rounded-full bg-primary/10">
               <UserPlus className="size-6 text-primary" />
@@ -271,7 +268,7 @@ export default function InviteAcceptPage() {
               Added by {invitation.inviterName}
             </p>
           </CardFooter>
-        </Card>
+        </SECard>
       </div>
     </div>
   );

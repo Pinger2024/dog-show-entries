@@ -197,7 +197,7 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
   const readOnly = !isOwner;
 
   return (
-    <Card className="border-amber-200/60 dark:border-amber-900/40">
+    <Card className="border-se-honey/60">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Shield className="size-4 text-primary" />

@@ -1,5 +1,10 @@
 import path from 'path';
 import { StyleSheet, Font } from '@react-pdf/renderer';
+// Side-effect: registers the HankenGrotesk family used below for display/
+// heading elements. Imported from a single shared module (not registered
+// inline here) — see src/lib/pdf-fonts.ts for why duplicate registration
+// of the same family from multiple modules is unsafe.
+import '@/lib/pdf-fonts';
 
 // ── Font Registration ───────────────────────────────────────────
 // Register the same fonts as the schedule for visual consistency
@@ -89,9 +94,9 @@ export const styles = StyleSheet.create({
     color: C.primary,
   },
   headerTitle: {
-    fontFamily: 'LibreBaskerville',
+    fontFamily: 'HankenGrotesk',
     fontSize: 13,
-    fontWeight: 'bold',
+    fontWeight: 800,
     textTransform: 'uppercase',
     letterSpacing: 1.5,
     marginBottom: 2,
@@ -128,7 +133,7 @@ export const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionBandText: {
-    fontFamily: 'LibreBaskerville',
+    fontFamily: 'HankenGrotesk',
     fontSize: 11,
     fontWeight: 'bold',
     color: C.textOnPrimary,
@@ -397,9 +402,9 @@ export const styles = StyleSheet.create({
     marginBottom: 10,
   },
   coverShowName: {
-    fontFamily: 'LibreBaskerville',
+    fontFamily: 'HankenGrotesk',
     fontSize: 17,
-    fontWeight: 'bold',
+    fontWeight: 800,
     textAlign: 'center',
     color: C.textDark,
     marginBottom: 8,
@@ -530,7 +535,7 @@ export const styles = StyleSheet.create({
     color: C.textDark,
   },
   frontMatterTitle: {
-    fontFamily: 'LibreBaskerville',
+    fontFamily: 'HankenGrotesk',
     fontSize: 11,
     fontWeight: 'bold',
     textTransform: 'uppercase',

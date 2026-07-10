@@ -200,7 +200,7 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
                     className={cn(
                       'flex size-8 items-center justify-center rounded-full text-xs font-semibold transition-colors',
                       isComplete
-                        ? 'bg-emerald-500 text-white'
+                        ? 'bg-se-fresh text-white'
                         : isCurrent
                           ? 'ring-2 ring-primary bg-background text-primary'
                           : 'bg-muted text-muted-foreground',
@@ -232,7 +232,7 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
                     className={cn(
                       'mx-2 h-0.5 flex-1',
                       stepComplete(STEPS[i].id)
-                        ? 'bg-emerald-500'
+                        ? 'bg-se-fresh'
                         : 'bg-muted',
                     )}
                   />
@@ -266,7 +266,7 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
                 className={cn(
                   'flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
                   isComplete
-                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                    ? 'bg-se-fresh-soft text-se-fresh-deep'
                     : isCurrent
                       ? 'bg-primary/10 text-primary'
                       : 'bg-muted text-muted-foreground',
@@ -295,7 +295,7 @@ export function SetupWizard({ showId, show }: SetupWizardProps) {
               {isComplete && (
                 <Badge
                   variant="secondary"
-                  className="bg-emerald-50 text-emerald-700 text-xs dark:bg-emerald-900/20 dark:text-emerald-400"
+                  className="bg-se-fresh-soft text-se-fresh-deep text-xs"
                 >
                   Complete
                 </Badge>
@@ -1027,9 +1027,9 @@ function StepOpenEntries({ showId }: { showId: string }) {
       ) : (
         <div className="space-y-1.5">
           {allBlockers.length === 0 && (
-            <div className="flex items-center gap-2.5 rounded-md bg-emerald-50 px-3 py-3 dark:bg-emerald-900/20">
-              <Check className="size-5 text-emerald-600" />
-              <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+            <div className="flex items-center gap-2.5 rounded-md bg-se-fresh-soft px-3 py-3">
+              <Check className="size-5 text-se-fresh-deep" />
+              <span className="text-sm font-medium text-se-fresh-deep">
                 All requirements met — ready to open entries!
               </span>
             </div>
@@ -1045,13 +1045,13 @@ function StepOpenEntries({ showId }: { showId: string }) {
                   'flex size-5 shrink-0 items-center justify-center rounded-full',
                   blocker.severity === 'required'
                     ? 'bg-destructive/10'
-                    : 'bg-amber-100 dark:bg-amber-900/30',
+                    : 'bg-se-honey-soft',
                 )}
               >
                 {blocker.severity === 'required' ? (
                   <X className="size-3 text-destructive" />
                 ) : (
-                  <AlertTriangle className="size-3 text-amber-600" />
+                  <AlertTriangle className="size-3 text-se-honey-deep" />
                 )}
               </div>
 

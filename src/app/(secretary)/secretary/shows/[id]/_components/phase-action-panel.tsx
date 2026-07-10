@@ -82,20 +82,20 @@ function ActionCard({
 }) {
   const accentStyles = {
     default: 'bg-muted/40 hover:bg-muted/60 border-border/60',
-    emerald: 'bg-emerald-50/60 hover:bg-emerald-50 border-emerald-200/60 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/30 dark:border-emerald-800/40',
-    blue: 'bg-blue-50/60 hover:bg-blue-50 border-blue-200/60 dark:bg-blue-950/20 dark:hover:bg-blue-950/30 dark:border-blue-800/40',
-    amber: 'bg-amber-50/60 hover:bg-amber-50 border-amber-200/60 dark:bg-amber-950/20 dark:hover:bg-amber-950/30 dark:border-amber-800/40',
+    emerald: 'bg-se-fresh-soft/60 hover:bg-se-fresh-soft border-se-fresh-line/60',
+    blue: 'bg-primary/5 hover:bg-primary/10 border-primary/20',
+    amber: 'bg-se-honey-soft/60 hover:bg-se-honey-soft border-se-honey-line/60',
     primary: 'bg-primary/5 hover:bg-primary/10 border-primary/20',
-    rose: 'bg-rose-50/60 hover:bg-rose-50 border-rose-200/60 dark:bg-rose-950/20 dark:hover:bg-rose-950/30 dark:border-rose-800/40',
+    rose: 'bg-destructive/5 hover:bg-destructive/10 border-destructive/20',
   };
 
   const iconStyles = {
     default: 'bg-muted text-muted-foreground',
-    emerald: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400',
-    blue: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400',
-    amber: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400',
+    emerald: 'bg-se-fresh-soft text-se-fresh-deep',
+    blue: 'bg-primary/10 text-primary',
+    amber: 'bg-se-honey-soft text-se-honey-deep',
     primary: 'bg-primary/10 text-primary',
-    rose: 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-400',
+    rose: 'bg-destructive/10 text-destructive',
   };
 
   const content = (
@@ -252,13 +252,13 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
   };
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-amber-200/60 bg-gradient-to-br from-amber-50/80 via-white to-orange-50/40 shadow-sm dark:border-amber-800/30 dark:from-amber-950/20 dark:via-background dark:to-orange-950/10">
+    <div className="overflow-hidden rounded-2xl border border-se-honey-line/60 bg-gradient-to-br from-se-honey-soft/80 via-white to-se-honey-soft/20 shadow-sm">
       <div className="px-5 pb-5 pt-5 sm:px-6">
         {/* Header with progress */}
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-900/40">
-              <ClipboardList className="size-5 text-amber-700 dark:text-amber-400" />
+            <div className="flex size-10 items-center justify-center rounded-xl bg-se-honey-soft">
+              <ClipboardList className="size-5 text-se-honey-deep" />
             </div>
             <div>
               <h3 className="font-serif text-base font-semibold tracking-tight">
@@ -271,7 +271,7 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
           </div>
           {totalCount > 0 && (
             <div className="text-right">
-              <span className="text-2xl font-bold tracking-tight text-amber-700 dark:text-amber-400">
+              <span className="text-2xl font-bold tracking-tight text-se-honey-deep">
                 {progressPct}%
               </span>
             </div>
@@ -280,9 +280,9 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
 
         {/* Progress bar */}
         {totalCount > 0 && (
-          <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-amber-100 dark:bg-amber-900/30">
+          <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-se-honey-soft">
             <div
-              className="h-full rounded-full bg-amber-500 transition-all duration-500 ease-out"
+              className="h-full rounded-full bg-se-honey transition-all duration-500 ease-out"
               style={{ width: `${progressPct}%` }}
             />
           </div>
@@ -299,11 +299,11 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
             {checklist.map((item) => (
               <div
                 key={item.key}
-                className="flex items-center gap-2.5 rounded-lg px-2 py-2 transition-colors hover:bg-white/60 dark:hover:bg-white/5 min-h-[2.75rem]"
+                className="flex items-center gap-2.5 rounded-lg px-2 py-2 transition-colors hover:bg-white/60 min-h-[2.75rem]"
               >
                 {item.done ? (
-                  <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
-                    <Check className="size-3 text-emerald-600" />
+                  <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-se-fresh-soft">
+                    <Check className="size-3 text-se-fresh-deep" />
                   </div>
                 ) : (
                   <div className={cn(
@@ -353,7 +353,7 @@ function SetupPanel({ show, showId }: { show: Show; showId: string }) {
         )}
 
         {/* Action area */}
-        <div className="mt-4 flex flex-col gap-3 border-t border-amber-200/40 pt-4 sm:flex-row sm:items-center sm:justify-between dark:border-amber-800/20">
+        <div className="mt-4 flex flex-col gap-3 border-t border-se-honey-line/50 pt-4 sm:flex-row sm:items-center sm:justify-between">
           <Button
             size="default"
             className="w-full sm:w-auto min-h-[2.75rem]"
@@ -421,12 +421,12 @@ function EntriesOpenPanel({ show, showId }: { show: Show; showId: string }) {
     <div className="space-y-3">
       {/* Overdue warning banner — entries should have closed but haven't been */}
       {closeInfo?.overdue && (
-        <div className="overflow-hidden rounded-xl border border-rose-300 bg-rose-50 dark:border-rose-800/60 dark:bg-rose-950/30">
+        <div className="overflow-hidden rounded-xl border border-destructive/30 bg-destructive/5">
           <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-2.5">
-              <AlertTriangle className="mt-0.5 size-5 shrink-0 text-rose-600 dark:text-rose-400" />
+              <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
               <div>
-                <p className="text-sm font-semibold text-rose-800 dark:text-rose-300">
+                <p className="text-sm font-semibold text-destructive">
                   Entries were scheduled to close on{' '}
                   {new Date(show.entryCloseDate!).toLocaleDateString('en-GB', {
                     day: 'numeric',
@@ -434,7 +434,7 @@ function EntriesOpenPanel({ show, showId }: { show: Show; showId: string }) {
                     year: 'numeric',
                   })}
                 </p>
-                <p className="mt-0.5 text-xs text-rose-700/80 dark:text-rose-400/80">
+                <p className="mt-0.5 text-xs text-destructive/80">
                   Entries are still being accepted. Close them now or they will remain open.
                 </p>
               </div>
@@ -464,24 +464,24 @@ function EntriesOpenPanel({ show, showId }: { show: Show; showId: string }) {
         <div className={cn(
           'flex items-center gap-2.5 rounded-xl px-4 py-3',
           closeInfo.urgent
-            ? 'bg-amber-50 border border-amber-200/60 dark:bg-amber-950/20 dark:border-amber-800/40'
-            : 'bg-emerald-50/60 border border-emerald-200/40 dark:bg-emerald-950/10 dark:border-emerald-800/30',
+            ? 'bg-se-honey-soft border border-se-honey-line/60'
+            : 'bg-se-fresh-soft/60 border border-se-fresh-line/40',
         )}>
           <span className="relative flex size-2.5">
             <span className={cn(
               'absolute inline-flex size-full animate-ping rounded-full opacity-75',
-              closeInfo.urgent ? 'bg-amber-400' : 'bg-emerald-400',
+              closeInfo.urgent ? 'bg-se-honey' : 'bg-se-fresh',
             )} />
             <span className={cn(
               'relative inline-flex size-2.5 rounded-full',
-              closeInfo.urgent ? 'bg-amber-500' : 'bg-emerald-500',
+              closeInfo.urgent ? 'bg-se-honey-deep' : 'bg-se-fresh-deep',
             )} />
           </span>
           <span className={cn(
             'text-sm font-medium',
             closeInfo.urgent
-              ? 'text-amber-700 dark:text-amber-400'
-              : 'text-emerald-700 dark:text-emerald-400',
+              ? 'text-se-honey-deep'
+              : 'text-se-fresh-deep',
           )}>
             {closeInfo.text}
           </span>
@@ -570,14 +570,14 @@ function PreShowPanel({ show, showId }: { show: Show; showId: string }) {
         <div className={cn(
           'flex items-center justify-between gap-3 rounded-xl px-4 py-3',
           showDayInfo.urgent
-            ? 'bg-amber-50 border border-amber-200/60 dark:bg-amber-950/20 dark:border-amber-800/40'
-            : 'bg-blue-50/60 border border-blue-200/40 dark:bg-blue-950/10 dark:border-blue-800/30',
+            ? 'bg-se-honey-soft border border-se-honey-line/60'
+            : 'bg-primary/5 border border-primary/20',
         )}>
           <span className={cn(
             'text-sm font-medium',
             showDayInfo.urgent
-              ? 'text-amber-700 dark:text-amber-400'
-              : 'text-blue-700 dark:text-blue-400',
+              ? 'text-se-honey-deep'
+              : 'text-primary',
           )}>
             {showDayInfo.text}
           </span>
@@ -740,7 +740,7 @@ function PostShowPanel({ show, showId }: { show: Show; showId: string }) {
         <div className="flex items-center gap-2.5">
           <CheckCircle className={cn(
             'size-5',
-            completedCount === tasks.length ? 'text-emerald-600' : 'text-muted-foreground',
+            completedCount === tasks.length ? 'text-se-fresh-deep' : 'text-muted-foreground',
           )} />
           <span className="text-sm font-medium">
             {completedCount === tasks.length
@@ -749,13 +749,13 @@ function PostShowPanel({ show, showId }: { show: Show; showId: string }) {
           </span>
         </div>
         {rkcSubmitted ? (
-          <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-0">
+          <Badge className="bg-se-fresh-soft text-se-fresh-deep border-0">
             RKC submitted
           </Badge>
         ) : (
           <span className={cn(
             'text-xs font-medium',
-            rkcInfo.overdue ? 'text-destructive' : rkcInfo.urgent ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground',
+            rkcInfo.overdue ? 'text-destructive' : rkcInfo.urgent ? 'text-se-honey-deep' : 'text-muted-foreground',
           )}>
             {rkcInfo.text}
           </span>

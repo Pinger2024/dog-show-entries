@@ -183,12 +183,12 @@ export default function StewardClassResultsPage({
           <ArrowLeft className="size-4" />
           Back to classes
         </Link>
-        <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-5 text-amber-900 sm:p-6">
+        <div className="mt-6 rounded-xl border border-se-honey-line bg-se-honey-soft p-5 text-se-honey-ink sm:p-6">
           <div className="flex items-start gap-3">
             <CalendarClock className="mt-0.5 size-5 shrink-0" />
             <div>
               <p className="font-semibold">Entries unlock on {showDayLabel}</p>
-              <p className="mt-1 text-sm text-amber-800">
+              <p className="mt-1 text-sm text-se-honey-ink/80">
                 To keep judging fair, exhibitors and dogs aren&apos;t shown to
                 stewards until the morning of the show. Come back then and
                 you&apos;ll see the full class list ready for placements.
@@ -322,7 +322,7 @@ export default function StewardClassResultsPage({
             </Badge>
           )}
           {showClass.hasUnpublishedChanges && (
-            <Badge variant="outline" className="ml-2 border-amber-300 bg-amber-50 text-amber-700 text-xs align-middle">
+            <Badge variant="outline" className="ml-2 border-se-honey-line bg-se-honey-soft text-se-honey-deep text-xs align-middle">
               Unpublished edits
             </Badge>
           )}
@@ -332,7 +332,7 @@ export default function StewardClassResultsPage({
           <span>{entries.length} {entries.length === 1 ? 'entry' : 'entries'}</span>
           <span className="font-medium text-foreground">· {dogsForward} forward</span>
           {entries.length - dogsForward > 0 && (
-            <span className="text-amber-600">({entries.length - dogsForward} absent)</span>
+            <span className="text-se-honey-deep">({entries.length - dogsForward} absent)</span>
           )}
         </div>
 
@@ -357,16 +357,16 @@ export default function StewardClassResultsPage({
       </div>
 
       {isLocked && (
-        <div className="mt-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+        <div className="mt-4 flex items-center gap-2 rounded-lg border border-se-honey-line bg-se-honey-soft p-3 text-sm text-se-honey-deep">
           <Lock className="size-4 shrink-0" />
           <p>Results have been published. Editing is locked. Contact the secretary to make changes.</p>
         </div>
       )}
 
       {judgeBreederWarnings.length > 0 && (
-        <div className="mt-4 space-y-1.5 rounded-lg border border-amber-200 bg-amber-50 p-3">
+        <div className="mt-4 space-y-1.5 rounded-lg border border-se-honey-line bg-se-honey-soft p-3">
           {judgeBreederWarnings.map((entry) => (
-            <div key={entry.entryClassId} className="flex items-center gap-2 text-sm text-amber-800">
+            <div key={entry.entryClassId} className="flex items-center gap-2 text-sm text-se-honey-deep">
               <AlertTriangle className="size-4 shrink-0" />
               <p>{entry.dogName} was bred by the assigned judge ({judgeName})</p>
             </div>
@@ -426,7 +426,7 @@ export default function StewardClassResultsPage({
                     key={n}
                     className={cn(
                       'flex min-h-[58px] items-center gap-3 px-3 py-2',
-                      isActive && 'border-l-4 border-amber-400 bg-amber-50/60 pl-2'
+                      isActive && 'border-l-4 border-se-honey bg-se-honey-soft/60 pl-2'
                     )}
                   >
                     <div
@@ -447,7 +447,7 @@ export default function StewardClassResultsPage({
                             {placed.dogName}
                           </p>
                           {placed.result?.specialAward && (
-                            <Badge variant="secondary" className="mt-1 text-xs bg-amber-50 text-amber-700">
+                            <Badge variant="secondary" className="mt-1 text-xs bg-se-honey-soft text-se-honey-deep">
                               <Award className="mr-0.5 size-3" />
                               {placed.result.specialAward}
                             </Badge>
@@ -587,7 +587,7 @@ export default function StewardClassResultsPage({
                 'mt-5 rounded-xl border p-4',
                 showClass.isPublished
                   ? 'border-green-300 bg-green-50/60'
-                  : 'border-slate-200 bg-slate-50'
+                  : 'border-se-line bg-se-paper2'
               )}
             >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -595,7 +595,7 @@ export default function StewardClassResultsPage({
                   <div
                     className={cn(
                       'flex size-9 shrink-0 items-center justify-center rounded-full',
-                      showClass.isPublished ? 'bg-green-600 text-white' : 'bg-slate-300 text-slate-700'
+                      showClass.isPublished ? 'bg-green-600 text-white' : 'bg-se-line2 text-se-ink2'
                     )}
                   >
                     <Globe className="size-4" />
@@ -662,8 +662,8 @@ export default function StewardClassResultsPage({
                 <DialogTitle>Publish {showClass.classDefinition.name} results?</DialogTitle>
               </DialogHeader>
               <div className="space-y-3 text-sm">
-                <div className="flex gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900">
-                  <AlertTriangle className="size-5 shrink-0 text-amber-600" />
+                <div className="flex gap-2 rounded-lg border border-se-honey-line bg-se-honey-soft p-3 text-se-honey-ink">
+                  <AlertTriangle className="size-5 shrink-0 text-se-honey-deep" />
                   <p>
                     <strong>Double-check your placements first.</strong> Once published,
                     everyone on the public results page can see them — including
@@ -838,7 +838,7 @@ function DogCard({
         <p className="truncate text-sm font-semibold">{entry.dogName}</p>
         <p className="truncate text-xs text-muted-foreground">{entry.exhibitorName}</p>
         {entry.result?.specialAward && (
-          <Badge variant="secondary" className="mt-1 text-xs bg-amber-50 text-amber-700">
+          <Badge variant="secondary" className="mt-1 text-xs bg-se-honey-soft text-se-honey-deep">
             <Award className="mr-0.5 size-3" />
             {entry.result.specialAward}
           </Badge>
@@ -855,8 +855,8 @@ function DogCard({
             className={cn(
               'inline-flex h-9 items-center gap-1 rounded-full border px-2.5 text-xs font-semibold transition-colors',
               entry.result?.specialAward
-                ? 'border-amber-300 bg-amber-100 text-amber-800'
-                : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                ? 'border-se-honey bg-se-honey-soft text-se-honey-ink'
+                : 'border-se-honey-line bg-se-honey-soft/60 text-se-honey-deep hover:bg-se-honey-soft'
             )}
             title="Give a Special Award (Best of Breed, etc)"
           >
@@ -868,7 +868,7 @@ function DogCard({
             <button
               type="button"
               onClick={(e) => e.stopPropagation()}
-              className="inline-flex h-9 items-center gap-1 rounded-full border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100"
+              className="inline-flex h-9 items-center gap-1 rounded-full border border-se-line2 bg-white px-2.5 text-xs font-semibold text-se-ink2 transition-colors hover:bg-se-paper2"
               title="Mark as absent / withheld / unplaced"
             >
               Status
@@ -881,7 +881,7 @@ function DogCard({
               className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-muted"
               onClick={onMarkAbsent}
             >
-              <UserX className="size-4 text-amber-600" />
+              <UserX className="size-4 text-se-honey-deep" />
               Mark as absent
             </button>
             <button
@@ -889,7 +889,7 @@ function DogCard({
               className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-muted"
               onClick={onWithhold}
             >
-              <CircleSlash className="size-4 text-amber-600" />
+              <CircleSlash className="size-4 text-se-honey-deep" />
               Mark as withheld
             </button>
             <button
@@ -931,15 +931,15 @@ function CategoryCard({
 }) {
   const toneClasses =
     tone === 'amber'
-      ? 'border-amber-200 bg-amber-50/70'
+      ? 'border-se-honey-line bg-se-honey-soft/70'
       : tone === 'slate'
-        ? 'border-slate-200 bg-slate-50/70'
+        ? 'border-se-line bg-se-paper2/70'
         : 'border-muted-foreground/10 bg-muted/30';
   const titleClasses =
     tone === 'amber'
-      ? 'text-amber-700'
+      ? 'text-se-honey-deep'
       : tone === 'slate'
-        ? 'text-slate-600'
+        ? 'text-se-ink2'
         : 'text-muted-foreground';
   return (
     <div className={cn('overflow-hidden rounded-xl border', toneClasses)}>

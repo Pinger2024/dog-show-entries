@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { Quote, Star, ArrowRight } from 'lucide-react';
 import { AnimateIn } from '@/components/animate-in';
 import { Button } from '@/components/ui/button';
+import { SE_H } from '@/components/show-experience/tokens';
+import { cn } from '@/lib/utils';
 
 export const metadata = {
   title: 'Reviews — Remi',
@@ -33,7 +35,7 @@ export default function ReviewsPage() {
             <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
               <Quote className="size-7" strokeWidth={1.5} />
             </div>
-            <h1 className="mt-6 font-serif text-3xl font-bold tracking-tight sm:text-5xl">
+            <h1 className={cn(SE_H, 'mt-6 text-3xl sm:text-5xl')}>
               What people are saying
             </h1>
             <p className="mt-4 text-base text-muted-foreground sm:text-lg">
@@ -51,7 +53,7 @@ export default function ReviewsPage() {
             {REVIEWS.map((r, i) => (
               <AnimateIn key={`${r.name}-${i}`} delay={i * 80}>
                 <li className="rounded-2xl border bg-card p-6 shadow-sm sm:p-8">
-                  <div className="flex items-center gap-1 text-amber-500">
+                  <div className="flex items-center gap-1 text-se-honey">
                     {Array.from({ length: 5 }).map((_, idx) => (
                       <Star key={idx} className="size-4 fill-current" strokeWidth={0} />
                     ))}

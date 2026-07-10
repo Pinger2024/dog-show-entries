@@ -56,11 +56,11 @@ export function RkcSubmissionAction({ showId, onComplete }: ActionPanelProps) {
     <div className="space-y-3">
       {/* Status */}
       {rkcSubmitted ? (
-        <div className="flex items-center gap-2 rounded-lg bg-green-50 p-3 text-sm text-green-800">
+        <div className="flex items-center gap-2 rounded-lg bg-se-fresh-soft p-3 text-sm text-se-fresh-deep">
           <CheckCircle className="size-4 shrink-0" />
           <div>
             <p className="font-medium">Submitted to RKC</p>
-            <p className="text-xs text-green-600">
+            <p className="text-xs text-se-fresh-deep">
               Marked as submitted on{' '}
               {new Date(rkcSubmittedAt!).toLocaleDateString('en-GB', {
                 day: 'numeric',
@@ -71,7 +71,7 @@ export function RkcSubmissionAction({ showId, onComplete }: ActionPanelProps) {
           </div>
         </div>
       ) : (
-        <div className="flex items-center gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+        <div className="flex items-center gap-2 rounded-lg bg-se-honey-soft p-3 text-sm text-se-honey-deep">
           <Send className="size-4 shrink-0" />
           <p className="font-medium">Not yet submitted</p>
         </div>
@@ -122,7 +122,7 @@ export function RkcSubmissionAction({ showId, onComplete }: ActionPanelProps) {
       ) : (
         <Button
           size="sm"
-          className="w-full bg-green-700 hover:bg-green-800 gap-1.5"
+          className="w-full bg-se-fresh hover:bg-se-fresh/90 gap-1.5"
           disabled={!isCompleted || markSubmitted.isPending}
           onClick={() => markSubmitted.mutate({ showId })}
         >

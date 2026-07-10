@@ -16,9 +16,9 @@ import { buildResultsSubject } from '@/lib/results-subject';
 import { resend, FROM, APP_URL, btn } from './email';
 
 const placementColor: Record<number, string> = {
-  1: '#d97706',
-  2: '#6b7280',
-  3: '#92400e',
+  1: '#2f6b43',
+  2: '#535c4d',
+  3: '#8a5a2b',
 };
 
 /**
@@ -102,12 +102,12 @@ export async function sendExhibitorResultsEmails(showId: string) {
           const sex = ec.showClass?.sex;
           const sexLabel = sex === 'dog' ? ' Dog' : sex === 'bitch' ? ' Bitch' : '';
           const pLabel = r.placement ? getPlacementLabel(r.placement) : 'Entered';
-          const pColor = r.placement ? (placementColor[r.placement] ?? '#374151') : '#9ca3af';
+          const pColor = r.placement ? (placementColor[r.placement] ?? '#535c4d') : '#8f9488';
 
           return `<tr>
-            <td style="padding: 6px 12px; border-bottom: 1px solid #f0f0f0; font-size: 14px;">${className}${sexLabel}</td>
-            <td style="padding: 6px 12px; border-bottom: 1px solid #f0f0f0; font-size: 14px; font-weight: 600; color: ${pColor};">${pLabel}</td>
-            ${r.specialAward ? `<td style="padding: 6px 12px; border-bottom: 1px solid #f0f0f0; font-size: 12px; color: #b45309;">${r.specialAward}</td>` : '<td></td>'}
+            <td style="padding: 6px 12px; border-bottom: 1px solid #e7e1d3; font-size: 14px;">${className}${sexLabel}</td>
+            <td style="padding: 6px 12px; border-bottom: 1px solid #e7e1d3; font-size: 14px; font-weight: 600; color: ${pColor};">${pLabel}</td>
+            ${r.specialAward ? `<td style="padding: 6px 12px; border-bottom: 1px solid #e7e1d3; font-size: 12px; color: #535c4d;">${r.specialAward}</td>` : '<td></td>'}
           </tr>`;
         })
         .join('');
@@ -119,10 +119,10 @@ export async function sendExhibitorResultsEmails(showId: string) {
 
       return `
         <div style="margin-bottom: 20px;">
-          <h3 style="margin: 0 0 4px; font-size: 16px; color: #1a1a1a;">${dogName}</h3>
-          ${breedName ? `<p style="margin: 0 0 8px; font-size: 13px; color: #666;">${breedName}</p>` : ''}
-          ${dogAchievements.length > 0 ? `<div style="margin-bottom: 8px;">${dogAchievements.map((a) => `<span style="display: inline-block; padding: 2px 8px; background: #fef3c7; color: #92400e; border-radius: 4px; font-size: 12px; font-weight: 600; margin-right: 4px;">${a}</span>`).join('')}</div>` : ''}
-          ${classRows ? `<table style="width: 100%; border-collapse: collapse;">${classRows}</table>` : '<p style="font-size: 13px; color: #999;">No results recorded for this entry.</p>'}
+          <h3 style="margin: 0 0 4px; font-size: 16px; color: #1b241d;">${dogName}</h3>
+          ${breedName ? `<p style="margin: 0 0 8px; font-size: 13px; color: #535c4d;">${breedName}</p>` : ''}
+          ${dogAchievements.length > 0 ? `<div style="margin-bottom: 8px;">${dogAchievements.map((a) => `<span style="display: inline-block; padding: 2px 8px; background: #e3f5ea; color: #1f6b43; border-radius: 4px; font-size: 12px; font-weight: 600; margin-right: 4px;">${a}</span>`).join('')}</div>` : ''}
+          ${classRows ? `<table style="width: 100%; border-collapse: collapse;">${classRows}</table>` : '<p style="font-size: 13px; color: #535c4d;">No results recorded for this entry.</p>'}
         </div>`;
     }).join('');
 
@@ -130,19 +130,19 @@ export async function sendExhibitorResultsEmails(showId: string) {
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin: 0; padding: 0; background-color: #f5f3ef; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+<body style="margin: 0; padding: 0; background-color: #f6f4ec; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
     <div style="text-align: center; padding: 24px 0;">
-      <h1 style="margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 28px; color: #2D5F3F; letter-spacing: -0.5px;">Remi</h1>
+      <h1 style="margin: 0; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 26px; font-weight: 800; color: #2f6b43; letter-spacing: -0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#5bb579;margin-left:3px;"></span></h1>
     </div>
-    <div style="background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-      <div style="background: #2D5F3F; padding: 24px 24px 20px; text-align: center;">
-        <div style="display: inline-block; width: 40px; height: 40px; line-height: 40px; border-radius: 50%; background: rgba(255,255,255,0.2); font-size: 20px; color: #fff; margin-bottom: 8px;">&#127942;</div>
-        <h2 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 700;">Your Results</h2>
-        <p style="margin: 8px 0 0; color: #b8d4c4; font-size: 14px;">${show.name} &middot; ${showDate}</p>
+    <div style="background: #ffffff; border: 1px solid #e7e1d3; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: #20452c; padding: 24px 24px 20px; text-align: center;">
+        <div style="display: inline-block; width: 40px; height: 40px; line-height: 40px; border-radius: 50%; background: rgba(243,236,220,0.2); font-size: 20px; color: #f3ecdc; margin-bottom: 8px;">&#127942;</div>
+        <h2 style="margin: 0; color: #f3ecdc; font-size: 22px; font-weight: 700;">Your Results</h2>
+        <p style="margin: 8px 0 0; color: rgba(243, 236, 220, 0.78); font-size: 14px;">${show.name} &middot; ${showDate}</p>
       </div>
       <div style="padding: 24px;">
-        <p style="font-size: 15px; color: #333; margin-bottom: 20px;">
+        <p style="font-size: 15px; color: #1b241d; margin-bottom: 20px;">
           Hi ${exhibitor.name ?? 'there'}, the results from <strong>${show.name}</strong> have been published. Here are your results:
         </p>
         ${dogSections}
@@ -150,8 +150,8 @@ export async function sendExhibitorResultsEmails(showId: string) {
           ${btn(resultsUrl, 'View Full Results')}
         </div>
         <!-- Share -->
-        <div style="padding: 16px; text-align: center; background: #f4f9f6; border-radius: 8px; margin: 0 0 16px;">
-          <p style="margin: 0 0 10px; font-size: 13px; font-weight: 600; color: #444;">Share your results!</p>
+        <div style="padding: 16px; text-align: center; background: #eaf7ee; border-radius: 8px; margin: 0 0 16px;">
+          <p style="margin: 0 0 10px; font-size: 13px; font-weight: 600; color: #1b241d;">Share your results!</p>
           <div style="display: inline-block;">
             <!--[if mso]><table><tr><td><![endif]-->
             <a href="https://wa.me/?text=${encodeURIComponent(`Check out my results from ${show.name}! 🏆 ${resultsUrl}`)}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 8px 16px; background: #25D366; color: #fff; font-size: 13px; font-weight: 600; text-decoration: none; border-radius: 6px; margin: 0 4px;">WhatsApp</a>
@@ -162,8 +162,8 @@ export async function sendExhibitorResultsEmails(showId: string) {
         </div>
       </div>
     </div>
-    <p style="text-align: center; margin-top: 16px; font-size: 12px; color: #999;">
-      Sent by <a href="${APP_URL}" style="color: #2D5F3F; text-decoration: none; font-weight: 600;">Remi</a> on behalf of ${show.organisation?.name ?? 'the show society'}.
+    <p style="text-align: center; margin-top: 16px; font-size: 12px; color: #535c4d;">
+      Sent by <a href="${APP_URL}" style="color: #2f6b43; text-decoration: none; font-weight: 600;">Remi</a> on behalf of ${show.organisation?.name ?? 'the show society'}.
     </p>
   </div>
 </body>
@@ -330,10 +330,10 @@ export async function sendFollowerResultsNotifications(showId: string) {
     const dogSections = follower.dogs.map((d) => {
       const highlights = [...d.awards, ...d.placements].join(', ');
       return `
-        <div style="padding: 12px; border-bottom: 1px solid #f0f0f0;">
-          <p style="margin: 0 0 4px; font-size: 15px; font-weight: 600; color: #1a1a1a;">${d.dogName}</p>
-          ${d.breedName ? `<p style="margin: 0 0 4px; font-size: 13px; color: #666;">${d.breedName}</p>` : ''}
-          <p style="margin: 0; font-size: 14px; color: #2D5F3F; font-weight: 600;">${highlights}</p>
+        <div style="padding: 12px; border-bottom: 1px solid #e7e1d3;">
+          <p style="margin: 0 0 4px; font-size: 15px; font-weight: 600; color: #1b241d;">${d.dogName}</p>
+          ${d.breedName ? `<p style="margin: 0 0 4px; font-size: 13px; color: #535c4d;">${d.breedName}</p>` : ''}
+          <p style="margin: 0; font-size: 14px; color: #2f6b43; font-weight: 600;">${highlights}</p>
         </div>`;
     }).join('');
 
@@ -341,25 +341,25 @@ export async function sendFollowerResultsNotifications(showId: string) {
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin: 0; padding: 0; background-color: #f5f3ef; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+<body style="margin: 0; padding: 0; background-color: #f6f4ec; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
     <div style="text-align: center; padding: 24px 0;">
-      <h1 style="margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 28px; color: #2D5F3F;">Remi</h1>
+      <h1 style="margin: 0; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 26px; font-weight: 800; color: #2f6b43; letter-spacing: -0.015em;">Remi<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#5bb579;margin-left:3px;"></span></h1>
     </div>
-    <div style="background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-      <div style="background: #2D5F3F; padding: 24px; text-align: center;">
-        <h2 style="margin: 0; color: #ffffff; font-size: 20px;">Dogs You Follow Placed!</h2>
-        <p style="margin: 8px 0 0; color: #b8d4c4; font-size: 14px;">${show.name} &middot; ${showDate}</p>
+    <div style="background: #ffffff; border: 1px solid #e7e1d3; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: #20452c; padding: 24px; text-align: center;">
+        <h2 style="margin: 0; color: #f3ecdc; font-size: 20px;">Dogs You Follow Placed!</h2>
+        <p style="margin: 8px 0 0; color: rgba(243, 236, 220, 0.78); font-size: 14px;">${show.name} &middot; ${showDate}</p>
       </div>
       <div style="padding: 16px 24px;">
         ${dogSections}
       </div>
-      <div style="padding: 16px 24px; text-align: center; border-top: 1px solid #e5e5e5;">
+      <div style="padding: 16px 24px; text-align: center; border-top: 1px solid #e7e1d3;">
         ${btn(`${APP_URL}/shows/${show.slug ?? show.id}/results`, 'View Full Results')}
       </div>
     </div>
-    <p style="text-align: center; margin-top: 16px; font-size: 12px; color: #999;">
-      Sent by <a href="${APP_URL}" style="color: #2D5F3F; text-decoration: none; font-weight: 600;">Remi</a>
+    <p style="text-align: center; margin-top: 16px; font-size: 12px; color: #535c4d;">
+      Sent by <a href="${APP_URL}" style="color: #2f6b43; text-decoration: none; font-weight: 600;">Remi</a>
     </p>
   </div>
 </body>

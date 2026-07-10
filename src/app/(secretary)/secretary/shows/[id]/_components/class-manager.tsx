@@ -429,16 +429,16 @@ export function ClassManager({ showId, showType, showScope, classes }: ClassMana
       </CardHeader>
       {/* Championship class requirement warning */}
       {championshipWarnings.length > 0 && (
-        <div className="mx-4 mb-3 rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30">
+        <div className="mx-4 mb-3 rounded-md border border-se-honey-line bg-se-honey-soft p-3">
           <div className="flex items-start gap-2">
-            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-600" />
+            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-se-honey-deep" />
             <div className="min-w-0 space-y-1">
-              <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+              <p className="text-sm font-medium text-se-honey-deep">
                 Championship shows require Open and Limit classes for each sex per RKC regulations
               </p>
               <ul className="space-y-0.5">
                 {championshipWarnings.map((w) => (
-                  <li key={w.breed} className="text-xs text-amber-700 dark:text-amber-300">
+                  <li key={w.breed} className="text-xs text-se-honey-deep">
                     <span className="font-medium">{w.breed}</span>: missing {w.missing.join(', ')}
                   </li>
                 ))}

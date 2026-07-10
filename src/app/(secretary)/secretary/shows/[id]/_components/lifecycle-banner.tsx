@@ -61,7 +61,7 @@ export function LifecycleBanner({ show, entryStats, onOpenEntries }: LifecycleBa
       className={cn(
         'rounded-lg border-l-4 p-3 sm:p-4',
         entriesOverdue
-          ? 'bg-rose-50 border-rose-400 dark:bg-rose-950/20 dark:border-rose-600'
+          ? 'bg-destructive/10 border-destructive'
           : cn(config.bgColor, config.borderColor),
         // Show day gets a more prominent treatment
         phase === 'show_day' && !entriesOverdue && 'bg-primary/10 border-primary',
@@ -69,7 +69,7 @@ export function LifecycleBanner({ show, entryStats, onOpenEntries }: LifecycleBa
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div className="flex items-start gap-3 min-w-0">
-          <div className={cn('mt-0.5 shrink-0', entriesOverdue ? 'text-rose-600 dark:text-rose-400' : config.color)}>
+          <div className={cn('mt-0.5 shrink-0', entriesOverdue ? 'text-destructive' : config.color)}>
             <Icon className="size-5" />
           </div>
           <div className="min-w-0 flex-1">
@@ -131,7 +131,7 @@ function SetupContent({
         {entriesOpenInfo && (
           <span className={cn(
             'text-xs',
-            entriesOpenInfo.urgent ? 'text-amber-600 font-medium' : 'text-muted-foreground',
+            entriesOpenInfo.urgent ? 'text-se-honey-deep font-medium' : 'text-muted-foreground',
           )}>
             {entriesOpenInfo.text}
           </span>
@@ -150,11 +150,11 @@ function SetupContent({
                 className="flex items-center gap-2 min-h-[2.75rem] sm:min-h-0"
               >
                 {done ? (
-                  <Check className="size-3.5 shrink-0 text-emerald-600" />
+                  <Check className="size-3.5 shrink-0 text-se-fresh-deep" />
                 ) : (
                   <X className={cn(
                     'size-3.5 shrink-0',
-                    isRequired ? 'text-destructive' : 'text-amber-500',
+                    isRequired ? 'text-destructive' : 'text-se-honey',
                   )} />
                 )}
                 <span className={cn(
@@ -232,16 +232,16 @@ function EntriesOpenContent({
       {closeInfo?.overdue ? (
         <>
           <div className="flex items-start gap-2">
-            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-rose-600" />
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
             <div>
-              <h3 className="text-sm font-semibold text-rose-800 dark:text-rose-300">
+              <h3 className="text-sm font-semibold text-destructive">
                 Entries were scheduled to close on{' '}
                 {new Date(show.entryCloseDate!).toLocaleDateString('en-GB', {
                   day: 'numeric',
                   month: 'long',
                 })}
               </h3>
-              <p className="text-xs text-rose-700/80 dark:text-rose-400/80">
+              <p className="text-xs text-destructive/80">
                 {totalEntries} {totalEntries === 1 ? 'entry' : 'entries'} from{' '}
                 {uniqueExhibitors} {uniqueExhibitors === 1 ? 'exhibitor' : 'exhibitors'} — entries are still being accepted
               </p>
@@ -274,7 +274,7 @@ function EntriesOpenContent({
             {closeInfo && (
               <span className={cn(
                 'text-xs',
-                closeInfo.urgent ? 'text-amber-600 font-medium' : 'text-muted-foreground',
+                closeInfo.urgent ? 'text-se-honey-deep font-medium' : 'text-muted-foreground',
               )}>
                 {closeInfo.text}
               </span>
@@ -337,7 +337,7 @@ function PreShowContent({
         {showDayInfo && (
           <span className={cn(
             'text-xs',
-            showDayInfo.urgent ? 'text-amber-600 font-medium' : 'text-muted-foreground',
+            showDayInfo.urgent ? 'text-se-honey-deep font-medium' : 'text-muted-foreground',
           )}>
             {showDayInfo.text}
           </span>
@@ -391,15 +391,15 @@ function PostShowContent({ show }: { show: Show }) {
         </h3>
         <span className={cn(
           'text-xs',
-          resultsPublished ? 'text-emerald-600' : 'text-muted-foreground',
+          resultsPublished ? 'text-se-fresh-deep' : 'text-muted-foreground',
         )}>
           {resultsPublished ? 'Results published' : 'Results not yet published'}
         </span>
       </div>
       <span className={cn(
         'block text-xs',
-        rkcSubmitted && 'text-emerald-600',
-        !rkcSubmitted && rkcInfo.urgent ? 'text-amber-600 font-medium' : '',
+        rkcSubmitted && 'text-se-fresh-deep',
+        !rkcSubmitted && rkcInfo.urgent ? 'text-se-honey-deep font-medium' : '',
         !rkcSubmitted && rkcInfo.overdue && 'text-destructive font-medium',
         !rkcSubmitted && !rkcInfo.urgent && !rkcInfo.overdue && 'text-muted-foreground',
       )}>

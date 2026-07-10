@@ -1,11 +1,10 @@
 import { ImageResponse } from 'next/og';
 import { eq } from 'drizzle-orm';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { db } from '@/server/db';
 import { shows, showClasses } from '@/server/db/schema';
 import { isUuid } from '@/lib/slugify';
 import { format } from 'date-fns';
+import { loadShareImageFonts, SHARE_GREEN as G } from '@/lib/share-image-data';
 
 export const runtime = 'nodejs';
 export const contentType = 'image/png';
@@ -21,6 +20,9 @@ const SHOW_TYPE_LABELS: Record<string, string> = {
   championship: 'Championship Show',
 };
 
+const BG_GRADIENT = `linear-gradient(172deg, ${G.deep}, ${G.deepest})`;
+const HEAD = { fontFamily: 'Hanken Grotesk', fontWeight: 800, letterSpacing: '-0.015em' } as const;
+
 export default async function OGImage({
   params,
 }: {
@@ -28,16 +30,7 @@ export default async function OGImage({
 }) {
   const { id } = await params;
 
-  // Load fonts from disk — see /shows/[id]/opengraph-image.tsx for why we avoid
-  // the `fetch(new URL(..., import.meta.url))` pattern in prod.
-  const fontsDir = join(process.cwd(), 'public', 'fonts');
-  const readFont = (name: string): ArrayBuffer => {
-    const buf = readFileSync(join(fontsDir, name));
-    return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
-  };
-  const baskervilleBold = readFont('libre-baskerville-bold.ttf');
-  const interRegular = readFont('inter-regular.ttf');
-  const interSemibold = readFont('inter-semibold.ttf');
+  const fonts = loadShareImageFonts();
 
   const show = await db?.query.shows.findFirst({
     where: isUuid(id) ? eq(shows.id, id) : eq(shows.slug, id),
@@ -57,9 +50,9 @@ export default async function OGImage({
             justifyContent: 'center',
             width: '100%',
             height: '100%',
-            backgroundColor: '#1C1917',
-            color: '#FAFAF8',
-            fontFamily: 'Libre Baskerville',
+            background: BG_GRADIENT,
+            color: G.cream,
+            ...HEAD,
             fontSize: 32,
           }}
         >
@@ -68,16 +61,14 @@ export default async function OGImage({
       ),
       {
         ...size,
-        fonts: [
-          { name: 'Libre Baskerville', data: baskervilleBold, weight: 700 },
-        ],
+        fonts: fonts.filter((f) => f.weight === 800),
       }
     );
   }
 
   // Count judged classes and entries
   const classes = await db?.query.showClasses.findMany({
-    where: eq(showClasses.showId, id),
+    where: eq(showClasses.showId, show.id),
     with: {
       entryClasses: {
         with: {
@@ -112,35 +103,23 @@ export default async function OGImage({
           flexDirection: 'column',
           width: '100%',
           height: '100%',
-          backgroundColor: '#1C1917',
+          background: BG_GRADIENT,
           position: 'relative',
           overflow: 'hidden',
         }}
       >
-        {/* Top gold accent line */}
+        {/* Fresh-green radial glow */}
         <div
           style={{
             display: 'flex',
             position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 3,
-            background: 'linear-gradient(90deg, #92702A, #C9A84C, #92702A)',
-          }}
-        />
-
-        {/* Subtle background radial */}
-        <div
-          style={{
-            display: 'flex',
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background:
-              'radial-gradient(ellipse at 70% 30%, rgba(180,130,80,0.05) 0%, transparent 60%)',
+            right: -140,
+            top: -110,
+            width: 420,
+            height: 420,
+            borderRadius: 999,
+            background: `radial-gradient(circle, ${G.fresh}, transparent 68%)`,
+            opacity: 0.28,
           }}
         />
 
@@ -153,6 +132,7 @@ export default async function OGImage({
             padding: '48px 56px 24px',
             justifyContent: 'center',
             gap: 20,
+            position: 'relative',
           }}
         >
           {/* Trophy + show type */}
@@ -169,7 +149,7 @@ export default async function OGImage({
                 width: 40,
                 height: 40,
                 borderRadius: 20,
-                backgroundColor: 'rgba(201, 168, 76, 0.15)',
+                backgroundColor: 'rgba(243,236,220,0.14)',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
@@ -179,7 +159,7 @@ export default async function OGImage({
                 height="20"
                 viewBox="0 0 24 24"
                 fill="none"
-                stroke="#C9A84C"
+                stroke={G.honey}
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -195,10 +175,10 @@ export default async function OGImage({
             <div
               style={{
                 display: 'flex',
-                fontFamily: 'Inter',
+                fontFamily: 'Hanken Grotesk',
                 fontWeight: 600,
                 fontSize: 16,
-                color: '#C9A84C',
+                color: G.honey,
                 letterSpacing: '0.06em',
                 textTransform: 'uppercase',
               }}
@@ -211,12 +191,10 @@ export default async function OGImage({
           <div
             style={{
               display: 'flex',
-              fontFamily: 'Libre Baskerville',
-              fontWeight: 700,
+              ...HEAD,
               fontSize: show.name.length > 40 ? 32 : 40,
-              color: '#FAFAF8',
+              color: G.cream,
               lineHeight: 1.15,
-              letterSpacing: '0.01em',
             }}
           >
             {show.name}
@@ -233,10 +211,10 @@ export default async function OGImage({
             <div
               style={{
                 display: 'flex',
-                fontFamily: 'Inter',
+                fontFamily: 'Hanken Grotesk',
                 fontWeight: 400,
                 fontSize: 18,
-                color: '#A8A29E',
+                color: G.creamDim,
               }}
             >
               {showDate}
@@ -245,10 +223,10 @@ export default async function OGImage({
               <div
                 style={{
                   display: 'flex',
-                  fontFamily: 'Inter',
+                  fontFamily: 'Hanken Grotesk',
                   fontWeight: 400,
                   fontSize: 16,
-                  color: '#78716C',
+                  color: 'rgba(243,236,220,0.5)',
                 }}
               >
                 {venueName}
@@ -271,7 +249,7 @@ export default async function OGImage({
                 display: 'flex',
                 flex: 1,
                 height: 1,
-                backgroundColor: 'rgba(201, 168, 76, 0.2)',
+                backgroundColor: 'rgba(243,236,220,0.16)',
               }}
             />
             <div
@@ -279,8 +257,8 @@ export default async function OGImage({
                 display: 'flex',
                 width: 6,
                 height: 6,
-                backgroundColor: '#C9A84C',
-                transform: 'rotate(45deg)',
+                borderRadius: 99,
+                backgroundColor: G.fresh,
               }}
             />
             <div
@@ -288,7 +266,7 @@ export default async function OGImage({
                 display: 'flex',
                 flex: 1,
                 height: 1,
-                backgroundColor: 'rgba(201, 168, 76, 0.2)',
+                backgroundColor: 'rgba(243,236,220,0.16)',
               }}
             />
           </div>
@@ -298,21 +276,21 @@ export default async function OGImage({
             style={{
               display: 'flex',
               gap: 32,
-              fontFamily: 'Inter',
+              fontFamily: 'Hanken Grotesk',
               fontSize: 16,
             }}
           >
             {judgedCount > 0 && (
-              <div style={{ display: 'flex', color: '#A8A29E' }}>
-                <span style={{ color: '#FAFAF8', fontWeight: 600, marginRight: 6 }}>
+              <div style={{ display: 'flex', color: G.creamDim }}>
+                <span style={{ color: G.cream, fontWeight: 700, marginRight: 6 }}>
                   {judgedCount}
                 </span>
                 classes judged
               </div>
             )}
             {totalEntries > 0 && (
-              <div style={{ display: 'flex', color: '#A8A29E' }}>
-                <span style={{ color: '#FAFAF8', fontWeight: 600, marginRight: 6 }}>
+              <div style={{ display: 'flex', color: G.creamDim }}>
+                <span style={{ color: G.cream, fontWeight: 700, marginRight: 6 }}>
                   {totalEntries}
                 </span>
                 entries
@@ -326,43 +304,41 @@ export default async function OGImage({
           style={{
             display: 'flex',
             height: 52,
-            borderTop: '1px solid rgba(201, 168, 76, 0.15)',
+            borderTop: '1px solid rgba(243,236,220,0.12)',
             padding: '0 56px',
             alignItems: 'center',
             justifyContent: 'space-between',
-            backgroundColor: 'rgba(28, 25, 23, 0.95)',
+            position: 'relative',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div
               style={{
                 display: 'flex',
-                width: 6,
-                height: 6,
-                backgroundColor: '#C9A84C',
-                transform: 'rotate(45deg)',
+                width: 7,
+                height: 7,
+                borderRadius: 99,
+                backgroundColor: G.fresh,
               }}
             />
             <div
               style={{
                 display: 'flex',
-                fontFamily: 'Libre Baskerville',
-                fontWeight: 700,
+                ...HEAD,
                 fontSize: 16,
-                color: '#C9A84C',
-                letterSpacing: '0.08em',
+                color: G.cream,
               }}
             >
-              REMI
+              Remi
             </div>
           </div>
           <div
             style={{
               display: 'flex',
-              fontFamily: 'Inter',
+              fontFamily: 'Hanken Grotesk',
               fontWeight: 400,
               fontSize: 13,
-              color: '#78716C',
+              color: G.creamDim,
               letterSpacing: '0.04em',
             }}
           >
@@ -373,11 +349,7 @@ export default async function OGImage({
     ),
     {
       ...size,
-      fonts: [
-        { name: 'Libre Baskerville', data: baskervilleBold, weight: 700 },
-        { name: 'Inter', data: interRegular, weight: 400 },
-        { name: 'Inter', data: interSemibold, weight: 600 },
-      ],
+      fonts,
     }
   );
 }

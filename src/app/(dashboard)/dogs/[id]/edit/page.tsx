@@ -4,6 +4,8 @@ import { use } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, Dog, Loader2 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
+import { cn } from '@/lib/utils';
+import { SE_H } from '@/components/show-experience/tokens';
 import { Button } from '@/components/ui/button';
 import { DogForm } from '@/components/dogs/dog-form';
 import { DogSvHealthCard } from '@/components/dogs/dog-sv-health-card';
@@ -49,7 +51,7 @@ export default function EditDogPage({
             Back to {dog.registeredName}
           </Link>
         </Button>
-        <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">
+        <h1 className={cn(SE_H, 'text-2xl sm:text-3xl')}>
           Edit Dog
         </h1>
         <p className="mt-1 text-muted-foreground">

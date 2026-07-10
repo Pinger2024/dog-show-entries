@@ -3,11 +3,25 @@ import fontkit from '@pdf-lib/fontkit';
 import { readFileSync } from 'fs';
 import path from 'path';
 
-// The base-14 standard fonts. react-pdf leaves an UNUSED Helvetica /
-// Helvetica-Oblique in the catalogue pages' Resources (invisible, but print
-// preflight — Tradeprint/Mixam — rejects any unembedded font). The catalogue
-// itself draws nothing in base-14, so removing these refs is safe and leaves
-// the embedded Inter/Libre/Times subsets untouched (BAGSD 2026-06-19).
+// The base-14 standard fonts. react-pdf leaves a Helvetica / Helvetica-Oblique
+// reference in every page's Resources — print preflight (Tradeprint/Mixam)
+// rejects any unembedded font, so these have to go before print.
+//
+// IMPORTANT (2026-07-10 finding): this reference is NOT always genuinely
+// unused. react-pdf emits a `BT /F<n> <size> Tf ET` sequence (font selected,
+// nothing drawn) for blank/empty `<Text>` nodes, and on some pages that tag
+// IS the base-14 one. Simply DELETING the Resources entry in that case
+// leaves the content stream's `Tf` operator pointing at a resource that no
+// longer exists — harmless visually (nothing was ever drawn under that tag)
+// but it corrupts strict PDF parsing: poppler (pdftoppm) fails the page with
+// "Unknown font tag" / "No font in show/space", and a real print-preflight
+// tool would very plausibly reject the same dangling reference. Confirmed
+// by inspecting the raw content stream of an affected page — the base-14 tag
+// appeared inside empty `BT...Tf...ET` blocks with no `Tj`/`TJ` in between.
+// Fix: ALIAS the tag to an already-embedded font on the same page instead of
+// deleting it outright — the `Tf` reference stays valid (now resolving to an
+// embedded font), nothing is visually different (nothing was drawn under it
+// either way), and print preflight no longer sees an unembedded font.
 const BASE14_FONTS = new Set([
   'Helvetica', 'Helvetica-Bold', 'Helvetica-Oblique', 'Helvetica-BoldOblique',
   'Courier', 'Courier-Bold', 'Courier-Oblique', 'Courier-BoldOblique',
@@ -15,18 +29,62 @@ const BASE14_FONTS = new Set([
   'Symbol', 'ZapfDingbats',
 ]);
 
-/** Remove unembedded base-14 font references from pages [start, end). */
+/**
+ * Strip the unembedded base-14 phantom font references react-pdf leaves in
+ * every rendered document's page Resources (see BASE14_FONTS above) — even
+ * documents that never reach `padPdfToMultiple` (the schedule PDF has no
+ * booklet-padding requirement, but still picks up the same phantom refs).
+ * Print preflight (Tradeprint/Mixam) rejects any unembedded font, so every
+ * PDF leaving the print pipeline needs this pass. No-ops if nothing matches;
+ * page count and content are otherwise untouched.
+ */
+export async function stripUnembeddedBase14Fonts(input: Uint8Array | Buffer): Promise<Uint8Array> {
+  const doc = await PDFDocument.load(input);
+  doc.registerFontkit(fontkit);
+  stripBase14Fonts(doc, 0, doc.getPageCount());
+  return doc.save();
+}
+
+/** Remove (or safely alias) unembedded base-14 font references from pages
+ *  [start, end). See the BASE14_FONTS comment above for why this can't just
+ *  delete the entry. */
 function stripBase14Fonts(doc: PDFDocument, start: number, end: number): void {
   const pages = doc.getPages();
   for (let i = start; i < end; i++) {
     const resources = pages[i]?.node.Resources();
     const fontDict = resources?.lookupMaybe(PDFName.of('Font'), PDFDict);
     if (!fontDict) continue;
-    for (const [key] of fontDict.entries()) {
+
+    // Snapshot entries first — never mutate `fontDict` while iterating it.
+    const entries = fontDict.entries();
+    const base14Keys: (typeof entries)[number][0][] = [];
+    let embeddedReplacement: (typeof entries)[number][1] | undefined;
+    for (const [key, rawValue] of entries) {
       const fontObj = fontDict.lookupMaybe(key, PDFDict);
       const baseFont = fontObj?.get(PDFName.of('BaseFont'));
       const name = baseFont ? baseFont.toString().replace(/^\//, '') : '';
-      if (BASE14_FONTS.has(name)) fontDict.delete(key);
+      if (BASE14_FONTS.has(name)) {
+        base14Keys.push(key);
+      } else if (!embeddedReplacement) {
+        // Keep the RAW (un-dereferenced) value — usually a PDFRef — so we
+        // can point another key at the exact same object below.
+        embeddedReplacement = rawValue;
+      }
+    }
+
+    for (const key of base14Keys) {
+      if (embeddedReplacement) {
+        // Alias the tag to an embedded font already on this page instead of
+        // deleting it — safe even if react-pdf's empty-Text `Tf` selects
+        // this exact tag elsewhere in the content stream (nothing is ever
+        // actually drawn under it, so repointing it is visually a no-op).
+        fontDict.set(key, embeddedReplacement);
+      } else {
+        // No embedded font on this page to alias to (shouldn't happen in
+        // practice — every page renders at least one real font) — fall back
+        // to deleting, which is safe only if the tag is truly unreferenced.
+        fontDict.delete(key);
+      }
     }
   }
 }

@@ -711,9 +711,9 @@ function EditShowDetailsDialog({
             </div>
             {isWusv ? (
               <>
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900/40 dark:bg-amber-950/30">
-                  <p className="font-medium text-amber-900 dark:text-amber-200">Show Format: Regional</p>
-                  <p className="mt-1 text-xs text-amber-900/80 dark:text-amber-200/80">
+                <div className="rounded-lg border border-se-honey-line bg-se-honey-soft p-3 text-sm">
+                  <p className="font-medium text-se-honey-ink">Show Format: Regional</p>
+                  <p className="mt-1 text-xs text-se-honey-ink/80">
                     WUSV / SV ruleset — single breed (German Shepherd Dog), separate Dog &amp; Bitch classes,
                     coat type split. These are fixed for Regional shows and aren&apos;t editable here.
                   </p>

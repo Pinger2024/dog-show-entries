@@ -4,6 +4,8 @@ import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+import { SE_H } from '@/components/show-experience/tokens';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -216,7 +218,7 @@ export default function MyClubPage() {
   if (!org) {
     return (
       <div className="space-y-4 sm:space-y-6 pb-16 md:pb-0">
-        <h1 className="font-serif text-lg font-bold tracking-tight sm:text-2xl">
+        <h1 className={cn(SE_H, 'font-serif text-lg sm:text-2xl')}>
           My Club
         </h1>
         <Card>
@@ -241,7 +243,7 @@ export default function MyClubPage() {
     <div className="space-y-4 sm:space-y-6 pb-16 md:pb-0">
       {/* Header */}
       <div>
-        <h1 className="font-serif text-lg font-bold tracking-tight sm:text-2xl">
+        <h1 className={cn(SE_H, 'font-serif text-lg sm:text-2xl')}>
           My Club
         </h1>
         <p className="mt-0.5 text-sm text-muted-foreground">

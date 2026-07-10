@@ -65,6 +65,7 @@ import {
 } from '@/components/ui/dialog';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
+import { SE_H } from '@/components/show-experience/tokens';
 import {
   Form,
   FormControl,
@@ -600,7 +601,7 @@ export default function NewShowPage() {
     return (
       <div className="space-y-6 pb-16 md:pb-0">
         <div>
-          <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">Create New Show</h1>
+          <h1 className={cn(SE_H, 'font-serif text-2xl font-bold tracking-tight sm:text-3xl')}>Create New Show</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             You need to set up your club before creating a show.
           </p>
@@ -627,7 +628,7 @@ export default function NewShowPage() {
     <div className="space-y-6 pb-16 md:pb-0">
       {/* Header */}
       <div>
-        <h1 className="font-serif text-2xl font-bold tracking-tight sm:text-3xl">Create New Show</h1>
+        <h1 className={cn(SE_H, 'font-serif text-2xl font-bold tracking-tight sm:text-3xl')}>Create New Show</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Step {step + 1} of {STEPS.length} — <span className="font-medium text-foreground">{STEPS[step]}</span>
         </p>
@@ -1079,9 +1080,9 @@ export default function NewShowPage() {
                     )}
                   />
                   {pendingInviteEmail && !form.watch('secretaryUserId') && (
-                    <div className="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30">
+                    <div className="rounded-md border border-se-honey-line bg-se-honey-soft p-3">
                       <div className="flex items-center gap-2">
-                        <Mail className="size-4 text-amber-600" />
+                        <Mail className="size-4 text-se-honey-deep" />
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium">Invite sent to <span className="font-semibold">{pendingInviteEmail}</span></p>
                           <p className="text-xs text-muted-foreground">They&apos;ll be set as secretary once they sign up</p>

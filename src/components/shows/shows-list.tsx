@@ -30,7 +30,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Chip, Pulse, SE_H, SEButton, SECard, SecLabel } from '@/components/show-experience/kit';
+import { Chip, Pulse, SEButton, SECard, SecLabel } from '@/components/show-experience/kit';
+import { SE_H } from '@/components/show-experience/tokens';
 
 /* ─── Debounce hook ────────────────────────────────── */
 

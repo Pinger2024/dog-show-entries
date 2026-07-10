@@ -616,19 +616,19 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
                       than create a new entry. */}
                   {remiResults.length > 0 && (
                     <div className="mt-3 space-y-2">
-                      <p className="text-sm font-medium text-emerald-700">
+                      <p className="text-sm font-medium text-se-fresh-deep">
                         Found in Remi — tap to fill in the details
                       </p>
                       <div className="space-y-1">
                         {remiResults.map((dog) => (
                           <div
                             key={dog.id}
-                            className="rounded-md border border-emerald-200 bg-emerald-50"
+                            className="rounded-md border border-se-fresh-line bg-se-fresh-soft"
                           >
                             <button
                               type="button"
                               onClick={() => applyRemiResult(dog)}
-                              className="flex w-full flex-col gap-0.5 px-3 py-2.5 text-left text-sm transition-colors hover:bg-emerald-100 sm:flex-row sm:items-center sm:justify-between sm:gap-2 sm:py-2"
+                              className="flex w-full flex-col gap-0.5 px-3 py-2.5 text-left text-sm transition-colors hover:bg-se-fresh-line sm:flex-row sm:items-center sm:justify-between sm:gap-2 sm:py-2"
                             >
                               <div className="min-w-0">
                                 <span className="font-medium">{dog.registeredName}</span>
@@ -643,7 +643,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
                             </button>
                             <a
                               href={`/dogs/${dog.id}`}
-                              className="block border-t border-emerald-200 px-3 py-1.5 text-center text-xs text-emerald-700 hover:bg-emerald-100"
+                              className="block border-t border-se-fresh-line px-3 py-1.5 text-center text-xs text-se-fresh-deep hover:bg-se-fresh-line"
                             >
                               Go to existing profile →
                             </a>
@@ -673,7 +673,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
                         {kcResults.length} dogs found — select the correct one:
                       </p>
                       {kcResults.length >= 12 && (
-                        <p className="text-xs text-amber-600">
+                        <p className="text-xs text-se-honey-deep">
                           Showing first 12 results only. Try a more specific search
                           (e.g. the full registered name) if your dog isn&apos;t listed.
                         </p>
@@ -1005,7 +1005,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
         {/* German Shepherd / SV Details — only relevant for GSDs.
             Hidden entirely for any other breed (Amanda 2026-05-21). */}
         {isGsd && (
-        <Card className="border-amber-200/60 dark:border-amber-900/40">
+        <Card className="border-se-honey/60">
           <CardHeader>
             <CardTitle>German Shepherd — SV / WUSV Details</CardTitle>
             <CardDescription className="space-y-1">
@@ -1458,7 +1458,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection }: DogFormProps)
             persist their respective data. (Amanda 2026-05-21: she lost
             health data because she only clicked one of the two buttons.) */}
         {isGsd && mode === 'edit' && (
-          <p className="text-xs text-amber-700 dark:text-amber-400">
+          <p className="text-xs text-se-honey-deep">
             Don&apos;t forget — the SV Health card above has its own <span className="font-semibold">Save Health Data</span> button. Click that one too to save the health/Koerung/breed survey fields.
           </p>
         )}
