@@ -58,6 +58,18 @@ are agreed product decisions. An audit must NOT flag these:
    design's radius 2); `Pulse`'s inner dot is normal-flow rather than
    `absolute inset-0` (identical geometry). Audits should not re-flag these.
 
+11. **Spread-the-word share block (task-first, not link-first)** — the
+   share card deliberately supersedes the mock's WhatsApp/Copy link/QR row.
+   Our users are 60+ UK dog-show secretaries/exhibitors who share into
+   WhatsApp chats and Facebook groups; the hard part for them is what to
+   write, not the link. So the primary row is WhatsApp / Facebook / Copy
+   post — three task buttons that each hand over a ready-made caption+URL
+   (via `share-caption.ts`), no QR button. The poster tool (previously
+   "Instagram poster") is reframed as a general "Show poster" for Facebook
+   posts, WhatsApp status, or printing — Instagram isn't singled out. The
+   general OS share sheet stays available as a small "More apps…" text
+   action so no capability is lost. (Michael 2026-07-10.)
+
 Everything NOT listed here that differs from the `.original.jsx` values is a
 defect to be fixed. (The hero's share icon-button, previously in the top row,
 is NOT a deviation — it gets removed; sharing lives in the sticky bar and the
