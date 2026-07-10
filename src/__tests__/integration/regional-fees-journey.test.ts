@@ -227,13 +227,15 @@ describe('regional (SV/WUSV) entry fees — journey', () => {
       expect(orderEntries.map((e) => e.totalFee).sort((a, b) => a - b)).toEqual([1000, 2000, 2000]);
     });
 
-    it('keeps the discount scale for adults: 3 adults + BP = £20 + £20 + £16 + £10 = £66', async () => {
+    it('rides the free 4th+ slot: 3 adults + BP = £20 + £20 + £16 + free = £56', async () => {
+      // Mandy 2026-07-10: the BP never consumes a discount position, but after
+      // three paid dogs it is "classed as the 4th dog" and goes free.
       const { show, exhibitor, cartEntries } = await withBabyPuppy(await regionalFixture(3), 1000);
       const result = await createTestCaller(exhibitor).orders.checkout({
         showId: show.id,
         entries: cartEntries,
       });
-      expect(result.totalAmount).toBe(6600);
+      expect(result.totalAmount).toBe(5600);
     });
 
     it('members pay the same flat £10 for the baby puppy (2 member adults + BP = £44)', async () => {

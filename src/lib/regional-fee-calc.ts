@@ -29,10 +29,12 @@ export type RegionalDogEntryInput = {
    *  Junior Handler = a flat-fee handler entry (does not consume a position). */
   kind: 'standard' | 'junior_handler';
   /** Flat special-class fee in pence — a dog in a class the secretary priced
-   *  away from the scale (e.g. Baby Puppy at £10). Charged this exact amount,
-   *  excluded from the per-dog discount scale: it neither consumes a position
-   *  nor gets member/first-time rates (Mandy 2026-07-10). Resolve via
-   *  `regionalClassFlatFee`. */
+   *  away from the scale (e.g. Baby Puppy at £10). Never consumes a discount
+   *  position (other dogs keep their scale prices), but takes the next
+   *  notional slot AFTER every paying dog and is charged whichever is
+   *  cheaper: this flat fee or that slot's scale price — so after 3 paid
+   *  dogs a Baby Puppy rides the free 4th+ slot (Mandy 2026-07-10). No
+   *  first-time rate. Resolve via `regionalClassFlatFee`. */
   flatFeePence?: number | null;
 };
 
@@ -95,18 +97,16 @@ export function computeRegionalOrderFees(
 ): RegionalOrderFeeResult {
   let position = 0;
 
-  const perEntry: RegionalEntryFeeBreakdown[] = entries.map((entry) => {
+  // First pass — standard dogs consume the scale positions among themselves;
+  // flat-priced special classes are deferred so they never shift a standard
+  // dog up the scale, wherever they sit in the order.
+  const drafts: (RegionalEntryFeeBreakdown | null)[] = entries.map((entry) => {
     if (entry.kind === 'junior_handler') {
       const jh = ctx.juniorHandlerFeePence ?? 0;
       return { key: entry.key, fee: jh, perClassFees: [jh], position: 0 };
     }
 
-    // Flat-priced special class (Baby Puppy) — charged as-is, outside the
-    // per-dog scale, so it doesn't shift the other dogs' positions.
-    if (entry.flatFeePence != null) {
-      const flat = entry.flatFeePence;
-      return { key: entry.key, fee: flat, perClassFees: [flat], position: 0 };
-    }
+    if (entry.flatFeePence != null) return null; // second pass
 
     // Standard paying dog — consumes the next tier position.
     position += 1;
@@ -118,6 +118,22 @@ export function computeRegionalOrderFees(
         ? ctx.firstTimeFeePence ?? 0
         : tierPrice(ctx.tiers, position, ctx.isMember);
     return { key: entry.key, fee, perClassFees: [fee], position };
+  });
+
+  // Second pass — each flat-priced dog (Baby Puppy) takes the next notional
+  // slot after every paying dog and is charged whichever is cheaper: its flat
+  // fee or that slot's scale price. After 3 paid dogs on the BRG scale the
+  // Baby Puppy is "classed as the 4th dog" and goes free (Mandy 2026-07-10).
+  let notionalSlot = position;
+  const perEntry: RegionalEntryFeeBreakdown[] = entries.map((entry, i) => {
+    const draft = drafts[i];
+    if (draft) return draft;
+    notionalSlot += 1;
+    const fee = Math.min(
+      entry.flatFeePence!,
+      tierPrice(ctx.tiers, notionalSlot, ctx.isMember),
+    );
+    return { key: entry.key, fee, perClassFees: [fee], position: 0 };
   });
 
   const entriesTotal = perEntry.reduce((sum, e) => sum + e.fee, 0);

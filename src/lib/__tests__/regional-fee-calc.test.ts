@@ -138,9 +138,46 @@ describe('computeRegionalOrderFees — flat-priced special classes (Baby Puppy)'
   });
 
   it('a third ADULT dog still reaches the £16 tier past a baby puppy', () => {
+    // The BP sits AFTER the three paid dogs on the scale (notional 4th slot,
+    // free) — it neither takes the £16 slot nor pays £10 here.
     const r = computeRegionalOrderFees([std('d0'), std('d1'), bp('bp'), std('d2')], base);
-    expect(r.perEntry.map((e) => e.fee)).toEqual([2000, 2000, 1000, 1600]);
-    expect(r.entriesTotal).toBe(6600);
+    expect(r.perEntry.map((e) => e.fee)).toEqual([2000, 2000, 0, 1600]);
+    expect(r.entriesTotal).toBe(5600);
+  });
+
+  it("rides the free 4th+ slot after three paid dogs (Mandy 2026-07-10: 'classed as the 4th dog')", () => {
+    const r = computeRegionalOrderFees([std('d0'), std('d1'), std('d2'), bp('bp')], base);
+    expect(r.perEntry.map((e) => e.fee)).toEqual([2000, 2000, 1600, 0]);
+    expect(r.entriesTotal).toBe(5600);
+    expect(r.payingDogCount).toBe(3);
+  });
+
+  it('members: 3 member dogs + baby puppy = £17 + £17 + £11 + free', () => {
+    const r = computeRegionalOrderFees(
+      [std('d0'), std('d1'), std('d2'), bp('bp')],
+      { ...base, isMember: true },
+    );
+    expect(r.perEntry.map((e) => e.fee)).toEqual([1700, 1700, 1100, 0]);
+    expect(r.entriesTotal).toBe(4500);
+  });
+
+  it('every baby puppy past the paid dogs takes its own notional slot', () => {
+    const r = computeRegionalOrderFees(
+      [std('d0'), std('d1'), std('d2'), bp('bp1'), bp('bp2')],
+      base,
+    );
+    // Notional 4th and 5th slots are both free on the BRG scale.
+    expect(r.perEntry.map((e) => e.fee)).toEqual([2000, 2000, 1600, 0, 0]);
+  });
+
+  it('charges whichever is cheaper: the flat fee or the scale slot', () => {
+    // A scale whose 2nd slot (£5) undercuts the £10 flat fee.
+    const cheapSecond = [
+      { standardPence: 2000, memberPence: 2000 },
+      { standardPence: 500, memberPence: 500 },
+    ];
+    const r = computeRegionalOrderFees([std('d0'), bp('bp')], { ...base, tiers: cheapSecond });
+    expect(r.perEntry.map((e) => e.fee)).toEqual([2000, 500]);
   });
 
   it('members pay the same flat fee for a baby puppy', () => {
