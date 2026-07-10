@@ -136,7 +136,7 @@ export default function StewardShowPage({
           <p className="mt-1.5 text-xs text-muted-foreground">
             {judgedCount} judged · {liveCount} live to public
             {notLiveCount > 0 && (
-              <span className="text-amber-600"> · {notLiveCount} not yet live</span>
+              <span className="text-se-honey-deep"> · {notLiveCount} not yet live</span>
             )}
           </p>
         )}
@@ -187,7 +187,7 @@ export default function StewardShowPage({
                         </Badge>
                       )}
                       {sc.hasResults && !sc.isPublished && (
-                        <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700 text-[10px] uppercase tracking-wider">
+                        <Badge variant="outline" className="border-se-honey-line bg-se-honey-soft text-se-honey-deep text-[10px] uppercase tracking-wider">
                           Not published
                         </Badge>
                       )}
@@ -600,7 +600,7 @@ function BestOfBreedSection({
     return (
       <div className="mt-6 sm:mt-8 space-y-4">
         <div className="flex items-center gap-2">
-          <Trophy className="size-5 text-amber-500" />
+          <Trophy className="size-5 text-se-honey-deep" />
           <h2 className="text-sm sm:text-base font-semibold">Top Awards</h2>
         </div>
         <p className="text-xs text-muted-foreground">
