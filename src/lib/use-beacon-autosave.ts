@@ -1,9 +1,12 @@
 'use client';
 
 /**
- * Autosave hook for the dog form's data-loss-prone sections (Mandy
- * 2026-07-11 — an exhibitor lost sire/dam registration + health details to
- * an unpressed second save button).
+ * Generic autosave: debounced keepalive fetch + unmount beacon. First used
+ * by the dog form's data-loss-prone sections (Mandy 2026-07-11 — an
+ * exhibitor lost sire/dam registration + health details to an unpressed
+ * second save button); domain-neutral so the next autosave surface (e.g.
+ * the schedule form's inline copy of this pattern) can adopt it without
+ * touching this module.
  *
  * Two delivery paths, copied from the schedule-settings autosave that
  * survived the 2026-04-22 wipe incident:
@@ -20,47 +23,44 @@
  */
 import { useEffect, useRef, useState } from 'react';
 
-export type DogAutosaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+export type AutosaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
-export type DogAutosavePayload = {
-  dog?: Record<string, unknown>;
-  svProfile?: Record<string, unknown>;
-};
-
-export function useDogAutosave({
-  dogId,
+export function useBeaconAutosave({
+  url,
   enabled,
   hydrated,
   payload,
   onSaved,
 }: {
-  dogId: string | undefined;
-  /** Master switch — false in create mode (no dog row to save onto yet). */
+  /** Autosave endpoint, e.g. `/api/dog-autosave/<dogId>`. Undefined
+   *  disables the hook (no target to save to yet). */
+  url: string | undefined;
+  /** Master switch — e.g. false in a create flow with no row to save onto. */
   enabled: boolean;
   /** True only once the form state reflects the SERVER's data, never the
    *  blank defaults. Nothing is captured or sent before this. */
   hydrated: boolean;
-  payload: DogAutosavePayload;
+  payload: Record<string, unknown>;
   onSaved?: () => void;
-}): DogAutosaveStatus {
-  const [status, setStatus] = useState<DogAutosaveStatus>('idle');
+}): AutosaveStatus {
+  const [status, setStatus] = useState<AutosaveStatus>('idle');
   const latestPayloadRef = useRef<string | null>(null);
-  const baselineRef = useRef<string | null>(null);
+  const hasBaselineRef = useRef(false);
   const lastSavedRef = useRef<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onSavedRef = useRef(onSaved);
   onSavedRef.current = onSaved;
 
   const serialized = JSON.stringify(payload);
-  const active = enabled && !!dogId;
+  const active = enabled && !!url;
 
   useEffect(() => {
     if (!active || !hydrated) return;
 
     // First hydrated snapshot is the baseline — an untouched form never
     // saves (and never beacons) at all.
-    if (baselineRef.current === null) {
-      baselineRef.current = serialized;
+    if (!hasBaselineRef.current) {
+      hasBaselineRef.current = true;
       lastSavedRef.current = serialized;
       latestPayloadRef.current = serialized;
       return;
@@ -74,7 +74,7 @@ export function useDogAutosave({
     const snapshot = serialized;
     timerRef.current = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/dog-autosave/${dogId}`, {
+        const res = await fetch(url!, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: snapshot,
@@ -93,7 +93,7 @@ export function useDogAutosave({
       if (timerRef.current) clearTimeout(timerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serialized, active, hydrated, dogId]);
+  }, [serialized, active, hydrated, url]);
 
   // Unmount beacon — delivers whatever the debounce hadn't flushed yet.
   useEffect(() => {
@@ -101,14 +101,11 @@ export function useDogAutosave({
     return () => {
       const latest = latestPayloadRef.current;
       if (latest !== null && latest !== lastSavedRef.current) {
-        navigator.sendBeacon(
-          `/api/dog-autosave/${dogId}`,
-          new Blob([latest], { type: 'application/json' }),
-        );
+        navigator.sendBeacon(url!, new Blob([latest], { type: 'application/json' }));
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, dogId]);
+  }, [active, url]);
 
   return status;
 }

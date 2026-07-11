@@ -2,14 +2,14 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm, useFieldArray, useWatch, type Control } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format, parse, isValid } from 'date-fns';
 import { CalendarIcon, Check, ChevronsUpDown, Loader2, Plus, Trash2, Award, Search, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
-import { useDogAutosave, type DogAutosaveStatus } from '@/lib/use-dog-autosave';
+import { useBeaconAutosave } from '@/lib/use-beacon-autosave';
 import { cn, getTitleDisplay } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -117,18 +117,89 @@ const TITLE_OPTIONS = [
   { value: 'wt_ch', label: 'WT.Ch. — Working Trial Champion' },
 ] as const;
 
-/** Tiny "saves itself" status line for the autosaved cards (edit mode). */
-function AutosaveHint({ status }: { status: DogAutosaveStatus }) {
+/** Static reassurance line for the autosaved cards (edit mode). The live
+ *  saving/saved/error status renders once, via DogFormAutosaveBridge. */
+function AutosaveHint() {
   return (
-    <span className="mt-1 flex items-center gap-1 text-xs" aria-live="polite">
-      {status === 'saving' ? (
-        <span className="text-muted-foreground">Saving…</span>
-      ) : status === 'error' ? (
-        <span className="text-destructive">Couldn&apos;t save — check your connection.</span>
-      ) : (
-        <span className="text-muted-foreground">Saves automatically as you type.</span>
-      )}
+    <span className="mt-1 block text-xs text-muted-foreground">
+      Saves automatically as you type.
     </span>
+  );
+}
+
+/** The dog-form sections that autosave in edit mode. Must match
+ *  dogAutosaveFieldsSchema (server side) — field order matters below. */
+const AUTOSAVE_FIELDS = [
+  'sireName',
+  'damName',
+  'breederName',
+  'breederCountry',
+  'breederCity',
+  'breederPostcode',
+  'microchipNumber',
+  'coatType',
+  'sireRegistrationBody',
+  'sireRegistrationNumber',
+  'damRegistrationBody',
+  'damRegistrationNumber',
+] as const;
+
+/** Isolates the autosave subscription so typing only re-renders THIS tiny
+ *  component, not the whole 1500-line form — react-hook-form's inputs stay
+ *  uncontrolled (the point of RHF). Renders the live status line shown
+ *  above the submit button. */
+function DogFormAutosaveBridge({
+  control,
+  dogId,
+}: {
+  control: Control<DogFormValues>;
+  dogId: string;
+}) {
+  const [
+    sireName, damName, breederName, breederCountry, breederCity,
+    breederPostcode, microchipNumber, coatType, sireRegistrationBody,
+    sireRegistrationNumber, damRegistrationBody, damRegistrationNumber,
+  ] = useWatch({ control, name: AUTOSAVE_FIELDS }) as Array<string | undefined>;
+
+  // hydrated is unconditionally true: the edit page only mounts the form
+  // AFTER the dog has loaded, so it is born with server values, never
+  // blank defaults.
+  const status = useBeaconAutosave({
+    url: `/api/dog-autosave/${dogId}`,
+    enabled: true,
+    hydrated: true,
+    payload: {
+      dog: {
+        sireName: sireName ?? '',
+        damName: damName ?? '',
+        breederName: breederName ?? '',
+        breederCountry: breederCountry ?? '',
+        breederCity: breederCity ?? '',
+        breederPostcode: breederPostcode ?? '',
+        microchipNumber: microchipNumber ?? '',
+        coatType: coatType ?? null,
+        sireRegistrationBody: sireRegistrationBody ?? null,
+        sireRegistrationNumber: sireRegistrationNumber ?? '',
+        damRegistrationBody: damRegistrationBody ?? null,
+        damRegistrationNumber: damRegistrationNumber ?? '',
+      },
+    },
+  });
+
+  return (
+    <p className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
+      {status === 'saving' ? (
+        'Saving your changes…'
+      ) : status === 'saved' ? (
+        <span className="text-green-700 dark:text-green-500">Saved ✓</span>
+      ) : status === 'error' ? (
+        <span className="text-destructive">
+          Some details couldn&apos;t save — check your connection, then press Save Dog Details.
+        </span>
+      ) : (
+        'Pedigree, breeder and registration details save automatically.'
+      )}
+    </p>
   );
 }
 
@@ -255,6 +326,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
 
   function applyKcResult(data: typeof kcResults[number]) {
     const sv = { shouldValidate: true, shouldDirty: true } as const;
+    setLookupApplied(true);
 
     if (data.registeredName) form.setValue('registeredName', data.registeredName, sv);
     if (data.sex) form.setValue('sex', data.sex as 'dog' | 'bitch', sv);
@@ -330,6 +402,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
 
   function applyRemiResult(data: typeof remiResults[number]) {
     const sv = { shouldValidate: true, shouldDirty: true } as const;
+    setLookupApplied(true);
 
     if (data.registeredName) form.setValue('registeredName', data.registeredName, sv);
     if (data.kcRegNumber) form.setValue('kcRegNumber', data.kcRegNumber, sv);
@@ -449,44 +522,19 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
   const selectedBreedName = breeds?.find((b) => b.id === watchedBreedId)?.name ?? '';
   const isGsd = /german\s+shepherd/i.test(selectedBreedName);
 
-  // Autosave the loss-prone middle sections in edit mode (Mandy 2026-07-11:
-  // an exhibitor lost sire/dam registration details to an unpressed save
-  // button): pedigree, breeder location, microchip, sire/dam registration.
-  // Identity fields (name, reg number, breed, sex, DOB, owners) still go
-  // through the Save button. hydrated is unconditionally true because the
-  // edit page only mounts this form AFTER the dog has loaded — the form is
-  // born with server values, never blank defaults.
-  const av = form.watch();
-  const autosaveStatus = useDogAutosave({
-    dogId,
-    enabled: mode === 'edit',
-    hydrated: true,
-    payload: {
-      dog: {
-        sireName: av.sireName ?? '',
-        damName: av.damName ?? '',
-        breederName: av.breederName ?? '',
-        breederCountry: av.breederCountry ?? '',
-        breederCity: av.breederCity ?? '',
-        breederPostcode: av.breederPostcode ?? '',
-        microchipNumber: av.microchipNumber ?? '',
-        coatType: av.coatType ?? null,
-        sireRegistrationBody: av.sireRegistrationBody ?? null,
-        sireRegistrationNumber: av.sireRegistrationNumber ?? '',
-        damRegistrationBody: av.damRegistrationBody ?? null,
-        damRegistrationNumber: av.damRegistrationNumber ?? '',
-      },
-    },
-  });
-
   // The RKC lookup can only find RKC-registered dogs — hide it when the
-  // registration body says otherwise (regional flows pre-tick SV), or when
-  // the saved dog already has its registration number (nothing to look up;
-  // Mandy 2026-07-11: exhibitors clicked it and got confused).
+  // registration body says otherwise (regional flows pre-tick SV), when the
+  // saved dog already has its registration number, or once a lookup result
+  // has just been applied (nothing left to look up; Mandy 2026-07-11:
+  // exhibitors clicked it and got confused). Autosave lives in
+  // DogFormAutosaveBridge so keystrokes don't re-render this form.
   const watchedRegBody = form.watch('registrationBody');
   const savedRegNumber = mode === 'edit' ? (defaultValues?.kcRegNumber ?? '').trim() : '';
+  const [lookupApplied, setLookupApplied] = useState(false);
   const showKcLookup =
-    (watchedRegBody == null || watchedRegBody === 'kc') && !savedRegNumber;
+    (watchedRegBody == null || watchedRegBody === 'kc') &&
+    !savedRegNumber &&
+    !lookupApplied;
 
   function onSubmit(data: DogFormValues) {
     if (mode === 'create') {
@@ -557,7 +605,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
               control={form.control}
               name="kcRegNumber"
               render={({ field }) => {
-                const body = form.watch('registrationBody');
+                const body = watchedRegBody;
                 const labelByBody: Record<string, { label: string; placeholder: string; helper: string }> = {
                   kc: {
                     label: 'Dog Registration Number',
@@ -981,7 +1029,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
             <CardDescription>
               Your dog&apos;s lineage details. These are often required for show
               entries.
-              {mode === 'edit' && <AutosaveHint status={autosaveStatus} />}
+              {mode === 'edit' && <AutosaveHint />}
             </CardDescription>
             {kcProfileLookup.isPending && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -1103,7 +1151,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
               <span className="block text-xs">
                 For RKC shows the section is optional. The dog&apos;s registration number can be entered either at the top of the form or below — both feed the same field.
               </span>
-              {mode === 'edit' && <AutosaveHint status={autosaveStatus} />}
+              {mode === 'edit' && <AutosaveHint />}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 sm:space-y-4">
@@ -1546,9 +1594,12 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
         )}
 
         {/* Submit. The SV Health card and the pedigree/breeder/registration
-            sections save themselves in edit mode (useDogAutosave) — the old
-            second "Save Health Data" button and its warning banner are gone
-            (Mandy 2026-07-11). */}
+            sections save themselves in edit mode (DogFormAutosaveBridge +
+            useBeaconAutosave) — the old second "Save Health Data" button and
+            its warning banner are gone (Mandy 2026-07-11). */}
+        {mode === 'edit' && dogId && (
+          <DogFormAutosaveBridge control={form.control} dogId={dogId} />
+        )}
         <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
           <Button type="submit" disabled={isPending} size="lg" className="w-full sm:w-auto">
             {isPending && <Loader2 className="size-4 animate-spin" />}

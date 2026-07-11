@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Check, Loader2, Shield, TriangleAlert } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
-import { useDogAutosave } from '@/lib/use-dog-autosave';
+import { useBeaconAutosave } from '@/lib/use-beacon-autosave';
 import { Input } from '@/components/ui/input';
 import {
   Card,
@@ -150,8 +150,8 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
   // Data" button was the second of two save buttons and exhibitors lost
   // data to it. Same field mapping the old button used, including the
   // '__unset__' sentinel guards (Amanda 2026-05-20).
-  const autosaveStatus = useDogAutosave({
-    dogId,
+  const autosaveStatus = useBeaconAutosave({
+    url: `/api/dog-autosave/${dogId}`,
     enabled: isOwner,
     hydrated,
     payload: {
@@ -448,6 +448,11 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
               {autosaveStatus === 'saving' ? (
                 <>
                   <Loader2 className="size-3.5 animate-spin" /> Saving…
+                </>
+              ) : autosaveStatus === 'saved' ? (
+                <>
+                  <Check className="size-3.5 text-green-600" />
+                  <span className="text-green-700 dark:text-green-500">Saved</span>
                 </>
               ) : autosaveStatus === 'error' ? (
                 <>

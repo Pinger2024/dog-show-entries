@@ -24,46 +24,37 @@ import { z } from 'zod';
 import { auth } from '@/lib/auth';
 import { db } from '@/server/db';
 import { dogs, dogSvProfile } from '@/server/db/schema';
-
-const regBody = z.enum(['kc', 'sv', 'ikc', 'other']).nullable().optional();
-
-const dogFieldsSchema = z.object({
-  sireName: z.string().nullable().optional(),
-  damName: z.string().nullable().optional(),
-  breederName: z.string().nullable().optional(),
-  breederCountry: z.string().nullable().optional(),
-  breederCity: z.string().nullable().optional(),
-  breederPostcode: z.string().nullable().optional(),
-  microchipNumber: z.string().nullable().optional(),
-  coatType: z.enum(['stock', 'long_stock']).nullable().optional(),
-  sireRegistrationBody: regBody,
-  sireRegistrationNumber: z.string().nullable().optional(),
-  damRegistrationBody: regBody,
-  damRegistrationNumber: z.string().nullable().optional(),
-});
-
-// Same field set as dogs.upsertSvProfile (minus dogId).
-const svProfileSchema = z.object({
-  breedSurveyClass: z.string().nullable().optional(),
-  breedSurveyYear: z.number().int().min(1900).max(2100).nullable().optional(),
-  breedSurveyor: z.string().nullable().optional(),
-  hipGrade: z.enum(['not_required', 'normal', 'fast_normal', 'noch_zugelassen', 'bva', 'ankc', 'other']).nullable().optional(),
-  hipScore: z.string().nullable().optional(),
-  hipScoreOther: z.string().nullable().optional(),
-  elbowGrade: z.enum(['not_required', 'normal', 'fast_normal', 'noch_zugelassen', 'bva', 'ankc', 'other']).nullable().optional(),
-  elbowScore: z.string().nullable().optional(),
-  elbowScoreOther: z.string().nullable().optional(),
-  haemophiliaClear: z.enum(['not_required', 'yes', 'no', 'not_tested']).nullable().optional(),
-  dmTest: z.enum(['not_required', 'clear', 'carrier', 'affected', 'not_tested']).nullable().optional(),
-  koerung: z.enum(['none', 'current_year', 'lebenzeit']).nullable().optional(),
-  dna: z.enum(['recorded', 'proven']).nullable().optional(),
-  workingTitle: z.string().nullable().optional(),
-});
+import {
+  dogAutosaveFieldsSchema,
+  svProfileInputSchema,
+} from '@/server/trpc/routers/dogs';
 
 const payloadSchema = z.object({
-  dog: dogFieldsSchema.optional(),
-  svProfile: svProfileSchema.optional(),
+  dog: dogAutosaveFieldsSchema.optional(),
+  svProfile: svProfileInputSchema.optional(),
 });
+
+// Field lists derived from the schemas, so the wipe guards can never drift
+// out of sync with what the payload may contain.
+const DOG_FIELD_KEYS = Object.keys(dogAutosaveFieldsSchema.shape) as Array<
+  keyof z.infer<typeof dogAutosaveFieldsSchema>
+>;
+const SV_FIELD_KEYS = Object.keys(svProfileInputSchema.shape) as Array<
+  keyof z.infer<typeof svProfileInputSchema>
+>;
+
+const pick = (row: Record<string, unknown>, keys: readonly string[]) =>
+  Object.fromEntries(keys.map((k) => [k, row[k]]));
+
+/** Merge set: absent keys stay untouched; blank strings normalise to null. */
+function toMergeSet(incoming: Record<string, unknown>): Record<string, unknown> {
+  const set: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(incoming)) {
+    if (v === undefined) continue;
+    set[k] = typeof v === 'string' ? norm(v) : v;
+  }
+  return set;
+}
 
 /** Blank-ish string normaliser — the form round-trips DB nulls as ''. */
 const norm = (v: string | null | undefined) => {
@@ -74,11 +65,11 @@ const norm = (v: string | null | undefined) => {
 /** Values that mean "the exhibitor hasn't told us anything yet". */
 const SV_EMPTY = new Set([null, undefined, 'not_required', '']);
 
-function dogGroupHasContent(g: z.infer<typeof dogFieldsSchema>): boolean {
+function dogGroupHasContent(g: Record<string, unknown>): boolean {
   return Object.values(g).some((v) => typeof v === 'string' && v.trim().length > 0);
 }
 
-function svGroupHasContent(g: z.infer<typeof svProfileSchema>): boolean {
+function svGroupHasContent(g: Record<string, unknown>): boolean {
   return Object.entries(g).some(([, v]) => {
     if (typeof v === 'number') return true;
     if (typeof v === 'string') return v.trim().length > 0 && !SV_EMPTY.has(v);
@@ -120,27 +111,13 @@ export async function POST(
 
   if (parsed.dog) {
     const incoming = parsed.dog;
-    const existingHasContent = dogGroupHasContent({
-      sireName: dog.sireName,
-      damName: dog.damName,
-      breederName: dog.breederName,
-      breederCountry: dog.breederCountry,
-      breederCity: dog.breederCity,
-      breederPostcode: dog.breederPostcode,
-      microchipNumber: dog.microchipNumber,
-      sireRegistrationNumber: dog.sireRegistrationNumber,
-      damRegistrationNumber: dog.damRegistrationNumber,
-    });
-    if (!dogGroupHasContent(incoming) && existingHasContent) {
+    const existing = pick(dog as unknown as Record<string, unknown>, DOG_FIELD_KEYS);
+    if (!dogGroupHasContent(incoming) && dogGroupHasContent(existing)) {
       // Unhydrated-form-defaults shape against a populated dog — refuse.
       console.warn(`[dog-autosave] Refused suspicious dog-fields wipe for ${dogId}`);
       skipped.push('dog');
     } else {
-      const set: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(incoming)) {
-        if (v === undefined) continue; // merge: absent keys stay untouched
-        set[k] = typeof v === 'string' ? norm(v) : v;
-      }
+      const set = toMergeSet(incoming);
       if (Object.keys(set).length > 0) {
         await db.update(dogs).set(set).where(eq(dogs.id, dogId));
       }
@@ -149,15 +126,12 @@ export async function POST(
 
   if (parsed.svProfile) {
     const incoming = parsed.svProfile;
-    if (!svGroupHasContent(incoming) && svGroupHasContent(dog.svProfile ?? {})) {
+    const existing = pick((dog.svProfile ?? {}) as Record<string, unknown>, SV_FIELD_KEYS);
+    if (!svGroupHasContent(incoming) && svGroupHasContent(existing)) {
       console.warn(`[dog-autosave] Refused suspicious sv-profile wipe for ${dogId}`);
       skipped.push('svProfile');
     } else {
-      const set: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(incoming)) {
-        if (v === undefined) continue;
-        set[k] = typeof v === 'string' ? norm(v) : v;
-      }
+      const set = toMergeSet(incoming);
       if (Object.keys(set).length > 0) {
         await db
           .insert(dogSvProfile)

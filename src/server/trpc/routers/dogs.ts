@@ -102,6 +102,48 @@ function getAchievementEligible(
     : allEligible;
 }
 
+/** SV health/working-title fields — single source shared by the
+ *  `upsertSvProfile` mutation and the `/api/dog-autosave` route, so the two
+ *  write paths can't drift (2026-07-11). */
+export const svProfileInputSchema = z.object({
+        breedSurveyClass: z.string().nullable().optional(),
+        breedSurveyYear: z.number().int().min(1900).max(2100).nullable().optional(),
+        breedSurveyor: z.string().nullable().optional(),
+        // Amanda 2026-05-19: BVA + ANKC added as recognised hip / elbow
+        // grading bodies; "other" already supported with hipScoreOther /
+        // elbowScoreOther free-text fields.
+        hipGrade: z.enum(['not_required', 'normal', 'fast_normal', 'noch_zugelassen', 'bva', 'ankc', 'other']).nullable().optional(),
+        hipScore: z.string().nullable().optional(),
+        hipScoreOther: z.string().nullable().optional(),
+        elbowGrade: z.enum(['not_required', 'normal', 'fast_normal', 'noch_zugelassen', 'bva', 'ankc', 'other']).nullable().optional(),
+        elbowScore: z.string().nullable().optional(),
+        elbowScoreOther: z.string().nullable().optional(),
+        haemophiliaClear: z.enum(['not_required', 'yes', 'no', 'not_tested']).nullable().optional(),
+        dmTest: z.enum(['not_required', 'clear', 'carrier', 'affected', 'not_tested']).nullable().optional(),
+        koerung: z.enum(['none', 'current_year', 'lebenzeit']).nullable().optional(),
+        dna: z.enum(['recorded', 'proven']).nullable().optional(),
+        workingTitle: z.string().nullable().optional(),
+});
+
+/** The dog-form sections that autosave in edit mode (pedigree, breeder
+ *  location, microchip, sire/dam registration). Kept here beside `update`'s
+ *  input so the field shapes stay in one file — the `/api/dog-autosave`
+ *  route imports this rather than retyping it. */
+export const dogAutosaveFieldsSchema = z.object({
+  sireName: z.string().nullable().optional(),
+  damName: z.string().nullable().optional(),
+  breederName: z.string().nullable().optional(),
+  breederCountry: z.string().nullable().optional(),
+  breederCity: z.string().nullable().optional(),
+  breederPostcode: z.string().nullable().optional(),
+  microchipNumber: z.string().nullable().optional(),
+  coatType: z.enum(['stock', 'long_stock']).nullable().optional(),
+  sireRegistrationBody: z.enum(['kc', 'sv', 'ikc', 'other']).nullable().optional(),
+  sireRegistrationNumber: z.string().nullable().optional(),
+  damRegistrationBody: z.enum(['kc', 'sv', 'ikc', 'other']).nullable().optional(),
+  damRegistrationNumber: z.string().nullable().optional(),
+});
+
 export const dogsRouter = createTRPCRouter({
   // ── Public dog profile ──────────────────────────────────
   getPublicProfile: publicProcedure
@@ -1418,28 +1460,7 @@ export const dogsRouter = createTRPCRouter({
     }),
 
   upsertSvProfile: protectedProcedure
-    .input(
-      z.object({
-        dogId: z.string().uuid(),
-        breedSurveyClass: z.string().nullable().optional(),
-        breedSurveyYear: z.number().int().min(1900).max(2100).nullable().optional(),
-        breedSurveyor: z.string().nullable().optional(),
-        // Amanda 2026-05-19: BVA + ANKC added as recognised hip / elbow
-        // grading bodies; "other" already supported with hipScoreOther /
-        // elbowScoreOther free-text fields.
-        hipGrade: z.enum(['not_required', 'normal', 'fast_normal', 'noch_zugelassen', 'bva', 'ankc', 'other']).nullable().optional(),
-        hipScore: z.string().nullable().optional(),
-        hipScoreOther: z.string().nullable().optional(),
-        elbowGrade: z.enum(['not_required', 'normal', 'fast_normal', 'noch_zugelassen', 'bva', 'ankc', 'other']).nullable().optional(),
-        elbowScore: z.string().nullable().optional(),
-        elbowScoreOther: z.string().nullable().optional(),
-        haemophiliaClear: z.enum(['not_required', 'yes', 'no', 'not_tested']).nullable().optional(),
-        dmTest: z.enum(['not_required', 'clear', 'carrier', 'affected', 'not_tested']).nullable().optional(),
-        koerung: z.enum(['none', 'current_year', 'lebenzeit']).nullable().optional(),
-        dna: z.enum(['recorded', 'proven']).nullable().optional(),
-        workingTitle: z.string().nullable().optional(),
-      })
-    )
+    .input(svProfileInputSchema.extend({ dogId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const dog = await ctx.db.query.dogs.findFirst({
         where: and(eq(dogs.id, input.dogId), isNull(dogs.deletedAt)),
