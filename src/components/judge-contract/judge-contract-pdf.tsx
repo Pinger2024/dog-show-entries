@@ -220,6 +220,17 @@ const s = StyleSheet.create({
   },
 });
 
+/** Section heading that never strands at the foot of a page — the
+ *  minPresenceAhead makes it move with its first content row (same pattern
+ *  as SectionTitle in sv-show-schedule.tsx). */
+function SectionHeading({ children }: { children: string }) {
+  return (
+    <View minPresenceAhead={28}>
+      <Text style={s.sectionHeading}>{children}</Text>
+    </View>
+  );
+}
+
 function formatPence(pence: number | null): string {
   if (pence == null) return '—';
   return formatCurrency(pence);
@@ -290,12 +301,7 @@ export function JudgeContractPdf({ data }: { data: JudgeContractPdfData }) {
         </View>
 
         <View style={s.section}>
-          {/* minPresenceAhead: never strand a section heading at the foot of a
-              page — if less than a row's worth of space follows, the heading
-              moves with its content. */}
-          <View minPresenceAhead={28}>
-            <Text style={s.sectionHeading}>Show Details</Text>
-          </View>
+          <SectionHeading>Show Details</SectionHeading>
           <View style={s.row}>
             <Text style={s.rowLabel}>Society</Text>
             <Text style={s.rowValue}>{data.societyName}</Text>
@@ -321,10 +327,7 @@ export function JudgeContractPdf({ data }: { data: JudgeContractPdfData }) {
         </View>
 
         <View style={s.section}>
-          {/* minPresenceAhead: keep the heading with its content */}
-          <View minPresenceAhead={28}>
-            <Text style={s.sectionHeading}>Judge</Text>
-          </View>
+          <SectionHeading>Judge</SectionHeading>
           <View style={s.row}>
             <Text style={s.rowLabel}>Name</Text>
             <Text style={s.rowValue}>{judgeName}</Text>
@@ -342,10 +345,7 @@ export function JudgeContractPdf({ data }: { data: JudgeContractPdfData }) {
         </View>
 
         <View style={s.section}>
-          {/* minPresenceAhead: keep the heading with its content */}
-          <View minPresenceAhead={28}>
-            <Text style={s.sectionHeading}>Appointment</Text>
-          </View>
+          <SectionHeading>Appointment</SectionHeading>
           <View style={s.breedsBlock}>
             {data.breedLine || data.classificationLine ? (
               <>
@@ -375,10 +375,7 @@ export function JudgeContractPdf({ data }: { data: JudgeContractPdfData }) {
 
         {hasExpenses && (
           <View style={s.section}>
-            {/* minPresenceAhead: keep the heading with its content */}
-            <View minPresenceAhead={28}>
-              <Text style={s.sectionHeading}>Agreed Expenses</Text>
-            </View>
+            <SectionHeading>Agreed Expenses</SectionHeading>
             {/* wrap={false}: max 4 rows (hotel/travel/other/total) — always
                 keep the expenses table together on one page. */}
             <View style={s.expensesTable} wrap={false}>
@@ -411,19 +408,13 @@ export function JudgeContractPdf({ data }: { data: JudgeContractPdfData }) {
 
         {data.terms && (
           <View style={s.section}>
-            {/* minPresenceAhead: keep the heading with its content */}
-            <View minPresenceAhead={28}>
-              <Text style={s.sectionHeading}>Additional Terms</Text>
-            </View>
+            <SectionHeading>Additional Terms</SectionHeading>
             <Text style={s.notesBlock}>{data.terms}</Text>
           </View>
         )}
 
         <View style={s.section}>
-          {/* minPresenceAhead: keep the heading with its content */}
-          <View minPresenceAhead={28}>
-            <Text style={s.sectionHeading}>Acceptance</Text>
-          </View>
+          <SectionHeading>Acceptance</SectionHeading>
           {/* wrap={false}: the closing paragraph and both signature blocks
               are small and belong together — never split across a page break. */}
           <View wrap={false}>

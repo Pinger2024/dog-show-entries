@@ -20,7 +20,7 @@ import {
   getDockingStatement,
   s,
 } from './shared/styles';
-import { SectionBand, InfoCard, GoldRule, Rule } from './shared/elements';
+import { SectionBand, InfoCard, GoldRule, Rule, TwoColSectionHeader } from './shared/elements';
 import { sortOfficers } from './shared/officers';
 import { buildEntryFeeGroups } from './shared/entry-fee-groups';
 import { AdvertPage, selectAdverts } from './shared/advert-page';
@@ -937,12 +937,7 @@ export function ShowScheduleMultibreed({
 
           const sacSection = sacClasses.length > 0 ? (
             <View key="sac-section" wrap={false} style={{ marginTop: 12 }}>
-              {/* minPresenceAhead: never strand this heading at the foot of a
-                  page — if less than a row's worth of space follows, it moves
-                  with its content. */}
-              <View style={s.twoColMixedHeader} wrap={false} minPresenceAhead={22}>
-                <Text style={s.twoColHeaderText}>SPECIAL AWARD CLASSES</Text>
-              </View>
+              <TwoColSectionHeader title="SPECIAL AWARD CLASSES" />
               {sacJudges.length > 0 && (
                 <View
                   style={{
@@ -993,12 +988,7 @@ export function ShowScheduleMultibreed({
             <>
               {sections.map((section, si) => (
                 <View key={`section-${si}`}>
-                  {/* minPresenceAhead: never strand this heading at the foot
-                      of a page — if less than a row's worth of space follows,
-                      it moves with its content. */}
-                  <View style={s.twoColMixedHeader} wrap={false} minPresenceAhead={22}>
-                    <Text style={s.twoColHeaderText}>{section.heading}</Text>
-                  </View>
+                  <TwoColSectionHeader title={section.heading} />
                   {section.judges && section.judges.length > 0 && (
                     <View
                       style={{

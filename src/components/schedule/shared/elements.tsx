@@ -44,6 +44,19 @@ export function InfoCard({
   );
 }
 
+/** Two-column classification sub-heading ("Mixed", "Junior Handling",
+ *  "Special Award Classes", per-group headings). minPresenceAhead keeps the
+ *  heading with its first class row — never stranded at a page foot — and
+ *  the value lives here once so the single- and multi-breed renderers can't
+ *  drift (same pattern as SectionTitle in sv-show-schedule.tsx). */
+export function TwoColSectionHeader({ title }: { title: string }) {
+  return (
+    <View style={s.twoColMixedHeader} wrap={false} minPresenceAhead={22}>
+      <Text style={s.twoColHeaderText}>{title}</Text>
+    </View>
+  );
+}
+
 export function GoldRule({ variant = 'rkc' }: { variant?: Variant } = {}) {
   return (
     <View style={[s.coverGoldRule, variant === 'sv' && { backgroundColor: CSv.streak }]} />

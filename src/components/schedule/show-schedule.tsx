@@ -20,7 +20,7 @@ import {
   getDockingStatement,
   s,
 } from './shared/styles';
-import { SectionBand, InfoCard, GoldRule, Rule } from './shared/elements';
+import { SectionBand, InfoCard, GoldRule, Rule, TwoColSectionHeader } from './shared/elements';
 import { sortOfficers } from './shared/officers';
 import { buildEntryFeeGroups } from './shared/entry-fee-groups';
 import { AdvertPage, selectAdverts } from './shared/advert-page';
@@ -1074,12 +1074,7 @@ export function ShowSchedule({
             "Junior Handling" section. */}
         {mixedTopClasses.length > 0 && (
           <View style={{ marginBottom: 8 }}>
-            {/* minPresenceAhead: never strand this heading at the foot of a
-                page — if less than a row's worth of space follows, it moves
-                with its content. */}
-            <View style={s.twoColMixedHeader} minPresenceAhead={22}>
-              <Text style={s.twoColHeaderText}>Mixed</Text>
-            </View>
+            <TwoColSectionHeader title="Mixed" />
             {mixedTopClasses.map((cls, i) => (
               <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
                 <Text style={s.twoColNum}>{cls.classLabel}</Text>
@@ -1119,12 +1114,7 @@ export function ShowSchedule({
 
         {mixedBottomClasses.length > 0 && (
           <View style={{ marginTop: 8 }}>
-            {/* minPresenceAhead: never strand this heading at the foot of a
-                page — if less than a row's worth of space follows, it moves
-                with its content. */}
-            <View style={s.twoColMixedHeader} minPresenceAhead={22}>
-              <Text style={s.twoColHeaderText}>Junior Handling</Text>
-            </View>
+            <TwoColSectionHeader title="Junior Handling" />
             {mixedBottomClasses.map((cls, i) => (
               <View key={i} style={[s.twoColRow, i % 2 !== 0 && s.twoColRowAlt]} wrap={false}>
                 <Text style={s.twoColNum}>{cls.classLabel}</Text>
@@ -1143,12 +1133,7 @@ export function ShowSchedule({
             call-to-action that the host clubs actually use. */}
         {sacClasses.length > 0 && (
           <View style={{ marginTop: 12 }} wrap={false}>
-            {/* minPresenceAhead: never strand this heading at the foot of a
-                page — if less than a row's worth of space follows, it moves
-                with its content. */}
-            <View style={s.twoColMixedHeader} minPresenceAhead={22}>
-              <Text style={s.twoColHeaderText}>Special Award Classes</Text>
-            </View>
+            <TwoColSectionHeader title="Special Award Classes" />
             {sacJudges.length > 0 && (
               <View style={{ marginTop: 6, marginBottom: 4 }}>
                 {sacJudges.map((j, i) => {
