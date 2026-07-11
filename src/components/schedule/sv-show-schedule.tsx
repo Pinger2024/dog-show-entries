@@ -468,16 +468,6 @@ function SvOverview({
             </Text>
           ) : null}
 
-          {sundryExtras.length > 0 ? (
-            <>
-              <View style={{ height: 4 }} />
-              <SectionTitle title="Sponsorship & adverts" />
-              {sundryExtras.map((s) => (
-                <FeeRow key={s.name} label={s.name} value={fmtMoney(s.priceInPence)} />
-              ))}
-            </>
-          ) : null}
-
           <View style={{ height: 4 }} />
           <SectionTitle title="Awards" />
           {/* Amanda 2026-05-22: drop per-class derivation. Two big awards
@@ -575,6 +565,22 @@ function SvOverview({
               ? 'Paid by Remi at entry. Bank transfer accepted for postal entries — surname as reference. No entries by phone, text or social media.'
               : 'Online payment only via Remi at entry. No entries by phone, text, post or social media.'}
           </Text>
+
+          {/* Sponsorship sits in the RIGHT column: the left (fees) column
+              grows with the show's fee config — a regional with several
+              memberships + Baby Puppy + catalogue rows overflowed A5 and
+              orphaned the prizes text onto its own near-blank page (Mandy
+              2026-07-11, North East). The short sundry list balances the
+              columns far better than the tall Awards block does. */}
+          {sundryExtras.length > 0 ? (
+            <>
+              <View style={{ height: 7 }} />
+              <SectionTitle title="Sponsorship & adverts" />
+              {sundryExtras.map((s) => (
+                <FeeRow key={s.name} label={s.name} value={fmtMoney(s.priceInPence)} />
+              ))}
+            </>
+          ) : null}
         </View>
       </View>
 
