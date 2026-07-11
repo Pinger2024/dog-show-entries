@@ -9,6 +9,7 @@ import { format, parse, isValid } from 'date-fns';
 import { CalendarIcon, Check, ChevronsUpDown, Loader2, Plus, Trash2, Award, Search, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
+import { useDogAutosave, type DogAutosaveStatus } from '@/lib/use-dog-autosave';
 import { cn, getTitleDisplay } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -115,6 +116,21 @@ const TITLE_OPTIONS = [
   { value: 'ft_ch', label: 'FT.Ch. — Field Trial Champion' },
   { value: 'wt_ch', label: 'WT.Ch. — Working Trial Champion' },
 ] as const;
+
+/** Tiny "saves itself" status line for the autosaved cards (edit mode). */
+function AutosaveHint({ status }: { status: DogAutosaveStatus }) {
+  return (
+    <span className="mt-1 flex items-center gap-1 text-xs" aria-live="polite">
+      {status === 'saving' ? (
+        <span className="text-muted-foreground">Saving…</span>
+      ) : status === 'error' ? (
+        <span className="text-destructive">Couldn&apos;t save — check your connection.</span>
+      ) : (
+        <span className="text-muted-foreground">Saves automatically as you type.</span>
+      )}
+    </span>
+  );
+}
 
 interface DogFormProps {
   mode: 'create' | 'edit';
@@ -433,6 +449,45 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
   const selectedBreedName = breeds?.find((b) => b.id === watchedBreedId)?.name ?? '';
   const isGsd = /german\s+shepherd/i.test(selectedBreedName);
 
+  // Autosave the loss-prone middle sections in edit mode (Mandy 2026-07-11:
+  // an exhibitor lost sire/dam registration details to an unpressed save
+  // button): pedigree, breeder location, microchip, sire/dam registration.
+  // Identity fields (name, reg number, breed, sex, DOB, owners) still go
+  // through the Save button. hydrated is unconditionally true because the
+  // edit page only mounts this form AFTER the dog has loaded — the form is
+  // born with server values, never blank defaults.
+  const av = form.watch();
+  const autosaveStatus = useDogAutosave({
+    dogId,
+    enabled: mode === 'edit',
+    hydrated: true,
+    payload: {
+      dog: {
+        sireName: av.sireName ?? '',
+        damName: av.damName ?? '',
+        breederName: av.breederName ?? '',
+        breederCountry: av.breederCountry ?? '',
+        breederCity: av.breederCity ?? '',
+        breederPostcode: av.breederPostcode ?? '',
+        microchipNumber: av.microchipNumber ?? '',
+        coatType: av.coatType ?? null,
+        sireRegistrationBody: av.sireRegistrationBody ?? null,
+        sireRegistrationNumber: av.sireRegistrationNumber ?? '',
+        damRegistrationBody: av.damRegistrationBody ?? null,
+        damRegistrationNumber: av.damRegistrationNumber ?? '',
+      },
+    },
+  });
+
+  // The RKC lookup can only find RKC-registered dogs — hide it when the
+  // registration body says otherwise (regional flows pre-tick SV), or when
+  // the saved dog already has its registration number (nothing to look up;
+  // Mandy 2026-07-11: exhibitors clicked it and got confused).
+  const watchedRegBody = form.watch('registrationBody');
+  const savedRegNumber = mode === 'edit' ? (defaultValues?.kcRegNumber ?? '').trim() : '';
+  const showKcLookup =
+    (watchedRegBody == null || watchedRegBody === 'kc') && !savedRegNumber;
+
   function onSubmit(data: DogFormValues) {
     if (mode === 'create') {
       if (!data.owners || data.owners.length === 0) {
@@ -572,7 +627,9 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
               )}
             />
 
-            {/* RKC Lookup Button */}
+            {/* RKC Lookup Button — hidden for non-RKC dogs and for dogs
+                whose registration number is already saved. */}
+            {showKcLookup && (
             <div className="rounded-lg border border-dashed border-primary/30 bg-primary/5 p-4">
               <div className="flex items-start gap-3">
                 <Search className="mt-0.5 size-5 shrink-0 text-primary" />
@@ -733,6 +790,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
                 </div>
               </div>
             </div>
+            )}
           </CardContent>
         </Card>
 
@@ -923,6 +981,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
             <CardDescription>
               Your dog&apos;s lineage details. These are often required for show
               entries.
+              {mode === 'edit' && <AutosaveHint status={autosaveStatus} />}
             </CardDescription>
             {kcProfileLookup.isPending && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -1044,6 +1103,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
               <span className="block text-xs">
                 For RKC shows the section is optional. The dog&apos;s registration number can be entered either at the top of the form or below — both feed the same field.
               </span>
+              {mode === 'edit' && <AutosaveHint status={autosaveStatus} />}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 sm:space-y-4">
@@ -1233,10 +1293,13 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
           <CardHeader>
             <CardTitle>Owners</CardTitle>
             <CardDescription>
-              <strong>Owner 1 should be you.</strong> If the dog is jointly
-              owned with a partner, family member or co-breeder, tap{' '}
-              <em>Add New Owner</em> below to add each joint owner — every
-              name will appear together on the RKC catalogue. Up to 4 owners.
+              {/* Mandy 2026-07-11: copy must name the button that actually
+                  exists — it said "Add New Owner" while the button reads
+                  "Add Joint Owner". */}
+              <strong>You&apos;re already saved as Owner 1.</strong> If the dog
+              is jointly owned with a partner, family member or co-breeder,
+              tap <em>Add Joint Owner</em> below — every name will appear
+              together on the show catalogue. Up to 4 owners.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -1426,7 +1489,7 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
 
             {ownerFields.length === 0 && (
               <p className="text-sm text-muted-foreground">
-                No owners added yet. Click &quot;Add New Owner&quot; to add one.
+                No owners added yet. Tap &quot;Add Joint Owner&quot; to add one.
               </p>
             )}
           </CardContent>
@@ -1482,15 +1545,10 @@ export function DogForm({ mode, defaultValues, dogId, svSection, returnTo }: Dog
           </Card>
         )}
 
-        {/* Submit. Note for SV/GSD dogs: the SV Health card above has its
-            own "Save Health Data" button — both need to be clicked to
-            persist their respective data. (Amanda 2026-05-21: she lost
-            health data because she only clicked one of the two buttons.) */}
-        {isGsd && mode === 'edit' && (
-          <p className="text-xs text-amber-700 dark:text-amber-400">
-            Don&apos;t forget — the SV Health card above has its own <span className="font-semibold">Save Health Data</span> button. Click that one too to save the health/Koerung/breed survey fields.
-          </p>
-        )}
+        {/* Submit. The SV Health card and the pedigree/breeder/registration
+            sections save themselves in edit mode (useDogAutosave) — the old
+            second "Save Health Data" button and its warning banner are gone
+            (Mandy 2026-07-11). */}
         <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
           <Button type="submit" disabled={isPending} size="lg" className="w-full sm:w-auto">
             {isPending && <Loader2 className="size-4 animate-spin" />}

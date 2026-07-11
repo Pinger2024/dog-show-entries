@@ -1,10 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Check, Loader2, Shield } from 'lucide-react';
-import { toast } from 'sonner';
+import { Check, Loader2, Shield, TriangleAlert } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
-import { Button } from '@/components/ui/button';
+import { useDogAutosave } from '@/lib/use-dog-autosave';
 import { Input } from '@/components/ui/input';
 import {
   Card,
@@ -96,14 +95,6 @@ interface DogSvHealthCardProps {
 export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
   const utils = trpc.useUtils();
   const { data: profile, isLoading } = trpc.dogs.getSvProfile.useQuery({ dogId });
-  const upsert = trpc.dogs.upsertSvProfile.useMutation({
-    onSuccess: () => {
-      utils.dogs.getSvProfile.invalidate({ dogId });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
-    },
-    onError: (err) => toast.error('Failed to save', { description: err.message }),
-  });
 
   const [hipGrade, setHipGrade] = useState<string>('not_required');
   const [hipScore, setHipScore] = useState('');
@@ -123,7 +114,9 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
   const [breedSurveyClass, setBreedSurveyClass] = useState('');
   const [breedSurveyYear, setBreedSurveyYear] = useState('');
   const [breedSurveyor, setBreedSurveyor] = useState('');
-  const [saved, setSaved] = useState(false);
+  // Autosave arms only once the loaded profile has been written into local
+  // state — never against blank mount defaults (the 2026-04-22 lesson).
+  const [hydrated, setHydrated] = useState(false);
 
   const isMale = sex === 'dog';
 
@@ -147,36 +140,45 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
       setBreedSurveyYear(bsy != null ? String(bsy) : '');
       setBreedSurveyor((profile as { breedSurveyor?: string | null }).breedSurveyor ?? '');
     }
-  }, [profile]);
+    // Arm autosave in the same effect that populates the loaded values, so
+    // hydrated can never be true while the fields still hold mount
+    // defaults. Also covers the no-profile-yet case (profile === null).
+    if (!isLoading) setHydrated(true);
+  }, [profile, isLoading]);
 
-  function handleSave(e: React.MouseEvent | React.FormEvent) {
-    e.preventDefault();
-    upsert.mutate({
-      dogId,
-      hipGrade: hipGrade as typeof HIP_OPTIONS[number]['value'],
-      hipScore: hipScore || null,
-      hipScoreOther: hipGrade === 'other' ? (hipScoreOther || null) : null,
-      elbowGrade: elbowGrade as typeof HIP_OPTIONS[number]['value'],
-      elbowScore: elbowScore || null,
-      elbowScoreOther: elbowGrade === 'other' ? (elbowScoreOther || null) : null,
-      // Haemophilia is meaningless for bitches — persist as not_required.
-      haemophiliaClear: (isMale ? haemophiliaClear : 'not_required') as typeof HAEM_OPTIONS[number]['value'],
-      dmTest: dmTest as typeof DM_OPTIONS[number]['value'],
-      // Defensive guard: anything that isn't a valid enum value becomes
-      // null on save (covers the '__unset__' sentinel + an empty string
-      // if the Select ever ends up uncontrolled — Amanda 2026-05-20).
-      koerung: (['none', 'current_year', 'lebenzeit'] as const).includes(koerung as 'none')
-        ? (koerung as 'none' | 'current_year' | 'lebenzeit')
-        : null,
-      dna: (['recorded', 'proven'] as const).includes(dna as 'recorded')
-        ? (dna as 'recorded' | 'proven')
-        : null,
-      workingTitle: workingTitle || null,
-      breedSurveyClass: breedSurveyClass || null,
-      breedSurveyYear: breedSurveyYear ? Number(breedSurveyYear) : null,
-      breedSurveyor: breedSurveyor || null,
-    });
-  }
+  // Saves itself — no button. Mandy 2026-07-11: the separate "Save Health
+  // Data" button was the second of two save buttons and exhibitors lost
+  // data to it. Same field mapping the old button used, including the
+  // '__unset__' sentinel guards (Amanda 2026-05-20).
+  const autosaveStatus = useDogAutosave({
+    dogId,
+    enabled: isOwner,
+    hydrated,
+    payload: {
+      svProfile: {
+        hipGrade: hipGrade as typeof HIP_OPTIONS[number]['value'],
+        hipScore: hipScore || null,
+        hipScoreOther: hipGrade === 'other' ? (hipScoreOther || null) : null,
+        elbowGrade: elbowGrade as typeof HIP_OPTIONS[number]['value'],
+        elbowScore: elbowScore || null,
+        elbowScoreOther: elbowGrade === 'other' ? (elbowScoreOther || null) : null,
+        // Haemophilia is meaningless for bitches — persist as not_required.
+        haemophiliaClear: (isMale ? haemophiliaClear : 'not_required') as typeof HAEM_OPTIONS[number]['value'],
+        dmTest: dmTest as typeof DM_OPTIONS[number]['value'],
+        koerung: (['none', 'current_year', 'lebenzeit'] as const).includes(koerung as 'none')
+          ? (koerung as 'none' | 'current_year' | 'lebenzeit')
+          : null,
+        dna: (['recorded', 'proven'] as const).includes(dna as 'recorded')
+          ? (dna as 'recorded' | 'proven')
+          : null,
+        workingTitle: workingTitle || null,
+        breedSurveyClass: breedSurveyClass || null,
+        breedSurveyYear: breedSurveyYear ? Number(breedSurveyYear) : null,
+        breedSurveyor: breedSurveyor || null,
+      },
+    },
+    onSaved: () => utils.dogs.getSvProfile.invalidate({ dogId }),
+  });
 
   if (isLoading) {
     return (
@@ -216,8 +218,10 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
       <CardContent>
         {/* Not a <form> — this card is rendered INSIDE the DogForm's
             <form>, and nested forms are invalid HTML (hydration error).
-            The "Save Health Data" button is a type="button" with an
-            explicit onClick handler instead (Amanda 2026-05-21). */}
+            It saves itself (debounce + unmount beacon) via useDogAutosave;
+            the old separate "Save Health Data" button lost exhibitors'
+            data when they only pressed one of two buttons (Mandy
+            2026-07-11). */}
         <div className="space-y-4">
           {/* Hips — body dropdown + numeric score for BVA/ANKC + free text for Other */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -440,18 +444,22 @@ export function DogSvHealthCard({ dogId, isOwner, sex }: DogSvHealthCardProps) {
           </div>
 
           {!readOnly && (
-            <Button type="button" onClick={handleSave} size="sm" disabled={upsert.isPending} className="min-h-[2.75rem]">
-              {upsert.isPending ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : saved ? (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
+              {autosaveStatus === 'saving' ? (
                 <>
-                  <Check className="size-4" />
-                  Saved
+                  <Loader2 className="size-3.5 animate-spin" /> Saving…
+                </>
+              ) : autosaveStatus === 'error' ? (
+                <>
+                  <TriangleAlert className="size-3.5 text-destructive" />
+                  <span className="text-destructive">Couldn&apos;t save — check your connection.</span>
                 </>
               ) : (
-                'Save Health Data'
+                <>
+                  <Check className="size-3.5 text-green-600" /> Saves automatically as you type.
+                </>
               )}
-            </Button>
+            </p>
           )}
         </div>
       </CardContent>

@@ -1149,7 +1149,7 @@ export default function EnterShowPage() {
                   This is a {showBreedName ?? 'single breed'} show. None of your registered dogs are this breed.
                 </p>
                 <Button asChild variant="outline">
-                  <Link href="/dogs/new">Register a {showBreedName ?? 'new'} dog</Link>
+                  <Link href={`/dogs/new?returnTo=${encodeURIComponent(`/shows/${idOrSlug}/enter`)}`}>Register a {showBreedName ?? 'new'} dog</Link>
                 </Button>
               </CardContent>
             </Card>
@@ -1162,7 +1162,7 @@ export default function EnterShowPage() {
                   You need to add a dog before entering a show.
                 </p>
                 <Button asChild>
-                  <Link href="/dogs/new">Add a Dog</Link>
+                  <Link href={`/dogs/new?returnTo=${encodeURIComponent(`/shows/${idOrSlug}/enter`)}`}>Add a Dog</Link>
                 </Button>
               </CardContent>
             </Card>
