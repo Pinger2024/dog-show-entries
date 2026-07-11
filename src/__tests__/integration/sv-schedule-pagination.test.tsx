@@ -2,6 +2,10 @@ import { describe, it, expect } from 'vitest';
 import React from 'react';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { SvShowSchedule } from '@/components/schedule/sv-show-schedule';
+import {
+  renderScheduleWithFit,
+  pdfPageCount as fitPageCount,
+} from '@/server/services/schedule-render';
 import type {
   ScheduleShowInfo,
   ScheduleClass,
@@ -214,5 +218,55 @@ describe('SV schedule pagination', () => {
       />,
     );
     expect(pdfPageCount(buf)).toBe(6);
+  }, 60_000);
+
+  // renderScheduleWithFit is the production render path (HTTP route +
+  // print-order pipeline): when a show's data-elastic sections outgrow the
+  // designed six pages at normal density, it must fall back to compact
+  // density instead of shipping an orphaned extra page.
+  it('fit renderer absorbs a pathological fee config via compact density', async () => {
+    const pathological: ScheduleShowInfo = {
+      ...richRegionalShow,
+      regionalFeeConfig: {
+        ...richRegionalShow.regionalFeeConfig!,
+        // Six extra membership price levels and four extra sundries beyond
+        // North East's config — comfortably past what the normal-density
+        // layout can absorb.
+        memberships: [
+          ...(richRegionalShow.regionalFeeConfig!.memberships ?? []),
+          ...['Associate', 'Junior', 'Overseas', 'Life', 'Honorary', 'Family'].map(
+            (kind) => ({
+              label: `${kind} member`,
+              requiresNumber: false,
+              tiers: richRegionalShow.regionalFeeConfig!.memberships![0]!.tiers,
+            }),
+          ),
+        ],
+      },
+      sundryItems: [
+        ...(richRegionalShow.sundryItems ?? []),
+        { name: 'Raffle ticket', description: null, priceInPence: 100 },
+        { name: 'Ringside lunch', description: null, priceInPence: 800 },
+        { name: 'Car pass', description: null, priceInPence: 300 },
+        { name: 'Commemorative pin', description: null, priceInPence: 450 },
+      ],
+    };
+    const props = {
+      show: pathological,
+      classes: richRegionalClasses,
+      judges,
+    };
+
+    // Sanity: this fixture genuinely overflows at normal density…
+    const normal = await renderToBuffer(<SvShowSchedule {...props} />);
+    expect(pdfPageCount(normal)).toBeGreaterThan(6);
+
+    // …and the fit renderer brings it back to the designed six pages.
+    const fitted = await renderScheduleWithFit(
+      SvShowSchedule as React.ComponentType<Record<string, unknown>>,
+      props,
+      6,
+    );
+    expect(fitPageCount(fitted)).toBe(6);
   }, 60_000);
 });

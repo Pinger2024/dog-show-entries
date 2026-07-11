@@ -122,10 +122,16 @@ function Folio({ num, total = 6, label }: { num: number; total?: number; label: 
   );
 }
 
-function SectionTitle({ title }: { title: string }) {
+function SectionTitle({ title, dense }: { title: string; dense?: boolean }) {
   return (
-    <View style={ss.sectionHeader}>
-      <Text style={ss.sectionHeaderText}>{title}</Text>
+    // minPresenceAhead: never strand a section heading at the foot of a
+    // page — if less than a row's worth of space follows, the title moves
+    // with its content.
+    <View
+      style={[ss.sectionHeader, dense ? { marginBottom: 3 } : {}]}
+      minPresenceAhead={28}
+    >
+      <Text style={[ss.sectionHeaderText, dense ? { fontSize: 12 } : {}]}>{title}</Text>
       <View style={ss.sectionHeaderRule} />
     </View>
   );
@@ -134,12 +140,16 @@ function SectionTitle({ title }: { title: string }) {
 function FeeRow({
   label,
   value,
+  dense,
 }: {
   label: string;
   value: string;
+  /** Compact-density render — tighter row pitch when the at-a-glance page
+   *  would otherwise overflow (see SvOverview's density prop). */
+  dense?: boolean;
 }) {
   return (
-    <View style={ss.feeRow}>
+    <View style={[ss.feeRow, dense ? { paddingVertical: 1.2 } : {}]}>
       <Text style={ss.feeRowLabel}>{label}</Text>
       <Text style={ss.feeRowValue}>{value}</Text>
     </View>
@@ -152,7 +162,7 @@ function FeeRow({
  *  the old 1st/2nd/3rd positional scale was only a Google-Forms workaround).
  *  Each level resolves to the exact tiers the checkout charges, so the printed
  *  schedule and the till always agree. Plus the first-time-exhibitor line. */
-function RegionalFeeRows({ config }: { config: RegionalFeeConfig }) {
+function RegionalFeeRows({ config, dense }: { config: RegionalFeeConfig; dense?: boolean }) {
   const money = (p: number) => (p === 0 ? 'Free' : fmtMoney(p));
 
   // Level resolution lives in `buildRegionalFeeDisplay`, shared with the
@@ -178,12 +188,13 @@ function RegionalFeeRows({ config }: { config: RegionalFeeConfig }) {
         const value = capped
           ? `${money(lvl.perDogPence)} / ${money(lvl.threePlusPence)}`
           : money(lvl.perDogPence);
-        return <FeeRow key={i} label={multi ? lvl.label : 'Entry fee'} value={value} />;
+        return <FeeRow key={i} label={multi ? lvl.label : 'Entry fee'} value={value} dense={dense} />;
       })}
       {config.firstTimeEnabled ? (
         <FeeRow
           label="First-time exhibitor"
           value={(config.firstTimeFeePence ?? 0) === 0 ? 'First dog free' : `${fmtMoney(config.firstTimeFeePence ?? 0)} first dog`}
+          dense={dense}
         />
       ) : null}
     </>
@@ -361,9 +372,11 @@ function SvCover({
 function SpecialClassFeeRows({
   config,
   classes,
+  dense,
 }: {
   config: RegionalFeeConfig;
   classes: ScheduleClass[];
+  dense?: boolean;
 }) {
   return (
     <>
@@ -372,6 +385,7 @@ function SpecialClassFeeRows({
           key={`${r.label}-${r.fee}`}
           label={`${r.label} · per dog`}
           value={r.fee === 0 ? 'Free' : fmtMoney(r.fee)}
+          dense={dense}
         />
       ))}
     </>
@@ -382,13 +396,23 @@ function SvOverview({
   show,
   classes,
   washes,
+  density = 'normal',
 }: {
   show: ScheduleShowInfo;
   classes: ScheduleClass[];
   washes?: SvWashBuffers;
+  /** 'compact' tightens the data-elastic sections (fee rows, awards,
+   *  gaps) so an unusually rich show still fits this page on one A5 sheet.
+   *  Selected automatically by `renderScheduleWithFit` when a normal-density
+   *  render paginates past the designed page count. */
+  density?: 'normal' | 'compact';
 }) {
   const memberTier = show.discountGroups?.[0] ?? null;
   const firstAider = show.scheduleData?.firstAiders?.[0] ?? null;
+  const dense = density === 'compact';
+  // Vertical rhythm knobs — the only dimensions compact mode shrinks.
+  const sectionGap = dense ? 4 : 7;
+  const leftGap = dense ? 2 : 4;
 
   // Sundry items the secretary has configured (sponsorship slots, advert
   // space, donations etc.) — surface on the schedule so the prospectus
@@ -413,40 +437,43 @@ function SvOverview({
       <TonalWash buffer={washes?.inside} />
       <Topper num={2} subject={show.name} />
 
-      <View style={{ marginTop: 8 }}>
+      <View style={{ marginTop: dense ? 5 : 8 }}>
         <Text style={[ss.displayIt, { fontSize: 10, color: SV.ink3 }]}>At a glance —</Text>
-        <Text style={[ss.display, { fontSize: 22, lineHeight: 1, marginTop: 2 }]}>the essentials.</Text>
+        <Text style={[ss.display, { fontSize: dense ? 19 : 22, lineHeight: 1, marginTop: 2 }]}>the essentials.</Text>
       </View>
 
       {/* Two-column body */}
-      <View style={{ flexDirection: 'row', marginTop: 8 }}>
+      <View style={{ flexDirection: 'row', marginTop: dense ? 5 : 8 }}>
         {/* LEFT */}
         <View style={{ width: '50%', paddingRight: 10 }}>
-          <SectionTitle title="Fees" />
+          <SectionTitle dense={dense} title="Fees" />
           {show.regionalFeeConfig ? (
             <>
-              <RegionalFeeRows config={show.regionalFeeConfig} />
-              <SpecialClassFeeRows config={show.regionalFeeConfig} classes={classes} />
+              <RegionalFeeRows config={show.regionalFeeConfig} dense={dense} />
+              <SpecialClassFeeRows config={show.regionalFeeConfig} classes={classes} dense={dense} />
             </>
           ) : (
             <>
-              <FeeRow label="Per dog · per class" value={fmtMoney(show.firstEntryFee)} />
+              <FeeRow label="Per dog · per class" value={fmtMoney(show.firstEntryFee)} dense={dense} />
               {memberTier ? (
                 <FeeRow
                   label={memberTier.label}
                   value={fmtMoney(memberTier.firstEntryFeePence)}
+                  dense={dense}
                 />
               ) : null}
               {show.multiDogPackagePence != null ? (
                 <FeeRow
                   label={`${show.multiDogThreshold ?? 3}+ dogs · multi-dog`}
                   value={fmtMoney(show.multiDogPackagePence)}
+                  dense={dense}
                 />
               ) : null}
               {memberTier?.multiDogPackagePence != null ? (
                 <FeeRow
                   label="Members · multi-dog"
                   value={fmtMoney(memberTier.multiDogPackagePence)}
+                  dense={dense}
                 />
               ) : null}
             </>
@@ -454,11 +481,12 @@ function SvOverview({
           <FeeRow
             label="Junior Handling"
             value={!show.juniorHandlerFee ? 'Free' : fmtMoney(show.juniorHandlerFee)}
+            dense={dense}
           />
           {/* Catalogue prices — pulled from the catalogue sundry items
               (Printed / Online) so the real configured prices show. */}
           {catalogueItems.map((s) => (
-            <FeeRow key={s.name} label={s.name} value={fmtMoney(s.priceInPence)} />
+            <FeeRow key={s.name} label={s.name} value={fmtMoney(s.priceInPence)} dense={dense} />
           ))}
           {/* Multi-dog ownership note — only show when there's no sundry
               block competing for vertical space (Amanda 2026-05-22). */}
@@ -468,8 +496,8 @@ function SvOverview({
             </Text>
           ) : null}
 
-          <View style={{ height: 4 }} />
-          <SectionTitle title="Awards" />
+          <View style={{ height: leftGap }} />
+          <SectionTitle dense={dense} title="Awards" />
           {/* Amanda 2026-05-22: drop per-class derivation. Two big awards
               groups split by sex, with plain-English eligibility lines. */}
           {[
@@ -480,21 +508,22 @@ function SvOverview({
           ].map((a, i, arr) => (
             <View
               key={a.name}
+              wrap={false}
               style={{
-                paddingVertical: 2.5,
+                paddingVertical: dense ? 1.2 : 2.5,
                 borderBottomWidth: i < arr.length - 1 ? 0.5 : 0,
                 borderBottomColor: SV.rule,
               }}
             >
-              <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 8.5, color: SV.ink, fontWeight: 'bold' }}>
+              <Text style={{ fontFamily: SV_FONTS.sans, fontSize: dense ? 8 : 8.5, color: SV.ink, fontWeight: 'bold' }}>
                 {a.name}
               </Text>
-              <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 7, color: SV.ink3, marginTop: 0.5 }}>
+              <Text style={{ fontFamily: SV_FONTS.sans, fontSize: dense ? 6.5 : 7, color: SV.ink3, marginTop: 0.5 }}>
                 {a.desc}
               </Text>
             </View>
           ))}
-          <Text style={{ fontFamily: SV_FONTS.serif, fontSize: 7.5, color: SV.ink3, marginTop: 4, fontStyle: 'italic' }}>
+          <Text style={{ fontFamily: SV_FONTS.serif, fontSize: dense ? 7 : 7.5, color: SV.ink3, marginTop: dense ? 2 : 4, fontStyle: 'italic' }}>
             {show.scheduleData?.awardsDescription?.trim() ||
               'Trophies for 1st · Medals 1st–3rd · GSDL-BRG Grading Cards for all classes.'}
           </Text>
@@ -502,18 +531,18 @@ function SvOverview({
 
         {/* RIGHT */}
         <View style={{ width: '50%', paddingLeft: 10 }}>
-          <SectionTitle title="Key dates" />
+          <SectionTitle dense={dense} title="Key dates" />
           {/* Short date format here so long weekday + month names don't
               overrun the label column (Amanda 2026-05-22). */}
-          <FeeRow label="Entries open" value={fmtDateShort(show.entriesOpenDate)} />
+          <FeeRow label="Entries open" value={fmtDateShort(show.entriesOpenDate)} dense={dense} />
           {show.acceptsPostalEntries && show.postalCloseDate ? (
-            <FeeRow label="Postal close" value={fmtDateShort(show.postalCloseDate)} />
+            <FeeRow label="Postal close" value={fmtDateShort(show.postalCloseDate)} dense={dense} />
           ) : null}
-          <FeeRow label="Entries close" value={fmtDateShort(show.entryCloseDate)} />
-          <FeeRow label="Show day" value={fmtDateShort(show.date)} />
+          <FeeRow label="Entries close" value={fmtDateShort(show.entryCloseDate)} dense={dense} />
+          <FeeRow label="Show day" value={fmtDateShort(show.date)} dense={dense} />
 
-          <View style={{ height: 7 }} />
-          <SectionTitle title="Event Secretary" />
+          <View style={{ height: sectionGap }} />
+          <SectionTitle dense={dense} title="Event Secretary" />
           <View>
             <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 9, fontWeight: 'bold', color: SV.ink }}>
               {show.secretaryName ?? '—'}
@@ -537,8 +566,8 @@ function SvOverview({
 
           {show.onCallVet ? (
             <>
-              <View style={{ height: 7 }} />
-              <SectionTitle title="On-call vet" />
+              <View style={{ height: sectionGap }} />
+              <SectionTitle dense={dense} title="On-call vet" />
               <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 8, color: SV.ink2, lineHeight: 1.4 }}>
                 {show.onCallVet}
               </Text>
@@ -547,16 +576,16 @@ function SvOverview({
 
           {firstAider ? (
             <>
-              <View style={{ height: 7 }} />
-              <SectionTitle title="First Aider" />
+              <View style={{ height: sectionGap }} />
+              <SectionTitle dense={dense} title="First Aider" />
               <Text style={{ fontFamily: SV_FONTS.sans, fontSize: 8.5, color: SV.ink2 }}>
                 {firstAider}
               </Text>
             </>
           ) : null}
 
-          <View style={{ height: 7 }} />
-          <SectionTitle title="Payment" />
+          <View style={{ height: sectionGap }} />
+          <SectionTitle dense={dense} title="Payment" />
           {/* Amanda 2026-05-22: only surface the postal/bank-transfer line
               when the show actually accepts postal entries — otherwise just
               say online via Remi. */}
@@ -574,10 +603,10 @@ function SvOverview({
               columns far better than the tall Awards block does. */}
           {sundryExtras.length > 0 ? (
             <>
-              <View style={{ height: 7 }} />
-              <SectionTitle title="Sponsorship & adverts" />
+              <View style={{ height: sectionGap }} />
+              <SectionTitle dense={dense} title="Sponsorship & adverts" />
               {sundryExtras.map((s) => (
-                <FeeRow key={s.name} label={s.name} value={fmtMoney(s.priceInPence)} />
+                <FeeRow key={s.name} label={s.name} value={fmtMoney(s.priceInPence)} dense={dense} />
               ))}
             </>
           ) : null}
@@ -987,12 +1016,26 @@ function SvRulesPage({ washes }: { washes?: SvWashBuffers }) {
 
 // ── Top-level document ─────────────────────────────────────────────────────
 
+/** Designed page count for the SV schedule: six editorial pages plus one
+ *  page per full-page advert. `renderScheduleWithFit` re-renders at compact
+ *  density when a normal render paginates past this (i.e. a data-elastic
+ *  section outgrew its page). */
+export function svSchedulePageCount(adverts: readonly ScheduleAdvert[] = []): number {
+  return (
+    6 +
+    selectAdverts(adverts, 'schedule', 'inside_front').length +
+    selectAdverts(adverts, 'schedule', 'inside_back').length +
+    selectAdverts(adverts, 'schedule', 'last_page').length
+  );
+}
+
 export function SvShowSchedule({
   show,
   classes,
   judges,
   adverts = [],
   washes,
+  density,
 }: {
   show: ScheduleShowInfo;
   classes: ScheduleClass[];
@@ -1006,6 +1049,9 @@ export function SvShowSchedule({
    *  synchronous. When omitted, every page falls back to the default
    *  Sieger dusty pink/blue PNGs in `public/sv-schedule/`. */
   washes?: SvWashBuffers;
+  /** 'compact' tightens the at-a-glance page's data-elastic sections; set
+   *  by `renderScheduleWithFit` when normal density overflows. */
+  density?: 'normal' | 'compact';
 }) {
   const groups = groupSvClasses(classes);
   // Total numbered classes (breed + JH) — used by the page 3 header.
@@ -1035,7 +1081,7 @@ export function SvShowSchedule({
         <AdvertPage key={`ad-if-${ad.id}`} advert={ad} />
       ))}
 
-      <SvOverview show={show} classes={classes} washes={washes} />
+      <SvOverview show={show} classes={classes} washes={washes} density={density} />
       <SvClassificationPage
         breedClasses={groups.breedClasses}
         juniorHandling={groups.juniorHandling}

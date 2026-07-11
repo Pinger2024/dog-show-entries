@@ -20,6 +20,8 @@ import type { CatalogueEntry, CatalogueShowInfo } from '@/components/catalogue/c
 import { PrizeCards } from '@/components/prize-cards/prize-cards';
 import type { PrizeCardShowInfo, PrizeCardClass } from '@/components/prize-cards/prize-cards';
 import { pickScheduleComponent } from '@/components/schedule';
+import { svSchedulePageCount } from '@/components/schedule/sv-show-schedule';
+import { renderScheduleWithFit } from './schedule-render';
 import type { ScheduleShowInfo, ScheduleClass, ScheduleJudge, ScheduleSponsor, SchedulePanelJudge } from '@/components/schedule';
 import { RingBoard } from '@/components/ring-board/ring-board';
 import type { RingBoardShowInfo, RingBoardRing } from '@/components/ring-board/ring-board';
@@ -734,16 +736,24 @@ export async function generateSchedulePdf(showId: string): Promise<Buffer> {
     washes = { cover, inside };
   }
 
-  const pdfDocument = React.createElement(ScheduleComponent, {
-    show: showInfo,
-    classes,
-    judges,
-    sponsors,
-    adverts,
-    panelJudges,
-    washes,
-  });
-  return Buffer.from(await renderToBuffer(pdfDocument));
+  // Same fit fallback as the HTTP schedule route: the SV schedule is a
+  // fixed six-page design (plus advert pages) — re-render at compact
+  // density instead of shipping an orphaned extra page.
+  const designedPages =
+    showInfo.showRuleset === 'wusv' ? svSchedulePageCount(adverts) : null;
+  return renderScheduleWithFit(
+    ScheduleComponent as React.ComponentType<Record<string, unknown>>,
+    {
+      show: showInfo,
+      classes,
+      judges,
+      sponsors,
+      adverts,
+      panelJudges,
+      washes,
+    },
+    designedPages,
+  );
 }
 
 // ── Ring Board PDF ──
